@@ -81,6 +81,121 @@ describe('Knowledge host scope removal', () => {
     expect(activity.events.map(event => event.action)).not.toContain('scope-restored');
   });
 
+  it('refuses to remove a scope that changed since the caller read it, and removes nothing', async () => {
+    const { knowledge } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', name: 'Notes' });
+    await knowledge.removePage({ scope: 'docs:acme', path: 'notes' });
+    for (const path of ['start/faq', 'start']) await knowledge.removeTemplatePage({ scope: 'docs:acme', path });
+    const pages = await knowledge.getStorage();
+    const [seen] = await pages.getScopesByAddress(['docs:acme']);
+
+    // Stale version: the scope was written (here, its body) after the caller read it.
+    await pages.updatePage({ id: seen!.id, expectedVersion: seen!.version, body: 'About docs' });
+    await expect(
+      knowledge.removeScope({ scope: 'docs:acme', expected: { id: seen!.id, version: seen!.version } }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+
+    // Stale identity: the scope at that address is no longer the one the caller saw.
+    const current = (await pages.getPage({ id: seen!.id, read: 'all' }))!;
+    await expect(
+      knowledge.removeScope({ scope: 'docs:acme', expected: { id: 'some-other-scope', version: current.version } }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+
+    const after = (await pages.getPage({ id: seen!.id, read: 'all' }))!;
+    expect(after.deletedAt).toBeFalsy();
+    const activity = await pages.listPageActivity({ scopeId: seen!.id, read: 'all' });
+    expect(activity.events.map(event => event.action)).not.toContain('scope-removed');
+
+    await expect(
+      knowledge.removeScope({ scope: 'docs:acme', expected: { id: current.id, version: current.version } }),
+    ).resolves.toMatchObject({ id: current.id });
+  });
+
+  it("checks the caller's version, not Core's own re-read, when the scope changes just before the store write", async () => {
+    const { knowledge } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', name: 'Notes' });
+    await knowledge.removePage({ scope: 'docs:acme', path: 'notes' });
+    for (const path of ['start/faq', 'start']) await knowledge.removeTemplatePage({ scope: 'docs:acme', path });
+    const pages = await knowledge.getStorage();
+    const [seen] = await pages.getScopesByAddress(['docs:acme']);
+    // Another writer edits the scope after Core looked it up, right before the store removes it.
+    const removeScope = pages.removeScope.bind(pages);
+    pages.removeScope = async input => {
+      await pages.updatePage({ id: seen!.id, expectedVersion: seen!.version, body: 'Newer' });
+      return removeScope(input);
+    };
+    await expect(
+      knowledge.removeScope({ scope: 'docs:acme', expected: { id: seen!.id, version: seen!.version } }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+    const after = (await pages.getPage({ id: seen!.id, read: 'all' }))!;
+    expect(after).toMatchObject({ body: 'Newer' });
+    expect(after.deletedAt).toBeFalsy();
+  });
+
+  it('refuses to remove a template page that changed or was replaced since the caller read it', async () => {
+    const { knowledge } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', name: 'Notes' });
+    const pages = await knowledge.getStorage();
+    const [scope] = await pages.getScopesByAddress(['docs:acme']);
+    const faq = (await pages.getPageByPath({ scopeId: scope!.id, path: ['start', 'faq'], read: 'all' }))!;
+
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'start/faq', body: 'Edited after the read' });
+    await expect(
+      knowledge.removeTemplatePage({
+        scope: 'docs:acme',
+        path: 'start/faq',
+        expected: { id: faq.id, version: faq.version },
+      }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+    const edited = (await pages.getPage({ id: faq.id, read: 'all' }))!;
+    await expect(
+      knowledge.removeTemplatePage({
+        scope: 'docs:acme',
+        path: 'start/faq',
+        expected: { id: 'another-page', version: edited.version },
+      }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+
+    expect(edited).toMatchObject({ body: 'Edited after the read' });
+    expect(edited.deletedAt).toBeFalsy();
+    const activity = await pages.listPageActivity({ scopeId: scope!.id, read: 'all' });
+    expect(activity.events.map(event => event.action)).not.toContain('template-removed');
+
+    await expect(
+      knowledge.removeTemplatePage({
+        scope: 'docs:acme',
+        path: 'start/faq',
+        expected: { id: faq.id, version: edited.version },
+      }),
+    ).resolves.toMatchObject({ id: faq.id });
+  });
+
+  it('refuses to remove an ordinary page that changed or was replaced since the caller read it', async () => {
+    const { knowledge } = setup();
+    const { page: seen } = await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', name: 'Notes' });
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', body: 'Edited after the read' });
+    await expect(
+      knowledge.removePage({ scope: 'docs:acme', path: 'notes', expected: { id: seen.id, version: seen.version } }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+    const pages = await knowledge.getStorage();
+    const edited = (await pages.getPage({ id: seen.id, read: 'all' }))!;
+    await expect(
+      knowledge.removePage({
+        scope: 'docs:acme',
+        path: 'notes',
+        expected: { id: 'another-page', version: edited.version },
+      }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+    await expect(
+      knowledge.removePage({ scope: 'docs:acme', path: 'gone', expected: { id: seen.id, version: 1 } }),
+    ).rejects.toThrow(expect.objectContaining({ name: 'KnowledgeConflictError' }));
+    expect(edited.deletedAt).toBeFalsy();
+
+    await expect(
+      knowledge.removePage({ scope: 'docs:acme', path: 'notes', expected: { id: seen.id, version: edited.version } }),
+    ).resolves.toMatchObject({ id: seen.id });
+  });
+
   it('removes an empty scope, refuses writes to it, and restores it with the same id', async () => {
     const { knowledge, storage, call } = setup();
     await knowledge.removeTemplatePage({ scope: 'docs:acme', path: 'start/faq' }).catch(() => {});

@@ -14,6 +14,15 @@ const removed = await knowledge.removeScope({ scope: 'repo:acme:sandbox' });
 await knowledge.restoreScope({ id: removed!.id });
 ```
 
+`removePage`, `removeTemplatePage` and `removeScope` take an optional `expected: { id, version }`: the page as you read it. The removal then fails with `KnowledgeConflictError`, removing nothing, if that page is gone, was replaced by another page at the same address, or changed since.
+
+```ts
+const removed = await knowledge.removeScope({
+  scope: 'repo:acme:sandbox',
+  expected: { id: seen.id, version: seen.version },
+});
+```
+
 The matching store methods:
 
 - `removeTemplatePage` deletes a declared template page and records that it was removed, so reopening the store or re-materializing the scope does not bring it back. An ordinary page that later reuses the key does not undo this.

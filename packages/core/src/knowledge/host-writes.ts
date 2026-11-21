@@ -56,6 +56,11 @@ export interface KnowledgeUpsertPageResult {
 export interface KnowledgeRemovePageInput {
   scope: string;
   path: string;
+  /**
+   * The {@link KnowledgePage.id} and {@link KnowledgePage.version} the caller read. When given, the
+   * removal refuses with `KnowledgeConflictError` unless that same page is still there at that version.
+   */
+  expected?: { id: string; version: number };
   author?: string;
 }
 
@@ -63,6 +68,11 @@ export interface KnowledgeRemovePageInput {
 export interface KnowledgeRemoveScopeInput {
   /** Address of the scope to remove, e.g. `repo:acme:web`. */
   scope: string;
+  /**
+   * The {@link KnowledgePage.id} and {@link KnowledgePage.version} the caller read. When given, the
+   * removal refuses with `KnowledgeConflictError` unless that same page is still there at that version.
+   */
+  expected?: { id: string; version: number };
   author?: string;
 }
 
@@ -300,16 +310,17 @@ export async function removeKnowledgePage(
   await host.runtime.checkDeclarations();
   const storage = await host.getStorage();
   const [scope] = await storage.getScopesByAddress([input.scope]);
-  if (!scope) return null;
+  if (!scope) return expectedGone(input);
   const page = await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' });
-  if (!page) return null;
+  if (!page) return expectedGone(input);
+  const expectedVersion = expectedVersionOf(input, page);
   const template = await host.runtime.templatePageRef(page);
   if (template) throw new Error(`"${template}" is declared in config; change the scope's pages to remove it.`);
   let deleted: KnowledgePage;
   try {
     deleted = await storage.deletePage({
       id: page.id,
-      expectedVersion: page.version,
+      expectedVersion,
       deletedBy: input.author ?? 'host',
     });
   } catch (error) {
@@ -336,14 +347,15 @@ export async function removeKnowledgeTemplatePage(
   await host.runtime.checkDeclarations();
   const storage = await host.getStorage();
   const [scope] = await storage.getScopesByAddress([input.scope]);
-  if (!scope) return null;
+  if (!scope) return expectedGone(input);
   const page = await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' });
-  if (!page) return null;
+  if (!page) return expectedGone(input);
+  const expectedVersion = expectedVersionOf(input, page);
   const template = await host.runtime.templatePageRef(page);
   if (!template) throw new Error(`"${input.scope}#${input.path}" is not declared in config; use removePage.`);
   const removed = await withChildrenMessage(
     `"${template}" has child pages; remove them first.`,
-    storage.removeTemplatePage({ id: page.id, expectedVersion: page.version, provenance: provenanceOf(input) }),
+    storage.removeTemplatePage({ id: page.id, expectedVersion, provenance: provenanceOf(input) }),
   );
   await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
   await updateKnowledgeLinks(host.warn, async () => {
@@ -362,10 +374,11 @@ export async function removeKnowledgeScope(
   await host.runtime.checkDeclarations();
   const storage = await host.getStorage();
   const [scope] = await storage.getScopesByAddress([input.scope]);
-  if (!scope) return null;
+  if (!scope) return expectedGone(input);
+  const expectedVersion = expectedVersionOf(input, scope);
   const removed = await withChildrenMessage(
     `"${input.scope}" still has pages or child scopes; remove them first.`,
-    storage.removeScope({ id: scope.id, expectedVersion: scope.version, provenance: provenanceOf(input) }),
+    storage.removeScope({ id: scope.id, expectedVersion, provenance: provenanceOf(input) }),
   );
   await updateKnowledgeLinks(host.warn, () => refreshKnowledgeLinksTo(storage, [removed]));
   return removed;
@@ -395,6 +408,22 @@ export async function restoreKnowledgeScope(
   });
   await updateKnowledgeLinks(host.warn, () => refreshKnowledgeLinksTo(storage, [restored]));
   return restored;
+}
+
+/**
+ * The version the store's compare-and-set must see: the caller's when it named the page it read (a
+ * different page now at that address conflicts), otherwise the one just read.
+ */
+function expectedVersionOf(input: { expected?: { id: string; version: number } }, found: KnowledgePage): number {
+  if (!input.expected) return found.version;
+  if (input.expected.id !== found.id) throw new KnowledgeConflictError(input.expected.id);
+  return input.expected.version;
+}
+
+/** Nothing at the address: fine for a plain removal, a conflict when the caller named what it read. */
+function expectedGone(input: { expected?: { id: string } }): null {
+  if (input.expected) throw new KnowledgeConflictError(input.expected.id);
+  return null;
 }
 
 function provenanceOf(input: { author?: string }): KnowledgeProvenance {
