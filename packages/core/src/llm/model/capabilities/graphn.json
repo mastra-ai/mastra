@@ -29,9 +29,10 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "qwen3-vl": [
+    "gpt-oss-120b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "gemma-4-e4b": [
@@ -39,10 +40,9 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
+    "qwen3-vl": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "glm-5.3": [

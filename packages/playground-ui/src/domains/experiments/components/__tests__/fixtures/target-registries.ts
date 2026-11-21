@@ -34,16 +34,14 @@ export const workflow = (name: string): GetWorkflowResponse => ({
   stateSchema: '',
 });
 
-/** `scorer` is a class instance on the wire, so only the serialized shape the UI reads is modelled. */
-export const scorer = (id: string, name: string): GetScorerResponse =>
-  ({
-    scorer: { config: { id, name, description: `${name} description` } },
-    source: 'code',
-    isRegistered: true,
-    agentIds: [],
-    agentNames: [],
-    workflowIds: [],
-  }) as unknown as GetScorerResponse;
+export const scorer = (id: string, name: string): GetScorerResponse => ({
+  scorer: { config: { id, name, description: `${name} description` } },
+  source: 'code',
+  isRegistered: true,
+  agentIds: [],
+  agentNames: [],
+  workflowIds: [],
+});
 
 export const processor = (id: string, name: string): GetProcessorResponse => ({
   id,
