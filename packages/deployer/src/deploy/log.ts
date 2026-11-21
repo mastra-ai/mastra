@@ -25,6 +25,8 @@ export const createPinoStream = (logger: IMastraLogger) => {
  * else (spaces, apostrophes, emoji, `&`, `^`…) is wrapped in double quotes, where
  * cmd.exe treats it literally. Characters cmd.exe still interprets inside quotes
  * (`"`, `!`, line breaks) are refused; `"` can never appear in a Windows path.
+ * A quoted argument that ends in a backslash would make the C runtime treat that
+ * backslash as escaping the closing quote, so trailing backslashes are doubled.
  * `%` only expands as a `%name%` pair, so one `%` per command line is allowed
  * (Yarn Berry's `--out …%v.tgz` needs it) and a second one is refused.
  */
@@ -35,7 +37,12 @@ export function toWindowsShellArg(arg: string) {
   if (UNQUOTABLE_WINDOWS_ARG.test(arg)) {
     throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
   }
-  return PLAIN_WINDOWS_ARG.test(arg) ? arg : `"${arg}"`;
+  if (PLAIN_WINDOWS_ARG.test(arg)) return arg;
+  // Double trailing backslashes so they do not escape the closing quote.
+  // A loop, not /\\+$/: that pattern retries across a long non-trailing run.
+  let end = arg.length;
+  while (end > 0 && arg[end - 1] === '\\') end--;
+  return `"${arg}${arg.slice(end)}"`;
 }
 
 export function toWindowsShellArgs(bin: string, args: string[]) {
@@ -49,21 +56,45 @@ export function toWindowsShellArgs(bin: string, args: string[]) {
   return quoted;
 }
 
-export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
+export function createChildProcessLogger({
+  logger,
+  root,
+  platform = process.platform,
+  windowsShell,
+}: {
+  logger: IMastraLogger;
+  root: string;
+  /** Override for tests that replay the Windows `.cmd` path on another OS. */
+  platform?: NodeJS.Platform;
+  /** cmd.exe stand-in. Production uses `ComSpec` or `cmd.exe`. */
+  windowsShell?: string;
+}) {
   const pinoStream = createPinoStream(logger);
   return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
     try {
       const [bin, ...cmdArgs] = cmd.split(' ').filter(Boolean);
       if (!bin) throw new Error('Refusing to spawn an empty command');
       const allArgs = [...cmdArgs, ...args.filter(Boolean)];
-      const shell = process.platform === 'win32';
-      const subprocess = spawn(bin, shell ? toWindowsShellArgs(bin, allArgs) : allArgs, {
-        cwd: root,
-        shell,
-        env,
-        // No stdin for the child process — it doesn't need interactive input
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+      // Same shape Node uses for `shell: true` on win32: cmd.exe /d /s /c "<line>".
+      // Explicit so a test can supply a cmd stand-in and still run this path.
+      const subprocess =
+        platform === 'win32'
+          ? spawn(
+              windowsShell ?? process.env.ComSpec ?? 'cmd.exe',
+              ['/d', '/s', '/c', `"${[bin, ...toWindowsShellArgs(bin, allArgs)].join(' ')}"`],
+              {
+                cwd: root,
+                env,
+                windowsVerbatimArguments: true,
+                stdio: ['ignore', 'pipe', 'pipe'],
+              },
+            )
+          : spawn(bin, allArgs, {
+              cwd: root,
+              shell: false,
+              env,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
 
       let stdout = '';
       let stderr = '';
