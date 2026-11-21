@@ -114,6 +114,7 @@ function executeStep(pubsub: any, initData: any, input?: any, resumeData?: any) 
     suspend: vi.fn(),
     resumeData,
     requestContext: new Map(),
+    getState: async () => ({}),
     getInitData: () => initData,
     [PUBSUB_SYMBOL]: pubsub,
   });

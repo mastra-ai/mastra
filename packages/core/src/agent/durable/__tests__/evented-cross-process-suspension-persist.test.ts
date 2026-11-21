@@ -60,7 +60,7 @@ class CrossProcessToolStepPubSub extends EventEmitterPubSub {
   }
 }
 
-function makeModel() {
+function makeModel(toolCallIds = ['call-1']) {
   return new MockLanguageModelV2({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -68,14 +68,14 @@ function makeModel() {
       stream: convertArrayToReadableStream<any>([
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
-        {
+        ...toolCallIds.map(toolCallId => ({
           type: 'tool-call',
           toolCallType: 'function',
-          toolCallId: 'call-1',
+          toolCallId,
           toolName: 'askColour',
           input: '{"question":"Favourite colour?"}',
           providerExecuted: false,
-        },
+        })),
         { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
       ]),
     }),
@@ -159,4 +159,56 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
     },
     15_000,
   );
+
+  it('saves the next sibling suspension on the existing assistant row when it suspends in another process after a resume', async () => {
+    pubsub = new CrossProcessToolStepPubSub('fresh-worker');
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const askColour = createTool({
+      id: 'askColour',
+      description: 'Asks the user for a colour',
+      inputSchema: z.object({ question: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      resumeSchema: z.object({ colour: z.string() }),
+      execute: async (input, context: any) => {
+        if (!context?.agent?.resumeData) return await context.agent.suspend({ question: input.question });
+        return { colour: context.agent.resumeData.colour };
+      },
+    });
+    const agent = new Agent({
+      id: 'colour-agent',
+      name: 'colour-agent',
+      instructions: 'Ask for a colour.',
+      model: makeModel(['call-1', 'call-2']) as any,
+      tools: { askColour },
+      memory,
+    });
+    const evented = createEventedAgent({ agent });
+    mastra = new Mastra({ logger: false, storage, pubsub, agents: { [evented.id]: evented } });
+    await mastra.startWorkers();
+    const durable = mastra.getAgentById(evented.id);
+    const threadMemory = { thread: 'thread-1', resource: 'user-1' };
+    const waitForSuspension = async (output: any) => {
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'tool-call-suspended') return chunk.payload.toolCallId as string;
+      }
+    };
+
+    const first = await durable.stream('Ask me twice', { memory: threadMemory });
+    expect(await waitForSuspension(first.output)).toBe('call-1');
+    first.cleanup();
+    await new Promise(r => setTimeout(r, 200));
+
+    // The evented loop runs sibling tool calls one at a time, so call-2 only runs once call-1 resumes.
+    const resumed = await (durable as any).resumeStream(
+      { colour: 'blue' },
+      { runId: first.runId, toolCallId: 'call-1', memory: threadMemory },
+    );
+    expect(await waitForSuspension(resumed)).toBe('call-2');
+
+    const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
+    expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
+    const assistant = messages[1]!;
+    expect(Object.keys((assistant.content.metadata as any)?.suspendedTools ?? {})).toEqual(['call-2']);
+  }, 15_000);
 });
