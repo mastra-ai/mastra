@@ -129,7 +129,7 @@ export class PlatformGitLabIntegration
    * requires one.
    */
   override workers(ctx: IntegrationContext): MastraWorker[] {
-    void this.binding.ensureBootLinked();
+    void this.binding.ensureBootLinked(ctx.storage.generic);
     const workers = super.workers(ctx);
     this.#reconcileWorker = workers.find(worker => worker instanceof IssueReconcileWorker);
     return workers;
@@ -166,6 +166,7 @@ export class PlatformGitLabIntegration
       pollingEnabled: this.#pollingEnabled,
       ...(this.#pollingIntervalMs === undefined ? {} : { pollingIntervalMs: this.#pollingIntervalMs }),
       ...(this.binding.needsLinking.length > 0 ? { needsLinking: this.binding.needsLinking } : {}),
+      ...(this.binding.detached.length > 0 ? { detached: this.binding.detached } : {}),
     };
   }
 

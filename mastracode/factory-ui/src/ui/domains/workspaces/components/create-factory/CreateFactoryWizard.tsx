@@ -5,7 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useApiConfig } from '../../../../../api/config';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
-import { connectLinear } from '../../../factory/services/linear';
+import { useLinearConnect } from '../../../../../hooks/useLinearConnect';
 import { useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
 import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
@@ -58,6 +58,7 @@ export function CreateFactoryWizard() {
   const location = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
+  const linear = useLinearConnect();
   const flow = useCreateFactoryFlow();
   const [githubRedirecting, setGithubRedirecting] = useState(false);
   const [typed, setTyped] = useState<{ step: CreateFactoryFlowStep; value: string }>();
@@ -135,8 +136,7 @@ export function CreateFactoryWizard() {
             <CreateFactoryLinearRows
               query={value}
               onConnect={() => {
-                flow.persistBeforeRedirect(factoryId);
-                connectLinear(baseUrl);
+                void linear.connect({ beforeRedirect: () => flow.persistBeforeRedirect(factoryId) });
               }}
               onSelectProject={projectId => void flow.chooseLinearProject(projectId)}
               onSkip={() => void flow.skipProjectManagement()}

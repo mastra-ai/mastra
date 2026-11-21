@@ -70,6 +70,7 @@ export const FACTORY_ERROR_NAMES: ReadonlySet<string> = new Set([
   'GitLabApiError',
   'IncidentioApiError',
   'JiraApiError',
+  'LinearGraphqlError',
   'LinearReauthRequiredError',
   'MastraGatewayError',
   'MaterializeError',

@@ -1,6 +1,7 @@
 import { MastraConnectError } from '@mastra/connect';
 import type { ConnectClient, ProjectConnection, ProxyRequestOptions } from '@mastra/connect';
 
+import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import { logPlatformInfo, logPlatformWarn } from '../logging.js';
 import {
   connectProxyFetch,
@@ -31,6 +32,22 @@ export interface LinkOrgConnectionsResult {
   /** Connections that were not in the project listing and are now linked. */
   linked: string[];
   needsLinking: NeedsLinkingEntry[];
+  /** Org connections the project had and no longer lists: removed on purpose, so left unlinked. */
+  detached: string[];
+}
+
+/**
+ * Where a binding remembers the org connections it has linked, or seen
+ * linked, to the Factory project. The integration's own storage handle fits.
+ */
+export type PlatformConnectLinkStore = Pick<IntegrationStorageHandle, 'settings'>;
+
+export interface LinkOrgConnectionsOptions {
+  /**
+   * Also link connections the project had before and no longer has, i.e.
+   * ones someone detached. Only an admin's explicit request does this.
+   */
+  relinkDetached?: boolean;
 }
 
 export interface PlatformConnectBindingOptions {
@@ -79,6 +96,9 @@ const PERMISSION_REMEDY =
   "The Factory's platform credential cannot link this connection to the project. Grant it the integrations:write permission, or link the connection to the project in Mastra Platform.";
 const NOT_LISTED_AFTER_LINK =
   'The platform accepted the link, but the connection is not in the Factory project yet. Retry linking, or link it in the platform.';
+const LINKS_ORG_ID = '__platform_connect_links__';
+
+type RememberedLinks = { version: 1; connectionIds: string[] };
 
 /**
  * The Connect plumbing a Platform integration needs: project-scoped
@@ -101,6 +121,8 @@ export class PlatformConnectBinding {
   #generation = 0;
   #bootLinking: Promise<void> | undefined;
   #needsLinking = new Map<string, NeedsLinkingEntry>();
+  #detached: string[] = [];
+  #linkStore: PlatformConnectLinkStore | undefined;
 
   constructor(options: PlatformConnectBindingOptions) {
     this.integrationId = options.integrationId;
@@ -212,6 +234,14 @@ export class PlatformConnectBinding {
     return [...this.#needsLinking.values()];
   }
 
+  /**
+   * Org connections the project had and no longer lists, as of the last linking:
+   * someone removed them from the project, so linking leaves them alone.
+   */
+  get detached(): string[] {
+    return this.#detached;
+  }
+
   /** Runs `listener` whenever linking adds a connection to the project. */
   onConnectionsLinked(listener: () => void): () => void {
     this.#linkedListeners.add(listener);
@@ -221,8 +251,11 @@ export class PlatformConnectBinding {
   /**
    * Starts boot linking once and resolves when it settles, whether it linked
    * everything or not. Failures are logged and kept in `needsLinking`.
+   * `store` remembers the connections linked to the project, so a connection
+   * someone later detaches is not linked again on the next boot.
    */
-  ensureBootLinked(): Promise<void> {
+  ensureBootLinked(store?: PlatformConnectLinkStore): Promise<void> {
+    if (store) this.#linkStore ??= store;
     if (!this.linkOrgConnectionsAtBoot) return Promise.resolve();
     this.#bootLinking ??= this.linkOrgConnections().then(
       result => {
@@ -249,14 +282,25 @@ export class PlatformConnectBinding {
    * yet linked to the Factory project. The platform answers 204 whether a
    * link was created or already existed, so the project listing is compared
    * before and after.
+   *
+   * Each connection is linked at most once: one the project has had before
+   * and no longer lists was detached on purpose and is left alone, unless
+   * `relinkDetached` is set.
    */
-  async linkOrgConnections(): Promise<LinkOrgConnectionsResult> {
+  async linkOrgConnections(options: LinkOrgConnectionsOptions = {}): Promise<LinkOrgConnectionsResult> {
     const candidates = await this.#orgCandidates();
     const linkedBefore = new Set((await this.connect.listConnections()).map(connection => connection.id));
+    const remembered = await this.#rememberedLinks();
     const attempted: string[] = [];
+    const detached: string[] = [];
     for (const connection of candidates) {
       if (linkedBefore.has(connection.id)) {
         this.#needsLinking.delete(connection.id);
+        continue;
+      }
+      if (remembered.has(connection.id) && !options.relinkDetached) {
+        this.#needsLinking.delete(connection.id);
+        detached.push(connection.id);
         continue;
       }
       try {
@@ -287,24 +331,64 @@ export class PlatformConnectBinding {
         }
       }
     }
+    this.#detached = detached.sort();
     if (linked.length > 0) {
       this.invalidateConnections();
       for (const listener of this.#linkedListeners) listener();
     }
-    return { linked, needsLinking: this.needsLinking };
+    const seen = candidates.map(connection => connection.id).filter(id => linkedBefore.has(id) || linked.includes(id));
+    await this.#rememberLinks(remembered, seen);
+    return { linked, needsLinking: this.needsLinking, detached: this.detached };
   }
 
   /**
    * Org connections for these provider keys missing from `projectConnections`:
-   * links that were refused or failed, and connections made outside the
-   * Factory since it last linked. Pass the listing the caller acts on, so a
-   * connection linked in between can't hide from both.
+   * links that were refused or failed, connections made outside the
+   * Factory since it last linked, and connections someone detached. Pass the
+   * listing the caller acts on, so a connection linked in between can't hide
+   * from both.
    */
   async unlinkedOrgConnections(projectConnections: readonly PlatformConnection[]): Promise<string[]> {
     const linked = new Set(projectConnections.map(connection => connection.id));
     return (await this.#orgCandidates())
       .filter(connection => !linked.has(connection.id))
       .map(connection => connection.id);
+  }
+
+  /**
+   * Connections remembered as linked to this platform project; empty without a store.
+   * A failed read throws: linking without it would attach connections someone
+   * removed, and saving afterwards would forget them.
+   */
+  async #rememberedLinks(): Promise<Set<string>> {
+    if (!this.#linkStore) return new Set();
+    let saved: RememberedLinks | null;
+    try {
+      saved = (await this.#linkStore.settings.get(LINKS_ORG_ID, this.#linkStoreKey())) as RememberedLinks | null;
+    } catch (error) {
+      throw new Error(
+        `Could not read which connections the Factory project has had linked: ${platformErrorMessage(error)}`,
+      );
+    }
+    return new Set(saved?.version === 1 && Array.isArray(saved.connectionIds) ? saved.connectionIds : []);
+  }
+
+  async #rememberLinks(remembered: Set<string>, connectionIds: readonly string[]): Promise<void> {
+    if (!this.#linkStore || connectionIds.every(id => remembered.has(id))) return;
+    const next: RememberedLinks = { version: 1, connectionIds: [...new Set([...remembered, ...connectionIds])].sort() };
+    try {
+      await this.#linkStore.settings.save(LINKS_ORG_ID, this.#linkStoreKey(), next);
+    } catch (error) {
+      logPlatformWarn('Could not remember which connections are linked to the Factory project', {
+        integrationId: this.integrationId,
+        error: platformErrorMessage(error),
+      });
+    }
+  }
+
+  /** Per platform project, so a deployment moved to another project starts fresh. */
+  #linkStoreKey(): string {
+    return `project:${this.connect.projectId ?? 'default'}`;
   }
 
   async #orgCandidates(): Promise<ProjectConnection[]> {

@@ -3292,6 +3292,12 @@ describe('MastraFactory.prepare integrations', () => {
     const names = (args.workers ?? []).map(worker => worker.name);
     expect(names.filter(name => name === 'platform-connect-event-poller')).toHaveLength(1);
     expect(names).not.toContain('platform-gitlab-events');
+    // Linear's events come through the shared poller; no Linear poller of its own.
+    expect(names.filter(name => name.startsWith('platform-linear'))).toEqual([]);
+    const poller = args.workers!.find(worker => worker.name === 'platform-connect-event-poller') as unknown as {
+      diagnostics(): { integrations: string[] };
+    };
+    expect(poller.diagnostics().integrations.sort()).toEqual(['gitlab', 'linear']);
   });
 
   it('runs no Platform Connect event poller when no installed integration reads event logs', async () => {

@@ -138,6 +138,7 @@ export class PlatformConnectEventPoller extends MastraWorker {
   diagnostics(): Record<string, unknown> {
     return {
       polling: this.#running,
+      integrations: [...new Set(this.#routes.map(route => route.binding.integrationId))],
       hasLease: this.#hasLease,
       connections: Object.keys(this.#settings.connections).length,
       handlerFailures: this.#handlerFailures,
