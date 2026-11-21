@@ -1,0 +1,70 @@
+---
+title: "Reference: PromptCacheProcessor | Processors"
+description: "The PromptCacheProcessor adds Anthropic and Amazon Bedrock prompt-cache breakpoints to every model call."
+packages:
+  - "@mastra/core"
+---
+
+# PromptCacheProcessor
+
+The `PromptCacheProcessor` adds explicit prompt-cache breakpoints to requests sent to Anthropic and Amazon Bedrock models. It marks two places:
+
+- **The last system message.** The instructions and all system context before it are cached on their own, so they stay cached when the conversation changes.
+- **The last message.** The whole prompt up to the latest message is cached, so the next call in the same conversation reads it back instead of writing it again.
+
+It works on the prompt that's about to be sent, after input processors have added their system messages (such as memory or skills), so it marks those as well as your instructions. Processors that rewrite that prompt run in the order you register them, so register `PromptCacheProcessor` after any other processor that rewrites it. Otherwise a later processor can change or move a message after it's marked. Requests to other providers are left unchanged.
+
+## Usage example
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { PromptCacheProcessor } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  id: 'my-agent',
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'anthropic/claude-sonnet-4-5',
+  inputProcessors: [new PromptCacheProcessor({ ttl: '1h' })],
+})
+```
+
+## Breakpoints you set yourself
+
+Anthropic and Bedrock accept at most four cache breakpoints per request. The processor counts the breakpoints already in the prompt for the provider being called, such as `providerOptions.anthropic.cacheControl` on a message or a message part for Anthropic, and never adds more than the limit allows. A message you already marked is left as it is. When only one slot is free, the last message takes it, because its breakpoint also covers the system messages.
+
+Anthropic rejects a request where a breakpoint with a shorter TTL comes before one with a longer TTL. When your own breakpoints use a different TTL from the processor's, the processor uses `'5m'` for its breakpoint when an earlier one of yours has a shorter TTL, and skips its breakpoint when a later one of yours has a longer TTL. Your breakpoints are never changed.
+
+Breakpoints on tool definitions aren't part of the prompt, so the processor can't count them. If you mark tools, leave room for those breakpoints yourself.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'PromptCacheProcessorOptions',
+    description: 'Configuration options for the prompt cache breakpoints.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'PromptCacheProcessorOptions',
+        parameters: [
+          {
+            name: 'ttl',
+            type: "'5m' | '1h'",
+            description:
+              'Lifetime of the Anthropic cache entries the processor writes. When omitted, Anthropic uses its default of five minutes. Bedrock has no per-breakpoint lifetime, so this setting applies to Anthropic only.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Related
+
+- [Processors](/docs/agents/processors)
+- [ResponseCache](/reference/processors/response-cache)
