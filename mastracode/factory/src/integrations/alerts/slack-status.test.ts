@@ -363,8 +363,8 @@ describe('AlertSlackStatus', () => {
     ]);
   });
 
-  it('keeps the reaction a restarted run wants when an older cleanup takes it off', async () => {
-    const { linked, card, calls, slack, status } = await setup();
+  it('ends on the restarted run\'s reaction when it lands while an immediate cleanup is in flight', async () => {
+    const { linked, card, calls, record, slack, status } = await setup();
     await linked();
     const gate = () => {
       let open!: () => void;
@@ -388,8 +388,6 @@ describe('AlertSlackStatus', () => {
     await lateCleanup.at;
     // ...while a restarted run puts 👀 on again; the old cleanup lands after it.
     await status.runStarted(await card());
-    // Putting it straight back is refused too.
-    slack.failReacts = 1;
     lateCleanup.open();
     await first;
     const reactions = () => {
@@ -400,10 +398,91 @@ describe('AlertSlackStatus', () => {
       }
       return [...on].sort();
     };
-    expect(reactions()).toEqual([]);
-    // The next write, the same as the last, puts it back.
-    await status.runStarted(await card());
     expect(reactions()).toEqual(['eyes']);
+    expect((await record())?.reaction).toBe('eyes');
+  });
+
+  it('ends on the restarted run\'s reaction when it lands while a queued cleanup is in flight', async () => {
+    const { linked, card, calls, record, slack, status } = await setup();
+    await linked();
+    const reactions = () => {
+      const on = new Set<string>();
+      for (const call of calls) {
+        if (call.call === 'react') on.add(call.emoji!);
+        if (call.call === 'unreact') on.delete(call.emoji!);
+      }
+      return [...on].sort();
+    };
+    // Queue a cleanup: the first run's 👀 lands after the run failed, and taking it back is refused.
+    let releaseAdd!: () => void;
+    let reachedAdd!: () => void;
+    const addHeld = new Promise<void>(r => (releaseAdd = r));
+    const atAdd = new Promise<void>(r => (reachedAdd = r));
+    let holdAdd = true;
+    slack.hold = (call, emoji) => {
+      if (call !== 'react' || emoji !== 'eyes' || !holdAdd) return undefined;
+      holdAdd = false;
+      reachedAdd();
+      return addHeld;
+    };
+    const first = status.runStarted(await card());
+    await atAdd;
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    slack.failUnreacts = 2;
+    releaseAdd();
+    await first;
+    expect((await record())?.staleReactions).toEqual(['eyes']);
+    // A later write runs the queued cleanup; a restarted run puts 👀 on while it is in flight.
+    let releaseCleanup!: () => void;
+    let reachedCleanup!: () => void;
+    const cleanupHeld = new Promise<void>(r => (releaseCleanup = r));
+    const atCleanup = new Promise<void>(r => (reachedCleanup = r));
+    let holdCleanup = true;
+    slack.hold = (call, emoji) => {
+      if (call !== 'unreact' || emoji !== 'eyes' || !holdCleanup) return undefined;
+      holdCleanup = false;
+      reachedCleanup();
+      return cleanupHeld;
+    };
+    const later = status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    await atCleanup;
+    await status.runStarted(await card());
+    releaseCleanup();
+    await later;
+    expect(reactions()).toEqual(['eyes']);
+    expect((await record())?.reaction).toBe('eyes');
+    expect((await record())?.staleReactions).toBeUndefined();
+  });
+
+  it('drops a queued cleanup of the reaction a restarted run wants, without taking it off', async () => {
+    const { linked, card, calls, record, slack, status } = await setup();
+    await linked();
+    let release!: () => void;
+    let reached!: () => void;
+    const held = new Promise<void>(r => (release = r));
+    const at = new Promise<void>(r => (reached = r));
+    let holding = true;
+    slack.hold = (call, emoji) => {
+      if (call !== 'react' || emoji !== 'eyes' || !holding) return undefined;
+      holding = false;
+      reached();
+      return held;
+    };
+    const first = status.runStarted(await card());
+    await at;
+    await status.runEnded(await card(), { status: 'failed', reason: 'sandbox crashed' });
+    slack.failUnreacts = 2;
+    release();
+    await first;
+    expect((await record())?.staleReactions).toEqual(['eyes']);
+    calls.length = 0;
+    await status.runStarted(await card());
+    expect(calls.filter(call => call.call.endsWith('react'))).toEqual([
+      { call: 'unreact', ts: '1700.1', emoji: 'warning' },
+      { call: 'react', ts: '1700.1', emoji: 'eyes' },
+    ]);
+    expect((await record())?.reaction).toBe('eyes');
+    expect((await record())?.staleReactions).toBeUndefined();
   });
 
   it('takes back a late reaction whose cleanup Slack refused, on a later write', async () => {
