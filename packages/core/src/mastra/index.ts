@@ -1227,6 +1227,7 @@ export class Mastra<
    * Kept separate from `#workersStarted`, which partial `startWorkers(name)`
    * calls also set without starting the workflow consumer.
    */
+  #durableAgentInitialization?: Promise<void>;
   #executionWorkersStarted = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
@@ -3255,7 +3256,7 @@ export class Mastra<
         (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
         (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
-        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy(this.#durable);
+        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
         return;
       }
       throw new MastraError({
@@ -3283,8 +3284,9 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
-    mastraAgent.__registerExecutionEnginePolicy(this.#durable);
+    mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
     agents[agentKey] = mastraAgent;
+    this.#durableAgentInitialization = undefined;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
       if (!registrations) {
@@ -5226,7 +5228,7 @@ export class Mastra<
       return { agents: 0, recovered: 0, succeeded: 0, failed: 0, skipped: 0 };
     }
 
-    const durableAgents: DurableAgentLike[] = [];
+    const durableAgents: (Agent<any, any, any> | DurableAgentLike)[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
       if (agent && hasDurableExecution(agent)) {
         durableAgents.push(agent);
@@ -5300,7 +5302,7 @@ export class Mastra<
    * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
-    agent: DurableAgentLike,
+    agent: Agent<any, any, any> | DurableAgentLike,
     run: { runId: string; retryAt?: number },
     failures = 0,
   ): void {
@@ -7972,6 +7974,20 @@ export class Mastra<
     await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
+  #initializeDurableAgents(): Promise<void> {
+    const initialization = (this.#durableAgentInitialization ??= Promise.all(
+      Object.values(this.#agents ?? {}).map(async agent => {
+        if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) {
+          await agent.__initializeDurableExecution();
+        }
+      }),
+    ).then(() => undefined));
+    return initialization.catch(error => {
+      if (this.#durableAgentInitialization === initialization) this.#durableAgentInitialization = undefined;
+      throw error;
+    });
+  }
+
   /**
    * Process a single workflow event. Shared entry point used by:
    * - pull-mode workers (OrchestrationWorker)
@@ -7983,6 +7999,12 @@ export class Mastra<
    * should nack/return 5xx so the broker retries.
    */
   public async handleWorkflowEvent(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    try {
+      await this.#initializeDurableAgents();
+    } catch (error) {
+      this.#logger.error('Failed to initialize durable agents for workflow event', { error });
+      return { ok: false, retry: true };
+    }
     if (!this.#workflowEventProcessor) {
       this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
     }
@@ -8014,6 +8036,8 @@ export class Mastra<
     if (this.#storage) {
       await this.#storage.init();
     }
+
+    await this.#initializeDurableAgents();
 
     // Skip the boot probe when it cannot affect startup. Besides avoiding an
     // unnecessary query, this preserves request-scoped storage behavior from
@@ -8171,7 +8195,18 @@ export class Mastra<
     const modes = this.#pubsub.supportedModes ?? ['pull'];
     const pushOnly = modes.includes('push') && !modes.includes('pull');
     if (pushOnly && !this.#pushSubscription) {
-      const cb: EventCallback = (event, ack, nack) => {
+      const deliver = async (
+        event: Parameters<EventCallback>[0],
+        ack?: () => Promise<void>,
+        nack?: () => Promise<void>,
+      ) => {
+        try {
+          await this.#initializeDurableAgents();
+        } catch (error) {
+          this.#logger.error('Failed to initialize durable agents for push delivery', { error });
+          if (nack) await nack().catch(err => this.#logger.error('Error nacking workflow event', err));
+          return;
+        }
         // In cross-process push environments (e.g. UnixSocketPubSub),
         // every subscriber receives every event — including events for
         // internal workflows registered on a different process. Skip
@@ -8190,7 +8225,7 @@ export class Mastra<
           return;
         }
 
-        const inFlight = this.handleWorkflowEvent(event)
+        await this.handleWorkflowEvent(event)
           .then(result => {
             if (result.ok) {
               if (ack) {
@@ -8229,6 +8264,11 @@ export class Mastra<
             }
           })
           .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+      };
+      const cb: EventCallback = (event, ack, nack) => {
+        // Track the whole delivery, including native engine initialization, so a
+        // concurrent stopWorkers() drain cannot finish before this event is handled.
+        const inFlight = deliver(event, ack, nack);
         this.#inFlightPushEvents.add(inFlight);
         void inFlight.finally(() => this.#inFlightPushEvents.delete(inFlight));
       };
@@ -8282,6 +8322,7 @@ export class Mastra<
   }
 
   async #startExecutionWorkers(): Promise<void> {
+    await this.#initializeDurableAgents();
     // Storage init is memoized (see augmentWithInit) — cheap when already run.
     if (this.#storage) {
       await this.#storage.init();

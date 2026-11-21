@@ -1121,7 +1121,7 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     type: 'boolean | { pubsub?: PubSub; cache?: MastraServerCache | false; shouldCache?: (topic: string) => boolean; cleanupTimeoutMs?: number }',
     isOptional: true,
     description:
-      'Publishes each run on its stream topic so another reader can follow it with observe() or reconnect after a disconnect. Omit to turn streams on when the agent is registered on Mastra and off for standalone agents. On a plain agent, pass false to stop publishing. This controls resumable streams only, not checkpoint execution. For durable execution, wrap the agent explicitly with createDurableAgent(). See [Resumable streams](/docs/agents/resumable-streams).',
+      'Publishes run events for observe() and reconnecting clients. Set executionEngine to durable or evented for checkpointed execution, or false for the plain loop. Explicit agent settings override Mastra.durable defaults, and the engine is fixed at registration or first execution. Pass durable: false to opt out of publication and inherited defaults. Native streams keep MastraModelOutput APIs. See [Native agent execution](/reference/agents/durable-agent#native-agent-execution).',
   },
   {
     name: 'editor',

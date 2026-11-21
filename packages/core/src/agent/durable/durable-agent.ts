@@ -654,6 +654,10 @@ export class DurableAgent<
     return new DurableExecutionEngine(this.id, mastra);
   }
 
+  protected override get returnsDurableStreamResult(): boolean {
+    return true;
+  }
+
   /** @internal Forced strategy, without resolving host/storage fallback. */
   __getExecutionEngineStrategy(): 'durable' | 'evented' {
     return this.workflowEngine === 'evented' ? 'evented' : 'durable';

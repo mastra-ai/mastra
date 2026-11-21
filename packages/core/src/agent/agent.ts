@@ -207,6 +207,7 @@ import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
   AgentExecutionOptionsBase,
+  AgentStreamOutput,
   PublicAgentExecutionOptions,
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
@@ -1254,9 +1255,56 @@ export class Agent<
     return this.#resolveExecutionEngine() ?? this.#requireDurableExecution('execution');
   }
 
-  /** @internal Plain agents have no durable execution backend. */
+  /** @internal Legacy wrappers provide synchronous engine construction. */
   protected createExecutionEngine(_mastra?: Mastra): DurableExecutionEngine | undefined {
     return undefined;
+  }
+
+  #executionEngineInitialization?: Promise<DurableExecutionEngine>;
+
+  async #initializeExecutionEngine(): Promise<DurableExecutionEngine | undefined> {
+    const existing = this.#resolveExecutionEngine();
+    if (existing) return existing;
+    const engine = this.#executionEnginePolicy.engine;
+    if (!engine) return undefined;
+    this.#beginExecutionPolicy();
+    // The workflow builder extends the plain loop builder, so importing it while
+    // Agent's module is still evaluating creates an import-order-dependent cycle.
+    return (this.#executionEngineInitialization ??= (async () => {
+      const { DurableExecutionEngine } = await import('./durable/execution-engine');
+      const { EventedExecutionEngine } = await import('./durable/evented-execution-engine');
+      return (this.#executionEngine ??=
+        engine === 'evented'
+          ? new EventedExecutionEngine(this.id, this.#mastra)
+          : new DurableExecutionEngine(this.id, this.#mastra));
+    })().catch(error => {
+      this.#executionEngineInitialization = undefined;
+      throw error;
+    }));
+  }
+
+  /**
+   * The engine when it can be read without awaiting: an existing engine, or false when none is
+   * selected. Undefined only while a native engine awaits its first import, so legacy wrappers and
+   * plain agents keep their pre-dispatch call timing.
+   */
+  #readyExecutionEngine(): DurableExecutionEngine | false | undefined {
+    return this.#resolveExecutionEngine() ?? (this.__hasDurableExecution() ? undefined : false);
+  }
+
+  /** @internal Register native durable workflows before execution workers subscribe. */
+  async __initializeDurableExecution(): Promise<void> {
+    if (await this.#initializeExecutionEngine()) this.getWorkflow();
+  }
+
+  /** @internal Legacy wrappers expose the low-level durable stream result. */
+  protected get returnsDurableStreamResult(): boolean {
+    return false;
+  }
+
+  /** @internal Inspect engine selection without allocating a backend or freezing policy. */
+  __hasDurableExecution(): boolean {
+    return this.#executionEnginePolicy.engine !== false;
   }
 
   /** Resumable stream layer, built on first use once streams are enabled. */
@@ -1390,8 +1438,8 @@ export class Agent<
       if (legacyKeys.length) {
         this.logger.warn(
           `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
-            'Use createDurableAgent({ agent, ...executionOptions }) for checkpoint execution. ' +
-            'On native Agent, durable configures resumable streams and staged engine policy; native execution activation is deferred.',
+            'Use createDurableAgent({ agent, ...executionOptions }) to configure wrapper-specific options. ' +
+            'On native Agent, durable configures resumable streams and the execution engine.',
         );
       }
     }
@@ -1735,7 +1783,7 @@ export class Agent<
 
   /** @internal Read one JSON-safe request-context value captured in a suspended run snapshot. */
   async __getSuspendedRunRequestContextValue({ runId, key }: { runId: string; key: string }): Promise<unknown> {
-    const executionEngine = this.#resolveExecutionEngine();
+    const executionEngine = this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine());
     if (executionEngine) {
       if (!this.#mastra) {
         throw new MastraError({
@@ -2055,9 +2103,9 @@ export class Agent<
   }
 
   /**
-   * Effective resumable-stream configuration and staged execution-engine policy.
+   * Effective resumable-stream configuration and execution-engine selection.
    *
-   * Native execution activation is deferred. See {@link AgentDurableOption}.
+   * See {@link AgentDurableOption}.
    */
   get durable(): AgentDurableOption | undefined {
     return this.#executionEnginePolicy.durable;
@@ -2094,9 +2142,7 @@ export class Agent<
   #warnExecutionPolicy(kind: string, message: string): void {
     if (this.#executionPolicyWarnings.has(kind)) return;
     this.#executionPolicyWarnings.add(kind);
-    this.logger.warn(
-      `Agent "${this.id}": ${message} Native execution activation is deferred; this policy does not change execution yet.`,
-    );
+    this.logger.warn(`Agent "${this.id}": ${message}`);
   }
 
   #warnInheritedExecutionOptions(options: PublicAgentExecutionOptions<TOutput>): void {
@@ -2142,12 +2188,16 @@ export class Agent<
 
   /** Whether run frames are published by workers on Mastra's shared log. @internal */
   __usesSharedRunLog(): boolean {
-    return false;
+    return (
+      !!this.#mastra &&
+      !!this.#resolveExecutionEngine() &&
+      this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented'
+    );
   }
 
   /** Whether this class executes through the plain Agent publisher. @internal */
   protected __ownsPlainStreamPublisher(): boolean {
-    return true;
+    return !this.__hasDurableExecution();
   }
 
   // Sharing transport does not opt durable execution into plain run records or abort checks.
@@ -2292,6 +2342,7 @@ export class Agent<
   protected async requestRemoteAbort(runId: string, bus = this.__getStreamBus()): Promise<void> {
     if (!bus) return;
     try {
+      if (this.#readyExecutionEngine() === undefined) await this.#initializeExecutionEngine();
       await publishAbortRequest(bus.forRun(this.__usesSharedRunLog()).pubsub, runId);
     } catch (error) {
       this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
@@ -7821,9 +7872,11 @@ export class Agent<
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
     /** @internal In-flight run messages, so recovery can restore processor-loaded tools. */
     runMessages?: MastraDBMessage[];
+    /** @internal Defaults already evaluated for this invocation. */
+    resolvedDefaultOptions?: AgentExecutionOptionsBase<any>;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
-    const defaultOptions = await this.getDefaultOptions({ requestContext });
+    const defaultOptions = options.resolvedDefaultOptions ?? (await this.getDefaultOptions({ requestContext }));
     const mergedOptions = deepMerge(
       defaultOptions as Record<string, unknown>,
       { ...withDefinedToolHooks(options), requestContext } as Record<string, unknown>,
@@ -10630,12 +10683,12 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
-    if (this.#resolveExecutionEngine())
-      return this.#generateDurable(messages, options as DurableAgentStreamOptions<TOutput>);
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
     this.#beginExecutionPolicy();
+    if (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine()))
+      return this.#generateDurable(messages, options as DurableAgentStreamOptions<TOutput>);
 
     const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
     return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
@@ -10967,7 +11020,7 @@ export class Agent<
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
     const aborted = this.#abortThreadStreamLocally(options);
     // The synchronous API cannot report the asynchronous lease-owner lookup.
-    if (this.#resolveExecutionEngine() && !aborted && !options.localOnly) {
+    if ((this.__hasDurableExecution() || this.#resolveExecutionEngine()) && !aborted && !options.localOnly) {
       void this.#abortThreadLeaseOwner(options).catch(error => {
         this.#mastra?.getLogger?.()?.warn?.('Failed to abort durable agent thread run on another process', {
           agentId: this.id,
@@ -11000,7 +11053,8 @@ export class Agent<
 
   /** @internal Abort the thread's run even when another process executes it, reporting whether one was asked to stop. */
   async __abortThreadStreamAcrossProcesses(options: AgentAbortThreadOptions): Promise<boolean> {
-    if (!this.#resolveExecutionEngine()) return this.abortThreadStream(options);
+    if (!(this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine())))
+      return this.abortThreadStream(options);
     const aborted = this.#abortThreadStreamLocally(options);
     if (aborted || options.localOnly) return aborted;
     return this.#abortThreadLeaseOwner(options);
@@ -11008,6 +11062,7 @@ export class Agent<
 
   /** Stop the lease owner even when this process has no thread subscription. */
   async #abortThreadLeaseOwner(options: AgentAbortThreadOptions): Promise<boolean> {
+    if (this.#readyExecutionEngine() === undefined) await this.#initializeExecutionEngine();
     const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(this.getPubSub(), options);
     if (!runId) return false;
     // Never stop a successor run the caller didn't mean (#24422).
@@ -11068,7 +11123,8 @@ export class Agent<
    * @internal Used by the server's run abort route.
    */
   async __abortRunAcknowledged(runId: string): Promise<boolean> {
-    if (this.#resolveExecutionEngine()) return this.#abortDurableRunAcknowledged(runId);
+    if (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine()))
+      return this.#abortDurableRunAcknowledged(runId);
     if (this.__abortLocalRun(runId)) return true;
     const bus = this.__getStreamBus();
     if (!bus) return false;
@@ -11561,13 +11617,21 @@ export class Agent<
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
-  ): Promise<MastraModelOutput<OUTPUT> | DurableAgentStreamResult<TOutput>> {
-    if (this.#resolveExecutionEngine())
-      return this.#streamDurable(messages, streamOptions as DurableAgentStreamOptions<TOutput>);
+  ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput> | DurableAgentStreamResult<TOutput>> {
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
     this.#beginExecutionPolicy();
+    if (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine())) {
+      const result = await this.#streamDurable(messages, streamOptions as DurableAgentStreamOptions<TOutput>);
+      if (this.returnsDurableStreamResult) return result;
+      return Object.assign(result.output, {
+        abort: result.abort,
+        cleanup: result.cleanup,
+        threadId: result.threadId,
+        resourceId: result.resourceId,
+      });
+    }
 
     const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(streamOptions);
 
@@ -11666,7 +11730,7 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
-    if (this.#resolveExecutionEngine()) {
+    if (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine())) {
       const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
       const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
       if (structuredOutput) {
@@ -11800,7 +11864,7 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
-    if (this.#resolveExecutionEngine())
+    if (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine()))
       return this.#resumeDurableStream(resumeData, streamOptions as DurableAgentResumeOptions<TOutput>);
     return this.#resumeStream<OUTPUT>(resumeData, streamOptions, false);
   }
@@ -11808,7 +11872,7 @@ export class Agent<
   async #resumeDurableStream(
     resumeData: unknown,
     streamOptions?: DurableAgentResumeOptions<TOutput> & { runId?: string },
-  ): Promise<MastraModelOutput<TOutput>> {
+  ): Promise<AgentStreamOutput<TOutput>> {
     const runId = streamOptions?.runId;
     if (!runId) {
       throw new Error('resumeStream() on DurableAgent requires a runId in streamOptions.');
@@ -11819,7 +11883,12 @@ export class Agent<
       // Close when the resumed workflow suspends again so the caller's reader terminates.
       closeOnSuspend: resumeOptions.closeOnSuspend ?? true,
     });
-    return result.output;
+    return Object.assign(result.output, {
+      abort: result.abort,
+      cleanup: result.cleanup,
+      threadId: result.threadId,
+      resourceId: result.resourceId,
+    });
   }
 
   /**
@@ -12107,7 +12176,8 @@ export class Agent<
       legacyOptions?: DurableAgentResumeOptions<TOutput>,
     ]
   ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
-    if (this.#resolveExecutionEngine()) return this.#resumeDurableGenerate(args);
+    if (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine()))
+      return this.#resumeDurableGenerate(args);
     const [resumeData, options] = args;
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
@@ -12889,12 +12959,13 @@ export class Agent<
    * @internal
    */
   protected get workflowEngine(): 'default' | 'evented' {
-    return 'default';
+    return this.#executionEnginePolicy.engine === 'evented' ? 'evented' : 'default';
   }
   protected getWorkflow(): ReturnType<DurableExecutionEngine['getWorkflow']> {
     return this.executionEngine.getWorkflow({
       workflowEngine: this.workflowEngine,
       storesRunsInJournal: false,
+      shouldPersistSnapshot: typeof this.durable === 'object' ? this.durable.shouldPersistSnapshot : undefined,
       logger: this.logger,
       guardrailLogger: this.guardrailLogger,
     });
@@ -13870,7 +13941,8 @@ export class Agent<
     runId: string,
     options?: DurableAgentRecoverOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('recover');
+    if (!(this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine())))
+      return this.#requireDurableExecution('recover');
     const workflowsStore = await this.executionEngine.recoveryStore(runId, this.name, this.guardrailLogger);
 
     // 1. Validate the persisted durable-agent input before claiming ownership
@@ -14276,6 +14348,7 @@ export class Agent<
     }
 
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
+    this.#warnInheritedExecutionOptions(defaultOptions);
     const resolvedOptions = deepMerge(
       withDefaultToolCallConcurrencyLimit(defaultOptions ?? {}, options) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
@@ -14571,7 +14644,11 @@ export class Agent<
         id: this.id,
         getDefaultOptions: () => ({}),
         getMemory: (args?: any) => this.getMemory(args),
-        stream: this.stream.bind(this),
+        // Legacy wrappers route continuations through their public stream() so subclass overrides still run.
+        stream: this.returnsDurableStreamResult
+          ? this.stream.bind(this)
+          : (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+              this.#streamDurable(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
       return runDurableStreamUntilIdle<TOutput>(
         resolvedOptionsAgent,
@@ -14963,7 +15040,7 @@ export class Agent<
       id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
-      text: `Agent.${method}() requires durable execution. Use createDurableAgent({ agent }) or new DurableAgent({ agent }); Agent.durable configures staged engine policy; native execution activation is deferred.`,
+      text: `Agent.${method}() requires durable execution. Set durable.executionEngine to 'durable' or 'evented', or use createDurableAgent({ agent }).`,
       details: { agentId: this.id, method },
     });
   }
@@ -14977,7 +15054,8 @@ export class Agent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    if (!this.#resolveExecutionEngine()) this.#requireDurableExecution('resume');
+    if (!(this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine())))
+      this.#requireDurableExecution('resume');
     const abortedRunError = () =>
       new MastraError({
         id: 'AGENT_RESUME_ABORTED_RUN',
@@ -15315,7 +15393,11 @@ export class Agent<
             ...innerOptions,
             tracingOptions: resumeTracingOptions,
           } as DurableAgentResumeOptions<TOutput>),
-        stream: this.stream.bind(this),
+        // Legacy wrappers route continuations through their public stream() so subclass overrides still run.
+        stream: this.returnsDurableStreamResult
+          ? this.stream.bind(this)
+          : (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+              this.#streamDurable(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
       return runResumeDurableStreamUntilIdle<TOutput>(
         resolvedOptionsAgent,
@@ -15858,7 +15940,7 @@ export class Agent<
    * ```
    */
   async listActiveRuns(options: DurableAgentListActiveRunsOptions = {}): Promise<DurableAgentListActiveRunsResult> {
-    const executionEngine = this.#resolveExecutionEngine();
+    const executionEngine = this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine());
     if (!executionEngine) return this.#requireDurableExecution('listActiveRuns');
 
     return executionEngine.listActiveRuns(this.id, this.name, options);
@@ -15905,7 +15987,8 @@ export class Agent<
   async recoverActiveRuns(
     options: DurableAgentRecoverActiveRunsOptions = {},
   ): Promise<DurableAgentRecoverActiveRunsResult> {
-    const executionEngine = this.#resolveExecutionEngine();
+    // Resolve an existing engine synchronously so discovery starts before a concurrent shutdown can begin.
+    const executionEngine = this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine());
     if (!executionEngine) return this.#requireDurableExecution('recoverActiveRuns');
     if (this.#mastra?.__shuttingDown) return { recovered: [], succeeded: 0, failed: 0 };
     const { runId, ...discoveryOptions } = options;
@@ -16062,7 +16145,8 @@ export class Agent<
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
-    if (this.#resolveExecutionEngine()) return this.#observeDurableRun(runId, options);
+    if (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine()))
+      return this.#observeDurableRun(runId, options);
 
     const bus = this.__getStreamBus();
     if (bus) return this.#observeRun(bus, runId, options);
@@ -16850,7 +16934,8 @@ export class Agent<
     messages: MessageListInput,
     options?: AgentExecutionOptions<TOutput>,
   ): Promise<Omit<PreparationResult<TOutput>, 'messageList'>> {
-    if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('prepare');
+    if (!(this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine())))
+      return this.#requireDurableExecution('prepare');
 
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.agentForExecution as Agent<string, any, TOutput>,
