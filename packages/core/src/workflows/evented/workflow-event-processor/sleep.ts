@@ -141,20 +141,21 @@ export async function processWorkflowSleep(
   });
 
   setLongTimeout(async () => {
+    const output = prevResult.status === 'success' ? prevResult.output : undefined;
+    const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
+    await runStorage.writeStepResult({
+      stepId: step.id,
+      result,
+      requestContext: withoutAuthToken(requestContext ?? {}),
+    });
+
     if (emitStepEvents) {
       await pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
         data: {
           type: 'workflow-step-result',
-          payload: {
-            id: step.id,
-            status: 'success',
-            payload: prevResult.status === 'success' ? prevResult.output : undefined,
-            output: prevResult.status === 'success' ? prevResult.output : undefined,
-            startedAt,
-            endedAt: Date.now(),
-          },
+          payload: { id: step.id, ...result },
         },
       });
 
@@ -181,7 +182,7 @@ export async function processWorkflowSleep(
         resumeSteps,
         timeTravel,
         restart,
-        stepResults,
+        stepResults: { ...stepResults, [step.id]: result },
         prevResult,
         resumeData,
         parentWorkflow,
@@ -275,20 +276,21 @@ export async function processWorkflowSleepUntil(
   }
 
   setLongTimeout(async () => {
+    const output = prevResult.status === 'success' ? prevResult.output : undefined;
+    const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
+    await runStorage.writeStepResult({
+      stepId: step.id,
+      result,
+      requestContext: withoutAuthToken(requestContext ?? {}),
+    });
+
     if (emitStepEvents) {
       await pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
         data: {
           type: 'workflow-step-result',
-          payload: {
-            id: step.id,
-            status: 'success',
-            payload: prevResult.status === 'success' ? prevResult.output : undefined,
-            output: prevResult.status === 'success' ? prevResult.output : undefined,
-            startedAt,
-            endedAt: Date.now(),
-          },
+          payload: { id: step.id, ...result },
         },
       });
 
@@ -315,7 +317,7 @@ export async function processWorkflowSleepUntil(
         resumeSteps,
         timeTravel,
         restart,
-        stepResults,
+        stepResults: { ...stepResults, [step.id]: result },
         prevResult,
         resumeData,
         parentWorkflow,
