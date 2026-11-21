@@ -8,11 +8,19 @@ import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolveVerdaccioPath, setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup';
 import { publishPackages } from '../_local-registry-setup/publish';
+import { runOrThrow } from '../_local-registry-setup/install.js';
 import { E2E_TAG, getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
+
+  // The template pins its own pnpm via `packageManager`. Each test file's install would otherwise
+  // make pnpm download that version into the shared store concurrently, and pnpm names the
+  // download dir only by millisecond timestamp, so parallel workers can delete each other's dir
+  // (ENOENT on `.tmp/pnpm-<version>-<ms>`). Install it once here, before any worker starts.
+  runOrThrow('pnpm', ['--version'], { cwd: join(__dirname, 'template'), env: process.env });
+
   const publishedRegistryTeardown = await setupPublishedRegistryFromEnv(project);
   if (publishedRegistryTeardown) {
     return publishedRegistryTeardown;
