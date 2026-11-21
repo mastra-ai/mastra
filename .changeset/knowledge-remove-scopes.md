@@ -12,4 +12,6 @@ Knowledge page stores can now remove a template page or an empty scope, and rest
 - `removeScope` removes a scope with no live pages or child scopes and drops its pins. Writes to a removed scope's address fail with `KnowledgeScopeRemovedError` instead of reviving it, and removed scopes are left out of scope lookups and listings.
 - `restoreScope` brings a removed scope back with the same id, as long as its parent scope is live. Template pages removed before stay removed.
 
-Removal and child creation are serialized, so a scope is never removed while a page is being created in it.
+Removal is serialized against creating, moving or merging pages into the same parent, so a scope or template page is never removed while a page lands under it.
+
+On MongoDB these three operations need transactions (a replica set or sharded cluster). On a standalone server they refuse with an error and write nothing, instead of falling back to unprotected sequential writes.

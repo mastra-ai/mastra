@@ -1005,7 +1005,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
       const row = await this.#livePage(tx, input.id);
       if (Number(row.isScope) === 1) throw new Error(`Cannot move ${input.id}: it is a scope page`);
       if (Number(row.version) !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
-      const parent = await this.#livePage(tx, input.parentId);
+      const parent = await this.#liveParent(tx, input.parentId);
       const path = String(row.path);
       if (String(parent.id) === input.id || String(parent.path).startsWith(path)) {
         throw new Error(`Cannot move ${input.id} into its own subtree`);
@@ -1028,7 +1028,8 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const core = await loadPagesCore();
     return this.#transaction(async tx => {
       const source = await this.#livePage(tx, input.sourceId);
-      const target = await this.#livePage(tx, input.targetId);
+      // The source's children land under the target, so lock it like any other new parent.
+      const target = await this.#liveParent(tx, input.targetId);
       if (Number(source.isScope) === 1 || Number(target.isScope) === 1) {
         throw new Error('Cannot merge a scope page: merging applies to non-scope pages only');
       }

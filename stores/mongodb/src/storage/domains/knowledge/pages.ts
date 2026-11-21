@@ -225,6 +225,22 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return this.#connector.withTransaction(operation);
   }
 
+  /**
+   * Like {@link #tx}, but refuses to run without a transaction instead of falling back to
+   * sequential writes: removal and restore promise an atomic delete-and-tombstone and a scope
+   * with no children, which a standalone server can't keep. Nothing is written when refused.
+   */
+  #atomic<T>(operation: string, run: (session: Session) => Promise<T>): Promise<T> {
+    return this.#connector.withTransaction(async session => {
+      if (!session) {
+        throw new Error(
+          `Knowledge ${operation} needs MongoDB transactions (a replica set or sharded cluster); this server doesn't support them.`,
+        );
+      }
+      return run(session);
+    });
+  }
+
   // Schema ---------------------------------------------------------------------------------------
 
   async inspectSchema(): Promise<KnowledgePagesSchemaInspection> {
@@ -1075,6 +1091,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       const tree = await this.#subtree(input.id, session, input.parentId);
       if (tree.found) throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
+      // Claimed, not just read: removal of the destination writes the same document.
+      await this.#claimParent(session, input.parentId, new Date());
       const parent = await this.#requireLivePage(input.parentId, session);
       if (tree.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES)
         throw new core.KnowledgeMoveTooLargeError(input.id, tree.live + 1);
@@ -1134,6 +1152,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const target = await this.#requireLivePage(input.targetId, session);
       if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
       if (source.isScope || target.isScope) throw new Error("Knowledge scope pages can't be merged");
+      // The source's children land under the target, so claim it like any other new parent.
+      await this.#claimParent(session, target.id, new Date());
       const tree = await this.#subtree(source.id, session, target.id);
       if (tree.found) {
         throw new Error(`Knowledge page ${source.id} can't merge into itself or its own subtree`);
@@ -1295,7 +1315,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     expectedVersion: number;
     provenance: KnowledgeProvenance;
   }): Promise<KnowledgePage> {
-    return this.#tx(async session => {
+    return this.#atomic('removeTemplatePage', async session => {
       const page = await this.#requireLivePage(input.id, session);
       if (page.isScope) throw new Error(`Knowledge scope page ${input.id} isn't a template page`);
       return this.#removeEmpty(session, page, input, 'template-removed');
@@ -1307,7 +1327,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     expectedVersion: number;
     provenance: KnowledgeProvenance;
   }): Promise<KnowledgePage> {
-    return this.#tx(async session => {
+    return this.#atomic('removeScope', async session => {
       const scope = await this.#requireLivePage(input.id, session);
       if (!scope.isScope) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
       return this.#removeEmpty(session, scope, input, 'scope-removed');
@@ -1344,7 +1364,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }
 
   async restoreScope(input: { id: string; provenance: KnowledgeProvenance }): Promise<KnowledgePage> {
-    return this.#tx(async session => {
+    return this.#atomic('restoreScope', async session => {
       const scope = await this.#page(input.id, session);
       if (!scope) throw new KnowledgeNotFoundError('page', input.id);
       if (!scope.isScope) throw new Error(`Knowledge page ${input.id} isn't a scope page`);

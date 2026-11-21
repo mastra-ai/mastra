@@ -363,6 +363,45 @@ export function createKnowledgePageStoreTests(
         }
       });
 
+      it('never both removes a scope and moves or merges a page into it', async () => {
+        for (let round = 0; round < 5; round++) {
+          await store.dangerouslyClearAll();
+          const acme = await scope('org:acme', ORG);
+          const other = await scope('org:other', ORG);
+          const mover = await page(other.id, 'Mover');
+          const [removal, move] = await Promise.allSettled([
+            store.removeScope({ id: acme.id, expectedVersion: acme.version, provenance: host }),
+            store.movePage({ id: mover.id, expectedVersion: mover.version, parentId: acme.id, provenance: host }),
+          ]);
+          expect([removal.status, move.status].filter(status => status === 'fulfilled')).toHaveLength(1);
+          const live = (await store.listChildPages({ parentId: acme.id, read: 'all' })).pages;
+          if (removal.status === 'fulfilled') expect(live).toEqual([]);
+          else expect(await store.getScopesByAddress(['org:acme'])).toHaveLength(1);
+        }
+      });
+
+      it('never both removes a template page and merges children into it', async () => {
+        for (let round = 0; round < 5; round++) {
+          await store.dangerouslyClearAll();
+          const { scope: acct } = await account();
+          const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+          const source = await page(acct.id, 'Source');
+          await page(source.id, 'Child');
+          const [removal, merge] = await Promise.allSettled([
+            store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host }),
+            store.mergePages({
+              sourceId: source.id,
+              sourceVersion: source.version,
+              targetId: overview.id,
+              provenance: host,
+            }),
+          ]);
+          expect([removal.status, merge.status].filter(status => status === 'fulfilled')).toHaveLength(1);
+          const children = (await store.listChildPages({ parentId: overview.id, read: 'all' })).pages;
+          if (removal.status === 'fulfilled') expect(children).toEqual([]);
+        }
+      });
+
       it('restores a removed scope with its id, leaving removed template pages removed', async () => {
         const { scope: acct } = await account();
         const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
