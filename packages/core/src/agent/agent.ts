@@ -7625,64 +7625,80 @@ export class Agent<
 
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
 
-              let result: WorkflowResult<any, any, any, any, 1 | 2> | undefined = undefined;
-
-              if (methodType === 'generate' || methodType === 'generateLegacy') {
-                if (shouldResumeWorkflow) {
-                  result = await run.resume({
-                    resumeData,
-                    requestContext,
-                    actor: invocationActor,
-                    ...resolveObservabilityContext(context ?? {}),
-                  });
-                } else {
-                  result = await run.start({
-                    inputData: workflowInputData,
-                    requestContext,
-                    actor: invocationActor,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(initialState && { initialState }),
-                  });
-                }
-              } else if (methodType === 'streamLegacy') {
-                const streamResult = run.streamLegacy({
-                  inputData: workflowInputData,
-                  requestContext,
-                  actor: invocationActor,
-                  ...resolveObservabilityContext(context ?? {}),
+              // Aborting the tool (parent abort, background cancel or timeout) must stop the run it started.
+              const abortSignal = context?.abortSignal;
+              abortSignal?.throwIfAborted();
+              const cancelRun = () => {
+                // An event listener has no caller to surface a cancel failure to.
+                run.cancel().catch(error => {
+                  this.logger.error(`Failed to cancel workflow "${workflowName}" run ${run.runId}`, error);
                 });
+              };
+              abortSignal?.addEventListener('abort', cancelRun, { once: true });
 
-                if (context?.writer) {
-                  await streamResult.stream.pipeTo(context.writer);
-                } else {
-                  for await (const _chunk of streamResult.stream) {
-                    // complete the stream
-                  }
-                }
-
-                result = await streamResult.getWorkflowState();
-              } else if (methodType === 'stream') {
-                const streamResult = shouldResumeWorkflow
-                  ? run.resumeStream({
+              let result: WorkflowResult<any, any, any, any, 1 | 2> | undefined = undefined;
+              try {
+                if (methodType === 'generate' || methodType === 'generateLegacy') {
+                  if (shouldResumeWorkflow) {
+                    result = await run.resume({
                       resumeData,
                       requestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
-                    })
-                  : run.stream({
+                    });
+                  } else {
+                    result = await run.start({
                       inputData: workflowInputData,
                       requestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
+                  }
+                } else if (methodType === 'streamLegacy') {
+                  const streamResult = run.streamLegacy({
+                    inputData: workflowInputData,
+                    requestContext,
+                    actor: invocationActor,
+                    ...resolveObservabilityContext(context ?? {}),
+                  });
 
-                if (context?.writer) {
-                  await streamResult.fullStream.pipeTo(context.writer);
+                  if (context?.writer) {
+                    await streamResult.stream.pipeTo(context.writer);
+                  } else {
+                    for await (const _chunk of streamResult.stream) {
+                      // complete the stream
+                    }
+                  }
+
+                  result = await streamResult.getWorkflowState();
+                } else if (methodType === 'stream') {
+                  const streamResult = shouldResumeWorkflow
+                    ? run.resumeStream({
+                        resumeData,
+                        requestContext,
+                        actor: invocationActor,
+                        ...resolveObservabilityContext(context ?? {}),
+                      })
+                    : run.stream({
+                        inputData: workflowInputData,
+                        requestContext,
+                        actor: invocationActor,
+                        ...resolveObservabilityContext(context ?? {}),
+                        ...(initialState && { initialState }),
+                      });
+
+                  if (context?.writer) {
+                    await streamResult.fullStream.pipeTo(context.writer);
+                  }
+
+                  result = await streamResult.result;
                 }
-
-                result = await streamResult.result;
+              } finally {
+                abortSignal?.removeEventListener('abort', cancelRun);
               }
+              // A run cancelled by the abort has no result for the model; report the abort itself.
+              abortSignal?.throwIfAborted();
 
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
@@ -7742,6 +7758,9 @@ export class Agent<
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
+
+              // An aborted call is a cancellation, not a workflow failure.
+              if (context?.abortSignal?.aborted) throw err;
 
               const mastraError = new MastraError(
                 {
