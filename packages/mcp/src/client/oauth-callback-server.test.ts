@@ -197,8 +197,11 @@ describe('createOAuthCallbackServer', () => {
         state: STATE,
       });
 
-      expect(callbackServer.port).toBe(preferredPort + 1);
-      expect(callbackServer.url.toString()).toBe(`http://127.0.0.1:${preferredPort + 1}/oauth/callback`);
+      // Another process on a busy runner can hold preferredPort + 1 too, so assert
+      // the server moved to a later port in the fallback range, not exactly +1.
+      expect(callbackServer.port).toBeGreaterThan(preferredPort);
+      expect(callbackServer.port).toBeLessThanOrEqual(preferredPort + 10);
+      expect(callbackServer.url.toString()).toBe(`http://127.0.0.1:${callbackServer.port}/oauth/callback`);
     } finally {
       await closeServer(blocker);
     }
