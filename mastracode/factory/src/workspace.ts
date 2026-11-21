@@ -22,6 +22,8 @@ import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
+import { recordedHeadResolver } from './environment/heads.js';
+import type { EnvironmentHeads } from './environment/heads.js';
 import { groupRepositoryIds, groupedRepositoryAccess } from './environment/repository-access.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -661,16 +663,26 @@ export interface SessionEnvironment {
  * sandbox of its own link, still booted with the project's settings. A link
  * whose repository row is missing is skipped with a warning rather than
  * failing every start of the session.
+ *
+ * `templateHeads` are the commits the project's active template was built
+ * from, present only while pushes rebuild that template. A session that asks
+ * for those commits boots the template the project already built; one that
+ * asks for the newest commits names a template nobody built yet, so every
+ * session start after a push would start its own build, outside the push
+ * debounce. The session's checkout fetches the newest commit either way.
  */
 async function resolveSessionEnvironment(
   projects: Pick<FactoryProjectsStorage, 'get'> | undefined,
   storage: SourceControlStorageHandle,
   session: SourceControlSession,
-): Promise<SessionEnvironment | undefined> {
+): Promise<{ environment: SessionEnvironment; templateHeads: EnvironmentHeads | undefined } | undefined> {
   if (!projects || !session.factoryProjectId) return undefined;
   const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
   if (!project) return undefined;
-  return resolveProjectEnvironment(storage, project);
+  return {
+    environment: await resolveProjectEnvironment(storage, project),
+    templateHeads: project.buildOnPushEnabled ? (project.activeTemplateHeads ?? undefined) : undefined,
+  };
 }
 
 /**
@@ -878,7 +890,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // factory in position order, with the project's settings. Absent when the
     // session predates `factoryProjectId`; the settings apply to every boot of
     // a factory session, list form or single repository.
-    const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
+    const sessionEnvironment = await resolveSessionEnvironment(projects, storage, session);
+    const resolvedEnvironment = sessionEnvironment?.environment;
+    const templateHeads = sessionEnvironment?.templateHeads;
     const sandboxSettings = resolvedEnvironment?.settings ?? {};
     // The Factory's variables, read before construction (which is synchronous).
     const envScope =
@@ -1135,6 +1149,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                   ? environmentSandboxContext(environment, {
                       orgId: session.orgId,
                       getRepositoryAccess: args => repositoryAccess(args.repositoryId),
+                      ...(templateHeads ? { resolveHead: recordedHeadResolver(templateHeads) } : {}),
                     })
                   : {
                       // Stored nullable; the context speaks `undefined` for absent.
