@@ -135,6 +135,7 @@ function openWardSessionAs(
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SESSION_ID,
+        running: agentRunning,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
@@ -184,8 +185,11 @@ describe("a teammate's Factory session", () => {
     it('says "a teammate" when the owner has no profile, never the raw user id', async () => {
       openWardSessionAs('user-damien', { session: wardSessionWithoutProfile });
 
-      expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
-      expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      expect(await within(composer).findByText('You’re steering a teammate’s session')).toBeInTheDocument();
+      expect(within(composer).queryByText(/user-ward/)).not.toBeInTheDocument();
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
+      expect(await screen.findByRole('alertdialog', { name: 'Take a teammate’s session?' })).toBeInTheDocument();
     });
 
     // A card a webhook filed, or an automatic phase picked up, runs in a session no person owns.
