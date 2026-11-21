@@ -191,26 +191,63 @@ test(
   },
 );
 
+test('a complete fallback finds matches beyond the search query cap', { timeout: 30000 }, async () => {
+  const f = await runtimeFixture({ syntheticKnowledge: false });
+  try {
+    const scope = 'customer:north:store-1';
+    const path = 'cases/fallback-match';
+    await f.supportKnowledge.upsertPage({
+      scope,
+      path,
+      name: 'Fallback match',
+      body: historyRecord('MATCHING_PAGE', ['late-match']),
+    });
+    const result = await prepareHistory(
+      f.supportKnowledge,
+      profile,
+      'one two three four five six seven eight nine ten eleven twelve late-match',
+    );
+    assert.equal(result.status, 'ready');
+    assert.deepEqual(
+      result.records.map(record => record.ref),
+      [`${scope}#${path}`],
+    );
+  } finally {
+    await f.close();
+  }
+});
+
 test('a note removed after native search does not enter scoped history', { timeout: 30000 }, async () => {
-  const f = await runtimeFixture();
+  const f = await runtimeFixture({ syntheticKnowledge: false });
   try {
     const { supportKnowledge } = f;
-    const { noteRef } = await generateHistoryCorpus(supportKnowledge);
-    const id = noteRef.split('?note=')[1]!;
+    const scope = 'customer:north:store-1';
+    const path = 'cases/current-check';
+    await supportKnowledge.upsertPage({ scope, path, name: 'Current check', body: historyRecord('MATCHING_PAGE') });
+    const note = await supportKnowledge.addNote({
+      scope,
+      path,
+      text: reviewedNote(historyRecord('REVIEWED_CONNECTIVITY_NOTE')),
+      author: 'review:synthetic-reviewer',
+    });
+    const noteRef = `${scope}#${path}?note=${note.id}`;
+    const question = 'network printer';
+    const baseline = await prepareHistory(supportKnowledge, profile, question);
+    assert.ok(baseline.records.some(record => record.ref === noteRef));
     const store = await supportKnowledge.getStorage();
     const search = store.searchPages.bind(store);
     let removed = false;
     store.searchPages = async input => {
       const hits = await search(input);
-      if (!removed && hits.some(hit => hit.type === 'note' && hit.note.id === id)) {
+      if (!removed && hits.some(hit => hit.type === 'note' && hit.note.id === note.id)) {
         removed = true;
-        await supportKnowledge.removeNote({ id, author: 'synthetic-fixture' });
+        await supportKnowledge.removeNote({ id: note.id, author: 'synthetic-fixture' });
       }
       return hits;
     };
-    const result = await prepareHistory(supportKnowledge, profile, 'network printer');
+    const result = await prepareHistory(supportKnowledge, profile, question);
     assert.ok(removed, 'The note must be removed after the scoped search returned it');
-    assert.ok(result.records.some(record => record.summary === 'BEST_A'));
+    assert.ok(result.records.some(record => record.summary === 'MATCHING_PAGE'));
     assert.ok(result.records.every(record => record.ref !== noteRef));
   } finally {
     await f.close();

@@ -13,6 +13,7 @@ import {
   type KnowledgePage,
 } from '@mastra/core/knowledge';
 import { validateProfile, type Profile } from '../identity.ts';
+import { isCustomerHistoryPath } from '../../examples/support.ts';
 import { requiredPolicyContentIssue } from './required-policy.ts';
 import { supportRecordEnvelope } from './support-record-envelope.ts';
 
@@ -385,9 +386,14 @@ export async function prepareDataset(
     );
     const marker = pageMarker(config.id, alias);
     const body = `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}${renderedBody.text}\n`;
-    if ((page.record || page.input.kind === 'case') && body.length > MAX_SUPPORT_RECORD_BODY_LENGTH)
+    if (
+      body.length > MAX_SUPPORT_RECORD_BODY_LENGTH &&
+      (page.record ||
+        page.input.kind === 'case' ||
+        (page.placement.kind === 'customer' && isCustomerHistoryPath(page.path)))
+    )
       throw new Error(
-        `Rendered support record in ${page.file} exceeds the ${MAX_SUPPORT_RECORD_BODY_LENGTH}-character read bound`,
+        `Rendered page body in ${page.file} exceeds the ${MAX_SUPPORT_RECORD_BODY_LENGTH}-character read bound`,
       );
     if (mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)) {
       const issue = requiredPolicyContentIssue(body);

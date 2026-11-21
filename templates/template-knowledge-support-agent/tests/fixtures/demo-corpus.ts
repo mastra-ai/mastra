@@ -8,6 +8,18 @@ export const demoCorpus = {
     { query: 'pending payments factory reset', expected: 'tenant:retailops#policies/safe-changes' },
   ],
   alternate: { query: '401 WWW-Authenticate challenge', expected: 'docs:software#guides/request-check' },
+  conflictObservations: [
+    {
+      path: 'cases/conflict-a',
+      summary: 'The Ethernet connection recovered after cable reseating.',
+      applicability: 'Synthetic Ethernet observations after cable reseating.',
+    },
+    {
+      path: 'cases/conflict-b',
+      summary: 'The Ethernet connection did not recover after cable reseating.',
+      applicability: 'Synthetic Ethernet observations after cable reseating.',
+    },
+  ],
   sources: [
     'https://squareup.com/help/us/en/article/8350-troubleshoot-network-connection-on-square-terminal',
     'https://squareup.com/help/us/en/article/8351-troubleshoot-payment-errors-on-square-terminal',

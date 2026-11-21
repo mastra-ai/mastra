@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
 import test from 'node:test';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { runtimeFixture, syntheticSafetyPolicy } from '../fixtures/runtime.ts';
 import type { ModelScript } from '../fixtures/model-server.ts';
@@ -212,9 +213,20 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
       /Technician alex confirms/u,
     );
     assert.deepEqual(await snapshot(f), state, 'Confirmation must not publish Knowledge');
-    const saved = JSON.stringify(await json(await f.request(`/memory/threads/${own}/messages?agentId=support`)));
-    assert.match(saved, /CONFIRMED_THREAD_OBSERVATION/u);
-    assert.doesNotMatch(saved, /Customer history preflight/u);
+    const saved: { messages: MastraDBMessage[] } = await json(
+      await f.request(`/memory/threads/${own}/messages?agentId=support`),
+    );
+    assert.ok(
+      saved.messages.some(
+        message =>
+          message.role === 'user' &&
+          message.content.parts.some(
+            part => part.type === 'text' && part.text?.includes('CONFIRMED_THREAD_OBSERVATION'),
+          ),
+      ),
+      'The attributed confirmation must be saved as a technician user message',
+    );
+    assert.doesNotMatch(JSON.stringify(saved), /Customer history preflight/u);
     const separate = await thread(f);
     const start = f.model.requests.length;
     await turn(f, separate, 'network connectivity');
@@ -455,6 +467,9 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
       'x'.repeat(100),
       'x'.repeat(900),
       'This page contains no policy. The safety procedure is not yet available.',
+      ...['Source:', '**Source:**', '**<!-- internal -->Source:**'].map(label =>
+        syntheticSafetyPolicy.replace(/(## Prohibited actions\n\n)[^\n]+/u, `$1${label} North Branch Operations`),
+      ),
       '# Safe changes\n\n```support-record\n{"summary":"Confirmed successful network recovery after checking the connection indicator."}\n```',
     ]) {
       await f.supportKnowledge.upsertPage({

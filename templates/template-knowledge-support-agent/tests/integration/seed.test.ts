@@ -181,6 +181,13 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
         complete.replace(/(## Prohibited actions\n\n)[^\n]+/u, '$1[[connection-guide]]'),
         /substantive policy instructions under the Prohibited actions heading/u,
       ],
+      ...['Source:', '**Source:**'].map(
+        label =>
+          [
+            complete.replace(/(## Prohibited actions\n\n)[^\n]+/u, `$1${label} North Branch Operations`),
+            /substantive policy instructions under the Prohibited actions heading/u,
+          ] as const,
+      ),
       [
         complete.replace('## Prohibited actions', '[[connection-guide]]## Prohibited actions'),
         /substantive policy instructions under the Prohibited actions heading/u,
@@ -210,10 +217,34 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
         assert.deepEqual(await f.snapshot(), before, 'The active policy version and other Knowledge must be preserved');
       }
     }
-    const updated = complete.replace(/(## Before changes\n\n)[^\n]+/u, `$1> ${instructions.trim()}`);
+    const updated = complete.replace(/(## Before changes\n\n)[^\n]+/u, `$1> **${instructions.trim()}**`);
     await writeFile(policyPath, updated);
     await f.cli({ args: ['--dry-run'] });
     assert.equal(page((await f.cli()).report, 'safety-policy').status, 'updated');
+  } finally {
+    await f.close();
+  }
+});
+
+test('seed checks the rendered body of customer references in history', { timeout: 30000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.cli();
+    const before = await f.snapshot();
+    const manifest = await f.readManifest();
+    const reference = manifest.pages[2]!;
+    reference.kind = 'reference';
+    delete reference.record;
+    await f.saveManifest(manifest);
+    await writeFile(join(dirname(f.manifestFile), reference.file), 'x'.repeat(1_000_000));
+    for (const args of [['--dry-run'], []]) {
+      const { output } = await f.cli({ args, code: 1 });
+      assert.match(output, /Rendered page body in case\.md exceeds the 1000000-character read bound/u);
+      assert.deepEqual(await f.snapshot(), before);
+    }
+    reference.path = 'manual/reference';
+    await f.saveManifest(manifest);
+    await f.cli({ args: ['--dry-run'] });
   } finally {
     await f.close();
   }
@@ -762,7 +793,7 @@ test('seed_rejects_invalid_input_and_recovers_partial_note_update', { timeout: 1
     const fullBody = normalized + '\n\n' + 'x'.repeat(1_000_000 - normalized.length - 2);
     await writeFile(caseFile, fullBody);
     const oversized = await f.cli({ code: 1 });
-    assert.match(oversized.output, /Rendered support record.*exceeds the 1000000-character read bound/u);
+    assert.match(oversized.output, /Rendered page body.*exceeds the 1000000-character read bound/u);
     assert.deepEqual(await f.snapshot(), stable);
     await writeFile(caseFile, caseBody);
     // Reject destination spellings whose CommonMark/GFM interpretation can bypass literal URL checks.

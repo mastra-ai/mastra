@@ -6,7 +6,7 @@ import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
 import { encodeConfirmationReference } from '../../src/mastra/review/confirmation.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
-import { runtimeFixture } from '../fixtures/runtime.ts';
+import { fixtureFetch, runtimeFixture } from '../fixtures/runtime.ts';
 import { history, json, latest, messages } from '../fixtures/demo.ts';
 
 const guide = 'docs:helpdesk#guides/network-configuration';
@@ -67,7 +67,7 @@ test(
     });
     const request = (path: string, owner = 0, options: RequestInit = {}) =>
       path.startsWith('/support/')
-        ? fetch(`${f.base}${path}`, {
+        ? fixtureFetch(`${f.base}${path}`, {
             ...options,
             headers: {
               authorization: `Bearer ${f.credentials[owner]!.token}`,
@@ -151,7 +151,7 @@ test(
       assert.equal((await post('/support/confirmations?actorId=bruno', confirmation)).status, 403);
       assert.equal(
         (
-          await fetch(`${f.base}/support/confirmations`, {
+          await fixtureFetch(`${f.base}/support/confirmations`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(confirmation),

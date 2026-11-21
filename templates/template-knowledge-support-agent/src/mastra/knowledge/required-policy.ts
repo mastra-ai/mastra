@@ -4,6 +4,11 @@ import { gfmAutolinkLiteral } from 'micromark-extension-gfm-autolink-literal';
 
 type MarkdownNode = { type: string; value?: string; children?: MarkdownNode[] };
 
+function visibleText(node: MarkdownNode): string {
+  if (node.type === 'html') return '';
+  return node.value ?? node.children?.map(visibleText).join('') ?? '';
+}
+
 function instructionText(node: MarkdownNode): string {
   if (
     [
@@ -19,7 +24,7 @@ function instructionText(node: MarkdownNode): string {
     ].includes(node.type)
   )
     return '';
-  if (node.type === 'paragraph' && /^\s*Source:/u.test(node.children?.[0]?.value ?? '')) return '';
+  if (node.type === 'paragraph' && /^\s*Source:/iu.test(visibleText(node))) return '';
   if (node.value !== undefined) return node.value.replace(/\[\[[^\r\n]*?\]\]|^[ \t]*Source:.*$/gmu, '');
   return node.children?.map(instructionText).join(' ') ?? '';
 }

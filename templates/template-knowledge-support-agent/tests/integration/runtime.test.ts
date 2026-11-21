@@ -148,6 +148,10 @@ test('local_studio_boots_and_scoped_state_survives_restart', { timeout: 120000 }
     const activeFile = fixture.credentialFile()!;
     const activeCredentials = await readFile(activeFile, 'utf8');
     const injectedCredentials = await readFile(fixture.injectedCredentialFile, 'utf8');
+    const activeOutput = fixture.output();
+    await assert.rejects(fixture.start(), /Stop the existing runtime/u);
+    assert.equal(fixture.credentialFile(), activeFile);
+    assert.ok(fixture.output().includes(activeOutput), 'The rejected start must preserve the active launch output');
     assert.equal((await stat(activeFile)).mode & 0o777, 0o600);
     const duplicate = await fixture.duplicateStart();
     assert.match(duplicate.output, /Another development server instance is already running/u);
@@ -410,8 +414,9 @@ test('http_agent_and_memory_reject_foreign_scope_and_thread', { timeout: 120000 
       firstRun,
       /SYNTHETIC_PRIVATE_[1245]|SYNTHETIC_NOTE_[1245]|SYNTHETIC_DOC_south|SYNTHETIC_FOREIGN_STAMP_1/u,
     );
-    const secondRun = JSON.stringify(fixture.model.requests.slice(firstRequestCount));
-    assert.doesNotMatch(secondRun, /OWN_THREAD_ONLY/u);
+    const secondRun = fixture.model.requests.slice(firstRequestCount);
+    assert.ok(secondRun.length > 0, 'The independent turn must reach the provider');
+    assert.doesNotMatch(JSON.stringify(secondRun), /OWN_THREAD_ONLY/u);
     const before = await fixture.supportKnowledge
       .getStorage()
       .then(store => store.getPage({ id: fixture.pages[2]!.id, read: 'all' }));

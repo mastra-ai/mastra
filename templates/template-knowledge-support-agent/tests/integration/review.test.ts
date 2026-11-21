@@ -374,7 +374,7 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
     assert.ok(reused.text.includes(sharedRef) && reused.text.includes(publicUrl));
     const captured = JSON.stringify(f.model.requests.slice(start).map(request => request.messages));
     assert.match(captured, /knowledge_read/u);
-    assert.doesNotMatch(captured, /Source technician: alex|SYNTHETIC_PRIVATE_[1245]/u);
+    assert.doesNotMatch(captured, /Source technician: alex|SYNTHETIC_PRIVATE_[01245]/u);
     assert.ok(!captured.includes(input.threadId) && !captured.includes(input.messageId));
     const audit = await inspect(f, shared.runId);
     assert.deepEqual(audit.steps['review-decision'].output.decision, decision(shared.proposal));

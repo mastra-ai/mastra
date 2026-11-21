@@ -85,7 +85,10 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     assert.equal(seeded.pages.length, 8);
     assert.equal(seeded.notes.length, 0);
     const repeated = await f.seed();
-    assert.ok(repeated.pages.every(page => page.status === 'unchanged'));
+    assert.deepEqual(
+      repeated.pages.map(({ key, status }) => ({ key, status })),
+      seeded.pages.map(({ key }) => ({ key, status: 'unchanged' })),
+    );
     assert.equal((await snapshot(f)).filter(item => item.page.body?.includes('```support-record')).length, 0);
     await f.start();
     const ranks = await retrievalBaseline(f, demoCorpus.queries);
@@ -137,7 +140,10 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     assert.equal(historySeed.pages.length, 5);
     assert.equal(historySeed.notes.length, 3);
     const historyRepeat = await f.seed('retail-pos-history');
-    assert.ok(historyRepeat.pages.every(page => page.status === 'unchanged'));
+    assert.deepEqual(
+      historyRepeat.pages.map(({ key, status }) => ({ key, status })),
+      historySeed.pages.map(({ key }) => ({ key, status: 'unchanged' })),
+    );
     assert.deepEqual(
       historyRepeat.notes.map(note => note.id),
       historySeed.notes.map(note => note.id),
@@ -203,15 +209,12 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
       403,
     );
     assert.equal(f.model.requests.length, beforeOverride);
-    for (const [key, summary] of [
-      ['a', 'The Ethernet connection recovered after cable reseating.'],
-      ['b', 'The Ethernet connection did not recover after cable reseating.'],
-    ])
+    for (const { path, summary, applicability } of demoCorpus.conflictObservations)
       await f.supportKnowledge.upsertPage({
         scope: 'customer:retailops:store-42',
-        path: `cases/conflict-${key}`,
-        name: `Fictional contradictory observation ${key}`,
-        body: `Fictional test record.\n\n\`\`\`support-record\n${JSON.stringify({ topicTags: ['conflict-check'], observedOn: '2026-11-20', state: 'approved', summary, applicability: 'Synthetic Ethernet observations only.' })}\n\`\`\``,
+        path,
+        name: summary,
+        body: `Fictional test record.\n\n\`\`\`support-record\n${JSON.stringify({ topicTags: ['conflict-check'], observedOn: '2026-11-20', state: 'approved', summary, applicability })}\n\`\`\``,
         author: 'synthetic-demo-test',
       });
     start = f.model.requests.length;

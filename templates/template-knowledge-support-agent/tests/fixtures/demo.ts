@@ -60,6 +60,7 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
   const alternate = example === 'software-integration';
   const tenant = alternate ? 'software' : 'retailops';
   const guide = alternate ? 'docs:software#guides/request-check' : 'docs:retailops#guides/network';
+  const publicSource = { ref: guide, version: 1 };
   const publicUrl = alternate ? demoCorpus.sources[3] : demoCorpus.sources[0];
   const profiles = alternate ? integrationProfiles : retailProfiles;
   const reviewerProfile = alternate
@@ -117,8 +118,13 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
       }
       if (question.includes('F5:conflict')) {
         assert.equal(prepared.records.length, 2);
-        assert.ok(prepared.records.some(record => record.summary.includes('recovered')));
-        assert.ok(prepared.records.some(record => record.summary.includes('did not recover')));
+        for (const expected of demoCorpus.conflictObservations) {
+          const ref = `${customerScope}#${expected.path}`;
+          const observed = prepared.records.find(record => record.ref === ref);
+          assert.ok(observed, `Provider must receive the distinct observation ${ref}`);
+          assert.equal(observed.summary, expected.summary);
+          assert.equal(observed.applicability, expected.applicability);
+        }
         return {
           content: `The historical findings conflict. I cannot choose a repair from these observations. ${prepared.records.map(record => `[${record.ref}] ${record.summary}`).join(' ')} Collect the current connection type and observed result before applying either case.`,
         };
@@ -170,8 +176,10 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
           return { tool: { name: 'knowledge_read', arguments: { page: reuse } } };
         }
         const page = parsedTool(tools.at(-1)).page;
-        assert.match(page.body, /Public source:/u);
-        assert.ok(page.body.includes(guide));
+        assert.deepEqual(
+          page.body.split('\n').filter((line: string) => line.startsWith('Public source:')),
+          [`Public source: [[${publicSource.ref}]] (v${publicSource.version})`],
+        );
         return {
           content: `Use only when the observed conditions match. Reviewed finding [${page.ref}] cites public source [${guide}] (${publicUrl}).`,
         };
@@ -273,7 +281,7 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
             : 'Only a confirmed unintended Wi-Fi network, never an Ethernet issue.',
         },
         evidence: [],
-        publicSource: shared ? { ref: guide, version: 1 } : null,
+        publicSource: shared ? publicSource : null,
       };
     },
   });

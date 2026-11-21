@@ -332,14 +332,21 @@ async function verifyInterruptedSeed(db, env, [first, second]) {
     await admin.query('BEGIN');
     try {
       await admin.query('SELECT id FROM mastra_knowledge_pages WHERE id = $1 FOR UPDATE', [second.id]);
-      const interrupted = start(process.execPath, args, workerEnv);
+      const seedSession = `support-seed-${randomUUID()}`;
+      const interrupted = start(process.execPath, args, { ...workerEnv, PGAPPNAME: seedSession });
       let lockOwner;
       for (let attempt = 0; attempt < 100 && interrupted.child.exitCode === null; attempt++) {
-        const { rows } = await admin.query(`SELECT pid FROM pg_locks
-          WHERE locktype = 'advisory' AND objsubid = 2 AND granted
-          AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
-          AND EXISTS (SELECT 1 FROM pg_locks waiting
-            WHERE NOT waiting.granted AND pg_backend_pid() = ANY(pg_blocking_pids(waiting.pid)))`);
+        // Refresh session activity while the admin transaction holds the blocking row lock.
+        await admin.query('SELECT pg_stat_clear_snapshot()');
+        const { rows } = await admin.query(
+          `SELECT held.pid FROM pg_locks held
+          JOIN pg_stat_activity session ON session.pid = held.pid
+          WHERE held.locktype = 'advisory' AND held.objsubid = 2 AND held.granted
+          AND held.database = (SELECT oid FROM pg_database WHERE datname = current_database())
+          AND session.application_name = $1
+          AND pg_backend_pid() = ANY(pg_blocking_pids(held.pid))`,
+          [seedSession],
+        );
         if (rows.length) {
           lockOwner = rows[0].pid;
           break;

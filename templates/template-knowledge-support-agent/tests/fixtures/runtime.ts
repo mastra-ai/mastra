@@ -14,6 +14,10 @@ import type { KnowledgePage } from '@mastra/core/knowledge';
 import { Memory } from '@mastra/memory';
 import { startModelServer, type ModelScript } from './model-server.ts';
 
+export function fixtureFetch(url: string, options: RequestInit = {}) {
+  return fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(30000) });
+}
+
 export const syntheticSafetyPolicy = `## Before changes
 
 Preserve pending work and obtain authorization before disruptive changes.
@@ -190,9 +194,8 @@ async function configureRuntime(
     return launch;
   }
   async function request(path: string, owner = 0, options: RequestInit = {}) {
-    return fetch(`${base()}/api${path}`, {
+    return fixtureFetch(`${base()}/api${path}`, {
       ...options,
-      signal: options.signal ?? AbortSignal.timeout(30000),
       headers: {
         authorization: `Bearer ${credentials[owner]!.token}`,
         'content-type': 'application/json',
@@ -209,9 +212,9 @@ async function configureRuntime(
     throw new Error(`Dev could not bind after three port collisions: ${output}`);
   }
   async function launch() {
+    assert.equal(child, undefined, 'Stop the existing runtime before starting it again');
     output = '';
     activeCredentialFile = undefined;
-    assert.equal(child, undefined, 'Stop the existing runtime before starting it again');
     const launcher = spawn('npm', ['run', 'dev'], {
       cwd: process.cwd(),
       detached: true,

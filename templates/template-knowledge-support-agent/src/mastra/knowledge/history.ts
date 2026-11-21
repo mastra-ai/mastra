@@ -1,6 +1,6 @@
 import { knowledgeScopeAddress, MAX_KNOWLEDGE_PAGE_DEPTH } from '@mastra/core/knowledge';
 import type { Knowledge, KnowledgePage, KnowledgeNote } from '@mastra/core/knowledge';
-import { supportConfiguration } from '../../examples/support.ts';
+import { isCustomerHistoryPath, supportConfiguration } from '../../examples/support.ts';
 import { principals, type Profile } from '../identity.ts';
 import { recordOperation } from '../observability.ts';
 import { MAX_SUPPORT_RECORD_BODY_LENGTH, validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
@@ -72,7 +72,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     };
     // Search tags as well as question words: a tag may be absent from title and prose.
     const queries = [...new Set([...topics, ...words])];
-    if (queries.length > bounds.queries) partial = true;
+    // The fallback covers omitted queries when enumeration completes and reports partial when it cannot.
     for (const query of queries.slice(0, bounds.queries)) {
       try {
         const hits = await store.searchPages({ query, scopeIds: [customer.id], read, limit: bounds.hits });
@@ -158,8 +158,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
         return;
       }
       const canonical = path.join('/');
-      if (!supportConfiguration.customerRoots.some(root => canonical === root || canonical.startsWith(`${root}/`)))
-        return;
+      if (!isCustomerHistoryPath(canonical)) return;
       const ref = `${scope}#${canonical}`;
       inspected++;
       try {
