@@ -38,4 +38,34 @@ describe('DelayedPromise', () => {
     expect(await firstResume).toBe(150);
     expect(await delayed.promise).toBe(200);
   });
+
+  it('does not raise an unhandled rejection when resolved after it was rejected', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const delayed = new DelayedPromise<number>();
+      const error = new Error('provider connection reset');
+
+      // A durable stream rejects the pending key when its model call fails
+      // before anything has read the promise.
+      delayed.reject(error);
+
+      // The consumer then reads the value (e.g. `withBufferedStepResponses`
+      // awaiting `output.steps`), which builds the already-rejected promise.
+      await delayed.promise.catch(observed => {
+        expect(observed).toBe(error);
+      });
+
+      // The closing `resolvePromises` resolves the same key afterwards.
+      delayed.resolve(42);
+
+      // Let microtasks flush: before the fix this chained a fresh rejected
+      // promise off the settled one with nothing awaiting it.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });

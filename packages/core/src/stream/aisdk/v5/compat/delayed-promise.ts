@@ -34,6 +34,12 @@ export class DelayedPromise<T> {
   }
 
   resolve(value: T): void {
+    // A rejection is terminal. Chaining here would build a new rejected promise
+    // off the settled one with nothing awaiting it, which Node reports as an
+    // unhandled rejection (a durable/evented run that aborts after its model
+    // call failed reaches `resolve()` again at the closing `resolvePromises`).
+    if (this.status.type === 'rejected') return;
+
     this.status = { type: 'resolved', value };
 
     if (!this._promise) return;
