@@ -755,6 +755,8 @@ export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase
 export interface FactoryPullRequestHome {
   workItemId: string;
   reason: 'authored' | 'closes';
+  /** The other unfinished cards of issues it closes: they link to it without holding it. */
+  alsoCloses?: string[];
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
