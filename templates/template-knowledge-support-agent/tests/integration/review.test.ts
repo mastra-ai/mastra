@@ -432,7 +432,9 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
     await f.start();
     const input = await confirmation(f);
     const before = await snapshot(f);
-    f.select(candidate('private-page'));
+    const privatePage = candidate('private-page');
+    privatePage.content += ` See [[ ${evidence} ]].`;
+    f.select(privatePage);
     const run = await pending(f, input);
     assert.deepEqual(await snapshot(f), before, 'Suspension cannot write Knowledge');
     await f.stop();
@@ -441,7 +443,16 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
     const result = await resume(f, run);
     assert.equal(result.result.status, 'published');
     const reference = result.result.reference as string;
-    const published = JSON.stringify(await read(f, reference));
+    const publishedPage = await read(f, reference);
+    const published = JSON.stringify(publishedPage);
+    assert.ok(published.includes(`[[ ${evidence} ]]`));
+    const { page: evidencePage } = await read(f, evidence);
+    const links = await json(await f.request(`/knowledge/support/pages/${publishedPage.page.id}/links?direction=out`));
+    assert.ok(
+      links.edges.some(
+        (edge: { toPageId: string; count: number }) => edge.toPageId === evidencePage.id && edge.count === 2,
+      ),
+    );
     assert.match(published, /review:morgan/u);
     assert.match(published, /Source technician: alex/u);
     assert.ok(published.includes(input.threadId) && published.includes(input.messageId));
@@ -455,6 +466,16 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
     // Approved supplements enter bounded preflight with an exact note citation.
     f.select(candidate('private-note', { action: 'note', target: { path: 'cases/synthetic', expectedVersion: 1 } }));
     const note = await pending(f, input);
+    const { revision: noteRevision, ...noteDraft } = note.proposal;
+    const target = noteDraft.bindings.find(binding => binding.kind === 'target');
+    assert.ok(target);
+    const evidenceBindings = noteDraft.bindings.filter(binding => binding.kind !== 'target');
+    assert.ok(proposalDraftSchema.safeParse({ ...noteDraft, bindings: [] }).success);
+    for (const bindings of [evidenceBindings, [...evidenceBindings, { ...target, ref: `${customer}#cases/other` }]]) {
+      const result = proposalSchema.safeParse({ ...noteDraft, revision: noteRevision, bindings });
+      assert.equal(result.success, false, 'A note must be bound to its exact destination before review');
+      assert.ok(result.error?.issues.some(issue => issue.path.join('.') === 'bindings'));
+    }
     const noted = await resume(f, note);
     assert.equal(noted.result.status, 'published');
     const noteRef = noted.result.reference as string;
@@ -483,6 +504,18 @@ test('approval_publishes_scoped_content_and_a_new_thread_reuses_knowledge', { ti
 
     f.select(candidate('sanitized-shared', { publicSource: { ref: publicRef, version: 1 } }));
     const shared = await pending(f, { ...input, audience: 'tenant' });
+    const { revision: sharedRevision, ...sharedDraft } = shared.proposal;
+    const invalidSource = {
+      ...sharedDraft,
+      candidate: { ...sharedDraft.candidate, publicSource: { ref: 'tenant:north#public-network-guide', version: 1 } },
+    };
+    for (const result of [
+      proposalDraftSchema.safeParse(invalidSource),
+      proposalSchema.safeParse({ ...invalidSource, revision: sharedRevision }),
+    ]) {
+      assert.equal(result.success, false, 'The tenant publication must cite its documentation scope');
+      assert.ok(result.error?.issues.some(issue => issue.path.join('.') === 'candidate.publicSource.ref'));
+    }
     const sharedResult = await resume(f, shared, 'approve', 'review-decision');
     assert.equal(sharedResult.result.status, 'published');
     const sharedRef = sharedResult.result.reference as string;
@@ -774,6 +807,12 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
       ],
       [{ evidence: [{ ref: `${customer}#cases/../synthetic`, version: 1 }] }, input, /Invalid scoped page reference/u],
       [{ evidence: [{ ref: `${customer}#cases/missing`, version: 1 }] }, input, /Evidence or target is missing/u],
+      [{ content: `See [[ ${customer}#cases/other ]].` }, input, /unvalidated evidence link/u],
+      [
+        { publicSource: { ref: 'tenant:north#absent-public-source', version: 1 } },
+        { ...input, audience: 'tenant' },
+        /Public source must be a documentation reference/u,
+      ],
       [
         { publicSource: { ref: bodyOnlySource, version: 1 } },
         { ...input, audience: 'tenant' },

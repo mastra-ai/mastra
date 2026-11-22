@@ -36,7 +36,7 @@ export function supportPreflight(knowledge: HistoryKnowledge): InputProcessor {
   const approvalFile = process.env.SUPPORT_POLICY_APPROVAL_FILE;
   return {
     id: 'support-preflight',
-    async processInput({ messages, messageList, requestContext, state, abort }) {
+    async processInput({ messages, messageList, requestContext, state, abort, metrics, tracingContext }) {
       const profile = requestContext?.get('mastra__user') as Profile | undefined;
       if (!profile) return abort('Authenticated profile required');
       const started = performance.now();
@@ -70,6 +70,7 @@ export function supportPreflight(knowledge: HistoryKnowledge): InputProcessor {
           'ready',
           started,
           history.records.filter(record => record.state === 'approved').length,
+          tracingContext?.currentSpan ? metrics : undefined,
         );
       return messageList;
     },

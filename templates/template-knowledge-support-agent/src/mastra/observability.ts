@@ -1,5 +1,5 @@
-import { createHmac, randomBytes } from 'node:crypto';
-import { MastraStorageExporter, Observability } from '@mastra/observability';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { BaseObservabilityInstance, MastraStorageExporter, Observability } from '@mastra/observability';
 import { SPAN_OUTCOMES, SPAN_STOP_REASONS, SpanType, TokenMetrics, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan, CostContext, MetricEvent, TracingEvent } from '@mastra/core/observability';
 
@@ -144,7 +144,8 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
       },
     };
     if (event.type === 'span_ended' && operation) {
-      const metrics = observability.getDefaultInstance()?.getMetricsContext?.();
+      const instance = observability.getDefaultInstance();
+      const metrics = instance?.getMetricsContext?.();
       const status =
         span.errorInfo || output.error || attributes.success === false ? 'error' : (reportedOutcome ?? 'success');
       metrics?.emit('support_operation_count', 1, { operation, status });
@@ -154,10 +155,23 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
       const page = output.page as { body?: unknown } | undefined;
       if (
         operation === 'knowledge-read' &&
+        instance instanceof BaseObservabilityInstance &&
+        span.endTime &&
         (hasReviewMarker(page?.body) ||
           (Array.isArray(output.notes) && output.notes.some(note => hasReviewMarker(note?.text))))
       )
-        metrics?.emit('support_operation_count', 1, { operation: 'resolution-reuse', status: 'ready' });
+        instance.getObservabilityBus().emit({
+          type: 'metric',
+          metric: {
+            metricId: randomUUID(),
+            timestamp: span.endTime,
+            traceId: span.traceId,
+            spanId: span.id,
+            name: 'support_operation_count',
+            value: 1,
+            labels: { operation: 'resolution-reuse', status: 'ready' },
+          },
+        });
       if (span.endTime)
         metrics?.emit('support_operation_duration_ms', Math.max(0, span.endTime.getTime() - span.startTime.getTime()), {
           operation,
@@ -216,8 +230,13 @@ export const observability = new Observability({
 });
 
 /** Values are enums and nonnegative numbers; callers never supply private strings or identifiers. */
-export function recordOperation(operation: Operation, status: Status, started = performance.now(), results?: number) {
-  const metrics = observability.getDefaultInstance()?.getMetricsContext?.();
+export function recordOperation(
+  operation: Operation,
+  status: Status,
+  started = performance.now(),
+  results?: number,
+  metrics = observability.getDefaultInstance()?.getMetricsContext?.(),
+) {
   metrics?.emit('support_operation_count', 1, { operation, status });
   metrics?.emit('support_operation_duration_ms', Math.max(0, performance.now() - started), { operation, status });
   if (results !== undefined && numbers(results)) metrics?.emit('support_result_count', results, { operation, status });

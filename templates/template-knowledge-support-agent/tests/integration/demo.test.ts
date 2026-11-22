@@ -405,7 +405,15 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     await turn(f, notesThread, `F5:notes READ=${noteScope}#${notePath}`, f.otherCustomer!);
     const noteReadEnd = Date.now();
     assert.ok(providerInput(f, noteRequestStart).includes(noteValue));
-    await turn(f, await thread(f), 'F5:diagnostic network with previous history');
+    const historyThread = await thread(f);
+    const historyRequestStart = f.model.requests.length;
+    const historyStart = Date.now();
+    await turn(f, historyThread, 'F5:diagnostic network with previous history');
+    const historyEnd = Date.now();
+    const approvedRecords = history(f.model.requests[historyRequestStart]!).records.filter(
+      record => record.state === 'approved',
+    );
+    assert.ok(approvedRecords.length, 'The history turn must deliver approved evidence from preflight');
     await turn(f, await thread(f), 'F5:insufficient fluxcapacitor');
     assert.equal((await f.request('/observability/traces')).status, 403);
     assert.equal((await f.request(`/memory/threads/${id}/messages?agentId=support`, f.otherCustomer!)).status, 403);
@@ -418,7 +426,6 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       ['knowledge-search', 'success'],
       ['knowledge-read', 'success'],
       ['missing-evidence', 'empty'],
-      ['resolution-reuse', 'ready'],
       ['review-proposal', 'success'],
       ['review-decision', 'suspended'],
       ['review-decision', 'resumed'],
@@ -454,26 +461,45 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       if (!samples.some(row => row.name === 'mastra_model_total_output_tokens' && row.metadata.value === 8))
         missing.push('model output tokens');
       if (!samples.some(row => row.metadata.costContext?.estimatedCost > 0)) missing.push('native cost estimate');
+      const inTurn = (row: Record<string, any>, start: number, end: number) => {
+        const timestamp = new Date(row.startedAt).getTime();
+        return timestamp >= start && timestamp <= end;
+      };
+      const reuse = samples.filter(
+        row => row.metadata.labels?.operation === 'resolution-reuse' && row.metadata.labels?.status === 'ready',
+      );
       for (const [label, start, end] of [
         ['shared finding', sharedReadStart, sharedReadEnd],
         ['reviewed notes', noteReadStart, noteReadEnd],
       ] as const) {
-        const inTurn = (row: Record<string, any>) => {
-          const timestamp = new Date(row.startedAt).getTime();
-          return timestamp >= start && timestamp <= end;
-        };
-        const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row));
-        const reuse = samples.filter(row => row.metadata.labels?.operation === 'resolution-reuse' && inTurn(row));
-        const counts = reuse.filter(row => row.name === 'support_operation_count');
-        // Preflight also reports reuse, with a paired duration in the same turn.
-        const preflight = reuse.filter(row => row.name === 'support_operation_duration_ms');
-        if (
-          reads.length !== 1 ||
-          counts.length - preflight.length !== 1 ||
-          counts.some(row => row.metadata.value !== 1)
-        )
-          missing.push(`one resolution reuse event for the ${label} read`);
+        const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row, start, end));
+        const [read] = reads;
+        const counts = reuse.filter(
+          row =>
+            row.name === 'support_operation_count' &&
+            read &&
+            row.traceId === read.traceId &&
+            row.parentSpanId === read.spanId,
+        );
+        if (reads.length !== 1 || counts.length !== 1 || counts[0]?.metadata.value !== 1)
+          missing.push(`one resolution reuse event linked to the ${label} read span`);
       }
+      const historyRun = rows.find(
+        row => row.name === 'agent_run' && row.endedAt && inTurn(row, historyStart, historyEnd),
+      );
+      const processorIds = new Set(
+        rows
+          .filter(row => row.name === 'processor_run' && row.traceId === historyRun?.traceId && row.endedAt)
+          .map(row => row.spanId),
+      );
+      const preflight = reuse.filter(row => row.traceId === historyRun?.traceId && processorIds.has(row.parentSpanId));
+      if (
+        preflight.filter(row => row.name === 'support_operation_count' && row.metadata.value === 1).length !== 1 ||
+        preflight.filter(row => row.name === 'support_operation_duration_ms').length !== 1 ||
+        preflight.filter(row => row.name === 'support_result_count' && row.metadata.value === approvedRecords.length)
+          .length !== 1
+      )
+        missing.push('preflight reuse events linked to the history turn processor');
       if (
         !rows.some(
           row => row.traceId === failedTraceId && row.name === 'agent_run' && row.outcome === 'error' && row.error,

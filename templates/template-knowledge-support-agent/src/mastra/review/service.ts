@@ -30,6 +30,7 @@ import {
   publishedText,
   reviewStartInputSchema,
   ReviewConflict,
+  targetBinding,
   type Approval,
   type Candidate,
   type Proposal,
@@ -159,15 +160,11 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     }
     if (proposal.source.audience === 'tenant' && ['page', 'note', 'update'].includes(proposal.candidate.action)) {
       const source = proposal.candidate.publicSource!;
-      requireReview(
-        source.ref.startsWith(`${knowledgeScopeAddress('docs:$tenantId', { ...proposal.reviewer })}#`),
-        'Public source must be a documentation reference',
-      );
       const current = await page(
         source.ref,
         [
-          knowledgeScopeAddress('tenant:$tenantId', { ...proposal.reviewer }),
-          knowledgeScopeAddress('docs:$tenantId', { ...proposal.reviewer }),
+          knowledgeScopeAddress('tenant:$tenantId', proposal.reviewer),
+          knowledgeScopeAddress('docs:$tenantId', proposal.reviewer),
         ],
         activeKnowledge,
       );
@@ -262,8 +259,8 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     for (const evidence of candidate.evidence) await bind('evidence', evidence.ref, [customer(current)]);
     if (input.audience === 'tenant' && candidate.publicSource && ['page', 'note', 'update'].includes(candidate.action))
       await bind('public', candidate.publicSource.ref, [
-        knowledgeScopeAddress('tenant:$tenantId', { ...plainProfile(current) }),
-        knowledgeScopeAddress('docs:$tenantId', { ...plainProfile(current) }),
+        knowledgeScopeAddress('tenant:$tenantId', draft.reviewer),
+        knowledgeScopeAddress('docs:$tenantId', draft.reviewer),
       ]);
     if (candidate.target)
       await bind('target', `${draft.destination.scope}#${draft.destination.path}`, [draft.destination.scope]);
@@ -310,8 +307,8 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       const author = `review:${reviewerId}`;
       const reference = `${proposal.destination.scope}#${proposal.destination.path}`;
       if (proposal.candidate.action === 'note') {
-        const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
-        requireReview(target, 'Note target is not bound');
+        // The proposal schema requires a binding for the note's destination.
+        const target = targetBinding(proposal)!;
         const mentions = [
           ...new Set(
             proposal.bindings
@@ -390,7 +387,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
               'Conflicting prior page effect',
             );
             if (proposal.candidate.action === 'update') {
-              const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
+              const target = targetBinding(proposal);
               requireReview(
                 target &&
                   target.id === current.id &&

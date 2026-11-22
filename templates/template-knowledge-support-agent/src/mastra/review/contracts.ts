@@ -3,7 +3,11 @@ import { createHash } from 'node:crypto';
 import { confirmationInputSchema, confirmationReferenceSchema, confirmationReferenceString } from './confirmation.ts';
 import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
 import { supportRecordEnvelope } from '../knowledge/support-record-envelope.ts';
-import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
+import {
+  assertKnowledgeNoteTextWithinBound,
+  assertKnowledgePageDescriptionWithinBound,
+  knowledgeScopeAddress,
+} from '@mastra/core/knowledge';
 import { supportConfiguration } from '../../examples/support.ts';
 
 const text = (max: number) =>
@@ -91,7 +95,7 @@ export const candidateSchema = z
     if (/knowledge-review:|knowledge-seed:|Seed note:|```support-record/iu.test(content))
       context.addIssue({ code: 'custom', message: 'Reserved publication markers are not allowed in proposed content' });
     const evidence = new Set(value.evidence.map(item => item.ref));
-    if ([...content.matchAll(/\[\[([^\]]+)\]\]/gu)].some(link => !evidence.has(link[1]!)))
+    if ([...content.matchAll(/\[\[([^\]]+)\]\]/gu)].some(link => !evidence.has(link[1]!.trim())))
       context.addIssue({ code: 'custom', message: 'Content contains an unvalidated evidence link' });
   });
 
@@ -148,12 +152,19 @@ const proposalFields = z
   })
   .strict();
 
-function validateDestination(
-  { candidate, destination, source }: Pick<z.infer<typeof proposalFields>, 'candidate' | 'destination' | 'source'>,
+type ProposalFields = z.infer<typeof proposalFields>;
+
+export function targetBinding({ destination, bindings }: Pick<ProposalFields, 'destination' | 'bindings'>) {
+  const ref = `${destination.scope}#${destination.path}`;
+  return bindings.find(binding => binding.kind === 'target' && binding.ref === ref);
+}
+
+function validateProposalDraft(
+  { candidate, destination, reviewer, source }: Omit<ProposalFields, 'revision'>,
   context: z.RefinementCtx,
 ) {
+  if (candidate.action !== 'page' && candidate.action !== 'note' && candidate.action !== 'update') return;
   if (
-    (candidate.action === 'page' || candidate.action === 'note' || candidate.action === 'update') &&
     !destination.path.startsWith(`${supportConfiguration.customerRoots[0]}/`) &&
     !(source.audience === 'tenant' && destination.path.startsWith(`${supportConfiguration.sharedRoot}/`))
   )
@@ -162,12 +173,25 @@ function validateDestination(
       path: ['destination', 'path'],
       message: 'Target must be an allowed finding or case record',
     });
+  if (
+    source.audience === 'tenant' &&
+    candidate.publicSource &&
+    reviewer.tenantId &&
+    !candidate.publicSource.ref.startsWith(`${knowledgeScopeAddress('docs:$tenantId', reviewer)}#`)
+  )
+    context.addIssue({
+      code: 'custom',
+      path: ['candidate', 'publicSource', 'ref'],
+      message: 'Public source must be a documentation reference',
+    });
 }
 
-export const proposalDraftSchema = proposalFields.omit({ revision: true }).superRefine(validateDestination);
-export const proposalSchema = proposalFields.superRefine(validateDestination).superRefine((proposal, context) => {
+export const proposalDraftSchema = proposalFields.omit({ revision: true }).superRefine(validateProposalDraft);
+export const proposalSchema = proposalFields.superRefine(validateProposalDraft).superRefine((proposal, context) => {
   const { candidate, source } = proposal;
   if (candidate.action !== 'page' && candidate.action !== 'note' && candidate.action !== 'update') return;
+  if (candidate.action === 'note' && !targetBinding(proposal))
+    context.addIssue({ code: 'custom', path: ['bindings'], message: 'Note target is not bound' });
   if (source.audience === 'tenant' && (!candidate.publicSource || candidate.record.applicability.length < 15)) {
     context.addIssue({
       code: 'custom',
