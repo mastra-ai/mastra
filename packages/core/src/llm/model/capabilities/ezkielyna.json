@@ -12,13 +12,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "deepseek-v4-pro": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -30,10 +27,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-v4-pro": [
+    "glm-5.3": [
       {
-        "type": "toggle"
-      },
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

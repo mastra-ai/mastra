@@ -26,10 +26,10 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "google/gemini-3.8-flash": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "z-ai/glm-5.3": [
@@ -56,7 +56,31 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "anthropic/claude-sonnet-5.5": [
+    "google/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro-0813": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "minimax/minimax-m3.1-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -71,40 +95,16 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "anthropic/claude-sonnet-5.5": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "deepseek/deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "x-ai/grok-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "minimax/minimax-m3.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

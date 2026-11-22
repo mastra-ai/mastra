@@ -37,7 +37,13 @@
     "mimo-v2.6-flash"
   ],
   "reasoning": {
-    "hy3": [
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "hy4-preview": [
       {
         "type": "toggle"
       },
@@ -46,16 +52,9 @@
         "values": ["none", "high"]
       }
     ],
-    "kimi-k3": [
+    "mimo-v2.6-flash": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "type": "toggle"
       }
     ],
     "glm-5.2": [
@@ -67,13 +66,21 @@
         "values": ["high", "max"]
       }
     ],
-    "hy4-preview": [
+    "minimax-m-3-0": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "glm-5-3": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-5.3": [
@@ -97,28 +104,21 @@
         "values": ["high", "max"]
       }
     ],
-    "glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax-m-3-0": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "minimax-m3": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-flash": [
+    "hy3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -127,7 +127,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-flash": [
       {
         "type": "toggle"
       },

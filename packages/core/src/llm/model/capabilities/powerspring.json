@@ -25,10 +25,16 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "glm-5.3-flash": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "gemma-4-26b-a4b": [
@@ -37,28 +43,22 @@
         "values": ["none", "high"]
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
     "gemma-4-31b": [
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }
