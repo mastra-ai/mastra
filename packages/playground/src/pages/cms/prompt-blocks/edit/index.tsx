@@ -1,33 +1,17 @@
-import type { StoredPromptBlockResponse, UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
-import { IconRocket } from '@mastra/playground-ui/icons/central/IconRocket';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useMastraClient } from '@mastra/react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
 import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
 import {
   useStoredPromptBlock,
-  useStoredPromptBlockMutations,
   usePromptBlockVersions,
-  usePromptBlockVersion,
-  PromptBlockEditMain,
-  PromptBlockEditSidebar,
   PromptBlockVersionCombobox,
-  usePromptBlockEditForm,
   DeletePromptBlockAction,
   PromptBlockEditContent,
 } from '@/domains/prompt-blocks';
