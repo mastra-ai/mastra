@@ -25,6 +25,7 @@ export function ExperimentPageLayout({
 }: ExperimentPageLayoutProps) {
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={
         <ExperimentBreadcrumbs experimentsHref={experimentsHref} experimentId={experimentId} experiment={experiment} />
       }
