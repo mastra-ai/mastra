@@ -140,9 +140,12 @@ function serveAgent(model: MockLanguageModelV2) {
   return bodies;
 }
 
-function Transcript() {
+type ChatSend = ReturnType<typeof useChatSend>;
+
+function Transcript({ sends }: { sends?: Set<ChatSend> }) {
   const messages = useChatMessages();
   const send = useChatSend();
+  sends?.add(send);
   return (
     <>
       <button onClick={() => void send({ message: 'I want to join the beta' })}>Ask</button>
@@ -153,14 +156,14 @@ function Transcript() {
   );
 }
 
-function renderChat() {
+function renderChat(sends?: Set<ChatSend>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <ChatProvider agentId={AGENT_ID} threadId="thread-1" supportsMemory={false}>
-            <Transcript />
+            <Transcript sends={sends} />
           </ChatProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -243,6 +246,34 @@ describe('an interface an agent composes in Studio chat', () => {
       await screen.findByText('Saved.', undefined, TURN);
       expect(bodies).toHaveLength(3);
       expect(bodies[2]?.requestContext?.[JSON_RENDER_STATE]).toEqual({ team: 'platform' });
+    },
+  );
+
+  it(
+    'answers again after a reply that draws no new interface, through the one send the chat keeps',
+    { timeout: 45_000 },
+    async () => {
+      const { model } = modelWriting(`Here you go.\n${specBlock(signupForm)}`, 'Check your inbox.', 'Updated.');
+      const bodies = serveAgent(model);
+      const sends = new Set<ChatSend>();
+      renderChat(sends);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+      const joinEnabled = () =>
+        waitFor(() => expect(screen.getByRole('button', { name: 'Join' }).hasAttribute('disabled')).toBe(false), TURN);
+      await joinEnabled();
+      fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'ada@example.com' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+
+      await screen.findByText('Check your inbox.', undefined, TURN);
+      await joinEnabled();
+      fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'grace@example.com' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+
+      await screen.findByText('Updated.', undefined, TURN);
+      expect(bodies).toHaveLength(3);
+      expect(bodies[2]?.requestContext?.[JSON_RENDER_STATE]).toEqual({ email: 'grace@example.com' });
+      expect(sends.size).toBe(1);
     },
   );
 
