@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DATASET_ID,
   EXPERIMENT_ID,
+  emptyMetricAggregate,
   emptyScoresResponse,
   experiment,
   experimentResultScoresResponse,
@@ -46,7 +47,7 @@ afterEach(cleanup);
 beforeEach(() => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(renamedPostgresWithMetrics)),
-    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () => HttpResponse.json({ value: null })),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () => HttpResponse.json(emptyMetricAggregate)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () =>
       HttpResponse.json(experimentUsageBreakdown),
     ),

@@ -2,16 +2,17 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ExperimentRowCells } from '../experiment-row-cells';
-import { experiments } from './fixtures/experiments';
+import type { ExperimentRowCellsProps } from '../experiment-row-cells';
+import { completedExperiment } from './fixtures/experiments';
 import { agents, processors } from './fixtures/target-registries';
 import { DataList } from '@/ds/components/DataList';
 
-const base = experiments[0];
+const base = completedExperiment;
 const registries = { agents, processors };
 
-const renderCells = (experiment = base, targetRegistries = registries) =>
+const renderCells = (experiment = base, targetRegistries: ExperimentRowCellsProps['targetRegistries'] = registries) =>
   render(
-    <DataList>
+    <DataList columns="auto">
       <DataList.RowStatic>
         <ExperimentRowCells experiment={experiment} targetRegistries={targetRegistries} />
       </DataList.RowStatic>

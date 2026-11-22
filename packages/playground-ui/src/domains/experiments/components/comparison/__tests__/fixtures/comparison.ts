@@ -54,10 +54,13 @@ export const comparisonResponse: CompareExperimentsResponse = {
   ],
 };
 
-const makeResult = (overrides: Partial<DatasetExperimentResult> & Pick<DatasetExperimentResult, 'id' | 'itemId'>) =>
+type AgentResult = Extract<DatasetExperimentResult, { targetType: 'agent' }>;
+
+const makeResult = (overrides: Partial<AgentResult> & Pick<AgentResult, 'id' | 'itemId'>) =>
   ({
     experimentId: BASELINE_ID,
     itemDatasetVersion: 1,
+    targetType: 'agent',
     input: {},
     output: null,
     groundTruth: null,
@@ -161,66 +164,33 @@ export const usageBreakdownByExperimentId: Record<string, MetricBreakdownRespons
   },
 };
 
-/** Raw score rows as `GET /api/scores/run/:experimentId` returns them (`entityId` = dataset item id). */
-const makeScoreRow = (runId: string, entityId: string, scorerId: string, score: number, reason: string | null) => ({
-  id: `score-${runId}-${entityId}-${scorerId}`,
-  runId,
-  entityId,
-  entityType: 'DATASET_ITEM',
-  scorerId,
-  scorer: { name: scorerId },
-  score,
-  reason,
-  source: 'TEST',
-  createdAt: '2026-08-01T10:00:05.000Z',
-  updatedAt: '2026-08-01T10:00:05.000Z',
-});
-
-export const baselineScoreRows = [
-  makeScoreRow(BASELINE_ID, 'item-a', 'accuracy', 0.5, 'Missing the country'),
-  makeScoreRow(BASELINE_ID, 'item-a', 'relevancy', 0.9, null),
-  makeScoreRow(BASELINE_ID, 'item-b', 'accuracy', 1, 'Exact match'),
-  makeScoreRow(BASELINE_ID, 'item-c', 'accuracy', 0.7, null),
-];
-
-export const contenderScoreRows = [
-  makeScoreRow(CONTENDER_ID, 'item-a', 'accuracy', 0.9, 'Complete answer'),
-  makeScoreRow(CONTENDER_ID, 'item-a', 'relevancy', 0.9, null),
-];
-
 /** Scorer runs, grouped by dataset item id like `useScoresByExperimentId` returns them. */
 export const baselineScores: ScoresByItemId = {
-  'item-a': [
-    { scorerId: 'accuracy', reason: 'Missing the country' },
-    { scorerId: 'relevancy', reason: null },
-  ],
+  'item-a': [{ scorerId: 'accuracy', reason: 'Missing the country' }, { scorerId: 'relevancy' }],
   'item-b': [{ scorerId: 'accuracy', reason: 'Exact match' }],
-  'item-c': [{ scorerId: 'accuracy', reason: null }],
+  'item-c': [{ scorerId: 'accuracy' }],
 };
 
 export const contenderScores: ScoresByItemId = {
-  'item-a': [
-    { scorerId: 'accuracy', reason: 'Complete answer' },
-    { scorerId: 'relevancy', reason: null },
-  ],
+  'item-a': [{ scorerId: 'accuracy', reason: 'Complete answer' }, { scorerId: 'relevancy' }],
 };
 
 /**
  * Three-way payload: the two-way one plus a second contender (`CHALLENGER_ID`) that ran
  * `item-a` and `item-b` but not `item-c`.
  */
+const challengerRunsByItemId: CompareExperimentsResponse['items'][number]['results'] = {
+  'item-a': { output: { answer: 'Paris' }, scores: { accuracy: 0.6, relevancy: 0.8 } },
+  'item-b': { output: { answer: 'Frank Herbert' }, scores: { accuracy: 1 } },
+};
+
 export const threeWayComparisonResponse: CompareExperimentsResponse = {
   baselineId: BASELINE_ID,
   items: comparisonResponse.items.map(item => ({
     ...item,
     results: {
       ...item.results,
-      [CHALLENGER_ID]:
-        item.itemId === 'item-a'
-          ? { output: { answer: 'Paris' }, scores: { accuracy: 0.6, relevancy: 0.8 } }
-          : item.itemId === 'item-b'
-            ? { output: { answer: 'Frank Herbert' }, scores: { accuracy: 1 } }
-            : null,
+      [CHALLENGER_ID]: challengerRunsByItemId[item.itemId] ?? null,
     },
   })),
 };
@@ -258,17 +228,8 @@ export const challengerResults: DatasetExperimentResult[] = [
   }),
 ];
 
-export const challengerScoreRows = [
-  makeScoreRow(CHALLENGER_ID, 'item-a', 'accuracy', 0.6, 'Close enough'),
-  makeScoreRow(CHALLENGER_ID, 'item-a', 'relevancy', 0.8, null),
-  makeScoreRow(CHALLENGER_ID, 'item-b', 'accuracy', 1, 'Exact match'),
-];
-
 export const challengerScores: ScoresByItemId = {
-  'item-a': [
-    { scorerId: 'accuracy', reason: 'Close enough' },
-    { scorerId: 'relevancy', reason: null },
-  ],
+  'item-a': [{ scorerId: 'accuracy', reason: 'Close enough' }, { scorerId: 'relevancy' }],
   'item-b': [{ scorerId: 'accuracy', reason: 'Exact match' }],
 };
 
@@ -286,9 +247,9 @@ export const contenderTraceSpans: GetTraceResponse = {
       parentSpanId: null,
       spanType: SpanType.AGENT_RUN,
       isEvent: false,
-      startedAt: new Date('2026-08-01T10:00:00.000Z'),
-      endedAt: new Date('2026-08-01T10:00:05.000Z'),
-      createdAt: new Date('2026-08-01T10:00:00.000Z'),
+      startedAt: '2026-08-01T10:00:00.000Z',
+      endedAt: '2026-08-01T10:00:05.000Z',
+      createdAt: '2026-08-01T10:00:00.000Z',
       updatedAt: null,
       status: TraceStatus.SUCCESS,
     },

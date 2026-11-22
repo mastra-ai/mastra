@@ -223,6 +223,13 @@ export const experimentResultScoresResponse: ListScoresResponse = {
 };
 
 type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
+type MetricAggregateResponse = Awaited<ReturnType<MastraClient['getMetricAggregate']>>;
+
+/** `POST /api/observability/metrics/aggregate` before any metric has been recorded. */
+export const emptyMetricAggregate: MetricAggregateResponse = { value: null };
+
+/** `DELETE /api/experiments/:experimentId`. */
+export const experimentDeletedResponse: RouteResponse<'DELETE /experiments/:experimentId'> = { success: true };
 
 /** `POST /api/observability/metrics/breakdown` for the shared `TRACE_ID`: 1,200 in + 300 out tokens, $0.0015. */
 export const experimentUsageBreakdown: MetricBreakdownResponse = {

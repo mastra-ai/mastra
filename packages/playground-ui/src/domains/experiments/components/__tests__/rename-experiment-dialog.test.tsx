@@ -4,9 +4,9 @@ import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import type { RenameExperimentPatch } from '../rename-experiment-dialog';
-import { experiments } from './fixtures/experiments';
+import { completedExperiment } from './fixtures/experiments';
 
-const experiment = { ...experiments[0], name: 'Baseline run', description: 'First pass' };
+const experiment = { ...completedExperiment, name: 'Baseline run', description: 'First pass' };
 
 afterEach(() => {
   cleanup();

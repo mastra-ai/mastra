@@ -1,3 +1,4 @@
+import type { DatasetExperiment, SerializedRouteResponse, UpdateDatasetExperimentParams } from '@mastra/client-js';
 import { RenameExperimentDialog } from '@mastra/playground-ui/domains/experiments';
 import { useDatasetExperiment } from '@mastra/react/hooks/datasets';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -10,10 +11,18 @@ import { useRenameExperiment } from '../use-rename-experiment';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-const base = { ...experiments[0], datasetId: 'dataset-1', name: 'Baseline run', description: 'First pass' };
+type RenameBody = Omit<UpdateDatasetExperimentParams, 'datasetId' | 'experimentId'>;
+type RenameResponse = SerializedRouteResponse<'PATCH /datasets/:datasetId/experiments/:experimentId'>;
 
-let current = base;
-const patchCalls: Array<{ datasetId: string; experimentId: string; body: Record<string, unknown> }> = [];
+const base: DatasetExperiment = {
+  ...experiments[0],
+  datasetId: 'dataset-1',
+  name: 'Baseline run',
+  description: 'First pass',
+};
+
+let current: DatasetExperiment = base;
+const patchCalls: Array<{ datasetId: string; experimentId: string; body: RenameBody }> = [];
 
 /** Mirrors the detail page: the title comes from the experiment query so a rename must refresh it. */
 function Harness() {
@@ -41,10 +50,11 @@ beforeEach(() => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments/:experimentId`, () => HttpResponse.json(current)),
     http.patch(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments/:experimentId`, async ({ params, request }) => {
-      const body = (await request.json()) as Record<string, unknown>;
+      const body = (await request.json()) as RenameBody;
       patchCalls.push({ datasetId: String(params.datasetId), experimentId: String(params.experimentId), body });
       current = { ...current, ...body };
-      return HttpResponse.json(current);
+      const response: RenameResponse = current;
+      return HttpResponse.json(response);
     }),
   );
 });

@@ -18,22 +18,28 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { makeWrapper, TEST_BASE_URL } from '@/test/render';
 
-const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
+type AgentResult = Extract<DatasetExperimentResult, { targetType: 'agent' }>;
+
+const makeResult = (overrides: Partial<AgentResult> = {}): AgentResult => ({
   id: 'res-1',
   experimentId: 'exp-1',
   itemId: 'item-1',
+  itemDatasetVersion: 1,
   input: 'hello',
   targetType: 'agent',
-  output: 'world',
+  output: { text: 'world' },
   groundTruth: null,
-  scores: {},
+  scores: [],
   error: null,
   status: null,
   tags: null,
   comment: null,
   traceId: 'trace-a',
-  createdAt: new Date('2026-01-01T00:00:00Z'),
-  updatedAt: new Date('2026-01-01T00:00:00Z'),
+  metadata: null,
+  startedAt: '2026-01-01T00:00:00.000Z',
+  completedAt: '2026-01-01T00:00:01.000Z',
+  retryCount: 0,
+  createdAt: '2026-01-01T00:00:00.000Z',
   ...overrides,
 });
 
@@ -127,7 +133,7 @@ describe('StudioExperimentResultDetail usage', () => {
       renderDetail(makeResult());
 
       await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
-      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
+      expect(termLabels().slice(0, 3)).toEqual(['Cost', 'Duration', 'Tokens']);
     });
   });
 
@@ -144,14 +150,14 @@ describe('StudioExperimentResultDetail usage', () => {
       await waitFor(() => expect(onTraceRequest).toHaveBeenCalledTimes(2));
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
+      expect(termLabels().slice(0, 3)).toEqual(['Cost', 'Duration', 'Tokens']);
     });
   });
 
   describe('when the trace is a workflow run', () => {
     it('skips usage', async () => {
-      serveTrace({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
-      renderDetail(makeResult({ targetType: 'workflow' }));
+      serveTrace({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW_RUN });
+      renderDetail({ ...makeResult(), targetType: 'workflow' });
 
       await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
       expect(onBreakdownRequest).not.toHaveBeenCalled();

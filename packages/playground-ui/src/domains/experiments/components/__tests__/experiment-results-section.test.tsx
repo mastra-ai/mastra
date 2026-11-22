@@ -18,7 +18,7 @@ import { TestLinkProvider } from '@/test/link-provider';
 afterEach(cleanup);
 
 const itemScores: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason'>>> = {
-  'item-agent-traced': [{ scorerId: 'accuracy', score: 0.75, reason: null }],
+  'item-agent-traced': [{ scorerId: 'accuracy', score: 0.75 }],
 };
 
 function renderSection(

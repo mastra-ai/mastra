@@ -52,6 +52,18 @@ export const experiments: DatasetExperiment[] = [
   },
 ];
 
+/** Completed run: 10:00 → 10:05, 10 items. Same as `experiments[0]`. */
+export const completedExperiment: DatasetExperiment = base;
+
+/** `experiments[0]` with 3 of its 10 items errored. */
+export const experimentWithErrors: DatasetExperiment = { ...base, succeededCount: 7, failedCount: 3 };
+
+/** `experiments[0]` while it is still running. */
+export const runningExperiment: DatasetExperiment = { ...base, status: 'running', completedAt: null };
+
+/** `experiments[0]` with a blank name, labelled by its short id. */
+export const unnamedExperiment: DatasetExperiment = { ...base, name: '' };
+
 type ListExperimentsResponse = Awaited<ReturnType<MastraClient['listExperiments']>>;
 type ReviewSummaryResponse = Awaited<ReturnType<MastraClient['getExperimentReviewSummary']>>;
 

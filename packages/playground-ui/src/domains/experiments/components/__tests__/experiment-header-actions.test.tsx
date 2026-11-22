@@ -3,9 +3,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentHeaderActions } from '../experiment-header-actions';
 import type { ExperimentHeaderActionsProps } from '../experiment-header-actions';
-import { experiments } from './fixtures/experiments';
+import { completedExperiment } from './fixtures/experiments';
 
-const namedExperiment = experiments[0];
+const namedExperiment = completedExperiment;
 
 const renderActions = (props: Partial<Omit<ExperimentHeaderActionsProps, 'experiment'>> = {}) =>
   render(<ExperimentHeaderActions experiment={namedExperiment} {...props} />);

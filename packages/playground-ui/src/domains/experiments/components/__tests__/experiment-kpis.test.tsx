@@ -1,30 +1,14 @@
 // @vitest-environment jsdom
-import type { ClientScoreRowData, DatasetExperiment } from '@mastra/client-js';
-import type { ExperimentItemUsage, ExperimentMetrics } from '@mastra/react/hooks/experiments';
+import type { DatasetExperiment } from '@mastra/client-js';
+import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ExperimentKpis } from '../experiment-kpis';
 import type { ExperimentKpisProps } from '../experiment-kpis';
 import { experimentTotalsUsage } from './fixtures/experiment-item-usage';
-import { experiments } from './fixtures/experiments';
-
-// Completed run: 10:00 → 10:05, 10 items.
-const completedExperiment: DatasetExperiment = experiments[0];
-
-// Cost and tokens come from the usage prop; the KPIs only read the average duration here.
-const fullMetrics: ExperimentMetrics = {
-  totalTokens: null,
-  estimatedCost: null,
-  costUnit: null,
-  avgAgentDurationMs: 1850,
-  agentRuns: 42,
-};
-
-// avg of 0.5, 1 and 1 across both scorers is 0.833.
-const scoresByItemId: Record<string, Array<Pick<ClientScoreRowData, 'score'>>> = {
-  'item-1': [{ score: 0.5 }],
-  'item-2': [{ score: 1 }, { score: 1 }],
-};
+import { experimentMetrics } from './fixtures/experiment-metrics';
+import { kpiScoresByItemId } from './fixtures/experiment-scores';
+import { completedExperiment, runningExperiment } from './fixtures/experiments';
 
 const renderKpis = (
   experiment: DatasetExperiment,
@@ -35,7 +19,7 @@ const renderKpis = (
     <ExperimentKpis
       experiment={experiment}
       metrics={metrics}
-      scoresByItemId={scoresByItemId}
+      scoresByItemId={kpiScoresByItemId}
       usage={usage}
       isUsageLoading={isUsageLoading}
     />,
@@ -57,7 +41,7 @@ describe('ExperimentKpis', () => {
     const renderWithMetrics = () =>
       renderKpis(
         completedExperiment,
-        { data: fullMetrics, isLoading: false, isEnabled: true },
+        { data: experimentMetrics, isLoading: false, isEnabled: true },
         {
           usage: experimentTotalsUsage,
         },
@@ -86,18 +70,19 @@ describe('ExperimentKpis', () => {
 
     it('leads with cost, duration and tokens', () => {
       renderWithMetrics();
-      const labels = ['Total cost', 'Run duration', 'Total tokens', 'Avg score'].map(label => screen.getByText(label));
-      for (let i = 1; i < labels.length; i++) {
-        expect(labels[i - 1].compareDocumentPosition(labels[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      }
+      const labels = screen.getAllByText(/^(Total cost|Run duration|Total tokens|Avg score)$/);
+      expect(labels.map(label => label.textContent)).toEqual([
+        'Total cost',
+        'Run duration',
+        'Total tokens',
+        'Avg score',
+      ]);
     });
   });
 
   describe('when metrics are enabled and the run is still in progress', () => {
-    const runningExperiment: DatasetExperiment = { ...completedExperiment, status: 'running', completedAt: null };
-
     it('keeps the cost and token cards loading', () => {
-      renderKpis(runningExperiment, { data: fullMetrics, isLoading: false, isEnabled: true });
+      renderKpis(runningExperiment, { data: experimentMetrics, isLoading: false, isEnabled: true });
 
       expect(screen.getByText('Total cost')).toBeDefined();
       expect(screen.getByText('Total tokens')).toBeDefined();
@@ -110,7 +95,7 @@ describe('ExperimentKpis', () => {
     it('keeps the cost and token cards loading', () => {
       renderKpis(
         completedExperiment,
-        { data: fullMetrics, isLoading: false, isEnabled: true },
+        { data: experimentMetrics, isLoading: false, isEnabled: true },
         { isUsageLoading: true },
       );
 
@@ -122,7 +107,7 @@ describe('ExperimentKpis', () => {
 
   describe('when metrics are disabled', () => {
     const renderWithoutMetrics = () =>
-      renderKpis(completedExperiment, { data: fullMetrics, isLoading: false, isEnabled: false });
+      renderKpis(completedExperiment, { data: experimentMetrics, isLoading: false, isEnabled: false });
 
     it('hides the cost and token cards', () => {
       renderWithoutMetrics();

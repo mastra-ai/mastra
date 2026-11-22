@@ -6,15 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentItemPanelProvider } from '../../context/experiment-item-panel-context';
 import { ExperimentItemPanel } from '../experiment-item-panel';
 import type { ExperimentItemPanelProps } from '../experiment-item-panel';
-import { agentTracedResult } from './fixtures/experiment-results';
+import { agentTracedResult, needsReviewResult } from './fixtures/experiment-results';
 import { TestLinkProvider } from '@/test/link-provider';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-
-const needsReviewResult: DatasetExperimentResult = { ...agentTracedResult, status: 'needs-review' };
 
 const renderPanel = (
   { results = [agentTracedResult], currentItemId }: { results?: DatasetExperimentResult[]; currentItemId?: string },

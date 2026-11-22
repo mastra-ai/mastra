@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
-import type { DatasetExperiment } from '@mastra/client-js';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentPageLayout } from '../experiment-page-layout';
 import type { ExperimentPageLayoutProps } from '../experiment-page-layout';
-import { experiments } from './fixtures/experiments';
+import {
+  completedExperiment,
+  experimentWithErrors,
+  runningExperiment,
+  unnamedExperiment,
+} from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 
-const completed = experiments[0];
-const withErrors: DatasetExperiment = { ...completed, succeededCount: 7, failedCount: 3 };
-const running: DatasetExperiment = { ...completed, status: 'running', completedAt: null };
+const completed = completedExperiment;
 
 const renderLayout = (props: Partial<ExperimentPageLayoutProps> = {}) =>
   render(
@@ -48,7 +50,7 @@ describe('ExperimentPageLayout', () => {
     });
 
     it('counts the errored items', () => {
-      renderLayout({ experiment: withErrors });
+      renderLayout({ experiment: experimentWithErrors });
 
       expect(within(breadcrumb()).getByText('3 errored')).toBeDefined();
     });
@@ -79,7 +81,7 @@ describe('ExperimentPageLayout', () => {
 
   describe('given a running experiment', () => {
     it('leaves the item count out until it settles', () => {
-      renderLayout({ experiment: running });
+      renderLayout({ experiment: runningExperiment });
 
       expect(within(breadcrumb()).getByText('entity-extraction / model-a')).toBeDefined();
       expect(within(breadcrumb()).queryByText('10 items')).toBeNull();
@@ -102,7 +104,7 @@ describe('ExperimentPageLayout', () => {
 
   describe('given an unnamed experiment', () => {
     it('names the current crumb by its short id', () => {
-      renderLayout({ experiment: { ...completed, name: '' } });
+      renderLayout({ experiment: unnamedExperiment });
 
       expect(within(breadcrumb()).getByText('a1b2c3d4...')).toBeDefined();
     });

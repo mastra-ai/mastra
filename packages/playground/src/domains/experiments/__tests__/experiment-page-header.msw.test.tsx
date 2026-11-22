@@ -9,8 +9,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DATASET_ID,
   EXPERIMENT_ID,
+  emptyMetricAggregate,
   emptyScoresResponse,
   experiment,
+  experimentDeletedResponse,
   noAgents,
   noProcessors,
   noScorers,
@@ -55,7 +57,7 @@ beforeEach(() => {
   requests.length = 0;
   server.use(
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(renamedPostgresWithMetrics)),
-    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () => HttpResponse.json({ value: null })),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () => HttpResponse.json(emptyMetricAggregate)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => HttpResponse.json(emptyUsageBreakdown)),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
@@ -64,7 +66,7 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => HttpResponse.json(current)),
     http.delete(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => {
       requests.push('DELETE experiment');
-      return HttpResponse.json({ success: true });
+      return HttpResponse.json(experimentDeletedResponse);
     }),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
       HttpResponse.json({ error: 'not found' }, { status: 404 }),

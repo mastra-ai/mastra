@@ -89,6 +89,9 @@ export const agentTracedResult: DatasetExperimentResult = {
   completedAt: '2026-08-25T10:00:02.500Z',
 };
 
+/** `agentTracedResult` flagged for review. */
+export const needsReviewResult: DatasetExperimentResult = { ...agentTracedResult, status: 'needs-review' };
+
 export const experimentResultsResponse: ListDatasetExperimentResultsResponse = {
   results: [agentMarkdownResult, agentFailedResult, workflowResult],
   pagination: { total: 3, page: 0, perPage: 50, hasMore: false },
