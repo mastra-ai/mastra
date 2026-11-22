@@ -233,13 +233,13 @@ export async function resolveExtractors(
   extractors: readonly Extractor<any>[],
   context: ExtractorRuntimeContext,
 ): Promise<Extractor<any>[]> {
-  // One failing user extractor must not stop the observer or reflector: skip it for this cycle.
-  // Built-in (internal) extractors still throw.
+  // One failing optional plugin extractor must not stop the observer or reflector: skip it for this cycle.
+  // Internal and required extractors carry mandatory OM state, so their failures still abort the cycle.
   const settled = await Promise.allSettled(extractors.map(extractor => extractor.resolve(context)));
   return settled.flatMap((result, i) => {
     if (result.status === 'fulfilled') return [result.value];
     const extractor = extractors[i]!;
-    if (extractor.internal) throw result.reason;
+    if (extractor.internal || extractor.required) throw result.reason;
     console.warn(`[observational-memory] skipping extractor "${extractor.slug}" this cycle:`, result.reason);
     return [];
   });

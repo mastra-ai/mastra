@@ -179,8 +179,13 @@ export type MastraCodePluginProcessorEntries =
     };
 
 /**
- * Observational Memory extractors a plugin contributes: `Extractor` instances or
- * plain extractor configs, which Mastra Code builds with its own `@mastra/memory`.
+ * Observational Memory extractors a plugin contributes. Plain extractor configs are portable and
+ * Mastra Code builds them with its own `@mastra/memory` constructor.
+ *
+ * `Extractor` instances are accepted only when their constructor comes from the host copy re-exported
+ * by `mastracode/plugin`. A plugin that bundles or resolves a separate `@mastra/memory` copy must pass
+ * a plain `ExtractorConfig`; foreign instances are rejected because rebuilding one would lose dynamic
+ * instructions, schemas, mode and hooks.
  *
  * `observation` extractors run with the observer, `reflection` extractors with
  * the reflector; an extractor may sit in both lanes. They join Mastra Code's
