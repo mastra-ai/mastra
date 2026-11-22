@@ -3,7 +3,7 @@ import type { ExperimentsBulkActionsProps } from './experiments-bulk-actions';
 import { ExperimentsComparableLegend } from './experiments-comparable-legend';
 import type { ExperimentsComparableLegendProps } from './experiments-comparable-legend';
 import { ExperimentsFilterBar } from './experiments-filter-bar';
-import type { ExperimentsFilters } from './experiments-filter-bar';
+import type { ExperimentsFilterBarProps, ExperimentsFilters } from './experiments-filter-bar';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export interface ExperimentsToolbarDatasetOption {
@@ -14,6 +14,7 @@ export interface ExperimentsToolbarDatasetOption {
 export interface ExperimentsToolbarProps extends ExperimentsFilters {
   onFiltersChange: (next: ExperimentsFilters) => void;
   datasetOptions: ExperimentsToolbarDatasetOption[];
+  targetFields: ExperimentsFilterBarProps['targetFields'];
   selection: ExperimentsBulkActionsProps;
   /** Dataset of the first selected experiment, named by the legend. */
   comparableDataset?: ExperimentsComparableLegendProps['dataset'];
@@ -26,6 +27,7 @@ export function ExperimentsToolbar({
   datasetOptions,
   targetType,
   targetId,
+  targetFields,
   onFiltersChange,
   selection,
   comparableDataset,
@@ -41,6 +43,7 @@ export function ExperimentsToolbar({
             datasetOptions={datasetOptions}
             targetType={targetType}
             targetId={targetId}
+            targetFields={targetFields}
             onChange={onFiltersChange}
           />
         </ActionRow.Start>

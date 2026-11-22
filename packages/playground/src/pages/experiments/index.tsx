@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useTargetFilterFields } from '@mastra/playground-ui/domains/datasets';
 import {
   ExperimentsList,
   ExperimentsToolbar,
@@ -55,6 +56,7 @@ export default function Experiments() {
 
   const datasetFilter = searchParams.get('dataset') ?? 'all';
   const { targetType, targetId } = useTargetFilterParams();
+  const targetFields = useTargetFilterFields(targetType);
 
   const handleFiltersChange = (next: ExperimentsFilters) => {
     setSearch(next.search);
@@ -254,6 +256,7 @@ export default function Experiments() {
           datasetOptions={experimentDatasetOptions}
           targetType={targetType}
           targetId={targetId}
+          targetFields={targetFields}
           onFiltersChange={handleFiltersChange}
           selection={{
             selectedIds,

@@ -1,12 +1,6 @@
 import { useMemo } from 'react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
-import {
-  filterBarItem,
-  getFilterBarItemValue,
-  targetFromItems,
-  targetToItems,
-  useTargetFilterFields,
-} from '@/domains/datasets';
+import { filterBarItem, getFilterBarItemValue, targetFromItems, targetToItems } from '@/domains/datasets';
 import type { TargetFilterValue } from '@/domains/datasets';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar';
@@ -38,6 +32,8 @@ export interface ExperimentsFilters extends TargetFilterValue {
 
 export interface ExperimentsFilterBarProps extends ExperimentsFilters {
   datasetOptions: Array<{ value: string; label: string }>;
+  /** `Target type` + `Target` fields, e.g. from `useTargetFilterFields(targetType)`; `[]` hides the target filter. */
+  targetFields: FilterBarField[];
   onChange: (next: ExperimentsFilters) => void;
 }
 
@@ -65,10 +61,9 @@ export function ExperimentsFilterBar({
   targetType,
   targetId,
   datasetOptions,
+  targetFields,
   onChange,
 }: ExperimentsFilterBarProps) {
-  const targetFields = useTargetFilterFields(targetType);
-
   const fields = useMemo<FilterBarField[]>(
     () => [
       // Listed first so free text lands on it by default.
