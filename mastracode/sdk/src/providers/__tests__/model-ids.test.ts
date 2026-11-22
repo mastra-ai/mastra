@@ -13,10 +13,13 @@ describe('parseCodexModelSelection', () => {
     expect(getCatalogThinkingLevels(`${modelId}:fast`)).toEqual(getCatalogThinkingLevels(modelId));
   });
 
-  it.each(['openrouter/openai/gpt-6.2-sol:fast', 'anthropic/claude:fast', 'openai/gpt-6.2-sol:FAST'])(
-    'does not reserve the suffix for %s',
-    modelId => expect(parseCodexModelSelection(modelId)).toEqual({ modelId }),
-  );
+  it.each([
+    'openrouter/openai/gpt-6.2-sol:fast',
+    'anthropic/claude:fast',
+    'openai/gpt-6.2-sol:FAST',
+    'openai-proxy/gpt-6.2-sol:fast',
+    'acme/local:fast',
+  ])('does not reserve the suffix for %s', modelId => expect(parseCodexModelSelection(modelId)).toEqual({ modelId }));
 
   it.each(['openai/gpt-5.3', 'openai/gpt-5.4-mini', 'mastra/openai/gpt-4.1'])(
     'drops the suffix without requesting Fast on %s, which has no Fast tier',
