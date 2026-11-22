@@ -1,14 +1,11 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
-import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { Button } from '@/ds/components/Button';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
+import { useLinkComponent } from '@/lib/framework';
 
-export const NoPromptBlocksInfo = () => {
+export const NoPromptBlocksInfo = ({ canCreate }: { canCreate: boolean }) => {
   const { Link, paths } = useLinkComponent();
-  const { isCmsAvailable, isLoading } = useIsCmsAvailable();
-  const canCreate = !isLoading && isCmsAvailable;
 
   return (
     <EmptyState

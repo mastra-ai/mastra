@@ -1,7 +1,13 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
+import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AgentCMSRefBlock } from './agent-cms-ref-block';
+import { DisplayConditionsDialog } from './display-conditions-dialog';
+import type { InstructionBlock, InlineInstructionBlock } from './types';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ContentBlock } from '@/ds/components/ContentBlocks';
 import {
   Dialog,
   DialogAction,
@@ -12,28 +18,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { IconBookmarkPlus } from '@mastra/playground-ui/icons/central/IconBookmarkPlus';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+} from '@/ds/components/Dialog';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { Notice } from '@/ds/components/Notice';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconBookmarkPlus } from '@/ds/icons/central/IconBookmarkPlus';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
-import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { AgentCMSRefBlock } from './agent-cms-ref-block';
-import { DisplayConditionsDialog } from '@/domains/cms';
-import { useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
+import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
+import type { JsonSchema } from '@/utils/json-schema';
+import type { RuleGroup } from '@/utils/rule-engine';
 
 export interface AgentCMSBlockProps {
   index: number;

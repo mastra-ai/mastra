@@ -1,10 +1,11 @@
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { UseFormReturn } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
-
+import { SectionHeader } from '../section-header';
 import type { PromptBlockFormValues } from './utils/form-validation';
-import { DisplayConditionsDialog, SectionHeader } from '@/domains/cms';
+
+import { DisplayConditionsDialog } from '@/domains/instruction-blocks';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import type { RuleGroup } from '@/utils/rule-engine';
 
 interface PromptBlockEditMainProps {
   form: UseFormReturn<PromptBlockFormValues>;

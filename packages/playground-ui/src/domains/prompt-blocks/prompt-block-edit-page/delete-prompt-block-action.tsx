@@ -1,10 +1,10 @@
-import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
 import { useState } from 'react';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Button } from '@/ds/components/Button';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
+import { useLinkComponent } from '@/lib/framework';
+import { toast } from '@/utils/toast';
 
 interface DeletePromptBlockActionProps {
   blockId: string;

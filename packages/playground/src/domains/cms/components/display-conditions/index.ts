@@ -1,1 +1,1 @@
-export { DisplayConditionsDialog } from './display-conditions-dialog';
+export { DisplayConditionsDialog } from '@mastra/playground-ui/domains/instruction-blocks';

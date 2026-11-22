@@ -1,18 +1,18 @@
-import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
-import { IconPencilLine } from '@mastra/playground-ui/icons/central/IconPencilLine';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { useState } from 'react';
-import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { createInstructionBlock, createRefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { AgentCMSBlock } from './agent-cms-block';
 import { PromptBlockPickerDialog } from './prompt-block-picker-dialog';
+import type { InstructionBlock } from './types';
+import { createInstructionBlock, createRefInstructionBlock } from './types';
+import { ContentBlocks } from '@/ds/components/ContentBlocks';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconPencilLine } from '@/ds/icons/central/IconPencilLine';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { Icon } from '@/ds/icons/Icon';
+import { focusRing } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
+import type { JsonSchema } from '@/utils/json-schema';
 
 export interface AgentCMSBlocksProps {
   items: Array<InstructionBlock>;
@@ -38,7 +38,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           <button
             type="button"
             className={cn(
-              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100',
+              'flex size-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100',
               focusRing,
               quietTextHover,
             )}
@@ -125,7 +125,7 @@ export const AgentCMSBlocks = ({
   };
 
   return (
-    <div className={cn('flex h-full w-full flex-col overflow-y-auto', className)}>
+    <div className={cn('flex size-full flex-col overflow-y-auto', className)}>
       {items.length > 0 && (
         <div className="h-full overflow-y-auto pr-2 pl-10">
           <ContentBlocks items={items} onChange={onChange} className="flex w-full flex-col">

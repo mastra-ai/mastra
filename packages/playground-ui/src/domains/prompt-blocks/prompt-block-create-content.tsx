@@ -1,12 +1,12 @@
 import type { CreateStoredPromptBlockParams } from '@mastra/client-js';
-import { Form } from '@mastra/playground-ui/components/Form';
-import { toast } from '@mastra/playground-ui/utils/toast';
-
 import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
+import { AgentEditLayout } from './edit-layout';
+
 import { PromptBlockEditMain } from './prompt-block-edit-page/prompt-block-edit-main';
 import { PromptBlockEditSidebar } from './prompt-block-edit-page/prompt-block-edit-sidebar';
 import { usePromptBlockEditForm } from './prompt-block-edit-page/use-prompt-block-edit-form';
-import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { Form } from '@/ds/components/Form';
+import { toast } from '@/utils/toast';
 
 interface PromptBlockCreateContentProps {
   onSuccess?: (block: { id: string }) => void;
