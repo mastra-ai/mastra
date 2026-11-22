@@ -415,6 +415,194 @@ test('a changeset failure in the merged repository-files job is judged on retry 
   assert.equal(passedOnRetry(first, key, [first, pending], keysOf), false);
 });
 
+test('the merged light E2E job fails only the suite whose step failed', () => {
+  // Step names as e2e-tests.yml's e2e-light job reports them in the jobs API.
+  const steps = [
+    { name: 'Set up job', conclusion: 'success' },
+    { name: 'Build', conclusion: 'success' },
+    { name: 'E2E no-bundling: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E no-bundling', conclusion: 'failure' },
+    { name: 'E2E create-mastra: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E create-mastra', conclusion: 'skipped' },
+    { name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'failure' },
+    { name: 'E2E CommonJS', conclusion: 'skipped' },
+    { name: 'E2E npm import: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E npm import', conclusion: 'success' },
+    { name: 'E2E deployers: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E deployers', conclusion: 'success' },
+    { name: 'E2E Type check: install e2e test type-check', conclusion: 'success' },
+    { name: 'E2E Type check', conclusion: 'success' },
+  ];
+  const keys = jobKeysFor('Prebuild', 'E2E Tests / E2E light suites', () => '', steps);
+  assert.deepEqual(keys.ran, ['job:e2e/commonjs', 'job:e2e/deployers', 'job:e2e/no-bundling', 'job:e2e/type-check']);
+  assert.deepEqual(keys.failed, ['job:e2e/commonjs', 'job:e2e/no-bundling']);
+  assert.deepEqual(keys.passed, ['job:e2e/deployers', 'job:e2e/type-check']);
+  // A job the API returned without steps names no key rather than guessing.
+  assert.deepEqual(jobKeysFor('Prebuild', 'E2E Tests / E2E light suites'), { ran: [], failed: [], passed: [] });
+});
+
+test('a failed shared Build fails the selected light suites it blocked, not the tiered-out ones', () => {
+  // As e2e-light reports a run where Build failed: no-bundling and deployers were selected,
+  // create-mastra was tiered out, and npm import (which needs no build) passed on its own.
+  const steps = [
+    { name: 'Set up job', conclusion: 'success' },
+    { name: 'Download E2E registry artifact', conclusion: 'success' },
+    { name: 'E2E npm import: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E npm import', conclusion: 'success' },
+    { name: 'Build', conclusion: 'failure' },
+    { name: 'E2E no-bundling: not run, a prerequisite failed', conclusion: 'failure' },
+    { name: 'E2E no-bundling: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E no-bundling', conclusion: 'skipped' },
+    { name: 'E2E create-mastra: not run, a prerequisite failed', conclusion: 'skipped' },
+    { name: 'E2E create-mastra: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E create-mastra', conclusion: 'skipped' },
+    { name: 'E2E deployers: not run, a prerequisite failed', conclusion: 'failure' },
+    { name: 'E2E deployers: install e2e test dependencies', conclusion: 'skipped' },
+    { name: 'E2E deployers', conclusion: 'skipped' },
+  ];
+  const keys = jobKeysFor('Prebuild', 'E2E Tests / E2E light suites', () => '', steps);
+  assert.deepEqual(keys.ran, ['job:e2e/deployers', 'job:e2e/no-bundling']);
+  assert.deepEqual(keys.failed, ['job:e2e/deployers', 'job:e2e/no-bundling']);
+  assert.deepEqual(keys.passed, []);
+});
+
+test('a green retry recovers a light suite whose prerequisite step was skipped', () => {
+  // Build passed, so the prerequisite step was skipped on purpose and the suite ran and passed.
+  const green = [
+    { name: 'Build', conclusion: 'success' },
+    { name: 'E2E no-bundling: not run, a prerequisite failed', conclusion: 'skipped' },
+    { name: 'E2E no-bundling: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E no-bundling', conclusion: 'success' },
+    { name: 'E2E deployers: not run, a prerequisite failed', conclusion: 'skipped' },
+    { name: 'E2E deployers: install e2e test dependencies', conclusion: 'success' },
+    { name: 'E2E deployers', conclusion: 'skipped' },
+  ];
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  assert.deepEqual(keysOf({ name: 'E2E Tests / E2E light suites', steps: green }).passed, ['job:e2e/no-bundling']);
+  const failed = {
+    name: 'E2E Tests / E2E light suites',
+    run_id: 1,
+    run_attempt: 1,
+    steps: [
+      { name: 'Build', conclusion: 'failure' },
+      { name: 'E2E no-bundling: not run, a prerequisite failed', conclusion: 'failure' },
+      { name: 'E2E deployers: not run, a prerequisite failed', conclusion: 'failure' },
+    ],
+  };
+  const retry = { ...failed, run_attempt: 2, steps: green };
+  assert.equal(passedOnRetry(failed, 'job:e2e/no-bundling', [failed, retry], keysOf), true);
+  // A real skipped test step still isn't a pass.
+  assert.equal(passedOnRetry(failed, 'job:e2e/deployers', [failed, retry], keysOf), false);
+});
+
+test('the merged Mastra Code job fails only the suite whose step failed', () => {
+  const steps = (e2e, om) => [
+    { name: 'Checkout repo', conclusion: 'success' },
+    { name: 'Build Mastra Code', conclusion: e2e },
+    { name: 'Run Mastra Code E2E', conclusion: e2e },
+    { name: 'Upload ACP conformance reports', conclusion: e2e },
+    { name: 'Mastra Code web host OM scenarios: install web host dependencies', conclusion: 'success' },
+    { name: 'Mastra Code web host OM scenarios', conclusion: om },
+  ];
+  const keys = s => jobKeysFor('Prebuild', 'Mastra Code E2E / Mastra Code E2E', () => '', s);
+  assert.deepEqual(keys(steps('success', 'failure')), {
+    ran: ['job:mastracode-e2e', 'job:mastracode-om'],
+    failed: ['job:mastracode-om'],
+    passed: ['job:mastracode-e2e'],
+  });
+  assert.deepEqual(keys(steps('failure', 'success')).failed, ['job:mastracode-e2e']);
+  // Runs from before the merge: the job held only the Mastra Code E2E steps.
+  assert.deepEqual(keys(steps('failure', 'skipped').slice(0, 4)), {
+    ran: ['job:mastracode-e2e'],
+    failed: ['job:mastracode-e2e'],
+    passed: [],
+  });
+  assert.deepEqual(keys(), { ran: ['job:mastracode-e2e'], failed: ['job:mastracode-e2e'] });
+});
+
+test('a merged job retry counts as a flake only for the suites whose own steps passed again', () => {
+  const name = 'E2E Tests / E2E light suites';
+  const job = (id, attempt, runId, conclusion, suites) => ({
+    id,
+    name,
+    run_id: runId,
+    run_attempt: attempt,
+    conclusion,
+    steps: Object.entries(suites).flatMap(([label, c]) => [
+      { name: `E2E ${label}: install e2e test dependencies`, conclusion: c === 'failure' ? 'success' : c },
+      { name: `E2E ${label}`, conclusion: c },
+    ]),
+  });
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  const failed = job(1, 1, 10, 'failure', { 'no-bundling': 'failure', CommonJS: 'failure', deployers: 'failure' });
+  const retry = job(2, 2, 10, 'success', { 'no-bundling': 'success', CommonJS: 'skipped', deployers: 'cancelled' });
+  assert.equal(passedOnRetry(failed, 'job:e2e/no-bundling', [failed, retry], keysOf), true);
+  // The job went green, but CommonJS was skipped and deployers cancelled: neither passed.
+  assert.equal(passedOnRetry(failed, 'job:e2e/commonjs', [failed, retry], keysOf), false);
+  assert.equal(passedOnRetry(failed, 'job:e2e/deployers', [failed, retry], keysOf), false);
+  // A later green run of the same head counts only if the suite ran and passed in it.
+  const laterRun = job(3, 1, 11, 'success', { CommonJS: 'success', deployers: 'skipped' });
+  assert.equal(passedOnRetry(failed, 'job:e2e/commonjs', [failed, retry, laterRun], keysOf), true);
+  assert.equal(passedOnRetry(failed, 'job:e2e/deployers', [failed, retry, laterRun], keysOf), false);
+  // An earlier attempt never counts, and whole-job keys still go by the job's conclusion.
+  assert.equal(passedOnRetry(retry, 'job:e2e/no-bundling', [failed, retry], keysOf), false);
+  const store = (id, attempt, conclusion) => ({
+    id,
+    name: 'Combined Store Tests / test (pg)',
+    run_id: 10,
+    run_attempt: attempt,
+    conclusion,
+  });
+  assert.equal(passedOnRetry(store(1, 1, 'failure'), 'job:store/pg', [store(2, 2, 'success')], keysOf), true);
+  assert.equal(passedOnRetry(store(1, 1, 'failure'), 'job:store/pg', [store(2, 2, 'cancelled')], keysOf), false);
+});
+
+test('a merged suite passes only when its own test step ran and succeeded', () => {
+  const light = steps => jobKeysFor('Prebuild', 'E2E Tests / E2E light suites', () => '', steps);
+  // The install went green but the CommonJS test step is absent: no test result, so no pass.
+  assert.deepEqual(light([{ name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'success' }]).passed, []);
+  // Skipped and cancelled test steps are not passes either.
+  for (const conclusion of ['skipped', 'cancelled'])
+    assert.deepEqual(
+      light([
+        { name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'success' },
+        { name: 'E2E CommonJS', conclusion },
+      ]).passed,
+      [],
+    );
+  // A red sibling doesn't stop a suite whose test actually passed.
+  assert.deepEqual(
+    light([
+      { name: 'E2E deployers', conclusion: 'failure' },
+      { name: 'E2E CommonJS: install e2e test dependencies', conclusion: 'success' },
+      { name: 'E2E CommonJS', conclusion: 'success' },
+    ]).passed,
+    ['job:e2e/commonjs'],
+  );
+  const mc = steps => jobKeysFor('Prebuild', 'Mastra Code E2E / Mastra Code E2E', () => '', steps);
+  // OM installed and built but its scenario step never reported; E2E built but never tested.
+  assert.deepEqual(
+    mc([
+      { name: 'Build Mastra Code', conclusion: 'success' },
+      { name: 'Mastra Code web host OM scenarios: install web host dependencies', conclusion: 'success' },
+      { name: 'Mastra Code web host OM scenarios: build web host dependencies', conclusion: 'success' },
+    ]).passed,
+    [],
+  );
+});
+
+test('a green reattempt is inspected so an earlier merged-suite failure is still judged', () => {
+  const runs = [
+    { id: 1, conclusion: 'success', run_attempt: 1 },
+    { id: 7, conclusion: 'success', run_attempt: 2 },
+  ];
+  // A first-attempt green run still isn't fetched.
+  assert.deepEqual(
+    runsToInspect(runs).map(r => r.id),
+    [7],
+  );
+});
+
 test('a grouped container-store job fails only the store whose step failed', () => {
   const steps = [
     { name: 'Build grouped storage packages', conclusion: 'success' },
