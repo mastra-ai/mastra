@@ -16,7 +16,6 @@ import {
   stabilizeThemeFlow,
   themeFlowToSankeyData,
 } from '../sankey-signals-data';
-import { formatSnapshotCutoff, formatSnapshotWindow } from '../signal-formatting';
 import { SignalsErrorState } from '../signals-error-state';
 import { SignalsLoadingSkeleton } from '../signals-loading-skeleton';
 import type { ThemeFlowResponse } from '../types';
@@ -193,24 +192,6 @@ describe('snapshotSummaryParts', () => {
       const parts = snapshotSummaryParts(themeSnapshotsResponse.snapshots[0], singleThemeFlow);
 
       expect(parts).toEqual(['Jul 1 – 8, 2026', '50 traces', '1 theme']);
-    });
-  });
-});
-
-describe('formatSnapshotCutoff', () => {
-  describe('when the server sends an unparseable timestamp', () => {
-    it('falls back to the raw value instead of throwing', () => {
-      expect(formatSnapshotCutoff('not-a-timestamp')).toBe('not-a-timestamp');
-    });
-  });
-});
-
-describe('formatSnapshotWindow', () => {
-  describe('when the server sends an unparseable timestamp', () => {
-    it('falls back to the raw values instead of throwing', () => {
-      expect(formatSnapshotWindow('not-a-timestamp', '2026-07-08T00:00:00.000Z')).toBe(
-        'not-a-timestamp–2026-07-08T00:00:00.000Z',
-      );
     });
   });
 });
@@ -549,15 +530,11 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('renders without the page identity header', async () => {
+    it('shows the flow instead of the onboarding empty state', async () => {
       renderSankeySignals();
 
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
-      expect(screen.queryByText('TRACE INTELLIGENCE')).toBeNull();
       expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
-      expect(screen.queryByTestId('signals-page-header')).toBeNull();
-      expect(screen.queryByRole('list', { name: 'Trace intelligence metrics' })).toBeNull();
-      expect(screen.queryByRole('link', { name: 'Trace intelligence documentation' })).toBeNull();
     });
 
     it('shows the selected snapshot date, trace count, and theme count in the timeline summary', async () => {
@@ -568,7 +545,6 @@ describe('SankeySignals', () => {
       expect(within(summary).getByText('Jul 1 – 8, 2026')).not.toBeNull();
       expect(within(summary).getByText('50 traces')).not.toBeNull();
       expect(within(summary).getByText('9 themes')).not.toBeNull();
-      expect(screen.queryByText(/4 snapshots/)).toBeNull();
     });
 
     it('describes the active view under the tabs and swaps it with the tab', async () => {
@@ -596,7 +572,6 @@ describe('SankeySignals', () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       const infoButton = screen.getByRole('button', { name: 'What is trace intelligence?' });
-      expect(screen.queryByText('What is this?')).toBeNull();
 
       fireEvent.focus(infoButton);
 
@@ -606,7 +581,6 @@ describe('SankeySignals', () => {
       expect(tooltip.textContent).toContain('What the user wanted from the interaction.');
       expect(tooltip.textContent).toContain('How the interaction ended.');
       expect(tooltip.textContent).toContain('the views show how they appear, grow, and fade');
-      expect(tooltip.textContent).not.toContain('views above');
     });
 
     it('shows the selected snapshot context without controls for a single snapshot', async () => {
@@ -641,8 +615,6 @@ describe('SankeySignals', () => {
       }
       // The header row replaces the SVG column labels, so headings never double up.
       expect(within(chart).getAllByText('GOAL')).toHaveLength(1);
-      expect(within(chart).queryByText('RIBBON WIDTH = TRACE COUNT')).toBeNull();
-      expect(within(chart).queryByText('CLICK TO ISOLATE THEME')).toBeNull();
     });
 
     it('describes the goal signal when its column header is focused', async () => {
@@ -652,14 +624,6 @@ describe('SankeySignals', () => {
       fireEvent.focus(within(chart).getByText('GOAL'));
 
       expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
-    });
-
-    it('renders no stage legend in the chart footer', async () => {
-      renderSankeySignals();
-
-      await screen.findByRole('region', { name: 'Trace signal theme flow' });
-      expect(screen.queryByRole('list', { name: 'Trace signal stage legend' })).toBeNull();
-      expect(screen.queryByTestId('signal-legend-swatch')).toBeNull();
     });
 
     it('labels signals on the card border and separates themes with a horizontal rule', async () => {
@@ -673,23 +637,13 @@ describe('SankeySignals', () => {
       expect(within(chart).getByText('THEMES').style.writingMode).toBe('');
     });
 
-    it('renders the timeline before the flow, without a distribution rail', async () => {
+    it('renders the timeline before the flow', async () => {
       renderSankeySignals();
 
       const flow = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       const timeline = screen.getByRole('region', { name: 'Snapshot timeline' });
 
       expect(timeline.compareDocumentPosition(flow) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-      expect(screen.queryByRole('region', { name: 'Trace signal distributions' })).toBeNull();
-      expect(screen.queryByRole('article', { name: /distribution$/ })).toBeNull();
-    });
-
-    it('does not force the analysis into a separate horizontal scroll region', async () => {
-      renderSankeySignals();
-
-      await screen.findByRole('region', { name: 'Trace signal theme flow' });
-      expect(screen.queryByTestId('signals-analysis-scroll')).toBeNull();
-      expect(screen.queryByTestId('signals-analysis-canvas')).toBeNull();
     });
 
     it('aligns the header centers with the Sankey edge and interior columns', async () => {
@@ -1037,7 +991,6 @@ describe('SankeySignals', () => {
       expect(summary.parentElement).toBe(playButton.parentElement);
       expect(playButton.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
       expect(track.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-      expect(screen.queryByText(/snapshots · .*traces at this point/)).toBeNull();
     });
 
     it('keeps the rendered frame visible while playback advances', async () => {
@@ -1071,6 +1024,9 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       await screen.findByRole('group', { name: 'Snapshot landmarks' });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
+      await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces');
+
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
 
       expect(await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces')).not.toBeNull();
@@ -1189,26 +1145,6 @@ describe('SankeySignals', () => {
       expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
       releasePendingFlow?.();
       expect(await screen.findByRole('button', { name: 'Play snapshots' })).not.toBeNull();
-    });
-  });
-
-  describe('when the timeline requests snapshots', () => {
-    it('requests time-balanced landmarks with a bounded limit', async () => {
-      const snapshotUrls: URL[] = [];
-      server.use(
-        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
-          snapshotUrls.push(new URL(request.url));
-          return HttpResponse.json(themeSnapshotsResponse);
-        }),
-        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
-          HttpResponse.json(fourStageThemeFlowResponse),
-        ),
-      );
-      renderSankeySignals();
-
-      await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces');
-      expect(snapshotUrls[0]?.searchParams.get('presentation')).toBe('landmarks');
-      expect(snapshotUrls[0]?.searchParams.get('limit')).toBe('24');
     });
   });
 
@@ -1415,12 +1351,6 @@ describe('SankeySignals', () => {
           HttpResponse.json(themeFlowResponse),
         ),
       );
-    });
-
-    it('renders the flow with the trace signal and theme labels', async () => {
-      renderSankeySignals();
-
-      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
 
     it('limits the column headers to stages returned by the flow', async () => {

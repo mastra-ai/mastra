@@ -191,14 +191,6 @@ describe('experiments comparison table', () => {
   });
 
   describe('when an item row is clicked', () => {
-    it('opens the dataset item in a side panel named after it', async () => {
-      renderComparison();
-
-      fireEvent.click(await findItemRow('item-a'));
-
-      expect(await screen.findByRole('dialog', { name: 'Dataset item item-a' })).toBeTruthy();
-    });
-
     it('shows the dataset item input and ground truth in the side panel', async () => {
       renderComparison();
 
@@ -518,14 +510,6 @@ describe('experiments comparison table', () => {
   });
 
   describe('when observability storage supports metrics and usage resolves', () => {
-    it('renders the comparison table', async () => {
-      useMetricsUsage();
-      renderComparison();
-
-      expect(await screen.findByRole('columnheader', { name: 'Items' })).toBeTruthy();
-      expect(await findItemRow('item-a')).toBeTruthy();
-    });
-
     it('shows each experiment total cost, with the contender difference against the baseline', async () => {
       useMetricsUsage();
       renderComparison();

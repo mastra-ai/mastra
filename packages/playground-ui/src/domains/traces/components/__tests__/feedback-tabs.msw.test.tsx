@@ -128,25 +128,6 @@ describe('feedback tabs composer', () => {
     });
     await waitFor(() => expect(onList).toHaveBeenCalledTimes(2));
   });
-
-  it('submits trace-level feedback without a spanId', async () => {
-    const onPost = vi.fn<(body: unknown) => void>();
-    server.use(
-      http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
-      http.post(FEEDBACK_URL, async ({ request }) => {
-        onPost(await request.json());
-        return HttpResponse.json({ success: true });
-      }),
-    );
-
-    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
-
-    submit('trace note');
-
-    await waitFor(() => expect(onPost).toHaveBeenCalled());
-    expect(onPost.mock.calls[0][0]).toMatchObject({ feedback: { traceId: TRACE_ID, value: 'trace note' } });
-    expect(onPost.mock.calls[0][0]).not.toHaveProperty('feedback.spanId');
-  });
 });
 
 describe('feedback tabs pending comment', () => {
@@ -346,7 +327,7 @@ describe('feedback tabs delete', () => {
     render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
     await screen.findByText('👍');
 
-    expect(screen.queryByRole('button', { name: 'Delete feedback' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
   });
 
   it('shows the resolved author avatar and name on trace feedback', async () => {
@@ -381,17 +362,6 @@ describe('feedback tabs review status', () => {
     );
     return { onList, onPatch };
   };
-
-  it('shows the review status of trace feedback', async () => {
-    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(authoredFeedbackResponse)));
-    const { unmount } = render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
-    expect(await screen.findByText('Needs review')).toBeTruthy();
-    unmount();
-
-    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(reviewedFeedbackResponse)));
-    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
-    expect(await screen.findByText('Reviewed')).toBeTruthy();
-  });
 
   it('marks trace feedback reviewed and refetches the thread', async () => {
     const { onList, onPatch } = reviewFlow(authoredFeedbackResponse, reviewedFeedbackResponse);

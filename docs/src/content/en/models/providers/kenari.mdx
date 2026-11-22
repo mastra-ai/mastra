@@ -7,7 +7,7 @@ description: "Browse Kenari model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/kenari.svg" alt="Kenari logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kenari
 
-Access 82 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
+Access 83 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
 
 Learn more in the [Kenari documentation](https://kenari.id/docs).
 
@@ -762,8 +762,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 524288,
-    "inputCost": 0.1714,
-    "outputCost": 0.8571
+    "inputCost": 0.1143,
+    "outputCost": 0.5714
   },
   {
     "model": "kenari/muse-glimmer-30b:free",
@@ -944,6 +944,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2.4,
     "outputCost": 6.86
+  },
+  {
+    "model": "kenari/qwen4-max:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kenari/solar-mini4:free",

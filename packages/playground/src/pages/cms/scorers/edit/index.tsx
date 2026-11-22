@@ -256,7 +256,7 @@ function CmsScorersEditPage() {
 
   if (isLoading) {
     return (
-      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scorerId}</h1>
         <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
           <Spinner fill size="lg" />
@@ -267,7 +267,7 @@ function CmsScorersEditPage() {
 
   if (!scorer || !scorerId) {
     return (
-      <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scorerId}</h1>
         <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Scorer not found" />}>
           <EmptyState variant="fill" titleSlot="Scorer not found" />
@@ -289,7 +289,7 @@ function CmsScorersEditPage() {
   );
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <h1 className="sr-only">{scorerId}</h1>
       <CmsScorersEditForm
         scorer={scorer}

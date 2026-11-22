@@ -32,16 +32,32 @@ export function listHeadQueryKey(queryKey: readonly unknown[]) {
   return ['observability-list-head', ...queryKey] as const;
 }
 
+export type ListWindow = { from: string; to: string };
+
 /**
- * The moved end of a list window after a head-poll overflow. `reanchor` sets it to now, which changes
- * the list's query key so only its first page reloads. A new `selection` drops the anchor.
+ * `window` moved to end at `to`. A preset window ("Last 7 days") keeps its length, so a server cap on
+ * the length (word search's 7 days) never refuses it while the list is open. With `fixedStart` (a start
+ * the user picked, with no end) `from` stays put and the window grows instead.
  */
-export function useListAnchor(selection: unknown) {
+export function windowEndingAt(window: ListWindow, to: string, fixedStart = false): ListWindow {
+  if (fixedStart) return { from: window.from, to };
+  const length = Date.parse(window.to) - Date.parse(window.from);
+  return { from: new Date(Date.parse(to) - length).toISOString(), to };
+}
+
+/**
+ * The moved list window after a head-poll overflow. `reanchor` moves the selected window to end now
+ * (see `windowEndingAt`), which changes the list's query key so only its first page reloads. A new
+ * `selection` drops the anchor.
+ */
+export function useListAnchor(selection: unknown, fixedStart = false) {
   const selectionHash = hashKey([selection]);
-  const [anchor, setAnchor] = useState<{ selectionHash: string; to: string }>();
-  const anchorTo = anchor?.selectionHash === selectionHash ? anchor.to : undefined;
-  const reanchor = () => setAnchor({ selectionHash, to: new Date().toISOString() });
-  return { anchorTo, reanchor };
+  const [anchor, setAnchor] = useState<{ selectionHash: string; window: ListWindow }>();
+  const anchorWindow = anchor?.selectionHash === selectionHash ? anchor.window : undefined;
+  /** `selected` is the window the user selected, not the current anchor: each overflow moves it from there. */
+  const reanchor = (selected: ListWindow) =>
+    setAnchor({ selectionHash, window: windowEndingAt(selected, new Date().toISOString(), fixedStart) });
+  return { anchorWindow, reanchor };
 }
 
 const emptyStore = <Row>(): ListHeadStore<Row> => ({ rows: [], watermark: undefined });

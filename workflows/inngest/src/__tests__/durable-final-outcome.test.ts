@@ -50,51 +50,75 @@ const CASES = [
   },
 ];
 
+const endedSpans = (exporter: TestExporter) =>
+  exporter.getByEventType(TracingEventType.SPAN_ENDED).map(event => event.exportedSpan);
+
+/** Runs the final step the way a worker does: from the saved state, with spans another process started. */
+async function runFinalStep(observability: Observability, state: object, requestContext = new RequestContext()) {
+  const mastra = new Mastra({ observability, logger: false });
+  const agentSpan = mastra.observability.getSelectedInstance({ requestContext })!.startSpan({
+    type: SpanType.AGENT_RUN,
+    name: 'agent run',
+  });
+  const modelSpan = agentSpan.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'model generation' });
+  const iterationState = {
+    runId: 'run-from-another-worker',
+    agentId: 'agent',
+    messageId: 'message',
+    messageListState: new MessageList().serialize(),
+    accumulatedSteps: [],
+    accumulatedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    agentSpanData: agentSpan.exportSpan(),
+    modelSpanData: modelSpan.exportSpan(),
+    options: {},
+    state: {},
+    ...state,
+  };
+  const workflow = createInngestDurableAgenticWorkflow({
+    inngest: new Inngest({ id: 'final-outcome', isDev: true }),
+  }) as any;
+
+  await workflow.steps['map-final-output'].execute({
+    inputData: iterationState,
+    getInitData: () => iterationState,
+    mastra,
+    requestContext,
+    tracingContext: {},
+  });
+}
+
 describe('Inngest final step on a worker with no run-registry entry', () => {
   it.each(CASES)('ends the root spans with the outcome in the saved state: $name', async ({ state, expected }) => {
     const exporter = new TestExporter();
-    const observability = new Observability({
-      configs: { default: { serviceName: 'final-outcome', exporters: [exporter] } },
-    });
-    const mastra = new Mastra({ observability, logger: false });
-    const agentSpan = mastra.observability.getDefaultInstance()!.startSpan({
-      type: SpanType.AGENT_RUN,
-      name: 'agent run',
-    });
-    const modelSpan = agentSpan.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'model generation' });
-    const iterationState = {
-      runId: 'run-from-another-worker',
-      agentId: 'agent',
-      messageId: 'message',
-      messageListState: new MessageList().serialize(),
-      accumulatedSteps: [],
-      accumulatedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      agentSpanData: agentSpan.exportSpan(),
-      modelSpanData: modelSpan.exportSpan(),
-      options: {},
-      state: {},
-      ...state,
-    };
-    const workflow = createInngestDurableAgenticWorkflow({
-      inngest: new Inngest({ id: 'final-outcome', isDev: true }),
-    }) as any;
+    await runFinalStep(
+      new Observability({ configs: { default: { serviceName: 'final-outcome', exporters: [exporter] } } }),
+      state,
+    );
 
-    await workflow.steps['map-final-output'].execute({
-      inputData: iterationState,
-      getInitData: () => iterationState,
-      mastra,
-      requestContext: new RequestContext(),
-      tracingContext: {},
-    });
-
-    const ended = (type: SpanType) =>
-      exporter
-        .getByEventType(TracingEventType.SPAN_ENDED)
-        .map(event => event.exportedSpan)
-        .filter(span => span.type === type);
+    const ended = (type: SpanType) => endedSpans(exporter).filter(span => span.type === type);
     await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(1);
     await expect.poll(() => ended(SpanType.AGENT_RUN).length).toBe(1);
     expect(ended(SpanType.AGENT_RUN)[0]).toMatchObject(expected);
     expect(ended(SpanType.MODEL_GENERATION)[0]).toMatchObject(expected);
+  });
+
+  it('ends the root spans on the observability config the request context selects', async () => {
+    const defaultExporter = new TestExporter();
+    const selectedExporter = new TestExporter();
+    await runFinalStep(
+      new Observability({
+        configs: {
+          default: { serviceName: 'final-outcome', exporters: [defaultExporter] },
+          selected: { serviceName: 'final-outcome', exporters: [selectedExporter] },
+        },
+        configSelector: ({ requestContext }) => (requestContext?.get('obsConfig') as string | undefined) ?? 'default',
+      }),
+      CASES[0]!.state,
+      new RequestContext([['obsConfig', 'selected']]),
+    );
+
+    const endedTypes = (exporter: TestExporter) => endedSpans(exporter).map(span => span.type);
+    await expect.poll(() => endedTypes(selectedExporter)).toEqual([SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]);
+    expect(endedTypes(defaultExporter)).toEqual([]);
   });
 });

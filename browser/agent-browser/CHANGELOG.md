@@ -1,5 +1,32 @@
 # @mastra/agent-browser
 
+## 0.7.0-alpha.0
+
+### Minor Changes
+
+- `@mastra/agent-browser` now drives Chrome with Playwright alone and no longer depends on the `agent-browser` package. This drops webdriverio and its vulnerable transitive dependencies (basic-ftp, extract-zip). The tools and config are unchanged. ([#25855](https://github.com/mastra-ai/mastra/pull/25855))
+
+  Local launches run Chrome as a child of your Node.js process. The browser exits when that process does. Playwright's Chromium is used when installed, otherwise an installed Google Chrome. If neither is found, run `npx playwright install chromium` or set `executablePath`. Snapshot refs inside iframes (for example `@f1e2`) now resolve like any other ref.
+
+  A ref from the last snapshot still targets an element after the page re-renders it, when its role and name stay the same. After the page navigates, that ref is rejected immediately instead of waiting out the action timeout.
+
+  `BrowserManager` is now exported from `@mastra/agent-browser`, and `@mastra/browser-firecrawl` imports it from there instead of depending on `agent-browser` directly. `@mastra/browser-firecrawl` therefore needs the `@mastra/agent-browser` release from this change (peer `>=0.7.0-0`) and no longer has an `agent-browser` peer dependency.
+
+  ```typescript
+  import { BrowserManager } from '@mastra/agent-browser';
+
+  const manager = new BrowserManager();
+  await manager.launch({ headless: true });
+  await manager.getPage().goto('https://example.com');
+  const { tree } = await manager.getSnapshot({ interactive: true });
+  await manager.close();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18)]:
+  - @mastra/core@1.86.0-alpha.3
+
 ## 0.6.0
 
 ### Minor Changes

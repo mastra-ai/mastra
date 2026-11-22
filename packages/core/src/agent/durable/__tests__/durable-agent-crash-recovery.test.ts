@@ -448,6 +448,11 @@ async function recoverFrom(
     if (finalText === undefined) return 'stream closed without finish';
     if (finishEvents !== 1) return `published FINISH ${finishEvents} times`;
     if (onFinishCalls !== 1) return `onFinish fired ${onFinishCalls} times`;
+    // The result names the recovered run's span, so a score or log can be linked to the trace.
+    const recoveredSpan = observability?.ended.find(span => span.name.includes('(recovered)'));
+    if (recoveredSpan && (recovered.traceId !== recoveredSpan.traceId || recovered.spanId !== recoveredSpan.id)) {
+      return `result names span ${recovered.spanId} in trace ${recovered.traceId}`;
+    }
     const usage = finalUsage as TestUsage | undefined;
     if (
       usage?.inputTokens !== expectedUsage.inputTokens ||

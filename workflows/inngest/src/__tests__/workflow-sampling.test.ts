@@ -4,6 +4,7 @@
  * linked, an unsampled run stays unrecorded.
  */
 import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
 import { createStep } from '@mastra/core/workflows';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -154,5 +155,24 @@ describe('Inngest workflow sampling', () => {
 
     expect(samplingDecisions, 'sampling decisions').toBe(1);
     expect(new Set(endedSpans().map(span => span.traceId)).size, 'traces').toBe(1);
+  });
+});
+
+describe('Inngest workflow hidden input and output', () => {
+  it('hides input and output on every span of the run, and names the request context keys on each', async () => {
+    originalSampled = true;
+    const run = await parent.createRun();
+    const result = await run.start({
+      inputData: {},
+      requestContext: new RequestContext([['tenant', 'tenant-a']]),
+      tracingOptions: { hideInput: true, hideOutput: true, requestContextKeys: ['tenant'] },
+    });
+    expect(result.status).toBe('success');
+    // The parent run, its step, the nested run and its step.
+    await expect.poll(() => endedSpans().length).toBe(4);
+
+    expect(endedSpans().map(span => [span.name, span.input, span.output, span.metadata?.tenant])).toEqual(
+      endedSpans().map(span => [span.name, undefined, undefined, 'tenant-a']),
+    );
   });
 });

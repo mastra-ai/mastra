@@ -74,11 +74,6 @@ describe('AgentBuilderStarter', () => {
     await waitFor(() => expect(submit.disabled).toBe(false));
   });
 
-  it('does not render a "create manually" affordance — users must use the prompt input', () => {
-    const { queryByTestId } = renderStarter();
-    expect(queryByTestId('agent-builder-starter-create-manually')).toBeNull();
-  });
-
   it('eagerly creates the agent then navigates to its edit page with the user message', async () => {
     let capturedBody: any = null;
     server.use(

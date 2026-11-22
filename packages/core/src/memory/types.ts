@@ -8,7 +8,7 @@ import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
-import type { MastraCompositeStore } from '../storage';
+import type { MastraCompositeStore, ObservationalMemoryRecord } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { VectorFilter } from '../vector/filter/base';
@@ -1584,4 +1584,36 @@ export type SerializedObservationalMemoryReflectionConfig = {
   activateOnProviderChange?: boolean;
   /** Ratio for async reflection buffering */
   bufferActivation?: number;
+};
+
+/**
+ * Observational Memory settings reported by a memory implementation that runs Observational
+ * Memory itself instead of through an `observational-memory` processor (for example a hosted
+ * backend).
+ */
+export type ObservationalMemorySettings = {
+  enabled: boolean;
+  scope: 'thread' | 'resource';
+  /** Unobserved message tokens that trigger an observation. */
+  messageTokens?: number;
+  /** Observation tokens that trigger a reflection. */
+  observationTokens?: number;
+};
+
+export type GetObservationalMemoryRecordsInput = {
+  threadId?: string;
+  resourceId?: string;
+  /** Number of past generations to return, newest first. */
+  historyLimit?: number;
+  from?: Date;
+  to?: Date;
+  offset?: number;
+  requestContext?: RequestContext;
+};
+
+export type ObservationalMemoryRecords = {
+  /** Current record, or null before the first observation. */
+  record: ObservationalMemoryRecord | null;
+  /** Past generations, newest first. */
+  history: ObservationalMemoryRecord[];
 };

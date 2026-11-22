@@ -1,42 +1,14 @@
-import { createContext, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import type { ReactNode } from 'react';
-import { knowledgePageHref } from './pinned-knowledge-data';
+import { KnowledgeLinksContext } from './knowledge-links-context';
+import type { KnowledgeLinks, KnowledgePageTarget, UseKnowledgePagePreview } from './knowledge-links-context';
+import { useRecordNavigation } from '@/domains/chat/context/record-navigation';
 import { KnowledgePageCard } from '@/domains/knowledge/components/KnowledgePageCard';
-import type { KnowledgePageCardProps } from '@/domains/knowledge/components/KnowledgePageCard';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { useLinkComponent } from '@/lib/framework';
-import type { LinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
-/** Names the page a link points at: by id, or by reference the way `refHref` takes it. */
-export type KnowledgePageTarget = { pageId: string; pageRef?: never } | { pageRef: string; pageId?: never };
-
-/**
- * What a hover card says about a page. Called, as a hook, only while a card is open, so a host fetches
- * the page on hover and not for every link in the transcript. (Chat prose is the exception: a bare address
- * in text calls it on render, since it links only if the page resolves.) `undefined` while loading or unreadable.
- */
-export type UseKnowledgePagePreview = (target: KnowledgePageTarget) => KnowledgePageCardProps | undefined;
-
-interface KnowledgeLinks {
-  /** Left out where the host cannot look a page up; links then have no hover card. */
-  usePagePreview?: UseKnowledgePagePreview;
-  /** Undefined when this host has no page to open, e.g. a chat outside any project; the name shows as text. */
-  pageHref: (pageId: string) => string | undefined;
-  /**
-   * Where a page named by reference (a scope address, or `scope#key/path` as `knowledge_list` names
-   * entries) opens. Studio's Knowledge page resolves the reference itself, so it uses the page URL. A
-   * host that only opens pages by id leaves it out, and those names show as text.
-   */
-  refHref?: (ref: string) => string | undefined;
-  Link?: LinkComponent;
-  /** Set by the provider: this host has Knowledge pages, so references in chat prose become links. */
-  provided?: boolean;
-}
-
-const KnowledgeLinksContext = createContext<KnowledgeLinks>({
-  pageHref: knowledgePageHref,
-  refHref: knowledgePageHref,
-});
+export type { KnowledgePageTarget, UseKnowledgePagePreview } from './knowledge-links-context';
 
 /**
  * Where Knowledge page links in chat (tool cards, pinned Knowledge) point. Studio's default opens its own
@@ -54,16 +26,6 @@ export function KnowledgeLinksProvider({
       {children}
     </KnowledgeLinksContext.Provider>
   );
-}
-
-/** What the host gave the provider; for renderers that must decide before drawing a link. */
-export function useKnowledgeLinksContext(): KnowledgeLinks {
-  return useContext(KnowledgeLinksContext);
-}
-
-/** Whether this host mounted a `KnowledgeLinksProvider`, i.e. has Knowledge pages chat prose can link to. */
-export function useHasKnowledgeLinks(): boolean {
-  return useContext(KnowledgeLinksContext).provided === true;
 }
 
 const LINK_CLASS = 'min-w-0 truncate text-foreground underline-offset-2 hover:underline';
@@ -85,7 +47,10 @@ function PagePreviewContent({
   );
 }
 
-/** A link to a Knowledge page, through the host's link component and route. */
+/**
+ * A link to a Knowledge page, through the host's link component and route. Read back from a record, it
+ * opens through the host's `onOpenKnowledgePage` instead, and shows as text without one.
+ */
 export function KnowledgePageLink({
   pageId,
   pageRef,
@@ -96,8 +61,19 @@ export function KnowledgePageLink({
   className?: string;
 } & KnowledgePageTarget) {
   const links = useContext(KnowledgeLinksContext);
+  const record = useRecordNavigation();
   const [open, setOpen] = useState(false);
   const { Link: FrameworkLink } = useLinkComponent();
+  if (record) {
+    const { onOpenKnowledgePage } = record;
+    if (!onOpenKnowledgePage) return <span className={className}>{children}</span>;
+    const target: KnowledgePageTarget = pageId !== undefined ? { pageId } : { pageRef };
+    return (
+      <button type="button" className={cn('text-left', className)} onClick={() => onOpenKnowledgePage(target)}>
+        {children}
+      </button>
+    );
+  }
   const Link = links.Link ?? FrameworkLink;
   const href = pageId !== undefined ? links.pageHref(pageId) : links.refHref?.(pageRef);
   if (!href) return <span className={className}>{children}</span>;

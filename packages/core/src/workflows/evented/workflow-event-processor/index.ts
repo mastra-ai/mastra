@@ -1714,11 +1714,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         step,
         prevResult,
-        // A restarted child re-drives the stored occurrence, so it completes under that
-        // occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
-        !parentWorkflow.timeTravel && !parentWorkflow.resumeSteps?.length
-          ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy
-          : undefined,
+        // A restarted or resumed child re-drives the stored occurrence, so it completes under
+        // that occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
+        !parentWorkflow.timeTravel ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy : undefined,
       );
       return;
     }
@@ -2434,6 +2432,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       loaded !== undefined
         ? loaded
         : await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+    const entry = args.executionPath.length > 1 ? args.workflow.stepGraph[args.executionPath[0]!] : undefined;
+    const siblings =
+      entry?.type === 'parallel' || entry?.type === 'conditional'
+        ? entry.steps.flatMap((branch, idx) =>
+            idx !== args.executionPath[1] && isSingleStepEntry(branch) ? [getSingleStepEntryId(branch)] : [],
+          )
+        : undefined;
     const outcome = finishedOccurrence({
       step,
       executionPath: args.executionPath,
@@ -2442,6 +2447,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       snapshot,
       stepGuards: store.supportsWorkflowStepGuards(),
       guarded: deferToGuards && this.#guardsStepStart(store, args, step),
+      siblings,
     });
     if (outcome === 'run' || outcome === 'drop') {
       return outcome;

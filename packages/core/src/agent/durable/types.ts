@@ -1051,12 +1051,13 @@ export interface RunRegistryEntry {
   /** A late subscriber re-publishes the winning deadline error at most once per segment. */
   deadlineErrorRedelivered?: boolean;
   /**
-   * Whether this process has already subscribed to cross-process abort
-   * requests for the run. Set by `ensureRemoteAbortListener`, which every
-   * durable step calls on entry — the flag is what keeps a run's many steps
-   * from installing duplicate subscriptions.
+   * This process's subscription to cross-process abort requests for the run.
+   * Set by `ensureRemoteAbortListener`, which every durable step calls on
+   * entry; its presence keeps a run's many steps from installing duplicate
+   * subscriptions. `releaseRemoteAbortListener` detaches and clears it once
+   * the run reaches a final status.
    */
-  remoteAbortListenerInstalled?: boolean;
+  remoteAbortListener?: { detach(): Promise<void> };
   /**
    * Promise tracking the in-flight workflow execution (or resume) for this
    * run. Resolves once the workflow has fully settled (finished, errored,

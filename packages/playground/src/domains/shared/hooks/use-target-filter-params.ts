@@ -1,7 +1,7 @@
+import { isDatasetTargetType } from '@mastra/playground-ui/domains/datasets';
+import type { DatasetTargetType } from '@mastra/playground-ui/domains/datasets';
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
-import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
-import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 
 export const TARGET_TYPE_PARAM = 'targetType';
 export const TARGET_ID_PARAM = 'targetId';

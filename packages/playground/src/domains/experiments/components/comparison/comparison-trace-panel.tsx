@@ -13,14 +13,12 @@ export interface ComparisonTracePanelProps {
   /** Trace to show. The panel stays closed while undefined. */
   traceId: string | undefined;
   onClose: () => void;
-  /** Full-thread view through the trace-query API; `false` falls back to `listTracesLight`. */
-  withQueryTrace: boolean;
   /** Shows the Feedback tabs and fetches their feedback. */
   withFeedback: boolean;
 }
 
 /** Trace drawer of one comparison cell, with the same tabs as the experiment result's trace drawer. */
-export function ComparisonTracePanel({ traceId, onClose, withQueryTrace, withFeedback }: ComparisonTracePanelProps) {
+export function ComparisonTracePanel({ traceId, onClose, withFeedback }: ComparisonTracePanelProps) {
   const { navigate } = useLinkComponent();
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>();
 
@@ -63,9 +61,6 @@ export function ComparisonTracePanel({ traceId, onClose, withQueryTrace, withFee
       showUnavailableFeaturesMsg={false}
       traceHref={traceId ? `/traces?traceId=${encodeURIComponent(traceId)}` : undefined}
       anchorSpanId={anchorSpan?.spanId}
-      withQueryTrace={withQueryTrace}
-      withFeedback={withFeedback}
-      onOpenScore={(id, scoreId) => navigate(traceScoreLink(id, scoreId))}
       feedbackTabBadge={withFeedback ? (traceFeedback?.pagination?.total ?? undefined) : undefined}
       feedbackTabSlot={withFeedback ? ({ traceId: id }) => <TraceFeedbackTab traceId={id} /> : undefined}
       scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}

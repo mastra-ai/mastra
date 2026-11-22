@@ -7,7 +7,7 @@ import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import * as coreObservability from '@mastra/core/observability';
-import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
+import type { EntityType, SpanOutcomeFields, SpanSnapshot, SpanType } from '@mastra/core/observability';
 import * as coreContextStorage from '@mastra/core/observability/context-storage';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
@@ -74,6 +74,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     private parentStream?: { workflowId: string; runId: string },
     /** Inngest's id for this function run: stable across its replays, new for each resume. */
     private inngestRunId?: string,
+    /** The run's root span. Step spans start without a live parent, so they take its trace state. */
+    private workflowSpan?: Pick<SpanSnapshot<SpanType>, 'traceState'>,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -365,6 +367,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   // =============================================================================
 
   /**
+   * The trace's hidden input/output and request context keys. A live parent hands them down;
+   * spans here start from ids, so they take them from the nearest parent.
+   */
+  private inheritedTraceState(parentSpan: any) {
+    const parent: typeof this.workflowSpan = parentSpan ?? this.workflowSpan;
+    return parent?.traceState;
+  }
+
+  /**
    * Create a step span durably - on first execution, creates and exports span.
    * On replay, returns cached span data without re-creating.
    */
@@ -404,6 +415,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
         samplingDecision: executionContext.tracingIds?.sampled,
+        traceState: this.inheritedTraceState(parentSpan),
       });
 
       // Return serializable form
@@ -495,6 +507,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
         samplingDecision: executionContext.tracingIds?.sampled,
+        traceState: this.inheritedTraceState(parentSpan),
         tracingPolicy: this.options?.tracingPolicy,
       });
 
@@ -604,11 +617,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       ? this.serializeRequestContext(parentRequestContext)
       : (inputData?.requestContextEntries ?? {});
 
-    // Build trace context to propagate to nested workflow
+    // Build trace context to propagate to nested workflow. Its root span starts in another function
+    // run, so the trace's hidden input/output and request context keys travel with the ids.
+    const { hideInput, hideOutput, requestContextKeys } = this.inheritedTraceState(stepSpan) ?? {};
     const nestedTracingContext = executionContext.tracingIds?.traceId
       ? {
           traceId: executionContext.tracingIds.traceId,
           parentSpanId: stepSpan?.id,
+          hideInput,
+          hideOutput,
+          requestContextKeys,
         }
       : undefined;
 
