@@ -10,6 +10,12 @@
     "tofino-3"
   ],
   "reasoning": {
+    "open-qwen-3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
     "ossington-4-1": [
       {
         "type": "effort",
@@ -26,12 +32,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "open-qwen-3.8-flash-next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

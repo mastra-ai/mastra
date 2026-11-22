@@ -20,12 +20,6 @@
     "gpt-5.6-terra"
   ],
   "reasoning": {
-    "gpt-5.4-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
     "gpt-5.4": [
       {
         "type": "effort",
@@ -38,6 +32,15 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
+    "deepseek-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -47,13 +50,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-flash": [
-      {
-        "type": "toggle"
-      },
+    "gpt-5.4-mini": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "claude-sonnet-5-5": [

@@ -34035,9 +34035,9 @@
       },
       "muse-ember-1-0": {
         "cost": {
-          "input": 0.1714,
-          "output": 0.8571,
-          "cache_read": 0.0086
+          "input": 0.1143,
+          "output": 0.5714,
+          "cache_read": 0.0057
         }
       },
       "muse-glimmer-30b:free": {
@@ -37017,9 +37017,9 @@
       },
       "thinkingmachines/inkling-2-mini": {
         "cost": {
-          "input": 0.08,
-          "output": 0.35,
-          "cache_read": 0.016
+          "input": 0.075,
+          "output": 0.3,
+          "cache_read": 0.015
         }
       },
       "thinkingmachines/inkling-2-small": {
@@ -52026,9 +52026,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -57939,9 +57939,9 @@
       },
       "deepseek-v4.1-flash": {
         "cost": {
-          "input": 0.3,
-          "output": 1.2,
-          "cache_read": 0.006
+          "input": 0.12,
+          "output": 0.48,
+          "cache_read": 0.0024
         }
       },
       "deepseek-v4.1-flash-free": {
@@ -58145,9 +58145,9 @@
       },
       "glm-5.3": {
         "cost": {
-          "input": 1.4,
-          "output": 4.4,
-          "cache_read": 0.26
+          "input": 0.56,
+          "output": 1.76,
+          "cache_read": 0.104
         }
       },
       "glm-5.3-flash": {
@@ -62444,9 +62444,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.132,
-          "output": 0.528,
-          "cache_read": 0.033
+          "input": 0.0825,
+          "output": 0.33,
+          "cache_read": 0.020625
         }
       },
       "tencent/hy4": {
@@ -62465,9 +62465,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -62499,9 +62499,9 @@
       },
       "thinkingmachines/inkling-2-mini": {
         "cost": {
-          "input": 0.1,
-          "output": 0.4,
-          "cache_read": 0.02
+          "input": 0.075,
+          "output": 0.3,
+          "cache_read": 0.015
         }
       },
       "thinkingmachines/inkling-2-small": {
@@ -62960,8 +62960,8 @@
       },
       "~moonshotai/kimi-latest": {
         "cost": {
-          "input": 0.1805,
-          "output": 11.0055,
+          "input": 0.1824,
+          "output": 10.6066,
           "cache_read": 0.18
         }
       },

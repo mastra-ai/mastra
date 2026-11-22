@@ -37,49 +37,19 @@
     "mimo-v2.6-flash"
   ],
   "reasoning": {
-    "mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax-m-3-0": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "hy3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "glm-5-2": [
+    "glm-5.2": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "hy4-preview": [
@@ -91,25 +61,26 @@
         "values": ["none", "high"]
       }
     ],
+    "minimax-m-3-0": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.2": [
+    "mimo-v2.6-flash": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "glm-5-3": [
@@ -118,7 +89,36 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "hy3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5-2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek/deepseek-flash": [
       {
         "type": "toggle"
       },
@@ -127,7 +127,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-flash": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },

@@ -19,23 +19,18 @@
     "z-ai-glm-5-3-flash"
   ],
   "reasoning": {
-    "deepseek-v4-1-flash-1017-uncensored": [
+    "nvidia-nemotron-3-5-super-vl-120b-a12b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Claude Haiku 5.5": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3-235b:web": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia-nemotron-3-5-super-vl-120b-a12b": [
-      {
-        "type": "toggle"
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "z-ai-glm-5-3-flash": [
@@ -53,19 +48,24 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-5-6-luna": [
+    "qwen3-235b:web": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
-    "Claude Haiku 5.5": [
+    "deepseek-v4-1-flash-1017-uncensored": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

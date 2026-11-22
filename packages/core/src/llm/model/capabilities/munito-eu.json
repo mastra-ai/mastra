@@ -13,12 +13,6 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "deepseek-ai/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "aleph-alpha/kolibri-1": [
       {
         "type": "effort",
@@ -29,6 +23,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "zai-org/glm-5.3-flash": [

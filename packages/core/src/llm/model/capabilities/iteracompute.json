@@ -66,74 +66,22 @@
     "z-ai/glm-5.2"
   ],
   "reasoning": {
-    "deepseek/deepseek-v4-flash-0731": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "openai/gpt-6-luna": [
+    "z-ai/glm-5.2": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["high", "max"]
       }
     ],
-    "openai/gpt-6-astra": [
+    "z-ai/glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "openai/gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gemini/gemini-3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini/gemini-4-argon": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "moonshotai/kimi-k2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k3": [
+    "z-ai/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -157,6 +105,15 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
+    "qwen/qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
     "qwen/qwen3.8-flash": [
       {
         "type": "toggle"
@@ -166,13 +123,53 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "qwen/qwen3.8-max": [
+    "gemini/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "moonshotai/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6-luna": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "anthropic/claude-fable-5-1": [
@@ -202,22 +199,25 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.2": [
-      {
-        "type": "toggle"
-      },
+    "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3": [
+    "deepseek/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash-0731": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
