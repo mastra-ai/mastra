@@ -197,23 +197,45 @@ const NAMED_JOBS = {
   'Prebuild\tMemory Tests': 'job:memory',
   'Prebuild\tMastra Code E2E / Mastra Code E2E': 'job:mastracode-e2e',
   'Prebuild\tMastra Code E2E / Mastra Code web host OM scenarios': 'job:mastracode-om',
+  // Before r308 E merged it into `Validate repository files`; runs in the window still use it.
   'Quality assurance\tValidate changeset packages': 'job:qa/changeset-check',
 };
+const CHANGESET_STEPS = new Set([
+  'Test changeset package validator',
+  'Reject unknown or ignored changeset packages',
+  'Check whether this PR adds changesets',
+  'Validate changeset release plan',
+]);
 
 /**
  * The tier keys one CI job ran, and which of them failed. `log` is only read for the jobs that
  * run several packages with `pnpm -r` (light stores, workspace unit tests): a package whose
  * script started (`stores/lance test$ …`) but never printed `Done` failed. Jobs that aren't
  * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing. `steps` (the
- * jobs API's) is only read for the grouped container-store jobs: a store ran when its
- * `Run <store> tests` step ran and failed when that step failed; a cancelled step didn't run, and a
- * failed checkout, setup or group build fails every store the job name lists (`prerequisite`).
+ * jobs API's) is only read for `Validate repository files`, where just the changeset steps
+ * belong to job:qa/changeset-check (`passed` when every one that ran succeeded), and for the
+ * grouped container-store jobs: a store ran when its `Run <store> tests` step ran and failed when
+ * that step failed; a cancelled step didn't run, and a failed checkout, setup or group build fails
+ * every store the job name lists (`prerequisite`).
  * @returns {{ ran: string[], failed: string[], passed?: string[], prerequisite?: string[] }}
  */
 export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   const one = key => ({ ran: [key], failed: [key] });
   const named = NAMED_JOBS[`${workflow}\t${name}`];
   if (named) return one(named);
+  if (workflow === 'Quality assurance' && name === 'Validate repository files') {
+    const own = steps.filter(
+      step => CHANGESET_STEPS.has(step.name) && step.conclusion && step.conclusion !== 'skipped',
+    );
+    // A changeset step with no conclusion is still running, so the attempt hasn't passed yet.
+    const pending = steps.some(step => CHANGESET_STEPS.has(step.name) && !step.conclusion);
+    const key = ['job:qa/changeset-check'];
+    return {
+      ran: own.length ? key : [],
+      failed: own.some(step => step.conclusion === 'failure') ? key : [],
+      passed: !pending && own.length && own.every(step => step.conclusion === 'success') ? key : [],
+    };
+  }
   let m;
   if (workflow === 'Workspace Cloud Tests' && (m = /^test-cloud \(([\w-]+)\)$/.exec(name)))
     return one(`job:workspace-cloud/${m[1]}`);
