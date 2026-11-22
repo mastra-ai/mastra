@@ -88,8 +88,8 @@ export function messagesAreEqual(one: MessageInput, two: MessageInput): boolean 
 }
 
 /**
- * The parts as memory persists them: `updateWorkingMemory` tool steps removed, and
- * `<working_memory>` tags and surrounding whitespace stripped from text.
+ * The parts in a whitespace-insensitive form for matching stored copies: `updateWorkingMemory`
+ * tool steps removed, and `<working_memory>` tags and surrounding whitespace stripped from text.
  */
 function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePart[] {
   return removeWorkingMemoryToolInvocationParts(parts).map(part =>
@@ -104,9 +104,9 @@ function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePa
 
 /**
  * Whether `stored` is the persisted copy of `live`: the same id, and the same parts once
- * both go through the cleanup memory applies when it saves a message. That cleanup makes
- * `messagesAreEqual` treat a stored copy as a different message, for example when the live
- * text ends in a newline.
+ * both have working-memory tags and tool steps removed and text trimmed. Memory now trims
+ * only text it removed tags from, but rows saved before that trimmed all text, so matching
+ * ignores surrounding whitespace to recognize both verbatim and trimmed stored copies.
  *
  * Saves through `MessageHistory` (observational memory's buffering) and the agent's save
  * queue first run `filterMessagesForPersistence`, which also drops streaming `partial-call`

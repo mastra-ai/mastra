@@ -27,17 +27,24 @@ const workingMemoryCall: MastraMessagePart = {
   },
 };
 
-// Memory cleans a message when it saves it. The stored copy must still be recognized as the
+// Memory cleans a message when it saves it (older rows also had all text trimmed). The stored copy must still be recognized as the
 // live message so MessageList does not re-add it with the same provider item ids. (#29380)
 describe('isPersistedCopy', () => {
-  it('matches a stored copy whose text lost surrounding whitespace', () => {
+  it('matches a stored copy saved verbatim with surrounding whitespace', () => {
+    const live = assistant([reasoning('rs_example'), { type: 'text', text: '  hello\n' }]);
+    const stored = assistant([reasoning('rs_example'), { type: 'text', text: '  hello\n' }]);
+
+    expect(isPersistedCopy(live, stored)).toBe(true);
+  });
+
+  it('matches a stored copy saved before memory kept surrounding whitespace', () => {
     const live = assistant([reasoning('rs_example'), { type: 'text', text: '  hello\n' }]);
     const stored = assistant([reasoning('rs_example'), { type: 'text', text: 'hello' }]);
 
     expect(isPersistedCopy(live, stored)).toBe(true);
   });
 
-  it('matches a stored copy of whitespace-only text', () => {
+  it('matches a stored copy of whitespace-only text saved before memory kept surrounding whitespace', () => {
     const live = assistant([reasoning('rs_example'), { type: 'text', text: '\n' }]);
     const stored = assistant([reasoning('rs_example'), { type: 'text', text: '' }]);
 
