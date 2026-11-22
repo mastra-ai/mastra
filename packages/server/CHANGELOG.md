@@ -1,5 +1,15 @@
 # @mastra/server
 
+## 1.86.0-alpha.4
+
+### Patch Changes
+
+- Stopped logging an error when a workspace route is called with an unknown workspace ID. The route still returns 404. Requires a `@mastra/core` version that supports `getWorkspaceById(id, { optional: true })`; with older cores the error is still logged. ([#31071](https://github.com/mastra-ai/mastra/pull/31071))
+
+- Updated dependencies [[`004f350`](https://github.com/mastra-ai/mastra/commit/004f35031e7419a16263f8641d43c9cd19275ae0), [`79a30b6`](https://github.com/mastra-ai/mastra/commit/79a30b6d5c758bf46f0633059eded42bffbeb443), [`fa2ea6d`](https://github.com/mastra-ai/mastra/commit/fa2ea6dfb5c13a5f9b4bdc99f332959f7b0f4209), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018)]:
+  - @mastra/core@1.86.0-alpha.4
+  - @mastra/mcp-apps-components@0.3.0-alpha.0
+
 ## 1.86.0-alpha.3
 
 ### Patch Changes

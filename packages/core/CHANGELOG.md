@@ -1,5 +1,44 @@
 # @mastra/core
 
+## 1.86.0-alpha.4
+
+### Minor Changes
+
+- Added `principals` and `author` options to `knowledge.createTools()`, and `knowledge.getPinnedContext({ principals })`. A host can now run the Knowledge tools and read pinned pages outside an agent run, for example from an MCP server acting for an external agent. Every call reads and writes under those fixed principals, following the same scope rules as an agent, and writes are recorded under `author`. Principals must match a declared scope type and must come from the host, never from the request. ([#30996](https://github.com/mastra-ai/mastra/pull/30996))
+
+  ```ts
+  const tools = knowledge.createTools({
+    read: true,
+    write: true,
+    principals: ['agent:claude-code'],
+   via mcp:claude-code',
+  });
+  ```
+
+- `Knowledge.upsertPage` takes an optional `expected: { id, version }`, the page as you read it. With it, the call finds the page at `scope#path`, refuses unless it is that page at that version, and then updates that page by id, only while it is still at that version. If the page was edited, moved, removed or replaced by a new page at the same path since, the call throws `KnowledgeConflictError` and writes nothing: no page, parent page or scope is created. The path is checked when the page is looked up; if a parent page is moved between that lookup and the write, the write follows the page to its new place. A sync that reads a page and writes it later no longer replaces an edit someone made in between. ([#31099](https://github.com/mastra-ai/mastra/pull/31099))
+
+  ```ts
+  const { page } = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'placeholder' });
+  // ...later, only if nobody has written the page since:
+  await knowledge.upsertPage({
+    scope: 'docs:acme',
+    path: 'faq',
+    name: 'FAQ',
+    body,
+    expected: { id: page.id, version: page.version },
+  });
+  ```
+
+- Added an `optional` flag to `mastra.getWorkspaceById()`. With `{ optional: true }` it returns `undefined` for an unknown ID instead of logging and throwing an error, so you can check whether a workspace exists before creating it. ([#31071](https://github.com/mastra-ai/mastra/pull/31071))
+
+  ```typescript
+  const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
+  ```
+
+### Patch Changes
+
+- Fixed skill search failing when two skills share a name. Searching no longer throws "multiple local skills found"; each matching skill is returned with its own path, and `skill_search` results now show that path next to the skill name so agents can load the right copy. Getting a skill by an ambiguous name still errors. ([#31069](https://github.com/mastra-ai/mastra/pull/31069))
+
 ## 1.86.0-alpha.3
 
 ### Minor Changes
