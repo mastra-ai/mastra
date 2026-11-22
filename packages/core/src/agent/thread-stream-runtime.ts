@@ -4959,10 +4959,9 @@ export class AgentThreadStreamRuntime {
   ) {
     state.threadRunsByStreamId.delete(streamId);
     state.watchedThreadStreamIds.delete(streamId);
-    // A same-instance resume re-registers the run under a newer streamId, so a
-    // record that is no longer the run's current record is just the superseded
-    // older stream: dropping its stream entry above is enough. Only the current
-    // record (an abandoned suspend) gets the full run-level teardown below.
+    // Subscribers reading this parked stream would otherwise wait on it forever. Only this stream's readers stop,
+    // since a same-instance resume reads a newer stream; a superseded record needs nothing more than that.
+    this.#stopReadingDisplacedRun(state, record.runId, streamId);
     if (state.threadRunsById.get(record.runId) !== record) return;
     const staleKey = this.#threadKey(record.resourceId, record.threadId);
     state.threadRunsById.delete(record.runId);
@@ -4971,10 +4970,6 @@ export class AgentThreadStreamRuntime {
     this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
     state.sweptLeasedRunIds.set(record.runId, now);
     state.displacedRecords.set(record, 'moved-on');
-    // A run parked across its suspension keeps its stream open, so subscribers
-    // reading it would never reach the runs queued behind it. Only this record's
-    // stream: a subscriber may be reading another instance's resume of the run.
-    this.#stopReadingDisplacedRun(state, record.runId, streamId);
     if (
       state.activeThreadRunIds.get(staleKey) === record.runId &&
       state.activeThreadStreamIds.get(staleKey) === streamId
