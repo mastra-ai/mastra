@@ -28,6 +28,18 @@
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
         "toolCallId": "call_ask_recommended",
+        "hasToolResult": true,
+        "toolResultContains": "recommended"
+      },
+      "response": {
+        "content": "The answer carried the recommended tag."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_recommended",
         "hasToolResult": true
       },
       "response": {

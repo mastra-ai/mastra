@@ -37,4 +37,19 @@ describe('AskQuestionDialogComponent recommended option', () => {
     dialog.handleInput('\r');
     expect(submitted).toEqual(['Keep it local']);
   });
+
+  it('answers with the bare label when the user picks the recommended option', () => {
+    const submitted: string[] = [];
+    const dialog = new AskQuestionDialogComponent({
+      question: 'Shall I open the PR?',
+      options,
+      allowCustomResponse: false,
+      onSubmit: answer => submitted.push(answer),
+      onCancel: () => {},
+    });
+
+    dialog.handleInput('\x1b[B');
+    dialog.handleInput('\r');
+    expect(submitted).toEqual(['Open the PR']);
+  });
 });
