@@ -71,6 +71,14 @@ export {
 
 export const MASTRACODE_GATEWAY_ID = 'mastracode';
 
+/** Gateway request header. `false` lets the gateway drop prompt cache controls no route can serve instead of refusing the request. */
+const GATEWAY_STRICT_CAPABILITIES_HEADER = 'x-gateway-strict-capabilities';
+
+/** Organization keys reach the gateway that leaves memory, and so the prompt, to the client. */
+function isOrganizationGatewayKey(apiKey: string): boolean {
+  return apiKey.startsWith('msk-gateway-') || apiKey.startsWith('mskv2_');
+}
+
 type ModelRequestHeaders = Record<string, string>;
 
 export type MastraCodeCustomProvider = { name: string; url: string; apiKey?: string; models?: string[] };
@@ -625,7 +633,23 @@ export class MastraCodeGateway extends MastraModelGateway {
         });
       }
 
-      return this.#mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId });
+      // Project keys (`msk_…`) get server-side memory: that gateway rewrites the prompt, so it owns the cache layout.
+      if (!isOrganizationGatewayKey(args.apiKey)) {
+        return this.#mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId });
+      }
+
+      // Anthropic caches only on request, so this route needs the same breakpoints
+      // as the direct ones. The gateway refuses a cache request no route can serve
+      // unless the caller opts out of strict matching; opting out lets such a
+      // model run uncached. The opt-out covers prompt cache controls only.
+      return wrapLanguageModel({
+        model: this.#mastraGateway.resolveLanguageModel({
+          ...args,
+          modelId: bareModelId,
+          headers: { ...args.headers, [GATEWAY_STRICT_CAPABILITIES_HEADER]: 'false' },
+        }),
+        middleware: [createPromptCacheMiddleware(this.#anthropicPromptCacheScope)],
+      });
     }
 
     if (storedCred?.type === 'oauth') {

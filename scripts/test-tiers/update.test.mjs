@@ -6,6 +6,9 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   addJobKeys,
+  failedJobKeys,
+  passedOnRetry,
+  failureVerdicts,
   boundedGh,
   applyCatches,
   applyVersioningFailures,
@@ -333,6 +336,277 @@ test('maps CI job names to tier keys', () => {
   assert.deepEqual(key('Workspace Cloud Tests', 'test-cloud (e2b)'), ['job:workspace-cloud/e2b']);
   assert.deepEqual(key('Quality assurance', 'Validate changeset packages'), ['job:qa/changeset-check']);
   assert.deepEqual(key('Prebuild', 'Unit and E2E Tests / Affected UNIT Test'), []);
+});
+
+test('the merged repository-files job fails job:qa/changeset-check only from its changeset steps', () => {
+  const qa = steps => jobKeysFor('Quality assurance', 'Validate repository files', () => '', steps);
+  const step = (name, conclusion) => ({ name, conclusion });
+  const changesetSteps = [
+    step('Check test tier', 'success'),
+    step('Test changeset package validator', 'skipped'),
+    step('Reject unknown or ignored changeset packages', 'success'),
+    step('Check whether this PR adds changesets', 'success'),
+    step('Validate changeset release plan', 'skipped'),
+  ];
+  // Another validator failing doesn't count against the changeset key.
+  assert.deepEqual(qa([step('Run README validator', 'failure'), ...changesetSteps]), {
+    ran: ['job:qa/changeset-check'],
+    failed: [],
+    passed: ['job:qa/changeset-check'],
+  });
+  assert.deepEqual(
+    qa([
+      step('Run README validator', 'success'),
+      ...changesetSteps.with(1, step('Test changeset package validator', 'failure')),
+    ]),
+    { ran: ['job:qa/changeset-check'], failed: ['job:qa/changeset-check'], passed: [] },
+  );
+  assert.deepEqual(qa(changesetSteps.with(4, step('Validate changeset release plan', 'failure'))).failed, [
+    'job:qa/changeset-check',
+  ]);
+  // Setup failed: no changeset step ran.
+  assert.deepEqual(qa(changesetSteps.map(s => step(s.name, 'skipped'))), { ran: [], failed: [], passed: [] });
+});
+
+test('a changeset failure in the merged repository-files job is judged on retry by the changeset steps alone', () => {
+  const step = (name, conclusion) => ({ name, conclusion });
+  const job = (attempt, conclusion, steps) => ({
+    name: 'Validate repository files',
+    workflow_name: 'Quality assurance',
+    run_id: 1,
+    run_attempt: attempt,
+    conclusion,
+    steps,
+  });
+  const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps);
+  const changesets = conclusion =>
+    [
+      'Test changeset package validator',
+      'Reject unknown or ignored changeset packages',
+      'Check whether this PR adds changesets',
+      'Validate changeset release plan',
+    ].map(name => step(name, conclusion));
+  const first = job(1, 'failure', [step('Run README validator', 'success'), ...changesets('failure')]);
+  const key = 'job:qa/changeset-check';
+  assert.deepEqual(keysOf(first).failed, [key]);
+
+  // Attempt 2: every changeset step passes, README fails, so the job is red both times.
+  const recovered = job(2, 'failure', [step('Run README validator', 'failure'), ...changesets('success')]);
+  assert.equal(passedOnRetry(first, key, [first, recovered], keysOf), true);
+
+  // Attempt 2 still fails a changeset step: no recovery.
+  const stillRed = job(2, 'failure', [
+    step('Run README validator', 'failure'),
+    ...changesets('success').with(2, step('Check whether this PR adds changesets', 'failure')),
+  ]);
+  assert.equal(passedOnRetry(first, key, [first, stillRed], keysOf), false);
+
+  // Attempt 2 cancelled before the changeset steps finished: not a pass.
+  const cancelled = job(2, 'cancelled', [step('Run README validator', 'success'), ...changesets('cancelled')]);
+  assert.equal(passedOnRetry(first, key, [first, cancelled], keysOf), false);
+
+  // Attempt 2 skipped every changeset step (setup failed): not a pass, even if the job went green.
+  const skipped = job(2, 'success', changesets('skipped'));
+  assert.equal(passedOnRetry(first, key, [first, skipped], keysOf), false);
+
+  // Attempt 2 is still running a changeset step (no conclusion yet): not a pass until it finishes.
+  const pending = job(2, null, changesets('success').with(3, step('Validate changeset release plan', null)));
+  assert.deepEqual(keysOf(pending).passed, []);
+  assert.equal(passedOnRetry(first, key, [first, pending], keysOf), false);
+});
+
+test('a grouped container-store job fails only the store whose step failed', () => {
+  const steps = [
+    { name: 'Build grouped storage packages', conclusion: 'success' },
+    { name: 'Run opensearch tests', conclusion: 'success' },
+    { name: 'Stop opensearch containers', conclusion: 'success' },
+    { name: 'Run mssql tests', conclusion: 'failure' },
+    { name: 'Stop mssql containers', conclusion: 'success' },
+    { name: 'Run chroma tests', conclusion: 'skipped' },
+    { name: 'Stop chroma containers', conclusion: 'skipped' },
+    { name: 'Run mysql tests', conclusion: 'success' },
+    { name: 'Stop mysql containers', conclusion: 'failure' },
+  ];
+  assert.deepEqual(
+    jobKeysFor('Prebuild', 'Combined Store Tests / test (containers 1)', () => '', steps),
+    {
+      ran: ['job:store/mssql', 'job:store/mysql', 'job:store/opensearch'],
+      failed: ['job:store/mssql'],
+      passed: ['job:store/mysql', 'job:store/opensearch'],
+    },
+  );
+});
+
+test('a grouped container-store job whose shared build failed fails every store in the group', () => {
+  // Every `Run <store> tests` step is listed, member or not; the build step's name carries the group.
+  const steps = [
+    { name: 'Build grouped storage packages (opensearch mssql mysql)', conclusion: 'failure' },
+    { name: 'Run opensearch tests', conclusion: 'skipped' },
+    { name: 'Run mssql tests', conclusion: 'skipped' },
+    { name: 'Run chroma tests', conclusion: 'skipped' },
+    { name: 'Run mysql tests', conclusion: 'skipped' },
+    { name: 'Run dynamodb tests', conclusion: 'skipped' },
+  ];
+  const all = ['job:store/mssql', 'job:store/mysql', 'job:store/opensearch'];
+  assert.deepEqual(
+    jobKeysFor('Prebuild', 'Combined Store Tests / test (containers 1)', () => '', steps),
+    {
+      ran: all,
+      failed: all,
+      passed: [],
+      prerequisite: all,
+    },
+  );
+});
+
+test('a grouped container-store job whose checkout or setup failed fails its selected stores as a prerequisite', () => {
+  // The job name carries the stores this PR selected, so they are known even when no step ran.
+  const name = 'Combined Store Tests / test (containers 1: opensearch mssql)';
+  const steps = (checkout, setup) => [
+    { name: 'Set up job', conclusion: 'success' },
+    { name: 'Run actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f', conclusion: checkout },
+    { name: 'Setup pnpm and Node.js', conclusion: setup },
+    { name: 'Build grouped storage packages (opensearch mssql)', conclusion: 'skipped' },
+    { name: 'Run opensearch tests', conclusion: 'skipped' },
+    { name: 'Run mssql tests', conclusion: 'skipped' },
+    { name: 'Run chroma tests', conclusion: 'skipped' },
+    { name: 'Run mysql tests', conclusion: 'skipped' },
+  ];
+  // The workflow renders that name from the group's selected stores.
+  const workflow = fs.readFileSync(
+    new URL('../../.github/workflows/test-combined-stores.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    workflow,
+    /name: "test \(containers \$\{\{ matrix\.group\.group \}\}: \$\{\{ join\(matrix\.group\.stores, ' '\) \}\}\)"/,
+  );
+  const selected = ['job:store/mssql', 'job:store/opensearch'];
+  const prerequisite = { ran: selected, failed: selected, passed: [], prerequisite: selected };
+  assert.deepEqual(
+    jobKeysFor('Prebuild', name, () => '', steps('failure', 'skipped')),
+    prerequisite,
+  );
+  assert.deepEqual(
+    jobKeysFor('Prebuild', name, () => '', steps('success', 'failure')),
+    prerequisite,
+  );
+  // Cancelled before any test ran: nothing ran, nothing failed, nothing passed.
+  assert.deepEqual(
+    jobKeysFor('Prebuild', name, () => '', steps('success', 'cancelled')),
+    {
+      ran: [],
+      failed: [],
+      passed: [],
+    },
+  );
+});
+
+test('a grouped store recovers on its own retry even when a sibling store newly fails', () => {
+  const name = 'Combined Store Tests / test (containers 1: mssql mysql)';
+  const job = (id, attempt, runId, mssql, mysql) => ({
+    id,
+    name,
+    run_id: runId,
+    run_attempt: attempt,
+    conclusion: mssql === 'failure' || mysql === 'failure' ? 'failure' : 'success',
+    steps: [
+      { name: 'Build grouped storage packages (mssql mysql)', conclusion: 'success' },
+      { name: 'Run mssql tests', conclusion: mssql },
+      { name: 'Run mysql tests', conclusion: mysql },
+    ],
+  });
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  const first = job(1, 1, 10, 'failure', 'success');
+  const retry = job(2, 2, 10, 'success', 'failure');
+  assert.equal(passedOnRetry(first, 'job:store/mssql', [first, retry], keysOf), true);
+  assert.equal(passedOnRetry(retry, 'job:store/mysql', [first, retry], keysOf), false);
+  // A retry that cancelled or skipped the store is not a pass.
+  const cancelled = job(3, 3, 10, 'cancelled', 'success');
+  assert.equal(passedOnRetry(retry, 'job:store/mssql', [retry, cancelled], keysOf), false);
+  // Whole jobs still go by the job's conclusion.
+  const pg = (attempt, conclusion) => ({
+    name: 'Combined Store Tests / test (pg)',
+    run_id: 10,
+    run_attempt: attempt,
+    conclusion,
+  });
+  assert.equal(passedOnRetry(pg(1, 'failure'), 'job:store/pg', [pg(2, 'success')], keysOf), true);
+  assert.equal(passedOnRetry(pg(1, 'failure'), 'job:store/pg', [pg(2, 'cancelled')], keysOf), false);
+});
+
+test('a grouped store recovers in a later green run whose group selected different stores', () => {
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  const group = (id, runId, stores, conclusions) => ({
+    id,
+    name: `Combined Store Tests / test (containers 1: ${stores.join(' ')})`,
+    run_id: runId,
+    run_attempt: 1,
+    conclusion: conclusions.includes('failure') ? 'failure' : 'success',
+    steps: [
+      { name: `Build grouped storage packages (${stores.join(' ')})`, conclusion: 'success' },
+      ...stores.map((s, i) => ({ name: `Run ${s} tests`, conclusion: conclusions[i] })),
+    ],
+  });
+  const failed = group(1, 10, ['mssql', 'mysql'], ['failure', 'success']);
+  const later = group(2, 11, ['mssql'], ['success']);
+  assert.equal(passedOnRetry(failed, 'job:store/mssql', [failed, later], keysOf), true);
+  // A store the later group didn't run hasn't recovered.
+  assert.equal(passedOnRetry(failed, 'job:store/mysql', [failed, later], keysOf), false);
+  // The other group never runs this store, and a whole job never counts for a grouped key.
+  const other = { ...group(3, 11, ['redis'], ['success']), name: 'Combined Store Tests / test (containers 2: redis)' };
+  assert.equal(passedOnRetry(failed, 'job:store/redis', [failed, other], keysOf), true);
+  assert.equal(
+    passedOnRetry(
+      failed,
+      'job:store/mssql',
+      [
+        failed,
+        { name: 'Combined Store Tests / test (pg)', run_id: 11, run_attempt: 1, conclusion: 'success', steps: [] },
+      ],
+      keysOf,
+    ),
+    false,
+  );
+});
+
+test('a completed store failure counts even when its grouped job was later cancelled or timed out', () => {
+  const grouped = conclusion => ({
+    name: 'Combined Store Tests / test (containers 1: mssql mysql)',
+    conclusion,
+    steps: [
+      { name: 'Build grouped storage packages (mssql mysql)', conclusion: 'success' },
+      { name: 'Run mssql tests', conclusion: 'failure' },
+      { name: 'Run mysql tests', conclusion: 'cancelled' },
+    ],
+  });
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps);
+  for (const conclusion of ['failure', 'cancelled', 'timed_out'])
+    assert.deepEqual(failedJobKeys(grouped(conclusion), keysOf(grouped(conclusion))), ['job:store/mssql']);
+  // A whole job blames its key only when the job itself failed, never when it was cancelled.
+  const pg = conclusion => ({ name: 'Combined Store Tests / test (pg)', conclusion });
+  assert.deepEqual(failedJobKeys(pg('failure'), keysOf(pg('failure'))), ['job:store/pg']);
+  assert.deepEqual(failedJobKeys(pg('cancelled'), keysOf(pg('cancelled'))), []);
+});
+
+test('a grouped container-store job killed at its time cap does not count cancelled stores as run', () => {
+  const steps = [
+    { name: 'Build grouped storage packages (opensearch mssql chroma mysql)', conclusion: 'success' },
+    { name: 'Run opensearch tests', conclusion: 'success' },
+    { name: 'Stop opensearch containers', conclusion: 'success' },
+    { name: 'Run mssql tests', conclusion: 'cancelled' },
+    { name: 'Stop mssql containers', conclusion: 'skipped' },
+    { name: 'Run chroma tests', conclusion: 'skipped' },
+    { name: 'Run mysql tests', conclusion: 'skipped' },
+  ];
+  assert.deepEqual(
+    jobKeysFor('Prebuild', 'Combined Store Tests / test (containers 1)', () => '', steps),
+    {
+      ran: ['job:store/opensearch'],
+      failed: [],
+      passed: ['job:store/opensearch'],
+    },
+  );
 });
 
 test('a folded job fails only the packages that started and never finished', () => {
@@ -985,4 +1259,24 @@ test('the git fallback diff stops at the hard limit too', () => {
     e => isTransientGhError(e),
   );
   assert.equal(calls.length, 3);
+});
+
+test('a whole-job store failure is not a flake because a later green run of the head skipped that store', () => {
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps ?? []);
+  const job = (run_id, attempt, name, conclusion) => ({ name, run_id, run_attempt: attempt, conclusion, steps: [] });
+  const failed = job(10, 1, 'Combined Store Tests / test (pg)', 'failure');
+  const keys = jobKeysFor('Prebuild', failed.name, () => '', []);
+  // pg moved out between runs, so the later green run of the same head never ran it.
+  const greenWithoutPg = [job(11, 1, 'Combined Store Tests / test (mysql)', 'success')];
+  assert.deepEqual(failureVerdicts(failed, keys, [failed, ...greenWithoutPg], keysOf, true), [
+    { key: 'job:store/pg', verdict: 'fail' },
+  ]);
+  assert.deepEqual(failureVerdicts(failed, keys, [failed, ...greenWithoutPg], keysOf, false), [
+    { key: 'job:store/pg', verdict: 'unresolved' },
+  ]);
+  // pg passing in that later green run, or on a later attempt, is a flake.
+  for (const later of [job(11, 1, failed.name, 'success'), job(10, 2, failed.name, 'success')])
+    assert.deepEqual(failureVerdicts(failed, keys, [failed, later], keysOf, true), [
+      { key: 'job:store/pg', verdict: 'flake' },
+    ]);
 });

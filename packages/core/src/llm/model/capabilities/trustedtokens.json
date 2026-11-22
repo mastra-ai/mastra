@@ -31,13 +31,19 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -55,30 +61,6 @@
         "values": ["none", "medium"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "effort",
-        "values": ["none", "medium"]
-      }
-    ],
-    "google/diffusiongemma-26B-A4B-it": [
-      {
-        "type": "effort",
-        "values": ["none", "medium"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "Qwen/Qwen3.6-35B-A3B-FP8": [
       {
         "type": "effort",
@@ -89,6 +71,24 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "google/diffusiongemma-26B-A4B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "medium"]
+      }
+    ],
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "medium"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

@@ -1777,8 +1777,16 @@ ${workingMemory}`;
       newMessage.content = { ...message.content };
     }
 
+    // Trim only what removing the tags left behind. Text without working-memory tags is
+    // saved as the model saw it, so the next run replays the same prompt (and keeps the
+    // provider's prompt cache), matching core's filterMessagesForPersistence.
+    const hideTags = (text: string) => {
+      const cleaned = removeWorkingMemoryTags(text);
+      return cleaned === text ? text : cleaned.trim();
+    };
+
     if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-      newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
+      newMessage.content.content = hideTags(newMessage.content.content);
     }
 
     if (Array.isArray(newMessage.content?.parts)) {
@@ -1790,7 +1798,7 @@ ${workingMemory}`;
       newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
         if (part?.type === 'text') {
           const text = typeof part.text === 'string' ? part.text : '';
-          const stripped = removeWorkingMemoryTags(text).trim();
+          const stripped = hideTags(text);
           if (stripped === part.text) return part;
           return { ...clearTrustedTokenEstimates(part), text: stripped };
         }

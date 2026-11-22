@@ -1,5 +1,254 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.7
+
+### Minor Changes
+
+- Studio's experiments UI now ships from `@mastra/playground-ui/domains/experiments`, so another app can render its own experiments list, experiment page and comparison. No part fetches: experiments, results, scores and usage come in as props typed with the `@mastra/client-js` and `@mastra/react` response types, and actions (delete, rename, request review, add a tag, open an item) go out through callbacks. The parts render without a Mastra client, React Query or a router; links use `useLinkComponent()` paths (`experimentLink`, `experimentItemLink`, `datasetLink`, `traceLink`). ([#31119](https://github.com/mastra-ai/mastra/pull/31119))
+
+  Call the `@mastra/react` hooks yourself and pass the data down. An action you leave out hides its control: without `onDeleteExperiment` the list has no delete buttons, without `onRename` the header has no rename item, and without a `tracePanel` slot nothing links to a trace.
+
+  ```tsx
+  import {
+    ExperimentItemPanel,
+    ExperimentItemPanelProvider,
+    ExperimentKpis,
+    ExperimentResultsSection,
+    ExperimentsList,
+    useResultsSelection,
+  } from '@mastra/playground-ui/domains/experiments';
+
+  <ExperimentsList
+    experiments={experiments}
+    isLoading={isLoading}
+    onDeleteExperiment={id => deleteExperiment.mutateAsync(id)}
+  />;
+
+  const selection = useResultsSelection(results);
+
+  <ExperimentItemPanelProvider
+    experimentId={experiment.id}
+    datasetId={experiment.datasetId}
+    results={results}
+    isLoadingResults={isLoading}
+    currentItemId={itemId}
+    onOpenItem={openItem}
+    onClose={closeItem}
+  >
+    <ExperimentKpis experiment={experiment} scoresByItemId={scores} usage={usage?.summary} />
+    <ExperimentResultsSection
+      results={results}
+      isLoading={isLoading}
+      scoresByItemId={scores}
+      selectedIds={selection.selectedIds}
+      onToggleSelect={selection.toggleSelect}
+      onToggleSelectAll={selection.toggleSelectAll}
+    />
+    <ExperimentItemPanel
+      scoresByItemId={scores}
+      onFlagForReview={resultId => flagForReview(resultId)}
+      tracePanel={state => (
+        <MyTracePanel traceId={state.featuredTraceId} onClose={() => state.setFeaturedTraceId(undefined)} />
+      )}
+    />
+  </ExperimentItemPanelProvider>;
+  ```
+
+  **Added**
+
+  - Experiments list: `ExperimentsList`, `ExperimentRowCells`, `ExperimentsToolbar`, `ExperimentsFilterBar`, `ExperimentsBulkActions`, `ExperimentsComparableLegend`, `DeleteExperimentsButton`, `DeleteExperimentDialog`, `NoExperimentsInfo` and the name labels. Target names resolve through an optional `targetRegistries` prop and fall back to the target id. The toolbar and filter bar take their `Target type` / `Target` fields as a `targetFields` prop: build them with `useTargetFilterFields(targetType)` from `@mastra/playground-ui/domains/datasets`, or pass `[]` to hide the target filter.
+  - Experiment page: `ExperimentPageLayout` (breadcrumbs and the actions menu over the page body) and `ExperimentBreadcrumbs` ("Experiments / name", with the run status and item count), `ExperimentHeaderActions` (with a `rerunSlot`), `RenameExperimentDialog`, `ExperimentKpis`, `ExperimentRunProgress`, `ExperimentResultsSection`, `ExperimentResultsList`, `ExperimentResultsBulkActions`, `ExperimentResultsTagPicker`, `ExperimentItemPanelProvider` (router-agnostic: the open item and its open/close callbacks come in as props), `ExperimentItemPanel`, `ExperimentResultDetail`, `ExperimentResultPanel`, `ExperimentScorePanel`, `ToolMockReportSection`, and the `useResultsSelection`, `useExperimentResultDetailState` and `useNow` hooks.
+  - Comparison: `ExperimentsComparison` with `itemPanel` and `tracePanel` slots, `ComparisonSideTitle`, `ComparisonSideSummary`, `CompareMetricsMenu`, `ComparisonItemPanel`, `ComparisonSideCell` and `buildComparisonRows`.
+  - Helpers: `getExperimentDisplayName`, the result output helpers and the target name helpers.
+
+## 71.0.0-alpha.6
+
+### Patch Changes
+
+- Generative UI forms in agent chat keep what the user entered after they submit. Before, the values reset to the agent's defaults once the agent replied. ([#31137](https://github.com/mastra-ai/mastra/pull/31137))
+
+## 71.0.0-alpha.5
+
+### Patch Changes
+
+- Fixed the Knowledge and Memory empty state drawings losing their movement when an app minifies CSS with Lightning CSS, the Vite 8 default. The filing sheet drops into the drawer and the memory cards fly into their slots again. ([#31103](https://github.com/mastra-ai/mastra/pull/31103))
+
+- Agent chat can show the agent's avatar on the empty-thread welcome. Pass `agentAvatarUrl` to `AgentChat` (or `AgentThreadPage`'s `chat` props); without it the agent's initial is shown as before. ([#31134](https://github.com/mastra-ai/mastra/pull/31134))
+
+  ```tsx
+  <AgentThreadPage chat={{ agentName: agent.name, agentAvatarUrl: agent.metadata?.avatarUrl }} />
+  ```
+
+## 71.0.0-alpha.4
+
+### Minor Changes
+
+- Simplified page frames to one component, `PageLayout`, with a required `variant` that says what the page is for. Each variant takes only the props that make sense for it, so a page can no longer pick its own width, gutter or scroll mode, and a form can no longer show breadcrumbs next to its back link. ([#30956](https://github.com/mastra-ai/mastra/pull/30956))
+
+  - `variant="page"`: lists, dashboards, detail pages and explorers. The full width with the standard gutter, up to 1536px on very wide screens. Takes `breadcrumbs`, `headerActions`, `actionRow` and `header`. Add `body="fixed"` when the body is panels, an editor, a graph, a board or a chat that scroll on their own: it takes the remaining height edge to edge, as `variant="fit"` did.
+  - `variant="settings"`: settings pages. A centered 640px column of `SettingsGroup`s under the title. Takes `breadcrumbs`, `headerActions`, `title`, `titleAccessory`, `action` and `header`.
+  - `variant="form"`: create and edit forms. A centered 640px column under the title, with an optional back link above it and no breadcrumb bar. Takes `backHref`, `backLabel`, `title`, `isLoading`, `LinkComponent` and `aside`, for a live preview beside the form when the column is wide enough.
+
+  What goes inside the frame (`PageHeader`, `SettingsGroup`, `EmptyState`, `DashboardGrid`, panels) is unchanged.
+
+  **Migrating**
+
+  The old `container`, `fit` and `narrow` variants and the `mask` prop are gone, and `FormLayout` and `SettingsLayout` are no longer exported. Use the matching variant instead:
+
+  ```tsx
+  // Before
+  <PageLayout breadcrumbs={crumbs}>{list}</PageLayout>
+  <PageLayout variant="fit" breadcrumbs={crumbs}>
+    <AgentPanels />
+  </PageLayout>
+  <PageLayout breadcrumbs={crumbs}>
+    <SettingsLayout title="Project settings">{sections}</SettingsLayout>
+  </PageLayout>
+  <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert">
+    {sections}
+  </FormLayout>
+
+  // After
+  <PageLayout variant="page" breadcrumbs={crumbs}>{list}</PageLayout>
+  <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
+    <AgentPanels />
+  </PageLayout>
+  <PageLayout variant="settings" breadcrumbs={crumbs} title="Project settings">
+    {sections}
+  </PageLayout>
+  <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert">
+    {sections}
+  </PageLayout>
+  ```
+
+  Pages that used `variant="narrow"` move to `variant="settings"` or `variant="form"` when that is what they are, and to `variant="page"` otherwise.
+
+  **Lint**
+
+  Added the `playground-ui/no-page-width` rule and a `pageRules` preset. Turn it on for page files so a page can't center a `max-w-*` column of its own:
+
+  ```ts
+  overrides: [{ files: ['src/pages/**/*.tsx'], rules: pageRules }];
+  ```
+
+  Added `playground-ui/page-layout-props` to the `recommended` preset. It flags a `PageLayout` with no `variant`, the removed `container`, `fit` and `narrow` variants, the `mask` prop, and props a variant does not take (breadcrumbs on a form, `body` on a form or settings page). Each message says which variant or prop to use instead.
+
+- The scroll-to-latest button is a round 32px control with a muted arrow, lifted by soft shadows instead of a border, matching the composer. `MessageScrollerButton` / `ChatShell.ScrollButton` take a `busy` prop: while a reply is still streaming in below, the arrow gives way to a small stroke drawn as if by a pen, written in and chased off in a loop, in the same spot. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+  ```tsx
+  <ChatShell.ScrollButton busy={isRunning} />
+  ```
+
+- Added `AgentAvatarUpload` and `downscaleImageToDataUrl` under `@mastra/playground-ui/domains/agent-avatar`, so hosts other than Studio can let users pick an agent avatar. The image is downscaled in the browser and returned as a data URL. ([#31133](https://github.com/mastra-ai/mastra/pull/31133))
+
+  ```tsx
+  import { AgentAvatarUpload } from '@mastra/playground-ui/domains/agent-avatar';
+
+  <AgentAvatarUpload name={name} avatarUrl={avatarUrl} onChange={dataUrl => setAvatarUrl(dataUrl)} />;
+  ```
+
+- Added `RepositoryList`, `CommittedInput`, `SandboxSettings`, `SandboxEnvList` and `GitlabIcon` components for configuring sandbox environments (repositories, settings, environment variables) in any app. ([#31131](https://github.com/mastra-ai/mastra/pull/31131))
+
+- Added the instruction block editor (`AgentCMSBlocks`, prompt block picker, saved-block references and `DisplayConditionsDialog`) under `@mastra/playground-ui/domains/instruction-blocks`, so apps other than Studio can let users compose agent instructions from text and saved prompt blocks. ([#31133](https://github.com/mastra-ai/mastra/pull/31133))
+
+  The editor loads and saves prompt blocks through the `@mastra/react` hooks, so render it inside `MastraReactProvider` and a React Query `QueryClientProvider`:
+
+  ```tsx
+  import { MastraReactProvider } from '@mastra/react';
+  import {
+    AgentCMSBlocks,
+    createInstructionBlock,
+    type InstructionBlock,
+  } from '@mastra/playground-ui/domains/instruction-blocks';
+
+  function InstructionsEditor() {
+    const [blocks, setBlocks] = useState<InstructionBlock[]>([createInstructionBlock('You are a helpful agent.')]);
+    return <AgentCMSBlocks items={blocks} onChange={setBlocks} />;
+  }
+
+  <MastraReactProvider baseUrl="https://my-mastra-server">
+    <InstructionsEditor />
+  </MastraReactProvider>;
+  ```
+
+- Added the prompt-block list and edit components (`PromptsList`, `PromptBlockEditMain`, `PromptBlockEditSidebar`, `usePromptBlockEditForm`, version combobox, delete action) under `@mastra/playground-ui/domains/prompt-blocks`, so other apps can host a Prompts library page. ([#31133](https://github.com/mastra-ai/mastra/pull/31133))
+
+  The components read and write prompt blocks through the `@mastra/react` hooks, so render them inside `MastraReactProvider` and a React Query `QueryClientProvider`:
+
+  ```tsx
+  import {
+    usePromptBlockVersions,
+    useStoredPromptBlock,
+    useStoredPromptBlocks,
+  } from '@mastra/react/hooks/prompt-blocks';
+  import { PromptsList, PromptBlockEditContent } from '@mastra/playground-ui/domains/prompt-blocks';
+
+  function PromptsPage() {
+    const { data, isLoading } = useStoredPromptBlocks({ page: 0, perPage: 20 });
+    return <PromptsList promptBlocks={data?.promptBlocks ?? []} isLoading={isLoading} />;
+  }
+
+  function PromptEditPage({ blockId }: { blockId: string }) {
+    const { data: block } = useStoredPromptBlock({ blockId, status: 'draft' });
+    const { data: versions } = usePromptBlockVersions({ blockId });
+    const latestVersionId = versions?.versions?.[0]?.id;
+    if (!block) return null;
+    return (
+      <PromptBlockEditContent
+        block={block}
+        blockId={blockId}
+        selectedVersionId={null}
+        hasDraft={Boolean(latestVersionId && latestVersionId !== block.activeVersionId)}
+        latestVersionId={latestVersionId}
+        activeVersionId={block.activeVersionId}
+        onClearVersion={() => {}}
+      />
+    );
+  }
+  ```
+
+- The chat composer now stays one line until you use it, leaving more room for the conversation. Idle, it shows "+", the input, the model picker, voice and Send in a single row. Focusing the input or writing a draft (text, attachments or annotations) glides it open, giving the input its own row above the actions, and it glides back to one line when you leave it. "+" and Send stay on the same spot throughout, and the one-line composer is a full pill. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+  - Wrap actions that should only show in the expanded composer, such as model settings, in `ComposerActionsDetail`.
+  - Mark text the one-line composer should drop on small screens with `data-composer-line-hidden`, such as the model name in the picker trigger. It grows back in when the composer opens and shrinks out in place when it closes.
+  - Icon buttons (`icon-sm`, `icon-md`, `icon-lg`) no longer shrink in a crowded row, and on a narrow screen `ComposerActionsEnd` truncates the model name instead of wrapping onto a second row.
+  - `ComposerStatus` now sits after `Composer` as a footer. Opening the composer never changes it. While nothing in it would be seen (screen-reader-only text doesn't count), it gives its row back, after a short pause so status that blinks out and back doesn't move the composer. Use `ComposerStatusStart` for session context and `ComposerStatusEnd` for runtime readings.
+  - The composer draws its edge and depth with shadow layers only, no border: a 1px rim and soft drops that brighten and lift on hover and focus, with a top-lit gradient on the rim and a faint top glow instead of an inner line, so it never shows a double edge. `ComposerRing` no longer follows the pointer; while `busy` faint mono threads of light wander its top edge around the centre, like a quiet loader, instead of a coloured arc spinning round it. Its `tone` prop is gone: the rim no longer takes a colour, so drop `tone` from `<ComposerRing>`. `ComposerToneLabel` keeps its tones.
+  - New `--ease-in-out-custom` motion token (`cubic-bezier(0.77, 0, 0.175, 1)`) for things that move or change shape on screen, such as the composer opening.
+
+  ```tsx
+  <Composer>
+    <ComposerRing>
+      <ComposerBox>
+        <ComposerInput placeholder="Ask anything" />
+        <ComposerActions>
+          <ComposerActionsStart>
+            <ComposerAttachMenu onFiles={addFiles} />
+          </ComposerActionsStart>
+          <ComposerActionsEnd>
+            <ModelPicker {...pickerProps} />
+            <ComposerActionsDetail>
+              <ModelSettingsButton />
+            </ComposerActionsDetail>
+            <SendButton />
+          </ComposerActionsEnd>
+        </ComposerActions>
+      </ComposerBox>
+    </ComposerRing>
+  </Composer>
+  <ComposerStatus>
+    <ComposerStatusStart>You're steering Sam's session</ComposerStatusStart>
+    <ComposerStatusEnd>42 tok/s</ComposerStatusEnd>
+  </ComposerStatus>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`004f350`](https://github.com/mastra-ai/mastra/commit/004f35031e7419a16263f8641d43c9cd19275ae0), [`79a30b6`](https://github.com/mastra-ai/mastra/commit/79a30b6d5c758bf46f0633059eded42bffbeb443), [`fa2ea6d`](https://github.com/mastra-ai/mastra/commit/fa2ea6dfb5c13a5f9b4bdc99f332959f7b0f4209), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018)]:
+  - @mastra/core@1.86.0-alpha.4
+  - @mastra/client-js@1.61.2-alpha.4
+  - @mastra/react@1.16.0-alpha.4
+
 ## 71.0.0-alpha.3
 
 ### Minor Changes

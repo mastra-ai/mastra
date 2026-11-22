@@ -1,0 +1,43 @@
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/utils/cn';
+
+export type SectionHeaderProps = {
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  icon?: React.ReactNode;
+  className?: string;
+};
+
+export function SectionHeader({ title, subtitle, icon, className }: SectionHeaderProps) {
+  return (
+    <header className={cn('flex w-fit flex-col', className)}>
+      <Txt as="h2" variant="heading" className="flex items-center gap-2">
+        {icon && (
+          <Icon size="lg" className="text-success-indicator">
+            {icon}
+          </Icon>
+        )}
+        {title}
+      </Txt>
+      {subtitle && (
+        <Txt variant="body" tone="muted">
+          {subtitle}
+        </Txt>
+      )}
+    </header>
+  );
+}
+
+export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
+  return (
+    <Txt as="h4" variant="caption" tone="faint" className="flex items-center gap-1 uppercase">
+      {icon && (
+        <Icon size="xs" className="text-placeholder">
+          {icon}
+        </Icon>
+      )}
+      {title}
+    </Txt>
+  );
+}

@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 466 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 465 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -808,10 +808,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 115200,
-    "inputCost": 0.29,
-    "outputCost": 1.14
+    "contextWindow": 163840,
+    "maxOutput": 147456,
+    "inputCost": 0.25,
+    "outputCost": 1
   },
   {
     "model": "kilo/deepseek/deepseek-chat-v3.1",
@@ -928,10 +928,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048575,
-    "maxOutput": 943717,
-    "inputCost": 0.44,
-    "outputCost": 1.32
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 0.2156,
+    "outputCost": 0.6468
   },
   {
     "model": "kilo/deepseek/deepseek-v4-pro",
@@ -965,9 +965,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "maxOutput": 393216,
+    "inputCost": 0.0498,
+    "outputCost": 0.1992
   },
   {
     "model": "kilo/deepseek/deepseek-v4.1-flash-1017",
@@ -1016,18 +1016,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.6,
     "outputCost": 2.4
-  },
-  {
-    "model": "kilo/dots-studio/dots-3-note-preview:free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 512000,
-    "maxOutput": 460800,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "kilo/elorian/glimpse",
@@ -1409,7 +1397,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 16384,
+    "maxOutput": 117964,
     "inputCost": 0.04,
     "outputCost": 0.05
   },
@@ -1468,8 +1456,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 4096,
-    "maxOutput": 3686,
+    "contextWindow": 8192,
+    "maxOutput": 7372,
     "inputCost": 0.08,
     "outputCost": 0.11
   },
@@ -1762,18 +1750,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
-    "model": "kilo/meituan/longcat-2.0",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048756,
-    "maxOutput": 262144,
-    "inputCost": 0.75,
-    "outputCost": 3
-  },
-  {
     "model": "kilo/meituan/longcat-2.5",
     "imageInput": true,
     "audioInput": false,
@@ -2008,10 +1984,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 196608,
-    "maxOutput": 176947,
-    "inputCost": 0.295,
-    "outputCost": 1.2
+    "contextWindow": 198000,
+    "maxOutput": 32768,
+    "inputCost": 0.27,
+    "outputCost": 0.95
   },
   {
     "model": "kilo/minimax/minimax-m2.7",
@@ -2021,9 +1997,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 196608,
-    "maxOutput": 176947,
-    "inputCost": 0.21,
-    "outputCost": 0.84
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 1.8
   },
   {
     "model": "kilo/minimax/minimax-m3",
@@ -2032,10 +2008,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 524288,
-    "maxOutput": 512000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "contextWindow": 262144,
+    "maxOutput": 235929,
+    "inputCost": 0.23,
+    "outputCost": 0.96
   },
   {
     "model": "kilo/minimax/minimax-m3.1-flash",
@@ -2044,10 +2020,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 524288,
-    "inputCost": 0.075,
-    "outputCost": 0.3
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": 0.135,
+    "outputCost": 0.54
   },
   {
     "model": "kilo/mistralai/codestral",
@@ -2694,8 +2670,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.025,
-    "outputCost": 0.12
+    "inputCost": 0.02,
+    "outputCost": 0.096
   },
   {
     "model": "kilo/nvidia/nemotron-3.5-lightning:free",
@@ -2716,8 +2692,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 235929,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
     "inputCost": 0.06,
     "outputCost": 0.35
   },
@@ -3738,8 +3714,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 117964,
-    "inputCost": 0.018,
-    "outputCost": 0.09
+    "inputCost": 0.017,
+    "outputCost": 0.085
   },
   {
     "model": "kilo/openai/gpt-oss-safeguard-120b",
@@ -4218,8 +4194,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "inputCost": 0.07,
+    "outputCost": 0.28
   },
   {
     "model": "kilo/qwen/qwen3-coder-flash",
@@ -4325,7 +4301,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 65536,
+    "maxOutput": 81920,
     "inputCost": 0.195,
     "outputCost": 1.56
   },
@@ -4504,8 +4480,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
     "inputCost": 2,
     "outputCost": 6
   },
@@ -4592,6 +4568,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.5,
     "outputCost": 4.5
+  },
+  {
+    "model": "kilo/radixark/daisyrose-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
+    "inputCost": 0.2,
+    "outputCost": 2.5
   },
   {
     "model": "kilo/recursive/flint-v1.0",
@@ -4937,21 +4925,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 128000,
+    "maxOutput": 235929,
     "inputCost": 0.132,
     "outputCost": 0.528
-  },
-  {
-    "model": "kilo/tencent/hy3-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 235929,
-    "inputCost": 0.18,
-    "outputCost": 0.6
   },
   {
     "model": "kilo/tencent/hy4",
@@ -5036,6 +5012,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 471859,
     "inputCost": 1,
     "outputCost": 4.05
+  },
+  {
+    "model": "kilo/thinkingmachines/inkling-2-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.075,
+    "outputCost": 0.3
   },
   {
     "model": "kilo/thinkingmachines/inkling-2-small",
@@ -5298,7 +5286,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.435,
+    "inputCost": 0.43,
     "outputCost": 0.87
   },
   {
