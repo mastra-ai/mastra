@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.6
+
+### Patch Changes
+
+- Generative UI forms in agent chat keep what the user entered after they submit. Before, the values reset to the agent's defaults once the agent replied. ([#31137](https://github.com/mastra-ai/mastra/pull/31137))
+
 ## 71.0.0-alpha.5
 
 ### Patch Changes
