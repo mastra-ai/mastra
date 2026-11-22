@@ -513,15 +513,17 @@ export class MastraCodeGateway extends MastraModelGateway {
     responsesWebSocket?: any;
     codexServiceTier?: CodexServiceTier;
   }): GatewayLanguageModel {
-    const selection = parseCodexModelSelection(`${args.providerId}/${args.modelId}`);
-    if (selection.modelId !== `${args.providerId}/${args.modelId}`) {
+    // A custom provider named "OpenAI" shares the built-in id; on it `:fast`
+    // is part of the model name, not a Codex Fast request.
+    const customProvider = this.#customProvider(args.providerId);
+    const selection = customProvider ? undefined : parseCodexModelSelection(`${args.providerId}/${args.modelId}`);
+    if (selection && selection.modelId !== `${args.providerId}/${args.modelId}`) {
       args = {
         ...args,
         modelId: selection.modelId.slice(OPENAI_PREFIX.length),
         ...(selection.codexServiceTier ? { codexServiceTier: selection.codexServiceTier } : {}),
       };
     }
-    const customProvider = this.#customProvider(args.providerId);
     if (customProvider) {
       const provider = createOpenAICompatible({
         name: args.providerId,
