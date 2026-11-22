@@ -1,25 +1,25 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
-import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-
-import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
+import { SectionHeader } from '../section-header';
 import type { PromptBlockFormValues } from './utils/form-validation';
-import { SectionHeader } from '@/domains/cms';
+import { Button } from '@/ds/components/Button';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { InlineCode } from '@/ds/components/InlineCode';
+import { Input } from '@/ds/components/Input';
+import { JSONSchemaForm, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+
+import { Textarea } from '@/ds/components/Textarea';
+import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { useLinkComponent } from '@/lib/framework';
+import type { JsonSchema } from '@/utils/json-schema';
 
 function RecursiveFieldRenderer({
   field,
@@ -205,7 +205,7 @@ export function PromptBlockEditSidebar({
             <Button onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">
               {isSavingDraft ? (
                 <>
-                  <Spinner className="h-4 w-4" />
+                  <Spinner className="size-4" />
                   Saving...
                 </>
               ) : (
@@ -223,7 +223,7 @@ export function PromptBlockEditSidebar({
             >
               {isSubmitting ? (
                 <>
-                  <Spinner className="h-4 w-4" />
+                  <Spinner className="size-4" />
                   Publishing...
                 </>
               ) : (
@@ -238,7 +238,7 @@ export function PromptBlockEditSidebar({
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
-                <Spinner className="h-4 w-4" />
+                <Spinner className="size-4" />
                 Creating...
               </>
             ) : (

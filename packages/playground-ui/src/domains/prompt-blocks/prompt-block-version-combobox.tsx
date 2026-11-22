@@ -1,8 +1,8 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { usePromptBlockVersions } from '@mastra/react/hooks/prompt-blocks';
+import { Badge } from '@/ds/components/Badge';
+import { Combobox } from '@/ds/components/Combobox';
+import type { ComboboxProps } from '@/ds/components/Combobox';
+import { formatDate } from '@/utils/date-format';
 
 export interface PromptBlockVersionComboboxProps {
   blockId: string;

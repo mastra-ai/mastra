@@ -1,17 +1,18 @@
-import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+// @vitest-environment jsdom
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DeletePromptBlockAction } from '../delete-prompt-block-action';
+import { DeletePromptBlockAction } from '..';
+import { LinkComponentProvider } from '@/lib/framework';
 import { StubLink, stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-vi.mock('@mastra/playground-ui/utils/toast', () => ({
+vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-const { toast } = await import('@mastra/playground-ui/utils/toast');
+const { toast } = await import('@/utils/toast');
 
 const navigate = vi.fn();
 

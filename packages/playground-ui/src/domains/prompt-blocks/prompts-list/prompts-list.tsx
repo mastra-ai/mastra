@@ -1,10 +1,10 @@
 import type { StoredPromptBlockResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import type { DataListSort } from '@mastra/playground-ui/components/DataList';
-import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMemo } from 'react';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@/ds/components/DataList';
+import type { DataListSort } from '@/ds/components/DataList';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { useLinkComponent } from '@/lib/framework';
+import { truncateString } from '@/utils/truncate-string';
 
 export interface PromptsListProps {
   promptBlocks: StoredPromptBlockResponse[];

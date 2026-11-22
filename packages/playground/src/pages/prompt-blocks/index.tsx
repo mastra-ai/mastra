@@ -9,6 +9,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
 import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-blocks-header-actions';
@@ -19,6 +20,8 @@ const PROMPT_BLOCKS_PER_PAGE = 50;
 const PROMPT_BLOCKS_SORT_KEYS = ['updatedAt'] as const;
 
 export default function PromptBlocks() {
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+  const canCreate = !isCmsLoading && isCmsAvailable;
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -97,7 +100,7 @@ export default function PromptBlocks() {
     return (
       <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Prompts</h1>
-        <NoPromptBlocksInfo />
+        <NoPromptBlocksInfo canCreate={canCreate} />
       </PageLayout>
     );
   }

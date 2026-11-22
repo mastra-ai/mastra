@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 import type { StoredPromptBlockResponse } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
-import { PromptsList } from '../prompts-list';
+import { PromptsList } from '..';
 import { expectArrowNavigation, expectRovingTabindex, interactiveRows } from '@/test/keyboard';
 import { TestLinkProvider } from '@/test/link-provider';
 import { renderWithProviders } from '@/test/render';
