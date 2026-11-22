@@ -1,5 +1,38 @@
 # @mastra/factory
 
+## 0.31.0-alpha.5
+
+### Patch Changes
+
+- Factory sessions are now prompted to check a side session's claims before repeating or acting on them. The side-sessions notice says reports can be wrong and asks the session to check specific claims (files changed, pushes, CI, review findings) against the pull request first, or to say that a relayed report is unchecked. The notice stays while any side session's reports can still be read, even after those sessions age out of the list. The review tool says to submit only findings checked against the current diff. ([#31109](https://github.com/mastra-ai/mastra/pull/31109))
+
+- Updated dependencies [[`791f12f`](https://github.com/mastra-ai/mastra/commit/791f12f4ca378c4a6a7a6324631178a57bd0a16f)]:
+  - @mastra/code-sdk@1.21.0-alpha.5
+
+## 0.31.0-alpha.4
+
+### Minor Changes
+
+- Exported shared environment handlers so other servers can serve Factory's environment and sandbox env routes for their own projects. Import `EnvironmentHandlers` and `SandboxEnvHandlers` from `@mastra/factory/environment/handlers`, the request schemas from `@mastra/factory/routes/environment-contracts`, and `resolveProjectEnvironment` from `@mastra/factory/environment/session-environment` without loading the rest of Factory. ([#31132](https://github.com/mastra-ai/mastra/pull/31132))
+
+### Patch Changes
+
+- The chat composer stays one line until you focus it or start writing, so more of the conversation fits on screen, with the model still in view. Below it, a status footer shows who is steering the session on the left and token speed and memory on the right. The footer gives its row back while it has nothing to show, and opening the composer never moves "+" or Send. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+  Teammates steering someone else's session no longer see the provider icon twice next to the model: the locked model's tooltip now names whose credential their messages use.
+
+- Stopped logging an error each time a session workspace is created for the first time. ([#31071](https://github.com/mastra-ai/mastra/pull/31071))
+
+- The jump-to-latest button is easier to hit, quieter, and draws a moving pen stroke in place of its arrow while the agent is still replying below. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+- Factory's board settings pages (Rules, Routing, Skills and each phase) now sit in a 640px settings column, with their titles lined up with their sections. New board, New Factory and the skill editor are forms with a back link. On phones, Factory has a top bar with the menu button and search, like Studio. ([#30956](https://github.com/mastra-ai/mastra/pull/30956))
+
+- Offered the merge-request checkout refresh tool only in GitLab merge-request review sessions, so GitHub review sessions no longer call a tool that always fails. ([#31070](https://github.com/mastra-ai/mastra/pull/31070))
+
+- Updated dependencies [[`004f350`](https://github.com/mastra-ai/mastra/commit/004f35031e7419a16263f8641d43c9cd19275ae0), [`79a30b6`](https://github.com/mastra-ai/mastra/commit/79a30b6d5c758bf46f0633059eded42bffbeb443), [`fa2ea6d`](https://github.com/mastra-ai/mastra/commit/fa2ea6dfb5c13a5f9b4bdc99f332959f7b0f4209), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018)]:
+  - @mastra/core@1.86.0-alpha.4
+  - @mastra/code-sdk@1.21.0-alpha.4
+
 ## 0.31.0-alpha.3
 
 ### Patch Changes

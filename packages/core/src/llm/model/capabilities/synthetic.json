@@ -25,7 +25,7 @@
     "hf:zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "hf:Qwen/Qwen3.8-27B": [
+    "hf:openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -41,12 +41,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "hf:openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
       }
     ],
     "hf:zai-org/GLM-5.3": [
@@ -71,6 +65,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "hf:Qwen/Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ]
   }

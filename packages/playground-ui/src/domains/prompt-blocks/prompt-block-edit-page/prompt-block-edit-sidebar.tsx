@@ -1,0 +1,255 @@
+import { useStoredAgents } from '@mastra/react/hooks/agents';
+import { useCallback, useMemo } from 'react';
+import { useWatch } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
+import { SectionHeader } from '../section-header';
+import type { PromptBlockFormValues } from './utils/form-validation';
+import { Button } from '@/ds/components/Button';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { InlineCode } from '@/ds/components/InlineCode';
+import { Input } from '@/ds/components/Input';
+import { JSONSchemaForm, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Spinner } from '@/ds/components/Spinner';
+
+import { Textarea } from '@/ds/components/Textarea';
+import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { useLinkComponent } from '@/lib/framework';
+import type { JsonSchema } from '@/utils/json-schema';
+
+function RecursiveFieldRenderer({
+  field,
+  parentPath,
+  depth,
+}: {
+  field: SchemaField;
+  parentPath: string[];
+  depth: number;
+}) {
+  return (
+    <div className="py-2" style={{ paddingLeft: depth * 8 }}>
+      <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
+        <div className="space-y-2 px-2">
+          <div className="flex flex-row items-center gap-4">
+            <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full" />
+
+            <JSONSchemaForm.FieldType placeholder="Type" />
+            <JSONSchemaForm.FieldOptional />
+            <JSONSchemaForm.FieldNullable />
+            <JSONSchemaForm.FieldRemove />
+          </div>
+        </div>
+
+        <JSONSchemaForm.NestedFields className="pl-2">
+          <JSONSchemaForm.FieldList>
+            {(nestedField, _idx, nestedContext) => (
+              <RecursiveFieldRenderer
+                key={nestedField.id}
+                field={nestedField}
+                parentPath={nestedContext.parentPath}
+                depth={nestedContext.depth}
+              />
+            )}
+          </JSONSchemaForm.FieldList>
+          <JSONSchemaForm.AddField className="mt-2" size="sm">
+            <IconPlusMedium />
+            Add nested variable
+          </JSONSchemaForm.AddField>
+        </JSONSchemaForm.NestedFields>
+      </JSONSchemaForm.Field>
+    </div>
+  );
+}
+
+interface PromptBlockEditSidebarProps {
+  form: UseFormReturn<PromptBlockFormValues>;
+  onPublish: () => void;
+  onSaveDraft?: () => void;
+  isSubmitting?: boolean;
+  isSavingDraft?: boolean;
+  isDirty?: boolean;
+  hasDraft?: boolean;
+  mode?: 'create' | 'edit';
+  /** Key that changes when form is reset with new data, forces JSONSchemaForm to remount */
+  formResetKey?: number;
+  /** Block ID, used to show "Used by" agents section in edit mode */
+  blockId?: string;
+}
+
+export function PromptBlockEditSidebar({
+  form,
+  onPublish,
+  onSaveDraft,
+  isSubmitting = false,
+  isSavingDraft = false,
+  isDirty = false,
+  hasDraft = false,
+  mode = 'create',
+  formResetKey = 0,
+  blockId,
+}: PromptBlockEditSidebarProps) {
+  const {
+    register,
+    control,
+    formState: { errors },
+  } = form;
+
+  const watchedVariables = useWatch({ control, name: 'variables' });
+
+  const handleVariablesChange = useCallback(
+    (newSchema: JsonSchema) => {
+      form.setValue('variables', newSchema, { shouldDirty: true });
+    },
+    [form],
+  );
+
+  const initialFields = useMemo(() => jsonSchemaToFields(watchedVariables), [watchedVariables]);
+
+  const { data: storedAgentsData } = useStoredAgents();
+  const { navigate, paths } = useLinkComponent();
+
+  const usedByAgents = useMemo(() => {
+    if (!blockId || !storedAgentsData?.agents) return [];
+    return storedAgentsData.agents.filter(agent => {
+      if (!Array.isArray(agent.instructions)) return false;
+      return agent.instructions.some(instr => instr.type === 'prompt_block_ref' && instr.id === blockId);
+    });
+  }, [blockId, storedAgentsData]);
+
+  return (
+    <div className="flex h-full flex-col">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-4 p-4">
+          <SectionHeader title="Configuration" subtitle="Define your prompt block's name and description." />
+
+          <Field invalid={Boolean(errors.name)}>
+            <FieldLabel required>Name</FieldLabel>
+            <Input placeholder="My Prompt Block" required {...register('name')} />
+            <FieldError>{errors.name?.message}</FieldError>
+          </Field>
+
+          <Field invalid={Boolean(errors.description)}>
+            <FieldLabel>Description</FieldLabel>
+            <Textarea placeholder="Describe what this prompt block does" {...register('description')} />
+            <FieldError>{errors.description?.message}</FieldError>
+          </Field>
+        </div>
+
+        <div className="flex flex-col gap-4 border-t border-border p-4">
+          <SectionHeader
+            title="Variables"
+            subtitle={
+              <>
+                Define variables for this prompt block. Use{' '}
+                <InlineCode className="text-label text-foreground">{'{{variableName}}'}</InlineCode> syntax in your
+                content.
+              </>
+            }
+          />
+
+          <JSONSchemaForm.Root
+            key={formResetKey}
+            onChange={handleVariablesChange}
+            defaultValue={initialFields}
+            maxDepth={5}
+          >
+            <JSONSchemaForm.FieldList>
+              {(field, _index, { parentPath, depth }) => (
+                <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
+              )}
+            </JSONSchemaForm.FieldList>
+
+            <div className="p-2">
+              <JSONSchemaForm.AddField>
+                <IconPlusMedium />
+                Add variable
+              </JSONSchemaForm.AddField>
+            </div>
+          </JSONSchemaForm.Root>
+        </div>
+
+        {mode === 'edit' && blockId && (
+          <div className="flex flex-col gap-3 border-t border-border p-4">
+            <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
+            {usedByAgents.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {usedByAgents.map(agent => (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => navigate(paths.agentLink(agent.id))}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-fill-subtle"
+                  >
+                    <Txt variant="caption" tone="ink" className="truncate">
+                      {agent.name || agent.id}
+                    </Txt>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Txt variant="caption" tone="muted">
+                Not referenced by any agents yet.
+              </Txt>
+            )}
+          </div>
+        )}
+      </ScrollArea>
+
+      <div className="shrink-0 p-4">
+        {mode === 'edit' && onSaveDraft ? (
+          <div className="flex gap-2">
+            <Button onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">
+              {isSavingDraft ? (
+                <>
+                  <Spinner className="size-4" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <IconFloppyDisk1 />
+                  Save
+                </>
+              )}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={onPublish}
+              disabled={(!hasDraft && !isDirty) || isSubmitting || isSavingDraft}
+              className="flex-1"
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner className="size-4" />
+                  Publishing...
+                </>
+              ) : (
+                <>
+                  <IconCheckmark2Medium />
+                  Publish
+                </>
+              )}
+            </Button>
+          </div>
+        ) : (
+          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
+            {isSubmitting ? (
+              <>
+                <Spinner className="size-4" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <IconCheckmark2Medium />
+                Create prompt block
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}

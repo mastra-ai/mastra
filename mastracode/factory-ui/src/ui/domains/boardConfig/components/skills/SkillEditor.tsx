@@ -134,9 +134,6 @@ export function SkillEditor({
             <Notice.Message>The original changed since this was edited. Revert to use the new original.</Notice.Message>
           </Notice>
         )}
-        <Txt as="h1" variant="display-lg" tone="ink" className="min-w-0 break-words">
-          {skill.name}
-        </Txt>
         <SkillDescription
           value={description}
           required
