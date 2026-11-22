@@ -1,5 +1,11 @@
 # @mastra/code-sdk
 
+## 1.21.0-alpha.5
+
+### Patch Changes
+
+- Fixed Anthropic models not using prompt caching when they run through the Mastra Gateway with an organization key. Supported gateway routes can now reuse cached input on later steps of a conversation. ([#30972](https://github.com/mastra-ai/mastra/pull/30972))
+
 ## 1.21.0-alpha.4
 
 ### Patch Changes

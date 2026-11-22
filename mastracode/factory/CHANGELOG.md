@@ -1,5 +1,14 @@
 # @mastra/factory
 
+## 0.31.0-alpha.5
+
+### Patch Changes
+
+- Factory sessions are now prompted to check a side session's claims before repeating or acting on them. The side-sessions notice says reports can be wrong and asks the session to check specific claims (files changed, pushes, CI, review findings) against the pull request first, or to say that a relayed report is unchecked. The notice stays while any side session's reports can still be read, even after those sessions age out of the list. The review tool says to submit only findings checked against the current diff. ([#31109](https://github.com/mastra-ai/mastra/pull/31109))
+
+- Updated dependencies [[`791f12f`](https://github.com/mastra-ai/mastra/commit/791f12f4ca378c4a6a7a6324631178a57bd0a16f)]:
+  - @mastra/code-sdk@1.21.0-alpha.5
+
 ## 0.31.0-alpha.4
 
 ### Minor Changes
