@@ -22,10 +22,15 @@
     "kimi-k3.1-pro"
   ],
   "reasoning": {
-    "claude-sonnet-5-5": [
+    "gpt-6-luna": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4-pro": [
@@ -35,53 +40,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "claude-opus-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-fable-5-1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "claude-haiku-5-5": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "kimi-k3": [
@@ -96,16 +54,25 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-6-astra": [
+    "deepseek-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "claude-fable-5-1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gemini-3.5-flash-lite": [
+    "gpt-6-astra": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gemini-4-argon": [
@@ -114,10 +81,43 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "gemini-3.5-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

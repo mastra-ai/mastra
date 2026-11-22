@@ -19,6 +19,12 @@
     "infer/grok-4.7:low-cost"
   ],
   "reasoning": {
+    "infer/gpt-6.1-sol:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "infer/claude-opus-5-5:low-cost": [
       {
         "type": "effort",
@@ -26,12 +32,6 @@
       }
     ],
     "infer/claude-sonnet-5-5:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/claude-fable-5-1:low-cost": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -49,22 +49,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "infer/gpt-6-astra:low-cost": [
+    "infer/grok-4.7:low-cost": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/gpt-6.1-sol:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/gemini-3.1-pro-preview:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "infer/gpt-5.6-sol:official": [
@@ -73,10 +61,22 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "infer/grok-4.7:low-cost": [
+    "infer/gemini-3.1-pro-preview:low-cost": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "infer/gpt-6-astra:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "infer/claude-fable-5-1:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }
