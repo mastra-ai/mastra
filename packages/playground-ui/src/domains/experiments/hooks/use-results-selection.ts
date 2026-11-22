@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 
 /** Selection over a page of results; results that are no longer loaded drop out of `selectedResults`. */

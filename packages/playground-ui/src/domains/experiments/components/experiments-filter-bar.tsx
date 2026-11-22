@@ -1,3 +1,5 @@
+'use client';
+
 import { useMemo } from 'react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 import { filterBarItem, getFilterBarItemValue, targetFromItems, targetToItems } from '@/domains/datasets';

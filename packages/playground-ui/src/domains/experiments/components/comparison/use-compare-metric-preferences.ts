@@ -1,3 +1,5 @@
+'use client';
+
 import { z } from 'zod';
 import { createLocalStorageStore, useLocalStorageStore } from '@/hooks/use-local-storage-store';
 

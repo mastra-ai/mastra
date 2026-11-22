@@ -1,3 +1,5 @@
+'use client';
+
 import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
 import { ComparisonMetricList } from './comparison-metric-list';

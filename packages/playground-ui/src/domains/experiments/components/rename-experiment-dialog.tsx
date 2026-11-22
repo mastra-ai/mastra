@@ -1,3 +1,5 @@
+'use client';
+
 import type { DatasetExperiment } from '@mastra/client-js';
 import { useState } from 'react';
 import {

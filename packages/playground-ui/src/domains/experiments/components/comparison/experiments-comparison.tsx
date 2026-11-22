@@ -1,3 +1,5 @@
+'use client';
+
 import type { CompareExperimentsResponse, DatasetExperiment } from '@mastra/client-js';
 import { useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent, ReactNode } from 'react';

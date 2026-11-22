@@ -1,3 +1,5 @@
+'use client';
+
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { createContext, useContext, useMemo } from 'react';

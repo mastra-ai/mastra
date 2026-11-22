@@ -1,3 +1,5 @@
+'use client';
+
 import type { CompareExperimentsResponse } from '@mastra/client-js';
 import { useMemo } from 'react';
 import type { CompareMetricKey } from './use-compare-metric-preferences';

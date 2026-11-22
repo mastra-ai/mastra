@@ -1,3 +1,5 @@
+'use client';
+
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { useMemo, useState } from 'react';
 import { Combobox } from '@/ds/components/Combobox';

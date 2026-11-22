@@ -1,3 +1,5 @@
+'use client';
+
 import type { DatasetExperiment } from '@mastra/client-js';
 import { ExperimentStatusIcon } from './experiment-stats';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';

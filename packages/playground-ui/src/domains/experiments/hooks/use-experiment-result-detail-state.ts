@@ -1,3 +1,5 @@
+'use client';
+
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { useState } from 'react';
 

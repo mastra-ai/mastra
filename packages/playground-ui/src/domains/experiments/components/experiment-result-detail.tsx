@@ -1,3 +1,5 @@
+'use client';
+
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { useExperimentResultDetailState } from '../hooks/use-experiment-result-detail-state';

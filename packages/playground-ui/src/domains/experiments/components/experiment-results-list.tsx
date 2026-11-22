@@ -1,3 +1,5 @@
+'use client';
+
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 import {

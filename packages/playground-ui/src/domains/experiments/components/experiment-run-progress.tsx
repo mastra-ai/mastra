@@ -1,3 +1,5 @@
+'use client';
+
 import type { DatasetExperiment } from '@mastra/client-js';
 import { QUEUED_MESSAGE, RUNNING_MESSAGES } from './experiment-run-messages';
 import { useNow } from '@/domains/experiments/hooks/use-now';

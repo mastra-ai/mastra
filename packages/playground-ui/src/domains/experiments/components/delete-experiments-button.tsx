@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Button } from '@/ds/components/Button';

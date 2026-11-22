@@ -1,3 +1,5 @@
+'use client';
+
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '../hooks/use-experiment-result-detail-state';

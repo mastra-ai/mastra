@@ -1,3 +1,5 @@
+'use client';
+
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
