@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.5
+
+### Patch Changes
+
+- Fixed the Knowledge and Memory empty state drawings losing their movement when an app minifies CSS with Lightning CSS, the Vite 8 default. The filing sheet drops into the drawer and the memory cards fly into their slots again. ([#31103](https://github.com/mastra-ai/mastra/pull/31103))
+
+- Agent chat can show the agent's avatar on the empty-thread welcome. Pass `agentAvatarUrl` to `AgentChat` (or `AgentThreadPage`'s `chat` props); without it the agent's initial is shown as before. ([#31134](https://github.com/mastra-ai/mastra/pull/31134))
+
+  ```tsx
+  <AgentThreadPage chat={{ agentName: agent.name, agentAvatarUrl: agent.metadata?.avatarUrl }} />
+  ```
+
 ## 71.0.0-alpha.4
 
 ### Minor Changes
