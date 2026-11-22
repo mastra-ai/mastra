@@ -537,6 +537,7 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
     assert.ok(original?.body);
     let pendingEdit: string | undefined;
     let verifyMissingCounts = false;
+    let countFailures = 0;
     // Commit a real edit after preflight's policy lookup, before the native pin lookup in this turn.
     store.searchPages = async input => {
       if (pendingEdit) {
@@ -547,7 +548,10 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
       return search(input);
     };
     store.countNotes = async input => {
-      if (verifyMissingCounts && input.pageIds.includes(original.id)) throw new Error('Synthetic note count outage');
+      if (verifyMissingCounts && input.pageIds.includes(original.id)) {
+        countFailures++;
+        throw new Error('Synthetic note count outage');
+      }
       return countNotes(input);
     };
     const generate = (thread: string) =>
@@ -561,6 +565,7 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
     verifyMissingCounts = true;
     const deltaStart = f.model.requests.length;
     assert.equal((await generate(first.id)).text, 'Policy delivered.');
+    assert.ok(countFailures > 0, 'The policy delta must be delivered during a note count outage');
     const delta = messages(f.model.requests[deltaStart]!).find(message =>
       message.content?.startsWith('<pinned-knowledge-update'),
     );
@@ -579,7 +584,12 @@ test('turns use the delivered policy when an edit lands during preflight', { tim
     await f.approvePolicy(policyRef, nextRevision);
     pendingEdit = nextRevision;
     const snapshotStart = f.model.requests.length;
+    const failuresBeforeSnapshot = countFailures;
     assert.equal((await generate(fresh.id)).text, 'Policy delivered.');
+    assert.ok(
+      countFailures > failuresBeforeSnapshot,
+      'The initial policy must be delivered during a note count outage',
+    );
     const snapshot = messages(f.model.requests[snapshotStart]!).find(message =>
       message.content?.startsWith('<pinned-knowledge '),
     );

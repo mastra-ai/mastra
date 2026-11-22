@@ -126,7 +126,7 @@ export function publishedText(proposal: Parameters<typeof renderPublication>[0])
 const proposalFields = z
   .object({
     id: z.uuid(),
-    owner: identifier.max(1000),
+    owner: text(1000),
     reviewer: z.object({ id: identifier, actorId: identifier, tenantId: identifier, customerId: identifier }).strict(),
     source: reviewInputSchema.extend({ confirmation: text(4000), digest: z.string().length(64) }).strict(),
     candidate: candidateSchema,

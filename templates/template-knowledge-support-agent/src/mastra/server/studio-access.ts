@@ -29,7 +29,7 @@ import { LIST_TOOLS_ROUTE } from '@mastra/server/handlers/tools';
 import type { Memory } from '@mastra/memory';
 import { MemoryPG } from '@mastra/pg';
 import { hostedMode } from '../database/store.ts';
-import { withWriterLock, WriterBusyError } from '../knowledge/writer-lock.ts';
+import { withWriterLock } from '../knowledge/writer-lock.ts';
 
 type RoutePolicy = (input: {
   request: Request;
@@ -105,19 +105,14 @@ export function createStudioAccess(memory: Memory) {
         await memory.createThread({ threadId, resourceId: owner });
         return true;
       }
-      try {
-        return await withWriterLock(async ({ postgres }) => {
-          const store = postgres ? new MemoryPG({ client: postgres, schemaName: 'public' }) : memory;
-          const claimed = await store.getThreadById({ threadId });
-          if (claimed) return claimed.resourceId === owner;
-          const thread = await memory.createThread({ threadId, resourceId: owner, saveThread: false });
-          await store.saveThread({ thread });
-          return true;
-        });
-      } catch (error) {
-        if (error instanceof WriterBusyError) return false;
-        throw error;
-      }
+      return withWriterLock(async ({ postgres }) => {
+        const store = postgres ? new MemoryPG({ client: postgres, schemaName: 'public' }) : memory;
+        const claimed = await store.getThreadById({ threadId });
+        if (claimed) return claimed.resourceId === owner;
+        const thread = await memory.createThread({ threadId, resourceId: owner, saveThread: false });
+        await store.saveThread({ thread });
+        return true;
+      });
     });
     pending = operation.catch(() => undefined);
     return operation;

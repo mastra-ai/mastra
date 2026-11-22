@@ -13,7 +13,7 @@ import { resourceId } from '../../src/mastra/identity.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
 import { upsertPageAtRevision } from '../../src/mastra/knowledge/versioned-page.ts';
-import { proposalSchema, publishedText } from '../../src/mastra/review/contracts.ts';
+import { proposalDraftSchema, proposalSchema, publishedText } from '../../src/mastra/review/contracts.ts';
 import { createReviewService } from '../../src/mastra/review/service.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
 
@@ -382,6 +382,13 @@ test('a short thread ID blocks explicit references and permits ordinary shared w
     const publicSource = { ref: publicRef, version: 1 };
     f.select(candidate('short-thread', { content: 'Wait for the link light to turn green.', publicSource }));
     const safe = await pending(f, input);
+    const { revision, ...draft } = safe.proposal;
+    const longOwner = resourceId({ ...draft.reviewer, actorId: 'a'.repeat(200) });
+    assert.ok(longOwner.length > 200);
+    assert.equal(proposalDraftSchema.parse({ ...draft, owner: longOwner }).owner, longOwner);
+    assert.equal(proposalSchema.parse({ ...draft, revision, owner: longOwner }).owner, longOwner);
+    assert.equal(proposalDraftSchema.safeParse({ ...draft, owner: 'a'.repeat(1001) }).success, false);
+    assert.equal(proposalSchema.safeParse({ ...draft, revision, owner: 'a'.repeat(1001) }).success, false);
     const invalid = proposalSchema.safeParse({ ...safe.proposal, source: { ...safe.proposal.source, threadId: '(' } });
     assert.ok(!invalid.success);
     assert.ok(invalid.error.issues.some(issue => issue.path.join('.') === 'source.threadId'));
@@ -1101,14 +1108,15 @@ test('review_rejects_unsafe_resumes_and_recovers_publication_once', { timeout: 2
           author: 'synthetic-fixture',
         });
         assert.equal(page.version, interrupted.proposal.candidate.target!.expectedVersion + 1);
+        await f.supportKnowledge.upsertPage({ scope, path: 'archive', name: 'Archive' });
+        await f.supportKnowledge.movePage({ scope, path, parent: 'archive' });
       }
       await f.start();
       const beforeRetry = await snapshot(f);
-      assert.equal(
-        (await post(f, `/workflows/review/restart-async?runId=${interrupted.runId}`, { inputData: {} })).status,
-        403,
-      );
-      const recovered = await json(await post(f, `/workflows/review/restart-async?runId=${interrupted.runId}`, {}));
+      const restartPath = `/workflows/review/restart-async?runId=${interrupted.runId}`;
+      for (const body of [{ inputData: {} }, { requestContext: { extra: true } }])
+        assert.equal((await post(f, restartPath, body)).status, 403);
+      const recovered = await json(await post(f, restartPath, note ? {} : { requestContext: {} }));
       assert.deepEqual(await snapshot(f), beforeRetry, 'Recovery must preserve the stored Knowledge');
       assert.deepEqual(await effects(), superseded ? [] : written, 'Recovery must never reapply the original effect');
       assert.equal(

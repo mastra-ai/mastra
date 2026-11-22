@@ -53,7 +53,11 @@ export async function bootstrap() {
   const reviewerAuthority =
     platform?.reviewerAuthority ?? oauth?.reviewerAuthority ?? createReviewerAuthority(credentials);
   const review = createReviewWorkflow(createReviewService(supportKnowledge, memory, reviewerAuthority));
-  const authorize = createSupportAuthorization(memory, review, reviewerAuthority);
+  const { authorize, writerContentionResponse } = createSupportAuthorization(memory, review, reviewerAuthority);
+  const middleware = [
+    ...(onPlatform ? [platform?.middleware ?? platformAuthMiddleware()] : []),
+    ...(hosted ? [writerContentionResponse] : []),
+  ];
   const auth = platform?.createAuth(authorize) ?? createAuth(credentials, authorize, oauth?.authenticateToken);
 
   return {
@@ -67,7 +71,7 @@ export async function bootstrap() {
       host: serverHost(hosted, onPlatform),
       port: Number(process.env.PORT ?? 4111),
       auth,
-      middleware: onPlatform ? (platform?.middleware ?? platformAuthMiddleware()) : undefined,
+      middleware,
       apiRoutes: [...KNOWLEDGE_ROUTES, createConfirmationRoute(memory)],
     },
   };

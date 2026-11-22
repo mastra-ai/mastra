@@ -95,7 +95,10 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     const ranks = await retrievalBaseline(f, demoCorpus.queries);
     const id = await thread(f);
     let start = f.model.requests.length;
-    const cold = await turn(f, id, `F5:diagnostic network ${sentinels.prompt}`);
+    const cold = await turn(f, id, [
+      { type: 'text', text: 'F5:diagnostic network' },
+      { type: 'text', text: sentinels.prompt },
+    ]);
     assert.equal(history(f.model.requests[start]!).status, 'empty');
     assert.match(cold.text, /No customer history yet/u);
     assert.match(cold.text, /indicator.*pending/u);
@@ -381,7 +384,10 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       assert.ok(saved.includes(sentinel), 'Positive private-payload control must be stored in Memory');
     const source = await confirm(f, id);
     const lifecycle = await approveLifecycle(f, source);
-    await turn(f, await thread(f, f.otherCustomer!), 'F5:reuse network', f.otherCustomer!);
+    const sharedThread = await thread(f, f.otherCustomer!);
+    const sharedReadStart = Date.now();
+    await turn(f, sharedThread, 'F5:reuse network', f.otherCustomer!);
+    const sharedReadEnd = Date.now();
     await f.seed('retail-pos-history');
     const noteValue = 'REVIEWED_NOTE_PRIVATE_MARIGOLD';
     const noteScope = 'customer:retailops:store-73';
@@ -393,9 +399,12 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
         text: reviewedNote(`${noteValue} ${index}`),
         author: 'review:synthetic',
       });
-    const noteReadStart = f.model.requests.length;
-    await turn(f, await thread(f, f.otherCustomer!), `F5:notes READ=${noteScope}#${notePath}`, f.otherCustomer!);
-    assert.ok(providerInput(f, noteReadStart).includes(noteValue));
+    const notesThread = await thread(f, f.otherCustomer!);
+    const noteRequestStart = f.model.requests.length;
+    const noteReadStart = Date.now();
+    await turn(f, notesThread, `F5:notes READ=${noteScope}#${notePath}`, f.otherCustomer!);
+    const noteReadEnd = Date.now();
+    assert.ok(providerInput(f, noteRequestStart).includes(noteValue));
     await turn(f, await thread(f), 'F5:diagnostic network with previous history');
     await turn(f, await thread(f), 'F5:insufficient fluxcapacitor');
     assert.equal((await f.request('/observability/traces')).status, 403);
@@ -445,11 +454,26 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       if (!samples.some(row => row.name === 'mastra_model_total_output_tokens' && row.metadata.value === 8))
         missing.push('model output tokens');
       if (!samples.some(row => row.metadata.costContext?.estimatedCost > 0)) missing.push('native cost estimate');
-      const reuse = samples.filter(row => row.metadata.labels?.operation === 'resolution-reuse');
-      const counts = reuse.filter(row => row.name === 'support_operation_count').length;
-      // Preflight emits a count and a duration for reuse. Each matching native tool read emits one count.
-      const preflight = reuse.filter(row => row.name === 'support_operation_duration_ms').length;
-      if (counts - preflight !== 2) missing.push('one resolution reuse event for each matching read');
+      for (const [label, start, end] of [
+        ['shared finding', sharedReadStart, sharedReadEnd],
+        ['reviewed notes', noteReadStart, noteReadEnd],
+      ] as const) {
+        const inTurn = (row: Record<string, any>) => {
+          const timestamp = new Date(row.startedAt).getTime();
+          return timestamp >= start && timestamp <= end;
+        };
+        const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row));
+        const reuse = samples.filter(row => row.metadata.labels?.operation === 'resolution-reuse' && inTurn(row));
+        const counts = reuse.filter(row => row.name === 'support_operation_count');
+        // Preflight also reports reuse, with a paired duration in the same turn.
+        const preflight = reuse.filter(row => row.name === 'support_operation_duration_ms');
+        if (
+          reads.length !== 1 ||
+          counts.length - preflight.length !== 1 ||
+          counts.some(row => row.metadata.value !== 1)
+        )
+          missing.push(`one resolution reuse event for the ${label} read`);
+      }
       if (
         !rows.some(
           row => row.traceId === failedTraceId && row.name === 'agent_run' && row.outcome === 'error' && row.error,

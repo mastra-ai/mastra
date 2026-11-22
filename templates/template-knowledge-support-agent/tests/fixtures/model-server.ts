@@ -8,7 +8,7 @@ export interface ScriptedReply {
 }
 export type ModelScript = (body: Record<string, unknown>) => ScriptedReply;
 
-function messageText(content: unknown): string {
+export function messageText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content

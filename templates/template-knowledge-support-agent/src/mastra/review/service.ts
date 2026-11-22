@@ -310,8 +310,8 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       const author = `review:${reviewerId}`;
       const reference = `${proposal.destination.scope}#${proposal.destination.path}`;
       if (proposal.candidate.action === 'note') {
-        const current = await currentPage();
-        requireReview(current, 'Note target is missing');
+        const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
+        requireReview(target, 'Note target is not bound');
         const mentions = [
           ...new Set(
             proposal.bindings
@@ -319,10 +319,11 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
               .map(binding => binding.id),
           ),
         ].sort();
-        const priorEffect = (note: KnowledgeNote) => {
-          const target = proposal.bindings.find(binding => binding.kind === 'target' && binding.ref === reference);
+        const priorEffect = async (note: KnowledgeNote) => {
+          const [home] = await store.getScopesByAddress([proposal.destination.scope]);
+          const bound = await store.getPage({ id: target.id, read: 'all' });
           requireReview(
-            target?.id === current.id && note.pageId === current.id,
+            home && bound?.scopeId === home.id && note.pageId === bound.id,
             'Prior note effect does not match the bound target',
           );
           requireReview(
@@ -332,7 +333,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
               !note.when &&
               JSON.stringify([...note.mentions].sort()) === JSON.stringify(mentions) &&
               note.stampScopeIds.length === 1 &&
-              note.stampScopeIds[0] === current.scopeId,
+              note.stampScopeIds[0] === bound.scopeId,
             'Conflicting prior note effect',
           );
           reviewer(authenticated ?? proposal.reviewer);
@@ -341,13 +342,16 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         const prior = await store.getNote({ id: proposal.id, read: 'all', includeDeleted: true });
         if (prior) return priorEffect(prior);
 
-        const legacyIds = await matchingNoteIds(current.id, marker, 'legacy-marker', postgres);
+        const legacyIds = await matchingNoteIds(target.id, marker, 'legacy-marker', postgres);
         requireReview(legacyIds.length <= 1, 'Conflicting prior note effect');
         if (legacyIds[0]) {
           const legacy = await store.getNote({ id: legacyIds[0], read: 'all', includeDeleted: true });
           requireReview(legacy, 'Prior note effect is missing');
           return priorEffect(legacy);
         }
+        const current = await currentPage();
+        requireReview(current, 'Note target is missing');
+        requireReview(current.id === target.id, 'Note target changed; reevaluate');
         await validate(proposal, authenticated, activeKnowledge);
         const duplicates = await matchingNoteIds(current.id, proposal.candidate.content, 'live-content', postgres);
         requireReview(duplicates.length === 0, 'A duplicate note now exists; reevaluate');

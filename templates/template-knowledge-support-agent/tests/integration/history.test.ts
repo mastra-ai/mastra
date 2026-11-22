@@ -320,7 +320,13 @@ test('history verifies note visibility and case ancestry at the same point in ti
     const { supportKnowledge } = f;
     const scope = 'customer:north:store-1';
     const path = 'cases/snapshot-check';
-    await supportKnowledge.upsertPage({ scope, path, name: 'Snapshot check', body: historyRecord('CASE_BODY') });
+    const { page } = await supportKnowledge.upsertPage({
+      scope,
+      path,
+      name: 'Snapshot check',
+      body: historyRecord('CASE_BODY'),
+    });
+    await supportKnowledge.upsertPage({ scope, path: 'archive', name: 'Archive' });
     const add = (summary: string) =>
       supportKnowledge.addNote({ scope, path, text: reviewedNote(historyRecord(summary)), author: 'review:synthetic' });
     const removedBefore = await add('WITHDRAWN_BEFORE_SNAPSHOT');
@@ -330,17 +336,13 @@ test('history verifies note visibility and case ancestry at the same point in ti
     const withReadSnapshot = supportKnowledge.withReadSnapshot;
     supportKnowledge.withReadSnapshot = async read => {
       await supportKnowledge.removeNote({ id: removedBefore.id });
-      return withReadSnapshot(snapshot =>
-        read({
-          getPages: async input => {
-            const current = await snapshot.getPages(input);
-            await supportKnowledge.removeNote({ id: removedDuring.id });
-            return current;
-          },
-          listNotes: snapshot.listNotes.bind(snapshot),
-          getNote: snapshot.getNote.bind(snapshot),
-        }),
-      );
+      return withReadSnapshot(async snapshot => {
+        // Anchor the read transaction before changing what a live ancestry lookup would see.
+        assert.equal((await snapshot.getPages({ ids: [page.id], read: 'all' })).length, 1);
+        await supportKnowledge.removeNote({ id: removedDuring.id });
+        await supportKnowledge.movePage({ scope, path, parent: 'archive' });
+        return read(snapshot);
+      });
     };
     const result = await run();
     supportKnowledge.withReadSnapshot = withReadSnapshot;
@@ -350,11 +352,8 @@ test('history verifies note visibility and case ancestry at the same point in ti
       [`${scope}#${path}`, `${scope}#${path}?note=${removedDuring.id}`].sort(),
     );
     const next = await run();
-    assert.equal(next.status, 'ready');
-    assert.deepEqual(
-      next.records.map(record => record.ref),
-      [`${scope}#${path}`],
-    );
+    assert.equal(next.status, 'empty');
+    assert.deepEqual(next.records, []);
   } finally {
     await f.close();
   }

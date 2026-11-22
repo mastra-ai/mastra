@@ -12,11 +12,11 @@ import { integrationProfiles, integrationReviewers } from '../../src/examples/ru
 import { resourceId } from '../../src/mastra/identity.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import type { Candidate, Proposal, ReviewInput } from '../../src/mastra/review/contracts.ts';
-import type { ScriptedReply } from './model-server.ts';
+import { messageText, type ScriptedReply } from './model-server.ts';
 
 const execute = promisify(execFile);
 export type Fixture = Awaited<ReturnType<typeof demoFixture>>;
-export type Message = { role: string; content?: string };
+type Message = { role: string; content?: unknown };
 export interface History {
   status: string;
   records: { ref: string; state: string; observedOn: string; applicability?: string; summary: string }[];
@@ -29,25 +29,28 @@ export const sentinels = {
   policy: 'ESCALATE_TO_EXAMPLE_SUPERVISOR_FIRST',
 };
 export function messages(body: Record<string, unknown>) {
-  return body.messages as Message[];
+  return (body.messages as Message[]).map(message => ({
+    ...message,
+    content: messageText(message.content),
+  }));
 }
 export function history(body: Record<string, unknown>): History {
-  const item = messages(body).find(message => message.content?.startsWith('Customer history preflight'));
+  const item = messages(body).find(message => message.content.startsWith('Customer history preflight'))?.content;
   assert.ok(item, 'Scoped preflight must reach the real provider');
-  return JSON.parse(item.content!.slice(item.content!.indexOf('\n') + 1));
+  return JSON.parse(item.slice(item.indexOf('\n') + 1));
 }
 export function latest(body: Record<string, unknown>) {
   const list = messages(body);
   let index = list.length - 1;
-  while (index >= 0 && (list[index]!.role !== 'user' || list[index]!.content?.startsWith('<pinned-knowledge'))) index--;
+  while (index >= 0 && (list[index]!.role !== 'user' || list[index]!.content.startsWith('<pinned-knowledge'))) index--;
   return {
     question: list[index]?.content ?? '',
     tools: list.slice(index + 1).filter(message => message.role === 'tool'),
   };
 }
-function parsedTool(message: Message | undefined): Record<string, any> {
-  assert.equal(typeof message?.content, 'string');
-  return JSON.parse(message!.content!);
+function parsedTool(message: { content: string } | undefined): Record<string, any> {
+  assert.ok(message, 'Expected a model tool result');
+  return JSON.parse(message.content);
 }
 export async function json(response: Response, status = 200) {
   const text = await response.text();
@@ -76,7 +79,7 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
     modelScript: body => {
       const list = messages(body);
       const allTools = list.filter(message => message.role === 'tool');
-      if (list.some(message => message.content?.includes('Review one confirmed customer outcome'))) {
+      if (list.some(message => message.content.includes('Review one confirmed customer outcome'))) {
         assert.ok(selected, 'Review scenario must select a candidate');
         if (!allTools.length)
           return { tool: { name: 'knowledge_search', arguments: { query: alternate ? 'authentication' : 'network' } } };
@@ -106,8 +109,8 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
         };
       if (question.includes('F5:policy')) {
         const pins = list
-          .filter(message => message.content?.startsWith('<pinned-knowledge'))
           .map(message => message.content)
+          .filter(text => text.startsWith('<pinned-knowledge'))
           .join('\n');
         assert.match(pins, /factory reset|credential values/u);
         return {
@@ -153,7 +156,7 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
       if (question.includes('F5:foreign')) {
         const ref = question.split('READ=')[1]!.split(' ')[0]!;
         if (!tools.length) return { tool: { name: 'knowledge_read', arguments: { page: ref, notes: true } } };
-        const denial = tools[0]!.content!;
+        const denial = tools[0]!.content;
         assert.ok(denial.startsWith(`Knowledge page "${ref}" not found.`), denial);
         assert.doesNotMatch(
           JSON.stringify(tools),
@@ -327,7 +330,12 @@ export async function thread(f: Fixture, owner = f.owner) {
     )
   ).id as string;
 }
-export async function turn(f: Fixture, id: string, question: string, owner = f.owner) {
+export async function turn(
+  f: Fixture,
+  id: string,
+  question: string | { type: 'text'; text: string }[],
+  owner = f.owner,
+) {
   return json(
     await post(
       f,

@@ -252,15 +252,21 @@ async function configureRuntime(
     });
     const deadline = Date.now() + 30000;
     while (Date.now() < deadline) {
+      const exited = launcher.exitCode !== null || launcher.signalCode !== null;
       if (!running.bound) {
         const plain = output.replace(/\x1b\[[0-9;]*m/gu, '');
         running.bound = plain
           .split('\n')
           .some(line => line.includes('API:') && line.split('API:').at(-1)?.trim() === `${base()}/api`);
-        if (!running.bound && /\bEADDRINUSE\b/u.test(plain)) return false;
+        if (!running.bound && (!exited || running.closed) && /\bEADDRINUSE\b/u.test(plain)) return false;
       }
       if (running.error) throw running.error;
-      if (launcher.exitCode !== null || launcher.signalCode !== null) throw new Error(`Dev exited: ${output}`);
+      if (running.closed) throw new Error(`Dev exited: ${output}`);
+      if (exited) {
+        // The launcher may exit before its output pipes close.
+        await setTimeout(Math.max(0, Math.min(200, deadline - Date.now())));
+        continue;
+      }
       if (options.generatedCredentials && !activeCredentialFile) {
         const match = /Local Studio credentials are available privately in (.+?)\. Open/u.exec(output);
         if (match) {

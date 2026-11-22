@@ -400,21 +400,24 @@ async function holdWriterLock(env, db) {
 async function verifyStalledPostgresWriter(db, env) {
   const destination = new URL(db.url);
   const proxy = createPortServer();
-  let upstream;
-  let downstream;
-  proxy.on('connection', socket => {
-    downstream = socket;
-    upstream = createConnection({ host: destination.hostname, port: Number(destination.port) });
-    socket.on('error', () => upstream.destroy());
-    upstream.on('error', () => socket.destroy());
-    socket.on('close', () => upstream.destroy());
-    upstream.on('close', () => socket.destroy());
-    socket.pipe(upstream).pipe(socket);
+  const pairs = new Map();
+  proxy.on('connection', downstream => {
+    const upstream = createConnection({ host: destination.hostname, port: Number(destination.port) });
+    pairs.set(downstream, upstream);
+    downstream.on('error', () => upstream.destroy());
+    upstream.on('error', () => downstream.destroy());
+    downstream.on('close', () => upstream.destroy());
+    upstream.on('close', () => {
+      downstream.destroy();
+      pairs.delete(downstream);
+    });
+    downstream.pipe(upstream).pipe(downstream);
   });
   proxy.listen(0, host);
   await once(proxy, 'listening');
   const proxyUrl = new URL(destination);
   proxyUrl.port = String(proxy.address().port);
+  const writerName = `support-stalled-writer-${randomUUID()}`;
   const imports = "import { withWriterLock } from './src/mastra/knowledge/writer-lock.ts';";
   const proc = start(
     process.execPath,
@@ -439,16 +442,38 @@ async function verifyStalledPostgresWriter(db, env) {
       );
       process.disconnect();`,
     ],
-    { ...env, ...databaseEnv({ url: proxyUrl.href }) },
+    { ...env, ...databaseEnv({ url: proxyUrl.href }), PGAPPNAME: writerName },
     template,
     true,
   );
   try {
-    const [message] = await once(proc.child, 'message', { signal: AbortSignal.timeout(5000) });
+    const [message] = await Promise.race([
+      once(proc.child, 'message', { signal: AbortSignal.timeout(5000) }),
+      proc.exited.then(() => {
+        throw new Error(`Stalled writer exited before acquiring its lock: ${proc.output()}`);
+      }),
+    ]);
     assert.equal(message, 'writer-held');
-    assert.ok(upstream);
-    // Keep the TCP connection open while suppressing the next PostgreSQL reply.
-    upstream.pause();
+    const observer = new Client({
+      connectionString: proxyUrl.href,
+      application_name: 'support-proxy-observer',
+      connectionTimeoutMillis: 5000,
+      query_timeout: 5000,
+    });
+    try {
+      await observer.connect();
+      const { rows } = await observer.query('SELECT client_port FROM pg_stat_activity WHERE application_name = $1', [
+        writerName,
+      ]);
+      assert.equal(rows.length, 1, 'Identify the PostgreSQL writer session behind the proxy');
+      const upstream = [...pairs.values()].find(socket => socket.localPort === rows[0].client_port);
+      assert.ok(upstream, 'The stalled writer must have an open upstream connection');
+      // Keep the writer's TCP connection open while suppressing its next PostgreSQL reply.
+      upstream.pause();
+      assert.equal((await observer.query('SELECT 1 AS available')).rows[0].available, 1);
+    } finally {
+      await observer.end();
+    }
     proc.child.send('query');
     const [code] = await Promise.race([
       proc.exited,
@@ -463,8 +488,10 @@ async function verifyStalledPostgresWriter(db, env) {
       { cwd: template, env: { ...env, ...databaseEnv(db) }, timeout: 5000 },
     );
   } finally {
-    downstream?.destroy();
-    upstream?.destroy();
+    for (const [downstream, upstream] of pairs) {
+      downstream.destroy();
+      upstream.destroy();
+    }
     await Promise.all([stop(proc), new Promise(resolve => proxy.close(resolve))]);
   }
 }
@@ -838,7 +865,10 @@ try {
   for (let attempt = 0; attempt < 20; attempt++) {
     const draft = randomUUID();
     const race = await Promise.all([generate(first, technician, draft), generate(second, reviewer, draft)]);
-    assert.deepEqual(race.map(response => response.status).sort(), [200, 403]);
+    assert.equal(race.filter(response => response.status === 200).length, 1);
+    const refused = race.find(response => response.status !== 200);
+    assert.ok(refused && (refused.status === 403 || refused.status === 503));
+    if (refused.status === 503) assert.equal(refused.headers.get('Retry-After'), '1');
     const winner = race[0].status === 200 ? technician : reviewer;
     const loser = winner === technician ? reviewer : technician;
     await Promise.all(race.map(response => response.text()));
@@ -847,6 +877,7 @@ try {
     const { tenant_id, customer_id, sub } = profiles.get(winner);
     assert.equal(saved.resourceId, JSON.stringify([tenant_id, customer_id, sub]));
     assert.equal((await request(first, route, loser)).status, 403);
+    assert.equal((await generate(first, loser, draft)).status, 403);
   }
 
   const { id: thread } = await createThread(first, technician);
@@ -888,8 +919,19 @@ try {
   );
   profiles.set(reviewer, grant);
 
+  const draftThread = randomUUID();
+  const generateRoute = '/api/agents/support/generate';
+  const firstTurn = {
+    messages: [{ role: 'user', content: 'Check the network connection' }],
+    memory: { thread: draftThread },
+  };
   const holder = await holdWriterLock(env, db);
   try {
+    const beforeTurn = model.requests.length;
+    const busy = await request(second, generateRoute, technician, firstTurn);
+    assert.equal(busy.headers.get('Retry-After'), '1');
+    assert.match((await json(busy, 503)).error, /writer is busy/u);
+    assert.equal(model.requests.length, beforeTurn, 'The busy draft claim must stop before provider execution');
     await assert.rejects(seed, { code: 75 }, 'An admin seed sees the shared writer lock');
     const blocked = await json(
       request(second, resumeRoute(runId), reviewer, {
@@ -903,6 +945,10 @@ try {
     await stop(holder);
   }
   await seed(); // The database session/OS lock is released when its owner exits.
+  assert.match((await json(request(second, generateRoute, technician, firstTurn))).text, /Wi-Fi network/u);
+  const denied = await request(second, generateRoute, reviewer, firstTurn);
+  assert.equal(denied.headers.get('Retry-After'), null);
+  assert.equal(denied.status, 403, 'A different technician cannot claim the existing thread');
   const resumed = await json(
     request(second, resumeRoute(runId), reviewer, {
       step: ['publish-review'],

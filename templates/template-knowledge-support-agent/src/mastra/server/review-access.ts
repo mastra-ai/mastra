@@ -80,7 +80,8 @@ const startRun: WritePolicy = ({ body, owner, run }) =>
   (body.closeOnSuspend === undefined || body.closeOnSuspend === true);
 
 const restartRun: WritePolicy = ({ body, owner, actorId, run }) => {
-  if (!onlyKeys(body, []) || run?.status !== 'running') return false;
+  if (run?.status !== 'running' || !onlyKeys(body, ['requestContext']) || !emptyObjectOption(body.requestContext))
+    return false;
 
   const decision = run.steps?.['review-decision'];
   if (!decision || Array.isArray(decision) || decision.status !== 'success') return false;

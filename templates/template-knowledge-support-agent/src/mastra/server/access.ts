@@ -1,6 +1,6 @@
 import { recordOperation } from '../observability.ts';
 import { readFileSync } from 'node:fs';
-import type { MastraAuthConfig } from '@mastra/core/server';
+import type { MastraAuthConfig, Middleware } from '@mastra/core/server';
 import { getWebRequest } from '@mastra/core/server';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -13,6 +13,7 @@ import { createStudioAccess } from './studio-access.ts';
 import { createReviewAccess } from './review-access.ts';
 import type { ReviewWorkflow } from '../workflows/review-workflow.ts';
 import type { ReviewerAuthority } from '../review/service.ts';
+import { WriterBusyError } from '../knowledge/writer-lock.ts';
 
 export type LocalProfile = Profile & { role: string; review?: boolean };
 export type CredentialSource = Credential[] | (() => Credential[]);
@@ -61,13 +62,24 @@ export function createSupportAuthorization(
 ) {
   const authorizeStudioRoute = createStudioAccess(memory);
   const authorizeReviewRoute = createReviewAccess(reviewWorkflow, authority);
-  return async (
+  const busyRequests = new WeakSet<RequestContext>();
+  const writerContentionResponse: Middleware = async (context, next) => {
+    await next();
+    // Mastra authorization returns a boolean. Replace its denial for this request after it stops dispatch.
+    if (busyRequests.has(context.get('requestContext'))) {
+      context.res = context.json({ error: 'Knowledge writer is busy. Retry shortly.' }, 503, {
+        'Retry-After': '1',
+      });
+    }
+  };
+
+  async function authorize(
     path: string,
     method: string,
     request: Request | undefined,
     profile: LocalProfile | null,
     requestContext: RequestContext,
-  ) => {
+  ) {
     const started = performance.now();
     if (!profile || !request) {
       recordOperation('authorization', 'denied', started);
@@ -80,13 +92,22 @@ export function createSupportAuthorization(
 
     const review = await authorizeReviewRoute(path, method, request, owner, profile);
     const confirmation = authorizeConfirmation(path, method, request);
-    const allowed = confirmation ?? review ?? (await authorizeStudioRoute(path, method, request, owner));
-    recordOperation('authorization', allowed ? 'success' : 'denied', started);
-    return allowed;
-  };
+    try {
+      const allowed = confirmation ?? review ?? (await authorizeStudioRoute(path, method, request, owner));
+      recordOperation('authorization', allowed ? 'success' : 'denied', started);
+      return allowed;
+    } catch (error) {
+      if (!(error instanceof WriterBusyError)) throw error;
+      busyRequests.add(requestContext);
+      recordOperation('authorization', 'error', started);
+      return false;
+    }
+  }
+
+  return { authorize, writerContentionResponse };
 }
 
-export type SupportAuthorization = ReturnType<typeof createSupportAuthorization>;
+export type SupportAuthorization = ReturnType<typeof createSupportAuthorization>['authorize'];
 
 type AuthorizationRequest = Request | { raw?: Request; header?(name: string): string | undefined };
 

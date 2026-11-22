@@ -5,7 +5,8 @@ export function hasHostedOAuthConfiguration() {
   return Boolean(
     process.env.SUPPORT_OAUTH_INTROSPECTION_URL ||
     process.env.SUPPORT_OAUTH_INTROSPECTION_TOKEN ||
-    process.env.SUPPORT_OAUTH_ISSUER,
+    process.env.SUPPORT_OAUTH_ISSUER ||
+    process.env.SUPPORT_OAUTH_AUDIENCE,
   );
 }
 
