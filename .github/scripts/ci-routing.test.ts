@@ -329,7 +329,9 @@ describe('quality assurance CI routing', () => {
     expect(workflow).toContain('discoverPackages(process.cwd())');
     expect(workflow).toContain('findPackagesMissingDocs(process.cwd())');
     expect(workflow).toContain('has_readme_inputs: ${{ steps.filter.outputs.has_readme_inputs }}');
-    expect(workflow).toMatch(/- name: Run README validator\n\s+if: \$\{\{[^\n]*needs\.changes\.outputs\.has_readme_inputs == 'true'/);
+    expect(workflow).toMatch(
+      /- name: Run README validator\n\s+if: \$\{\{[^\n]*needs\.changes\.outputs\.has_readme_inputs == 'true'/,
+    );
     expect(workflow).toContain('run: node .github/scripts/check-package-readmes.mjs');
   });
 
