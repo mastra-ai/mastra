@@ -11,6 +11,8 @@ import { createTool } from '../tool';
 export interface AskUserOption {
   label: string;
   description?: string;
+  /** A display hint for the host, not a default answer. */
+  recommended?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export interface AskUserSuspendPayload {
 const optionSchema = z.object({
   label: z.string().describe('Short display text for this option (1-5 words)'),
   description: z.string().optional().describe('Explanation of what this option means'),
+  recommended: z.boolean().optional().describe('Marks this option as recommended without selecting it'),
 });
 
 /**
