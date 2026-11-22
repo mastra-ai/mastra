@@ -222,7 +222,7 @@ describe('runDurableFinishSideEffects', () => {
     // but told never to create the thread row, so a title cannot end up in an otherwise empty row.
     expect(flushMessages).not.toHaveBeenCalled();
     expect(generateThreadTitle).toHaveBeenCalledTimes(1);
-    expect(generateThreadTitle).toHaveBeenCalledWith(expect.objectContaining({ requireExistingThread: true }));
+    expect(generateThreadTitle).toHaveBeenCalledWith(expect.objectContaining({ fromStoredThread: true }));
   });
 
   it('still generates a title for an ordinary run', async () => {

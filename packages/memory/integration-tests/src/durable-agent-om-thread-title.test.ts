@@ -14,9 +14,11 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
+import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 function textModel(text: string) {
   const calls: unknown[] = [];
@@ -50,6 +52,49 @@ function textModel(text: string) {
   return { model, calls };
 }
 
+/**
+ * Steps 0 and 1 call `lookupWeather`, step 2 answers in prose. OM keeps the request while it is
+ * still unread (step 0, and step 1 when it is first drained); from step 2 on, an observation prunes it.
+ */
+function toolThenTextModel() {
+  let call = 0;
+  const finish = (finishReason: 'tool-calls' | 'stop') =>
+    ({ type: 'finish', finishReason, usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } }) as const;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      const step = call++;
+      const chunks =
+        step < 2
+          ? [
+              { type: 'tool-call', toolCallId: `call-${step}`, toolName: 'lookupWeather', input: '{"city":"Lisbon"}' },
+              finish('tool-calls'),
+            ]
+          : [
+              { type: 'text-start', id: 't1' },
+              { type: 'text-delta', id: 't1', delta: 'It is sunny in Lisbon.' },
+              { type: 'text-end', id: 't1' },
+              finish('stop'),
+            ];
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: randomUUID(), modelId: 'mock', timestamp: new Date(0) },
+          ...chunks,
+        ] as any),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+}
+
+const lookupWeather = createTool({
+  id: 'lookupWeather',
+  description: 'Look up the weather for a city.',
+  inputSchema: z.object({ city: z.string() }),
+  execute: async () => ({ forecast: 'sunny', highC: 23 }),
+});
+
 const ENGINES = { durable: createDurableAgent, evented: createEventedAgent } as const;
 
 describe.each(Object.entries(ENGINES))('#30478 durable OM thread title — %s engine', (engine, wrap) => {
@@ -65,14 +110,16 @@ describe.each(Object.entries(ENGINES))('#30478 durable OM thread title — %s en
     await rm(dbDir, { recursive: true, force: true });
   });
 
-  async function runTurn({ readOnly = false } = {}) {
+  async function runTurn({ readOnly = false, observeMidTurn = false } = {}) {
     const title = textModel('Lisbon Weather');
-    const observer = textModel('<observations></observations>');
+    const observer = textModel('<observations>\n- User asked about the weather in Lisbon.\n</observations>');
     const observationalMemory = {
       enabled: true,
       model: observer.model,
       scope: 'thread',
-      observation: { messageTokens: 1_000_000 },
+      // Mid-turn: observe as soon as anything is unobserved, synchronously, so step 0's request is
+      // observed before step 1 and pruned from the run's message list.
+      observation: observeMidTurn ? { messageTokens: 1, bufferTokens: false } : { messageTokens: 1_000_000 },
       reflection: { observationTokens: 1_000_000 },
     };
     const memory = new Memory({
@@ -89,7 +136,8 @@ describe.each(Object.entries(ENGINES))('#30478 durable OM thread title — %s en
       id: `om-title-${engine}`,
       name: 'OM Title Agent',
       instructions: 'Answer briefly.',
-      model: textModel('It is sunny in Lisbon.').model,
+      model: observeMidTurn ? toolThenTextModel() : textModel('It is sunny in Lisbon.').model,
+      tools: observeMidTurn ? { lookupWeather } : undefined,
       memory,
     });
     const runner = wrap({ agent });
@@ -99,6 +147,7 @@ describe.each(Object.entries(ENGINES))('#30478 durable OM thread title — %s en
     const resource = 'om-title-resource';
     const result = await (runner as any).stream('What is the weather in Lisbon today?', {
       memory: { thread, resource, options: { observationalMemory, readOnly } },
+      maxSteps: 5,
     });
     for await (const _chunk of result.fullStream as AsyncIterable<unknown>) {
     }
@@ -115,6 +164,22 @@ describe.each(Object.entries(ENGINES))('#30478 durable OM thread title — %s en
     expect(messages.map(m => m.role)).toEqual(['user', 'assistant']);
     expect(title.calls).toHaveLength(1);
     expect(observer.calls).toHaveLength(0);
+
+    result.cleanup?.();
+    await mastra.stopWorkers?.();
+  });
+
+  // The observer runs on every step, so by the last step OM has dropped the turn's request from the
+  // run's message list: the observations stand in for it. The title must still come from it.
+  it('titles the thread when the turn was observed mid-turn', async () => {
+    const { memory, mastra, thread, result, title, observer } = await runTurn({ observeMidTurn: true });
+
+    await vi.waitFor(async () => {
+      expect((await memory.getThreadById({ threadId: thread }))?.title).toBe('Lisbon Weather');
+    });
+    expect(observer.calls.length).toBeGreaterThan(0);
+    expect(title.calls).toHaveLength(1);
+    expect(JSON.stringify(title.calls[0])).toContain('What is the weather in Lisbon today?');
 
     result.cleanup?.();
     await mastra.stopWorkers?.();

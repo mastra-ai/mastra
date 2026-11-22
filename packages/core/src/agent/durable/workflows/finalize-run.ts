@@ -428,9 +428,11 @@ export async function runDurableFinishSideEffects({
   let titleGeneration: Promise<void> | undefined;
   let titleForStream: Promise<string | undefined> | undefined;
 
-  // Observational memory saves its own messages, so the flush above skips OM runs and their
-  // thread row is not guaranteed to exist here. Title it only if the row is there, so a title
-  // never ends up in a row holding nothing else.
+  // Observational memory saves its own messages, so the flush above skips OM runs, and the run's
+  // message list is OM's working context rather than the transcript: by now it may have dropped
+  // the request it observed and added its continuation reminder. Title an OM run from its stored
+  // thread instead, and only if that row exists, so a title never ends up in a row holding
+  // nothing else.
   if (durableState?.threadId && durableState?.resourceId && !durableState.memoryConfig?.readOnly) {
     const titleArgs: GenerateThreadTitleArgs = {
       threadId: durableState.threadId,
@@ -439,7 +441,7 @@ export async function runDurableFinishSideEffects({
       messageListState: messageList.serialize(),
       requestContext: effectiveRequestContext,
       tracingContext,
-      requireExistingThread: !!durableState.observationalMemory,
+      fromStoredThread: !!durableState.observationalMemory,
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
@@ -846,6 +848,9 @@ async function runStructuringPass({
   return chunks;
 }
 
+/** How many of a stored thread's newest messages an observational-memory run titles from. */
+const STORED_TITLE_MESSAGES = 40;
+
 /**
  * Generate a durable thread title from messages belonging to that thread.
  * This is standalone so a remote worker can call it with the agent and memory
@@ -860,17 +865,29 @@ export async function generateDurableThreadTitle({
   messageListState,
   requestContext,
   tracingContext,
-  requireExistingThread,
+  fromStoredThread,
 }: GenerateThreadTitleArgs & { agent: AnyAgent; memory: MastraMemory }): Promise<string | undefined> {
   const thread = await memory.getThreadById({ threadId });
-  if (requireExistingThread && !thread) return undefined;
+  if (fromStoredThread && !thread) return undefined;
   const mergedConfig = memory.getMergedThreadConfig(memoryConfig);
   const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
     mergedConfig.generateTitle,
   );
   if (!shouldGenerate || thread?.title) return undefined;
 
-  const titleMessageList = new MessageList().deserialize(messageListState);
+  const titleMessageList = fromStoredThread
+    ? new MessageList({ threadId, resourceId }).add(
+        (
+          await memory.recall({
+            threadId,
+            resourceId,
+            perPage: STORED_TITLE_MESSAGES,
+            orderBy: { field: 'createdAt', direction: 'DESC' },
+          })
+        ).messages.reverse(),
+        'memory',
+      )
+    : new MessageList().deserialize(messageListState);
   const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
   if (uiMessages.length < (minMessages ?? 1)) return undefined;
 
