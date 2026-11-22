@@ -7,9 +7,9 @@ description: "Browse Bailing model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/bailing.svg" alt="Bailing logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Bailing
 
-Access 2 Bailing models through Mastra's model router. Authentication is handled automatically using the `BAILING_API_TOKEN` environment variable.
+Access 5 Bailing models through Mastra's model router. Authentication is handled automatically using the `BAILING_API_TOKEN` environment variable.
 
-Learn more in the [Bailing documentation](https://alipaytbox.yuque.com/sxs0ba/ling/intro).
+Learn more in the [Bailing documentation](https://developer.ant-ling.com/zh-CN/docs).
 
 ```bash title=".env"
 BAILING_API_TOKEN=your-api-token
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "bailing/Ling-1T"
+  model: "bailing/Ling-3.0-flash"
 });
 
 // Generate a response
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::note
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Bailing documentation](https://alipaytbox.yuque.com/sxs0ba/ling/intro) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Bailing documentation](https://developer.ant-ling.com/zh-CN/docs) for details.
 
 :::
 
@@ -46,28 +46,64 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "bailing/Ling-1T",
+    "model": "bailing/Ling-3.0-flash",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
-    "inputCost": 0.57,
-    "outputCost": 2.29
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.075,
+    "outputCost": 0.224
   },
   {
-    "model": "bailing/Ring-1T",
+    "model": "bailing/Ling-3.0-flash-VL",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.075,
+    "outputCost": 0.224
+  },
+  {
+    "model": "bailing/Ling-3.0-tiny",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
-    "inputCost": 0.57,
-    "outputCost": 2.29
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "bailing/Ling-3.1-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "bailing/Ling-3.2-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -85,8 +121,8 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.tbox.cn/api/llm/v1",
-    id: "bailing/Ling-1T",
+    url: "https://api.ant-ling.com/v1",
+    id: "bailing/Ling-3.0-flash",
     apiKey: process.env.BAILING_API_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -106,8 +142,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "bailing/Ring-1T"
-      : "bailing/Ling-1T";
+      ? "bailing/Ling-3.2-flash"
+      : "bailing/Ling-3.0-flash";
   }
 });
 ```

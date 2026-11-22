@@ -1,7 +1,8 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import type { MastraVector } from '@mastra/core/vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 import type { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MIN_OBSERVATION_THRESHOLD } from '../constants.js';
@@ -26,6 +27,9 @@ const lazyFastembedSmall: typeof fastembed.small = {
   supportsParallelCalls: true,
   doEmbed: options => embedInSubprocess(options),
 };
+
+/** A recall embedder: a `provider/model` router string or an AI SDK embedding model. */
+export type MemoryEmbedder = string | MastraEmbeddingModel<string>;
 
 /** Route-backed OM fallback entry. */
 type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
@@ -213,6 +217,21 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
 export { LOCAL_KNOWLEDGE_ORG_ID };
 
 /**
+ * Mastra Code's own title instructions: session lists show one narrow line per
+ * title. They differ from Core's default in three ways: the title is 3 to 5
+ * words instead of up to 80 characters, it names the topic instead of
+ * summarising the message, and it does not end with a period.
+ */
+export const TITLE_INSTRUCTIONS = `
+  - you will generate a short title based on a conversation transcript between a user and an assistant
+  - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
+  - always produce a title, even when the transcript is only a greeting or trivial exchange
+  - the title must be 3 to 5 words long
+  - the title should name the topic of the user's message, not repeat or answer it
+  - do not use quotes or colons, and do not end with a period
+  - the entire text you return will be used as the title`;
+
+/**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
@@ -221,8 +240,20 @@ export function getDynamicMemory(
   storage: MastraCompositeStore,
   vector?: MastraVector,
   settingsPath?: string,
-  options?: { disableSettingsOmSeed?: boolean },
+  options?: {
+    disableSettingsOmSeed?: boolean;
+    /** Recall embedder, used only with `vector`. Omitted → local `fastembed.small` (bge-small, 384 dimensions). */
+    embedder?: MemoryEmbedder;
+    /** Options passed to every embedding call, e.g. provider options or headers. */
+    embedderOptions?: MastraEmbeddingOptions;
+  },
 ) {
+  // Built now, so a missing provider key throws here rather than on the first embed.
+  const embedder = !vector
+    ? undefined
+    : typeof options?.embedder === 'string'
+      ? new ModelRouterEmbeddingModel(options.embedder)
+      : (options?.embedder ?? lazyFastembedSmall);
   // Cache is scoped per storage instance (per getDynamicMemory call) so a
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
@@ -309,7 +340,8 @@ export function getDynamicMemory(
     cachedMemory = new Memory({
       storage,
       vector: vector || false,
-      embedder: vector ? lazyFastembedSmall : undefined,
+      embedder,
+      embedderOptions: options?.embedderOptions,
       options: {
         // Generate a durable title from the first user message. Every client uses
         // the same title in its thread list and active-session chrome. Title
@@ -319,6 +351,7 @@ export function getDynamicMemory(
           process.env.MASTRACODE_DISABLE_TITLE_GENERATION === '1'
             ? false
             : {
+                instructions: TITLE_INSTRUCTIONS,
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
                   if (resolved === 'auto') {

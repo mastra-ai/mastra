@@ -14,7 +14,7 @@ export const dataDirectory = resolve(
 
 export const model: MastraModelConfig = {
   providerId: "openai",
-  modelId: process.env.ANALYSIS_MODEL ?? "gpt-4.1-mini",
+  modelId: process.env.ANALYSIS_MODEL ?? "gpt-6-luna",
   ...(process.env.ANALYSIS_BASE_URL
     ? { url: process.env.ANALYSIS_BASE_URL, api: "chat" as const }
     : {}),

@@ -411,7 +411,7 @@ Message queries return `MastraDBMessage[]` format. To display messages in a fron
 
 ## Thread cloning
 
-Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations or creating checkpoints before a potentially destructive operation, or alternatively testing variations of a conversation.
+Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations or creating checkpoints before a destructive operation, or alternatively testing variations of a conversation.
 
 ```typescript
 const { thread, clonedMessages } = await memory.cloneThread({

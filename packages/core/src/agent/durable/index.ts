@@ -79,11 +79,11 @@ export {
 // DurableAgent class (base class for durable agents)
 export {
   DurableAgent,
-  applyReservedMemoryContextKeys,
   type DurableAgentConfig,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
 } from './durable-agent';
+export { applyReservedMemoryContextKeys } from '../helpers';
 
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
 export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './evented-agent';
@@ -280,5 +280,7 @@ export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
 
 // Shared runtime outcome classification for external durable engines.
 export { endRunSpansWithError } from './run-registry';
+/** @internal The span pair a resumed or recovered execution reports under, shared with external durable engines. */
+export { carrySegmentSpans, liveSegmentSpan, segmentSpanData, type SegmentSpanData } from './segment-spans';
 /** @internal Runtime instrumentation helpers. */
 export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

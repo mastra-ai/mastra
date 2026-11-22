@@ -7,16 +7,24 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import {
+  ComparisonMetricList,
+  ComparisonPayload,
+  ComparisonSection,
+  sectionStackClass,
+} from '@mastra/playground-ui/domains/experiments';
+import type { ComparisonMetric } from '@mastra/playground-ui/domains/experiments';
+import { ComputedTag } from '@mastra/playground-ui/domains/observability';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
 import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
 import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
 import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -33,14 +41,9 @@ import {
   getResultToolCalls,
 } from '../utils/result-output';
 import { sideDurationMs } from './comparison/build-comparison-rows';
-import { ComparisonMetricList } from './comparison/comparison-metric-list';
-import type { ComparisonMetric } from './comparison/comparison-metric-list';
-import { ComparisonPayload } from './comparison/comparison-payload';
-import { ComparisonSection, sectionStackClass } from './comparison/comparison-section';
 import { itemMetrics } from './comparison/item-metrics';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
-import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
  * Structural subset of `DatasetExperimentResult` the panel renders. Review-queue
@@ -223,7 +226,7 @@ function ExperimentResultPanelBody({
       ? [
           {
             id: 'status',
-            icon: <IconCircleRecord />,
+            icon: <CircleDotIcon />,
             label: 'Status',
             value: <ReviewStatusBadge status={result.status} />,
             delta: null,

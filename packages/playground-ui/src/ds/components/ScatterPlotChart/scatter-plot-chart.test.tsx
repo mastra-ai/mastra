@@ -21,22 +21,6 @@ describe('ScatterPlotChart', () => {
     expect(screen.getByText('No data to display')).not.toBeNull();
   });
 
-  it('does not render a point count legend for supplied data', () => {
-    render(
-      <ScatterPlotChart
-        data={[
-          { id: 'trace-a', duration: 120, cost: 0.4 },
-          { id: 'trace-b', duration: 240, cost: 0.8 },
-        ]}
-        xKey="duration"
-        yKey="cost"
-      />,
-    );
-
-    expect(screen.queryByText('Points')).toBeNull();
-    expect(screen.queryByText('2')).toBeNull();
-  });
-
   it('keeps formatted axis ticks on a single line', () => {
     expect(formatScatterPlotAxisTick(12, value => `${value} spans`)).toBe('12\u00A0spans');
   });

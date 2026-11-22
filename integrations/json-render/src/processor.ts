@@ -23,6 +23,7 @@ import type {
 } from '@mastra/core/processors';
 import type { ChunkType } from '@mastra/core/stream';
 import type { z } from 'zod';
+import { JSON_RENDER_STATE } from './state';
 
 const FENCE_OPEN = '```spec';
 const FENCE_CLOSE = '```';
@@ -100,9 +101,6 @@ function latestSpec(messages: ReadonlyArray<MastraDBMessage>): Spec | undefined 
     if (spec) return spec;
   }
 }
-
-/** The `requestContext` key a client sends the state its interface holds under, so the model can see it. */
-export const JSON_RENDER_STATE = 'jsonRender.state';
 
 /**
  * Turns the ```spec blocks a model writes (json-render's text format) into

@@ -1,4 +1,11 @@
-export * from './agent-cms-blocks';
-export * from './agent-cms-block';
-export * from './agent-cms-ref-block';
-export * from './prompt-block-picker-dialog';
+export {
+  AgentCMSBlocks,
+  AgentCMSBlock,
+  AgentCMSRefBlock,
+  PromptBlockPickerDialog,
+} from '@mastra/playground-ui/domains/instruction-blocks';
+export type {
+  AgentCMSBlocksProps,
+  AgentCMSBlockProps,
+  AgentCMSRefBlockProps,
+} from '@mastra/playground-ui/domains/instruction-blocks';

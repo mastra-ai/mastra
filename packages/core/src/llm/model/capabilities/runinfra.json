@@ -1,5 +1,10 @@
 {
-  "attachment": ["Qwen/Qwen3.8-27B", "ornith-ai/Ornith-1.5-35B-A3B", "zai-org/GLM-5.3-Flash"],
+  "attachment": [
+    "Qwen/Qwen3.8-27B",
+    "ornith-ai/Ornith-1.5-35B-A3B",
+    "stepfun-ai/Step-5-Preview",
+    "zai-org/GLM-5.3-Flash"
+  ],
   "temperature": [
     "Inferact/Qwen3.8-2.4T-A95B-NVFP4",
     "Qwen/Qwen3.8-27B",
@@ -7,6 +12,7 @@
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
     "ornith-ai/Ornith-1.5-35B-A3B",
+    "stepfun-ai/Step-5-Preview",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
@@ -17,29 +23,12 @@
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
     "ornith-ai/Ornith-1.5-35B-A3B",
+    "stepfun-ai/Step-5-Preview",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
       {
         "type": "toggle"
       }
@@ -49,21 +38,45 @@
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
+    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "max"]
+      }
+    ],
+    "stepfun-ai/Step-5-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

@@ -94,7 +94,7 @@ function ErrorSession({
             busy: false,
             phase: 'awaiting',
             initializing: false,
-            historyInitializing: false,
+            loadingHistory: false,
             initialHistoryReady: true,
             localUser,
             failLocalUser,
@@ -283,6 +283,26 @@ describe('chat run errors', () => {
       await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
     },
   );
+
+  it('shows a retry as progress rather than a stopped run', () => {
+    renderWithProviders(
+      <ErrorSession
+        messages={[]}
+        liveEvent={{
+          type: 'error',
+          error: { name: 'Error', message: '[object Object]' },
+          retryable: true,
+          retryAttempt: 1,
+          maxRetries: 10,
+          retryDelay: 500,
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/Retrying request \(attempt 1 of 10\)/)).toBeVisible();
+    expect(screen.queryByText('Run stopped')).not.toBeInTheDocument();
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+  });
 
   it('classifies a live error by the status the server kept, not by its message alone', () => {
     renderWithProviders(

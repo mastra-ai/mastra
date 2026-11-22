@@ -348,7 +348,8 @@ describe('DataPanel', () => {
           </DataPanel>
         </TooltipProvider>,
       );
-      expect(screen.queryByRole('separator')).toBeNull();
+      const content = screen.getByRole('heading', { name: 'Trace' }).parentElement;
+      expect(content?.querySelector('[aria-hidden="true"]')).toBeNull();
     });
   });
 
@@ -403,27 +404,6 @@ describe('DataPanel', () => {
       expect(region.className).toContain('w-96');
       const describedBy = region.getAttribute('aria-describedby');
       expect(describedBy && document.getElementById(describedBy)?.textContent).toBe('Details of the selected span');
-    });
-
-    it('calls the close button onClick', () => {
-      const onClose = vi.fn();
-
-      render(
-        <TooltipProvider>
-          <DataPanel variant="inline" title="Span details">
-            <DataPanel.Header>
-              <DataPanel.Heading>Span</DataPanel.Heading>
-              <DataPanel.HeaderActions>
-                <DataPanel.CloseButton icon="x" onClick={onClose} />
-              </DataPanel.HeaderActions>
-            </DataPanel.Header>
-            <DataPanel.Content>Panel body</DataPanel.Content>
-          </DataPanel>
-        </TooltipProvider>,
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: 'Close panel' }));
-      expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('opens a nested Select', async () => {

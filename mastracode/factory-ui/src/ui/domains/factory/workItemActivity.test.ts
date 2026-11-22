@@ -168,7 +168,7 @@ describe('workItemActivity', () => {
     expect(activity.lastWorker).toEqual({
       id: 'github:octocat',
       name: 'octocat',
-      avatarUrl: 'https://github.com/octocat.png?size=64',
+      avatarUrl: 'https://avatars.githubusercontent.com/octocat?s=64',
     });
   });
 

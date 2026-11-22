@@ -26,11 +26,7 @@ beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
 afterAll(() => vi.unstubAllGlobals());
 
 beforeEach(() => {
-  server.use(
-    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(toolCallsTrace)),
-    http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
-    http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json(registeredTools)),
-  );
+  server.use(http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })));
 });
 
 const payloadSectionStartingWith = (label: string) => () => {
@@ -47,6 +43,8 @@ function DataPanelOnOutput({ span }: { span: SpanRecord }) {
   return (
     <SpanDataPanelView
       traceId={TOOL_CALLS_TRACE_ID}
+      traceSpans={toolCallsTrace.spans}
+      registeredTools={registeredTools}
       spanId={span.spanId}
       span={span}
       activeTab={tab}
@@ -73,7 +71,13 @@ const LAYOUTS = [
   {
     layout: 'details',
     renderSpan: (span: SpanRecord) => (
-      <SpanDetailsView traceId={TOOL_CALLS_TRACE_ID} spanId={span.spanId} span={span} />
+      <SpanDetailsView
+        traceId={TOOL_CALLS_TRACE_ID}
+        spanId={span.spanId}
+        span={span}
+        traceSpans={toolCallsTrace.spans}
+        registeredTools={registeredTools}
+      />
     ),
     toolCallsSection: () => {
       const found = document
@@ -95,6 +99,8 @@ describe('Tool calls in the data panel', () => {
       <TestLinkProvider>
         <SpanDataPanelView
           traceId={TOOL_CALLS_TRACE_ID}
+          traceSpans={toolCallsTrace.spans}
+          registeredTools={registeredTools}
           spanId="generation"
           span={toolCallsGenerationSpan}
           activeTab="output"
@@ -114,7 +120,13 @@ describe('Tool calls in the details layout', () => {
   it('keep their own section, counting only the calls the chat draws', async () => {
     const { queryClient } = renderWithProviders(
       <TestLinkProvider>
-        <SpanDetailsView traceId={TOOL_CALLS_TRACE_ID} spanId="generation" span={toolCallsGenerationSpan} />
+        <SpanDetailsView
+          traceId={TOOL_CALLS_TRACE_ID}
+          spanId="generation"
+          span={toolCallsGenerationSpan}
+          traceSpans={toolCallsTrace.spans}
+          registeredTools={registeredTools}
+        />
       </TestLinkProvider>,
     );
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));

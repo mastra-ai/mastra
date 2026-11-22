@@ -4,7 +4,9 @@ import {
   MastraCompositeStore,
   KnowledgeStorage,
   KnowledgeConflictError,
+  KnowledgeMoveTooLargeError,
   KnowledgeNotFoundError,
+  KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
   KnowledgePageKeyConflictError,
 } from '@mastra/core/storage';
@@ -120,7 +122,16 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     });
     const text = await response.text();
     if (!response.ok) {
-      let body: { name?: string; detail?: string; title?: string; error?: { name?: string; message?: string } } = {};
+      let body: {
+        name?: string;
+        detail?: string;
+        title?: string;
+        error?: { name?: string; message?: string };
+        key?: unknown;
+        parentId?: unknown;
+        pageId?: unknown;
+        pages?: unknown;
+      } = {};
       try {
         const parsed: unknown = JSON.parse(text);
         if (parsed && typeof parsed === 'object') body = parsed;
@@ -146,7 +157,9 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
         throw error;
       }
       if (name === 'KnowledgePageKeyConflictError') {
-        const error = new KnowledgePageKeyConflictError('', '');
+        const key = typeof body.key === 'string' ? body.key : '';
+        const parentId = typeof body.parentId === 'string' ? body.parentId : '';
+        const error = new KnowledgePageKeyConflictError(key, parentId);
         error.message = message;
         throw error;
       }
@@ -154,6 +167,18 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
         const error = new KnowledgePageHasChildrenError('');
         error.message = message;
         throw error;
+      }
+      if (name === 'KnowledgePageDepthError') {
+        const error = new KnowledgePageDepthError('');
+        error.message = message;
+        throw Object.assign(error, { status: response.status });
+      }
+      if (name === 'KnowledgeMoveTooLargeError') {
+        const pageId = typeof body.pageId === 'string' ? body.pageId : '';
+        const pages = typeof body.pages === 'number' ? body.pages : 0;
+        const error = new KnowledgeMoveTooLargeError(pageId, pages);
+        error.message = message;
+        throw Object.assign(error, { status: response.status });
       }
       throw Object.assign(new Error(message), { status: response.status });
     }
@@ -201,12 +226,24 @@ const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
 export class PlatformKnowledge extends Knowledge {
   constructor(options: PlatformKnowledgeOptions = {}) {
+    // `MASTRA_KNOWLEDGE_ACCESS_TOKEN` is a Knowledge-only credential, narrower than the general
+    // Platform token, so it's preferred when set.
     const token =
-      options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY;
+      options.accessToken ??
+      (process.env.MASTRA_KNOWLEDGE_ACCESS_TOKEN?.trim() || undefined) ??
+      process.env.MASTRA_PLATFORM_ACCESS_TOKEN ??
+      process.env.MASTRA_PLATFORM_SECRET_KEY;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
     const apiUrl = options.apiUrl ?? (process.env.MASTRA_KNOWLEDGE_API_URL?.trim() || undefined) ?? DEFAULT_API_URL;
-    if (!token || !instanceId) {
-      throw new Error('PlatformKnowledge requires a Platform access token and Knowledge instance ID');
+    if (!token) {
+      throw new Error(
+        'PlatformKnowledge requires a Knowledge token or Platform access token, and a Knowledge instance ID',
+      );
+    }
+    if (!instanceId) {
+      throw new Error(
+        'PlatformKnowledge requires a Knowledge instance ID: set MASTRA_KNOWLEDGE_INSTANCE_ID or pass instanceId',
+      );
     }
     const {
       accessToken: _accessToken,
@@ -222,6 +259,8 @@ export class PlatformKnowledge extends Knowledge {
     });
     super({
       ...config,
+      // Hosts register Knowledge under its id, so it must be the same on every boot.
+      id: config.id ?? `platform-knowledge-${instanceId}`,
       tools: config.tools ?? { read: true },
       // Platform owns every scope declaration and access grant: the instance serves them all through
       // `getScopeDeclarations`, so there is one place to change who reads what. Declaring scopes here

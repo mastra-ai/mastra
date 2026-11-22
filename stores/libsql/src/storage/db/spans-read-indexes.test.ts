@@ -1,4 +1,5 @@
 import { createClient } from '@libsql/client';
+import { noopLogger } from '@mastra/core/logger';
 import { OLD_SPAN_SCHEMA, TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 import { LibSQLDB } from './index';
@@ -26,7 +27,7 @@ describe('LibSQLDB spans read indexes', () => {
       }),
     };
 
-    const db = new LibSQLDB({ client: mockClient as any });
+    const db = new LibSQLDB({ client: mockClient as any, getLogger: () => noopLogger });
     await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
     expect(calls.some(sql => sql.includes(`CREATE INDEX IF NOT EXISTS "${ROOTS_INDEX}"`))).toBe(true);
@@ -50,7 +51,7 @@ describe('LibSQLDB spans read indexes', () => {
       }),
     };
 
-    const db = new LibSQLDB({ client: mockClient as any });
+    const db = new LibSQLDB({ client: mockClient as any, getLogger: () => noopLogger });
     await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
     expect(calls.some(sql => sql.includes(`CREATE INDEX IF NOT EXISTS "${ROOTS_INDEX}"`))).toBe(true);
@@ -59,7 +60,7 @@ describe('LibSQLDB spans read indexes', () => {
 
   it('produces query plans without full scans or temporary sorts for trace reads', async () => {
     const client = createClient({ url: ':memory:' });
-    const db = new LibSQLDB({ client });
+    const db = new LibSQLDB({ client, getLogger: () => noopLogger });
     await db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
     const listPlan = await client.execute(

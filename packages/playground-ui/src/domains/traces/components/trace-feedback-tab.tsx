@@ -25,7 +25,7 @@ export function TraceFeedbackTab({ traceId, variant, feedbackOptions }: TraceFee
     contextMode: feedbackOptions?.contextMode,
     feedbackUserId: feedbackOptions?.feedbackUserId,
   });
-  const { mutateAsync: deleteFeedback, isPending: isDeleting } = useDeleteFeedback({ traceId });
+  const { mutateAsync: deleteFeedback, isPending: isDeleting, error: deleteError } = useDeleteFeedback({ traceId });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();
 
   return (
@@ -38,6 +38,7 @@ export function TraceFeedbackTab({ traceId, variant, feedbackOptions }: TraceFee
       submitError={error ? 'Could not save feedback. Please try again.' : undefined}
       onDelete={feedbackOptions?.allowDelete === false ? undefined : feedbackId => deleteFeedback({ feedbackId })}
       isDeleting={isDeleting}
+      deleteError={deleteError ? 'Could not delete feedback. Please try again.' : undefined}
       variant={variant}
       onMarkReviewed={
         feedbackOptions?.allowReview === false

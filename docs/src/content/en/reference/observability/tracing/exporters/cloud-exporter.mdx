@@ -259,7 +259,7 @@ The exporter batches tracing spans, logs, metrics, scores, and feedback for effi
 - With `projectId` or `MASTRA_PROJECT_ID`, derived routes use `/projects/:projectId/ai/{signal}/publish`
 - Explicit full publish URLs are used as-is, even when `projectId` is configured
 
-### Signal Processing
+### Signal processing
 
 - `exportTracingEvent()` only exports `SPAN_ENDED` tracing events
 - `onLogEvent()`, `onMetricEvent()`, `onScoreEvent()`, and `onFeedbackEvent()` buffer every event they receive for that signal type
@@ -313,7 +313,7 @@ const customExporter = new CloudExporter({
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
 
-### Other Exporters
+### Other exporters
 
 - [DefaultExporter](/reference/observability/tracing/exporters/default-exporter): Storage persistence
 - [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output

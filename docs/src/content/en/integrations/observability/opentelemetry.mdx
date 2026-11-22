@@ -13,7 +13,7 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Agnost AI, Dash0, Datadog, Laminar, Latitude, MLflow, New Relic, Sazabi, Sentry, SigNoz, telemetry.dev, Traceloop, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Traces stay compatible with platforms such as Agnost AI, Dash0, Datadog, Laminar, Latitude, MLflow, New Relic, Sazabi, Sentry, SigNoz, telemetry.dev, and Traceloop.
 
 ### Installation
 
@@ -80,7 +80,7 @@ Agnost AI reads `userId` and `conversationId` (or `threadId`) from `tracingOptio
 
 [Dash0](https://www.dash0.com/) provides real-time observability with automatic insights.
 
-##### Zero-Config Setup
+##### Zero-config setup
 
 Set environment variables and use the exporter with an empty config:
 
@@ -110,7 +110,7 @@ export const mastra = new Mastra({
 })
 ```
 
-##### Explicit Configuration
+##### Explicit configuration
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -221,7 +221,7 @@ For Datadog-specific features like automatic span type mapping, LLM span categor
 
 [Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
 
-##### Zero-Config Setup
+##### Zero-config setup
 
 ```bash title=".env"
 # Required
@@ -235,7 +235,7 @@ LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
 new OtelExporter({ provider: { laminar: {} } })
 ```
 
-##### Explicit Configuration
+##### Explicit configuration
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
@@ -296,7 +296,7 @@ new OtelExporter({
 
 [New Relic](https://newrelic.com/) provides complete observability with AI monitoring capabilities.
 
-##### Zero-Config Setup
+##### Zero-config setup
 
 ```bash title=".env"
 # Required
@@ -310,7 +310,7 @@ NEW_RELIC_ENDPOINT=https://otlp.eu01.nr-data.net  # For EU region
 new OtelExporter({ provider: { newrelic: {} } })
 ```
 
-##### Explicit Configuration
+##### Explicit configuration
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
@@ -382,7 +382,7 @@ Choose an exporter based on your setup:
 
 [SigNoz](https://signoz.io/) is an open-source APM alternative with built-in Tracing support.
 
-##### Zero-Config Setup
+##### Zero-config setup
 
 ```bash title=".env"
 # Required
@@ -397,7 +397,7 @@ SIGNOZ_ENDPOINT=https://my-signoz.example.com  # For self-hosted
 new OtelExporter({ provider: { signoz: {} } })
 ```
 
-##### Explicit Configuration
+##### Explicit configuration
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
@@ -437,7 +437,7 @@ new OtelExporter({
 
 [Traceloop](https://www.traceloop.com/) specializes in LLM observability with automatic prompt tracking.
 
-##### Zero-Config Setup
+##### Zero-config setup
 
 ```bash title=".env"
 # Required
@@ -452,7 +452,7 @@ TRACELOOP_ENDPOINT=https://custom.traceloop.com
 new OtelExporter({ provider: { traceloop: {} } })
 ```
 
-##### Explicit Configuration
+##### Explicit configuration
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
@@ -465,7 +465,7 @@ new OtelExporter({
 })
 ```
 
-#### Custom/Generic OTEL Endpoints
+#### Custom or generic OTEL endpoints
 
 For other OTEL-compatible platforms or custom collectors:
 
@@ -519,7 +519,7 @@ If the matching log exporter package isn't installed, log export is silently dis
 
 ### Configuration options
 
-#### Complete Configuration
+#### Complete configuration
 
 ```typescript
 new OtelExporter({
@@ -549,7 +549,7 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.41.0](http
 
 The conventions cover the following span names and attributes:
 
-#### Span Naming
+#### Span naming
 
 - **Model calls**: `chat {model}`
 - **Generation loop**: `model_generation {model}`, with one `agent_step {agent_id}` per turn
@@ -557,9 +557,9 @@ The conventions cover the following span names and attributes:
 - **Agent Runs**: `invoke_agent {agent_id}`
 - **Workflow Runs**: `invoke_workflow {workflow_id}`
 
-Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution); neither carries usage.
+Each agent turn calls the model once. The `chat` span is that call and is the only span that carries `gen_ai.request.model`, the messages, and `gen_ai.usage.*`, so backends that sum usage across spans count each call once. The `model_generation` span wraps the whole loop and `agent_step` wraps one turn (model call plus tool execution). Neither carries usage.
 
-#### Key Attributes
+#### Key attributes
 
 - `gen_ai.operation.name` - Operation type (chat, tool.execute, etc.)
 - `gen_ai.provider.name` - AI provider (openai, anthropic, etc.)
@@ -587,13 +587,13 @@ Choose the right protocol package based on your provider:
 
 :::warning
 
-Make sure to install the correct protocol package for your provider. The exporter will provide a helpful error message if the wrong package is installed.
+Ensure you install the correct protocol package for your provider. The exporter will provide a helpful error message if the wrong package is installed.
 
 :::
 
 ### Troubleshooting
 
-#### Missing Dependency Error
+#### Missing dependency error
 
 If you see an error like:
 
@@ -605,7 +605,7 @@ To use HTTP/Protobuf export, install the required package:
 
 Install the suggested package for your provider.
 
-#### Common Issues
+#### Common issues
 
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
 1. **Invalid endpoint**: Check endpoint format matches provider requirements
@@ -679,7 +679,7 @@ Using the `OtelBridge` requires two steps:
 1. Configure OpenTelemetry instrumentation in your application
 1. Add the `OtelBridge` to your Mastra observability config
 
-#### Step 1: OpenTelemetry Instrumentation
+#### Step 1: OpenTelemetry instrumentation
 
 Create an instrumentation file that initializes OTEL. This must run before your application code:
 
@@ -708,7 +708,7 @@ sdk.start()
 export { sdk }
 ```
 
-#### Step 2: Mastra Configuration
+#### Step 2: Mastra configuration
 
 Add the `OtelBridge` to your Mastra observability config:
 
@@ -757,7 +757,7 @@ Logs that originate inside a Mastra span are emitted under that span's OTEL cont
 
 If you don't register a `LoggerProvider`, log emission is a silent no-op. Traces continue to work as configured.
 
-#### Running Your Application
+#### Running your application
 
 Use the `--import` flag to ensure instrumentation loads before your application:
 
@@ -767,7 +767,7 @@ tsx --import ./instrumentation.ts ./src/index.ts
 
 #### Flushing before exit
 
-Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` is not enough: it does not wait for a batch the exporter is already sending.
+Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` isn't enough: it doesn't wait for a batch the exporter is already sending.
 
 ### Semantic conventions
 

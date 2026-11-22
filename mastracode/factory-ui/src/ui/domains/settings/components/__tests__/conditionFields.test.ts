@@ -80,7 +80,7 @@ describe('condition rows', () => {
     );
     expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b)));
     expect(labels).toEqual(expect.arrayContaining(['Source', 'Has pull request']));
-    for (const gone of ['State', 'Integration', 'Provider', 'Source kind', 'Closed issue has a pull request']) {
+    for (const gone of ['State', 'Integration', 'Provider', 'Kind', 'Closed issue has a pull request']) {
       expect(labels).not.toContain(gone);
     }
   });
@@ -95,7 +95,7 @@ describe('condition rows', () => {
           { field: 'closedIssue.hasPullRequest', operator: 'equals', value: true },
         ],
       }),
-    ).toBe('Integration is GitHub and source kind is issue and closed issue has a pull request');
+    ).toBe('Integration is GitHub and kind is issue and closed issue has a pull request');
   });
 
   const CHANGES = ['event.labels.added', 'event.labels.removed', 'event.assignees.added', 'event.assignees.removed'];

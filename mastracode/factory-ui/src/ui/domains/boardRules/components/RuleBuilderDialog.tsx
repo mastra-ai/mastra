@@ -32,6 +32,7 @@ import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIco
 import { LANE_SECTIONS, LEGACY_OPENED_EVENT, laneText, placesArrival } from '../ruleLanes';
 import type { RuleEvent } from '../ruleLanes';
 import { ChoiceTile, RadioTile } from './ChoiceTile';
+import { GithubOnlyBadge } from './GithubOnlyBadge';
 import { RuleTarget } from './RuleTarget';
 
 const MAX_RULE_NAME = 120;
@@ -245,7 +246,7 @@ export function RuleBuilderDialog({
               {step === 'conditions' && (
                 <div className="flex flex-col gap-4">
                   <RadioGroup
-                    aria-label="Which items"
+                    aria-label="Which ones"
                     value={filtered ? 'matching' : 'every'}
                     disabled={readOnly}
                     onValueChange={value => {
@@ -256,7 +257,7 @@ export function RuleBuilderDialog({
                     className="grid-cols-1 sm:grid-cols-2"
                   >
                     <RadioTile value="every" selected={!filtered} disabled={readOnly}>
-                      <TileText title={placesNew ? 'Every item' : 'Every card'} hint="Run whenever this happens." />
+                      <TileText title={placesNew ? 'Every new one' : 'Every card'} hint="Run whenever this happens." />
                     </RadioTile>
                     <RadioTile value="matching" selected={filtered} disabled={readOnly}>
                       <TileText
@@ -489,7 +490,7 @@ function TriggerStep({
     <div className="flex flex-col gap-5">
       {on.includes(LEGACY_OPENED_EVENT) && (
         <Notice variant="info">
-          Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new work items and pull requests. Saving
+          Also listens on “{laneText(LEGACY_OPENED_EVENT).label}”, which takes new issues and pull requests. Saving
           keeps it.
         </Notice>
       )}
@@ -512,6 +513,11 @@ function TriggerStep({
                 >
                   <Icon className="text-badge-amber-indicator mt-0.5 size-4 shrink-0" aria-hidden />
                   <TileText title={text.label} hint={text.description} />
+                  {text.githubOnly && (
+                    <span className="ml-auto shrink-0">
+                      <GithubOnlyBadge />
+                    </span>
+                  )}
                 </ChoiceTile>
               );
             })}

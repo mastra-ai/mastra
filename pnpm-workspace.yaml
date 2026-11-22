@@ -156,6 +156,11 @@ packageExtensions:
     dependencies:
       protobufjs: '*'
 
+# Stagehand 3 lists puppeteer-core 22 as optional and never loads it at runtime.
+# Skipping it drops extract-zip, basic-ftp 5 and chromium-bidi's zod 3.23.8.
+ignoredOptionalDependencies:
+  - puppeteer-core
+
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
@@ -399,10 +404,10 @@ overrides:
   # Security floors for Dependabot alerts (transitive deps; patched versions
   # are within the parents' declared ranges).
   axios@>=1.0.0 <1.20.0: 1.20.0
-  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1). Cross-major, approved.
+  # Vanta 2026-11-10: CVE-2026-118764 (minimatch >=7.0.0 <11.0.1, fixed only in 11.0.1; target raised to 11.0.9 on 2026-11-18). Cross-major, approved.
   # 11.x drops makeRe()/Minimatch#regexp; @verdaccio/core 8.4.0 (e2e registry) is patched to use minimatch().
-  minimatch@>=7.0.0 <11.0.1: 11.0.5
-  ws@>=8.0.0 <8.21.3: 8.22.0
+  minimatch@>=7.0.0 <11.0.9: 11.0.9
+  ws@>=8.0.0 <8.23.0: 8.23.0
   # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1
   qs@>=6.7.0 <6.16.1: 6.16.1
   e2b>undici8: npm:undici@8.12.4
@@ -467,7 +472,7 @@ overrides:
   cjs-module-lexer@<2.2.1: 2.2.1
   fast-copy@<4.1.1: 4.1.1
   '@fastify/busboy@<3.2.2': 3.2.2
-  tinypool@<2.1.2: 2.1.2
+  tinypool@<2.1.2: 2.2.0
   ajv@>=8.0.0 <8.20.0: 8.20.0
   # Vanta 2026-10-14: AIKIDO-2026-143019 fixed in 4.6.7
   zod@>=4.0.0 <4.6.7: 4.6.7

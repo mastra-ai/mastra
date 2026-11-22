@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, within } from '@testing-library/react';
@@ -8,34 +7,13 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceScoresList } from '../trace-scores-list';
+import { buildScore, scoresResponse } from './fixtures/trace-scores';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const SCORES_URL = `${BASE_URL}/api/observability/traces/trace-1/root/scores`;
 
 afterEach(() => cleanup());
-
-function buildScore(overrides: Partial<ClientScoreRowData>): ClientScoreRowData {
-  return {
-    id: 'score-1',
-    scorerId: 'answer-relevancy',
-    entityId: 'agent-1',
-    runId: 'run-1',
-    score: 0.5,
-    scorer: { name: 'Answer relevancy' },
-    source: 'LIVE',
-    entity: {},
-    traceId: 'trace-1',
-    spanId: 'root',
-    createdAt: '2026-10-21T12:00:00.000Z',
-    updatedAt: null,
-    ...overrides,
-  };
-}
-
-function scoresResponse(scores: ClientScoreRowData[], hasMore = false): ListScoresResponse {
-  return { scores, pagination: { total: scores.length, page: 0, perPage: 10, hasMore } };
-}
 
 function renderList() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

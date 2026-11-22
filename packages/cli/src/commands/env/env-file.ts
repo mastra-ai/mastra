@@ -2,12 +2,12 @@
  * Serialize env vars into `.env` file content, quoting/escaping values so the
  * file is safe to `source` and skipping keys that aren't valid shell
  * identifiers. Managed var names (platform-injected secrets whose values are
- * never exposed) are listed as comments so users know they exist without
- * round-tripping secrets into local files.
+ * never exposed) and write-only secret names are listed as comments so users
+ * know they exist without round-tripping secrets into local files.
  */
 export function serializeEnvFile(
   envVars: Record<string, string>,
-  opts: { header: string; managedVarNames?: string[] },
+  opts: { header: string; managedVarNames?: string[]; secretVarNames?: string[] },
 ): { content: string; written: number; skipped: number } {
   const shellSafeKey = /^[A-Za-z_][A-Za-z0-9_]*$/;
   const lines = [`# ${opts.header}`, ''];
@@ -32,6 +32,14 @@ export function serializeEnvFile(
       .replace(/`/g, '\\`');
     lines.push(`${key}="${escaped}"`);
     written++;
+  }
+
+  if (opts.secretVarNames && opts.secretVarNames.length > 0) {
+    lines.push('');
+    lines.push('# Secrets stored on the Mastra platform — write-only, values are delivered at boot:');
+    for (const name of [...opts.secretVarNames].sort()) {
+      lines.push(`# ${name.replace(/[^\w.-]/g, '?')}`);
+    }
   }
 
   if (opts.managedVarNames && opts.managedVarNames.length > 0) {

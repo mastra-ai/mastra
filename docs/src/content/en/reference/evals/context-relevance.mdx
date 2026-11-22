@@ -115,7 +115,7 @@ Note: Either `context` or `contextExtractor` must be provided. If both are provi
 
 ## Scoring details
 
-### Weighted Relevance Scoring
+### Weighted relevance scoring
 
 Context Relevance uses a advanced scoring algorithm that considers:
 
@@ -123,7 +123,7 @@ Context Relevance uses a advanced scoring algorithm that considers:
    - `high` = 1.0 (directly addresses the query)
    - `medium` = 0.7 (supporting information)
    - `low` = 0.3 (tangentially related)
-   - `none` = 0.0 (completely irrelevant)
+   - `none` = 0.0 (irrelevant)
 
 1. **Usage Detection**: Tracks whether relevant context was actually used in the response
 
@@ -131,7 +131,7 @@ Context Relevance uses a advanced scoring algorithm that considers:
    - **Unused High-Relevance**: `unusedHighRelevanceContext` penalty per unused high-relevance context (default: 0.1)
    - **Missing Context**: Up to `maxMissingContextPenalty` for identified missing information (default: 0.5)
 
-### Scoring Formula
+### Scoring formula
 
 ```text
 Base Score = Σ(relevance_weights) / (num_contexts × 1.0)
@@ -150,11 +150,11 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 
 ### Score interpretation
 
-- **0.9-1.0**: Excellent - all context highly relevant and used
+- **0.9-1.0**: High - all context highly relevant and used
 - **0.7-0.8**: Good - mostly relevant with minor gaps
 - **0.4-0.6**: Mixed - substantial irrelevant or unused context
 - **0.2-0.3**: Poor - mostly irrelevant context
-- **0.0-0.1**: Very poor - no relevant context found
+- **0.0-0.1**: Low - no relevant context found
 
 ### Reason analysis
 
@@ -170,12 +170,12 @@ The reason field provides insights on:
 Use results to improve your system:
 
 - **Filter irrelevant context**: Remove low/none relevance pieces before processing
-- **Ensure context usage**: Make sure high-relevance context is incorporated
+- **Ensure context usage**: Ensure high-relevance context is incorporated
 - **Fill context gaps**: Add missing information identified by the scorer
 - **Balance context size**: Find optimal amount of context for best relevance
 - **Tune penalty sensitivity**: Adjust `unusedHighRelevanceContext`, `missingContextPerItem`, and `maxMissingContextPenalty` based on your application's tolerance for unused or missing context
 
-### Difference from Context Precision
+### Difference from context precision
 
 | Aspect | Context Relevance | Context Precision |
 | - | - | - |
@@ -256,7 +256,7 @@ console.log('Strict penalties:', strictResult.score) // Lower score due to unuse
 console.log('Lenient penalties:', lenientResult.score) // Higher score, less penalty
 ```
 
-### Dynamic Context Extraction
+### Dynamic context extraction
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
@@ -319,7 +319,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ### High relevance example
 
-This example shows excellent context relevance where all context directly supports the response:
+This example shows strong context relevance where all context directly supports the response:
 
 ```typescript
 import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt'

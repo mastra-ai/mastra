@@ -148,7 +148,7 @@ const agent = new Agent({
 })
 ```
 
-The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position: last, behind the `ProviderHistoryCompat`, `PrefillErrorHandler`, and `UnsupportedFileHandler` defaults your list never names. Pass all four ids to run a completely custom set.
+The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position: last, behind the `ProviderHistoryCompat`, `PrefillErrorHandler`, and `UnsupportedFileHandler` defaults your list never names. Pass all four ids to run a custom set.
 
 A processor's `maxRetries` can't raise the agent's limit. Without `maxProcessorRetries`, error-processor retries stop after `3` (see [Error processor retry limits](#error-processor-retry-limits)), so set it when a processor needs more.
 
@@ -843,7 +843,7 @@ for await (const chunk of stream.fullStream) {
 
 Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, `data-status`).
 
-By default, `processOutputStream()` skips `data-*` chunks so it doesn't accidentally operate on tool telemetry or other processors' output. To inspect, modify, or block these chunks in a processor, set `processDataParts = true` on that processor:
+By default, `processOutputStream()` skips `data-*` chunks so it doesn't operate on tool telemetry by mistake or other processors' output. To inspect, modify, or block these chunks in a processor, set `processDataParts = true` on that processor:
 
 ```typescript
 class ModerationCollector implements Processor {

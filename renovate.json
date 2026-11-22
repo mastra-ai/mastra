@@ -44,6 +44,12 @@
   ],
   "packageRules": [
     {
+      "description": "@mastra/mcp-legacy is the @mastra/mcp 1.x server that mcp-docs-server keeps for hosts using the legacy initialize handshake",
+      "matchDepNames": ["@mastra/mcp-legacy"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "description": "Disable all dependency updates in examples (Renovate previously ignored these via ignorePaths)",
       "matchFileNames": ["examples/**/package.json"],
       "enabled": false

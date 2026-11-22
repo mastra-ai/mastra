@@ -48,6 +48,10 @@ export interface KnowledgePageToolHost {
   warn?: (message: string) => void;
   /** Most estimated tokens one read, match or list result returns; defaults to {@link KNOWLEDGE_READ_BODY_TOKENS}. */
   maxTokens?: number;
+  /** Host-supplied principals that replace the call's run scopes (see `createTools({ principals })`). */
+  principals?: readonly string[];
+  /** Author recorded on writes; overrides the run's agent id. */
+  author?: string;
 }
 
 function maxTokensOf(host: KnowledgePageToolHost): number {
@@ -115,6 +119,8 @@ function limitOf(limit: number | undefined): number {
 async function start(host: KnowledgePageToolHost, context: unknown, write = false): Promise<KnowledgeRun> {
   return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined, {
     write,
+    principals: host.principals,
+    author: host.author,
   });
 }
 
@@ -1356,14 +1362,19 @@ function noteTool(host: KnowledgePageToolHost) {
       'Add a discrete, durable piece of knowledge to a page: something true or useful that someone else should be able to rely on later. Not for scratch work, to-dos, or comments about the page itself. ' +
       'Good, on "Refund Policy": "Refunds over $500 need a manager\'s approval (confirmed with finance, May 2026)." Bad: "Need to look into refunds later." ' +
       'Link other pages with [[Page Name]]. `scope` lists the stamp scopes that may see the note (any of them); a note on a shared page stamped with a narrower scope stays private to that scope. ' +
-      'op "add": adds `text` to `page`. op "restamp": replaces a note\'s stamp scopes. op "remove": removes a note. Removing then re-adding creates a new note id and resets its history.',
+      'op "add": adds `text` to `page`, stamped with the page\'s own scope unless `scope` is given. op "restamp": replaces a note\'s stamp scopes. op "remove": removes a note. Removing then re-adding creates a new note id and resets its history.',
     inputSchema: {
       type: 'object',
       properties: {
         op: { type: 'string', enum: ['add', 'restamp', 'remove'] },
         page: { type: 'string', minLength: 1, description: `Add: the page. ${pageRefDescription}` },
         note: { type: 'string', minLength: 1, description: 'Restamp or remove: the note id.' },
-        scope: { ...scopeListSchema, description: 'Add or restamp: the stamp scopes (addresses).' },
+        scope: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+          description:
+            "Add: the stamp scopes (addresses); defaults to the page's scope; pass narrower scopes to keep a note private. Restamp: the new stamp scopes (required).",
+        },
         text: {
           type: 'string',
           minLength: 1,
@@ -1382,8 +1393,11 @@ function noteTool(host: KnowledgePageToolHost) {
       const args = input as NoteInput;
       const run = await start(host, context, true);
       const { storage, provenance } = run;
-      const stamps = async (action: string) => {
-        if (!args.scope?.length) throw new Error(`${action} needs scope: the stamp scopes.`);
+      const stamps = async (action: string, home?: KnowledgePage) => {
+        if (!args.scope?.length) {
+          if (home) return [home.id];
+          throw new Error(`${action} needs scope: the stamp scopes.`);
+        }
         const scopes: KnowledgePage[] = [];
         for (const address of new Set(args.scope)) scopes.push(await run.targetScope(address, 'contributor', action));
         return scopes.map(scope => scope.id);
@@ -1394,8 +1408,9 @@ function noteTool(host: KnowledgePageToolHost) {
         const when = args.when ? new Date(args.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error(`Invalid when: "${args.when}".`);
         const page = await run.page(args.page, 'contributor');
-        await run.require(await run.scopeOf(page), 'contributor', 'Adding a note');
-        const stampScopeIds = await stamps('Adding a note');
+        const home = await run.scopeOf(page);
+        await run.require(home, 'contributor', 'Adding a note');
+        const stampScopeIds = await stamps('Adding a note', home);
         const note = await storage.addNote({
           pageId: page.id,
           text: args.text,

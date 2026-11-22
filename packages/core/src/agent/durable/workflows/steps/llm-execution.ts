@@ -84,6 +84,7 @@ import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transpor
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
+import { segmentSpanData } from '../../segment-spans';
 import {
   createStepStartChunk,
   emitChunkEvent,
@@ -844,17 +845,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // and passed through each iteration. This ensures all steps are children of the same span.
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
 
-            // modelSpanData is threaded through the iteration state (seeded in preparation.ts);
-            // after a resume the registry override points steps at the resumed generation.
-            const inputModelSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeModelSpanData ??
-              inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
+            // The run's first pair is threaded through the iteration state (seeded in preparation.ts);
+            // a resume or recovery carries its own pair on the request context.
+            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+            const segment = segmentSpanData(requestContext, runId, inputData, resumeRegistry);
+            const inputModelSpanData = segment.modelSpanData;
             // Rebuilt spans come from the run-start snapshot, so re-apply the carried
             // first-chunk clocks before the tracker sees them; otherwise a later
             // step would overwrite them mid-run. The loop state carries the originals'
             // clocks; a resumed segment has fresh spans, so its clocks live on the
             // registry beside them.
-            const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-            const carriedClocks = carriedSpanClocks(resumeRegistry, inputData);
+            const carriedClocks = carriedSpanClocks(resumeRegistry, inputData, segment.carried);
             const withCarriedClocks = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
               data: T,
             ): T => {
@@ -865,11 +866,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             recordClocks = () => {
               const completionStartTime = modelSpanTracker?.getCompletionStartTime?.();
               const timeToFirstTokenMs = modelSpanTracker?.getTimeToFirstTokenMs?.();
-              if (
-                resumeRegistry?.resumeModelSpanData &&
-                completionStartTime &&
-                !resumeRegistry.resumeCompletionStartTime
-              ) {
+              if (resumeRegistry?.resumeModelSpan && completionStartTime && !resumeRegistry.resumeCompletionStartTime) {
                 resumeRegistry.resumeCompletionStartTime = completionStartTime;
                 resumeRegistry.resumeTimeToFirstTokenMs = timeToFirstTokenMs;
               }
@@ -881,8 +878,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // On remote engines (Inngest) the step's tracingContext span is not part of the
             // exported trace, so parent client-tool spans on the rebuilt AGENT_RUN span instead.
-            const inputAgentSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeAgentSpanData ??
-              inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
+            const inputAgentSpanData = segment.agentSpanData;
             const agentRunSpan = inputAgentSpanData
               ? (observability?.rebuildSpan(withCarriedClocks(inputAgentSpanData)) as AnySpan | undefined)
               : undefined;

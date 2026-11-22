@@ -15,6 +15,7 @@ import {
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import type { IntakeConfig, IntakeSourceBinding } from '../domains/factory/services/intake';
+import type { PlatformProviderConnection } from '../domains/factory/services/platformConnect';
 import { linearProjects, wireSourceCards } from './fixtures/boardSourceFilters';
 import {
   docsWatchId,
@@ -128,12 +129,30 @@ async function expectPortalView() {
 }
 
 describe('Board source and Linear project filters', () => {
-  it('offers connected providers and Manual, but not unconnected sources', async () => {
+  it('offers connected providers, Detail and Manual, but not unconnected sources', async () => {
     stubSources();
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
     // Pull requests are offered while a code host is connected: they replace the retired Review board.
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual', 'Pull requests']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Detail', 'Manual', 'Pull requests']);
+  });
+
+  describe('when the organization has connected Vanta', () => {
+    it('offers Vanta, so its vulnerability cards can be found on the board', async () => {
+      stubSources();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/vanta/connections`, () =>
+          HttpResponse.json({
+            connections: [
+              { id: 'conn-1', integrationId: 'vanta', status: 'active', accountLabel: 'Acme' },
+            ] satisfies PlatformProviderConnection[],
+          }),
+        ),
+      );
+      const view = renderBoard();
+      await waitForMutationsIdle(view.client);
+      expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Vanta', 'Detail', 'Manual', 'Pull requests']);
+    });
   });
 
   it('shows Linear, Jira and incident.io cards without asking those providers for their issue lists', async () => {
@@ -207,11 +226,11 @@ describe('Board source and Linear project filters', () => {
     stubSources();
     const view = renderBoard('?source=gitlab');
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual', 'Pull requests']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Detail', 'Manual', 'Pull requests']);
     expect(screen.getByRole('menuitemcheckbox', { name: 'GitLab' })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('offers only Manual when configured providers are disconnected', async () => {
+  it('offers only Detail and Manual when configured providers are disconnected', async () => {
     stubSources();
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -223,7 +242,7 @@ describe('Board source and Linear project filters', () => {
     );
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['Manual']);
+    expect(await intakeSourceOptions()).toEqual(['Detail', 'Manual']);
   });
 
   describe('when a hosted Linear project is selected', () => {

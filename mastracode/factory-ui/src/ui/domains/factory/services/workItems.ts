@@ -6,8 +6,12 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
+import { externalSourceForWorkItem } from '@mastra/factory/rules/types';
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
+import type { ExternalWorkItemSource } from '@mastra/factory/storage/domains/work-items/base';
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
+import { workItemBoardSource } from '@mastra/factory/work-item-branch';
+import type { WorkItemBranchSource } from '@mastra/factory/work-item-branch';
 
 import type {
   WorkItemActivity,
@@ -20,16 +24,11 @@ import type {
 } from '../../../../api/types';
 import { requestJson } from './request';
 
-export type WorkItemSource =
-  | 'github-issue'
-  | 'github-pr'
-  | 'gitlab-issue'
-  | 'gitlab-pr'
-  | 'linear-issue'
-  | 'jira-issue'
-  | 'incidentio-follow-up'
-  | 'slack-thread'
-  | 'manual';
+/**
+ * Where a card came from, in the server's own vocabulary and read with the server's own
+ * `workItemBoardSource`, so the board can't fall behind an integration the server adds.
+ */
+export type WorkItemSource = WorkItemBranchSource;
 
 /** Takes any source string so callers holding a wider union (a user session's `'user'`) need no guard. */
 export function isPullRequestSource(source: string): source is 'github-pr' | 'gitlab-pr' {
@@ -116,14 +115,6 @@ export interface CreateWorkItemInput {
   metadata?: Record<string, unknown>;
 }
 
-interface ExternalWorkItemSource {
-  integrationId: string;
-  type: string;
-  externalId: string;
-  workspaceId?: string;
-  url?: string;
-}
-
 interface WireWorkItem extends Omit<
   WorkItem,
   'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'description' | 'triageType' | 'acceptedAt'
@@ -140,50 +131,14 @@ interface WireCreateWorkItemInput extends Omit<CreateWorkItemInput, 'source' | '
   externalSource?: ExternalWorkItemSource;
 }
 
-function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkItemSource {
-  if (!source) return 'manual';
-  if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
-  if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
-  if (source.integrationId === 'gitlab' && source.type === 'issue') return 'gitlab-issue';
-  if (source.integrationId === 'gitlab' && source.type === 'pull-request') return 'gitlab-pr';
-  if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
-  if (source.integrationId === 'jira' && source.type === 'issue') return 'jira-issue';
-  if (source.integrationId === 'incidentio' && source.type === 'issue') return 'incidentio-follow-up';
-  if (source.integrationId === 'slack' && source.type === 'slack-thread') return 'slack-thread';
-  return 'manual';
-}
-
-function externalSourceTarget(
-  source: Exclude<WorkItemSource, 'manual'>,
-): Pick<ExternalWorkItemSource, 'integrationId' | 'type'> {
-  switch (source) {
-    case 'github-issue':
-      return { integrationId: 'github', type: 'issue' };
-    case 'github-pr':
-      return { integrationId: 'github', type: 'pull-request' };
-    case 'gitlab-issue':
-      return { integrationId: 'gitlab', type: 'issue' };
-    case 'gitlab-pr':
-      return { integrationId: 'gitlab', type: 'pull-request' };
-    case 'linear-issue':
-      return { integrationId: 'linear', type: 'issue' };
-    case 'jira-issue':
-      return { integrationId: 'jira', type: 'issue' };
-    case 'incidentio-follow-up':
-      return { integrationId: 'incidentio', type: 'issue' };
-    case 'slack-thread':
-      return { integrationId: 'slack', type: 'slack-thread' };
+/** The provenance the server stores for a new card: none for one filed by hand. */
+function toExternalSource({ source, sourceKey, url }: CreateWorkItemInput): ExternalWorkItemSource | undefined {
+  if (source === 'manual' || !sourceKey) return undefined;
+  // The server's rule vocabulary has no Slack threads: Slack files its own cards.
+  if (source === 'slack-thread') {
+    return { integrationId: 'slack', type: 'slack-thread', externalId: sourceKey, ...(url ? { url } : {}) };
   }
-}
-
-function toExternalSource(input: CreateWorkItemInput): ExternalWorkItemSource | undefined {
-  const source = input.source;
-  if (source === 'manual' || !input.sourceKey) return undefined;
-  return {
-    ...externalSourceTarget(source),
-    externalId: input.sourceKey,
-    ...(input.url ? { url: input.url } : {}),
-  };
+  return externalSourceForWorkItem(source, sourceKey, url ?? undefined);
 }
 
 function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput {
@@ -203,7 +158,7 @@ function slackThreadUrl({ workspaceId, externalId }: ExternalWorkItemSource): st
 function externalSourceUrl(source: ExternalWorkItemSource | null): string | null {
   if (!source) return null;
   // A Slack card's saved `url` is the Factory session it started, never the Slack thread.
-  if (sourceFromExternalSource(source) === 'slack-thread') return slackThreadUrl(source);
+  if (workItemBoardSource(source) === 'slack-thread') return slackThreadUrl(source);
   return source.url ?? null;
 }
 
@@ -214,7 +169,7 @@ export function cardLink({
   externalSource: ExternalWorkItemSource | null;
   workItemUrl: string | null | undefined;
 }): { source: WorkItemSource; url: string | null } {
-  const source = sourceFromExternalSource(externalSource);
+  const source = workItemBoardSource(externalSource);
   return {
     source,
     url:
