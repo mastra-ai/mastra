@@ -1,4 +1,6 @@
-import { DataList } from '@mastra/playground-ui/components/DataList';
+import { useStoredPromptBlocks } from '@mastra/react/hooks/prompt-blocks';
+import { useState } from 'react';
+import { DataList } from '@/ds/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -6,16 +8,14 @@ import {
   DialogBody,
   DialogTitle,
   DialogDescription,
-} from '@mastra/playground-ui/components/Dialog';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
-import { cn } from '@mastra/playground-ui/utils/cn';
+} from '@/ds/components/Dialog';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { SearchInput } from '@/ds/components/SearchInput';
+import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
 
-import { useState } from 'react';
-import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { cn } from '@/utils/cn';
 
 const PROMPT_BLOCKS_PER_PAGE = 50;
 

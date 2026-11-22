@@ -1,30 +1,30 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
-import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
-import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
-import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
+import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import type { InstructionBlock, RefInstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { DisplayConditionsDialog } from '@/domains/cms';
-import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
+import { DisplayConditionsDialog } from './display-conditions-dialog';
+import type { InstructionBlock, RefInstructionBlock } from './types';
+import { Badge } from '@/ds/components/Badge';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ContentBlock } from '@/ds/components/ContentBlocks';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { Spinner } from '@/ds/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
+
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
+import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
+import type { JsonSchema } from '@/utils/json-schema';
+import type { RuleGroup } from '@/utils/rule-engine';
 
 export interface AgentCMSRefBlockProps {
   index: number;
@@ -138,13 +138,13 @@ const RefBlockContent = ({
       <div className="border-l-2 border-info-edge pl-3">
         {isLoading ? (
           <div className="flex items-center gap-2 py-3 text-muted-foreground">
-            <Spinner className="h-4 w-4" />
+            <Spinner className="size-4" />
             <Txt variant="caption">Loading prompt block...</Txt>
           </div>
         ) : promptBlock ? (
           <>
             {/* Sync-block header — always visible, with Popover on caret */}
-            <div className="-ml-1 flex items-center gap-1.5 px-1 py-1">
+            <div className="-ml-1 flex items-center gap-1.5 p-1">
               <Txt variant="meta" tone="muted" className="truncate">
                 {promptBlock.name}
               </Txt>
@@ -181,7 +181,7 @@ const RefBlockContent = ({
                         controlStateColorTransition,
                       )}
                     >
-                      <Icon className="h-3! w-3!">
+                      <Icon className="size-3!">
                         <IconChevronDownMedium />
                       </Icon>
                     </button>
@@ -206,7 +206,7 @@ const RefBlockContent = ({
                           'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
                         )}
                       >
-                        <Icon className="h-3.5! w-3.5! text-muted-foreground">
+                        <Icon className="size-3.5! text-muted-foreground">
                           <IconSquareArrowTopRight />
                         </Icon>
                         <Txt as="span" variant="meta" className="block">
@@ -225,7 +225,7 @@ const RefBlockContent = ({
                             'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
                           )}
                         >
-                          <Icon className="h-3.5! w-3.5! text-muted-foreground">
+                          <Icon className="size-3.5! text-muted-foreground">
                             <IconCrossMedium />
                           </Icon>
                           <Txt as="span" variant="meta" className="block">
@@ -239,7 +239,7 @@ const RefBlockContent = ({
                           className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive-foreground hover:bg-fill-subtle"
                           onClick={onDelete}
                         >
-                          <Icon className="h-3.5! w-3.5!">
+                          <Icon className="size-3.5!">
                             <IconCrossMedium />
                           </Icon>
                           <Txt as="span" variant="meta" className="block">

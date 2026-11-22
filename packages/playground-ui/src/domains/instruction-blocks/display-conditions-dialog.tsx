@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button } from '@/ds/components/Button';
 import {
   Dialog,
   DialogTrigger,
@@ -7,12 +7,12 @@ import {
   DialogBody,
   DialogTitle,
   DialogDescription,
-} from '@mastra/playground-ui/components/Dialog';
-import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
-import { IconRuler } from '@mastra/playground-ui/icons/central/IconRuler';
-import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { countLeafRules } from '@mastra/playground-ui/utils/rule-engine';
+} from '@/ds/components/Dialog';
+import { RuleBuilder } from '@/ds/components/RuleBuilder';
+import { IconRuler } from '@/ds/icons/central/IconRuler';
+import type { JsonSchema } from '@/utils/json-schema';
+import type { RuleGroup } from '@/utils/rule-engine';
+import { countLeafRules } from '@/utils/rule-engine';
 
 interface DisplayConditionsDialogProps {
   entityName: string;
