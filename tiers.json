@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-21",
+  "updated": "2026-11-22",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -36711,9 +36711,9 @@
     },
     "job:store/mongodb": {
       "tier": "in",
-      "since": "2026-11-19",
-      "last_failure": "2026-11-20",
-      "reason": "pr-job-fail",
+      "since": "2026-11-22",
+      "last_failure": "2026-11-22",
+      "reason": "versioning-fail",
       "pr_failures": {
         "131409837686": {
           "date": "2026-11-12",
