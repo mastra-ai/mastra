@@ -251,11 +251,23 @@ function animatedValues(css: string) {
       if (matrix) poses.set(key, matrix);
     }
     for (const [property, value] of declarations) {
+      if (inKeyframes && property === 'rotate' && literal) {
+        values.set(`${key} ${property}`, String(degrees(value)));
+      }
       if (POSE.includes(property) && literal) continue;
       if (inKeyframes || POSE.includes(property) || ANIMATED.test(property)) values.set(`${key} ${property}`, value);
     }
   }
   return { poses, values };
+}
+
+function changedAnimatedValues(expected: ReturnType<typeof animatedValues>, actual: ReturnType<typeof animatedValues>) {
+  const movedPoses = [...expected.poses].filter(([key, pose]) => {
+    const built = actual.poses.get(key);
+    return !built || differs(built, pose);
+  });
+  const changedValues = [...expected.values].filter(([key, value]) => actual.values.get(key) !== value);
+  return [...movedPoses, ...changedValues].map(([key]) => key);
 }
 
 async function minified(path: string) {
@@ -281,15 +293,28 @@ async function minified(path: string) {
 }
 
 describe('EmptyStateArt stylesheet', () => {
+  it.each(['0deg', '360deg', '-720deg'])('detects a full-turn rotation changed to %s', rotation => {
+    const expected = animatedValues('@keyframes spin { to { rotate: -360deg; } }');
+    const actual = animatedValues(`@keyframes spin { to { rotate: ${rotation}; } }`);
+    expect(changedAnimatedValues(expected, actual)).toContain('@keyframes spin 100% rotate');
+  });
+
+  it.each(['-1turn', '-6.283185307179586rad'])('accepts the same full turn expressed as %s', rotation => {
+    const expected = animatedValues('@keyframes spin { to { rotate: -360deg; } }');
+    const actual = animatedValues(`@keyframes spin { to { rotate: ${rotation}; } }`);
+    expect(changedAnimatedValues(expected, actual)).toEqual([]);
+  });
+
   it('keeps every animated value through a production Vite build', async () => {
     const expected = animatedValues(readFileSync(stylesheet, 'utf8'));
-    const actual = animatedValues(await minified(stylesheet));
+    const built = await minified(stylesheet);
+    const actual = animatedValues(built);
     expect(expected.poses.size + expected.values.size).toBeGreaterThan(5000);
-    const movedPoses = [...expected.poses].filter(([key, pose]) => {
-      const built = actual.poses.get(key);
-      return !built || differs(built, pose);
-    });
-    const changedValues = [...expected.values].filter(([key, value]) => actual.values.get(key) !== value);
-    expect([...movedPoses, ...changedValues].map(([key]) => key)).toEqual([]);
+    expect(changedAnimatedValues(expected, actual)).toEqual([]);
+    for (const name of ['lg-sa', 'lg-sb']) {
+      const stopped = built.replace(new RegExp(`(@keyframes ${name}\\{[^}]*rotate:)-?[^;}]+`), '$10deg');
+      expect(stopped).not.toBe(built);
+      expect(changedAnimatedValues(expected, animatedValues(stopped))).toContain(`@keyframes ${name} 100% rotate`);
+    }
   }, 30000);
 });
