@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 
 import { chatColumnClass, composerColumnClass, reservedSpaceClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
-import { chatHeaderRoomPx } from './chatPageHeader';
+import { sessionHeaderRoomPx } from '@mastra/playground-ui/new/layout/session-page-frame';
 import { ComposerPanel } from './ComposerPanel';
 import { SessionPreparationOverlay } from './SessionPreparationOverlay';
 import { TaskPanel } from './TaskPanel';
@@ -53,7 +53,7 @@ export function SessionChatSurface({
         defaultScrollPosition: busy ? 'end' : 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
-        scrollPreviousItemPeek: chatHeaderRoomPx + PREVIOUS_TURN_PEEK_PX,
+        scrollPreviousItemPeek: sessionHeaderRoomPx + PREVIOUS_TURN_PEEK_PX,
       }}
     >
       {secondaryBar && <ChatShell.Bar className="not-empty:mt-(--chat-header-room)">{secondaryBar}</ChatShell.Bar>}

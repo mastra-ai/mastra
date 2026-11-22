@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
-import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
+import { sessionHeaderCapsuleClass } from '@mastra/playground-ui/new/layout/session-page-frame';
 import { currentItemStage, phaseLabel } from '../boardStages';
 import type { WorkItem } from '../services/workItems';
 import { BoardStageIcon, boardPhaseIconKind } from './BoardIcons';
@@ -18,7 +18,7 @@ export function CardStageSummary({
   const stage = currentItemStage(item, board);
   if (stage === undefined) return null;
   return (
-    <div role="group" aria-label="Card stage" className={headerCapsuleClass}>
+    <div role="group" aria-label="Card stage" className={sessionHeaderCapsuleClass}>
       <span className="flex min-w-0 items-center gap-1.5 px-2 py-1">
         <BoardStageIcon stage={stage} kind={boardPhaseIconKind(board, stage)} decorative />
         <Txt as="span" variant="label" className="truncate">

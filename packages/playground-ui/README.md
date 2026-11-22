@@ -35,6 +35,21 @@ To use Mastra's product fonts, Mona Sans for text and Commit Mono for code, add 
 @import '@mastra/playground-ui/fonts.css';
 ```
 
+### App and session frames
+
+Use `AppFrame` for the page shell and `SessionPageFrame` for a session header and body. They use the styles above and take navigation, header actions, and content from the host; they don't mount Factory's router, API client, or providers.
+
+```tsx
+import { AppFrame } from '@mastra/playground-ui/new/layout/app-shell';
+import { SessionPageFrame } from '@mastra/playground-ui/new/layout/session-page-frame';
+
+<AppFrame sidebar={sidebar} mobileHeader={mobileHeader}>
+  <SessionPageFrame breadcrumbs={<h1>Session</h1>} headerActions={actions}>
+    {transcript}
+  </SessionPageFrame>
+</AppFrame>;
+```
+
 ### Metadata
 
 Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows.
