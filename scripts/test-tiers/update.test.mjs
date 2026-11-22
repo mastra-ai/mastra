@@ -409,6 +409,10 @@ test('a changeset failure in the merged repository-files job is judged on retry 
   const skipped = job(2, 'success', changesets('skipped'));
   assert.equal(passedOnRetry(first, key, [first, skipped], keysOf), false);
 
+  // Attempt 2 is still running a changeset step (no conclusion yet): not a pass until it finishes.
+  const pending = job(2, null, changesets('success').with(3, step('Validate changeset release plan', null)));
+  assert.deepEqual(keysOf(pending).passed, []);
+  assert.equal(passedOnRetry(first, key, [first, pending], keysOf), false);
 });
 
 test('a grouped container-store job fails only the store whose step failed', () => {

@@ -227,11 +227,13 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
     const own = steps.filter(
       step => CHANGESET_STEPS.has(step.name) && step.conclusion && step.conclusion !== 'skipped',
     );
+    // A changeset step with no conclusion is still running, so the attempt hasn't passed yet.
+    const pending = steps.some(step => CHANGESET_STEPS.has(step.name) && !step.conclusion);
     const key = ['job:qa/changeset-check'];
     return {
       ran: own.length ? key : [],
       failed: own.some(step => step.conclusion === 'failure') ? key : [],
-      passed: own.length && own.every(step => step.conclusion === 'success') ? key : [],
+      passed: !pending && own.length && own.every(step => step.conclusion === 'success') ? key : [],
     };
   }
   let m;
