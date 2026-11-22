@@ -338,6 +338,83 @@ test('maps CI job names to tier keys', () => {
   assert.deepEqual(key('Prebuild', 'Unit and E2E Tests / Affected UNIT Test'), []);
 });
 
+test('the merged repository-files job fails job:qa/changeset-check only from its changeset steps', () => {
+  const qa = steps => jobKeysFor('Quality assurance', 'Validate repository files', () => '', steps);
+  const step = (name, conclusion) => ({ name, conclusion });
+  const changesetSteps = [
+    step('Check test tier', 'success'),
+    step('Test changeset package validator', 'skipped'),
+    step('Reject unknown or ignored changeset packages', 'success'),
+    step('Check whether this PR adds changesets', 'success'),
+    step('Validate changeset release plan', 'skipped'),
+  ];
+  // Another validator failing doesn't count against the changeset key.
+  assert.deepEqual(qa([step('Run README validator', 'failure'), ...changesetSteps]), {
+    ran: ['job:qa/changeset-check'],
+    failed: [],
+    passed: ['job:qa/changeset-check'],
+  });
+  assert.deepEqual(
+    qa([
+      step('Run README validator', 'success'),
+      ...changesetSteps.with(1, step('Test changeset package validator', 'failure')),
+    ]),
+    { ran: ['job:qa/changeset-check'], failed: ['job:qa/changeset-check'], passed: [] },
+  );
+  assert.deepEqual(qa(changesetSteps.with(4, step('Validate changeset release plan', 'failure'))).failed, [
+    'job:qa/changeset-check',
+  ]);
+  // Setup failed: no changeset step ran.
+  assert.deepEqual(qa(changesetSteps.map(s => step(s.name, 'skipped'))), { ran: [], failed: [], passed: [] });
+});
+
+test('a changeset failure in the merged repository-files job is judged on retry by the changeset steps alone', () => {
+  const step = (name, conclusion) => ({ name, conclusion });
+  const job = (attempt, conclusion, steps) => ({
+    name: 'Validate repository files',
+    workflow_name: 'Quality assurance',
+    run_id: 1,
+    run_attempt: attempt,
+    conclusion,
+    steps,
+  });
+  const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps);
+  const changesets = conclusion =>
+    [
+      'Test changeset package validator',
+      'Reject unknown or ignored changeset packages',
+      'Check whether this PR adds changesets',
+      'Validate changeset release plan',
+    ].map(name => step(name, conclusion));
+  const first = job(1, 'failure', [step('Run README validator', 'success'), ...changesets('failure')]);
+  const key = 'job:qa/changeset-check';
+  assert.deepEqual(keysOf(first).failed, [key]);
+
+  // Attempt 2: every changeset step passes, README fails, so the job is red both times.
+  const recovered = job(2, 'failure', [step('Run README validator', 'failure'), ...changesets('success')]);
+  assert.equal(passedOnRetry(first, key, [first, recovered], keysOf), true);
+
+  // Attempt 2 still fails a changeset step: no recovery.
+  const stillRed = job(2, 'failure', [
+    step('Run README validator', 'failure'),
+    ...changesets('success').with(2, step('Check whether this PR adds changesets', 'failure')),
+  ]);
+  assert.equal(passedOnRetry(first, key, [first, stillRed], keysOf), false);
+
+  // Attempt 2 cancelled before the changeset steps finished: not a pass.
+  const cancelled = job(2, 'cancelled', [step('Run README validator', 'success'), ...changesets('cancelled')]);
+  assert.equal(passedOnRetry(first, key, [first, cancelled], keysOf), false);
+
+  // Attempt 2 skipped every changeset step (setup failed): not a pass, even if the job went green.
+  const skipped = job(2, 'success', changesets('skipped'));
+  assert.equal(passedOnRetry(first, key, [first, skipped], keysOf), false);
+
+  // Attempt 2 is still running a changeset step (no conclusion yet): not a pass until it finishes.
+  const pending = job(2, null, changesets('success').with(3, step('Validate changeset release plan', null)));
+  assert.deepEqual(keysOf(pending).passed, []);
+  assert.equal(passedOnRetry(first, key, [first, pending], keysOf), false);
+});
+
 test('the merged light E2E job fails only the suite whose step failed', () => {
   // Step names as e2e-tests.yml's e2e-light job reports them in the jobs API.
   const steps = [
