@@ -195,7 +195,7 @@ describe('runDurableFinishSideEffects', () => {
     expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
-  it('skips title generation for an observational-memory run, matching the persistence guard', async () => {
+  it('titles an observational-memory run without flushing it, and only into an existing thread', async () => {
     const generateThreadTitle = vi.fn().mockResolvedValue(undefined);
     const flushMessages = vi.fn().mockResolvedValue(undefined);
 
@@ -218,10 +218,11 @@ describe('runDurableFinishSideEffects', () => {
       messageListState: makeMessageListState(),
     });
 
-    // Neither finish-time memory write runs, so the run cannot leave behind a
-    // titled thread that holds no messages.
+    // OM saves its own messages, so finalize does not flush them. The title is still generated,
+    // but told never to create the thread row, so a title cannot end up in an otherwise empty row.
     expect(flushMessages).not.toHaveBeenCalled();
-    expect(generateThreadTitle).not.toHaveBeenCalled();
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(generateThreadTitle).toHaveBeenCalledWith(expect.objectContaining({ requireExistingThread: true }));
   });
 
   it('still generates a title for an ordinary run', async () => {

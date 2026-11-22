@@ -806,5 +806,82 @@ describe('DurableAgent memory edge cases', () => {
       expect(thread?.title).toBe('Existing Title');
       result.cleanup();
     });
+
+    // #30478: an observational-memory run writes its own messages, so finalize skips its flush.
+    // It skipped the title too, so OM threads never got one.
+    describe('observational-memory runs', () => {
+      const omOptions = { observationalMemory: { model: 'openai/gpt-4o-mini' } } as any;
+
+      async function streamOmTurn(
+        mockMemory: MockMemory,
+        threadId: string,
+        options: Record<string, unknown> = omOptions,
+        model = createTextModel('assistant response'),
+      ) {
+        const baseAgent = new Agent({
+          id: `om-title-${threadId}`,
+          name: 'OM Title Agent',
+          instructions: 'Test durable OM title generation',
+          model: model as LanguageModelV2,
+          memory: mockMemory,
+        });
+        const genTitle = vi.spyOn(baseAgent, 'genTitle').mockResolvedValue('OM Thread Title');
+        const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+        const result = await durableAgent.stream('What is the weather like today?', {
+          memory: { thread: threadId, resource: 'resource-om', options },
+        });
+        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+        }
+        return { result, genTitle };
+      }
+
+      it('titles the thread of an OM run', async () => {
+        const mockMemory = new MockMemory();
+        mockMemory.getMergedThreadConfig = () => ({ generateTitle: true });
+
+        const { result, genTitle } = await streamOmTurn(mockMemory, 'thread-om-title');
+
+        await vi.waitFor(async () => {
+          const thread = await mockMemory.getThreadById({ threadId: 'thread-om-title' });
+          expect(thread?.title).toBe('OM Thread Title');
+        });
+        expect(genTitle).toHaveBeenCalledTimes(1);
+        result.cleanup();
+      });
+
+      it('never creates a title-only thread row when the OM run leaves no thread', async () => {
+        const mockMemory = new MockMemory();
+        mockMemory.getMergedThreadConfig = () => ({ generateTitle: true });
+        // The thread row disappears while the turn runs (another writer deleted it).
+        const model = createTextModel('assistant response');
+        const doStream = model.doStream.bind(model);
+        model.doStream = async (...args: Parameters<typeof doStream>) => {
+          await mockMemory.deleteThread('thread-om-gone');
+          return doStream(...args);
+        };
+
+        const { result } = await streamOmTurn(mockMemory, 'thread-om-gone', omOptions, model);
+        // Title generation is fire-and-forget after FINISH; give it the chance to write.
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        expect(await mockMemory.getThreadById({ threadId: 'thread-om-gone' })).toBeNull();
+        result.cleanup();
+      });
+
+      it('does not title an OM run with read-only memory', async () => {
+        const mockMemory = new MockMemory();
+        mockMemory.getMergedThreadConfig = () => ({ generateTitle: true });
+
+        const { result, genTitle } = await streamOmTurn(mockMemory, 'thread-om-readonly', {
+          ...omOptions,
+          readOnly: true,
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        expect(genTitle).not.toHaveBeenCalled();
+        expect((await mockMemory.getThreadById({ threadId: 'thread-om-readonly' }))?.title ?? '').toBe('');
+        result.cleanup();
+      });
+    });
   });
 });

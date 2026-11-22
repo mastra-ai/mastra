@@ -998,6 +998,8 @@ export interface RunRegistryEntry {
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
+    /** Title only a thread row that exists; never create one to hold the title. */
+    requireExistingThread?: boolean;
   }) => Promise<string | undefined>;
   /**
    * True for a stream() run whose merged `generateTitle` config sets `emitEvent`. The finish

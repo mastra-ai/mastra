@@ -428,14 +428,10 @@ export async function runDurableFinishSideEffects({
   let titleGeneration: Promise<void> | undefined;
   let titleForStream: Promise<string | undefined> | undefined;
 
-  // Same exclusions as the persistence block above: an observational-memory run writes no
-  // messages here, and titling it would create a thread row holding a title and nothing else.
-  if (
-    durableState?.threadId &&
-    durableState?.resourceId &&
-    !durableState.observationalMemory &&
-    !durableState.memoryConfig?.readOnly
-  ) {
+  // Observational memory saves its own messages, so the flush above skips OM runs and their
+  // thread row is not guaranteed to exist here. Title it only if the row is there, so a title
+  // never ends up in a row holding nothing else.
+  if (durableState?.threadId && durableState?.resourceId && !durableState.memoryConfig?.readOnly) {
     const titleArgs: GenerateThreadTitleArgs = {
       threadId: durableState.threadId,
       resourceId: durableState.resourceId,
@@ -443,6 +439,7 @@ export async function runDurableFinishSideEffects({
       messageListState: messageList.serialize(),
       requestContext: effectiveRequestContext,
       tracingContext,
+      requireExistingThread: !!durableState.observationalMemory,
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
@@ -863,8 +860,10 @@ export async function generateDurableThreadTitle({
   messageListState,
   requestContext,
   tracingContext,
+  requireExistingThread,
 }: GenerateThreadTitleArgs & { agent: AnyAgent; memory: MastraMemory }): Promise<string | undefined> {
   const thread = await memory.getThreadById({ threadId });
+  if (requireExistingThread && !thread) return undefined;
   const mergedConfig = memory.getMergedThreadConfig(memoryConfig);
   const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
     mergedConfig.generateTitle,
