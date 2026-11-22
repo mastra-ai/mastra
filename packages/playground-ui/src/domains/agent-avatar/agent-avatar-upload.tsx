@@ -44,18 +44,21 @@ export const AgentAvatarUpload = ({
   };
 
   return (
-    <div className={cn('rounded-full bg-card p-1', className)} style={{ viewTransitionName: 'agent-avatar' }}>
+    <div
+      className={cn('w-fit shrink-0 rounded-full bg-card p-1', className)}
+      style={{ viewTransitionName: 'agent-avatar' }}
+    >
       {interactive ? (
         <>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className={cn('relative rounded-full', focusRing)}
+            className={cn('group relative rounded-full', focusRing)}
             aria-label="Upload avatar"
             data-testid="agent-configure-avatar-trigger"
           >
             <Avatar src={avatarUrl} name={name} size="lg" interactive color={color} textColor={textColor} />
-            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-muted opacity-0 transition-opacity">
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-muted/80 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
               <IconPlusMedium className="size-icon-lg text-foreground" />
             </span>
           </button>
