@@ -149,7 +149,9 @@ jobs:
     needs: setup
     if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.container_groups != '[]' }}
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 25
+    # Every step has its own budget and the job allows all of them, so a store that stalls to its
+    # cap can't use up the time of the stores after it (their steps would be cancelled unrun).
+    timeout-minutes: 170
     permissions:
       contents: read
       id-token: write
@@ -170,9 +172,11 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm and Node.js
+        timeout-minutes: 10
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Build grouped storage packages (${{ join(matrix.group.stores, ' ') }})
+        timeout-minutes: 20
         id: build
         env:
           GROUP_STORES: ${{ toJson(matrix.group.stores) }}
@@ -192,6 +196,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop opensearch containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.opensearch.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/opensearch
@@ -207,6 +212,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop mssql containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.mssql.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/mssql
@@ -222,6 +228,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop chroma containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.chroma.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/chroma
@@ -237,6 +244,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop mysql containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.mysql.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/mysql
@@ -252,6 +260,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop dynamodb containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.dynamodb.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/dynamodb
@@ -267,6 +276,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop qdrant containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.qdrant.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/qdrant
@@ -282,6 +292,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop redis containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.redis.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/redis
@@ -297,6 +308,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop upstash containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.upstash.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/upstash
@@ -312,6 +324,7 @@ jobs:
 
       # A failed run skips the store's posttest, so its containers would hold the ports.
       - name: Stop valkey containers
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.valkey.outcome != 'skipped' }}
         run: docker compose down -v
         working-directory: stores/valkey

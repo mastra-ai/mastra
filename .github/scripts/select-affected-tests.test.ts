@@ -257,3 +257,18 @@ describe('PR lockfile diff', () => {
     }
   });
 });
+
+describe('Grouped container store tests', () => {
+  // Stores that share a runner must not share a time budget: every step has its own timeout and
+  // the job allows all of them, so a store that stalls to its cap can't run out the clock on the
+  // stores after it, whose steps would then be cancelled without a result.
+  test('test-combined-stores.yml test-grouped gives every step its own budget', () => {
+    type Step = { name?: string; uses?: string; 'timeout-minutes'?: number };
+    const workflow = parse(readFileSync(new URL('../workflows/test-combined-stores.yml', import.meta.url), 'utf8'));
+    const job = workflow.jobs['test-grouped'] as { 'timeout-minutes': number; steps: Step[] };
+    const unbounded = job.steps.filter(step => !step['timeout-minutes']).map(step => step.name ?? step.uses);
+    expect(unbounded).toEqual([]);
+    const total = job.steps.reduce((sum, step) => sum + (step['timeout-minutes'] ?? 0), 0);
+    expect(job['timeout-minutes']).toBeGreaterThanOrEqual(total);
+  });
+});

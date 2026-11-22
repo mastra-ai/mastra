@@ -720,6 +720,18 @@ export function passedOnRetry(job, key, candidates, keysOf) {
   });
 }
 
+/**
+ * The verdict for each tier key a failed PR job failed: `flake` when the key passed on a later
+ * attempt or in a later green run of the same head (`candidates`, see passedOnRetry), else `fail`
+ * once the failure has settled and `unresolved` before.
+ */
+export function failureVerdicts(job, keys, candidates, keysOf, settled) {
+  return failedJobKeys(job, keys).map(key => ({
+    key,
+    verdict: passedOnRetry(job, key, candidates, keysOf) ? 'flake' : settled ? 'fail' : 'unresolved',
+  }));
+}
+
 function versioningCommand(tiers, { runId, date, escapesOut }) {
   const jobs = runJobs(runId).filter(j => j.conclusion && j.conclusion !== 'skipped');
   const files = jobs
@@ -817,13 +829,8 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
         const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();
         const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps);
-        const flaked = keys.passed
-          ? key => passedOnRetry(job, key, [...jobs, ...laterGreenJobs(run)], keysOf)
-          : () => passedLater(job);
-        for (const key of failedJobKeys(job, keys)) {
-          const verdict = flaked(key) ? 'flake' : settled ? 'fail' : 'unresolved';
+        for (const { key, verdict } of failureVerdicts(job, keys, [...jobs, ...laterGreenJobs(run)], keysOf, settled))
           failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict, settlesAt });
-        }
         continue;
       }
       const rerunPassed = passedLater(job);

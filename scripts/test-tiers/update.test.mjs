@@ -8,6 +8,7 @@ import {
   addJobKeys,
   failedJobKeys,
   passedOnRetry,
+  failureVerdicts,
   boundedGh,
   applyCatches,
   applyVersioningFailures,
@@ -1181,4 +1182,24 @@ test('the git fallback diff stops at the hard limit too', () => {
     e => isTransientGhError(e),
   );
   assert.equal(calls.length, 3);
+});
+
+test('a whole-job store failure is not a flake because a later green run of the head skipped that store', () => {
+  const keysOf = j => jobKeysFor('Prebuild', j.name, () => '', j.steps ?? []);
+  const job = (run_id, attempt, name, conclusion) => ({ name, run_id, run_attempt: attempt, conclusion, steps: [] });
+  const failed = job(10, 1, 'Combined Store Tests / test (pg)', 'failure');
+  const keys = jobKeysFor('Prebuild', failed.name, () => '', []);
+  // pg moved out between runs, so the later green run of the same head never ran it.
+  const greenWithoutPg = [job(11, 1, 'Combined Store Tests / test (mysql)', 'success')];
+  assert.deepEqual(failureVerdicts(failed, keys, [failed, ...greenWithoutPg], keysOf, true), [
+    { key: 'job:store/pg', verdict: 'fail' },
+  ]);
+  assert.deepEqual(failureVerdicts(failed, keys, [failed, ...greenWithoutPg], keysOf, false), [
+    { key: 'job:store/pg', verdict: 'unresolved' },
+  ]);
+  // pg passing in that later green run, or on a later attempt, is a flake.
+  for (const later of [job(11, 1, failed.name, 'success'), job(10, 2, failed.name, 'success')])
+    assert.deepEqual(failureVerdicts(failed, keys, [failed, later], keysOf, true), [
+      { key: 'job:store/pg', verdict: 'flake' },
+    ]);
 });
