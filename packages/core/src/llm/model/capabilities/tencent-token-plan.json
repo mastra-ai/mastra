@@ -37,20 +37,43 @@
     "mimo-v2.6-flash"
   ],
   "reasoning": {
-    "minimax-m3": [
+    "hy3": [
       {
         "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-flash": [
+      },
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "hy4-preview": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "glm-5.3": [
@@ -74,28 +97,10 @@
         "values": ["high", "max"]
       }
     ],
-    "glm-5.2": [
-      {
-        "type": "toggle"
-      },
+    "glm-5-3": [
       {
         "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "hy3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "minimax-m-3-0": [
@@ -103,31 +108,26 @@
         "type": "toggle"
       }
     ],
-    "glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "hy4-preview": [
+    "mimo-v2.6-flash": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "minimax-m3": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "deepseek/deepseek-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },

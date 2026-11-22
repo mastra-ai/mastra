@@ -21951,6 +21951,13 @@
           "cache_read": 0.033
         }
       },
+      "deepinfra/tencent/Hy4": {
+        "cost": {
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
+        }
+      },
       "deepinfra/tencent/Hy4-preview": {
         "cost": {
           "input": 0.834,
@@ -22021,13 +22028,6 @@
           "cache_read": 0.3
         }
       },
-      "fireworks_ai/accounts/fireworks/models/gpt-oss-120b": {
-        "cost": {
-          "input": 0.15,
-          "output": 0.6,
-          "cache_read": 0.015
-        }
-      },
       "fireworks_ai/accounts/fireworks/models/inkling": {
         "cost": {
           "input": 1,
@@ -22040,13 +22040,6 @@
           "input": 1.25,
           "output": 4.25,
           "cache_read": 0.15
-        }
-      },
-      "fireworks_ai/gpt-oss-120b": {
-        "cost": {
-          "input": 0.15,
-          "output": 0.6,
-          "cache_read": 0.014
         }
       },
       "flexai/DeepSeek-V4-Flash-0731": {
@@ -25079,15 +25072,15 @@
       },
       "deepseek-v4.1-flash": {
         "cost": {
-          "input": 0.03,
-          "output": 0.12,
+          "input": 0.06,
+          "output": 0.24,
           "cache_read": 0.006
         }
       },
       "deepseek-v4.1-flash-1017": {
         "cost": {
-          "input": 0.03,
-          "output": 0.12,
+          "input": 0.06,
+          "output": 0.24,
           "cache_read": 0.006
         }
       },
@@ -36372,7 +36365,7 @@
         "cost": {
           "input": 0.035,
           "output": 0.25,
-          "cache_read": 0.003
+          "cache_read": 0.015
         }
       },
       "particle-ai/particle-1:free": {
@@ -52040,9 +52033,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -61811,7 +61804,7 @@
         "cost": {
           "input": 0.07,
           "output": 0.5,
-          "cache_read": 0.006
+          "cache_read": 0.03
         }
       },
       "particle-ai/particle-1:free": {
@@ -62250,9 +62243,9 @@
       },
       "qwen/qwen3.8-27b": {
         "cost": {
-          "input": 0.06,
-          "output": 1.96,
-          "cache_read": 0.059
+          "input": 0.035,
+          "output": 1.5,
+          "cache_read": 0.0175
         }
       },
       "qwen/qwen3.8-flash": {
