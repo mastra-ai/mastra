@@ -6,3 +6,4 @@ export * from './prompts-list/no-prompt-blocks-info';
 export * from './prompts-list/prompts-list';
 export * from './section-header';
 export * from './edit-layout';
+export * from './prompt-block-edit-content';

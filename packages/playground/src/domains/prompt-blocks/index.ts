@@ -5,6 +5,8 @@ export {
   type PromptBlockVersionComboboxProps,
   PromptBlockEditSidebar,
   PromptBlockEditMain,
+  PromptBlockEditContent,
+  type PromptBlockEditContentProps,
   DeletePromptBlockAction,
   usePromptBlockEditForm,
   type UsePromptBlockEditFormOptions,
