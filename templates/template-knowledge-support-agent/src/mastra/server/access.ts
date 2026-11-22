@@ -79,7 +79,7 @@ export function createSupportAuthorization(
     requestContext.set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, principals(profile));
 
     const review = await authorizeReviewRoute(path, method, request, owner, profile);
-    const confirmation = await authorizeConfirmation(path, method, request, owner, memory);
+    const confirmation = authorizeConfirmation(path, method, request);
     const allowed = confirmation ?? review ?? (await authorizeStudioRoute(path, method, request, owner));
     recordOperation('authorization', allowed ? 'success' : 'denied', started);
     return allowed;

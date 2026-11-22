@@ -180,8 +180,12 @@ async function writeDataset(
     }
   }
   if (!reportRetention) return;
-  const selectedIds = new Set([...written.values()].map(({ page }) => page.id));
-  const selectedNotes = new Set(dataset.pages.flatMap(page => page.notes.map(note => note.marker)));
+  const selectedNotes = new Map(
+    dataset.pages.map(wanted => [
+      written.get(`${wanted.scope}#${wanted.path}`)!.page.id,
+      new Set(wanted.notes.map(note => note.marker)),
+    ]),
+  );
   const pagePrefix = `<!-- knowledge-seed:page:${dataset.id}:`;
   const notePrefix = `Seed note: ${dataset.id}/`;
   let cursor: string | undefined;
@@ -189,16 +193,13 @@ async function writeDataset(
     const batch = await storage.listPages({ read: 'all', cursor, limit: 100 });
     const noteCounts = await storage.countNotes({ pageIds: batch.pages.map(page => page.id), read: 'all' });
     for (const page of batch.pages) {
-      if (page.createdBy.author === author && page.body?.startsWith(pagePrefix) && !selectedIds.has(page.id))
+      const markers = selectedNotes.get(page.id);
+      if (page.createdBy.author === author && page.body?.startsWith(pagePrefix) && !markers)
         report.retained.push(`page:${page.id}`);
       if (!noteCounts[page.id]) continue;
       for (const note of await allNotes(storage, page.id)) {
         const marker = note.text.split('\n')[0]!;
-        if (
-          note.provenance.author === author &&
-          marker.startsWith(notePrefix) &&
-          (!selectedIds.has(page.id) || !selectedNotes.has(marker))
-        )
+        if (note.provenance.author === author && marker.startsWith(notePrefix) && !markers?.has(marker))
           report.retained.push(`note:${note.id}`);
       }
     }

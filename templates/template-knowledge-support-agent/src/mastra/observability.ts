@@ -77,6 +77,9 @@ function safeCost(value: CostContext | undefined): CostContext | undefined {
     ...(value.costUnit === 'USD' || value.costUnit === 'usd' ? { costUnit: value.costUnit } : {}),
   };
 }
+function hasReviewMarker(value: unknown) {
+  return typeof value === 'string' && value.startsWith('<!-- knowledge-review:');
+}
 function toolOperation(span: AnyExportedSpan): Operation | undefined {
   if (span.type !== SpanType.TOOL_CALL) return;
   for (const [name, operation] of [
@@ -151,8 +154,8 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
       const page = output.page as { body?: unknown } | undefined;
       if (
         operation === 'knowledge-read' &&
-        typeof page?.body === 'string' &&
-        /^<!-- knowledge-review:/u.test(page.body)
+        (hasReviewMarker(page?.body) ||
+          (Array.isArray(output.notes) && output.notes.some(note => hasReviewMarker(note?.text))))
       )
         metrics?.emit('support_operation_count', 1, { operation: 'resolution-reuse', status: 'ready' });
       if (span.endTime)

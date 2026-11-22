@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { setTimeout } from 'node:timers/promises';
 import { demoCorpus } from '../fixtures/demo-corpus.ts';
+import { reviewedNote } from '../fixtures/history-corpus.ts';
 import {
   assertCitations,
   confirm,
@@ -381,6 +382,20 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     const source = await confirm(f, id);
     const lifecycle = await approveLifecycle(f, source);
     await turn(f, await thread(f, f.otherCustomer!), 'F5:reuse network', f.otherCustomer!);
+    await f.seed('retail-pos-history');
+    const noteValue = 'REVIEWED_NOTE_PRIVATE_MARIGOLD';
+    const noteScope = 'customer:retailops:store-73';
+    const notePath = 'cases/hub-cable';
+    for (const index of [1, 2])
+      await f.supportKnowledge.addNote({
+        scope: noteScope,
+        path: notePath,
+        text: reviewedNote(`${noteValue} ${index}`),
+        author: 'review:synthetic',
+      });
+    const noteReadStart = f.model.requests.length;
+    await turn(f, await thread(f, f.otherCustomer!), `F5:notes READ=${noteScope}#${notePath}`, f.otherCustomer!);
+    assert.ok(providerInput(f, noteReadStart).includes(noteValue));
     await turn(f, await thread(f), 'F5:diagnostic network with previous history');
     await turn(f, await thread(f), 'F5:insufficient fluxcapacitor');
     assert.equal((await f.request('/observability/traces')).status, 403);
@@ -430,6 +445,11 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       if (!samples.some(row => row.name === 'mastra_model_total_output_tokens' && row.metadata.value === 8))
         missing.push('model output tokens');
       if (!samples.some(row => row.metadata.costContext?.estimatedCost > 0)) missing.push('native cost estimate');
+      const reuse = samples.filter(row => row.metadata.labels?.operation === 'resolution-reuse');
+      const counts = reuse.filter(row => row.name === 'support_operation_count').length;
+      // Preflight emits a count and a duration for reuse. Each matching native tool read emits one count.
+      const preflight = reuse.filter(row => row.name === 'support_operation_duration_ms').length;
+      if (counts - preflight !== 2) missing.push('one resolution reuse event for each matching read');
       if (
         !rows.some(
           row => row.traceId === failedTraceId && row.name === 'agent_run' && row.outcome === 'error' && row.error,
@@ -461,6 +481,7 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     assert.ok(failedSpan.error);
     const exported = JSON.stringify({ tables, trace });
     const forbidden = [
+      noteValue,
       ...Object.values(sentinels).filter(value => value !== sentinels.policy),
       ...f.credentials.map(entry => entry.token),
       'synthetic-model-key',

@@ -8,6 +8,15 @@ export interface ScriptedReply {
 }
 export type ModelScript = (body: Record<string, unknown>) => ScriptedReply;
 
+function messageText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter(part => part?.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text)
+    .join('\n');
+}
+
 export async function startModelServer(script?: ModelScript) {
   const requests: Record<string, unknown>[] = [];
   const failures: { status: number; message: string }[] = [];
@@ -39,14 +48,11 @@ export async function startModelServer(script?: ModelScript) {
     }
     requests.push(body);
     const messages = body.messages as { role: string; content?: unknown; tool_calls?: unknown }[];
-    const userText = (message: (typeof messages)[number]) =>
-      typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
     const lastUserIndex = messages
-      .map(message => message.role === 'user' && !userText(message)?.startsWith('<pinned-knowledge'))
+      .map(message => message.role === 'user' && !messageText(message.content).startsWith('<pinned-knowledge'))
       .lastIndexOf(true);
     const hasTool = messages.slice(lastUserIndex + 1).some(message => message.role === 'tool');
-    const text = messages[lastUserIndex] ? userText(messages[lastUserIndex]!) : '';
-    const read = /READ_PAGE:([^\s]+)/u.exec(text ?? '');
+    const read = /READ_PAGE:([^\s]+)/u.exec(messageText(messages[lastUserIndex]?.content));
     const toolMessages = messages.slice(lastUserIndex + 1).filter(message => message.role === 'tool');
     let requestedPage = read?.[1];
     if (!requestedPage && toolMessages.length === 1 && typeof toolMessages[0]?.content === 'string') {

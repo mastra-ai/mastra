@@ -1,6 +1,7 @@
 import { knowledgeScopeAddress, MAX_KNOWLEDGE_PAGE_DEPTH } from '@mastra/core/knowledge';
-import type { Knowledge, KnowledgePage, KnowledgeNote } from '@mastra/core/knowledge';
+import type { Knowledge, KnowledgePage, KnowledgeNote, KnowledgeStorage } from '@mastra/core/knowledge';
 import { isCustomerHistoryPath, supportConfiguration } from '../../examples/support.ts';
+import type { KnowledgeReadSnapshot } from '../database/knowledge-snapshot.ts';
 import { principals, type Profile } from '../identity.ts';
 import { recordOperation } from '../observability.ts';
 import { MAX_SUPPORT_RECORD_BODY_LENGTH, validateSupportRecord, type SupportRecord } from './seed-manifest.ts';
@@ -20,6 +21,8 @@ const bounds = {
 };
 type Evidence = SupportRecord & { ref: string };
 type PageLocation = Pick<KnowledgePage, 'id' | 'scopeId' | 'isScope' | 'key' | 'parentId' | 'version'>;
+type NoteEvidence = { id: string; version: number; listed: boolean; record: Evidence };
+export type HistoryKnowledge = Knowledge & { withReadSnapshot: KnowledgeReadSnapshot };
 export type History = {
   status: 'ready' | 'empty' | 'no-relevant-records' | 'partial' | 'unavailable';
   records: Evidence[];
@@ -36,7 +39,11 @@ function location({ id, scopeId, isScope, key, parentId, version }: KnowledgePag
 }
 
 /** Scoped native search, verified canonical ancestry, and a bounded small-corpus fallback. */
-export async function prepareHistory(knowledge: Knowledge, profile: Profile, question: string): Promise<History> {
+export async function prepareHistory(
+  knowledge: HistoryKnowledge,
+  profile: Profile,
+  question: string,
+): Promise<History> {
   const started = performance.now();
   const records: Evidence[] = [];
   let partial = false;
@@ -158,11 +165,15 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
     } catch {
       partial = true;
     }
-    async function scanNotes(pageId: string, visit: (note: KnowledgeNote) => void) {
+    async function scanNotes(
+      source: Pick<KnowledgeStorage, 'listNotes'>,
+      pageId: string,
+      visit: (note: KnowledgeNote) => void,
+    ) {
       let cursor: string | undefined;
       let count = 0;
       do {
-        const batch = await store.listNotes({ pageId, read, cursor, limit: bounds.batch });
+        const batch = await source.listNotes({ pageId, read, cursor, limit: bounds.batch });
         for (const note of batch.notes.slice(0, bounds.notes - count)) {
           count++;
           visit(note);
@@ -175,6 +186,8 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       } while (cursor);
     }
     const pagesToInspect = candidateBodies.entries();
+    const checks: Array<{ pageId: string; ancestry: PageLocation[]; pageRecord?: Evidence; notes: NoteEvidence[] }> =
+      [];
     async function inspect(pageId: string, body: string | undefined) {
       const path: string[] = [];
       const ancestry = new Map<string, PageLocation>();
@@ -196,16 +209,16 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       const canonical = path.join('/');
       if (!isCustomerHistoryPath(canonical)) return;
       const ref = `${scope}#${canonical}`;
-      const evidence: Evidence[] = [];
+      let pageRecord: Evidence | undefined;
       inspected++;
       try {
         const parsed = record(body);
-        if (parsed) evidence.push({ ...parsed, ref });
+        if (parsed) pageRecord = { ...parsed, ref };
       } catch {
         partial = true;
       }
       const seenNotes = new Set<string>();
-      const noteEvidence: Array<{ id: string; version: number; listed: boolean; record: Evidence }> = [];
+      const noteEvidence: NoteEvidence[] = [];
       const includeNote = (note: KnowledgeNote, listed: boolean) => {
         if (seenNotes.has(note.id) || note.pageId !== pageId || note.deletedAt) return;
         seenNotes.add(note.id);
@@ -230,7 +243,7 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
       };
       if (noteCounts[pageId] !== 0) {
         try {
-          await scanNotes(pageId, note => includeNote(note, true));
+          await scanNotes(store, pageId, note => includeNote(note, true));
         } catch {
           partial = true;
         }
@@ -245,64 +258,69 @@ export async function prepareHistory(knowledge: Knowledge, profile: Profile, que
           partial = true;
         }
       }
-      // Removing or editing a note does not change its parent page's revision.
-      const listedVersions = new Map<string, number>();
-      if (noteEvidence.some(note => note.listed)) {
-        try {
-          await scanNotes(pageId, note => {
-            if (note.pageId === pageId && !note.deletedAt) listedVersions.set(note.id, note.version);
-          });
-        } catch {
-          partial = true;
-        }
-      }
-      for (const observed of noteEvidence) {
-        try {
-          let currentVersion = listedVersions.get(observed.id);
-          if (!observed.listed) {
-            const note = await store.getNote({ id: observed.id, read });
-            if (note?.id === observed.id && note.pageId === pageId && !note.deletedAt) currentVersion = note.version;
-          }
-          if (currentVersion === observed.version) {
-            evidence.push(observed.record);
-            continue;
-          }
-        } catch {
-          // A failed recheck leaves the note unverified.
-        }
-        partial = true;
-      }
-      if (!evidence.length) return;
-      try {
-        // A note can be added after its case or an ancestor moves. Recheck the full path
-        // in one scoped read after collecting evidence, including moves away and back.
-        const verified = await store.getPages({ ids: [...ancestry.keys()], read });
-        if (
-          verified.length === ancestry.size &&
-          verified.every(current => {
-            const prior = ancestry.get(current.id);
-            return (
-              prior &&
-              current.scopeId === customer.id &&
-              current.parentId === prior.parentId &&
-              current.key === prior.key &&
-              current.version === prior.version
-            );
-          })
-        ) {
-          records.push(...evidence);
-          return;
-        }
-      } catch {
-        // A failed recheck leaves the evidence unverified.
-      }
-      partial = true;
+      if (pageRecord || noteEvidence.length)
+        checks.push({ pageId, ancestry: [...ancestry.values()], pageRecord, notes: noteEvidence });
     }
     await Promise.all(
       Array.from({ length: Math.min(bounds.noteConcurrency, candidateBodies.size) }, async () => {
         for (const [pageId, body] of pagesToInspect) await inspect(pageId, body);
       }),
     );
+    async function verify(batch: typeof checks) {
+      try {
+        // Note revisions and every ancestor must agree in the same scoped read snapshot.
+        const verified = await knowledge.withReadSnapshot(async snapshot => {
+          const ancestryIds = [...new Set(batch.flatMap(check => check.ancestry.map(page => page.id)))];
+          const currentPages = new Map<string, PageLocation>();
+          for (let index = 0; index < ancestryIds.length; index += bounds.batch) {
+            const batch = await snapshot.getPages({ ids: ancestryIds.slice(index, index + bounds.batch), read });
+            for (const current of batch) currentPages.set(current.id, location(current));
+          }
+          const evidence: Evidence[] = [];
+          for (const { pageId, ancestry, pageRecord, notes } of batch) {
+            if (
+              !ancestry.every(prior => {
+                const current = currentPages.get(prior.id);
+                return (
+                  current?.scopeId === customer.id &&
+                  current.parentId === prior.parentId &&
+                  current.key === prior.key &&
+                  current.version === prior.version
+                );
+              })
+            ) {
+              partial = true;
+              continue;
+            }
+            if (pageRecord) evidence.push(pageRecord);
+            const listedVersions = new Map<string, number>();
+            if (notes.some(note => note.listed)) {
+              await scanNotes(snapshot, pageId, note => {
+                if (note.pageId === pageId && !note.deletedAt) listedVersions.set(note.id, note.version);
+              });
+            }
+            for (const observed of notes) {
+              let currentVersion = listedVersions.get(observed.id);
+              if (!observed.listed) {
+                const note = await snapshot.getNote({ id: observed.id, read });
+                if (note?.pageId === pageId && !note.deletedAt) currentVersion = note.version;
+              }
+              if (currentVersion === observed.version) evidence.push(observed.record);
+              else partial = true;
+            }
+          }
+          return evidence;
+        });
+        records.push(...verified);
+      } catch {
+        partial = true;
+      }
+    }
+    // Independent batches bound each read transaction and preserve evidence if another batch fails.
+    const verification: Promise<void>[] = [];
+    for (let index = 0; index < checks.length; index += bounds.batch)
+      verification.push(verify(checks.slice(index, index + bounds.batch)));
+    await Promise.all(verification);
   } catch {
     return finish('unavailable');
   }

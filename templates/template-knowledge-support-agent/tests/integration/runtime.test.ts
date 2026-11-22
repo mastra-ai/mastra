@@ -116,6 +116,34 @@ test('the model fixture closes connections with incomplete request bodies', { ti
   }
 });
 
+test('the model fixture reads the same reference from plain text and text parts', async () => {
+  const model = await startModelServer();
+  try {
+    const ref = 'docs:north#manual';
+    const command = `READ_PAGE:${ref}`;
+    const pin = [{ type: 'text', text: '<pinned-knowledge>READ_PAGE:docs:north#policy</pinned-knowledge>' }];
+    for (const content of [command, [{ type: 'text', text: command }]]) {
+      const result = await json(
+        await fetch(`${model.url}/chat/completions`, {
+          method: 'POST',
+          body: JSON.stringify({
+            messages: [
+              { role: 'user', content },
+              { role: 'user', content: pin },
+            ],
+          }),
+          signal: AbortSignal.timeout(2000),
+        }),
+      );
+      const tool = result.choices[0].message.tool_calls[0].function;
+      assert.equal(tool.name, 'knowledge_read');
+      assert.deepEqual(JSON.parse(tool.arguments), { page: ref });
+    }
+  } finally {
+    await model.close();
+  }
+});
+
 test('the model fixture returns an error for non-JSON tool arguments and stays available', async () => {
   const model = await startModelServer(body =>
     body.stream

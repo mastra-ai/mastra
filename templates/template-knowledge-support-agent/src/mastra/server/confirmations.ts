@@ -10,21 +10,9 @@ import {
 } from '../review/confirmation.ts';
 
 /** This explicit route is the only HTTP writer of structured confirmation metadata. */
-export async function authorizeConfirmation(
-  path: string,
-  method: string,
-  request: Request,
-  owner: string,
-  memory: Memory,
-) {
+export function authorizeConfirmation(path: string, method: string, request: Request) {
   if (path !== '/support/confirmations') return undefined;
-  if (method !== 'POST' || new URL(request.url).search) return false;
-  try {
-    const input = confirmationInputSchema.parse(await request.clone().json());
-    return (await memory.getThreadById({ threadId: input.threadId }))?.resourceId === owner;
-  } catch {
-    return false;
-  }
+  return method === 'POST' && !new URL(request.url).search;
 }
 export function createConfirmationRoute(memory: Memory) {
   return registerApiRoute('/support/confirmations', {
@@ -34,7 +22,8 @@ export function createConfirmationRoute(memory: Memory) {
       if (context.req.method !== 'POST') return context.json({ error: 'Method not allowed' }, 405);
       const profile = context.get('requestContext').get('mastra__user') as Profile | undefined;
       if (!profile) return context.json({ error: 'Authentication required' }, 401);
-      const parsed = confirmationInputSchema.safeParse(await context.req.json());
+      const body: unknown = await context.req.json().catch(() => undefined);
+      const parsed = confirmationInputSchema.safeParse(body);
       if (!parsed.success) return context.json({ error: 'Invalid confirmation' }, 400);
       const input = parsed.data;
       const owner = resourceId(profile);

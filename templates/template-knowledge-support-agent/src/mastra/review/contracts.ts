@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { confirmationReferenceSchema, confirmationReferenceString } from './confirmation.ts';
+import { confirmationInputSchema, confirmationReferenceSchema, confirmationReferenceString } from './confirmation.ts';
 import { validateSupportRecord } from '../knowledge/seed-manifest.ts';
 import { supportRecordEnvelope } from '../knowledge/support-record-envelope.ts';
 import { assertKnowledgeNoteTextWithinBound, assertKnowledgePageDescriptionWithinBound } from '@mastra/core/knowledge';
@@ -21,7 +21,7 @@ const pageReferenceSchema = text(1000).refine(ref => {
 }, 'Invalid scoped page reference');
 export const reviewInputSchema = z
   .object({
-    threadId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/u),
+    threadId: confirmationInputSchema.shape.threadId,
     messageId: identifier,
     sourceActorId: identifier,
     audience: z.enum(['private', 'tenant']),
@@ -202,9 +202,11 @@ export const proposalSchema = proposalFields.superRefine(validateDestination).su
     const normalized = sharedText.toLowerCase();
     const threadId = source.threadId.toLowerCase();
     // UUIDs can also be embedded in formatted or prefixed references.
-    const mentionsThread = z.uuid().safeParse(threadId).success
-      ? normalized.includes(threadId)
-      : new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${threadId}(?![\\p{L}\\p{M}\\p{N}])`, 'iu').test(sharedText);
+    const mentionsThread =
+      reviewInputSchema.shape.threadId.safeParse(source.threadId).success &&
+      (z.uuid().safeParse(threadId).success
+        ? normalized.includes(threadId)
+        : new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${threadId}(?![\\p{L}\\p{M}\\p{N}])`, 'iu').test(sharedText));
     if (mentionsThread || privateIdentifiers.some(value => normalized.includes(value.toLowerCase())))
       context.addIssue({
         code: 'custom',

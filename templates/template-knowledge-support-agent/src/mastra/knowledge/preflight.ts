@@ -5,7 +5,7 @@ import type { InputProcessor } from '@mastra/core/processors';
 import { policyReference } from '../../examples/support.ts';
 import { principals, type Profile } from '../identity.ts';
 import { readApprovedPolicyRevisions, requiredPolicyContentIssue } from './required-policy.ts';
-import { prepareHistory } from './history.ts';
+import { prepareHistory, type HistoryKnowledge } from './history.ts';
 export { prepareHistory } from './history.ts';
 
 async function requiredPolicyReady(knowledge: Knowledge, profile: Profile, approvalFile?: string) {
@@ -32,7 +32,7 @@ function fullPolicyBody(pin: Pin, ref: string) {
   if (!body.endsWith('[truncated — knowledge_read for the rest]')) return body;
 }
 
-export function supportPreflight(knowledge: Knowledge): InputProcessor {
+export function supportPreflight(knowledge: HistoryKnowledge): InputProcessor {
   const approvalFile = process.env.SUPPORT_POLICY_APPROVAL_FILE;
   return {
     id: 'support-preflight',

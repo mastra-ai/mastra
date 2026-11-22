@@ -223,7 +223,7 @@ test('complete enumeration recovers from saturated history search', { timeout: 3
   try {
     const scope = 'customer:north:store-1';
     await f.supportKnowledge.upsertPage({ scope, path: 'cases', name: 'Network cases' });
-    for (let index = 0; index < 99; index++) {
+    for (let index = 0; index < 98; index++) {
       await f.supportKnowledge.upsertPage({
         scope,
         path: `cases/network-${index}`,
@@ -231,14 +231,34 @@ test('complete enumeration recovers from saturated history search', { timeout: 3
         body: historyRecord(`Network finding ${index}`),
       });
     }
+    await f.supportKnowledge.addNote({ scope, path: 'cases/network-0', text: 'Network diagnostic observation.' });
+    const { page: fallback } = await f.supportKnowledge.upsertPage({
+      scope,
+      path: 'cases/fallback-first',
+      name: 'Follow-up',
+      // JSON decodes the tag for history ranking, while native text search sees the escaped spelling.
+      body: historyRecord('Fallback finding', ['connectivity'], '2026-02-01').replace(
+        '"connectivity"',
+        '"\\u0063onnectivity"',
+      ),
+    });
     const store = await f.supportKnowledge.getStorage();
-    const [home] = await store.getScopesByAddress([scope]);
-    assert.ok(home);
-    const read = await f.supportKnowledge.readScopeFor([scope]);
-    assert.equal((await store.searchPages({ query: 'network', scopeIds: [home.id], read, limit: 100 })).length, 100);
+    const search = store.searchPages.bind(store);
+    const searched = new Map<string, string[]>();
+    store.searchPages = async input => {
+      const hits = await search(input);
+      searched.set(
+        input.query,
+        hits.map(hit => hit.page.id),
+      );
+      return hits;
+    };
     const history = await prepareHistory(f.supportKnowledge, profile, 'network');
+    assert.equal(searched.get('network')?.length, 100);
+    assert.ok([...searched.values()].flat().every(id => id !== fallback.id));
     assert.equal(history.status, 'ready');
     assert.equal(history.records.length, 3);
+    assert.equal(history.records[0]!.ref, `${scope}#cases/fallback-first`);
   } finally {
     await f.close();
   }
@@ -289,6 +309,52 @@ test('a page or note removed after native search does not enter scoped history',
     assert.ok(noteRemoved && pageRemoved, 'The scoped search returned both deleted entries');
     assert.ok(result.records.some(record => record.summary === 'MATCHING_PAGE'));
     assert.ok(result.records.every(record => record.ref !== noteRef && record.ref !== `${scope}#${deletedPath}`));
+  } finally {
+    await f.close();
+  }
+});
+
+test('history verifies note visibility and case ancestry at the same point in time', async () => {
+  const f = await runtimeFixture({ syntheticKnowledge: false });
+  try {
+    const { supportKnowledge } = f;
+    const scope = 'customer:north:store-1';
+    const path = 'cases/snapshot-check';
+    await supportKnowledge.upsertPage({ scope, path, name: 'Snapshot check', body: historyRecord('CASE_BODY') });
+    const add = (summary: string) =>
+      supportKnowledge.addNote({ scope, path, text: reviewedNote(historyRecord(summary)), author: 'review:synthetic' });
+    const removedBefore = await add('WITHDRAWN_BEFORE_SNAPSHOT');
+    const removedDuring = await add('WITHDRAWN_AFTER_SNAPSHOT');
+    const run = () => prepareHistory(supportKnowledge, profile, 'network');
+    assert.equal((await run()).records.length, 3);
+    const withReadSnapshot = supportKnowledge.withReadSnapshot;
+    supportKnowledge.withReadSnapshot = async read => {
+      await supportKnowledge.removeNote({ id: removedBefore.id });
+      return withReadSnapshot(snapshot =>
+        read({
+          getPages: async input => {
+            const current = await snapshot.getPages(input);
+            await supportKnowledge.removeNote({ id: removedDuring.id });
+            return current;
+          },
+          listNotes: snapshot.listNotes.bind(snapshot),
+          getNote: snapshot.getNote.bind(snapshot),
+        }),
+      );
+    };
+    const result = await run();
+    supportKnowledge.withReadSnapshot = withReadSnapshot;
+    assert.equal(result.status, 'partial');
+    assert.deepEqual(
+      result.records.map(record => record.ref).sort(),
+      [`${scope}#${path}`, `${scope}#${path}?note=${removedDuring.id}`].sort(),
+    );
+    const next = await run();
+    assert.equal(next.status, 'ready');
+    assert.deepEqual(
+      next.records.map(record => record.ref),
+      [`${scope}#${path}`],
+    );
   } finally {
     await f.close();
   }

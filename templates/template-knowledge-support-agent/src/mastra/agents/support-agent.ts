@@ -1,13 +1,13 @@
 import { configuredModel, runtimeExample } from '../../examples/runtime.ts';
 import { Agent } from '@mastra/core/agent';
-import type { Knowledge } from '@mastra/core/knowledge';
 import type { Memory } from '@mastra/memory';
 import { supportConfiguration } from '../../examples/support.ts';
 import { supportPreflight } from '../knowledge/preflight.ts';
+import type { HistoryKnowledge } from '../knowledge/history.ts';
 import { principals } from '../identity.ts';
 import type { Profile } from '../identity.ts';
 
-export function createSupportAgent(memory: Memory, knowledge: Knowledge) {
+export function createSupportAgent(memory: Memory, knowledge: HistoryKnowledge) {
   return new Agent({
     id: 'support',
     name: 'Support',

@@ -30,13 +30,15 @@ export async function canonicalDatabasePath(url?: string): Promise<string> {
       return join(canonical, ...missing.reverse());
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const parent = dirname(path);
+      if (parent === path) throw error;
       const existing = await lstat(path).catch(error => {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         return undefined;
       });
       if (existing?.isSymbolicLink()) throw new Error('Cannot use a dangling database path symlink');
       missing.push(basename(path));
-      path = dirname(path);
+      path = parent;
     }
   }
 }

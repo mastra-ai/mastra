@@ -338,7 +338,7 @@ export async function prepareDataset(
     if (
       !profile ||
       !page ||
-      (mapping.ref !== undefined && page.ref !== mapping.ref) ||
+      page.ref !== (mapping.ref ?? requiredPolicyReference(profile)) ||
       page.input.kind !== 'policy' ||
       !['tenant', 'docs'].includes(page.placement.kind) ||
       page.placement.profile.tenantId !== profile.tenantId

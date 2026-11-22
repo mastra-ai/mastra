@@ -13,7 +13,7 @@ import { resourceId } from '../../src/mastra/identity.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
 import { upsertPageAtRevision } from '../../src/mastra/knowledge/versioned-page.ts';
-import { publishedText } from '../../src/mastra/review/contracts.ts';
+import { proposalSchema, publishedText } from '../../src/mastra/review/contracts.ts';
 import { createReviewService } from '../../src/mastra/review/service.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
 
@@ -381,7 +381,11 @@ test('a short thread ID blocks explicit references and permits ordinary shared w
     assert.equal(input.threadId, 'it');
     const publicSource = { ref: publicRef, version: 1 };
     f.select(candidate('short-thread', { content: 'Wait for the link light to turn green.', publicSource }));
-    assert.equal((await resume(f, await pending(f, input))).result.status, 'published');
+    const safe = await pending(f, input);
+    const invalid = proposalSchema.safeParse({ ...safe.proposal, source: { ...safe.proposal.source, threadId: '(' } });
+    assert.ok(!invalid.success);
+    assert.ok(invalid.error.issues.some(issue => issue.path.join('.') === 'source.threadId'));
+    assert.equal((await resume(f, safe)).result.status, 'published');
 
     const leaked = candidate('explicit-thread', { content: 'See internal thread (_IT_).', publicSource });
     f.select(leaked);

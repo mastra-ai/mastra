@@ -188,8 +188,18 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
       if (question.includes('F5:notes')) {
         const ref = question.split('READ=')[1]!.split(' ')[0]!;
         if (!tools.length) return { tool: { name: 'knowledge_read', arguments: { page: ref, notes: true } } };
+        const markers: Record<string, string> = {
+          'customer:retailops:store-73#cases/hub-cable': 'RETAILOPS_STORE73_NOTE_SILVER',
+          'customer:fieldretail:store-42#cases/wifi-selection': 'FIELDRETAIL_STORE42_NOTE_TEAL',
+        };
+        const marker = markers[ref];
+        assert.ok(marker, `Expected a follow-up marker for ${ref}`);
         const response = parsedTool(tools[0]);
-        assert.ok(response.notes?.length);
+        assert.equal(response.page?.ref, ref);
+        assert.ok(
+          response.notes?.some((note: { text: string }) => note.text.includes(marker)),
+          `Provider must receive the expected follow-up for ${ref}`,
+        );
         return { content: `The attributed fictional follow-up is visible [${ref}].` };
       }
       if (!tools.length)

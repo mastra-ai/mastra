@@ -50,7 +50,7 @@ test(
         if (list.some(message => message.content?.includes('Review one confirmed customer outcome'))) {
           const tools = list.filter(message => message.role === 'tool');
           if (!tools.length) return { tool: { name: 'knowledge_search', arguments: { query: 'seleção' } } };
-          assert.doesNotMatch(JSON.stringify(tools), /HELPDESK_BRANCH|docs:|tenant:/u);
+          assert.doesNotMatch(JSON.stringify(tools), /HELPDESK_BRANCH|customer:helpdesk:branch|docs:|tenant:/u);
           return { content: JSON.stringify(candidate) };
         }
         const prepared = history(body);
@@ -96,10 +96,10 @@ test(
     try {
       const seeded = await seedDataset(datasets['it-helpdesk']!, { databaseUrl: f.databaseUrl });
       assert.equal(seeded.pages.length, 4);
-      assert.ok(
-        (await seedDataset(datasets['it-helpdesk']!, { databaseUrl: f.databaseUrl })).pages.every(
-          page => page.status === 'unchanged',
-        ),
+      const repeated = await seedDataset(datasets['it-helpdesk']!, { databaseUrl: f.databaseUrl });
+      assert.deepEqual(
+        repeated.pages.map(page => [page.id, page.status]),
+        seeded.pages.map(page => [page.id, 'unchanged']),
       );
       await f.start();
       const threadId = await newThread();
@@ -139,11 +139,17 @@ test(
         true,
       );
       for (const body of [
+        {},
         { ...confirmation, sourceActorId: 'bruno' },
         { ...confirmation, outcome: '' },
         { ...confirmation, metadata: {} },
       ])
-        assert.equal((await post('/support/confirmations', body)).status, 403);
+        assert.deepEqual(await json(await post('/support/confirmations', body), 400), {
+          error: 'Invalid confirmation',
+        });
+      assert.deepEqual(await json(await request('/support/confirmations', 0, { method: 'POST', body: '{' }), 400), {
+        error: 'Invalid confirmation',
+      });
       for (const owner of [1, 2]) assert.equal((await post('/support/confirmations', confirmation, owner)).status, 403);
       const branchThread = await newThread(1);
       assert.equal((await post('/support/confirmations', { ...confirmation, threadId: branchThread })).status, 403);

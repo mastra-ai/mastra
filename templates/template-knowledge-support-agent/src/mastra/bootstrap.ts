@@ -7,6 +7,7 @@ import { createKnowledge } from './knowledge/index.ts';
 import { seedHostedExample } from './knowledge/seed-on-startup.ts';
 import { createAuth, createReviewerAuthority, createSupportAuthorization, loadCredentials } from './server/access.ts';
 import { createStore, hostedMode, resolveStoreConfiguration } from './database/store.ts';
+import { createKnowledgeReadSnapshot } from './database/knowledge-snapshot.ts';
 import { createHostedIdentity, hasHostedOAuthConfiguration } from './server/hosted-identity.ts';
 import { createPlatformIdentity, platformAuthMiddleware } from './server/platform-identity.ts';
 import { createReviewService } from './review/service.ts';
@@ -31,7 +32,9 @@ export async function bootstrap() {
     storage: store,
     options: { lastMessages: 12, semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },
   });
-  const supportKnowledge = createKnowledge(store);
+  const supportKnowledge = Object.assign(createKnowledge(store), {
+    withReadSnapshot: createKnowledgeReadSnapshot(store, database),
+  });
   const support = createSupportAgent(memory, supportKnowledge);
 
   const credentials = () =>

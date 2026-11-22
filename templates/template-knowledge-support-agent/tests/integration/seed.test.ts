@@ -359,6 +359,68 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
   }
 });
 
+test('seed requires the configured policy reference when a mapping omits its override', async () => {
+  const f = await fixture();
+  try {
+    const original = (await f.cli()).report;
+    const policy = await f.knowledge((_, storage) =>
+      storage.getPage({ id: page(original, 'safety-policy').id!, read: 'all' }),
+    );
+    assert.ok(policy?.body);
+    const config = {
+      ...datasets['retail-pos']!,
+      directory: dirname(f.manifestFile),
+      mandatoryPolicies: [{ profileId: 'north-store', pageKey: 'safety-policy' }],
+    };
+    const options = { dryRun: true, policyApprovalFile: f.environment.SUPPORT_POLICY_APPROVAL_FILE };
+    await seedDataset(config, options);
+    const manifest = await f.readManifest();
+    manifest.pages[1]!.path = 'policies/alternate';
+    await f.saveManifest(manifest);
+    const ref = 'tenant:north#policies/alternate';
+    await approvePolicyRevision(options.policyApprovalFile, ref, policy.body);
+    await assert.rejects(seedDataset(config, options), /Invalid mandatory policy mapping/u);
+    const explicit = await seedDataset(
+      { ...config, mandatoryPolicies: [{ ...config.mandatoryPolicies[0]!, ref }] },
+      options,
+    );
+    assert.equal(explicit.pages.find(page => page.key === 'safety-policy')?.destination, ref);
+  } finally {
+    await f.close();
+  }
+});
+
+test('seed reports a managed note retained on its merge destination', async () => {
+  const f = await fixture();
+  try {
+    const manifest = await f.readManifest();
+    manifest.pages.push({ ...manifest.pages[2]!, key: 'another-case', path: 'cases/another', notes: [] });
+    await f.saveManifest(manifest);
+    const initial = (await f.cli()).report;
+    const source = page(initial, 'store-case');
+    const target = page(initial, 'another-case');
+    const oldNoteId = initial.notes[0]!.id!;
+    await f.knowledge(async (_, storage) => {
+      await storage.mergePages({
+        sourceId: source.id!,
+        sourceVersion: source.version!,
+        targetId: target.id!,
+        provenance: { author: 'synthetic-operator' },
+      });
+      assert.equal((await storage.getNote({ id: oldNoteId, read: 'all' }))?.pageId, target.id);
+    });
+    const repeated = (await f.cli()).report;
+    const newNote = repeated.notes.find(note => note.pageKey === 'store-case');
+    assert.ok(newNote?.id && newNote.id !== oldNoteId);
+    assert.deepEqual(repeated.retained, [`note:${oldNoteId}`]);
+    await f.knowledge(async (_, storage) => {
+      assert.equal((await storage.getNote({ id: newNote.id!, read: 'all' }))?.pageId, page(repeated, 'store-case').id);
+    });
+  } finally {
+    await f.close();
+  }
+});
+
 test('seed checks the rendered body of customer references in history', { timeout: 30000 }, async () => {
   const f = await fixture();
   try {
