@@ -91,6 +91,38 @@ describe('Experiment page — usage and scores', () => {
     });
   });
 
+  describe('when the experiment loads after the metrics capabilities', () => {
+    it('waits for its status before polling usage, then totals it', async () => {
+      let releaseExperiment = () => {};
+      const experimentLoaded = new Promise<void>(resolve => {
+        releaseExperiment = resolve;
+      });
+      const breakdownRequests: string[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, async () => {
+          await experimentLoaded;
+          return HttpResponse.json(experiment);
+        }),
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}`, async () => {
+          await experimentLoaded;
+          return HttpResponse.json(experiment);
+        }),
+        http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, ({ request }) => {
+          breakdownRequests.push(request.url);
+          return HttpResponse.json(experimentUsageBreakdown);
+        }),
+      );
+      renderExperimentPage();
+
+      // Empty polls before the status is known would use up the retries meant for after the run.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(breakdownRequests).toHaveLength(0);
+
+      releaseExperiment();
+      expect(await screen.findByText('1,200 in')).toBeDefined();
+    });
+  });
+
   describe('when the observability store cannot serve metrics', () => {
     beforeEach(() => {
       server.use(

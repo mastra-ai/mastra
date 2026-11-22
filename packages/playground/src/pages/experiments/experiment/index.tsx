@@ -114,8 +114,9 @@ function ExperimentPage() {
     experimentStatus: experiment?.status,
     queryOptions: { enabled: Boolean(experimentId) && isSettled },
   });
+  // Usage polling gives up after a few empty reads, so wait until the run is known to be over.
   const { data: usageByExperimentId, isLoading: isUsageLoading } = useExperimentsItemUsage({
-    experiments: experimentId ? [{ id: experimentId, status: experiment?.status }] : [],
+    experiments: experimentId && isSettled ? [{ id: experimentId, status: experiment?.status }] : [],
     supportsMetrics,
   });
   const usage = experimentId ? usageByExperimentId[experimentId] : undefined;
