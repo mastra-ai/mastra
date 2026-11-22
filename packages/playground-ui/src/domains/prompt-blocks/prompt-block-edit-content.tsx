@@ -2,7 +2,7 @@ import type { StoredPromptBlockResponse, UpdateStoredPromptBlockParams } from '@
 import { useMastraClient } from '@mastra/react';
 import { usePromptBlockVersion, useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentEditLayout } from './edit-layout';
 import { PromptBlockEditMain } from './prompt-block-edit-page/prompt-block-edit-main';
@@ -79,12 +79,16 @@ export function PromptBlockEditContent({
   const { form } = usePromptBlockEditForm({ initialValues });
   const [formResetKey, setFormResetKey] = useState(0);
 
+  const sourceKey = `${blockId}:${isViewingVersion ? selectedVersionId : 'latest'}`;
+  const loadedSourceKey = useRef(sourceKey);
+
   useEffect(() => {
-    if (initialValues) {
-      form.reset(initialValues);
-      setFormResetKey(prev => prev + 1);
-    }
-  }, [initialValues, form]);
+    // A refetch of the same source keeps unsaved edits; switching block or version replaces them.
+    const sameSource = loadedSourceKey.current === sourceKey;
+    loadedSourceKey.current = sourceKey;
+    form.reset(initialValues, { keepDirtyValues: sameSource });
+    setFormResetKey(prev => prev + 1);
+  }, [initialValues, form, sourceKey]);
 
   const handleSaveDraft = useCallback(async () => {
     const isValid = await form.trigger();
@@ -95,9 +99,10 @@ export function PromptBlockEditContent({
 
     setIsSavingDraft(true);
     try {
-      const params = buildUpdateParams(form.getValues());
-      await updateStoredPromptBlock.mutateAsync(params);
-      form.reset(form.getValues());
+      const submitted = form.getValues();
+      await updateStoredPromptBlock.mutateAsync(buildUpdateParams(submitted));
+      // Only what was sent counts as saved; edits typed during the request stay dirty.
+      form.reset(submitted, { keepValues: true });
       toast.success('Draft saved');
     } catch (error) {
       toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
