@@ -225,7 +225,11 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
       step => CHANGESET_STEPS.has(step.name) && step.conclusion && step.conclusion !== 'skipped',
     );
     const key = ['job:qa/changeset-check'];
-    return { ran: own.length ? key : [], failed: own.some(step => step.conclusion === 'failure') ? key : [] };
+    return {
+      ran: own.length ? key : [],
+      failed: own.some(step => step.conclusion === 'failure') ? key : [],
+      passed: own.length && own.every(step => step.conclusion === 'success') ? key : [],
+    };
   }
   let m;
   if (workflow === 'Workspace Cloud Tests' && (m = /^test-cloud \(([\w-]+)\)$/.exec(name)))
@@ -255,6 +259,22 @@ export function jobKeysFor(workflow, name, log = () => '', steps = []) {
     .sort()
     .map(pkg => `job:${group}/${pkg}`);
   return { ran, failed };
+}
+
+/**
+ * Whether a failed job's tier key passed on a later attempt of the job or in a later green run of
+ * the same head (`candidates` holds those runs' jobs). A job whose keys carry `passed`
+ * (`Validate repository files`) is judged by the key's own steps, so a retry that fixed the
+ * changeset steps but failed another validator is still a flake; other jobs go by the same job's
+ * conclusion, so a green run that never ran the job doesn't recover it.
+ */
+export function passedOnRetry(job, key, candidates, keysOf) {
+  return candidates.some(j => {
+    if (j === job || j.name !== job.name) return false;
+    if (j.run_id === job.run_id && !(j.run_attempt > job.run_attempt)) return false;
+    const { passed } = keysOf(j);
+    return passed ? passed.includes(key) : j.conclusion === 'success';
+  });
 }
 
 /** Job keys seen running that the list doesn't have yet join `in` from today (`all` scope only). */
@@ -728,6 +748,24 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
         r.conclusion === 'success',
     );
 
+  const laterGreenJobsCache = new Map();
+  const laterGreenJobs = run => {
+    if (!laterGreenJobsCache.has(run.id))
+      laterGreenJobsCache.set(
+        run.id,
+        runs
+          .filter(
+            r =>
+              r.id !== run.id &&
+              r.workflow_id === run.workflow_id &&
+              r.head_sha === run.head_sha &&
+              r.created_at > run.created_at &&
+              r.conclusion === 'success',
+          )
+          .flatMap(r => runJobs(r.id)),
+      );
+    return laterGreenJobsCache.get(run.id);
+  };
   const compareCache = new Map();
   const toInspect = runsToInspect(runs);
   const ready = (run, seen) => waitingRunReady(runs, run, seen);
@@ -747,10 +785,13 @@ function dailyCommand(tiers, { days, date, budgetMinutes }) {
       if (!isFileListJob(job.name)) {
         const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
-        const verdict = passedLater(job) ? 'flake' : settled ? 'fail' : 'unresolved';
         const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();
-        for (const key of failed)
+        const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps ?? []);
+        for (const key of failed) {
+          const flaked = passedOnRetry(job, key, [...jobs, ...laterGreenJobs(run)], keysOf);
+          const verdict = flaked ? 'flake' : settled ? 'fail' : 'unresolved';
           failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict, settlesAt });
+        }
         continue;
       }
       const rerunPassed = passedLater(job);

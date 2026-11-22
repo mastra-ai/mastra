@@ -17,6 +17,7 @@ import {
   gitDiffFiles,
   inspectRuns,
   jobKeysFor,
+  passedOnRetry,
   listRunsByDay,
   moveOut,
   nextGreenRun,
@@ -349,19 +350,92 @@ test('the merged repository-files job fails job:qa/changeset-check only from its
   assert.deepEqual(qa([step('Run README validator', 'failure'), ...changesetSteps]), {
     ran: ['job:qa/changeset-check'],
     failed: [],
+    passed: ['job:qa/changeset-check'],
   });
   assert.deepEqual(
     qa([
       step('Run README validator', 'success'),
       ...changesetSteps.with(1, step('Test changeset package validator', 'failure')),
     ]),
-    { ran: ['job:qa/changeset-check'], failed: ['job:qa/changeset-check'] },
+    { ran: ['job:qa/changeset-check'], failed: ['job:qa/changeset-check'], passed: [] },
   );
   assert.deepEqual(qa(changesetSteps.with(4, step('Validate changeset release plan', 'failure'))).failed, [
     'job:qa/changeset-check',
   ]);
   // Setup failed: no changeset step ran.
-  assert.deepEqual(qa(changesetSteps.map(s => step(s.name, 'skipped'))), { ran: [], failed: [] });
+  assert.deepEqual(qa(changesetSteps.map(s => step(s.name, 'skipped'))), { ran: [], failed: [], passed: [] });
+});
+
+test('a changeset failure in the merged repository-files job is judged on retry by the changeset steps alone', () => {
+  const step = (name, conclusion) => ({ name, conclusion });
+  const job = (attempt, conclusion, steps) => ({
+    name: 'Validate repository files',
+    workflow_name: 'Quality assurance',
+    run_id: 1,
+    run_attempt: attempt,
+    conclusion,
+    steps,
+  });
+  const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps);
+  const changesets = conclusion =>
+    [
+      'Test changeset package validator',
+      'Reject unknown or ignored changeset packages',
+      'Check whether this PR adds changesets',
+      'Validate changeset release plan',
+    ].map(name => step(name, conclusion));
+  const first = job(1, 'failure', [step('Run README validator', 'success'), ...changesets('failure')]);
+  const key = 'job:qa/changeset-check';
+  assert.deepEqual(keysOf(first).failed, [key]);
+
+  // Attempt 2: every changeset step passes, README fails, so the job is red both times.
+  const recovered = job(2, 'failure', [step('Run README validator', 'failure'), ...changesets('success')]);
+  assert.equal(passedOnRetry(first, key, [first, recovered], keysOf), true);
+
+  // Attempt 2 still fails a changeset step: no recovery.
+  const stillRed = job(2, 'failure', [
+    step('Run README validator', 'failure'),
+    ...changesets('success').with(2, step('Check whether this PR adds changesets', 'failure')),
+  ]);
+  assert.equal(passedOnRetry(first, key, [first, stillRed], keysOf), false);
+
+  // Attempt 2 cancelled before the changeset steps finished: not a pass.
+  const cancelled = job(2, 'cancelled', [step('Run README validator', 'success'), ...changesets('cancelled')]);
+  assert.equal(passedOnRetry(first, key, [first, cancelled], keysOf), false);
+
+  // Attempt 2 skipped every changeset step (setup failed): not a pass, even if the job went green.
+  const skipped = job(2, 'success', changesets('skipped'));
+  assert.equal(passedOnRetry(first, key, [first, skipped], keysOf), false);
+});
+
+test('a whole-job failure recovers only from a later run of that same job, not from any green run', () => {
+  const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps ?? []);
+  const job = (run_id, attempt, name, conclusion) => ({
+    name,
+    workflow_name: 'Prebuild',
+    run_id,
+    run_attempt: attempt,
+    conclusion,
+  });
+  const failed = job(1, 1, 'Combined Store Tests / test (pg)', 'failure');
+  // A later green run of the same head that didn't select pg (it moved out between runs).
+  const greenWithoutPg = [job(2, 1, 'Combined Store Tests / test (mysql)', 'success')];
+  assert.equal(passedOnRetry(failed, 'job:store/pg', [failed, ...greenWithoutPg], keysOf), false);
+  // The same job passing on a later attempt or in a later green run recovers it.
+  assert.equal(
+    passedOnRetry(failed, 'job:store/pg', [failed, job(1, 2, 'Combined Store Tests / test (pg)', 'success')], keysOf),
+    true,
+  );
+  assert.equal(
+    passedOnRetry(failed, 'job:store/pg', [failed, job(2, 1, 'Combined Store Tests / test (pg)', 'success')], keysOf),
+    true,
+  );
+  // An earlier attempt of the same run doesn't count.
+  const retried = job(1, 2, 'Combined Store Tests / test (pg)', 'failure');
+  assert.equal(
+    passedOnRetry(retried, 'job:store/pg', [job(1, 1, 'Combined Store Tests / test (pg)', 'success'), retried], keysOf),
+    false,
+  );
 });
 
 test('a folded job fails only the packages that started and never finished', () => {
