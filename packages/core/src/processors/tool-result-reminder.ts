@@ -3,7 +3,8 @@ import { isAbsolute, normalize, posix, resolve, win32 } from 'node:path';
 import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { signalToXmlMarkup } from '../agent/signals';
-import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
+import { parseMemoryRequestContext } from '../memory/types';
+import type { ProcessInputStepArgs, Processor } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
 const PATH_FIELDS = ['path', 'file', 'filePath', 'target', 'targetPath', 'dest', 'destination'] as const;
@@ -25,16 +26,9 @@ type TextPartLike = {
   text: string;
 };
 
-type ToolInvocationLike = {
-  type: 'tool-invocation';
-  toolInvocation?: {
-    state?: string;
-    toolCallId?: string;
-    args?: unknown;
-  };
-};
-
 export interface ToolResultReminderOptions {
+  /** Only inspect completed results from these tool names when configured. */
+  toolNames?: readonly string[];
   reminderText?: string;
   maxTokens?: number;
   pathExists?: (path: string) => boolean | Promise<boolean>;
@@ -281,37 +275,6 @@ function truncateToTokenLimit(content: string, maxTokens: number): string {
   return `${truncatedContent}\n\n[truncated — showing first ~${shownTokens} of ~${estimatedTokens} estimated tokens]`;
 }
 
-type CompletedToolCall = Pick<ToolCallInfo, 'toolCallId' | 'args'>;
-
-function getCompletedToolCalls(messages: MastraDBMessage[]): CompletedToolCall[] {
-  const completed: CompletedToolCall[] = [];
-
-  for (const message of [...messages].reverse()) {
-    const parts = isRecord(message.content) ? message.content.parts : undefined;
-    if (!Array.isArray(parts)) {
-      continue;
-    }
-
-    for (const part of [...parts].reverse()) {
-      if (!isRecord(part) || part.type !== 'tool-invocation') {
-        continue;
-      }
-
-      const invocation = (part as ToolInvocationLike).toolInvocation;
-      if (!invocation || invocation.state !== 'result' || typeof invocation.toolCallId !== 'string') {
-        continue;
-      }
-
-      completed.push({
-        toolCallId: invocation.toolCallId,
-        args: invocation.args,
-      });
-    }
-  }
-
-  return completed;
-}
-
 function parseInvocationArgs(args: unknown): Record<string, unknown> | undefined {
   if (isRecord(args)) {
     return args;
@@ -341,6 +304,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   description = 'Injects AGENTS.md reminders when instruction file operations are detected';
   processorIndex = 0;
 
+  private readonly toolNames?: ReadonlySet<string>;
   private readonly reminderText?: string;
   private readonly maxTokens: number;
   private readonly pathExists: (path: string) => boolean | Promise<boolean>;
@@ -355,6 +319,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   private readonly getBasePath?: (args: ProcessInputStepArgs) => string | undefined;
 
   constructor(options: ToolResultReminderOptions) {
+    this.toolNames = options.toolNames && new Set(options.toolNames);
     this.reminderText = options.reminderText;
     this.maxTokens = options.maxTokens ?? 1000;
     this.pathExists =
@@ -386,8 +351,15 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList } = args;
+    const { messageList, steps, stepNumber } = args;
     if (this.isEnabled && !this.isEnabled(args)) {
+      return messageList;
+    }
+    const completedToolCalls = steps[stepNumber - 1]?.content
+      .filter(part => part.type === 'tool-result')
+      .filter(part => !this.toolNames || this.toolNames.has(part.toolName))
+      .reverse();
+    if (!completedToolCalls?.length) {
       return messageList;
     }
     const reader: ReminderFileReader = (await this.getReader?.(args)) ?? {
@@ -408,14 +380,36 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       return identity;
     };
     const messages = messageList.get.all.db();
-    // Memory processors can reclassify completed responses before this hook runs.
-    const completedToolCalls = getCompletedToolCalls(messages);
+    const memoryContext = parseMemoryRequestContext(args.requestContext);
+    const threadId = memoryContext?.thread?.id;
+    const memory = threadId ? await args.agent?.getMemory({ requestContext: args.requestContext }) : undefined;
+    const persistedPages: MastraDBMessage[][] = [];
+    let hasMore = Boolean(memory);
     const checkedPaths = new Set<string>();
+    const wasReminded = async (markup: string) => {
+      if (await this.hasReminderAlready(messages, markup, resolvePathIdentity)) return true;
+      for (let page = 0; page < persistedPages.length || hasMore; page++) {
+        if (!persistedPages[page] && memory && threadId) {
+          const recalled = await memory.recall({
+            threadId,
+            resourceId: memoryContext?.resourceId,
+            page,
+            perPage: 100,
+            includeTotal: false,
+            hideSignals: false,
+          });
+          persistedPages.push(recalled.messages);
+          hasMore = recalled.hasMore;
+        }
+        if (await this.hasReminderAlready(persistedPages[page]!, markup, resolvePathIdentity)) return true;
+      }
+      return false;
+    };
     // Compare resolved identities so a symlinked instruction file cannot escape the base path.
     const rootIdentity = basePath ? await resolvePathIdentity(toAbsolutePath(basePath)) : undefined;
     let ignoredIdentities: Set<string> | undefined;
     for (const toolCall of completedToolCalls) {
-      for await (const instructionPath of this.findInstructionPathsInInvocation(toolCall, reader, basePath)) {
+      for await (const instructionPath of this.findInstructionPathsInInvocation(toolCall.input, reader, basePath)) {
         const identity = await resolvePathIdentity(instructionPath);
         if (checkedPaths.has(identity)) {
           continue;
@@ -439,7 +433,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         }
 
         const reminderMarkup = getReminderMarkup(reminderText, instructionPath);
-        if (await this.hasReminderAlready(messages, reminderMarkup, resolvePathIdentity)) {
+        if (await wasReminded(reminderMarkup)) {
           continue;
         }
 
@@ -450,7 +444,6 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
           attributes: { type: REMINDER_TYPE, path: instructionPath },
           metadata: getReminderMetadata(instructionPath).systemReminder,
         });
-        return messageList;
       }
     }
 
@@ -471,15 +464,11 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   }
 
   private async *findInstructionPathsInInvocation(
-    invocation: unknown,
+    input: unknown,
     reader: ReminderFileReader,
     basePath: string | undefined,
   ): AsyncGenerator<string> {
-    if (!isRecord(invocation)) {
-      return;
-    }
-
-    const args = parseInvocationArgs(invocation.args);
+    const args = parseInvocationArgs(input);
     if (!args) {
       return;
     }

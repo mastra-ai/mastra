@@ -15,7 +15,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
 import { MastraLanguageModelV3Mock } from '../loop/test-utils/MastraLanguageModelV3Mock';
-import type { RequestContext } from '../request-context';
+import { RequestContext } from '../request-context';
+import { DefaultStepResult } from '../stream/aisdk/v5/output-helpers';
 import { AgentsMDInjector } from './tool-result-reminder';
 import type { ProcessInputStepArgs, ProcessorStreamWriter, ToolCallInfo } from './index';
 
@@ -139,20 +140,30 @@ function createProcessInputStepArgs(
   writer?: ProcessorStreamWriter,
   rotateResponseMessageId?: () => string,
 ): ProcessInputStepArgs {
-  const requestContext = {
-    get: () => undefined,
-    set: () => undefined,
-    has: () => false,
-    delete: () => false,
-    clear: () => undefined,
-    values: () => [],
-    entries: () => [],
-    keys: () => [],
-  } as unknown as RequestContext;
+  const requestContext = new RequestContext();
+  const parts = messageList.get.all.db().at(-1)?.content.parts ?? [];
+  const results = parts.flatMap(part => {
+    if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return [];
+    const { toolCallId, toolName, args: input, result: output } = part.toolInvocation;
+    return [{ type: 'tool-result' as const, dynamic: true as const, toolCallId, toolName, input, output }];
+  });
+  const steps = results.length
+    ? [
+        new DefaultStepResult<any>({
+          content: results,
+          finishReason: 'tool-calls',
+          usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+          warnings: undefined,
+          request: {},
+          response: { id: 'response-1', timestamp: new Date(), modelId: 'mock', messages: [] },
+          providerMetadata: undefined,
+        }),
+      ]
+    : [];
 
   return {
-    stepNumber: 0,
-    steps: [],
+    stepNumber: steps.length,
+    steps,
     messageId: 'response-1',
     rotateResponseMessageId,
     finishReason: 'tool-calls',
@@ -249,6 +260,58 @@ describe('AgentsMDInjector', () => {
         }),
       }),
     );
+  });
+
+  it('ignores non-file tools with path-shaped arguments', async () => {
+    const messageList = new TestMessageList();
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart('non-file-call', { target: '/repo/AGENTS.md' }, 'result', {})],
+      }),
+    );
+    const readFile = vi.fn(() => FILE_CONTENT);
+    const injector = new AgentsMDInjector({ toolNames: ['view'], pathExists: () => true, readFile });
+
+    await injector.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(readFile).not.toHaveBeenCalled();
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+  });
+
+  it('remembers a persisted signal that is older than the loaded message window', async () => {
+    const messageList = new TestMessageList();
+    const file = '/repo/AGENTS.md';
+    const addResult = (list: TestMessageList) =>
+      list.pushResponse(
+        createAssistantMessage({
+          format: 2,
+          parts: [createToolInvocationPart('read', { path: file }, 'result', {})],
+        }),
+      );
+    const injector = new AgentsMDInjector({ pathExists: path => path === file, readFile: () => FILE_CONTENT });
+    addResult(messageList);
+    await injector.processInputStep(createProcessInputStepArgs(messageList, []));
+    const signal = messageList.get.all.db().at(-1)!;
+    expect(signal.role).toBe('signal');
+
+    const nextTurn = new TestMessageList();
+    addResult(nextTurn);
+    const args = createProcessInputStepArgs(nextTurn, []);
+    args.requestContext.set('MastraMemory', { thread: { id: 'test-thread' } });
+    const recall = vi
+      .fn()
+      .mockResolvedValueOnce({ messages: [createUserMessage('Newer message')], hasMore: true })
+      .mockResolvedValueOnce({ messages: [signal], hasMore: false });
+    args.agent = { getMemory: async () => ({ recall }) } as unknown as ProcessInputStepArgs['agent'];
+
+    await injector.processInputStep(args);
+
+    expect(recall).toHaveBeenCalledTimes(2);
+    expect(recall).toHaveBeenLastCalledWith(
+      expect.objectContaining({ threadId: 'test-thread', page: 1, hideSignals: false }),
+    );
+    expect(extractReminderMarkup(nextTurn)).toEqual([]);
   });
 
   it('injects nothing when isEnabled returns false (untrusted checkout)', async () => {
@@ -495,7 +558,27 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toHaveLength(1);
   });
 
-  it('scans all completed results newest-first without changing message or part order', async () => {
+  it('does not replay an old file read on a new turn when its reminder is absent', async () => {
+    const messageList = new TestMessageList();
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart('old-read', { path: '/repo/src/index.ts' }, 'result', 'file contents')],
+      }),
+      createUserMessage('What is two plus two?'),
+    );
+    const processor = new AgentsMDInjector({
+      pathExists: path => path === '/repo/src/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+    });
+
+    await processor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+  });
+
+  it('only inspects results from the immediately preceding step', async () => {
     const messageList = new TestMessageList();
     messageList.push(
       createAssistantMessage({
@@ -514,16 +597,17 @@ describe('AgentsMDInjector', () => {
     const readFile = vi.fn((path: string) => `Instructions for ${path}`);
     const testProcessor = new AgentsMDInjector({ readFile });
 
-    // These completed results are deliberately outside the response tracking set.
-    expect(messageList.get.response.db()).toEqual([]);
-    for (const directory of ['new', 'middle', 'old']) {
-      await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
-      expect(extractReminderMarkup(messageList).at(-1)).toContain(`/repo/${directory}/AGENTS.md`);
-    }
-    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+    const current = createProcessInputStepArgs(messageList, []);
+    const earlier = new TestMessageList();
+    earlier.push(originalMessages[0]!);
+    const previous = createProcessInputStepArgs(earlier, []);
+    await testProcessor.processInputStep({ ...current, stepNumber: 2, steps: [...previous.steps, ...current.steps] });
 
-    expect(extractReminderMarkup(messageList)).toHaveLength(3);
-    expect(readFile.mock.calls[0]).toEqual(['/repo/new/AGENTS.md']);
+    const reminders = extractReminderMarkup(messageList);
+    expect(reminders).toHaveLength(2);
+    expect(reminders[0]).toContain('/repo/new/AGENTS.md');
+    expect(reminders[1]).toContain('/repo/middle/AGENTS.md');
+    expect(readFile.mock.calls).toEqual([['/repo/new/AGENTS.md'], ['/repo/middle/AGENTS.md']]);
     expect(messageList.get.all.db().slice(0, originalMessages.length)).toEqual(originalMessages);
   });
 
@@ -548,11 +632,8 @@ describe('AgentsMDInjector', () => {
       messageList.push(
         createAssistantMessage({
           format: 2,
-          parts: [createToolInvocationPart('uncovered', { path: '/repo/uncovered/AGENTS.md' }, 'result', {})],
-        }),
-        createAssistantMessage({
-          format: 2,
           parts: [
+            createToolInvocationPart('uncovered', { path: '/repo/uncovered/AGENTS.md' }, 'result', {}),
             createToolInvocationPart('covered-1', { path: coveredPath }, 'result', {}),
             createToolInvocationPart('covered-2', { path: coveredPath }, 'result', {}),
           ],

@@ -5,6 +5,7 @@ import { Agent } from '../agent/agent';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
+import { DefaultStepResult } from '../stream/aisdk/v5/output-helpers';
 import { createTool } from '../tools';
 import { ProcessorRunner } from './runner';
 import { AgentsMDInjector } from './tool-result-reminder';
@@ -65,6 +66,23 @@ function createToolCallResponseMessage(args: {
   };
 }
 
+function completedStep(messageList: MessageList) {
+  const parts = messageList.get.response.db().at(-1)?.content.parts ?? [];
+  return new DefaultStepResult({
+    content: parts.flatMap(part => {
+      if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return [];
+      const { toolCallId, toolName, args: input, result: output } = part.toolInvocation;
+      return [{ type: 'tool-result', dynamic: true, toolCallId, toolName, input, output }];
+    }),
+    finishReason: 'tool-calls',
+    usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+    warnings: undefined,
+    request: {},
+    response: { id: 'response', timestamp: new Date(), modelId: 'mock', messages: [] },
+    providerMetadata: undefined,
+  });
+}
+
 describe('AgentsMDInjector integration through ProcessorRunner', () => {
   let messageList: MessageList;
 
@@ -112,7 +130,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -167,7 +185,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -222,7 +240,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -267,11 +285,12 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       agentName: 'test-agent',
     });
 
+    const firstStep = completedStep(messageList);
     // First injection
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -306,7 +325,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner2.runProcessInputStep({
       messageList,
       stepNumber: 2,
-      steps: [],
+      steps: [firstStep, completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -352,7 +371,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -402,7 +421,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -527,7 +546,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
@@ -570,7 +589,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     await runner.runProcessInputStep({
       messageList,
       stepNumber: 1,
-      steps: [],
+      steps: [completedStep(messageList)],
       model: {} as any,
       tools: {},
       retryCount: 0,
