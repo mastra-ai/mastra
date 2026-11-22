@@ -33,22 +33,12 @@
     "zenifra/qwen3.8-max"
   ],
   "reasoning": {
-    "zenifra/glm-5.2": [
+    "zenifra/glm-5.1": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ],
-    "zenifra/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zenifra/glm-5.1": [
+    "zenifra/kimi-k2.5": [
       {
         "type": "toggle"
       }
@@ -59,6 +49,12 @@
       },
       {
         "type": "budget_tokens"
+      }
+    ],
+    "zenifra/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zenifra/qwen3.6-flash": [
@@ -90,12 +86,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zenifra/kimi-k2.5": [
+    "zenifra/glm-5.2": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
-    "zenifra/qwen3.7-max": [
+    "zenifra/qwen3.6-plus": [
       {
         "type": "toggle"
       },
@@ -115,7 +115,7 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/qwen3.6-plus": [
+    "zenifra/qwen3.7-max": [
       {
         "type": "toggle"
       },

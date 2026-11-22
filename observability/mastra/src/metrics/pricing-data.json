@@ -17934,16 +17934,16 @@
       },
       "openai/gpt-5.6-sol": {
         "cost": {
-          "input": 4,
-          "output": 20,
-          "cache_read": 0.4,
-          "cache_write": 5,
+          "input": 5,
+          "output": 30,
+          "cache_read": 0.5,
+          "cache_write": 6.25,
           "tiers": [
             {
-              "input": 8,
-              "output": 30,
-              "cache_read": 0.8,
-              "cache_write": 10,
+              "input": 10,
+              "output": 45,
+              "cache_read": 1,
+              "cache_write": 12.5,
               "tier": {
                 "type": "context",
                 "size": 272000
@@ -17951,10 +17951,10 @@
             }
           ],
           "context_over_200k": {
-            "input": 8,
-            "output": 30,
-            "cache_read": 0.8,
-            "cache_write": 10
+            "input": 10,
+            "output": 45,
+            "cache_read": 1,
+            "cache_write": 12.5
           }
         }
       },
@@ -19639,6 +19639,13 @@
           "input": 0.13,
           "output": 0.53,
           "cache_read": 0.033
+        }
+      },
+      "tencent/Hy4": {
+        "cost": {
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "tencent/Hy4-preview": {
@@ -37304,9 +37311,9 @@
       },
       "z-ai/glm-5.1": {
         "cost": {
-          "input": 1.4,
-          "output": 4.4,
-          "cache_read": 0.26
+          "input": 1.19,
+          "output": 3.74,
+          "cache_read": 0.6
         }
       },
       "z-ai/glm-5.2": {
@@ -40721,10 +40728,10 @@
       },
       "aws-mantle/gpt-5.6-sol": {
         "cost": {
-          "input": 4.4,
-          "output": 26.4,
-          "cache_read": 0.44,
-          "cache_write": 5.5
+          "input": 5.5,
+          "output": 33,
+          "cache_read": 0.55,
+          "cache_write": 6.875
         }
       },
       "aws-mantle/gpt-5.6-terra": {
@@ -41679,6 +41686,13 @@
           "input": 1.25,
           "output": 4.25,
           "cache_read": 0.15
+        }
+      },
+      "fireworks/qwen3.8-2.4t-a95b": {
+        "cost": {
+          "input": 2,
+          "output": 6,
+          "cache_read": 0.25
         }
       },
       "flexai/deepseek-v4-flash": {
@@ -50318,9 +50332,9 @@
       },
       "minimax/minimax-m2.1": {
         "cost": {
-          "input": 0.3,
-          "output": 1.2,
-          "cache_read": 0.15
+          "input": 0.33,
+          "output": 1.32,
+          "cache_read": 0.165
         }
       },
       "minimax/minimax-m2.5": {
@@ -60331,8 +60345,9 @@
       },
       "google/gemma-3-4b-it": {
         "cost": {
-          "input": 0.05,
-          "output": 0.1
+          "input": 0.04,
+          "output": 0.05,
+          "cache_read": 0.02
         }
       },
       "google/gemma-4-26b-a4b-it": {
@@ -60374,8 +60389,9 @@
       },
       "gryphe/mythomax-l2-13b": {
         "cost": {
-          "input": 0.08,
-          "output": 0.11
+          "input": 0.3,
+          "output": 0.5,
+          "cache_read": 0.2
         }
       },
       "ibm-granite/granite-4.2-8b": {
@@ -62029,8 +62045,8 @@
       },
       "qwen/qwen3.5-27b": {
         "cost": {
-          "input": 0.195,
-          "output": 1.56
+          "input": 0.26,
+          "output": 2.6
         }
       },
       "qwen/qwen3.5-35b-a3b": {
@@ -62444,9 +62460,9 @@
       },
       "tencent/hy3": {
         "cost": {
-          "input": 0.0825,
-          "output": 0.33,
-          "cache_read": 0.020625
+          "input": 0.14,
+          "output": 0.58,
+          "cache_read": 0.035
         }
       },
       "tencent/hy4": {
@@ -62465,9 +62481,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thedrummer/cydonia-24b-v4.1": {
@@ -62803,9 +62819,9 @@
       },
       "z-ai/glm-5.1": {
         "cost": {
-          "input": 1.4,
-          "output": 4.4,
-          "cache_read": 0.26
+          "input": 1.19,
+          "output": 3.74,
+          "cache_read": 0.6
         }
       },
       "z-ai/glm-5.2": {
@@ -62961,7 +62977,7 @@
       "~moonshotai/kimi-latest": {
         "cost": {
           "input": 0.1824,
-          "output": 10.6066,
+          "output": 11.0055,
           "cache_read": 0.18
         }
       },
