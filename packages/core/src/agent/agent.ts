@@ -554,12 +554,17 @@ export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 type ResumeSuspension = { readonly toolCallId: string };
 
 /**
- * What the resume() an untilIdle wrapper re-enters was accepted with. The outer call already
- * authorized and validated the resume, rebuilt its tools and accepted it, so the inner call must
- * not repeat any of that and fail after acceptance, when the run already carries the caller's
- * request context. It still claims only the suspension the outer call validated.
+ * What the resume() an untilIdle wrapper re-enters carries from the outer call. The outer call
+ * already authorized and validated the resume and rebuilt its tools, so the inner call skips
+ * repeating those checks and publishes the prepared state only after claiming execution and
+ * confirming the validated suspension is still active.
  */
-type AcceptedResume = { readonly suspension: ResumeSuspension | undefined };
+type AcceptedResume = {
+  readonly suspension: ResumeSuspension | undefined;
+  readonly applyRequestTools?: () => void;
+  readonly coldAttempt?: ColdResumeAttempt;
+  readonly requestContext?: RequestContext<unknown>;
+};
 
 const acceptedResumes = new WeakMap<object, AcceptedResume>();
 
@@ -15188,9 +15193,12 @@ export class Agent<
   ): Promise<DurableAgentStreamResult<TOutput>> {
     const accepted = getAcceptedResume(options);
     // Wait out any cold resume of this run that is still deciding, then read the registry and claim
-    // a cold run in the same tick, so two resumes can never both rebuild it.
-    for (let pending = undecidedColdResume(runId); pending; pending = undecidedColdResume(runId)) {
-      await waitUnlessAborted(pending, giveUp());
+    // a cold run in the same tick, so two resumes can never both rebuild it. An untilIdle inner
+    // re-entry owns its outer call's undecided coldAttempt, so it must not wait on itself.
+    if (!accepted) {
+      for (let pending = undecidedColdResume(runId); pending; pending = undecidedColdResume(runId)) {
+        await waitUnlessAborted(pending, giveUp());
+      }
     }
     let entry = this.executionRunRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
@@ -15436,7 +15444,10 @@ export class Agent<
     const { hideInput, hideOutput, requestContextKeys } = options?.tracingOptions ?? {};
     const resumeTracingOptions = { ...resolvedOptions.tracingOptions, hideInput, hideOutput, requestContextKeys };
     // Scoped runs execute on a run-scoped copy of the request context.
-    resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
+    resumeRequestContext =
+      accepted?.requestContext ??
+      (resolvedOptions.requestContext as typeof resumeRequestContext) ??
+      resumeRequestContext;
 
     if (!accepted) {
       await this.requireAgentExecutionFGA({
@@ -15557,21 +15568,11 @@ export class Agent<
         });
       }
     }
-    // Only an accepted resume may change the suspended run: its request context carries the
-    // caller's identity and per-request tool configuration into the next resume. Everything above
-    // runs before acceptance, so a resume that fails there leaves the run as it was, and a cold
-    // one is rolled back by resume(). Accepting publishes a cold resume's entry to the shared slot.
-    coldAttempt.accept();
-    applyRequestTools?.();
-    entry.requestContext = resumeRequestContext;
-    const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
-    if (globalEntryForContext) {
-      globalEntryForContext.requestContext = resumeRequestContext;
-    }
-
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
     // call (and subsequent agent.stream([]) continuations) don't recurse.
+    // Prepared tools, context, and cold-resume publication stay unpublished until
+    // the inner call claims execution and confirms the validated suspension is still active.
     if (resolvedOptions.untilIdle) {
       const { untilIdle, ...rest } = resolvedOptions;
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
@@ -15590,7 +15591,12 @@ export class Agent<
                 ...innerOptions,
                 tracingOptions: resumeTracingOptions,
               } as DurableAgentResumeOptions<TOutput>,
-              { suspension },
+              {
+                suspension,
+                applyRequestTools,
+                coldAttempt,
+                requestContext: resumeRequestContext,
+              },
             ),
           ),
         stream: this.stream.bind(this),
@@ -15685,6 +15691,16 @@ export class Agent<
       // The segment never started: release the run so it can be resumed again.
       await executionFence.settle(async () => {});
       throw error;
+    }
+    // Only an accepted, claimed resume for an active suspension may mutate the suspended run:
+    // its request context and rebuilt tools carry the caller's identity into this and later
+    // resumes, so a stale or losing attempt leaves the run's state untouched.
+    (accepted?.coldAttempt ?? coldAttempt).accept();
+    (accepted?.applyRequestTools ?? applyRequestTools)?.();
+    entry.requestContext = resumeRequestContext;
+    const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
+    if (globalEntryForContext) {
+      globalEntryForContext.requestContext = resumeRequestContext;
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
     for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {

@@ -9,6 +9,7 @@
  * - Tool approval resume flow
  */
 
+import { getEventListeners } from 'node:events';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -2706,6 +2707,92 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
     }
   });
 
+  it('stale rejected resume does not seed the next caller context', async () => {
+    const answered: string[] = [];
+    const seenTenants: unknown[] = [];
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        answered.push(context.agent.toolCallId);
+        seenTenants.push(context.requestContext?.get('tenant'));
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-stale-agent',
+      name: 'Resume Stale Agent',
+      instructions: 'Ask for confirmation',
+      model: createToolCallSequenceModel('ask', ['call-1', 'call-2'], 'Confirmed'),
+      tools: { ask },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+
+      const outcome = (attempt: Promise<{ output: { getFullOutput(): Promise<{ error?: unknown }> } }>) =>
+        attempt.then(
+          result => result.output.getFullOutput().then(output => output.error ?? 'answered'),
+          (error: unknown) => error,
+        );
+      const options = { runId: initial.runId, closeOnSuspend: true };
+      const outcomes = await Promise.all([
+        outcome(
+          durable.resume(
+            initial.runId,
+            { confirmed: true },
+            {
+              ...options,
+              requestContext: new RequestContext([['tenant', 'accepted-caller']]),
+            },
+          ),
+        ),
+        outcome(
+          durable.resume(
+            initial.runId,
+            { confirmed: false },
+            {
+              ...options,
+              requestContext: new RequestContext([['tenant', 'rejected-caller']]),
+            },
+          ),
+        ),
+      ]);
+
+      expect(answered).toEqual(['call-1']);
+      expect(outcomes).toContainEqual(expect.objectContaining({ id: 'AGENT_RESUME_ALREADY_CLAIMED' }));
+      const suspendedRuns = (await durable.listSuspendedRuns()).runs;
+      expect(suspendedRuns).toHaveLength(1);
+      expect(JSON.stringify(suspendedRuns[0])).toContain('call-2');
+      expect(outcomes[0]).toBe('answered');
+      expect(outcomes[1]).toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+      const next = await durable.resume(
+        initial.runId,
+        { confirmed: true },
+        {
+          ...options,
+          requestContext: new RequestContext([['requestId', 'next-caller']]),
+        },
+      );
+      const output = await next.output.getFullOutput();
+      expect(output.error).toBeUndefined();
+      expect(output.text).toBe('Confirmed');
+      expect(answered).toEqual(['call-1', 'call-2']);
+      expect(seenTenants[1]).toBe('accepted-caller');
+    } finally {
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
   // Technical: resumes of a run another cold resume was rebuilding waited for that resume without a bound, so
   // a tool resolver that never answered held every later resume, even one whose caller had given up.
   it.each(['abort', 'deadline'] as const)(
@@ -2775,6 +2862,7 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
           new Promise(resolve => setTimeout(() => resolve('still waiting'), 3000)),
         ]);
         expect(settled).toBe('refused');
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
 
         stalledResolver.resolve();
         await stalled;
