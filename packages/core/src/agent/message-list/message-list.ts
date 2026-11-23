@@ -223,6 +223,7 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
             ...(modelOutput != null ? { modelOutput } : {}),
           },
         } as unknown as MastraToolInvocationPart['providerMetadata'];
+        serverComputedParts.add(outcomePart);
       }
     }
     return [outcomePart];

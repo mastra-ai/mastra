@@ -1,5 +1,6 @@
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
+import { serverComputedParts } from '../utils/server-computed-parts';
 import { stampPart, stampToolPartUpdate } from '../utils/stamp-part';
 
 type MessagePart = MastraMessageContentV2['parts'][number];
@@ -162,6 +163,13 @@ export class MessageMerger {
                 ...existingCallPart.providerMetadata,
                 ...part.providerMetadata,
               };
+              // The call part now holds the result part's mapping markers, so it takes over
+              // their provenance: a later reconciliation must keep trusting a server-computed
+              // mapping, and must not trust markers it was overwritten with.
+              if (part.providerMetadata.mastra !== undefined) {
+                if (serverComputedParts.has(part)) serverComputedParts.add(existingCallPart);
+                else serverComputedParts.delete(existingCallPart);
+              }
             }
             if (!latestMessage.content.toolInvocations) {
               latestMessage.content.toolInvocations = [];

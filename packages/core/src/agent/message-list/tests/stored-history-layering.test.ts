@@ -317,6 +317,20 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
     expect(output).toEqual({ type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] });
   });
 
+  it('keeps the server-computed mapping when the same pending row is reconciled again', async () => {
+    const list = await reconcileOutcome({ vetted: true });
+    list.add(withToolState('assistant', 1, { state: 'call', args: { color: 'green' } }), 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.toolInvocation.state).toBe('result');
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toEqual({
+      mastra: {
+        modelOutputComputed: true,
+        modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+      },
+    });
+  });
+
   it('drops mapping markers the server did not compute on that part', async () => {
     // e.g. a server tool's call left pending, or a tool missing from this agent: the hook
     // never vetted the client's markers, so they must not be persisted onto the stored call.
