@@ -2972,6 +2972,36 @@ describe('GitHub session workspace preparation', () => {
       expect(minted).toBe(before + 1);
     });
 
+    it('counts a slow re-mint against the command timeout, and never starts a command whose time ran out', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const sandbox = (resolved as any).sandbox;
+      const inner = mocks.createSandbox.mock.results[0]!.value.exec as ReturnType<typeof vi.fn>;
+      const slowMint = (delayMs: number) =>
+        mocks.getRepositoryAccess.mockImplementationOnce(async () => {
+          vi.advanceTimersByTime(delayMs);
+          return {
+            cloneUrl: 'https://github.com/octocat/hello.git',
+            authorization: { scheme: 'bearer' as const, token: `minted-${++minted}` },
+          };
+        });
+
+      vi.advanceTimersByTime(46 * 60_000);
+      slowMint(2 * 60_000);
+      inner.mockClear();
+      await expect(sandbox.executeCommand('pnpm', ['build'], { timeout: 60_000 })).rejects.toThrow(
+        'it was not started',
+      );
+      expect(inner).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(46 * 60_000);
+      slowMint(2 * 60_000);
+      await sandbox.executeCommand('pnpm', ['build'], { timeout: 15 * 60_000 });
+      expect(inner).toHaveBeenCalledWith('pnpm', ['build'], { timeout: 13 * 60_000 });
+    });
+
     it('does not overwrite a PAT installed while a command re-mint is in flight', async () => {
       const { reuse } = await startSession();
       const sandbox = mocks.createSandbox.mock.results[0]!.value;

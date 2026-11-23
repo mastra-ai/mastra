@@ -1047,7 +1047,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // A turn can outlive the token installed when the workspace was
           // resolved, so check its age before every command and background
           // spawn. Best-effort: a failed re-mint leaves the current token in
-          // place. Concurrent callers share one refresh.
+          // place. Concurrent callers share one refresh. A
+          // command's timeout counts the wait: one whose caller already gave up
+          // (a setup whose mark lapsed) is never dispatched.
           let commandRefresh: Promise<unknown> | undefined;
           const refreshBeforeCommand = () =>
             (commandRefresh ??= refreshStaleGithubToken()
@@ -1057,9 +1059,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               }));
           const executeCommand = sandbox.executeCommand?.bind(sandbox);
           if (executeCommand) {
-            sandbox.executeCommand = async (...args) => {
+            sandbox.executeCommand = async (command, args, options) => {
+              const waitStarted = Date.now();
               await refreshBeforeCommand();
-              return executeCommand(...args);
+              if (options?.timeout === undefined) return executeCommand(command, args, options);
+              const timeout = options.timeout - (Date.now() - waitStarted);
+              if (timeout <= 0) {
+                throw new Error(
+                  `Sandbox command timed out after ${Math.round(options.timeout / 1000)}s while refreshing its GitHub token; it was not started.`,
+                );
+              }
+              return executeCommand(command, args, { ...options, timeout });
             };
           }
           const processes = sandbox.processes;
