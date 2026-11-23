@@ -1823,7 +1823,8 @@ export class AgentController<TState = {}> {
         isResuming: resumed,
         workflowNames: new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()])),
       });
-      // A resume that started while the deletes were in flight may have parked the run again.
+      // A resume that started while the deletes were in flight may have parked the run again; the retry releases it
+      // when the deletes landed first. A delete that erases the re-parked row needs a storage fence to rule out.
       return deleted && !resumed();
     } finally {
       for (const watcher of watchers) watcher.stop();

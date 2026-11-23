@@ -409,18 +409,24 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     const settledGate = new Promise<void>(resolve => (resumeSettled = resolve));
     // Counts the delete's in-memory releases, so only the first attempt's own calls are held.
     let releases = 0;
+    let firstReleaseDone = false;
     const releaseParkedRun = agent.releaseParkedRun.bind(agent);
     vi.spyOn(agent, 'releaseParkedRun').mockImplementation(async (id: string) => {
       if (++releases === 1 && phase === 'release') {
         held();
         await settledGate;
       }
-      return releaseParkedRun(id);
+      try {
+        return await releaseParkedRun(id);
+      } finally {
+        if (releases === 1) firstReleaseDone = true;
+      }
     });
+    // The first read after the first in-memory release is the delete's own snapshot read.
     const read = workflows.getWorkflowRunById.bind(workflows);
     let readHeld = false;
     vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async args => {
-      if (phase !== 'read' || releases !== 1 || readHeld) return read(args);
+      if (phase !== 'read' || !firstReleaseDone || releases !== 1 || readHeld) return read(args);
       readHeld = true;
       const before = await read(args);
       held();
