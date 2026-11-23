@@ -76,6 +76,8 @@ import type {
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { WorkingMemoryInstructionCompat } from './processors/working-memory-instruction-compat';
+import type { WorkingMemoryInstructionArgs } from './processors/working-memory-instruction-compat';
 import { SUBCONSCIOUS_REMOVED_MESSAGE } from './removed-subconscious';
 import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
@@ -386,20 +388,14 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
   );
 }
 
-// Local copy of WorkingMemoryInstructionArgs from @mastra/core/processors. Importing it would put the name in
-// the published declarations, and the peer range includes 1.86.0 prereleases that don't export it, so
-// consumers type-checking with skipLibCheck: false would get TS2305. Keep in sync with
-// packages/core/src/processors/memory/working-memory.ts; type-tests/working-memory-instruction-args.test-d.ts
-// fails if the two drift.
-type WorkingMemoryInstructionArgs =
-  | { kind: 'tool' | 'vnext'; template: WorkingMemoryTemplate; data: string | null }
-  | {
-      kind: 'read-only';
-      template: WorkingMemoryTemplate;
-      data: string | null;
-      /** True when the app updates working memory (`agentManaged: false`), false for `readOnly`. */
-      autoUpdated: boolean;
-    };
+/**
+ * True when the installed `@mastra/core` builds its WorkingMemory processor with the memory instance as the
+ * instruction provider. Cores from before `MastraMemory.getWorkingMemoryInstruction` existed (up to and
+ * including 1.86.0-alpha.5) don't, and render their own built-in text. Checked per call, not at import.
+ */
+function coreRendersWorkingMemoryInstructionThroughMemory(): boolean {
+  return 'getWorkingMemoryInstruction' in MastraMemory.prototype;
+}
 
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
@@ -3931,6 +3927,15 @@ Notes:
     // Get base processors from parent class
     const processors = await super.getInputProcessors(configuredProcessors, context);
 
+    // Older cores build the WorkingMemory processor with their own instruction text, so swap in one that
+    // renders through this instance. A WorkingMemory processor the user configured is left alone.
+    if (!coreRendersWorkingMemoryInstructionThroughMemory()) {
+      const index = processors.findIndex(p => p.id === 'working-memory' && !configuredProcessors.includes(p));
+      if (index !== -1) {
+        processors[index] = await this.createWorkingMemoryInstructionCompatProcessor(context);
+      }
+    }
+
     const om = await this.createOMProcessor(configuredProcessors, context);
     if (om) {
       processors.push(om);
@@ -4023,6 +4028,33 @@ Notes:
     const { ObservationalMemoryProcessor } = await import('./processors/observational-memory');
     return new ObservationalMemoryProcessor(engine, this, {
       temporalMarkers: effectiveConfig.temporalMarkers,
+    });
+  }
+
+  /**
+   * Builds the WorkingMemory input processor for cores without an instruction provider, from the same
+   * config core's `MastraMemory.getInputProcessors()` uses for the processor it replaces.
+   */
+  private async createWorkingMemoryInstructionCompatProcessor(
+    context?: RequestContext,
+  ): Promise<WorkingMemoryInstructionCompat> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const effectiveConfig = runtimeMemory?.memoryConfig
+      ? this.getMergedThreadConfig(runtimeMemory.memoryConfig)
+      : this.threadConfig;
+    const workingMemory = typeof effectiveConfig.workingMemory === 'object' ? effectiveConfig.workingMemory : undefined;
+
+    return new WorkingMemoryInstructionCompat({
+      storage: await this.getMemoryStore(),
+      template: workingMemory?.template ? { format: 'markdown', content: workingMemory.template } : undefined,
+      scope: workingMemory?.scope,
+      useVNext: workingMemory !== undefined && 'version' in workingMemory && workingMemory.version === 'vnext',
+      readOnly: effectiveConfig.readOnly,
+      agentManaged: workingMemory?.agentManaged,
+      defaultTemplate: this.defaultWorkingMemoryTemplate,
+      getWorkingMemoryTemplate: args => this.getWorkingMemoryTemplate(args),
+      renderInstruction: args =>
+        this.getWorkingMemoryInstruction(args) ?? this.renderBuiltInWorkingMemoryInstruction(args),
     });
   }
 

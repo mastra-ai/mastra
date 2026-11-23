@@ -1,8 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { Agent, MessageList } from '@mastra/core/agent';
+import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, WorkingMemoryTemplate } from '@mastra/core/memory';
 import { WorkingMemory as WorkingMemoryProcessor } from '@mastra/core/processors';
+import type { InputProcessor, InputProcessorOrWorkflow } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -20,6 +22,9 @@ import { Memory } from './index';
 // durable, evented, fs) is covered by core's shared scenario
 // `loop/test-utils/aimock/scenarios/working-memory-instruction-override.scenario.test.ts`, which can't import
 // @mastra/memory and uses a `MastraMemory` subclass instead.
+//
+// Every case also runs against a simulated older core (the peer range admits cores up to 1.86.0-alpha.5 whose
+// processor has no instruction provider), where `Memory` swaps in its own compatible WorkingMemory processor.
 
 const BUILT_IN_STORE_EVERYTHING = "If you're unsure whether to store something, store it";
 const RESOURCE = 'user-1';
@@ -142,174 +147,252 @@ async function renderBuiltInInstruction(memory: Memory, config: MemoryConfig, th
     .join('\n');
 }
 
-describe('Memory subclass working memory instruction reaches the agent (#29752)', () => {
-  const overrideMarkers: Record<Case, { marker: string; kind: string; format: string; autoUpdated?: boolean }> = {
-    markdown: { marker: 'CUSTOM_WM (markdown)', kind: 'tool', format: 'markdown' },
-    schema: { marker: 'CUSTOM_WM (json)', kind: 'tool', format: 'json' },
-    vnext: { marker: 'CUSTOM_WM_VNEXT (markdown)', kind: 'vnext', format: 'markdown' },
-    'read-only': { marker: 'CUSTOM_WM_READ_ONLY (autoUpdated: false)', kind: 'read-only', format: 'markdown' },
-    'app-managed': {
-      marker: 'CUSTOM_WM_READ_ONLY (autoUpdated: true)',
-      kind: 'read-only',
-      format: 'markdown',
-      autoUpdated: true,
-    },
+/**
+ * Makes the installed core behave like one released before `MastraMemory.getWorkingMemoryInstruction` existed
+ * (up to 1.86.0-alpha.5): the method is missing from `MastraMemory`, and the auto-created WorkingMemory processor
+ * is built the way those cores build it, without an instruction provider, so it renders core's built-in text.
+ * Returns a function that restores the real core.
+ */
+function simulateCoreWithoutInstructionProvider(): () => void {
+  const proto = MastraMemory.prototype;
+  const instruction = Object.getOwnPropertyDescriptor(proto, 'getWorkingMemoryInstruction');
+  const getInputProcessors = proto.getInputProcessors;
+  if (!instruction) throw new Error('expected the current core to define MastraMemory.getWorkingMemoryInstruction');
+
+  Reflect.deleteProperty(proto, 'getWorkingMemoryInstruction');
+  proto.getInputProcessors = async function (
+    this: MastraMemory,
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor[]> {
+    const processors = await getInputProcessors.call(this, configuredProcessors, context);
+    const runtimeConfig = (context?.get('MastraMemory') as { memoryConfig?: MemoryConfig } | undefined)?.memoryConfig;
+    const config = this.getMergedThreadConfig(runtimeConfig);
+    const workingMemory = typeof config.workingMemory === 'object' ? config.workingMemory : undefined;
+    const storage = (await this.storage.getStore('memory'))!;
+    return processors.map(processor =>
+      processor.id === 'working-memory' && !configuredProcessors.includes(processor)
+        ? new WorkingMemoryProcessor({
+            storage,
+            template: workingMemory?.template ? { format: 'markdown', content: workingMemory.template } : undefined,
+            scope: workingMemory?.scope,
+            useVNext: workingMemory !== undefined && 'version' in workingMemory && workingMemory.version === 'vnext',
+            templateProvider: this,
+            readOnly: config.readOnly,
+            agentManaged: workingMemory?.agentManaged,
+          })
+        : processor,
+    );
   };
 
-  it.each(Object.keys(configs) as Case[])(
-    'agent.generate sends the overridden instruction to the model (%s working memory)',
-    async name => {
-      llm.on({ endpoint: 'chat' }, { content: 'ok' });
-      const memory = createMemory(DurableFactsMemory, configs[name]) as DurableFactsMemory;
-      const threadId = `thread-${name}`;
-      const stored = name === 'schema' ? '{"name":"Ada"}' : '# Profile\n- Name: Ada';
-      await seedWorkingMemory(memory, threadId, stored);
+  return () => {
+    Object.defineProperty(proto, 'getWorkingMemoryInstruction', instruction);
+    proto.getInputProcessors = getInputProcessors;
+  };
+}
 
-      await createAgent(memory).generate('I am searching Drive for the Q3 report', {
-        memory: { thread: threadId, resource: RESOURCE },
-      });
+describe.each(['current core', 'older core without an instruction provider'] as const)('on %s', coreMode => {
+  let restoreCore: (() => void) | undefined;
+  beforeAll(() => {
+    if (coreMode !== 'current core') restoreCore = simulateCoreWithoutInstructionProvider();
+  });
+  afterAll(() => {
+    restoreCore?.();
+  });
+
+  describe('Memory subclass working memory instruction reaches the agent (#29752)', () => {
+    const overrideMarkers: Record<Case, { marker: string; kind: string; format: string; autoUpdated?: boolean }> = {
+      markdown: { marker: 'CUSTOM_WM (markdown)', kind: 'tool', format: 'markdown' },
+      schema: { marker: 'CUSTOM_WM (json)', kind: 'tool', format: 'json' },
+      vnext: { marker: 'CUSTOM_WM_VNEXT (markdown)', kind: 'vnext', format: 'markdown' },
+      'read-only': { marker: 'CUSTOM_WM_READ_ONLY (autoUpdated: false)', kind: 'read-only', format: 'markdown' },
+      'app-managed': {
+        marker: 'CUSTOM_WM_READ_ONLY (autoUpdated: true)',
+        kind: 'read-only',
+        format: 'markdown',
+        autoUpdated: true,
+      },
+    };
+
+    it.each(Object.keys(configs) as Case[])(
+      'agent.generate sends the overridden instruction to the model (%s working memory)',
+      async name => {
+        llm.on({ endpoint: 'chat' }, { content: 'ok' });
+        const memory = createMemory(DurableFactsMemory, configs[name]) as DurableFactsMemory;
+        const threadId = `thread-${name}`;
+        const stored = name === 'schema' ? '{"name":"Ada"}' : '# Profile\n- Name: Ada';
+        await seedWorkingMemory(memory, threadId, stored);
+
+        await createAgent(memory).generate('I am searching Drive for the Q3 report', {
+          memory: { thread: threadId, resource: RESOURCE },
+        });
+
+        const system = systemPromptSentToModel();
+        const expected = overrideMarkers[name];
+        expect(system).toContain(expected.marker);
+        // The override is given the stored working memory, so it can still render it.
+        expect(system).toContain(stored);
+        expect(system).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+        expect(system).not.toContain(BUILT_IN_STORE_EVERYTHING);
+        expect(memory.seen).toContainEqual(
+          expect.objectContaining({ kind: expected.kind, format: expected.format, data: stored }),
+        );
+        if (expected.kind === 'read-only') {
+          expect(memory.seen.find(call => call.kind === 'read-only')?.autoUpdated ?? false).toBe(
+            expected.autoUpdated ?? false,
+          );
+        }
+        // memory.getSystemMessage() renders the same overridden instruction the agent sent.
+        expect(system.match(/CUSTOM_WM/g)).toHaveLength(1);
+        const fromMemory = await memory.getSystemMessage({ threadId, resourceId: RESOURCE });
+        expect(fromMemory).toContain(expected.marker);
+        expect(system).toContain(fromMemory!);
+      },
+    );
+
+    it.each(Object.keys(configs) as Case[])(
+      'without an override, the agent sends the same instruction memory.getSystemMessage() renders (%s working memory)',
+      async name => {
+        llm.on({ endpoint: 'chat' }, { content: 'ok' });
+        const memory = createMemory(Memory, configs[name]);
+        const threadId = `thread-default-${name}`;
+        const stored = name === 'schema' ? '{"name":"Ada"}' : '# Profile\n- Name: Ada';
+        await seedWorkingMemory(memory, threadId, stored);
+
+        await createAgent(memory).generate('hello', { memory: { thread: threadId, resource: RESOURCE } });
+
+        const expected = await memory.getSystemMessage({ threadId, resourceId: RESOURCE });
+        expect(expected).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+        expect(expected).toContain(stored);
+        expect(systemPromptSentToModel()).toContain(expected!);
+        // And it is the same text core's processor renders on its own, so the defaults did not change.
+        const builtIn = await renderBuiltInInstruction(memory, configs[name], threadId);
+        expect(builtIn).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+        expect(expected).toBe(builtIn);
+        expect(systemPromptSentToModel()).toContain(builtIn);
+        expect(systemPromptSentToModel().match(/WORKING_MEMORY_SYSTEM_INSTRUCTION/g)).toHaveLength(1);
+        if (name === 'markdown' || name === 'schema') {
+          expect(systemPromptSentToModel()).toContain(BUILT_IN_STORE_EVERYTHING);
+        }
+      },
+    );
+  });
+
+  describe('vnext working memory with a JSON template object (#29752)', () => {
+    // Technical: a getWorkingMemoryTemplate override may return JSON content as an object. The vnext
+    // instruction must serialize it, not render "[object Object]", now that the agent uses Memory's renderer.
+    class ObjectTemplateMemory extends Memory {
+      override async getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate> {
+        return {
+          format: 'json',
+          content: { type: 'object', properties: { favoriteColor: { type: 'string' } } },
+        };
+      }
+    }
+
+    it('the model receives the template schema', async () => {
+      llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      const memory = createMemory(ObjectTemplateMemory, configs.vnext);
+
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-object-template', resource: RESOURCE } });
 
       const system = systemPromptSentToModel();
-      const expected = overrideMarkers[name];
-      expect(system).toContain(expected.marker);
-      // The override is given the stored working memory, so it can still render it.
-      expect(system).toContain(stored);
-      expect(system).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(system).not.toContain(BUILT_IN_STORE_EVERYTHING);
-      expect(memory.seen).toContainEqual(
-        expect.objectContaining({ kind: expected.kind, format: expected.format, data: stored }),
-      );
-      if (expected.kind === 'read-only') {
-        expect(memory.seen.find(call => call.kind === 'read-only')?.autoUpdated ?? false).toBe(
-          expected.autoUpdated ?? false,
-        );
-      }
-      // memory.getSystemMessage() renders the same overridden instruction the agent sent.
-      expect(system.match(/CUSTOM_WM/g)).toHaveLength(1);
-      const fromMemory = await memory.getSystemMessage({ threadId, resourceId: RESOURCE });
-      expect(fromMemory).toContain(expected.marker);
-      expect(system).toContain(fromMemory!);
-    },
-  );
+      expect(system).toContain('"favoriteColor":{"type":"string"}');
+      expect(system).not.toContain('[object Object]');
+    });
+  });
 
-  it.each(Object.keys(configs) as Case[])(
-    'without an override, the agent sends the same instruction memory.getSystemMessage() renders (%s working memory)',
-    async name => {
+  describe('instruction overrides outside the system-message path (#29752)', () => {
+    it('an override that returns an empty string sends no working memory instruction', async () => {
+      class NoInstructionMemory extends Memory {
+        protected override getWorkingMemoryToolInstruction(): string {
+          return '';
+        }
+      }
       llm.on({ endpoint: 'chat' }, { content: 'ok' });
-      const memory = createMemory(Memory, configs[name]);
-      const threadId = `thread-default-${name}`;
-      const stored = name === 'schema' ? '{"name":"Ada"}' : '# Profile\n- Name: Ada';
-      await seedWorkingMemory(memory, threadId, stored);
+      const memory = createMemory(NoInstructionMemory, configs.markdown);
+      await seedWorkingMemory(memory, 'thread-empty', '# Profile\n- Name: Ada');
 
-      await createAgent(memory).generate('hello', { memory: { thread: threadId, resource: RESOURCE } });
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-empty', resource: RESOURCE } });
 
-      const expected = await memory.getSystemMessage({ threadId, resourceId: RESOURCE });
-      expect(expected).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(expected).toContain(stored);
-      expect(systemPromptSentToModel()).toContain(expected!);
-      // And it is the same text core's processor renders on its own, so the defaults did not change.
-      const builtIn = await renderBuiltInInstruction(memory, configs[name], threadId);
-      expect(builtIn).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(expected).toBe(builtIn);
-      expect(systemPromptSentToModel()).toContain(builtIn);
-      expect(systemPromptSentToModel().match(/WORKING_MEMORY_SYSTEM_INSTRUCTION/g)).toHaveLength(1);
-      if (name === 'markdown' || name === 'schema') {
-        expect(systemPromptSentToModel()).toContain(BUILT_IN_STORE_EVERYTHING);
+      const system = systemPromptSentToModel();
+      expect(system).toContain('You are a helpful assistant.');
+      expect(system).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+      expect(system).not.toContain('- Name: Ada');
+      expect(await memory.getSystemMessage({ threadId: 'thread-empty', resourceId: RESOURCE })).toBeNull();
+    });
+
+    it('a getWorkingMemoryInstruction override that returns undefined keeps the built-in instruction', async () => {
+      class BuiltInMemory extends Memory {
+        override getWorkingMemoryInstruction(): string | undefined {
+          return undefined;
+        }
       }
-    },
-  );
-});
+      llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      const memory = createMemory(BuiltInMemory, configs.markdown);
+      await seedWorkingMemory(memory, 'thread-undefined', '# Profile\n- Name: Ada');
 
-describe('vnext working memory with a JSON template object (#29752)', () => {
-  // Technical: a getWorkingMemoryTemplate override may return JSON content as an object. The vnext
-  // instruction must serialize it, not render "[object Object]", now that the agent uses Memory's renderer.
-  class ObjectTemplateMemory extends Memory {
-    override async getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate> {
-      return {
-        format: 'json',
-        content: { type: 'object', properties: { favoriteColor: { type: 'string' } } },
-      };
-    }
-  }
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-undefined', resource: RESOURCE } });
 
-  it('the model receives the template schema', async () => {
+      const fromMemory = await memory.getSystemMessage({ threadId: 'thread-undefined', resourceId: RESOURCE });
+      expect(fromMemory).toContain(BUILT_IN_STORE_EVERYTHING);
+      expect(fromMemory).toContain('- Name: Ada');
+      expect(systemPromptSentToModel()).toContain(fromMemory!);
+    });
+
+    it('returning undefined uses the built-in text in both paths, even with an instruction method override', async () => {
+      class MixedMemory extends DurableFactsMemory {
+        override getWorkingMemoryInstruction(): string | undefined {
+          return undefined;
+        }
+      }
+      llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      const memory = createMemory(MixedMemory, configs.markdown);
+      await seedWorkingMemory(memory, 'thread-mixed', '# Profile\n- Name: Ada');
+
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-mixed', resource: RESOURCE } });
+
+      const fromMemory = await memory.getSystemMessage({ threadId: 'thread-mixed', resourceId: RESOURCE });
+      expect(fromMemory).toContain(BUILT_IN_STORE_EVERYTHING);
+      expect(fromMemory).not.toContain('CUSTOM_WM');
+      expect(systemPromptSentToModel()).toContain(fromMemory!);
+      expect(systemPromptSentToModel()).not.toContain('CUSTOM_WM');
+    });
+
+    it('with useStateSignals the instruction methods are not used', async () => {
+      llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      const memory = createMemory(DurableFactsMemory, {
+        workingMemory: { ...markdownWorkingMemory, useStateSignals: true },
+      }) as DurableFactsMemory;
+
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-signals', resource: RESOURCE } });
+
+      expect(systemPromptSentToModel()).not.toContain('CUSTOM_WM');
+      expect(memory.seen).toEqual([]);
+    });
+  });
+
+  it('a WorkingMemory processor the app configured is used as is, once', async () => {
     llm.on({ endpoint: 'chat' }, { content: 'ok' });
-    const memory = createMemory(ObjectTemplateMemory, configs.vnext);
+    const memory = createMemory(DurableFactsMemory, configs.markdown) as DurableFactsMemory;
+    await seedWorkingMemory(memory, 'thread-configured', '# Profile\n- Name: Ada');
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+    const agent = new Agent({
+      id: 'wm-agent',
+      name: 'wm-agent',
+      instructions: 'You are a helpful assistant.',
+      model: openai.chat('wm-model'),
+      memory,
+      inputProcessors: [
+        new WorkingMemoryProcessor({ storage: (await memory.storage.getStore('memory'))!, templateProvider: memory }),
+      ],
+    });
 
-    await createAgent(memory).generate('hello', { memory: { thread: 'thread-object-template', resource: RESOURCE } });
+    await agent.generate('hello', { memory: { thread: 'thread-configured', resource: RESOURCE } });
 
     const system = systemPromptSentToModel();
-    expect(system).toContain('"favoriteColor":{"type":"string"}');
-    expect(system).not.toContain('[object Object]');
-  });
-});
-
-describe('instruction overrides outside the system-message path (#29752)', () => {
-  it('an override that returns an empty string sends no working memory instruction', async () => {
-    class NoInstructionMemory extends Memory {
-      protected override getWorkingMemoryToolInstruction(): string {
-        return '';
-      }
-    }
-    llm.on({ endpoint: 'chat' }, { content: 'ok' });
-    const memory = createMemory(NoInstructionMemory, configs.markdown);
-    await seedWorkingMemory(memory, 'thread-empty', '# Profile\n- Name: Ada');
-
-    await createAgent(memory).generate('hello', { memory: { thread: 'thread-empty', resource: RESOURCE } });
-
-    const system = systemPromptSentToModel();
-    expect(system).toContain('You are a helpful assistant.');
-    expect(system).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-    expect(system).not.toContain('- Name: Ada');
-    expect(await memory.getSystemMessage({ threadId: 'thread-empty', resourceId: RESOURCE })).toBeNull();
-  });
-
-  it('a getWorkingMemoryInstruction override that returns undefined keeps the built-in instruction', async () => {
-    class BuiltInMemory extends Memory {
-      override getWorkingMemoryInstruction(): string | undefined {
-        return undefined;
-      }
-    }
-    llm.on({ endpoint: 'chat' }, { content: 'ok' });
-    const memory = createMemory(BuiltInMemory, configs.markdown);
-    await seedWorkingMemory(memory, 'thread-undefined', '# Profile\n- Name: Ada');
-
-    await createAgent(memory).generate('hello', { memory: { thread: 'thread-undefined', resource: RESOURCE } });
-
-    const fromMemory = await memory.getSystemMessage({ threadId: 'thread-undefined', resourceId: RESOURCE });
-    expect(fromMemory).toContain(BUILT_IN_STORE_EVERYTHING);
-    expect(fromMemory).toContain('- Name: Ada');
-    expect(systemPromptSentToModel()).toContain(fromMemory!);
-  });
-
-  it('returning undefined uses the built-in text in both paths, even with an instruction method override', async () => {
-    class MixedMemory extends DurableFactsMemory {
-      override getWorkingMemoryInstruction(): string | undefined {
-        return undefined;
-      }
-    }
-    llm.on({ endpoint: 'chat' }, { content: 'ok' });
-    const memory = createMemory(MixedMemory, configs.markdown);
-    await seedWorkingMemory(memory, 'thread-mixed', '# Profile\n- Name: Ada');
-
-    await createAgent(memory).generate('hello', { memory: { thread: 'thread-mixed', resource: RESOURCE } });
-
-    const fromMemory = await memory.getSystemMessage({ threadId: 'thread-mixed', resourceId: RESOURCE });
-    expect(fromMemory).toContain(BUILT_IN_STORE_EVERYTHING);
-    expect(fromMemory).not.toContain('CUSTOM_WM');
-    expect(systemPromptSentToModel()).toContain(fromMemory!);
-    expect(systemPromptSentToModel()).not.toContain('CUSTOM_WM');
-  });
-
-  it('with useStateSignals the instruction methods are not used', async () => {
-    llm.on({ endpoint: 'chat' }, { content: 'ok' });
-    const memory = createMemory(DurableFactsMemory, {
-      workingMemory: { ...markdownWorkingMemory, useStateSignals: true },
-    }) as DurableFactsMemory;
-
-    await createAgent(memory).generate('hello', { memory: { thread: 'thread-signals', resource: RESOURCE } });
-
-    expect(systemPromptSentToModel()).not.toContain('CUSTOM_WM');
-    expect(memory.seen).toEqual([]);
+    expect(system.match(/WORKING_MEMORY_SYSTEM_INSTRUCTION/g)).toHaveLength(1);
+    expect(system).toContain('- Name: Ada');
+    expect(system).not.toContain('CUSTOM_WM');
   });
 });
