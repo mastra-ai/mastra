@@ -1,8 +1,16 @@
 import { Container, Text } from '@earendil-works/pi-tui';
+import { emitFeatureInstall } from '@mastra/code-sdk/features/events';
 import stripAnsi from 'strip-ansi';
-import { describe, expect, it, vi } from 'vitest';
 
-import { showError, showFormattedError, showInfo, showLines, showProgress } from './display.js';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  showError,
+  showFeatureInstallNotices,
+  showFormattedError,
+  showInfo,
+  showLines,
+  showProgress,
+} from './display.js';
 import type { TUIState } from './state.js';
 
 function createState(): TUIState {
@@ -45,6 +53,68 @@ describe('showProgress', () => {
     } finally {
       nowSpy.mockRestore();
       vi.useRealTimers();
+    }
+  });
+});
+
+describe('showFeatureInstallNotices', () => {
+  const label = 'local embeddings for memory recall';
+
+  it('shows a spinner while local embeddings install on first use, then replaces it with the result', () => {
+    const state = createState();
+    const stop = showFeatureInstallNotices(state);
+    try {
+      emitFeatureInstall({
+        type: 'feature_install',
+        status: 'started',
+        feature: 'embeddings',
+        label,
+        approxSizeMb: 325,
+      });
+      expect(renderedText(state)).toContain('Installing local embeddings for memory recall (about 325 MB, one time)…');
+
+      emitFeatureInstall({
+        type: 'feature_install',
+        status: 'completed',
+        feature: 'embeddings',
+        label,
+        durationMs: 12_300,
+      });
+      expect(renderedText(state)).not.toContain('Installing');
+      expect(renderedText(state)).toContain('Installed local embeddings for memory recall in 12.3 s.');
+    } finally {
+      stop();
+    }
+  });
+
+  it('tells the user how to get the feature when the install fails offline', () => {
+    const state = createState();
+    const stop = showFeatureInstallNotices(state);
+    try {
+      emitFeatureInstall({
+        type: 'feature_install',
+        status: 'started',
+        feature: 'embeddings',
+        label,
+        approxSizeMb: 325,
+      });
+      emitFeatureInstall({
+        type: 'feature_install',
+        status: 'failed',
+        feature: 'embeddings',
+        label,
+        reason: 'network',
+        message: 'the npm registry could not be reached (offline, DNS or proxy problem).',
+        remedy: 'Run "mastracode features install embeddings" when the npm registry is reachable.',
+      });
+      const text = renderedText(state);
+      expect(text).not.toContain('Installing');
+      expect(text).toContain(
+        'Error: Local embeddings for memory recall unavailable: the npm registry could not be reached',
+      );
+      expect(text).toContain('mastracode features install embeddings');
+    } finally {
+      stop();
     }
   });
 });

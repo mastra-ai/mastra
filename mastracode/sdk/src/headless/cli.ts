@@ -11,6 +11,7 @@ import type { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 
 import { resolveSubagentsSetting } from '../agents/subagents/index.js';
+import { formatFeatureInstallNotice, onFeatureInstall } from '../features/events.js';
 import { createMastraCode } from '../index.js';
 import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '../onboarding/pack-activation.js';
 import { listBuiltinModePacks } from '../onboarding/packs.js';
@@ -243,6 +244,7 @@ export async function runMCCli(
   // Default to a non-zero exit so an unexpected throw before the run resolves
   // still surfaces as a failure to the caller / CI.
   let exitCode = 1;
+  let unsubscribeFeatureInstall: (() => void) | undefined;
   try {
     boot = await createMastraCode({
       settingsPath: args.settings,
@@ -266,6 +268,12 @@ export async function runMCCli(
     setupDebugLogging();
 
     const humanState = createHumanFormatState();
+    // First-use installs (e.g. local embeddings) can take a while; say so instead of looking stuck.
+    // JSONL readers get the event; human and json output keep stdout for the answer.
+    unsubscribeFeatureInstall = onFeatureInstall(event => {
+      if (args.output === 'jsonl') process.stdout.write(JSON.stringify(event) + '\n');
+      else process.stderr.write(formatFeatureInstallNotice(event) + '\n');
+    });
     const run = runMC({
       controller,
       session,
@@ -324,6 +332,7 @@ export async function runMCCli(
     exitCode = 1;
   } finally {
     // --- Teardown (always runs, even on a thrown error) ---
+    unsubscribeFeatureInstall?.();
     releaseAllThreadLocks();
     if (boot) {
       // Stop plugin-contributed signal providers (and the plugin reload listener)

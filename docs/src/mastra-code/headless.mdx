@@ -59,6 +59,8 @@ echo "Summarize the repo" | mastracode --prompt -
 | `json` | A single final JSON object (text, usage, tool calls/results, threadId, status) |
 | `jsonl` | Newline-delimited JSON: one line per event except `display_state_changed` UI snapshots, then a final `{ "type": "result", ... }` line |
 
+When an [optional feature](/configuration#optional-features) installs on first use, `human` and `json` modes print a notice to stderr. `jsonl` mode emits `{ "type": "feature_install", "status": "started" | "completed" | "failed" | "disabled", ... }` lines.
+
 ### Exit codes
 
 | Code | Meaning |

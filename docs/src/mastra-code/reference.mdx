@@ -72,6 +72,7 @@ const {
 | `storage` | `StorageConfig \| MastraCompositeStore` | Local LibSQL | Custom storage config instead of auto-detected default, or a pre-built store |
 | `storageBackend` | `'libsql' \| 'pg'` | Inferred for LibSQL and Postgres | Backend for an injected store. Inferred for `LibSQLStore` and `PostgresStore`; required for any other `MastraCompositeStore` |
 | `vector` | `MastraVector` | Default recall store | Pre-built vector store for recall search |
+| `featureInstall` | `'auto' \| 'never'` | `'auto'` | Whether [optional features](/configuration#optional-features) such as local embeddings install with npm on first use. `'never'` reports them as unavailable. `MASTRACODE_FEATURE_INSTALL` overrides it. Subscribe with `onFeatureInstall()` to show install progress |
 | `knowledge` | `{ key: string; instance: Knowledge }` | - | Host-owned Knowledge instance registered on the mounted Mastra runtime |
 | `omScope` | `'thread' \| 'resource'` | Auto-detected | Observational Memory scope. `'resource'` is [deprecated](https://mastra.ai/docs/memory/observational-memory#resource-scope-deprecated) |
 | `settingsPath` | `string` | Global settings | Path to a custom `settings.json` file |

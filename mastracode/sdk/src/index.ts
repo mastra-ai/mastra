@@ -104,6 +104,8 @@ import {
   validateExperimentalAgent,
   wrapExperimentalAgent,
 } from './experimental-agent.js';
+import { setFeatureInstallPolicy } from './features/load.js';
+import type { FeatureInstallPolicy } from './features/load.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -129,9 +131,9 @@ import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.j
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { createGoogleVertexGateway } from './providers/google-vertex-gateway.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
+
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
-
 import {
   assembleSchedulePrompt,
   createScheduleTools,
@@ -140,9 +142,9 @@ import {
   shortScheduleId,
   ThreadScheduler,
 } from './schedules/index.js';
+
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
-
 import { mastraBrand } from './theme-palette.js';
 import { isThinkingLevelSetting } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
@@ -376,6 +378,14 @@ export interface MastraCodeConfig {
    * is set. Omitted → local `fastembed.small` (bge-small, 384 dimensions).
    */
   embedder?: MemoryEmbedder;
+  /**
+   * Optional features (local embeddings) whose packages are not installed with Mastra Code.
+   * `'auto'` (default) installs a feature with npm the first time it is used, into a per-user
+   * features directory; `'never'` reports it as unavailable instead. `MASTRACODE_FEATURE_INSTALL`
+   * overrides this. Hosts that must not download at runtime should install `@mastra/fastembed`
+   * themselves or set `'never'`.
+   */
+  featureInstall?: FeatureInstallPolicy;
   /** Options passed to every embedding call, e.g. provider options or headers. */
   embedderOptions?: MastraEmbeddingOptions;
   /**
@@ -609,6 +619,7 @@ function routesToOtherGateway(
 }
 
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
+  if (config?.featureInstall) setFeatureInstallPolicy(config.featureInstall);
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
@@ -2445,3 +2456,12 @@ export type {
   ResolutionPolicy,
   PermissionMode,
 } from './headless/index.js';
+export {
+  FeatureNotInstalledError,
+  formatFeatureInstallNotice,
+  isFeatureNotInstalledError,
+  onFeatureInstall,
+} from './features/events.js';
+export type { FeatureInstallEvent, FeatureUnavailableReason } from './features/events.js';
+export type { FeatureInstallPolicy } from './features/load.js';
+export { EmbedderPackageMissingError } from './agents/fastembed-subprocess.js';

@@ -67,7 +67,6 @@
     "@mastra/agent-browser": "workspace:*",
     "@mastra/client-js": "workspace:*",
     "@mastra/duckdb": "workspace:*",
-    "@mastra/fastembed": "workspace:*",
     "@mastra/github-signals": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
@@ -100,6 +99,7 @@
     "@internal/workspace-test-utils": "workspace:*",
     "@libsql/client": "^0.18.0",
     "@mastra/core": "workspace:*",
+    "@mastra/fastembed": "workspace:*",
     "@types/node": "22.19.15",
     "msw": "^2.12.11",
     "tsdown": "0.23.1",
@@ -108,9 +108,15 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.85.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.85.1-0 <2.0.0-0",
+    "@mastra/fastembed": ">=1.4.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.19.0"
+  },
+  "peerDependenciesMeta": {
+    "@mastra/fastembed": {
+      "optional": true
+    }
   }
 }

@@ -547,6 +547,12 @@ async function main() {
     return process.exit(await runPruneCommand(process.argv.slice(3)));
   }
 
+  // Lists and pre-installs the optional features that otherwise install on first use.
+  if (process.argv[2] === 'features') {
+    const { runFeaturesCommand } = await import('@mastra/code-sdk/features/cli');
+    return process.exit(await runFeaturesCommand(process.argv.slice(3)));
+  }
+
   // Also checked before the headless branch, which would send the bare word as a prompt.
   const updateArgs = getUpdateCommandArgs(process.argv);
   if (updateArgs) {

@@ -65,6 +65,7 @@
     "@mastra/code-sdk": "workspace:*",
     "@mastra/connect": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/fastembed": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/platform-workspace": "workspace:*",
     "@mastra/slack": "workspace:*",

@@ -4,6 +4,7 @@
 
 import { Container, Text } from '@earendil-works/pi-tui';
 
+import { formatFeatureInstallNotice, onFeatureInstall } from '@mastra/code-sdk/features/events';
 import { parseError } from '@mastra/code-sdk/utils/errors';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import {
@@ -89,6 +90,22 @@ export function showProgress(state: TUIState, label: string): () => void {
     reconcileChatBoundarySpacers(state.chatContainer);
     state.ui.requestRender();
   };
+}
+
+/**
+ * Shows first-use feature installs (e.g. local embeddings) in the chat: a spinner while npm runs, then
+ * the outcome. Returns the unsubscribe function.
+ */
+export function showFeatureInstallNotices(state: TUIState): () => void {
+  const stopProgress = new Map<string, () => void>();
+  return onFeatureInstall(event => {
+    stopProgress.get(event.feature)?.();
+    stopProgress.delete(event.feature);
+    const notice = formatFeatureInstallNotice(event);
+    if (event.status === 'started') stopProgress.set(event.feature, showProgress(state, notice));
+    else if (event.status === 'completed') showInfo(state, notice);
+    else showError(state, notice);
+  });
 }
 
 export function showFormattedError(

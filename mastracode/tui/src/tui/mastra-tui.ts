@@ -54,7 +54,7 @@ import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
 import { GradientAnimator } from './components/obi-loader.js';
-import { showError, showInfo, showFormattedError, notify } from './display.js';
+import { showError, showInfo, showFeatureInstallNotices, showFormattedError, notify } from './display.js';
 import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js';
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
@@ -213,6 +213,7 @@ export class MastraTUI {
   private cleanupPluginUpdateListener?: () => void;
   private cleanupPluginErrorListener?: () => void;
   private cleanupBackgroundCompletionListener?: () => void;
+  private cleanupFeatureInstallNotices?: () => void;
   private backgroundNoticeQueue = Promise.resolve();
   private lastStreamError: string | null = null;
   private stopped = false;
@@ -750,6 +751,8 @@ export class MastraTUI {
       this.cleanupPluginErrorListener = undefined;
     }
 
+    this.cleanupFeatureInstallNotices?.();
+    this.cleanupFeatureInstallNotices = undefined;
     if (this.cleanupBackgroundCompletionListener) {
       this.cleanupBackgroundCompletionListener();
       this.cleanupBackgroundCompletionListener = undefined;
@@ -869,6 +872,7 @@ export class MastraTUI {
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
+    this.cleanupFeatureInstallNotices ??= showFeatureInstallNotices(this.state);
     if (this.state.options.backgroundToolsEnabled) {
       this.cleanupBackgroundCompletionListener = this.state.options.backgroundCompletionEvents?.subscribe(event =>
         this.handleBackgroundCompletion(event),

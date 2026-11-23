@@ -1,5 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsdown';
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Exact versions of the packages installed on first use (`src/features/catalog.ts`). Pinned at build time
+ * so a published SDK always installs the versions it was built and tested with.
+ */
+const FEATURE_PACKAGES = ['@mastra/fastembed'];
+const featurePins = Object.fromEntries(
+  FEATURE_PACKAGES.map(name => [
+    name,
+    JSON.parse(readFileSync(require.resolve(`${name}/package.json`), 'utf8')).version,
+  ]),
+);
 
 /**
  * Transpile-only build that preserves the src/ module structure in dist/ so
@@ -19,6 +36,9 @@ export default defineConfig({
   clean: true,
   dts: false,
   sourcemap: true,
+  define: {
+    __MASTRACODE_FEATURE_PINS__: JSON.stringify(featurePins),
+  },
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { fastembed } from '@mastra/fastembed';
+import { FeatureNotInstalledError, isFeatureNotInstalledError } from '../features/events.js';
+import { resolveFeatureModule } from '../features/load.js';
 
 type FastembedModel = typeof fastembed.small;
 type DoEmbedOptions = Parameters<FastembedModel['doEmbed']>[0];
@@ -214,10 +216,50 @@ export class FastembedWorker {
   }
 }
 
-let defaultWorker: FastembedWorker | undefined;
+/**
+ * `@mastra/fastembed` is not installed and could not be installed. A `FeatureNotInstalledError` for the
+ * `embeddings` feature, so callers can tell it apart from an embedding that failed.
+ */
+export class EmbedderPackageMissingError extends FeatureNotInstalledError {
+  constructor(cause: FeatureNotInstalledError) {
+    super(
+      cause.feature,
+      cause.reason,
+      `Local embeddings for memory recall are unavailable: ${cause.message} ${cause.remedy}`,
+      { remedy: cause.remedy, logPath: cause.logPath, cause },
+    );
+    this.name = 'EmbedderPackageMissingError';
+  }
+}
+
+let defaultWorker: Promise<FastembedWorker> | undefined;
+
+/** The shared worker, once `@mastra/fastembed` is resolvable (installing it on first use when allowed). */
+function getDefaultWorker(): Promise<FastembedWorker> {
+  defaultWorker ??= resolveFeatureModule('embeddings', '@mastra/fastembed').then(
+    entry => new FastembedWorker(entry),
+    error => {
+      // Not cached: a later `mastracode features install embeddings` or a new process can still succeed.
+      defaultWorker = undefined;
+      throw isFeatureNotInstalledError(error) ? new EmbedderPackageMissingError(error) : error;
+    },
+  );
+  return defaultWorker;
+}
+
+/** Waits for `promise`, but gives up when `signal` aborts. The underlying work (a shared install) carries on. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
 
 /** Embeds with `fastembed.small` in the shared worker process (see `FastembedWorker`). */
-export function embedInSubprocess(options: DoEmbedOptions): Promise<DoEmbedResult> {
-  defaultWorker ??= new FastembedWorker(import.meta.resolve('@mastra/fastembed'));
-  return defaultWorker.embed(options);
+export async function embedInSubprocess(options: DoEmbedOptions): Promise<DoEmbedResult> {
+  const worker = await untilAborted(getDefaultWorker(), options.abortSignal);
+  return worker.embed(options);
 }

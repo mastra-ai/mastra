@@ -730,6 +730,29 @@ The lock that coordinates this lives in the app data directory, not next to the 
 
 The retention defaults are 14 days for traces and logs, 30 days for scorer results and workflow snapshots, and 90 days for chat history.
 
+## Optional features
+
+Some features need large packages that aren't installed with `mastracode`. Mastra Code installs each one with npm the first time it's used, into a `features` folder in the app data directory. Later sessions reuse it.
+
+| Feature | Installed when | Size |
+| - | - | - |
+| `embeddings` | Memory recall first embeds a message with the default local embedder | About 325 MB |
+
+While a feature installs, Mastra Code shows `Installing local embeddings for memory recall…`. The install uses your npm configuration, including registry, proxy, and authentication settings in `.npmrc`. Mastra Code always installs the exact version it was released with.
+
+If the install can't run, for example when you're offline, Mastra Code shows why and keeps working without that feature. It tries again in the next session.
+
+To see which features are installed, or to install them ahead of time for a Docker image or an offline machine:
+
+```bash
+mastracode features                    # list features and where they're installed
+mastracode features install --all      # install every feature now
+mastracode features install embeddings # install one feature
+mastracode features prune              # remove features installed for other Mastra Code versions
+```
+
+Set `MASTRACODE_FEATURE_INSTALL=never` to turn off installs on first use. Features that aren't installed are then reported as unavailable. Packages you install next to `mastracode` yourself, for example `npm install -g mastracode @mastra/fastembed`, are used as they are.
+
 ## Observational memory
 
 [Observational memory](https://mastra.ai/docs/memory/observational-memory) (OM) uses background agents to maintain a dense log of observations and reflections about the conversation, providing long-term context that persists across sessions.
@@ -824,6 +847,8 @@ MASTRACODE_DISABLE_CAFFEINATE=1 mastracode
 | `MASTRA_RESOURCE_ID` | Override the auto-detected project resource ID |
 | `MASTRA_OM_SCOPE` | Observational memory scope (`thread`, or deprecated `resource`) |
 | `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
+| `MASTRACODE_FEATURE_INSTALL` | Set to `never` to stop [optional features](#optional-features) from installing on first use |
+| `MASTRACODE_FEATURES_DIR` | Override the directory where [optional features](#optional-features) are installed (default: `features` in the app data directory) |
 | `MASTRA_PLANS_DIR` | Override the directory where approved plans are saved (default: app data directory) |
 | `MASTRA_THEME` | Color theme override (`dark`, `light`, a theme name, or a `light/dark` pair) |
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
