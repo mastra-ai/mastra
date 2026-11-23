@@ -1,4 +1,9 @@
 import type { MessageList } from '../../../agent/message-list';
+import {
+  MODEL_OUTPUT_ORIGIN_KEY,
+  stampServerModelOutput,
+  withoutModelOutputOrigin,
+} from '../../../agent/message-list/utils/model-output-origin';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
 import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
@@ -97,7 +102,7 @@ export async function computeModelOutputProviderMetadata(deps: {
   const providerMetadata = withAgentWorkflowToolMarker(
     {
       ...deps.existingProviderMetadata,
-      ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+      ...(modelOutput != null ? { mastra: stampServerModelOutput({ ...existingMastra, modelOutput }) } : {}),
     },
     tool,
   );
@@ -217,9 +222,13 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
       // Cleared: the model reads the (processed) raw result. Drop the key from the
       // part too, since the commit merges metadata and would otherwise keep it.
       delete processorMastra.modelOutput;
-      return Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined;
+      delete processorMastra[MODEL_OUTPUT_ORIGIN_KEY];
+      const cleared = withoutModelOutputOrigin(mastraWithoutModelOutput);
+      const { mastra: _stale, ...clearedNamespaces } = withoutModelOutput;
+      const result = Object.keys(cleared).length ? { ...clearedNamespaces, mastra: cleared } : clearedNamespaces;
+      return Object.keys(result).length ? result : undefined;
     }
-    return { ...withoutModelOutput, mastra: { ...mastraWithoutModelOutput, modelOutput } };
+    return { ...withoutModelOutput, mastra: stampServerModelOutput({ ...mastraWithoutModelOutput, modelOutput }) };
   }
 
   // Without a committed part, a processor can only have edited the result in place.

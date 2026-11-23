@@ -1,4 +1,8 @@
 import type { MessageList } from '../../../agent/message-list';
+import {
+  stampServerModelOutput,
+  withoutModelOutputOrigin,
+} from '../../../agent/message-list/utils/model-output-origin';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
@@ -145,11 +149,15 @@ export async function applyBackgroundToolResult(deps: {
   }
   const providerMetadata = {
     ...transformed.providerMetadata,
-    mastra: {
-      ...(transformed.providerMetadata as any)?.mastra,
-      modelOutput,
-      backgroundTask: { taskId: params.taskId, status: failed ? 'failed' : 'completed' },
-    },
+    // A null output must not inherit the dispatch placeholder's stamp.
+    mastra: (() => {
+      const mastra = {
+        ...withoutModelOutputOrigin((transformed.providerMetadata as any)?.mastra),
+        modelOutput,
+        backgroundTask: { taskId: params.taskId, status: failed ? 'failed' : 'completed' },
+      };
+      return modelOutput != null ? stampServerModelOutput(mastra) : mastra;
+    })(),
   } as ProviderMetadata;
 
   const updated = messageList.updateToolInvocation(

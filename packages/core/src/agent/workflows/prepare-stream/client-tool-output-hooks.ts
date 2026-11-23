@@ -2,7 +2,7 @@ import type { IMastraLogger } from '../../../logger';
 import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList, MessageListInput } from '../../message-list';
-import { serverComputedParts } from '../../message-list/utils/server-computed-parts';
+import { hasServerModelOutput, stampServerModelOutput } from '../../message-list/utils/model-output-origin';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
 type ToolCall = { toolCallId: string; toolName: string };
@@ -133,6 +133,7 @@ function stripModelOutputMarkers(part: { providerMetadata?: unknown }): void {
   const {
     modelOutput: _untrustedOutput,
     modelOutputComputed: _untrustedMarker,
+    modelOutputOrigin: _untrustedOrigin,
     ...restMastra
   } = mastra as Record<string, unknown>;
   part.providerMetadata = { ...(part.providerMetadata as object), mastra: restMastra };
@@ -141,17 +142,16 @@ function stripModelOutputMarkers(part: { providerMetadata?: unknown }): void {
 const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provider-defined';
 
 /**
- * Drop stored mappings on results of client tools that define no `toModelOutput`.
+ * Legacy rule for projections without provenance: drop an UNSTAMPED mapping on
+ * a result of a client tool that defines no `toModelOutput`.
  *
- * The server never writes a mapping there, so one can only have come from a
- * client; releases before the input strip in `applyClientToolModelOutput`
- * could persist such a forgery. History can enter the MessageList late
+ * Stamped mappings (see `model-output-origin.ts`) were computed by the server
+ * and are never judged here. An unstamped one predates the stamp or came from
+ * a client; releases before the input strip could persist a client forgery on
+ * a tool the server never maps. History can enter the MessageList late
  * (memory processors load it in the loop), so the loop calls this right
- * before every prompt build, once all history sources are merged.
- *
- * Pass the request's tools — the set `applyClientToolModelOutput` maps with —
- * never a step's processor-substituted set: a replacement without
- * `toModelOutput` says nothing about who computed a stored mapping.
+ * before every prompt build. It can be deleted once pre-stamp history is
+ * migrated.
  */
 export function dropUnmappedClientToolMarkers({
   messageList,
@@ -168,6 +168,7 @@ export function dropUnmappedClientToolMarkers({
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
     for (const part of message.content.parts) {
       if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      if (hasServerModelOutput(part)) continue;
       if (isUnmapped(tools[part.toolInvocation.toolName] as CoreTool | undefined)) stripModelOutputMarkers(part);
     }
   }
@@ -193,10 +194,11 @@ export function dropUnmappedClientToolMarkers({
  * building reads these same part objects, and messages saved to memory carry
  * the enrichment so memory reloads restore it without recomputing.
  *
- * Mapping markers found on wire-delivered results of client-mapped tools are
- * NOT trusted: a client could forge `mastra.modelOutput` to inject arbitrary
+ * Mapping markers found on wire-delivered results of client tools are NOT
+ * trusted: a client could forge `mastra.modelOutput` to inject arbitrary
  * prompt content, so they are stripped and the mapping is recomputed from the
- * raw result.
+ * raw result. Only parts carrying the server stamp keep their markers; the
+ * MessageList removes the stamp from every client-supplied part on add.
  */
 export async function applyClientToolModelOutput({
   messageList,
@@ -231,24 +233,16 @@ export async function applyClientToolModelOutput({
       // server-computed markers. A client could forge them on its input to
       // smuggle arbitrary content into the prompt past the idempotency skip
       // below, so markers on wire-delivered parts are stripped and the
-      // mapping is recomputed from the raw result. Only parts this process
-      // enriched itself (tracked by identity) keep their markers.
-      if (!serverComputedParts.has(part)) stripModelOutputMarkers(part);
+      // mapping is recomputed from the raw result. Only server-stamped parts
+      // (mapped by this hook on a previous run) keep their markers.
+      if (hasServerModelOutput(part)) continue;
+      stripModelOutputMarkers(part);
 
       // The server never stores a mapping for a client tool without one.
       const toModelOutput = tool.toModelOutput;
       if (typeof toModelOutput !== 'function') continue;
 
       const mastraMetadata = part.providerMetadata?.mastra;
-      // Idempotency: skip parts this process already mapped (retries and
-      // in-request re-runs). Markers from any other origin were stripped above.
-      if (
-        mastraMetadata &&
-        typeof mastraMetadata === 'object' &&
-        ('modelOutput' in mastraMetadata || mastraMetadata.modelOutputComputed)
-      ) {
-        continue;
-      }
 
       // Live ingestion pre-normalizes documented AI SDK wrappers, so an error
       // variant sent by the client usually arrives here as a plain value and is
@@ -259,10 +253,10 @@ export async function applyClientToolModelOutput({
 
       try {
         const modelOutput = normalizeModelOutput(await toModelOutput(normalized.output));
-        const nextMastra: Record<string, unknown> = {
+        const nextMastra: Record<string, unknown> = stampServerModelOutput({
           ...(typeof mastraMetadata === 'object' ? mastraMetadata : undefined),
           modelOutputComputed: true,
-        };
+        });
         // A nullish return means "no special mapping needed" — keep the raw
         // result but still mark the part computed.
         if (modelOutput != null) nextMastra.modelOutput = modelOutput;
@@ -270,7 +264,6 @@ export async function applyClientToolModelOutput({
           ...part.providerMetadata,
           mastra: nextMastra,
         } as unknown as typeof part.providerMetadata;
-        serverComputedParts.add(part);
       } catch (error) {
         // Client-tool mapping runs during preparation on an already-finished
         // result, outside the execution path, so log and preserve the raw result.

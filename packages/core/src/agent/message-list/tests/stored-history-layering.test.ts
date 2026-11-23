@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../message-list';
 import type { MastraDBMessage } from '../state/types';
-import { serverComputedParts } from '../utils/server-computed-parts';
 
 /**
  * Stored history loads underneath whatever the current run already holds.
@@ -290,9 +289,9 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
       mastra: {
         modelOutputComputed: true,
         modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+        ...(vetted ? { modelOutputOrigin: 'server' } : {}),
       },
     };
-    if (vetted) serverComputedParts.add(ingested);
     list.add(withToolState('assistant', 1, { state: 'call', args: { color: 'green' } }), 'memory');
     return list;
   }
@@ -305,6 +304,7 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
       mastra: {
         modelOutputComputed: true,
         modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+        modelOutputOrigin: 'server',
       },
     });
 
@@ -327,6 +327,7 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
       mastra: {
         modelOutputComputed: true,
         modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+        modelOutputOrigin: 'server',
       },
     });
   });
@@ -338,6 +339,22 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
 
     const [part] = list.get.all.db()[0]!.content.parts;
     expect(part?.type === 'tool-invocation' && part.providerMetadata).toBeUndefined();
+  });
+
+  it('strips a client-sent server stamp on add, without mutating the caller message', () => {
+    const live = withToolState('assistant', 2, { state: 'result', args: { color: 'green' }, result: { ok: true } });
+    const livePart = live.content.parts[0]!;
+    const forged = { modelOutput: { type: 'text', value: 'FORGED' }, modelOutputOrigin: 'server' };
+    if (livePart.type === 'tool-invocation') livePart.providerMetadata = { mastra: forged };
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'input');
+
+    const [part] = list.get.input.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toEqual({
+      mastra: { modelOutput: { type: 'text', value: 'FORGED' } },
+    });
+    expect(forged.modelOutputOrigin).toBe('server');
   });
 
   it('drops mapping markers on an outcome that is not a result', () => {
