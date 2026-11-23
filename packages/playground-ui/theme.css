@@ -40,6 +40,8 @@
   /* Rows of a table or list, on the card that frames them. */
   --row: color-mix(in oklab, var(--background-2) 75%, var(--background-3));
   --field: var(--field-on-page);
+  --field-hover: var(--field-hover-on-page);
+  --field-open: var(--field-open-on-page);
   --field-disabled: var(--fill-subtle);
   --field-rim-focus: var(--border-focus);
   --muted: var(--gray-1);

@@ -29,10 +29,13 @@
  */
 /** The field colors a raised surface gives the inputs on it. A surface that drops the rim and shadow but keeps
  * the card fill (a settings card) uses it alone, so its fields look the same as on a raised card. */
-export const fieldsOnSurface = '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)]';
+export const fieldsOnSurface =
+  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-hover:var(--field-hover-on-surface)] [--field-open:var(--field-open-on-surface)]';
 /** The same on a box inside a card, whose fill is translucent, so the field's is too. */
-export const fieldsOnNested = '[--field:var(--field-on-nested)] [--field-disabled:var(--field-on-nested)]';
-const fieldsOnPage = '[--field:var(--field-on-page)] [--field-disabled:var(--fill-subtle)]';
+export const fieldsOnNested =
+  '[--field:var(--field-on-nested)] [--field-disabled:var(--field-on-nested)] [--field-hover:var(--field-hover-on-surface)] [--field-open:var(--field-open-on-surface)]';
+const fieldsOnPage =
+  '[--field:var(--field-on-page)] [--field-disabled:var(--fill-subtle)] [--field-hover:var(--field-hover-on-page)] [--field-open:var(--field-open-on-page)]';
 
 export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised ' + fieldsOnSurface;
 

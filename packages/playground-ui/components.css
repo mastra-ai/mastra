@@ -180,6 +180,15 @@
     border-color: var(--border);
   }
 
+  /* A box painted with the card color directly gives its fields the same colors as `Card` does, or they would be
+   * the box's own color. The `fieldsOn*` utilities win over this. */
+  :where(.bg-card) {
+    --field: var(--field-on-surface);
+    --field-disabled: var(--field-on-surface);
+    --field-hover: var(--field-hover-on-surface);
+    --field-open: var(--field-open-on-surface);
+  }
+
   :where(code, samp, pre, .font-mono) {
     font-size-adjust: var(--font-mono-size-adjust, none);
   }

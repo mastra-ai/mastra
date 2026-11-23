@@ -20,12 +20,12 @@ export const inputFocusBorderWithin = 'focus-within:border-border-focus';
 // whose focus lives on a nested control use `inputFocusBorderWithin` instead.
 export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-hidden ${inputFocusBorderVisible}`;
 
-// A field is the same material as a card: `bg-card` plus `shadow-raised`, which
-// carries the 1px rim, so a field draws no border of its own. That is what makes a
-// filter input and the panel beside it read as one system — in light the field is
-// white on the off-white canvas, in dark it is the same step above it.
+// On the page a field is the same fill as a card, so a filter input and the panel beside
+// it read as one system. Inside a card or dialog it is a light tint, which the surface
+// sets through `--field`. `shadow-input` carries the 1px rim, so a field draws no border
+// of its own.
 //
-// Hover washes the fill, focus repaints the rim. Both go through `shadow-raised`:
+// Hover washes the fill, focus repaints the rim. Both go through `shadow-input`:
 // an `<input>` cannot carry a pseudo-element, so `--surface-tint` reaches into an
 // inset layer of that utility and gives a field the same state layer a `Card` gets
 // from `state-layer` — the rung a filter chip's segments already wear, which is the

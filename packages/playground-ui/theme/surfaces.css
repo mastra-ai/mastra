@@ -129,15 +129,17 @@
   --overlay-rim: oklch(var(--fill-tint) 0 0 / 12%);
   --elevation-raised: 0 0 #0000;
   --dialog: var(--card);
-  /* Fields are a light tint of what they sit on. */
+  /* A field on the page is the card color; inside a card or dialog it is a light tint of what it sits on. */
   --field-on-page: var(--card);
   --field-on-surface: color-mix(in srgb, oklch(var(--fill-tint) 0 0) 3%, var(--card));
   --field-on-nested: oklch(var(--fill-tint) 0 0 / 3%);
   --field-rim: oklch(var(--fill-tint) 0 0 / 8%);
   /* Edge of a control made of segments. */
   --control-rim: var(--border);
-  --field-hover: var(--fill-subtle);
-  --field-open: var(--fill);
+  --field-hover-on-page: var(--fill-subtle);
+  --field-open-on-page: var(--fill);
+  --field-hover-on-surface: var(--fill-subtle);
+  --field-open-on-surface: var(--fill);
   --elevation-overlay:
     0 3px 8px oklch(0% 0 0deg / 12%), 0 2px 5px oklch(0% 0 0deg / 12%), 0 1px 1px oklch(0% 0 0deg / 12%);
   --elevation-dialog: var(--elevation-overlay);
@@ -168,12 +170,11 @@ html.light {
 
   --inset-rim: oklch(0% 0 0deg / 8%);
   --elevation-raised: 0 1px 2px oklch(0% 0 0deg / 4%);
-  --field-on-page: color-mix(in srgb, oklch(var(--fill-tint) 0 0) 3%, var(--background));
   --field-rim: oklch(var(--fill-tint) 0 0 / 9%);
   --control-rim: oklch(var(--fill-tint) 0 0 / 12%);
   /* The field's own tint already took part of the way. */
-  --field-hover: oklch(var(--fill-tint) 0 0 / 1.5%);
-  --field-open: oklch(var(--fill-tint) 0 0 / 2.5%);
+  --field-hover-on-surface: oklch(var(--fill-tint) 0 0 / 1.5%);
+  --field-open-on-surface: oklch(var(--fill-tint) 0 0 / 2.5%);
   --elevation-overlay:
     0 6px 18px oklch(0% 0 0deg / 2%), 0 3px 9px oklch(0% 0 0deg / 4%), 0 1px 1px oklch(0% 0 0deg / 4%);
   --elevation-dialog:

@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Reworked the neutral colors in both themes. Supporting text is easier to read, and cards, menus and dialogs share one fill.
+Reworked the neutral colors in both themes. Supporting text is easier to read, and cards, menus and dialogs share one fill. Fields are the card color on the page and a light tint inside cards and dialogs.
 
 Added color roles, so a class says what it paints:
 
