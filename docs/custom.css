@@ -2110,3 +2110,9 @@ main .openapi-tabs__schema-list-container > .openapi-tabs__schema-item.active {
 main .openapi-markdown__details.response > summary {
   display: none !important;
 }
+
+/* Section headings inside collapsibles (Header Parameters, Body, ...) get the site's h3 underline otherwise */
+main .openapi-markdown__details > summary h3 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
