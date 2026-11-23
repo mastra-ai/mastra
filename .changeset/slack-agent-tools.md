@@ -2,7 +2,7 @@
 '@mastra/slack': minor
 ---
 
-Added `createSlackTools()`, which returns Slack-only agent tools: `findChannel`, `findUser`, `searchMessages` and `downloadSlackAttachment`. They take the same options as `createChannelTools()` from `@mastra/core/channels` and keep to the same channels.
+Added `createSlackTools()`, which returns Slack-only agent tools: `findChannel`, `findUser`, `searchMessages` and `downloadSlackAttachment`. They take the same options as `createChannelTools()` from `@mastra/core/channels`. `searchMessages` and `downloadSlackAttachment` only read channels those options allow. `findChannel` and `findUser` look up the whole workspace.
 
 ```ts
 import { createChannelTools } from '@mastra/core/channels';

@@ -41,8 +41,7 @@ function createAdapter() {
 
 const OWN_THREAD = 'test:C1:1700000000.000100';
 
-async function setup(options: ChannelToolsOptions = {}) {
-  const adapter = createAdapter();
+async function setup(options: ChannelToolsOptions = {}, adapter = createAdapter()) {
   const agent = new Agent({
     id: 'channel-agent',
     name: 'channel-agent',
@@ -109,6 +108,31 @@ describe('createChannelTools', () => {
     );
     expect(adapter.fetchMessages).not.toHaveBeenCalled();
     expect(adapter.fetchChannelMessages).not.toHaveBeenCalled();
+  });
+
+  it('only allows channels granted by id when the platform cannot tell DMs apart', async () => {
+    const adapter = createAdapter();
+    delete adapter.isDM;
+
+    const all = await setup({ channels: 'all' }, adapter);
+    await all.run('fetchMessages', { threadId: OWN_THREAD });
+    await expect(all.run('fetchChannelMessages', { channelId: 'test:D9' })).rejects.toThrow(
+      "can't be checked for being someone else's direct message",
+    );
+
+    const selected = await setup({ channels: 'selected', channelIds: ['test:C2'] }, adapter);
+    await selected.run('fetchChannelMessages', { channelId: 'test:C2' });
+    expect(adapter.fetchChannelMessages).toHaveBeenCalledTimes(1);
+    expect(adapter.fetchChannelMessages).toHaveBeenCalledWith('test:C2', expect.anything());
+  });
+
+  it('with read access, refuses to send direct messages', async () => {
+    const { adapter, run } = await setup({ access: 'read', directMessages: 'anyone' });
+    adapter.openDM = vi.fn();
+
+    await expect(run('sendDirectMessage', { userId: 'U2', message: 'hi' })).rejects.toThrow('read only');
+    expect(adapter.openDM).not.toHaveBeenCalled();
+    expect(adapter.postMessage).not.toHaveBeenCalled();
   });
 
   it('with read access, posts only in the conversation’s own channel', async () => {

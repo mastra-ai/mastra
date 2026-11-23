@@ -69,8 +69,10 @@ function matchesImageFormat(mimeType: string, data: Buffer): boolean {
 /**
  * Slack-only tools for an agent with Slack channels: findChannel, findUser,
  * searchMessages and downloadSlackAttachment. They take the same options as
- * `createChannelTools` from `@mastra/core/channels` and stay inside the
- * same channels; lookups act as the app. Nothing is added to the agent for you:
+ * `createChannelTools` from `@mastra/core/channels`. searchMessages and
+ * downloadSlackAttachment only read channels those options allow; findChannel
+ * and findUser look up the whole workspace as the app. Nothing is added to the
+ * agent for you:
  *
  * ```ts
  * const agent = new Agent({
@@ -98,6 +100,7 @@ export function createSlackTools(options: CreateChannelToolsOptions = {}): Chann
       execute: async ({ name }, context) => {
         const { client } = await slack(context);
         const query = normalize(name);
+        if (!query) throw new Error('Give a name to search for.');
         const { items: found, incomplete } = await listAll(async cursor => {
           const page = await client.conversations.list({
             types: 'public_channel,private_channel',
@@ -128,6 +131,7 @@ export function createSlackTools(options: CreateChannelToolsOptions = {}): Chann
       execute: async ({ name }, context) => {
         const { client } = await slack(context);
         const query = normalize(name);
+        if (!query) throw new Error('Give a name to search for.');
         const { items: people, incomplete } = await listAll(async cursor => {
           const page = await client.users.list({ limit: 200, cursor });
           return { items: page.members, response_metadata: page.response_metadata };

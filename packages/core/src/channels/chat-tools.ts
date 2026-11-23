@@ -99,10 +99,11 @@ function channelOf(chat: Chat, id: string): string {
   return adapter?.channelIdFromThreadId?.(id) ?? id.split(':').slice(0, 2).join(':');
 }
 
-function isDirectMessage(chat: Chat, channelId: string): boolean {
+/** `undefined` when the platform can't tell whether the channel is a DM. */
+function isDirectMessage(chat: Chat, channelId: string): boolean | undefined {
   const prefix = channelId.split(':')[0];
   const adapter = prefix ? (chat.getAdapter(prefix as never) as Adapter | undefined) : undefined;
-  return adapter?.isDM?.(channelId) ?? false;
+  return adapter?.isDM?.(channelId);
 }
 
 function describeSettings(settings: ChannelToolsSettings, own: string): string {
@@ -144,11 +145,19 @@ export function createChannelToolScope({
       throw new Error(`"${id}" isn't a full chat id. Use the platform prefix, e.g. "${ownChannel}".`);
     }
     const channel = channelOf(chat, id);
-    if (channel !== ownChannel && isDirectMessage(chat, channel)) {
+    const dm = channel === ownChannel ? false : isDirectMessage(chat, channel);
+    if (dm) {
       throw new Error(
         `"${id}" is someone else's direct message with the bot.${
           settings.directMessages === 'anyone' ? ' Use sendDirectMessage to message a person.' : ''
         }`,
+      );
+    }
+    // A platform that can't classify DMs could hide one behind `channels: 'all'`,
+    // so there only channels granted by id are allowed.
+    if (dm === undefined && !allowed.has(channel)) {
+      throw new Error(
+        `"${id}" can't be checked for being someone else's direct message, so this conversation can only use channels granted by id. ${describe()}`,
       );
     }
     if (!all && !allowed.has(channel)) {
@@ -316,6 +325,12 @@ export async function createChannelTools(options: CreateChannelToolsOptions = {}
       else scope.assertReadable(id);
     });
   }
-  if (settings.directMessages === 'anyone') build('sendDirectMessage', () => {});
+  if (settings.directMessages === 'anyone') {
+    build('sendDirectMessage', scope => {
+      if (scope.settings.access === 'read') {
+        throw new Error(`This conversation is read only: it can only post in its own channel, ${scope.channelId}.`);
+      }
+    });
+  }
   return tools;
 }

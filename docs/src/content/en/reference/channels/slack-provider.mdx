@@ -379,7 +379,7 @@ const result = await slack.connect('support-agent')
 
 ## Slack tools
 
-`createSlackTools()` returns Slack-only tools that sit alongside the [channel tools](/reference/agents/channels#channel-tools): `findChannel` (find channels by name), `findUser` (find people by name), `searchMessages` (search recent top-level messages in channels) and `downloadSlackAttachment` (show a JPEG, PNG or WebP attachment to the model). They take the same options as `createChannelTools()` and keep to the same channels.
+`createSlackTools()` returns Slack-only tools that sit alongside the [channel tools](/reference/agents/channels#channel-tools): `findChannel` (find channels by name), `findUser` (find people by name), `searchMessages` (search recent top-level messages in channels) and `downloadSlackAttachment` (show a JPEG, PNG or WebP attachment to the model). They take the same options as `createChannelTools()`. `searchMessages` and `downloadSlackAttachment` only read channels those options allow. `findChannel` and `findUser` look up the whole workspace, so they can return channels and people outside them.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'

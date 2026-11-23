@@ -930,7 +930,8 @@ Each call works out the channel thread of the run that makes it, the same way `a
     type: "'read' | 'post'",
     isOptional: true,
     defaultValue: "'post'",
-    description: "With `'read'`, the tools read every allowed channel but post only in the conversation's own channel.",
+    description:
+      "With `'read'`, the tools read every allowed channel but post only in the conversation's own channel. `sendDirectMessage` is refused.",
   },
   {
     name: 'directMessages',
