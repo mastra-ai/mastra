@@ -16,7 +16,14 @@ function canonicalName(name: string): string {
   return name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-export function knowledgePageRefIndex(pages: Iterable<KnowledgePagePayload>): KnowledgePageRefIndex {
+/**
+ * `byRef` holds pages fetched by the exact ref that names them, so a `scope#key/key` ref resolves even when
+ * the pages on its path aren't loaded.
+ */
+export function knowledgePageRefIndex(
+  pages: Iterable<KnowledgePagePayload>,
+  byRef: ReadonlyMap<string, KnowledgePagePayload> = new Map(),
+): KnowledgePageRefIndex {
   const byId = new Map<string, KnowledgePagePayload>();
   const scopesByAddress = new Map<string, KnowledgePagePayload>();
   const childByKey = new Map<string, KnowledgePagePayload>();
@@ -47,9 +54,64 @@ export function knowledgePageRefIndex(pages: Iterable<KnowledgePagePayload>): Kn
     resolve(raw) {
       const ref = raw.trim();
       if (!ref) return undefined;
-      return byId.get(ref) ?? byPath(ref) ?? scopesByAddress.get(ref) ?? byName.get(canonicalName(ref)) ?? undefined;
+      const fetched = byRef.get(ref);
+      return (
+        byId.get(ref) ??
+        (fetched && !fetched.deletedAt && !fetched.mergedInto ? fetched : undefined) ??
+        byPath(ref) ??
+        scopesByAddress.get(ref) ??
+        byName.get(canonicalName(ref)) ??
+        undefined
+      );
     },
   };
+}
+
+/**
+ * The page a note's `[[ref]]` links to: only one the server resolved the note's mentions to. When the index
+ * can't walk the ref's path (pages on the way aren't loaded), a mentioned page stands for it if it is the only
+ * one in the ref's scope (which must be loaded) whose key ends the path and whose loaded parents match the
+ * keys before it.
+ */
+export function noteMentionTarget(
+  index: KnowledgePageRefIndex,
+  pagesById: ReadonlyMap<string, KnowledgePagePayload>,
+  mentions: readonly string[],
+  ref: string,
+): KnowledgePagePayload | undefined {
+  const resolved = index.resolve(ref);
+  if (resolved) return mentions.includes(resolved.id) ? resolved : undefined;
+  const trimmed = ref.trim();
+  const hash = trimmed.indexOf('#');
+  if (hash <= 0) return undefined;
+  const address = trimmed.slice(0, hash);
+  const scope = [...pagesById.values()].find(candidate => candidate.isScope && candidate.address === address);
+  if (!scope) return undefined;
+  const keys = trimmed.slice(hash + 1).split('/');
+  const candidates = mentions.flatMap(id => {
+    const page = pagesById.get(id);
+    return page && onPath(page, scope, keys, pagesById) ? [page] : [];
+  });
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+/** Whether `page` can sit at `keys` under `scope`: its key and every loaded parent's key match, in that scope. */
+function onPath(
+  page: KnowledgePagePayload,
+  scope: KnowledgePagePayload,
+  keys: string[],
+  pagesById: ReadonlyMap<string, KnowledgePagePayload>,
+): boolean {
+  if (page.isScope || page.deletedAt || page.mergedInto || page.scopeId !== scope.id) return false;
+  let current = page;
+  for (let depth = keys.length - 1; depth >= 0; depth--) {
+    if (current.key !== keys[depth]) return false;
+    if (current.parentId === scope.id) return depth === 0;
+    const parent = current.parentId ? pagesById.get(current.parentId) : undefined;
+    if (!parent) return depth > 0;
+    current = parent;
+  }
+  return false;
 }
 
 const WIKILINK = /\[\[([^\]]+)\]\]/g;

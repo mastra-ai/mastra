@@ -11,7 +11,7 @@ import { MastraServer } from '../index';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-describe.each([undefined, false] as const)('Koa stream client disconnect (streams: %s)', streams => {
+describe.each([undefined, false] as const)('Koa stream client disconnect (durable: %s)', durable => {
   let llm: LLMock;
   let server: Server;
   let port: number;
@@ -41,7 +41,7 @@ describe.each([undefined, false] as const)('Koa stream client disconnect (stream
     const agent = new Agent({
       id: 'looper',
       name: 'looper',
-      streams,
+      durable,
       instructions: 'Call tick.',
       model: { id: 'openai/gpt-4o-mini', url: `${llm.url.replace(/\/+$/, '')}/v1`, apiKey: 'test-key' },
       tools: { tick },
@@ -63,7 +63,7 @@ describe.each([undefined, false] as const)('Koa stream client disconnect (stream
   });
 
   it(
-    streams === false ? 'aborts the run on disconnect' : 'detaches and replays the completed run on disconnect',
+    durable === false ? 'aborts the run on disconnect' : 'detaches and replays the completed run on disconnect',
     async () => {
       const runId = 'koa-disconnect';
       const controller = new AbortController();
@@ -83,7 +83,7 @@ describe.each([undefined, false] as const)('Koa stream client disconnect (stream
       controller.abort();
       const modelCallsAtAbort = llm.getRequests().length;
 
-      if (streams === false) {
+      if (durable === false) {
         await vi.waitFor(() => expect(toolState.abortSignalsFired).toBeGreaterThan(0));
         await sleep(500);
         // At most the in-flight step finishes; the loop must not keep calling the model.

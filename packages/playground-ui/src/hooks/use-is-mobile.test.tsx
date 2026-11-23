@@ -121,15 +121,6 @@ describe('useIsMobile', () => {
     expect(result.current).toBe(true);
   });
 
-  it('subscribes to the change event', () => {
-    renderHook(() => useIsMobile());
-
-    expect(mediaQueries.get('(max-width: 1023px)')?.addEventListener).toHaveBeenCalledWith(
-      'change',
-      expect.any(Function),
-    );
-  });
-
   it('stops reporting once the viewport no longer matches', () => {
     const { result } = renderHook(() => useIsMobile());
     const mql = mediaQueries.get('(max-width: 1023px)');

@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: 'false'
+      unit_shards:
+        description: JSON list of shard numbers for the affected unit job, e.g. [1] or [1, 2, 3]
+        required: false
+        type: string
+        default: '[1]'
       e2e_test_files:
         required: false
         type: string
@@ -96,10 +101,14 @@ jobs:
           retention-days: 1
 
   affected-unit-test:
-    name: Affected UNIT Test
+    name: Affected UNIT Test${{ strategy.job-total > 1 && format(' ({0}/{1})', matrix.shard, strategy.job-total) || '' }}
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.unit_shards) }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -148,7 +157,8 @@ jobs:
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
-            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+            --outputFile.blob=.vitest-reports/blob-unit-affected-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/${{ strategy.job-total }} \
             --passWithNoTests \
             "${test_files[@]}"
 
@@ -156,21 +166,18 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: vitest-blob-unit-affected
+          name: vitest-blob-unit-affected-${{ matrix.shard }}
           path: .vitest-reports/
           include-hidden-files: true
           retention-days: 1
 
+  # Package and client-SDK E2E share one build: each project is its own step, and the second
+  # runs even when the first failed. The name keeps "E2E Test (" for the tier updater.
   e2e-test:
-    name: E2E Test (${{ matrix.project }})
+    name: E2E Test (packages/*, client-sdks/*)
     if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.e2e_test_files != '')
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        project:
-          - packages/*
+    timeout-minutes: 50
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -199,15 +206,14 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Build packages
+        id: build
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
-      - name: Normalize project name
-        id: normalize
-        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | sed 's/\*/_star_/g')" >> $GITHUB_OUTPUT
-
-      - name: Run changed tests (${{ matrix.project }})
+      - name: Run changed tests (packages/*)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 25
         env:
           E2E_TEST_FILES: ${{ inputs.e2e_test_files }}
           NODE_OPTIONS: '--max_old_space_size=8192'
@@ -221,18 +227,41 @@ jobs:
 
           pnpm vitest run \
             $TEST_ARGS \
-            --project 'e2e:${{ matrix.project }}' \
+            --project 'e2e:packages/*' \
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
-            --outputFile.blob=.vitest-reports/blob-e2e-${{ steps.normalize.outputs.project_id }}.json \
+            --outputFile.blob=.vitest-reports/blob-e2e-packages-_star_.json \
+            --passWithNoTests
+
+      - name: Run changed tests (client-sdks/*)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 25
+        env:
+          E2E_TEST_FILES: ${{ inputs.e2e_test_files }}
+          NODE_OPTIONS: '--max_old_space_size=8192'
+        run: |
+          if [ "${{ inputs.run_full }}" = "false" ]; then
+            printf '%s\n' "$E2E_TEST_FILES" > /tmp/affected-e2e.txt
+            TEST_ARGS=$(cat /tmp/affected-e2e.txt | tr '\n' ' ')
+          else
+            TEST_ARGS=""
+          fi
+
+          pnpm vitest run \
+            $TEST_ARGS \
+            --project 'e2e:client-sdks/*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-e2e-client-sdks-_star_.json \
             --passWithNoTests
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: vitest-blob-e2e-${{ steps.normalize.outputs.project_id }}
+          name: vitest-blob-e2e
           path: .vitest-reports/
           include-hidden-files: true
           retention-days: 1
@@ -256,6 +285,10 @@ jobs:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
     needs: [unit-test, affected-unit-test, e2e-test]
+    # Required check: stays always() so a run cancelled mid-tests still reaches the
+    # "Require every test job to finish" step and fails. A skipped required job counts
+    # as a pass. The heavy steps below keep the implicit success() guard, which is
+    # false once the run is cancelled, so a superseded run spends seconds here.
     if: always()
     permissions:
       actions: read

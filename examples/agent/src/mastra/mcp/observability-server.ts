@@ -1,9 +1,16 @@
 import { MastraClient } from '@mastra/client-js';
 import { Agent } from '@mastra/core/agent';
-import type { DashboardQuery, DashboardWidget } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
 import { MCPClient, MCPServer } from '@mastra/mcp';
-import { QUERY_OBSERVABILITY_TOOL, observabilityWidgetApp } from '@mastra/mcp-apps-components';
+import {
+  OBSERVABILITY_CATALOG_MAX_METRIC_NAMES,
+  OBSERVABILITY_READ_ACTIONS,
+  QUERY_OBSERVABILITY_TOOL,
+  createObservabilityDashboardInputSchema,
+  observabilityDashboardApp,
+  observabilityDashboardOutputSchema,
+  toObservabilityDashboard,
+} from '@mastra/mcp-apps-components';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 
@@ -21,27 +28,13 @@ const observabilityClient = new MastraClient({
   headers: OBSERVABILITY_API_TOKEN ? { authorization: `Bearer ${OBSERVABILITY_API_TOKEN}` } : undefined,
 });
 
-// The read-only client methods the widget may ask for. Anything else fails input validation.
-const ACTIONS = [
-  'aggregateTraces',
-  'aggregateSpans',
-  'getMetricAggregate',
-  'getMetricBreakdown',
-  'getMetricTimeSeries',
-  'getMetricPercentiles',
-  'getScoreAggregate',
-  'getScoreBreakdown',
-  'getScoreTimeSeries',
-  'getScorePercentiles',
-  'listScores',
-] as const satisfies readonly (keyof MastraClient)[];
-
 // Visible to the app only: the widget asks for each read by action, and the server runs it on its
 // own client. A failed read throws, so the app shows the widget as failed.
 const queryObservability = createTool({
   id: QUERY_OBSERVABILITY_TOOL,
   description: 'Runs one observability read for the observability widget.',
-  inputSchema: z.object({ action: z.enum(ACTIONS), args: z.record(z.string(), z.unknown()) }),
+  // The read-only client methods the widget asks for. Anything else fails input validation.
+  inputSchema: z.object({ action: z.enum(OBSERVABILITY_READ_ACTIONS), args: z.record(z.string(), z.unknown()) }),
   outputSchema: z.object({ data: z.unknown() }),
   mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI, visibility: ['app'] } } },
   execute: async ({ action, args }) => {
@@ -51,173 +44,65 @@ const queryObservability = createTool({
   },
 });
 
-const INPUT = 'mastra_model_total_input_tokens';
-const OUTPUT = 'mastra_model_total_output_tokens';
-const AGENT_DURATION = 'mastra_agent_duration_ms';
-const FAILED = ['error', 'failed'];
-
-const aggregate = (id: string, name: string[], aggregation: 'count' | 'sum'): DashboardQuery => ({
-  id,
-  source: 'metrics',
-  request: 'aggregate',
-  name,
-  aggregation,
-  compare: 'previousWindow',
-});
-
-const timeSeries = (id: string, name: string, aggregation: 'count' | 'sum', groupBy?: string[]): DashboardQuery => ({
-  id,
-  source: 'metrics',
-  request: 'timeSeries',
-  name: [name],
-  aggregation,
-  groupBy,
-});
-
-const WIDGETS = {
-  overview: {
-    id: 'overview',
-    span: 12,
-    kind: 'kpis',
-    views: [
-      {
-        queries: [
-          aggregate('runs', [AGENT_DURATION], 'count'),
-          aggregate('cost', [INPUT, OUTPUT], 'sum'),
-          aggregate('input', [INPUT], 'sum'),
-          aggregate('output', [OUTPUT], 'sum'),
-        ],
-        options: {
-          items: [
-            { label: 'Agent runs', icon: 'bot', format: 'count', value: { query: 'runs' }, detail: 'in this range' },
-            {
-              label: 'Model cost',
-              icon: 'coins',
-              format: 'usd',
-              value: { query: 'cost', field: 'estimatedCost' },
-              detail: 'estimated',
-              lowerIsBetter: true,
-            },
-            {
-              label: 'Tokens',
-              icon: 'hash',
-              format: 'count',
-              value: { sum: [{ query: 'input' }, { query: 'output' }] },
-              detail: 'input and output',
-            },
-          ],
-        },
-      },
-    ],
-  },
-  agentRuns: {
-    id: 'agent-runs',
-    span: 12,
-    kind: 'timeseries',
-    title: 'Agent runs',
-    views: [
-      {
-        label: 'Agent runs',
-        description: 'Completed and failed runs.',
-        queries: [timeSeries('runs', AGENT_DURATION, 'count', ['status'])],
-        options: {
-          chart: 'stackedBar',
-          format: 'count',
-          xLabels: 'edges',
-          series: [
-            { dataKey: 'completed', label: 'Completed', color: 'green', value: { query: 'runs', notGroups: FAILED } },
-            { dataKey: 'failed', label: 'Failed', color: 'error', value: { query: 'runs', groups: FAILED } },
-          ],
-          total: { value: 'total' },
-          emptyMessage: 'No agent runs in this range.',
-        },
-      },
-    ],
-  },
-  tokenUsage: {
-    id: 'token-usage',
-    span: 12,
-    kind: 'timeseries',
-    title: 'Token usage',
-    views: [
-      {
-        label: 'Token usage',
-        description: 'Input and output tokens.',
-        queries: [timeSeries('input', INPUT, 'sum'), timeSeries('output', OUTPUT, 'sum')],
-        options: {
-          chart: 'stackedBar',
-          format: 'count',
-          xLabels: 'edges',
-          series: [
-            { dataKey: 'input', label: 'Input', color: 'green', value: { query: 'input' } },
-            { dataKey: 'output', label: 'Output', color: 'sky', value: { query: 'output' } },
-          ],
-          total: { value: 'total' },
-          emptyMessage: 'No model calls in this range.',
-        },
-      },
-    ],
-  },
-  latency: {
-    id: 'latency',
-    span: 12,
-    kind: 'timeseries',
-    title: 'Agent latency',
-    description: 'Duration percentiles.',
-    views: [
-      {
-        label: 'Agent latency',
-        queries: [
-          { id: 'latency', source: 'metrics', request: 'percentiles', name: AGENT_DURATION, percentiles: [0.5, 0.95] },
-        ],
-        options: {
-          chart: 'line',
-          format: 'duration',
-          buckets: 'api',
-          xLabels: 'edges',
-          series: [
-            { dataKey: 'p50', label: 'P50', color: 'sky', value: { query: 'latency', percentile: 0.5 }, round: true },
-            {
-              dataKey: 'p95',
-              label: 'P95',
-              color: 'green',
-              value: { query: 'latency', percentile: 0.95 },
-              round: true,
-            },
-          ],
-          emptyMessage: 'No agent runs in this range.',
-        },
-      },
-    ],
-  },
-} satisfies Record<string, DashboardWidget>;
-
-const DATE_PRESETS = ['24h', '3d', '7d', '14d', '30d'] as const;
-
-// Visible to the model: opens the widget app. The app reads the widget and window from the result.
-const showObservabilityWidget = createTool({
-  id: 'showObservabilityWidget',
-  description: 'Shows one observability chart for this Mastra project in the chat.',
+// Visible to the model: lists what the project records, so the dashboard queries name metrics,
+// labels and filter values that exist. An unknown metric name reads as zero rather than failing.
+const discoverObservability = createTool({
+  id: 'discoverObservability',
+  description: `Lists what this project's observability records, to use in dashboard queries and filters.
+metricNames: every metric name. labelKeys: the labels on \`metricName\`, to group or filter by. labelValues: the values
+of \`labelKey\` on \`metricName\`. entityNames: the agents, workflows and tools that ran. environments, tags: values to
+filter by.`,
   inputSchema: z.object({
-    widget: z
-      .enum(Object.keys(WIDGETS) as [keyof typeof WIDGETS])
-      .describe(
-        'overview: totals for agent runs, estimated model cost (spend) and tokens; agentRuns: completed vs failed runs over time; tokenUsage: input vs output tokens over time; latency: agent duration percentiles over time',
-      ),
-    datePreset: z.enum(DATE_PRESETS).default('24h').describe('How far back to look'),
+    list: z.enum(['metricNames', 'labelKeys', 'labelValues', 'entityNames', 'environments', 'tags']),
+    metricName: z.string().optional().describe('Required for labelKeys and labelValues.'),
+    labelKey: z.string().optional().describe('Required for labelValues.'),
   }),
-  // Declaring the output schema makes the MCP server send the result as `structuredContent`.
-  outputSchema: z.object({ widget: z.custom<DashboardWidget>(), datePreset: z.enum(DATE_PRESETS) }),
-  mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI } } },
-  execute: async ({ widget, datePreset }) => ({ widget: WIDGETS[widget], datePreset }),
+  execute: async ({ list, metricName, labelKey }) => {
+    switch (list) {
+      case 'metricNames':
+        return observabilityClient.getMetricNames();
+      case 'labelKeys':
+        if (!metricName) throw new Error('labelKeys needs a metricName');
+        return observabilityClient.getMetricLabelKeys({ metricName });
+      case 'labelValues':
+        if (!metricName || !labelKey) throw new Error('labelValues needs a metricName and a labelKey');
+        return observabilityClient.getMetricLabelValues({ metricName, labelKey });
+      case 'entityNames':
+        return observabilityClient.getEntityNames();
+      case 'environments':
+        return observabilityClient.getEnvironments();
+      case 'tags':
+        return observabilityClient.getTags();
+    }
+  },
 });
+
+// Visible to the model: opens the dashboard app. The model writes the widgets; the input schema
+// advertises every widget kind's options and the metric names that have data, so a bad dashboard
+// fails with errors the model can fix. Widgets without an id get a fresh one, which the host pins by.
+const showObservabilityDashboard = (metricNames: readonly string[]) =>
+  createTool({
+    id: 'showObservabilityDashboard',
+    description: `Shows an observability dashboard for this Mastra project in the chat. Each row holds widgets on a
+12-column grid and is a kpis, timeseries, table or scores widget.`,
+    inputSchema: createObservabilityDashboardInputSchema({ metricNames }),
+    // Declaring the output schema makes the MCP server send the result as `structuredContent`.
+    outputSchema: observabilityDashboardOutputSchema,
+    mcp: { _meta: { ui: { resourceUri: OBSERVABILITY_WIDGET_URI } } },
+    execute: async input => toObservabilityDashboard(input),
+  });
 
 export const observabilityMcpServer = new MCPServer({
   id: OBSERVABILITY_SERVER_ID,
   name: 'Observability MCP Server',
   version: '1.0.0',
-  appResources: { [OBSERVABILITY_WIDGET_URI]: observabilityWidgetApp },
-  tools: { showObservabilityWidget, [QUERY_OBSERVABILITY_TOOL]: queryObservability },
+  appResources: { [OBSERVABILITY_WIDGET_URI]: observabilityDashboardApp },
+  tools: {
+    discoverObservability,
+    // Free metric names until the first run reads the catalog.
+    showObservabilityDashboard: showObservabilityDashboard([]),
+    [QUERY_OBSERVABILITY_TOOL]: queryObservability,
+  },
 });
 
 // The server key matches the server id so Studio maps the namespaced tool back to its ui:// app.
@@ -228,14 +113,30 @@ const observabilityMcpClient = new MCPClient({
   },
 });
 
+// The schema is a snapshot of the catalog, so the tool is rebuilt when the metric names change.
+// Reading them at startup would ask this server before it listens, so each agent run reads them.
+let listedMetricNames: string | undefined;
+async function refreshDashboardTool() {
+  const { names } = await observabilityClient.getMetricNames({ limit: OBSERVABILITY_CATALOG_MAX_METRIC_NAMES + 1 });
+  const key = [...names].sort().join('\n');
+  if (key === listedMetricNames) return;
+  await observabilityMcpServer.toolActions.add({ showObservabilityDashboard: showObservabilityDashboard(names) });
+  listedMetricNames = key;
+}
+
 export const observabilityAgent = new Agent({
   id: 'observability-agent',
   name: 'Observability Agent',
-  description: 'Shows observability charts for this project in the chat.',
-  instructions: `When the user asks about agent runs, model cost, token usage or latency, call the observability widget tool
-with the matching widget and time range. The chart renders in the chat with its own numbers, so don't repeat or guess
-them: say in one short sentence what it shows.`,
+  description: 'Shows observability dashboards for this project in the chat.',
+  instructions: `When the user asks about agent runs, model cost, token usage, latency or scores, call the observability
+dashboard tool with the widgets that answer it and the matching time range. Before naming a metric, label or filter
+value you're not sure exists, check it with the discovery tool. The dashboard renders in the chat with its own numbers, so don't repeat or guess them: say in one
+short sentence what it shows.`,
   model: 'openai/gpt-5-mini',
   memory: new Memory(),
-  tools: () => observabilityMcpClient.listTools(),
+  tools: async () => {
+    // Unreachable, the tool keeps the names it last listed.
+    await refreshDashboardTool().catch(() => undefined);
+    return observabilityMcpClient.listTools();
+  },
 });

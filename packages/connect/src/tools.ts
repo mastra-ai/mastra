@@ -10,6 +10,8 @@ import {
   resolveClient,
   validateResourceId,
 } from './client.js';
+import { connectCodeMode } from './code-mode.js';
+import type { CodeModeOptions, ConnectCodeMode } from './code-mode.js';
 import { buildConnectPromptTool, CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import {
@@ -191,6 +193,23 @@ export interface ToolsResolver extends Promise<ResolvedToolsRecord> {
    * `disconnect`) delegate to the base resolver, and `.with()` calls chain.
    */
   with(extra: ToolsWithInput): ToolsResolver;
+  /**
+   * Exposes these tools through Code Mode: the agent writes one TypeScript
+   * program that calls them as `external_*` functions, instead of calling
+   * each tool in its own step. Returns per-request `tools` and `instructions`
+   * functions to pass to the agent. Tools that need the user's approval, and
+   * `request_connection`, stay direct agent tools because the agent loop
+   * pauses for them.
+   *
+   * ```ts
+   * const code = tools().codeMode({ sandbox })
+   * new Agent({
+   *   instructions: async ctx => ['You are helpful.', await code.instructions(ctx)],
+   *   tools: code.tools,
+   * })
+   * ```
+   */
+  codeMode(options?: CodeModeOptions): ConnectCodeMode;
 }
 
 /**
@@ -857,6 +876,7 @@ export function tools(options: ToolsOptionsInput = {}): ToolsResolver {
       },
       disconnect: (): Promise<void> => disconnectState(state),
       with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;
@@ -980,6 +1000,7 @@ function dynamicTools(getOptions: (ctx?: ToolsResolverContext) => ToolsOptions |
         return closing;
       },
       with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;
@@ -1044,6 +1065,7 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
       },
       disconnect: (): Promise<void> => base.disconnect(),
       with: (more: ToolsWithInput): ToolsResolver => withExtraTools(resolver, more),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;

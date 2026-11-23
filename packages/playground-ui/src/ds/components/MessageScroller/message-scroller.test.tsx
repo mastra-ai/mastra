@@ -300,13 +300,14 @@ describe('MessageScroller', () => {
     }
   });
 
-  it('keeps one preview shell while animating enter, switch, and exit', async () => {
+  it('keeps one preview shell while it crossfades in, between turns, and out', async () => {
     mockPreviewSizerHeight();
     renderScroller();
 
     const firstTurn = screen.getByRole('button', { name: 'Jump to First turn' });
     const secondTurn = screen.getByRole('button', { name: 'Jump to Second turn' });
     const rail = screen.getByTestId('thread-rail');
+    const current = () => screen.getByTestId('thread-rail-preview-current');
 
     setTop(rail, 100);
     setTop(firstTurn, 120);
@@ -316,31 +317,20 @@ describe('MessageScroller', () => {
 
     const preview = screen.getByTestId('thread-rail-preview');
     const previewId = preview.getAttribute('id');
-    const viewport = screen.getByTestId('thread-rail-preview-viewport');
     expect(firstTurn.getAttribute('aria-describedby')).toBe(previewId);
-    expect(preview.className).toContain('overflow-hidden');
-    expect(preview.className).toContain('transition-[height,translate,opacity]');
-    expect(preview.className).toContain('duration-360');
-    expect(preview.className).toContain('ease-out-custom');
     expect(preview.className).toContain('opacity-0');
     expect(preview.style.translate).toBe('0 calc(40px - 50%)');
     expect(preview.style.height).toBe('96px');
-    expect(viewport.className).not.toContain('overflow-hidden');
     expect(within(screen.getByTestId('thread-rail-preview-sizer')).getByText('First turn')).toBeTruthy();
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-150');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('ease-in-out');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
-    expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('First turn')).toBeTruthy();
+    expect(current().className).toContain('opacity-0');
+    expect(within(current()).getByText('First turn')).toBeTruthy();
 
     await waitFor(() => {
       expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBe('true');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-none');
+      expect(current().className).toContain('opacity-100');
     });
 
-    const firstCurrentLayer = screen.getByTestId('thread-rail-preview-current');
+    const firstCurrentLayer = current();
 
     fireEvent.mouseEnter(secondTurn);
 
@@ -353,25 +343,16 @@ describe('MessageScroller', () => {
     expect(within(screen.getByTestId('thread-rail-preview-sizer')).queryByText('First turn')).toBeNull();
     expect(within(screen.getByTestId('thread-rail-preview-sizer')).getByText('Second turn')).toBeTruthy();
 
-    const switchCurrentLayer = screen.getByTestId('thread-rail-preview-current');
     const switchPreviousLayer = screen.getByTestId('thread-rail-preview-previous');
-    expect(switchCurrentLayer).not.toBe(firstCurrentLayer);
+    expect(current()).not.toBe(firstCurrentLayer);
     expect(switchPreviousLayer.className).toContain('opacity-100');
-    expect(switchPreviousLayer.className).toContain('scale-100');
-    expect(switchPreviousLayer.className).toContain('blur-none');
     expect(within(switchPreviousLayer).getByText('First turn')).toBeTruthy();
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
-    expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('Second turn')).toBeTruthy();
+    expect(current().className).toContain('opacity-0');
+    expect(within(current()).getByText('Second turn')).toBeTruthy();
 
     await waitFor(() => {
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-none');
+      expect(current().className).toContain('opacity-100');
       expect(screen.getByTestId('thread-rail-preview-previous').className).toContain('opacity-0');
-      expect(screen.getByTestId('thread-rail-preview-previous').className).toContain('scale-95');
-      expect(screen.getByTestId('thread-rail-preview-previous').className).toContain('blur-xs');
     });
 
     fireEvent.mouseLeave(screen.getByTestId('thread-rail'));
@@ -379,9 +360,7 @@ describe('MessageScroller', () => {
     expect(screen.getByTestId('thread-rail-preview')).toBe(preview);
     expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBeNull();
     expect(preview.className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
+    expect(current().className).toContain('opacity-0');
 
     await waitFor(() => {
       expect(screen.queryByTestId('thread-rail-preview')).toBeNull();

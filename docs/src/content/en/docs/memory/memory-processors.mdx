@@ -213,9 +213,9 @@ const agent = new Agent({
 
 Understanding the execution order is important when combining guardrails with memory:
 
-### Input Processors
+### Input processors
 
-```
+```text
 [Memory Processors] → [Your inputProcessors]
 ```
 
@@ -224,9 +224,9 @@ Understanding the execution order is important when combining guardrails with me
 
 As a result, memory loads message history before your processors can validate or filter the input.
 
-### Output Processors
+### Output processors
 
-```
+```text
 [Your outputProcessors] → [Memory Processors]
 ```
 

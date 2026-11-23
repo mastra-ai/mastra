@@ -78,7 +78,7 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
       isLoading={isLoading}
       isUpdating={isPlaceholderData}
     >
-      <ChartArea isEmpty={!isLoading && tokens === 0 && cost === 0} emptyMessage="No model calls in this range.">
+      <ChartArea isEmpty={!isLoading && tokens === 0 && cost === 0}>
         <MetricsStackedBarChart
           data={data}
           series={series}

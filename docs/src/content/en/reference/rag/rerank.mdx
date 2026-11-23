@@ -70,7 +70,8 @@ const rerankedResults = await rerank(vectorSearchResults, 'How do I deploy to pr
           {
             name: 'weights',
             type: 'WeightConfig',
-            description: 'Weights for different scoring components (must add up to 1)',
+            description:
+              'Weights for different scoring components (must add up to 1; each weight must be between 0 and 1)',
             isOptional: true,
             properties: [
               {
@@ -132,7 +133,7 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
 
 :::note
 
-For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+For semantic scoring to work during re-ranking, each result must include the text content in its `metadata.text` field.
 
 :::
 

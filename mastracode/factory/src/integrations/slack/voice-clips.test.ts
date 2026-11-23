@@ -6,7 +6,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { transcribeVoiceClips, VOICE_CLIP_TIMEOUT_MS } from './voice-clips.js';
+import { transcribeVoiceClips, VOICE_CLIP_TIMEOUT_MS, voiceClipFailureCard } from './voice-clips.js';
+import type { VoiceClipReport } from './voice-clips.js';
 
 type Message = Parameters<ChannelHandler>[1];
 type Attachment = Message['attachments'][number];
@@ -118,20 +119,42 @@ describe('transcribeVoiceClips', () => {
       input: { name: 'Voice', modelScope: 'hybrid' },
     });
     await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
-    const clip = voiceClip();
-    const msg = message('m1', [clip]);
+    const msg = message('m1', [voiceClip()]);
 
-    await transcribeVoiceClips(
+    const report = await transcribeVoiceClips(
       [msg],
       SENDER,
       { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings },
-      async () => project,
+      { run: async () => project },
     );
 
-    expect(msg.attachments).toEqual([clip]);
-    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*API key/);
+    expect(report).toEqual({
+      transcribed: 0,
+      failures: [{ reason: expect.stringContaining('API key'), fix: 'settings' }],
+      settingsFactoryId: project.id,
+    });
     expect(calls.openai).toEqual([]);
   });
+
+  it.each([
+    ['user', true],
+    ['factory', false],
+  ] as const)(
+    "points a chat-only clip's missing personal key at a %s-scope home Factory's settings only when they show personal keys",
+    async (modelScope, linked) => {
+      const seed = await createFactoryStorageForTests();
+      const home = await seed.projects.create({ ...SENDER, input: { name: 'Home', modelScope } });
+
+      const report = await transcribeVoiceClips(
+        [message('m1', [voiceClip()])],
+        SENDER,
+        { modelCredentials: seed.credentials },
+        { home: async () => home },
+      );
+
+      expect(report.settingsFactoryId).toBe(linked ? home.id : undefined);
+    },
+  );
 
   it("follows the run's Factory model scope: factory scope uses its model and the org key, ignoring personal ones", async () => {
     const seed = await createFactoryStorageForTests();
@@ -155,7 +178,7 @@ describe('transcribeVoiceClips', () => {
       [msg],
       SENDER,
       { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings },
-      async () => project,
+      { run: async () => project },
     );
 
     expect(agentReads(msg)).toBe('hello from whisper');
@@ -176,30 +199,30 @@ describe('transcribeVoiceClips', () => {
     expect(calls.mistral).toHaveLength(2);
   });
 
-  it('keeps the clip and notes a missing speech-to-text key without calling a provider', async () => {
+  it('detaches a clip it cannot transcribe for a missing key, without calling a provider or writing to the text', async () => {
     const seed = await createFactoryStorageForTests();
-    const clip = voiceClip();
-    const msg = message('m1', [clip]);
+    const image: Attachment = { type: 'image', mimeType: 'image/png', name: 'shot.png' };
+    const msg = message('m1', [voiceClip(), image]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(msg.attachments).toEqual([clip]);
-    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*API key/);
+    expect(msg.attachments).toEqual([image]);
+    expect(msg.text).toBe('');
+    expect(agentReads(msg)).toBe('');
+    expect(report.failures).toEqual([{ reason: expect.stringContaining('API key'), fix: 'settings' }]);
     expect(calls.openai).toEqual([]);
     expect(calls.mistral).toEqual([]);
   });
 
-  it('keeps the clip with a note when the key lookup fails, so the message still dispatches', async () => {
+  it('asks for a resend, without the lookup error, when the key lookup fails', async () => {
     const seed = await createFactoryStorageForTests();
     vi.spyOn(seed.credentials, 'listCredentials').mockRejectedValueOnce(new Error('connection reset'));
-    const clip = voiceClip();
-    const msg = message('m1', [clip]);
+    const msg = message('m1', [voiceClip()]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(msg.attachments).toEqual([clip]);
-    expect(agentReads(msg)).toMatch(/not transcribed: speech-to-text settings could not be loaded/);
-    expect(agentReads(msg)).not.toContain('connection reset');
+    expect(msg.attachments).toEqual([]);
+    expect(report.failures).toEqual([{ reason: 'Speech-to-text settings could not be loaded.', fix: 'retry' }]);
   });
 
   it('lets a Factory routing failure propagate instead of guessing a Factory', async () => {
@@ -207,20 +230,23 @@ describe('transcribeVoiceClips', () => {
     const msg = message('m1', [voiceClip()]);
 
     await expect(
-      transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials }, async () => {
-        throw new Error('ambiguous Factory binding');
+      transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials }, {
+        run: async () => {
+          throw new Error('ambiguous Factory binding');
+        },
       }),
     ).rejects.toThrow('ambiguous Factory binding');
   });
 
-  it('notes an unlinked sender instead of using anyone else’s key', async () => {
+  it('fails an unlinked sender’s clip instead of using anyone else’s key', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1' }, 'mistral', { type: 'api_key', key: 'sk-org' });
     const msg = message('m1', [voiceClip()]);
 
-    await transcribeVoiceClips([msg], undefined, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], undefined, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toContain('linked Mastra account');
+    expect(report.failures).toEqual([{ reason: expect.stringContaining('linked Mastra account'), fix: 'none' }]);
+    expect(msg.attachments).toEqual([]);
     expect(calls.mistral).toEqual([]);
   });
 
@@ -238,35 +264,25 @@ describe('transcribeVoiceClips', () => {
       }),
     ]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toContain('too long');
+    expect(report.failures).toEqual([{ reason: 'The clip is too long.', fix: 'shorter' }]);
     expect(downloaded).toBe(false);
     expect(calls.mistral).toEqual([]);
   });
 
-  it('notes a clip of unknown size whose download turns out over the cap, without calling a provider', async () => {
+  it('fails a clip of unknown size whose download turns out over the cap, without calling a provider', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
     const msg = message('m1', [voiceClip({ size: undefined, fetchData: async () => Buffer.alloc(9 * 1024 * 1024) })]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toContain('too long');
+    expect(report.failures).toEqual([{ reason: 'The clip is too long.', fix: 'shorter' }]);
     expect(calls.mistral).toEqual([]);
   });
 
-  it('notes a clip Slack offers no download for', async () => {
-    const seed = await createFactoryStorageForTests();
-    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
-    const msg = message('m1', [voiceClip({ fetchData: undefined })]);
-
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
-
-    expect(agentReads(msg)).toContain('could not be downloaded');
-  });
-
-  it('names each clip in its note so a message with several clips stays unambiguous', async () => {
+  it('keeps transcribing the other clips of a message when one fails', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
     const msg = message('m1', [
@@ -274,42 +290,42 @@ describe('transcribeVoiceClips', () => {
       voiceClip({ name: 'huge.m4a', size: 50 * 1024 * 1024 }),
     ]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(msg.attachments.map(clip => clip.name)).toEqual(['huge.m4a']);
-    expect(agentReads(msg)).toContain('ship the fix');
-    expect(agentReads(msg)).toMatch(/"huge\.m4a".*too long/);
+    expect(msg.attachments).toEqual([]);
+    expect(agentReads(msg)).toBe('ship the fix');
+    expect(report.failures).toEqual([{ reason: 'The clip is too long.', fix: 'shorter' }]);
   });
 
-  it('gives up on a clip whose download never finishes and says it timed out', async () => {
+  it('gives up on a clip whose download never finishes and asks for a resend', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
     const download = Promise.withResolvers<void>();
-    const clip = voiceClip({
-      fetchData: () => {
-        download.resolve();
-        return new Promise<Buffer>(() => {});
-      },
-    });
-    const msg = message('m1', [clip]);
+    const msg = message('m1', [
+      voiceClip({
+        fetchData: () => {
+          download.resolve();
+          return new Promise<Buffer>(() => {});
+        },
+      }),
+    ]);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let report: VoiceClipReport;
     try {
       const done = transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
       await download.promise;
       await vi.advanceTimersByTimeAsync(VOICE_CLIP_TIMEOUT_MS);
-      await done;
+      report = await done;
     } finally {
       vi.useRealTimers();
     }
 
-    expect(msg.attachments).toEqual([clip]);
-    expect(agentReads(msg)).toBe(
-      'Voice clip "audio_message.m4a" not transcribed: transcription timed out after 60 seconds',
-    );
+    expect(msg.attachments).toEqual([]);
+    expect(report.failures).toEqual([{ reason: 'Transcription timed out after 60 seconds.', fix: 'retry' }]);
     expect(calls.mistral).toEqual([]);
   });
 
-  it('keeps the provider response out of the note', async () => {
+  it('keeps the provider response out of the failure reason', async () => {
     server.use(
       http.post(MISTRAL_URL, () =>
         HttpResponse.json({ message: 'boom', account: 'acct-internal-42' }, { status: 500 }),
@@ -319,39 +335,41 @@ describe('transcribeVoiceClips', () => {
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
     const msg = message('m1', [voiceClip()]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: /);
-    expect(agentReads(msg)).not.toMatch(/boom|acct-internal-42|Status 500/);
+    expect(report.failures).toEqual([{ reason: expect.any(String), fix: 'retry' }]);
+    expect(JSON.stringify(voiceClipFailureCard(report, 'mention me again'))).not.toMatch(/boom|acct-internal-42|500/);
   });
 
-  it('says when the provider rejects the key', async () => {
+  it('points a rejected key at voice settings', async () => {
     server.use(http.post(MISTRAL_URL, () => HttpResponse.json({ detail: 'Invalid API Key' }, { status: 401 })));
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral-revoked' });
     const msg = message('m1', [voiceClip()]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toMatch(/not transcribed: .*rejected the API key/);
-    expect(agentReads(msg)).not.toContain('sk-mistral-revoked');
+    expect(report.failures).toEqual([{ reason: 'The speech-to-text provider rejected the API key.', fix: 'settings' }]);
+    expect(JSON.stringify(voiceClipFailureCard(report, 'mention me again'))).not.toContain('sk-mistral-revoked');
   });
 
-  it('keeps the Slack file URL out of a download failure note', async () => {
+  it('keeps the Slack file URL out of a download failure', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
-    const clip = voiceClip({
-      fetchData: async () => {
-        throw new Error('Received HTML from https://files.slack.com/files-pri/T1-F9/audio_message.m4a');
-      },
-    });
-    const msg = message('m1', [clip]);
+    const msg = message('m1', [
+      voiceClip({
+        fetchData: async () => {
+          throw new Error('Received HTML from https://files.slack.com/files-pri/T1-F9/audio_message.m4a');
+        },
+      }),
+    ]);
 
-    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+    const report = await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toMatch(/not transcribed: the clip could not be downloaded$/);
+    expect(report.failures).toEqual([{ reason: 'The clip could not be downloaded.', fix: 'retry' }]);
     expect(calls.mistral).toEqual([]);
   });
+
 
   it('leaves an uploaded audio file as an attachment without calling a provider', async () => {
     const seed = await createFactoryStorageForTests();
@@ -410,5 +428,69 @@ describe('transcribeVoiceClips', () => {
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
     expect(msg.attachments).toEqual([image]);
+  });
+});
+
+describe('voiceClipFailureCard', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function hasSettingsButton(card: unknown): boolean {
+    return JSON.stringify(card).includes('Open voice settings');
+  }
+
+  it('sums up every failed clip of a batch in one card that asks for a resend, with no settings link', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://mc.example.com');
+    server.use(http.post(MISTRAL_URL, () => HttpResponse.json({ message: 'Too many requests' }, { status: 429 })));
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const project = await seed.projects.create({ ...SENDER, input: { name: 'Voice', modelScope: 'user' } });
+    const earlier = message('m1', [voiceClip()]);
+    const latest = message('m2', [voiceClip()]);
+
+    const report = await transcribeVoiceClips(
+      [earlier, latest],
+      SENDER,
+      { modelCredentials: seed.credentials },
+      { run: async () => project },
+    );
+    const card = voiceClipFailureCard(report, 'mention me again');
+
+    expect(card.title).toBe('2 voice clips not transcribed');
+    expect(JSON.stringify(card)).toContain('rate limiting');
+    expect(JSON.stringify(card)).toContain('Wait a moment, then mention me again with the clip.');
+    expect(hasSettingsButton(card)).toBe(false);
+  });
+
+  it('links a setup problem to the voice input section of the Factory settings', () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://mc.example.com/');
+    const card = voiceClipFailureCard(
+      {
+        transcribed: 0,
+        failures: [{ reason: 'The speech-to-text provider rejected the API key.', fix: 'settings' }],
+        settingsFactoryId: 'fp 1',
+      },
+      'message me again',
+    );
+
+    expect(JSON.stringify(card)).toContain('https://mc.example.com/factories/fp%201/settings/models#voice-input');
+    expect(JSON.stringify(card)).toContain("Once that's fixed, message me again with the clip.");
+  });
+
+  it('still explains a setup problem when the server has no public URL to link to', () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', '');
+    const card = voiceClipFailureCard(
+      {
+        transcribed: 0,
+        failures: [{ reason: 'The speech-to-text provider rejected the API key.', fix: 'settings' }],
+        settingsFactoryId: 'fp-1',
+      },
+      'mention me again',
+    );
+
+    expect(card.title).toBe('Voice clip not transcribed');
+    expect(JSON.stringify(card)).toContain('rejected the API key');
+    expect(hasSettingsButton(card)).toBe(false);
   });
 });

@@ -5,17 +5,24 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
-import type { ProviderInfo } from '../../../../../../../api/types';
+import type { CustomProviderInfo, ProviderInfo } from '../../../../../../../api/types';
 import { ProviderList } from '../ProviderList';
 import {
+  CUSTOM_PROVIDERS_URL,
   PROVIDERS_URL,
+  customProviderUrl,
+  fillCustomEndpoint,
+  findCustomRow,
   keyUrl,
   oauthUrl,
   openAddProvider,
+  openCustomEndpointForm,
   pasteCodeSession,
+  pickCustomRowAction,
   pickRowAction,
   rowFor,
   saveKey,
+  stubCustomProviders,
   stubProviders,
 } from './provider-list-test-utils';
 
@@ -247,6 +254,81 @@ describe('ProviderList credential scopes', () => {
         within(rowFor('anthropic', lists.factory())).getByRole('button', { name: 'Anthropic actions' }),
       ).toBeDisabled();
       expect(within(lists.personal()).getByRole('button', { name: 'Add provider' })).toBeEnabled();
+    });
+
+    describe('custom endpoints', () => {
+      const endpoint = (name: string, scope: CustomProviderInfo['scope']): CustomProviderInfo => ({
+        id: name.toLowerCase(),
+        name,
+        url: `https://${name.toLowerCase()}.example.com/v1`,
+        hasApiKey: false,
+        models: ['m'],
+        scope,
+      });
+
+      it('shows each endpoint in the list of the scope it is saved at', async () => {
+        stubProviders([], true);
+        stubCustomProviders([endpoint('Mine', 'user'), endpoint('Shared', 'org')]);
+        const lists = renderBothLists();
+
+        expect(await findCustomRow('Mine', lists.personal())).toBeInTheDocument();
+        expect(within(lists.personal()).queryByText('Shared')).not.toBeInTheDocument();
+        expect(await findCustomRow('Shared', lists.factory())).toBeInTheDocument();
+        expect(within(lists.factory()).queryByText('Mine')).not.toBeInTheDocument();
+      });
+
+      it.each([
+        { list: 'personal', scope: 'user', audience: 'Only you can use it.' },
+        { list: 'factory', scope: 'org', audience: 'Everyone in your organization can use it.' },
+      ] as const)('saves an endpoint added from the $list list at $scope scope', async ({ list, scope, audience }) => {
+        let postBody: unknown;
+        stubProviders([{ provider: 'openai', source: 'none' }], true);
+        server.use(
+          http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+            postBody = await request.json();
+            return HttpResponse.json({ ok: true, provider: endpoint('Team', scope) });
+          }),
+        );
+        const user = userEvent.setup();
+        const lists = renderBothLists();
+
+        const form = await openCustomEndpointForm(user, await openAddProvider(user, lists[list]()));
+        expect(within(form).getByText(new RegExp(audience.replace('.', '\\.')))).toBeInTheDocument();
+        await fillCustomEndpoint(user, form, { name: 'Team', url: 'https://team.example.com/v1', models: 'm' });
+        await user.click(within(form).getByRole('button', { name: 'Add' }));
+
+        await waitFor(() =>
+          expect(postBody).toEqual({ name: 'Team', url: 'https://team.example.com/v1', models: ['m'], scope }),
+        );
+      });
+
+      it('removes a personal endpoint at user scope, leaving the same name in the organization list', async () => {
+        let removedWith: string | undefined;
+        stubProviders([], true);
+        stubCustomProviders([endpoint('Gateway', 'user'), endpoint('Gateway', 'org')]);
+        server.use(
+          http.delete(customProviderUrl('gateway'), ({ request }) => {
+            removedWith = new URL(request.url).search;
+            return HttpResponse.json({ ok: true });
+          }),
+        );
+        const user = userEvent.setup();
+        const lists = renderBothLists();
+
+        await pickCustomRowAction(user, 'Gateway', 'Remove', lists.personal());
+
+        await waitFor(() => expect(removedWith).toBe('?scope=user'));
+      });
+
+      it("shows members the organization's endpoints read-only", async () => {
+        stubProviders([], false);
+        stubCustomProviders([endpoint('Shared', 'org')]);
+        const lists = renderBothLists();
+
+        const row = await findCustomRow('Shared', lists.factory());
+        expect(within(row).getByRole('button', { name: 'Shared actions' })).toBeDisabled();
+        expect(within(lists.factory()).getByRole('button', { name: 'Add provider' })).toBeDisabled();
+      });
     });
   });
 

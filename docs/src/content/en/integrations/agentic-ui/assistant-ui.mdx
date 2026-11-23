@@ -52,7 +52,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
     cd mastra-server # Replace with the actual directory name you provided
     ```
 
-    You now have a basic Mastra server project ready. You should have the following files and folders:
+    You now have a basic Mastra server project ready. Your project now has these files and folders:
 
     ```bash
     src
@@ -111,7 +111,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
     npm run dev
     ```
 
-    By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the Assistant UI frontend to connect to it.
+    By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps, where you'll set up the Assistant UI frontend to connect to it.
   </StepItem>
 
   <StepItem>
@@ -135,7 +135,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
   </StepItem>
 
   <StepItem>
-    The default Assistant UI setup configures the chat runtime to use a local API route (`/api/chat`) within the Next.js project. Since our Mastra agent is running on a separate server, we need to update the frontend to point to that server's endpoint.
+    The default Assistant UI setup configures the chat runtime to use a local API route (`/api/chat`) within the Next.js project. Because the Mastra agent runs on a separate server, update the frontend to point to that server's endpoint.
 
     Open the file in your assistant-ui frontend project that contains the `useChatRuntime` hook (usually `app/assistant.tsx` or `src/app/assistant.tsx`). Find the `useChatRuntime` hook and change the `api` property to the full URL of your Mastra agent's stream endpoint:
 
@@ -159,13 +159,13 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
   </StepItem>
 
   <StepItem>
-    You're ready to connect the pieces! Make sure both the Mastra server and the Assistant UI frontend are running. Start the Next.js development server:
+    You're ready to connect the pieces! Ensure both the Mastra server and the Assistant UI frontend are running. Start the Next.js development server:
 
     ```bash
     npm run dev
     ```
 
-    You should now be able to chat with your agent in the browser.
+    You can now chat with your agent in the browser.
   </StepItem>
 </Steps>
 

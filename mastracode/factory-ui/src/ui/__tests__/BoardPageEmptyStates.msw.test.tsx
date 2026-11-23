@@ -12,16 +12,16 @@ import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
 import { FACTORY_ID, OTHER_FACTORY_ID, REPO_ID, stubWorkBoard } from './workBoardStubs';
 
-function renderBoard(search = '', board = 'work') {
+function renderBoard(search = '') {
   const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
+    initialEntries: [`/factories/${FACTORY_ID}/work${search}`],
   });
   renderWithProviders(<RouterProvider router={router} />);
   return router;
 }
 
 describe('Board empty-state actions', () => {
-  it('offers repository setup before rendering a Review board without repositories', async () => {
+  it('offers repository setup before rendering Work without repositories', async () => {
     stubWorkBoard();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
@@ -31,30 +31,20 @@ describe('Board empty-state actions', () => {
             {
               id: OTHER_FACTORY_ID,
               name: 'Other Factory',
-              repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+              repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
             },
           ],
         }),
       ),
     );
-    renderBoard('', 'review');
+    renderBoard();
 
-    expect(await screen.findByRole('heading', { name: 'Connect a repository to start reviewing' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Connect a repository to start intake' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open Repository settings' })).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/settings/repositories`,
     );
     expect(screen.queryByTestId('board-column-intake')).not.toBeInTheDocument();
-  });
-
-  it('shows a clear Review intake when a connected repository has no change requests', async () => {
-    stubWorkBoard();
-    renderBoard('', 'review');
-
-    const intake = await screen.findByTestId('board-column-intake');
-    expect(await within(intake).findByText(/No change requests waiting/)).toBeVisible();
-    expect(within(intake).queryByRole('link', { name: /Connect/ })).not.toBeInTheDocument();
-    expect(within(intake).queryByRole('button', { name: 'Create card' })).not.toBeInTheDocument();
   });
 
   it.each(['list', 'board'])('offers manual creation and intake setup in the %s layout', async layout => {

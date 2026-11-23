@@ -3,6 +3,8 @@ import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 import { findSTTModel, resolveSTTModel, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
 import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
 import { createSTTTranscriber, resolveSTTApiKey } from '@mastra/code-sdk/voice/transcribe';
+import { classifyProviderError } from '@mastra/core/error';
+import type { ProviderFailureKind } from '@mastra/core/error';
 
 import type { CredentialRecord } from '../storage/domains/credentials/base.js';
 import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
@@ -115,4 +117,17 @@ export function chooseSTTModel(policy: VoicePolicy, saved: STTModel | undefined)
 export async function transcribeAudio(selection: STTSelection, audio: Buffer, mimeType: string): Promise<string> {
   const transcriber = await createSTTTranscriber(selection.entry, selection.apiKey);
   return transcriber.transcribe(audio, audioFiletype(mimeType));
+}
+
+const PROVIDER_FAILURES: Partial<Record<ProviderFailureKind, string>> = {
+  auth: 'the speech-to-text provider rejected the API key',
+  quota: 'the speech-to-text provider account is out of credit',
+  rate_limited: 'the speech-to-text provider is rate limiting requests, try again shortly',
+  timeout: 'speech-to-text timed out',
+  unavailable: 'the speech-to-text provider is unavailable, try again shortly',
+};
+
+/** Callers can be guests in a shared Slack thread, so raw provider text (bodies, key fragments) stays in the server log. */
+export function transcriptionFailureReason(error: unknown): string {
+  return PROVIDER_FAILURES[classifyProviderError(error)] ?? 'the speech-to-text provider returned an error';
 }

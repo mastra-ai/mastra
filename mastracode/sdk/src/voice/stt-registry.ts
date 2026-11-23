@@ -41,6 +41,7 @@ export interface STTModel {
   resolver: STTResolver;
   /** Base URL for `openai-compatible` providers (from models.dev `api`). */
   baseURL?: string;
+  realtimeModel?: string;
 }
 
 /**
@@ -75,7 +76,13 @@ export const STT_MODELS: readonly STTModel[] = [
   },
   // Deepgram — dedicated STT provider (not OpenAI-compatible); via @mastra/voice-deepgram.
   { provider: 'deepgram', model: 'nova-3', label: 'Deepgram Nova-3', resolver: 'deepgram' },
-  { provider: 'mistral', model: 'voxtral-mini-latest', label: 'Mistral Voxtral Mini', resolver: 'mistral' },
+  {
+    provider: 'mistral',
+    model: 'voxtral-mini-latest',
+    label: 'Mistral Voxtral Mini',
+    resolver: 'mistral',
+    realtimeModel: 'voxtral-mini-transcribe-realtime-3',
+  },
   // Alibaba Qwen ASR (OpenAI-compatible endpoints).
   {
     provider: 'alibaba',

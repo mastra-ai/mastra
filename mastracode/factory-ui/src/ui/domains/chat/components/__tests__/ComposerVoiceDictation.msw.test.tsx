@@ -1,12 +1,11 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { VoiceSettingsResponse } from '../../../../../api/types';
+import type { LiveSessionResponse } from '../../../../../api/types';
 import { FACTORY_ID, renderThread, stubPreparingSession } from './composer-session-test-fixture';
+import { acceptTranscribe, answerLiveSession, composerReady, stubVoiceSettings } from './voice-dictation-test-fixture';
 
 /** The slice of a mic stream the recorder touches: stopping its tracks releases the microphone. */
 interface FakeMicStream {
@@ -37,47 +36,7 @@ function micStream(): FakeMicStream {
   return { getTracks: () => [{ stop: stopTrack }] };
 }
 
-interface TranscribeRequest {
-  factoryId: string | null;
-  contentType: string | null;
-  clip: string;
-}
-
-function acceptTranscribe(reply: () => Response): TranscribeRequest[] {
-  const requests: TranscribeRequest[] = [];
-  server.use(
-    http.post(`${TEST_BASE_URL}/web/voice/transcribe`, async ({ request }) => {
-      requests.push({
-        factoryId: new URL(request.url).searchParams.get('factoryId'),
-        contentType: request.headers.get('Content-Type'),
-        clip: await request.text(),
-      });
-      return reply();
-    }),
-  );
-  return requests;
-}
-
-function stubVoiceSettings(effective: VoiceSettingsResponse['effective']) {
-  const response: VoiceSettingsResponse = {
-    scope: 'user',
-    selected: null,
-    canEdit: true,
-    effective,
-    models: [],
-    keys: [],
-  };
-  server.use(http.get(`${TEST_BASE_URL}/web/voice/settings`, () => HttpResponse.json(response)));
-}
-
-async function composerReady() {
-  stubPreparingSession({ materialized: true });
-  renderThread();
-  const message = await screen.findByRole('textbox', { name: 'Message' });
-  await waitFor(() => expect(message).toBeEnabled());
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled());
-  return message;
-}
+const recordedClipMode: LiveSessionResponse = { mode: 'batch' };
 
 describe('Composer voice dictation', () => {
   beforeEach(() => {
@@ -85,6 +44,7 @@ describe('Composer voice dictation', () => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
     getUserMedia.mockResolvedValue(micStream());
     stubVoiceSettings({ provider: 'openai', model: 'whisper-1' });
+    answerLiveSession(() => HttpResponse.json(recordedClipMode));
   });
 
   afterEach(() => {
@@ -94,24 +54,25 @@ describe('Composer voice dictation', () => {
     getUserMedia.mockReset();
   });
 
-  it('records, transcribes, and appends the transcript to the draft', async () => {
+  it('records a clip, transcribes it, and appends the transcript to the draft when the provider has no live mode', async () => {
     const bodies = acceptTranscribe(() => HttpResponse.json({ text: 'and add a test for it' }));
     const user = userEvent.setup();
     const message = await composerReady();
 
     await user.type(message, 'fix the login bug');
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
+    const recording = await screen.findByRole('button', { name: 'Dictate', pressed: true });
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
 
-    await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
+    await user.click(recording);
 
     await waitFor(() => expect(message).toHaveValue('fix the login bug and add a test for it'));
-    expect(bodies).toEqual([{ factoryId: FACTORY_ID, contentType: 'audio/webm;codecs=opus', clip: 'opus' }]);
+    expect(bodies).toEqual([{ factoryId: FACTORY_ID, contentType: 'audio/webm', clip: 'opus' }]);
     expect(stopTrack).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });
 
-  it('explains a blocked microphone without calling the server', async () => {
+  it('explains a blocked microphone without sending a recording', async () => {
     getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
     const bodies = acceptTranscribe(() => HttpResponse.json({ text: 'unused' }));
     const user = userEvent.setup();
@@ -221,5 +182,17 @@ describe('Composer voice dictation', () => {
 
     expect(await screen.findByText(/Voice input needs an API key/)).toBeVisible();
     expect(message).toHaveValue('');
+  });
+
+  it('asks you to wait instead of opening the microphone when you dictate too often', async () => {
+    answerLiveSession(() => HttpResponse.json({ error: 'voice_rate_limited' }, { status: 429 }));
+    const user = userEvent.setup();
+    await composerReady();
+
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+
+    expect(await screen.findByText('Too many voice requests. Wait a minute and try again.')).toBeVisible();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });
 });

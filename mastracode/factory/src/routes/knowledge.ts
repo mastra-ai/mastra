@@ -5,13 +5,15 @@
  * Every endpoint is a GET; this module never writes Knowledge.
  *
  * Scoping is fail-closed and server-side. The caller must be signed in to an org that owns the `:id`
- * project, and reads are limited to what the Knowledge's own declarations give the principals
- * `org:<orgId>` and `project:<projectId>`: the scopes a run in that project holds at org and project
- * level. Session (`resource:`/`thread:`) scopes are not principals here, so no member browses another
- * member's session pages. The host must declare `project:$projectId` (as its session runs need); without
- * it reads fail with 500 `knowledge_misconfigured`.
+ * project, and reads are limited to what the Knowledge's own declarations give the principals a run in
+ * that project holds, from the same resolver sessions use: `org:<orgId>` and `project:<projectId>`, or,
+ * when the host's `scopes` name an `org:`, those scopes alone, shared by every org and project on the
+ * Factory. Session (`resource:`/`thread:`) scopes are not principals here, so no member browses
+ * another member's session pages. The host's Knowledge must declare the principals; without them reads
+ * fail with 500 `knowledge_misconfigured`.
  */
 
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import type { Knowledge, KnowledgeChangeEvent } from '@mastra/core/knowledge';
 import {
   KnowledgeDeclarationError,
@@ -30,7 +32,7 @@ import { streamSSE } from 'hono/streaming';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Ids and cursors are opaque, but bounded so an unbounded query string never reaches storage. */
@@ -53,6 +55,8 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   knowledge: (key: string) => Promise<Knowledge | undefined>;
   /** Host-selected Knowledge key. Requests cannot override it. */
   defaultKnowledgeKey?: string;
+  /** The host's `scopes`; passed to the session resolver so the page reads what sessions hold. */
+  hostScopes?: readonly string[];
 }
 
 interface ResolvedView {
@@ -110,10 +114,6 @@ function withDisplayLabel<T extends LabelablePage>(knowledge: Knowledge, page: T
   return displayLabel ? { ...page, displayLabel } : page;
 }
 
-function loose(c: unknown): Context {
-  return c as Context;
-}
-
 export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   /** Tenant, org-owned project, Knowledge runtime and the caller's read scope: the one seam every route shares. */
   async #resolveView(c: Context): Promise<ResolvedView | { response: Response }> {
@@ -149,9 +149,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       };
     }
     try {
-      return { knowledge, store, read: await knowledge.readScopeFor([`org:${tenant.orgId}`, `project:${projectId}`]) };
+      // The same resolver a Factory session's runs use, so the page reads exactly what an agent there holds.
+      const session = resolveKnowledgeSessionScopes(
+        { factoryOrgId: tenant.orgId, factoryProjectId: projectId },
+        this.deps.hostScopes,
+      );
+      if (!session.resolved) {
+        return { response: c.json({ error: 'organization_required', message: session.reason }, 403) };
+      }
+      return { knowledge, store, read: await knowledge.readScopeFor(session.scopes) };
     } catch (error) {
-      // The host's Knowledge does not declare the scopes a Factory run holds (`org:` and `project:`): a
+      // The host's Knowledge does not declare the scopes a Factory run holds: a
       // deployment misconfiguration, which its session runs hit too. Never fall back to a guessed scope.
       if (error instanceof KnowledgeDeclarationError) {
         return { response: c.json({ error: 'knowledge_misconfigured', message: error.message }, 500) };

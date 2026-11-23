@@ -114,6 +114,8 @@ createDefaultEngineTestSuite({
   skipTests: {
     // Sync getStepResult throws on storage v2 runs.
     getStepResultSync: true,
+    // So does reading the sync `state` field.
+    stateSync: true,
   },
   afterEach: async () => {
     const calls = v1MethodCalls.splice(0);

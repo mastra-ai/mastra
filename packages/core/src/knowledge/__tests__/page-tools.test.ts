@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { setRunAgentScopes } from '../../agent/scopes';
-import { RequestContext } from '../../request-context';
 import { standardSchemaToJSONSchema } from '../../schema';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
@@ -10,6 +8,7 @@ import type { KnowledgeScopeDeclarations } from '../declarations';
 import { KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
 import { buildKnowledgePageTools } from '../page-tools';
 import { KnowledgeScopeRuntime } from '../scope-runtime';
+import { agentRunContext } from './agent-run-context';
 
 /** The §10 reference setup of the access spec. */
 const scopes: KnowledgeScopeDeclarations = {
@@ -71,12 +70,10 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
   let tools: ReturnType<typeof buildKnowledgePageTools>;
   let runtime: KnowledgeScopeRuntime;
 
-  /** Runs a tool as an agent holding `held` (raw run scopes). */
+  /** Runs a tool as an agent run with `held` as its Agent scopes. */
   const as = (agentId: string, held: string[]) => {
     const call = async (tool: string, input: Record<string, unknown>): Promise<Result> => {
-      const requestContext = new RequestContext();
-      setRunAgentScopes(requestContext, held);
-      return (await tools[tool]!.execute!(input as never, { requestContext, agent: { agentId } } as never)) as Result;
+      return (await tools[tool]!.execute!(input as never, agentRunContext(agentId, held) as never)) as Result;
     };
     return {
       call,
@@ -204,6 +201,35 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     ).rejects.toThrow(/not found/);
   });
 
+  it("a note added without scope is stamped with the page's home scope", async () => {
+    const alex = as('alex', ['org:acme', 'agent:acme:alex']);
+    const bea = as('bea', ['org:acme', 'agent:acme:bea']);
+    const shared = await alex.page({ op: 'write', scope: 'org:acme', name: 'Billing Service' });
+    const mine = await alex.page({ op: 'write', scope: 'agent:acme:alex', name: 'Alex Scratch' });
+
+    const onShared = await alex.note({ op: 'add', page: 'Billing Service', text: 'Owned by payments.' });
+    const onEmpty = await alex.note({ op: 'add', page: 'Billing Service', scope: [], text: 'Runs on Postgres.' });
+    const onMine = await alex.note({ op: 'add', page: 'Alex Scratch', text: 'Ask Bea about retries.' });
+
+    const stamps = async (id: string) => (await store.getNote({ id, read: 'all' }))!.stampScopeIds;
+    const homeOf = async (id: string) => (await store.getPage({ id, read: 'all' }))!.scopeId;
+    expect(await stamps(onShared.note.id)).toEqual([await homeOf(shared.page.id)]);
+    expect(await stamps(onEmpty.note.id)).toEqual([await homeOf(shared.page.id)]);
+    expect(await stamps(onMine.note.id)).toEqual([await homeOf(mine.page.id)]);
+
+    // Readers of the page's scope see the note; a private page's note stays private.
+    expect((await bea.read('Billing Service')).notes.map((n: Result) => n.text)).toEqual([
+      'Owned by payments.',
+      'Runs on Postgres.',
+    ]);
+    expect((await alex.read('Alex Scratch')).notes.map((n: Result) => n.text)).toEqual(['Ask Bea about retries.']);
+    expect((await bea.search('retries')).results).toEqual([]);
+
+    // Restamping still names its scopes.
+    await expect(alex.note({ op: 'restamp', note: onShared.note.id })).rejects.toThrow(/needs scope/);
+    await expect(alex.note({ op: 'restamp', note: onShared.note.id, scope: [] })).rejects.toThrow(/needs scope/);
+  });
+
   it('tells the model page bodies and notes are markdown', () => {
     const describe = (tool: string) =>
       (
@@ -224,6 +250,22 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     ).properties;
     expect(read.from!.description).toMatch(/token cap/);
     expect(read.limit!.description).toMatch(/not a line count/i);
+  });
+
+  it("tells the model a note's scope is optional on add and defaults to the page's scope", () => {
+    const schema = tools.knowledge_note!.inputSchema as Parameters<typeof validateToolInput>[0];
+    const modelSchema = standardSchemaToJSONSchema(schema!, { io: 'input' }) as {
+      required?: string[];
+      properties: { scope: { description?: string } };
+    };
+    expect(modelSchema.required ?? []).not.toContain('scope');
+    expect(modelSchema.properties.scope.description).toMatch(/defaults to the page's scope/);
+    for (const input of [
+      { op: 'add', page: 'Launch', text: 'Shipped.' },
+      { op: 'add', page: 'Launch', scope: [], text: 'Shipped.' },
+    ]) {
+      expect(validateToolInput(schema, input, 'knowledge_note')).toEqual({ data: input });
+    }
   });
 
   it('a note accepts a plain date or a date-time for when', async () => {
@@ -579,15 +621,18 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
       });
     });
 
-    it("refuses a typo'd run scope the way a run does, and takes raw run scopes", async () => {
+    it("refuses a typo'd run scope the way a run does, and takes canonical run scopes", async () => {
       await expect(runtime.explainAccess(['org:acme', 'role:acme:suport'], { scope: 'org:acme' })).rejects.toThrow(
         KnowledgeDeclarationError,
       );
       await expect(as('typo', ['org:acme', 'role:acme:suport']).read()).rejects.toThrow(/role:acme:suport/);
 
-      // A raw resource id with "/" is encoded exactly like run ingress encodes it.
-      const raw = await runtime.explainAccess(['resource:user/1'], { scope: 'resource:user%2F1' });
-      expect(raw.role).toBe('owner');
+      // Run scopes are canonical: an id with "/" is passed encoded, and the raw spelling is refused.
+      const encoded = await runtime.explainAccess(['resource:user%2F1'], { scope: 'resource:user%2F1' });
+      expect(encoded.role).toBe('owner');
+      await expect(runtime.explainAccess(['resource:user/1'], { scope: 'resource:user%2F1' })).rejects.toThrow(
+        /encodeKnowledgeScopeId/,
+      );
     });
   });
 });

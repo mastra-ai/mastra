@@ -13,9 +13,7 @@ export function stubSessionsFactory(factoryId: string, projectRepositoryIds: str
           {
             id: factoryId,
             name: 'Mastra',
-            repositories: projectRepositoryIds.map(id =>
-              listedRepository(id, `mastra-ai/${id}`, { branch: 'main', sandboxWorkdir: `/workspace/${id}` }),
-            ),
+            repositories: projectRepositoryIds.map(id => listedRepository(id, `mastra-ai/${id}`, { branch: 'main' })),
           },
         ],
       }),

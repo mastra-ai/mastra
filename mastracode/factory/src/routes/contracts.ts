@@ -3,14 +3,70 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
+import {
+  CLOSE_REASONS,
+  INTAKE_ROUTE_RULE_FIELDS,
+  routeEventsProblem,
+  ROUTE_EVENTS,
+  STATUS_EVENTS,
+} from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
-import { cardRuleGroupSchema } from '../rules/rule-group.js';
-import { FACTORY_ROLE_STAGES } from '../rules/types.js';
+import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
-import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
+import {
+  SESSION_ROW_ALL_OWNERS,
+  SESSION_ROW_GROUP_BYS,
+  SESSION_ROW_PINS_MAX,
+  SESSION_ROW_SORTS,
+  SESSION_ROW_STATUSES,
+  SESSION_ROW_UPDATED_WITHIN,
+  SESSION_ROW_WINDOW_MAX,
+  SESSION_ROW_WINDOWS_MAX,
+  sessionRowOwnerSchema,
+  sessionRowSourceSchema,
+} from '../session/session-row-query.js';
+import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
+import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
+import type { CardChangeRequest } from '../work-items/change-requests.js';
+import {
+  UUID_PATTERN,
+  uuidSchema,
+  nullableTrimmed,
+  environmentRepositorySchema,
+  environmentSandboxSchema,
+  environmentBuildTriggersSchema,
+  environmentLastBuildSchema,
+  RESERVED_SANDBOX_ENV_NAMES,
+  MAX_SANDBOX_ENV_VALUE_LENGTH,
+  sandboxEnvNameSchema,
+  sandboxEnvAppliesToSchema,
+  sandboxEnvPathSchema,
+  sandboxEnvSetBodySchema,
+  sandboxEnvUpdateBodySchema,
+  sandboxEnvSchema,
+  sandboxEnvsListResponseSchema,
+  sandboxEnvResponseSchema,
+  projectEnvironmentResponseSchema,
+  environmentRepositoryPatchSchema,
+  updateProjectEnvironmentBodySchema,
+} from './environment-contracts.js';
 
-const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
+export {
+  UUID_PATTERN,
+  environmentSandboxSchema,
+  environmentBuildTriggersSchema,
+  environmentLastBuildSchema,
+  RESERVED_SANDBOX_ENV_NAMES,
+  MAX_SANDBOX_ENV_VALUE_LENGTH,
+  sandboxEnvNameSchema,
+  sandboxEnvAppliesToSchema,
+  sandboxEnvSetBodySchema,
+  sandboxEnvUpdateBodySchema,
+  projectEnvironmentResponseSchema,
+  updateProjectEnvironmentBodySchema,
+};
+
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
@@ -23,8 +79,6 @@ export type FactoryRouteContract = {
   responseSchema: z.ZodType;
 };
 
-export const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
-const uuidSchema = z.string().regex(new RegExp(UUID_PATTERN));
 const entitySchema = z.record(z.string(), z.unknown());
 const nonEmptyTrimmed = (max: number) => z.string().trim().min(1).max(max);
 const rawBoundedTrimmed = (max: number) =>
@@ -33,16 +87,13 @@ const rawBoundedTrimmed = (max: number) =>
     .max(max)
     .transform(value => value.trim())
     .pipe(z.string().min(1));
+/** Card description: trimmed, and blank clears it. */
+const descriptionSchema = z
+  .string()
+  .max(8000)
+  .transform(value => value.trim() || null)
+  .nullable();
 const trimmedUuidSchema = z.string().trim().regex(new RegExp(UUID_PATTERN));
-const nullableTrimmed = (max: number) =>
-  z.union([
-    z
-      .string()
-      .trim()
-      .max(max)
-      .transform(value => value || null),
-    z.null(),
-  ]);
 const projectPathSchema = z.object({ id: uuidSchema });
 const projectDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
 const boardPathSchema = z.object({ id: uuidSchema, boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH) });
@@ -66,24 +117,17 @@ const storedBoardResponseSchema = z.object({
     revision: z.number().int().nullable(),
     source: z.enum(['builtin', 'app', 'stored']),
     /**
-     * True for boards the project created, the built-in Work board and app boards; their code
-     * behaviour stays attached. False for the legacy Review board, which is read-only.
+     * True for every board: the boards the project created, the built-in Work board and app boards,
+     * whose code behaviour stays attached. Only the retired Review board was read-only.
      */
     editable: z.boolean(),
     /**
      * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
-     * phase stays with its kind, phases with code handlers keep their runner context and skill,
-     * the exit tool id stays, and the moves code makes from it stay in nextPhases. Null for stored boards.
+     * phase stays with its kind and the moves code makes from it stay in nextPhases. Null for
+     * stored boards.
      */
     codeBehaviour: z
-      .record(
-        z.string(),
-        z.object({
-          handlers: z.boolean(),
-          exitToolId: z.string().nullable(),
-          requiredNextPhases: z.array(z.string()),
-        }),
-      )
+      .record(z.string(), z.object({ requiredNextPhases: z.array(z.string()) }))
       .nullable()
       .optional(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
@@ -93,21 +137,43 @@ const storedBoardResponseSchema = z.object({
   canEdit: z.boolean().optional(),
 });
 const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
-const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
+const boardIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
 const intakeRouteTargetSchema = z
   .object({
-    boardKey: intakeRouteIdentifierSchema,
+    boardKey: boardIdentifierSchema,
     /** Unset lands the card in the board's first phase. */
-    phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
+    phaseKey: boardIdentifierSchema.nullable().optional(),
+    /**
+     * File a pull request on the card of the issue it closes (on `boardKey`) instead of a new card;
+     * that card moves to `phaseKey` when its board allows it. Matches no other arrival.
+     */
+    joinClosedIssue: z.boolean().optional(),
+    /**
+     * On a route moving existing cards on later events, the board the card moves to, at `phaseKey`;
+     * `boardKey` stays the board whose cards the route moves. Unset keeps the card on `boardKey`.
+     */
+    moveToBoardKey: boardIdentifierSchema.nullable().optional(),
   })
   .strict();
+const intakeRouteWhenSchema = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
 const intakeRouteFields = {
   name: nonEmptyTrimmed(120),
   enabled: z.boolean(),
-  /** Which new cards the route applies to; null matches every card. */
-  when: cardRuleGroupSchema.nullable(),
-  /** Where matching new cards land. */
+  /** Which cards the route applies to; null matches every card. Event routes can test `event.type` and `event.reason`. */
+  when: intakeRouteWhenSchema.nullable(),
+  /** Where matching cards land. */
   target: intakeRouteTargetSchema,
+  /**
+   * The events the route handles. `work_item.opened` files new issues and `pull_request.opened` new
+   * pull requests with no card (and moves the card of an issue whose pull request opens); the others
+   * move existing cards. `work_item.created`, the legacy event, files both and is kept as written.
+   */
+  on: z
+    .array(z.enum(ROUTE_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
+    .superRefine((on, ctx) => {
+      const problem = routeEventsProblem(on, null);
+      if (problem) ctx.addIssue({ code: 'custom', message: problem });
+    }),
 };
 export const intakeRouteInputSchema = z
   .object({
@@ -115,6 +181,11 @@ export const intakeRouteInputSchema = z
     enabled: intakeRouteFields.enabled.default(true),
     when: intakeRouteFields.when.default(null),
     target: intakeRouteFields.target,
+    on: intakeRouteFields.on.optional(),
+    /** Restores a route read with `pullRequestOpenedMovesOnly` as it was: moving cards on `pull_request.opened`, filing none. */
+    pullRequestOpenedMovesOnly: z.literal(true).optional(),
+    /** Restores a route read with `outsiderPullRequestsGated` as it was: its card moves skipping outside authors' pull requests. */
+    outsiderPullRequestsGated: z.literal(true).optional(),
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -124,30 +195,62 @@ export const intakeRoutePatchSchema = z
     enabled: intakeRouteFields.enabled.optional(),
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
+    on: intakeRouteFields.on.optional(),
+    /**
+     * `false` lets outside authors' pull requests match an older rule's card moves, like every rule
+     * written since rules decided them. No other edit changes it, so an edit and its Undo can't
+     * quietly widen the rule.
+     */
+    outsiderPullRequestsGated: z.literal(false).optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
   .refine(({ expectedRevision: _revision, ...fields }) => Object.values(fields).some(value => value !== undefined), {
     message: 'Change at least one field.',
   });
+/** Bounds a whole-project reorder, which names every rule of every board. */
+const MAX_PROJECT_INTAKE_ROUTES = 10_000;
 export const intakeRouteReorderBodySchema = z
   .object({
-    /** Every route of the project, once each, in the new order. */
+    /** Reorders only this board's rules, within the places they hold; omitted, the whole project's. */
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).optional(),
+    /** Every rule of the board (or of the project), once each, in the new order. */
     ids: z
       .array(uuidSchema)
       .min(1)
-      .max(MAX_INTAKE_ROUTES)
+      .max(MAX_PROJECT_INTAKE_ROUTES)
       .refine(ids => new Set(ids).size === ids.length, { message: 'Each route may appear only once.' }),
   })
-  .strict();
+  .strict()
+  .refine(({ boardKey, ids }) => boardKey === undefined || ids.length <= MAX_INTAKE_ROUTES_PER_BOARD, {
+    message: `A board has at most ${MAX_INTAKE_ROUTES_PER_BOARD} intake rules.`,
+    path: ['ids'],
+  });
 const intakeRouteSchema = z.object({
   id: z.string(),
   name: z.string(),
   enabled: z.boolean(),
   /** 0 is evaluated first. */
   position: z.number().int(),
-  when: cardRuleGroupSchema.nullable(),
-  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }),
+  when: intakeRouteWhenSchema.nullable(),
+  target: z.object({
+    boardKey: z.string(),
+    phaseKey: z.string().nullable(),
+    joinClosedIssue: z.boolean(),
+    moveToBoardKey: z.string().nullable(),
+  }),
+  on: z.array(z.enum(ROUTE_EVENTS)),
+  /**
+   * True on a route stored by 0.28 naming `pull_request.opened`: there it only moves a card, and
+   * files no pull request, through every edit. Add a route to file pull requests.
+   */
+  pullRequestOpenedMovesOnly: z.literal(true).optional(),
+  /**
+   * True on a route stored before card-move rules decided outsiders' pull requests: its card moves
+   * skip an outside author's pull request unless its conditions test `pullRequest.trusted`. Edits
+   * keep it; only an explicit `outsiderPullRequestsGated: false` patch clears it.
+   */
+  outsiderPullRequestsGated: z.literal(true).optional(),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
@@ -158,7 +261,325 @@ const intakeRouteSchema = z.object({
   problems: z.array(z.string()),
 });
 const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
-const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
+const intakeRouteListResponseSchema = z.object({
+  intakeRoutes: z.array(intakeRouteSchema),
+  /** Whether the caller may add, edit, reorder, or delete routes. */
+  canEdit: z.boolean(),
+});
+const intakeRerouteResponseSchema = z.object({
+  total: z.number().int(),
+  moves: z.array(z.object({ fromBoard: z.string(), toBoard: z.string(), count: z.number().int() })),
+});
+const intakeRerouteApplyResponseSchema = z.object({ moved: z.number().int(), skipped: z.number().int() });
+const intakeRouteListQuerySchema = z
+  .object({
+    /** Lists only this board's rules, in their order. */
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).optional(),
+  })
+  .strict();
+const intakeOrderResponseSchema = z.object({
+  /** Every board of the project, in the order intake asks them. */
+  boards: z.array(z.object({ boardKey: z.string(), name: z.string() })),
+  /**
+   * `derived` follows the rule list until an admin sets the order; then it is `explicit`. A project
+   * created with intake order has its own order from the start, so it is `explicit` from the start.
+   */
+  origin: z.enum(['derived', 'explicit']),
+  /** Which evaluator places the project's new items now: `route-list` (the old one) or `intake-order`. */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /**
+   * What decided `evaluator`: `FACTORY_INTAKE_EVALUATOR` (forced on every project), the project's
+   * own setting, or none (a project from before the setting, on `route-list`).
+   */
+  evaluatorSource: z.enum(['env', 'project', 'legacy']),
+  /** The project's own setting, used unless one is forced; null for a project from before the setting. */
+  projectEvaluator: z.enum(['route-list', 'intake-order']).nullable(),
+  /** Both evaluators run over the project's newest 200 items against this order, worked out on each read. */
+  comparison: z.object({
+    compared: z.number().int(),
+    differing: z.number().int(),
+    notRouted: z.number().int(),
+  }),
+  /** Whether the caller may change the order. */
+  canEdit: z.boolean(),
+});
+export const intakeOrderBodySchema = z
+  .object({
+    /** Every board of the project, once each, in the new order. */
+    boardKeys: z
+      .array(z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH))
+      .min(1)
+      .max(MAX_PROJECT_INTAKE_ROUTES)
+      .refine(keys => new Set(keys).size === keys.length, { message: 'Each board may appear only once.' })
+      .optional(),
+    /** Switches the project's evaluator; a forced one still wins until it is unset. */
+    evaluator: z.enum(['route-list', 'intake-order']).optional(),
+  })
+  .strict()
+  .refine(body => body.boardKeys !== undefined || body.evaluator !== undefined, {
+    message: 'Name the boardKeys, the evaluator, or both.',
+  });
+const intakeDecisionSchema = z.object({
+  id: z.string(),
+  outcome: z.enum(['placed', 'not_routed', 'rule_skipped', 'rule_retired']),
+  evaluator: z.enum(['route-list', 'intake-order']),
+  boardKey: z.string().nullable(),
+  routeId: z.string().nullable(),
+  /** Why no board took it. */
+  reason: z.string().nullable(),
+  sourceKey: z.string().nullable(),
+  title: z.string(),
+  url: z.string().nullable(),
+  decidedAt: z.string(),
+});
+const intakeNotRoutedQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    /** The `nextCursor` of the page before. */
+    cursor: z.string().min(1).max(200).optional(),
+  })
+  .strict();
+const intakeNotRoutedResponseSchema = z.object({
+  /** Oldest first. */
+  notRouted: z.array(intakeDecisionSchema),
+  /** Pass as `cursor` for the next page; null on the last. */
+  nextCursor: z.string().nullable(),
+  /** Whether the caller may route an item again. */
+  canEdit: z.boolean(),
+});
+const intakeSkippedResponseSchema = z.object({
+  /** Card-move rules that matched but whose target couldn't take the card, in the last 30 days. */
+  skipped: z.array(z.object({ routeId: z.string(), count: z.number().int(), latest: intakeDecisionSchema })),
+});
+const intakeDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
+const intakeRouteAgainResponseSchema = z.object({
+  /** The item is queued to be filed here; the card appears once the dispatcher files it. */
+  status: z.literal('queued'),
+  boardKey: z.string(),
+  phaseKey: z.string(),
+  routeId: z.string(),
+});
+/** A board's rules as edited, not saved yet: they stand in for all of that board's rules. */
+const intakeDraftBoardSchema = z
+  .object({
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
+    routes: z
+      .array(
+        z
+          .object({
+            /** The saved rule this edits, so its counts line up; omitted for a new rule. */
+            id: uuidSchema.optional(),
+            name: intakeRouteFields.name,
+            enabled: intakeRouteFields.enabled.default(true),
+            when: intakeRouteFields.when.default(null),
+            target: z
+              .object({
+                phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable().optional(),
+                /** On a card-move rule: the board the card moves to; unset keeps it on this board. */
+                moveToBoardKey: intakeRouteTargetSchema.shape.moveToBoardKey,
+                /** On a pull request rule: join the card of the issue it closes, as the saved rule does. */
+                joinClosedIssue: z.boolean().optional(),
+              })
+              .strict(),
+            on: intakeRouteFields.on.optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_INTAKE_ROUTES_PER_BOARD),
+  })
+  .strict();
+const intakeDraftFields = {
+  /** Unsaved rules, board by board; boards not named run their saved rules. */
+  boards: z
+    .array(intakeDraftBoardSchema)
+    .max(MAX_PROJECT_INTAKE_ROUTES)
+    .refine(boards => new Set(boards.map(board => board.boardKey)).size === boards.length, {
+      message: 'Each board may appear only once.',
+    })
+    .optional(),
+  /** An unsaved intake order; omitted, the saved one. */
+  order: intakeOrderBodySchema.shape.boardKeys.optional(),
+};
+export const intakeDryRunBodySchema = z.object(intakeDraftFields).strict();
+const intakePlacementSchema = z.object({ boardKey: z.string(), routeId: z.string(), phase: z.string() });
+const intakeKeysByBoardSchema = z.array(z.object({ boardKey: z.string(), keys: z.array(z.string()) }));
+const intakeDryRunResponseSchema = z.object({
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /** How many of the project's newest items (at most 200) were decided, from their stored facts. */
+  sampled: z.number().int(),
+  /** Every board in intake order, with what it and each of its rules would take. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      /** Keys of the items the board would take. */
+      takes: z.array(z.string()),
+      /** Items its rules matched that another board took first, by that board. */
+      lostTo: intakeKeysByBoardSchema,
+      rules: z.array(
+        z.object({
+          /** A rule not saved yet reads `draft:<boardKey>:<index>`. */
+          routeId: z.string(),
+          name: z.string().nullable(),
+          enabled: z.boolean(),
+          takes: z.array(z.string()),
+          /** Items it matched but an earlier rule took, by the board that took them. */
+          lost: intakeKeysByBoardSchema,
+          /** Cards it actually filed in the last 30 days. */
+          filed: z.number().int(),
+        }),
+      ),
+    }),
+  ),
+  /** Keys of the items no board would take. */
+  notRouted: z.array(z.string()),
+  /** With unsaved rules or order: how many items land somewhere other than the saved ones put them. */
+  changed: z.number().int().optional(),
+  items: z.array(
+    z.object({
+      key: z.string(),
+      /** The card's id, or the Not routed decision's. */
+      id: z.string(),
+      kind: z.enum(['card', 'not_routed']),
+      title: z.string(),
+      url: z.string().nullable(),
+      placement: intakePlacementSchema.nullable(),
+      /** Every rule that matched and could take it, in the order intake asked them; the first won. */
+      matched: z.array(z.object({ boardKey: z.string(), routeId: z.string() })),
+      /** With unsaved rules or order: where the saved ones put it. */
+      before: intakePlacementSchema.nullable().optional(),
+    }),
+  ),
+  /** Whether the caller may run unsaved rules or order. */
+  canEdit: z.boolean(),
+});
+/** The most labels or assignees one test event may name on each side. */
+const MAX_TEST_EVENT_NAMES = 100;
+const itemChangeSchema = z
+  .object({
+    added: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+    removed: z.array(z.string().min(1).max(500)).max(MAX_TEST_EVENT_NAMES).default([]),
+  })
+  .strict();
+/** A status event as card-move rules read it. */
+const intakeTestEventSchema = z
+  .object({
+    type: z.enum(STATUS_EVENTS),
+    /** On `work_item.closed`. */
+    reason: z.enum(CLOSE_REASONS).optional(),
+    /** On an update: the labels and assignees it changed. */
+    labels: itemChangeSchema.optional(),
+    assignees: itemChangeSchema.optional(),
+    /** On a pull request event: whether that pull request's author is trusted. */
+    pullRequestTrusted: z.boolean().optional(),
+  })
+  .strict();
+export const intakeTestBodySchema = z
+  .object({
+    ...intakeDraftFields,
+    /** An issue or pull request URL; one the Factory has never seen is fetched once, read-only, from a linked source. */
+    url: z.string().trim().url().max(2000).optional(),
+    /** A recent item: a card's id, or a Not routed decision's. */
+    itemId: uuidSchema.optional(),
+    /** A status event to try on the item's card, as if it had just happened; its recent events are replayed either way. */
+    event: intakeTestEventSchema.optional(),
+  })
+  .strict()
+  .refine(body => (body.url === undefined) !== (body.itemId === undefined), {
+    message: 'Send either a url or an itemId.',
+  });
+const failedConditionSchema = z.object({
+  field: z.string(),
+  operator: z.string(),
+  value: z.unknown().optional(),
+  /** The item's value for the field; null when it has none. */
+  actual: z.unknown(),
+});
+const intakeTestResponseSchema = z.object({
+  item: z.object({
+    title: z.string(),
+    url: z.string().nullable(),
+    /** `card` and `not_routed` are items the Factory has; `fetched` was read from its provider for this test. */
+    kind: z.enum(['card', 'not_routed', 'fetched']),
+    id: z.string().nullable(),
+  }),
+  placement: intakePlacementSchema.nullable(),
+  /** Why no board takes it. */
+  reason: z.string().nullable(),
+  /** What this answer leaves out, such as a fetched pull request joining an existing card instead. */
+  note: z.string().nullable(),
+  /**
+   * The evaluator that files this project's items. Both endpoints always answer as `intake-order`;
+   * under `route-list` filing can land items elsewhere, such as on the default board.
+   */
+  evaluator: z.enum(['route-list', 'intake-order']),
+  /** Every board in intake order and every placing rule on it, with what it answered. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          phase: z.string(),
+          /** `took` decides; `lost` matched after the rule that took it; `phase_refuses` matched but its phase can't hold the item. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'phase_refuses', 'disabled']),
+          /** With `no_match`: the conditions it failed on. */
+          failed: z.array(failedConditionSchema).optional(),
+          /** With `lost`: the rule that took it. */
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+        }),
+      ),
+    }),
+  ),
+  /** On a card: where it is now, and the intake rule that filed it, if one did. */
+  current: z.object({ boardKey: z.string(), phase: z.string().nullable(), routeId: z.string().nullable() }).nullable(),
+  /**
+   * On a card: the event sent in the request, then its recent status events newest first, each
+   * replayed against today's rules (or the draft) and the card as it is now.
+   */
+  moves: z.array(
+    z.object({
+      /** The stored event's decision; null for the event sent in the request. */
+      decisionId: z.string().nullable(),
+      at: z.string().nullable(),
+      event: z.object({
+        type: z.enum(STATUS_EVENTS),
+        reason: z.enum(CLOSE_REASONS).optional(),
+        labels: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        assignees: z.object({ added: z.array(z.string()), removed: z.array(z.string()) }).optional(),
+        pullRequestTrusted: z.boolean().optional(),
+      }),
+      /**
+       * `moves` to `to`; `stays` where it is; `rule_default` leaves it to the integration's own move
+       * (to `phase`, when there is one) because no rule takes it; `ignored` when the event can't move
+       * a card in its state, with `reason`; `unknown` when an update burst reaches back past the
+       * history read, with `reason`.
+       */
+      outcome: z.enum(['moves', 'stays', 'rule_default', 'ignored', 'unknown']),
+      to: z.object({ boardKey: z.string(), phase: z.string(), routeId: z.string() }).nullable(),
+      phase: z.string().nullable(),
+      reason: z.string().nullable(),
+      /** Every rule on the card's board that handles the event, top to bottom. */
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          /** `skipped` matched but its target board or phase can't take the card, with `reason`. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'skipped', 'disabled']),
+          failed: z.array(failedConditionSchema).optional(),
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+          reason: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -180,7 +601,6 @@ export const projectListRepositorySchema = z.object({
   defaultBranch: z.string().nullable(),
   /** The branch set on the link; null means the repository's default branch. */
   branch: z.string().nullable(),
-  sandboxWorkdir: z.string(),
 });
 export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
 
@@ -204,6 +624,60 @@ const cardSchema = z
 const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
+const runQueueEntrySchema = z.object({
+  decisionId: z.string(),
+  /** `waiting`: no slot yet. `claimed`: a server holds a slot for it, starting or running the run. */
+  state: z.enum(['waiting', 'claimed']),
+  type: z.enum(['invokeSkill', 'sendMessage', 'signalActivity']),
+  /**
+   * `interactive`: a reply a person sent on the card's pull request or issue,
+   * claimed ahead of automated runs into its own reserve of slots.
+   * `automated`: everything else.
+   */
+  lane: z.enum(['automated', 'interactive']),
+  role: z.string().nullable(),
+  /** The skill an `invokeSkill` run starts; `null` for a prompt run and for messages and activity. */
+  skillName: z.string().nullable(),
+  /** When it became claimable for `waiting`, when it was claimed for `claimed`. */
+  queuedSince: z.string(),
+  workItem: z
+    .object({
+      id: z.string(),
+      key: z.string().nullable(),
+      title: z.string(),
+      board: z.string().nullable(),
+      phase: z.string().nullable(),
+    })
+    .nullable(),
+});
+
+export const runQueueResponseSchema = z.object({
+  /** This server process's run slots; `null` when it runs no dispatcher. Other servers keep their own. */
+  slots: z
+    .object({
+      scope: z.literal('server'),
+      /** Automated run slots, including any a person's reply borrowed once its reserve was full. */
+      inUse: z.number().int(),
+      cap: z.number().int(),
+      /** Slots kept for people's replies, on top of `cap`. */
+      interactive: z.object({ inUse: z.number().int(), cap: z.number().int() }),
+    })
+    .nullable(),
+  /** The project's runs holding a slot on any server. */
+  running: z.number().int(),
+  claimed: z.array(runQueueEntrySchema),
+  /** Every waiting run, though `queued` lists at most 50. */
+  queuedCount: z.number().int(),
+  /** `queuedCount` split by lane. */
+  queuedByLane: z.object({ automated: z.number().int(), interactive: z.number().int() }),
+  /**
+   * Waiting replies, then automated runs, each oldest first: interactive runs are claimed before
+   * automated ones. `position` counts within the run's lane.
+   */
+  queued: z.array(runQueueEntrySchema.extend({ position: z.number().int().positive() })),
+});
+export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
+
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
@@ -217,69 +691,16 @@ export const updateProjectBodySchema = z
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
+    /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
+    /** @deprecated Ignored. The review skill decides whether to publish its test check. */
     reviewTestChecksEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. A card is self-reviewed when its board has a self-review phase. */
     selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
-
-const environmentRepositorySchema = z.object({
-  projectRepositoryId: z.string(),
-  connectionId: z.string(),
-  repositoryId: z.string(),
-  // Null when the repository row behind the link is missing.
-  slug: z.string().nullable(),
-  defaultBranch: z.string().nullable(),
-  position: z.number().int(),
-  inEnvironment: z.boolean(),
-  setupCommand: z.string().nullable(),
-  teardownCommand: z.string().nullable(),
-  lastBuildStatus: z.enum(['unbuilt', 'configured', 'failed']),
-  lastBuildError: z.string().nullable(),
-  lastBuiltAt: z.string().nullable(),
-});
-
-/** The configured FactorySandbox as factory describes it: provider id, JSON Schema of its settings, capabilities. */
-export const environmentSandboxSchema = z.object({
-  provider: z.string(),
-  settingsSchema: z.record(z.string(), z.unknown()),
-  capabilities: z.object({
-    template: z.boolean(),
-    builds: z.object({ available: z.boolean(), history: z.boolean() }),
-  }),
-});
-
-/** When the environment builds on its own; present only when the sandbox can build. */
-export const environmentBuildTriggersSchema = z.object({
-  schedule: z.object({
-    enabled: z.boolean(),
-    cron: z.string().nullable(),
-    timezone: z.string().nullable(),
-    /** False when the host's storage has no schedules domain; the cron trigger cannot be enabled then. */
-    scheduleAvailable: z.boolean(),
-  }),
-  push: z.object({ enabled: z.boolean(), debounceMinutes: z.number().int() }),
-});
-
-/** The last build factory asked the provider for, from the project row only; status is read live. */
-export const environmentLastBuildSchema = z.object({ buildId: z.string(), attemptedAt: z.string().nullable() });
-
-export const projectEnvironmentResponseSchema = z.object({
-  environment: z.object({
-    sandbox: environmentSandboxSchema,
-    /** The stored settings document; only keys the user set. */
-    settings: z.record(z.string(), z.unknown()),
-    sandboxWorkingDirectory: z.string().nullable(),
-    workspaceSetupCommand: z.string().nullable(),
-    activeTemplateId: z.string().nullable(),
-    activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
-    repositories: z.array(environmentRepositorySchema),
-    buildTriggers: environmentBuildTriggersSchema.optional(),
-    build: environmentLastBuildSchema.nullable().optional(),
-  }),
-});
 
 const environmentBuildStatusSchema = z.enum(['pending', 'building', 'ready', 'failed', 'unknown']);
 
@@ -304,67 +725,6 @@ export const environmentBuildsResponseSchema = z.object({ builds: z.array(enviro
 export const environmentBuildResponseSchema = z.object({ build: environmentBuildSchema });
 
 const buildPathSchema = projectPathSchema.extend({ buildId: z.string().min(1) });
-
-const environmentRepositoryPatchSchema = z.object({
-  projectRepositoryId: uuidSchema,
-  position: z.number().int().min(1).optional(),
-  inEnvironment: z.boolean().optional(),
-  setupCommand: nullableTrimmed(2_000).optional(),
-  teardownCommand: nullableTrimmed(2_000).optional(),
-});
-
-export const updateProjectEnvironmentBodySchema = z
-  .object({
-    sandboxWorkingDirectory: nullableTrimmed(1_000)
-      .refine(value => value === null || value.startsWith('/'), {
-        message: 'sandboxWorkingDirectory must be absolute',
-      })
-      .optional(),
-    /** Partial settings merged onto the stored document; null removes a key. Validated by the FactorySandbox. */
-    settings: z.record(z.string(), z.unknown().nullable()).optional(),
-    workspaceSetupCommand: nullableTrimmed(2_000).optional(),
-    /** Build triggers; only accepted when the sandbox can build. */
-    buildTriggers: z
-      .object({
-        schedule: z
-          .object({
-            enabled: z.boolean(),
-            cron: z.string().trim().min(1).max(100).optional(),
-            timezone: z.string().trim().min(1).max(100).optional(),
-          })
-          .optional(),
-        push: z
-          .object({
-            enabled: z.boolean().optional(),
-            debounceMinutes: z.number().int().min(0).max(1_440).optional(),
-          })
-          .optional(),
-      })
-      .optional(),
-    repositories: z
-      .array(environmentRepositoryPatchSchema)
-      .max(100)
-      .superRefine((entries, ctx) => {
-        const ids = new Set(entries.map(entry => entry.projectRepositoryId));
-        if (ids.size !== entries.length) {
-          ctx.addIssue({ code: 'custom', message: 'Each repository may be listed once' });
-        }
-        const positions = entries.flatMap(entry => (entry.position === undefined ? [] : [entry.position]));
-        if (positions.length === 0) return;
-        const expected = Array.from({ length: entries.length }, (_, index) => index + 1);
-        if (
-          positions.length !== entries.length ||
-          [...positions].sort((a, b) => a - b).some((p, i) => p !== expected[i])
-        ) {
-          ctx.addIssue({
-            code: 'custom',
-            message: 'Positions must be a permutation of 1..n over the listed repositories',
-          });
-        }
-      })
-      .optional(),
-  })
-  .refine(input => Object.keys(input).length > 0, { message: 'At least one environment field is required' });
 
 const stagesSchema = z
   .array(
@@ -392,6 +752,389 @@ const sessionSchema = z.object({
   threadId: z.string().min(1).max(512),
 });
 
+const boundedLimitSchema = (defaultValue: number, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform(value => {
+      const parsed = value ? Number.parseInt(value, 10) : defaultValue;
+      return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
+    });
+/** Without `sessionId`, `scope`, `started`, `source` or `workItemId`, the list is the whole board. */
+const workItemListQuerySchema = z
+  .object({
+    /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
+    sessionId: z.array(sessionSchema.shape.sessionId).optional(),
+    /** `sessions` narrows the list to the cards that hold any session and the cards related to them. */
+    scope: z.enum(['sessions']).optional(),
+    /** `false` narrows the list to the cards that hold no session, most recently updated first. */
+    started: z.enum(['false']).optional(),
+    /** With `started=false`: words the card must all answer, as the phases' `q` reads them. */
+    q: z.string().max(200).optional(),
+    /** With `started=false`: how many cards to send. */
+    limit: boundedLimitSchema(20, 50),
+    /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
+    source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
+    /**
+     * Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing.
+     * Each card comes with the `version` the phases read names it by.
+     */
+    workItemId: z.array(uuidSchema).min(1).max(100).optional(),
+    /**
+     * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
+     * this server did not issue reads as none, and the board answers whole.
+     */
+    since: z
+      .string()
+      .regex(/^\d{1,15}$/)
+      .optional()
+      .catch(undefined),
+  })
+  .refine(query => !(query.scope && query.sessionId), {
+    path: ['scope'],
+    message: 'Send scope or sessionId, not both',
+  })
+  .refine(query => !(query.started && (query.scope || query.sessionId)), {
+    path: ['started'],
+    message: 'Send started without scope or sessionId',
+  })
+  .refine(query => query.q === undefined || query.started !== undefined, {
+    path: ['q'],
+    message: 'Send q only with started=false',
+  })
+  .refine(query => !(query.source && (query.started || query.scope || query.sessionId)), {
+    path: ['source'],
+    message: 'Send source without started, scope or sessionId',
+  })
+  .refine(query => !(query.workItemId && (query.source || query.started || query.scope || query.sessionId)), {
+    path: ['workItemId'],
+    message: 'Send workItemId without source, started, scope or sessionId',
+  })
+  // A narrowed list is not the board a cursor names, so it answers as it does without one.
+  .transform(query =>
+    query.sessionId || query.scope || query.started || query.source || query.workItemId
+      ? { ...query, since: undefined }
+      : query,
+  );
+
+const countSchema = z.number().int().nonnegative();
+
+export const workItemSessionRepositoryResponseSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('resolved'), projectRepositoryId: z.string(), slug: z.string() }),
+  z.object({ status: z.literal('unlinked'), hint: z.string() }),
+]);
+
+/** What the draft page's starter buttons count on the project's default board. */
+export const workItemStartersResponseSchema = z.object({
+  failed: countSchema,
+  changesRequested: countSchema,
+  review: z.object({ count: countSchema, oldestOpenedAt: z.string().optional() }),
+  undecided: countSchema,
+  untriaged: countSchema,
+  unplannedBugs: countSchema,
+  sweep: z.object({ area: z.string(), count: countSchema }).optional(),
+  stale: countSchema,
+});
+
+export const workItemActivityQuerySchema = z.object({
+  since: z.iso.datetime({ offset: true }).transform(since => Date.parse(since)),
+});
+
+/** When the project's cards were created and completed since an instant, and how many cards it has in all. */
+export const workItemActivityResponseSchema = z.object({
+  total: countSchema,
+  createdAt: z.array(z.string()),
+  doneAt: z.array(z.string()),
+});
+
+export const BOARD_PHASES_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
+
+/** Repeatable. The values picked for one filter: a card matches on any of them, and none picks every card. */
+const pickedValuesSchema = z
+  .array(z.string().min(1).max(512))
+  .max(100)
+  .default([])
+  .transform(values => new Set(values));
+
+/** `<phase>:<count>`: how many cards of one phase to list. */
+const phaseWindowSchema = z
+  .string()
+  .transform((entry): [phase: string, count: string] => {
+    const colon = entry.lastIndexOf(':');
+    return [entry.slice(0, Math.max(colon, 0)), entry.slice(colon + 1)];
+  })
+  .pipe(
+    z.tuple([
+      boardIdentifierSchema,
+      z
+        .string()
+        .regex(/^[1-9]\d{0,5}$/)
+        .transform(Number),
+    ]),
+  );
+
+/** One view of a board: its order, its search and filters, and how deep each phase is listed. */
+export const boardPhasesQuerySchema = z.object({
+  /** `recent-mine` puts the cards the signed-in user last moved into the phase before the others. */
+  sort: z.enum(BOARD_PHASES_SORTS).default('recent'),
+  /**
+   * Words the card must all answer: each one in its title, key, number or source id, or in the key of
+   * a pull request attached to it, or naming its id or one of its branches whole. A number or key with
+   * its `#` or `!` (`#12`, `acme/app#12`) is read whole: it never finds `#123`. A pasted link finds
+   * the card carrying the issue or pull request it names, whatever page of it the link opens; a link
+   * to a repository or project finds the cards it holds; a link to a Factory card finds that card.
+   */
+  q: z.string().max(200).optional(),
+  /** A provider (`github`, `linear`, `manual`…), or `pull-request` for every card that has one. */
+  source: pickedValuesSchema,
+  /** Linear project ids. Picked without `source`, they keep Linear cards only. */
+  linearProject: pickedValuesSchema,
+  /** A card matches when it carries every one of them. */
+  label: pickedValuesSchema,
+  /** Participant ids (`github:octocat`, `factory:<user id>`) related to the card in any way. */
+  teammate: pickedValuesSchema,
+  author: pickedValuesSchema,
+  assignee: pickedValuesSchema,
+  reviewer: pickedValuesSchema,
+  /** Factory users who created the card, moved it or started a session on it. */
+  worked: pickedValuesSchema,
+  /** How many cards each phase lists. */
+  limit: boundedLimitSchema(50, 200),
+  /**
+   * Repeatable `<phase>:<count>`: lists that phase's first `count` cards instead of `limit`.
+   * One for a phase the board does not have is ignored.
+   */
+  window: z
+    .array(phaseWindowSchema)
+    .max(64)
+    .default([])
+    .refine(windows => new Set(windows.map(([phase]) => phase)).size === windows.length, {
+      message: 'Send one window per phase',
+    })
+    .transform(windows => new Map(windows)),
+  /**
+   * A card to answer for wherever it lies: the answer names it with its place in each phase, and
+   * `cards=true` sends its body. No phase is listed deeper for it.
+   */
+  item: uuidSchema.optional(),
+  /** `true` also sends the body of every card the answer names. */
+  cards: z.enum(['true']).optional(),
+});
+
+/**
+ * Names a card and the body the answer was read from. `version` is another value whenever any of
+ * the body is, so a reader that holds the card at this version holds this body.
+ */
+const cardStampSchema = z.object({ id: z.string(), version: z.string() });
+
+export const boardPhasesResponseSchema = z.object({
+  /** The board's phases in declaration order. */
+  phases: z.array(
+    z.object({
+      phase: z.string(),
+      /** Cards of this phase that match the view. */
+      total: countSchema,
+      /** The first of them in the view's order: what the reader shows. */
+      cards: z.array(cardStampSchema),
+    }),
+  ),
+  /** With `item`: the asked card, when the board holds it. */
+  item: cardStampSchema
+    .extend({
+      /**
+       * Each phase the view lists the card under, and how many cards it lists before it there.
+       * Empty when the search or filters leave the card out.
+       */
+      places: z.array(z.object({ phase: z.string(), position: countSchema })),
+    })
+    .optional(),
+  /**
+   * Cards related to a listed card or to the asked one that no phase lists: the first `limit` of
+   * each card's, in the board's order.
+   */
+  related: z.array(cardStampSchema),
+  /** How many such cards there are, named in `related` or not. */
+  relatedTotal: countSchema,
+  /** Cards of the board, whatever the search and filters. */
+  boardTotal: countSchema,
+  /** Cards of the board that match the view, each counted once: a card in two phases is one. */
+  matchingTotal: countSchema,
+  /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
+  workItems: z.array(cardSchema.extend({ version: z.string() })).optional(),
+});
+
+/** What the board's filter menus offer, read over every card of the project. */
+export const workItemFilterOptionsResponseSchema = z.object({
+  /** Every label on a card, sorted. */
+  labels: z.array(z.string()),
+  /** The people the cards' sources name, sorted by name. `id` is what a people filter sends. */
+  people: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      source: z.enum(['github', 'gitlab', 'linear', 'jira', 'incidentio']),
+    }),
+  ),
+  /** The Factory users who created a card, moved one or started a session on one, sorted. */
+  actorIds: z.array(z.string()),
+});
+
+export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
+export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
+export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
+
+/** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
+const sessionRowWindowSchema = z
+  .string()
+  .transform((entry): [group: string, count: string] => {
+    const colon = entry.lastIndexOf(':');
+    return [entry.slice(0, Math.max(colon, 0)), entry.slice(colon + 1)];
+  })
+  .pipe(
+    z.tuple([
+      z.string().min(1).max(512),
+      z
+        .string()
+        .regex(/^[1-9]\d{0,2}$/)
+        .transform(Number)
+        .pipe(z.number().max(SESSION_ROW_WINDOW_MAX)),
+    ]),
+  );
+
+const sessionIdQuerySchema = z.string().min(1).max(512);
+
+export const sessionRowsQuerySchema = z.object({
+  sort: z.enum(SESSION_ROW_SORTS).default('activity'),
+  groupBy: z.enum(SESSION_ROW_GROUP_BYS).default('none'),
+  /** `all`, `mine`, or `owner:<user id>`. */
+  owner: sessionRowOwnerSchema.default(SESSION_ROW_ALL_OWNERS),
+  status: z.enum(SESSION_ROW_STATUSES).optional(),
+  updated: z.enum(SESSION_ROW_UPDATED_WITHIN).optional(),
+  /** `board:<board id>`, `user` or `slack`: keeps the rows that start there. */
+  source: sessionRowSourceSchema.optional(),
+  /** `true` lists a card's other sessions under its row. */
+  children: z.enum(['true']).optional(),
+  /** Repeatable. Sessions listed before every other one of their group. */
+  pin: z
+    .array(sessionIdQuerySchema)
+    .max(SESSION_ROW_PINS_MAX)
+    .default([])
+    .transform(ids => new Set(ids)),
+  /** The session the reader has open: its group lists it however deep it lies. */
+  open: sessionIdQuerySchema.optional(),
+  /** Repeatable `<group key>:<count>`: lists that group's first `count` rows instead of `SESSION_ROW_WINDOW`. */
+  window: z
+    .array(sessionRowWindowSchema)
+    .max(SESSION_ROW_WINDOWS_MAX)
+    .default([])
+    .refine(windows => new Set(windows.map(([group]) => group)).size === windows.length, {
+      message: 'Send one window per group',
+    })
+    .transform(windows => new Map(windows)),
+});
+
+const sessionRowStatusSchema = z.enum(SESSION_ROW_STATUSES);
+
+const changeRequestSchema = z.object({
+  url: z.string().optional(),
+  provider: z.enum(['github', 'gitlab']),
+  number: z.number().optional(),
+  status: z.enum(PULL_REQUEST_STATUSES).optional(),
+  draft: z.boolean(),
+  syncedAt: z.number().optional(),
+}) satisfies z.ZodType<CardChangeRequest>;
+
+const sessionRowFields = {
+  session: z.object({
+    id: z.string(),
+    sessionId: z.string(),
+    projectRepositoryId: z.string().nullable(),
+    userId: z.string(),
+    branch: z.string(),
+    title: z.string().nullable(),
+    visibility: z.enum(['org', 'private']),
+    createdAt: z.string(),
+    owner: z.object({ id: z.string(), name: z.string(), avatarUrl: z.string().optional() }).optional(),
+  }),
+  /** `factory` for a session the Factory runs on a card's branch, `user` for one a person or Slack started. */
+  origin: z.enum(['factory', 'user']),
+  board: z.string().optional(),
+  status: sessionRowStatusSchema,
+  /** The status of the card's whole row: its most urgent session's. */
+  cardStatus: sessionRowStatusSchema.optional(),
+  pinned: z.boolean(),
+  /** The card's last change for a card's session, else the session's. */
+  updatedAt: z.string(),
+  card: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      workItemUrl: z.string().nullable(),
+      externalSource: z
+        .object({
+          integrationId: z.string(),
+          type: z.string(),
+          externalId: z.string(),
+          workspaceId: z.string().optional(),
+          url: z.string().optional(),
+        })
+        .nullable(),
+    })
+    .optional(),
+  itemId: z.string().optional(),
+  threadId: z.string().optional(),
+  pullRequest: changeRequestSchema.optional(),
+  cardSessionIds: z.array(z.string()).optional(),
+  phaseLabel: z.string().optional(),
+  runByFactory: z.literal(true).optional(),
+  /** A followed card's session waiting on a person. */
+  waitingSessionId: z.string().optional(),
+};
+
+const sessionRowSchema = z.object({
+  ...sessionRowFields,
+  /** With `children=true`: the card's other sessions. */
+  childRows: z.array(z.object(sessionRowFields)).optional(),
+});
+
+export const sessionRowsResponseSchema = z.object({
+  /** Rows of the project, whatever the filters. */
+  total: countSchema,
+  matching: countSchema,
+  groups: z.array(
+    z.object({
+      /** `board:<id>`, `user`, `slack`, `status:<status>`, `owner:<user id>` or `all`. */
+      key: z.string(),
+      /** Rows of this group that match the filters. */
+      total: countSchema,
+      openIndex: countSchema.optional(),
+      /** The first of them in the view's order, keeping the open session. */
+      rows: z.array(sessionRowSchema),
+    }),
+  ),
+  /** Boards some row belongs to, whatever the filters. */
+  boards: z.array(z.string()),
+  /** People who own some row, whatever the filters. */
+  owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
+});
+
+export const sessionActivityResponseSchema = z.object({
+  runningSessionIds: z.array(z.string()),
+  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
+  parkedSessionIds: z.array(z.string()),
+  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
+  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
+  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
+  sessionHeldCardIds: z.array(z.string()),
+  /** Cards in `cardStatuses` working, and waiting on a person. */
+  cards: z.object({ working: countSchema, waiting: countSchema }),
+});
+
+export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;
+export type SessionRow = z.infer<typeof sessionRowSchema>;
+export type SessionRowsResponse = z.infer<typeof sessionRowsResponseSchema>;
+export type SessionActivityResponse = z.infer<typeof sessionActivityResponseSchema>;
+
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
   .union([z.record(z.string(), z.unknown()), z.null()])
@@ -415,6 +1158,7 @@ const metadataSchema = z
 
 export const createWorkItemBodySchema = z.object({
   title: rawBoundedTrimmed(500),
+  description: descriptionSchema.optional(),
   board: z.string().min(1).max(128).optional(),
   externalSource: externalSourceSchema.optional(),
   parentWorkItemId: uuidSchema.nullable().optional(),
@@ -426,6 +1170,7 @@ export const createWorkItemBodySchema = z.object({
 export const updateWorkItemBodySchema = z
   .object({
     title: rawBoundedTrimmed(500).optional(),
+    description: descriptionSchema.optional(),
     board: z.string().min(1).max(128).optional(),
     parentWorkItemId: uuidSchema.nullable().optional(),
     stages: stagesSchema.optional(),
@@ -467,7 +1212,8 @@ export const automationRunStartBodySchema = z
   .object({
     requestId: trimmedUuidSchema,
     expectedRevision: z.number().int().min(1),
-    role: z.enum(FACTORY_ROLE_VALUES),
+    // Checked against the card's board when the request arrives.
+    role: nonEmptyTrimmed(32),
     skillName: nonEmptyTrimmed(128),
     arguments: nonEmptyTrimmed(4_096).optional(),
   })
@@ -488,14 +1234,6 @@ const decisionStatusSchema = z.enum([
   'succeeded',
   'failed',
 ]);
-const boundedLimitSchema = (defaultValue: number, max: number) =>
-  z
-    .string()
-    .optional()
-    .transform(value => {
-      const parsed = value ? Number.parseInt(value, 10) : defaultValue;
-      return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
-    });
 const decisionCursorSchema = z
   .string()
   .optional()
@@ -537,13 +1275,7 @@ export const decisionQuerySchema = z.object({
   limit: boundedLimitSchema(25, 50),
 });
 
-const attentionKindSchema = z.enum([
-  'automation-failed',
-  'automation-proposed',
-  'mention',
-  'activity',
-  'agent-waiting',
-]);
+const attentionKindSchema = z.enum(['automation-failed', 'automation-proposed', 'agent-waiting']);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
 type AttentionStreamPosition = { occurredAt: Date; id: string };
 type AttentionCursorMap = Map<AttentionKind, AttentionStreamPosition | undefined>;
@@ -630,6 +1362,8 @@ const skillNameSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
 const skillResponseSchema = z.object({ skill: entitySchema });
+/** `skill` is null when the request deleted a skill the project created. */
+const skillRevertResponseSchema = z.object({ skill: entitySchema.nullable() });
 
 /** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
 function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
@@ -650,6 +1384,12 @@ export const skillOverrideBodySchema = z
  */
 export const skillOverrideSaveRequestSchema = skillPathSchema
   .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
+
+/** A new skill's SKILL.md must load under the name it is created with, exactly as the runtime validates it. */
+export const skillCreateBodySchema = z
+  .object({ name: skillNameSchema, content: skillContentSchema })
+  .strict()
   .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
 export const FACTORY_ROUTE_CONTRACTS = {
@@ -718,28 +1458,43 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: buildPathSchema,
     responseSchema: environmentBuildResponseSchema,
   },
+  projectSandboxEnvsList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/sandbox-envs',
+    description:
+      'List the sandbox environment variables of a Factory project: names and where they apply, never values',
+    pathSchema: projectPathSchema,
+    responseSchema: sandboxEnvsListResponseSchema,
+  },
+  projectSandboxEnvSet: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Create or replace a sandbox environment variable of a Factory project',
+    pathSchema: sandboxEnvPathSchema,
+    bodySchema: sandboxEnvSetBodySchema,
+    responseSchema: sandboxEnvResponseSchema,
+  },
+  projectSandboxEnvUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Change where a sandbox environment variable of a Factory project applies',
+    pathSchema: sandboxEnvPathSchema,
+    bodySchema: sandboxEnvUpdateBodySchema,
+    responseSchema: sandboxEnvResponseSchema,
+  },
+  projectSandboxEnvDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/sandbox-envs/:name',
+    description: 'Delete a sandbox environment variable of a Factory project',
+    pathSchema: sandboxEnvPathSchema,
+    responseSchema: z.null(),
+  },
   projectApplyDefaultModel: {
     method: 'POST',
     path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Apply the Factory default model to running work and review threads',
+    description: 'Start applying the Factory default model to running work and review threads in the background',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      modelId: z.string(),
-      applied: z.array(z.string()),
-      skipped: z.array(
-        z.object({
-          threadId: z.string(),
-          reason: z.enum([
-            'not-running',
-            'work-item-missing',
-            'stage-inactive',
-            'thread-missing',
-            'mode-unknown',
-            'apply-failed',
-          ]),
-        }),
-      ),
-    }),
+    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
   },
   projectDelete: {
     method: 'DELETE',
@@ -779,11 +1534,25 @@ export const FACTORY_ROUTE_CONTRACTS = {
           description: z.string().optional(),
           /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
           source: z.enum(['builtin', 'app', 'stored']).optional(),
-          /** False only for the legacy Review board; built-in Work, app and stored boards can be edited. */
+          /** True for every board; only the retired Review board was read-only. */
           editable: z.boolean().optional(),
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
+          /**
+           * Which phase plays each part of the pull request loop, read from what the phases declare.
+           * A part the board has no phase for is absent. Absent from servers older than the loop.
+           */
+          flow: z
+            .object({
+              triage: z.string().optional(),
+              build: z.string().optional(),
+              selfReview: z.string().optional(),
+              pullRequestReview: z.string().optional(),
+              completed: z.string().optional(),
+              canceled: z.string().optional(),
+            })
+            .optional(),
           phases: z.array(
             z.object({
               id: z.string(),
@@ -799,6 +1568,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
               role: z.string().optional(),
               /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
               skill: z.string().optional(),
+              /** The objective the phase's runs pursue as a goal (`runner.goal`). */
+              goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).optional(),
               autoStart: z.boolean().optional(),
               /** Cards the phase starts on its own for; absent means every card. */
               autoStartWhen: cardRuleGroupSchema.optional(),
@@ -810,6 +1581,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
                   autoApproveWhen: cardRuleGroupSchema.optional(),
                 })
                 .optional(),
+              /** Factory tools the phase grants the session working the card there. */
+              tools: z.array(z.string()).optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),
@@ -825,6 +1598,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: "Get a project board's definition",
     pathSchema: boardPathSchema,
     responseSchema: storedBoardResponseSchema,
+  },
+  boardPhases: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards/:boardKey/phases',
+    description: 'List the cards under each phase of a board view, in order, with how many match',
+    pathSchema: boardPathSchema,
+    querySchema: boardPhasesQuerySchema,
+    responseSchema: boardPhasesResponseSchema,
   },
   boardCreate: {
     method: 'POST',
@@ -863,6 +1644,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/intake-routes',
     description: "List a Factory project's intake routes in evaluation order",
     pathSchema: projectPathSchema,
+    querySchema: intakeRouteListQuerySchema,
     responseSchema: intakeRouteListResponseSchema,
   },
   intakeRouteGet: {
@@ -875,7 +1657,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   intakeRouteCreate: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes',
-    description: 'Add an intake route at the end of a Factory project',
+    description:
+      'Add an intake route to a Factory project, after its routes; a route that places new cards goes ahead of the first route that takes every new card',
     pathSchema: projectPathSchema,
     bodySchema: intakeRouteInputSchema,
     responseSchema: intakeRouteResponseSchema,
@@ -896,6 +1679,20 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: boardDeleteQuerySchema,
     responseSchema: z.null(),
   },
+  intakeRouteReroutePreview: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Untouched cards the project's intake routes would now file on a different board",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteResponseSchema,
+  },
+  intakeRouteRerouteApply: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Move untouched cards to the start of the board the project's intake routes now file them on",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteApplyResponseSchema,
+  },
   intakeRouteReorder: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes/reorder',
@@ -904,16 +1701,115 @@ export const FACTORY_ROUTE_CONTRACTS = {
     bodySchema: intakeRouteReorderBodySchema,
     responseSchema: intakeRouteListResponseSchema,
   },
+  intakeOrderGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-order',
+    description: "The order a Factory project's boards are asked to take a new item, and the evaluator in use",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeOrderResponseSchema,
+  },
+  intakeOrderUpdate: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/intake-order',
+    description: "Set the order a Factory project's boards are asked to take a new item, or its evaluator",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeOrderBodySchema,
+    responseSchema: intakeOrderResponseSchema,
+  },
+  intakeNotRoutedList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake/not-routed',
+    description: "Items no board's intake rules took, oldest first, a page at a time",
+    pathSchema: projectPathSchema,
+    querySchema: intakeNotRoutedQuerySchema,
+    responseSchema: intakeNotRoutedResponseSchema,
+  },
+  intakeRouteAgain: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/not-routed/:decisionId/route-again',
+    description: 'Run intake again for an item no board took, filing it where the rules now say',
+    pathSchema: intakeDecisionPathSchema,
+    responseSchema: intakeRouteAgainResponseSchema,
+  },
+  intakeSkippedList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake/skipped',
+    description: 'How often each card-move rule was skipped in the last 30 days, with its newest skip',
+    pathSchema: projectPathSchema,
+    responseSchema: intakeSkippedResponseSchema,
+  },
+  intakeDryRun: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/dry-run',
+    description:
+      "Run a Factory project's intake rules, saved or unsaved, over its newest 200 items without filing anything",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeDryRunBodySchema,
+    responseSchema: intakeDryRunResponseSchema,
+  },
+  intakeTest: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/test',
+    description: 'Show where intake would file one item, and what every rule answered, without filing it',
+    pathSchema: projectPathSchema,
+    bodySchema: intakeTestBodySchema,
+    responseSchema: intakeTestResponseSchema,
+  },
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description: 'List Factory work items',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
+      /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
       workItems: z.array(cardSchema),
-      runningSessionIds: z.array(z.string()),
-      parkedSessionIds: z.array(z.string()),
+      /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
+      total: z.number().int().nonnegative().optional(),
+      /** Names this read of the whole board. Absent when the next read must list it whole again. */
+      cursor: z.string().optional(),
+      /** Cards gone since the `since` sent. Its presence marks an answer that holds only what moved. */
+      removedIds: z.array(z.string()).optional(),
+      /** With `removedIds`: `boardCheck` of the whole board, for a reader to check its merged copy against. */
+      check: z.string().optional(),
     }),
+  },
+  workItemStarters: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/starters',
+    description: 'Count the cards behind each new-session starter on the default board',
+    pathSchema: projectPathSchema,
+    responseSchema: workItemStartersResponseSchema,
+  },
+  workItemActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/activity',
+    description: 'List when cards were created and completed since an instant',
+    pathSchema: projectPathSchema,
+    querySchema: workItemActivityQuerySchema,
+    responseSchema: workItemActivityResponseSchema,
+  },
+  workItemFilterOptions: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/filter-options',
+    description: 'List the labels and people the cards of a project can be filtered by',
+    pathSchema: projectPathSchema,
+    responseSchema: workItemFilterOptionsResponseSchema,
+  },
+  sessionRows: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/session-rows',
+    description: "List the sidebar's session rows of a view, grouped and in order, with how many match",
+    pathSchema: projectPathSchema,
+    querySchema: sessionRowsQuerySchema,
+    responseSchema: sessionRowsResponseSchema,
+  },
+  sessionActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/session-activity',
+    description: "List which of a project's sessions are running or waiting on a person, and each card's status",
+    pathSchema: projectPathSchema,
+    responseSchema: sessionActivityResponseSchema,
   },
   workItemCreate: {
     method: 'POST',
@@ -941,10 +1837,30 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemTransition: {
     method: 'POST',
     path: '/web/factory/projects/:id/work-items/:workItemId/transition',
-    description: 'Transition a work item with its expected revision',
+    description:
+      "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase",
     pathSchema: transitionPathSchema,
     bodySchema: transitionBodySchema,
     responseSchema: entitySchema,
+  },
+  workItemWorkingPullRequest: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/work-items/:workItemId/working-pull-request',
+    description:
+      "Make one of the pull requests linked to a card the one its sessions work on. The only way an outside author's pull request becomes a card's working pull request.",
+    pathSchema: transitionPathSchema,
+    bodySchema: z.object({
+      pullRequest: z.number().int().positive(),
+      expectedRevision: z.number().int().nonnegative(),
+    }),
+    responseSchema: workItemResponseSchema,
+  },
+  workItemSessionRepository: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId/session-repository',
+    description: "The repository a session on the card is filed under, resolved as the card's runs resolve it",
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemSessionRepositoryResponseSchema,
   },
   workItemStart: {
     method: 'POST',
@@ -969,6 +1885,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: decisionQuerySchema,
     responseSchema: z.object({ decisions: z.array(entitySchema), nextCursor: z.string().optional() }),
+  },
+  runQueue: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/run-queue',
+    description:
+      "List the project's automated runs waiting for a run slot, oldest first, and the runs holding one. The cap is per server process; manual starts are claimed ahead of this queue.",
+    pathSchema: projectPathSchema,
+    responseSchema: runQueueResponseSchema,
   },
   decisionApprove: {
     method: 'POST',
@@ -1047,10 +1971,18 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: z.object({ projectId: uuidSchema.optional() }),
     responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
   },
+  skillCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/skills',
+    description: 'Create a skill for one Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: skillCreateBodySchema,
+    responseSchema: skillResponseSchema,
+  },
   skillOverrideSave: {
     method: 'PUT',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Save a project's edited SKILL.md for a Factory skill",
+    description: "Save a project's SKILL.md for a Factory skill: an edit of an app skill, or a skill it created",
     pathSchema: skillPathSchema,
     bodySchema: skillOverrideBodySchema,
     responseSchema: skillResponseSchema,
@@ -1058,9 +1990,10 @@ export const FACTORY_ROUTE_CONTRACTS = {
   skillOverrideRevert: {
     method: 'DELETE',
     path: '/web/factory/projects/:id/skills/:name',
-    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    description:
+      "Revert a project's edited Factory skill to its original SKILL.md, or delete a skill the project created",
     pathSchema: skillPathSchema,
-    responseSchema: skillResponseSchema,
+    responseSchema: skillRevertResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

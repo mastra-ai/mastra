@@ -1,7 +1,10 @@
 import type { PlanResume } from '@mastra/client-js';
 
 import { isPlanReadablePath, usePlanFile } from '../../../../hooks/use-fs';
-import { useRespondAgentControllerSuspensionMutation } from '../../../../hooks/useAgentControllerRunMutations';
+import {
+  isEndedPrompt,
+  useRespondAgentControllerSuspensionMutation,
+} from '../../../../hooks/useAgentControllerRunMutations';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from '../components/submit-plan-source';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -52,7 +55,14 @@ export function usePendingPlanFeedback() {
       ...(title ? { title } : {}),
       ...(plan ? { plan } : {}),
     };
-    await respondMutation.mutateAsync({ toolCallId: prompt.toolCallId, resumeData });
+    try {
+      await respondMutation.mutateAsync({ toolCallId: prompt.toolCallId, resumeData, quietWhenEnded: true });
+    } catch (error) {
+      // Nothing will ever answer a prompt whose run has ended, so drop its card.
+      // The caller decides what to do with the text instead.
+      if (isEndedPrompt(error)) resolvePrompt(prompt.id);
+      throw error;
+    }
     resolvePrompt(prompt.id);
   };
 

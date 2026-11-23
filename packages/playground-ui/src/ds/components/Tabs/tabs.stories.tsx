@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Activity, ChartNoAxesColumnIncreasing, Settings } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, CSSProperties } from 'react';
 import { Button } from '../Button/Button';
@@ -7,6 +6,9 @@ import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
+import { IconChart3 } from '@/ds/icons/central/IconChart3';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -102,21 +104,21 @@ function ContainedExample({
           <TabList>
             {visibleTabs.includes('activity') && (
               <Tab value="activity" onClose={closeHandler('activity')}>
-                <Activity aria-hidden="true" className="size-4" />
+                <IconElectrocardiogram aria-hidden="true" className="size-4" />
                 Activity
                 <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">12</span>
               </Tab>
             )}
             {visibleTabs.includes('traces') && (
               <Tab value="traces" attention={attention} onClose={closeHandler('traces')}>
-                <ChartNoAxesColumnIncreasing aria-hidden="true" className="size-4" />
+                <IconChart3 aria-hidden="true" className="size-4" />
                 Traces
                 <span className="rounded-full bg-surface-overlay-strong px-2 py-0.5 text-meta tabular-nums">248</span>
               </Tab>
             )}
             {visibleTabs.includes('settings') && (
               <Tab value="settings" onClose={closeHandler('settings')}>
-                <Settings aria-hidden="true" className="size-4" />
+                <IconSettingsGear5 aria-hidden="true" className="size-4" />
                 Settings
               </Tab>
             )}
@@ -273,6 +275,37 @@ export const PillGhostVariant: Story = {
         <div className="p-4 text-foreground">Account content</div>
       </TabContent>
     </Tabs>
+  ),
+};
+
+const BREAKDOWN_VIEWS = ['Projects', 'Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments'];
+
+/**
+ * `overflow="menu"`: tabs that don't fit fold into a "+N" menu after the last one that does, and
+ * the open tab always stays in the row (a metrics card's views). The default scrolls instead.
+ */
+export const OverflowMenu: Story = {
+  render: () => (
+    <div className="flex w-150 flex-col gap-6">
+      {[600, 320].map(width => (
+        <div key={width} style={{ width }}>
+          <Tabs defaultTab="Agents">
+            <TabList variant="pill" size="sm" overflow="menu">
+              {BREAKDOWN_VIEWS.map(view => (
+                <Tab key={view} value={view}>
+                  {view}
+                </Tab>
+              ))}
+            </TabList>
+            {BREAKDOWN_VIEWS.map(view => (
+              <TabContent key={view} value={view}>
+                <div className="p-4 text-foreground">Breakdown by {view.toLowerCase()}</div>
+              </TabContent>
+            ))}
+          </Tabs>
+        </div>
+      ))}
+    </div>
   ),
 };
 

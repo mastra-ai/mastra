@@ -196,4 +196,108 @@ describe('VectorizeFilterTranslator', () => {
       });
     });
   });
+
+  // SemanticRecall and Memory.recall() send `{ $and: [scopeFilter, userFilter] }`. Vectorize ANDs
+  // top-level keys, so a top-level `$and` of plain clauses becomes one object.
+  describe('top-level $and', () => {
+    it('merges clauses on different fields into one filter', () => {
+      const filter: any = { $and: [{ resource_id: 'user-1' }, { projectId: { $eq: 'project-a' } }] };
+      expect(translator.translate(filter)).toEqual({
+        resource_id: { $eq: 'user-1' },
+        projectId: { $eq: 'project-a' },
+      });
+    });
+
+    it('merges different operators on the same field', () => {
+      const filter: any = { $and: [{ score: { $gt: 1 } }, { score: { $lt: 5 } }] };
+      expect(translator.translate(filter)).toEqual({ score: { $gt: 1, $lt: 5 } });
+    });
+
+    it('flattens nested fields inside a clause', () => {
+      const filter: any = { $and: [{ thread_id: 't-1' }, { project: { stage: 'beta' } }] };
+      expect(translator.translate(filter)).toEqual({
+        thread_id: { $eq: 't-1' },
+        'project.stage': { $eq: 'beta' },
+      });
+    });
+
+    it('rejects clauses that set the same operator on the same field', () => {
+      const filter: any = { $and: [{ resource_id: 'user-1' }, { resource_id: 'user-2' }] };
+      expect(() => translator.translate(filter)).toThrow(/Vectorize/);
+    });
+
+    it.each([
+      ['$eq with $in', [{ resource_id: 'u' }, { resource_id: { $in: ['u', 'v'] } }]],
+      ['$ne with $nin', [{ tag: { $ne: 'a' } }, { tag: { $nin: ['b'] } }]],
+      ['two lower bounds', [{ score: { $gt: 1 } }, { score: { $gte: 2 } }]],
+      ['two upper bounds', [{ score: { $lt: 9 } }, { score: { $lte: 8 } }]],
+    ])('rejects combining %s on one field, which Vectorize cannot run', (_name, clauses) => {
+      expect(() => translator.translate({ $and: clauses } as any)).toThrow(/Vectorize/);
+    });
+
+    it('accepts one lower and one upper bound on a field', () => {
+      const filter: any = { $and: [{ score: { $gte: 1 } }, { score: { $lte: 5 } }] };
+      expect(translator.translate(filter)).toEqual({ score: { $gte: 1, $lte: 5 } });
+    });
+
+    it.each([
+      ['an array', []],
+      ['an array of values', ['x']],
+      ['a number', 5],
+      ['a string', 'x'],
+    ])('rejects a clause that is %s', (_name, clause) => {
+      expect(() => translator.translate({ $and: [{ resource_id: 'u' }, clause] } as any)).toThrow(/clause/);
+    });
+
+    it.each(['constructor', 'toString', 'hasOwnProperty'])('merges a field named %s like any other field', field => {
+      const filter: any = { $and: [{ resource_id: 'u' }, JSON.parse(`{"${field}": "a"}`)] };
+      const translated = translator.translate(filter) as Record<string, unknown>;
+      expect(Object.keys(translated).sort()).toEqual([field, 'resource_id'].sort());
+      expect(Object.getOwnPropertyDescriptor(translated, field)?.value).toEqual({ $eq: 'a' });
+    });
+
+    it('flattens a user filter that is itself an $and inside the scope $and', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { $and: [{ mode: 'work' }, { team: 'alpha' }] }] };
+      expect(translator.translate(filter)).toEqual({
+        resource_id: { $eq: 'u' },
+        mode: { $eq: 'work' },
+        team: { $eq: 'alpha' },
+      });
+    });
+
+    it('keeps the same-field rule across nested $and clauses', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { $and: [{ resource_id: { $in: ['u', 'v'] } }] }] };
+      expect(() => translator.translate(filter)).toThrow(/Vectorize/);
+    });
+
+    it('merges a filter that repeats the scope value', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { resource_id: 'u', mode: 'work' }] };
+      expect(translator.translate(filter)).toEqual({ resource_id: { $eq: 'u' }, mode: { $eq: 'work' } });
+    });
+
+    it('merges a repeated range bound with the same value', () => {
+      const filter: any = { $and: [{ score: { $gte: 1 } }, { score: { $gte: 1, $lt: 5 } }] };
+      expect(translator.translate(filter)).toEqual({ score: { $gte: 1, $lt: 5 } });
+    });
+
+    it('still rejects the same operator with a different value', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, { resource_id: 'v' }] };
+      expect(() => translator.translate(filter)).toThrow(/Vectorize/);
+    });
+
+    it('treats empty, null and undefined clauses as no condition', () => {
+      const filter: any = { $and: [{ resource_id: 'u' }, {}, null, undefined] };
+      expect(translator.translate(filter)).toEqual({ resource_id: { $eq: 'u' } });
+    });
+
+    it('still rejects $and clauses that use logical operators', () => {
+      const filter: any = { $and: [{ a: 1 }, { $or: [{ b: 1 }, { c: 2 }] }] };
+      expect(() => translator.translate(filter)).toThrow();
+    });
+
+    it('still rejects $and next to other top-level keys', () => {
+      const filter: any = { $and: [{ a: 1 }], b: 2 };
+      expect(() => translator.translate(filter)).toThrow();
+    });
+  });
 });

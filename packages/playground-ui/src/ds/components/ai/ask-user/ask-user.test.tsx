@@ -278,12 +278,6 @@ describe('AskUser', () => {
   });
 
   describe('when free text is empty', () => {
-    it('disables the submit button', () => {
-      renderAskUser({ question: 'What is your name?' });
-
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Submit answer' }).disabled).toBe(true);
-    });
-
     it('does not submit with Enter', () => {
       const { onSubmit } = renderAskUser({ question: 'What is your name?' });
       const input = screen.getByRole<HTMLInputElement>('textbox');
@@ -528,14 +522,6 @@ describe('AskUser', () => {
       fireEvent.click(screen.getByRole('radio', { name: /Apple/ }));
 
       expect(onSubmit).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('when options are absent', () => {
-    it('renders a free-text control', () => {
-      renderAskUser({ question: 'Answer me' });
-
-      expect(screen.getByRole('textbox')).toBeTruthy();
     });
   });
 

@@ -116,7 +116,7 @@ app.listen({ port: 3000 }, (err, address) => {
     typeDescription:
       '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
     description:
-      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`. Defaults to `server.mcpOptions` from your `Mastra` config.',
     isOptional: true,
   },
 ]}

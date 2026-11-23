@@ -1,5 +1,4 @@
 import { startOfDay } from 'date-fns';
-import { CalendarIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { CustomRangeEditor } from './custom-range-editor';
@@ -8,6 +7,8 @@ import type { TextButtonSize } from '@/ds/components/Button/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup/buttons-group';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export type DateRangePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
@@ -186,7 +187,7 @@ export function DateTimeRangePicker({
       ref={ref}
       size={size}
       disabled={disabled}
-      icon={<CalendarIcon />}
+      icon={<IconCalendar1 />}
       iconEnd={canReset ? undefined : <TriggerChevron />}
     >
       {label}
@@ -273,7 +274,7 @@ function ResetRangeButton({
       disabled={disabled}
       onClick={onReset}
     >
-      <XIcon />
+      <IconCrossMedium />
     </Button>
   );
 }

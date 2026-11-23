@@ -1,10 +1,10 @@
 {
-  "attachment": ["deepseek-v4.1-flash", "kimi-k3", "sensenova-6.8-flash-lite"],
-  "temperature": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4.1-flash", "glm-5.2", "sensenova-6.8-flash-lite"],
+  "attachment": ["deepseek-flash", "kimi-k3", "sensenova-6.8-flash-lite"],
+  "temperature": ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "sensenova-6.8-flash-lite"],
   "structuredOutput": [
+    "deepseek-flash",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
-    "deepseek-v4.1-flash",
     "glm-5.2",
     "kimi-k3",
     "sensenova-6.8-flash-lite"
@@ -31,6 +31,12 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
+    "deepseek-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "glm-5.2": [
       {
         "type": "effort",
@@ -41,12 +47,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
       }
     ]
   }

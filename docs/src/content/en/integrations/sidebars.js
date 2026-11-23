@@ -443,7 +443,7 @@ const sidebars = {
         {
           type: 'link',
           label: 'Mastra',
-          href: '/docs/mastra-platform/observability',
+          href: '/docs/mastra-platform/observability/overview',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
         {
@@ -689,7 +689,7 @@ const sidebars = {
         {
           type: 'link',
           label: 'Mastra',
-          href: '/docs/mastra-platform/deploy',
+          href: '/docs/mastra-platform/deploy/overview',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
         {
@@ -761,6 +761,15 @@ const sidebars = {
           id: 'tools/perplexity',
           label: 'Perplexity',
           customProps: { icon: 'https://cdn.simpleicons.org/perplexity?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/sanity-context',
+          label: 'Sanity Context',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/sanity/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/sanity/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -912,6 +921,12 @@ const sidebars = {
           id: 'auth/google',
           label: 'Google',
           customProps: { icon: 'https://svgl.app/library/google.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'auth/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
         },
         {
           type: 'doc',

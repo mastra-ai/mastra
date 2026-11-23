@@ -7,7 +7,7 @@ description: "Browse NEAR AI Cloud model IDs, capabilities, context windows, and
 
 # <img src="https://models.dev/logos/nearai.svg" alt="NEAR AI Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NEAR AI Cloud
 
-Access 60 NEAR AI Cloud models through Mastra's model router. Authentication is handled automatically using the `NEARAI_API_KEY` environment variable.
+Access 61 NEAR AI Cloud models through Mastra's model router. Authentication is handled automatically using the `NEARAI_API_KEY` environment variable.
 
 Learn more in the [NEAR AI Cloud documentation](https://docs.near.ai/).
 
@@ -68,6 +68,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 10,
     "outputCost": 50
+  },
+  {
+    "model": "nearai/anthropic/claude-fable-5-2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
   },
   {
     "model": "nearai/anthropic/claude-haiku-4-5",
@@ -353,7 +365,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 3.3,
     "outputCost": 16.5
   },
@@ -365,7 +377,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 2,
     "outputCost": 10
   },
@@ -574,6 +586,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "nearai/openai/gpt-6.2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
+    "model": "nearai/openai/gpt-6.2-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "nearai/openai/o3",
     "imageInput": true,
     "audioInput": false,
@@ -658,18 +694,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.55
   },
   {
-    "model": "nearai/qwen/qwen3.5-397b-a17b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.5,
-    "outputCost": 3.3
-  },
-  {
     "model": "nearai/Qwen/Qwen3.6-35B-A3B-FP8",
     "imageInput": false,
     "audioInput": false,
@@ -680,18 +704,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.17,
     "outputCost": 1.1
-  },
-  {
-    "model": "nearai/qwen/qwen3.7-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": 2.8,
-    "outputCost": 7.5
   },
   {
     "model": "nearai/Qwen/Qwen3.8-27B",

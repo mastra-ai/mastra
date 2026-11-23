@@ -290,6 +290,147 @@ export function makeLoadingProxy(target: { host: string; port: number }) {
 }
 
 /**
+ * TCP proxy that drops the connection carrying the first XADD. With
+ * `before`, the XADD never reaches Redis; with `after`, Redis applies it and
+ * the reply is lost. Every later connection forwards normally, unless
+ * `closeListenerAfterDrop` is set: then the proxy stops accepting connections
+ * once it drops, like a Redis that went away and stayed down.
+ */
+export function makeXaddDropProxy(
+  target: { host: string; port: number },
+  mode: 'before' | 'after',
+  options: { closeListenerAfterDrop?: boolean } = {},
+) {
+  const sockets = new Set<Socket>();
+  let dropped = false;
+  const drop = () => {
+    dropped = true;
+    if (options.closeListenerAfterDrop) server.close();
+  };
+  const server = createServer(client => {
+    sockets.add(client);
+    client.on('close', () => sockets.delete(client));
+    client.on('error', () => {});
+    const upstream = connect(target.port, target.host);
+    sockets.add(upstream);
+    upstream.on('close', () => {
+      sockets.delete(upstream);
+      client.destroy();
+    });
+    upstream.on('error', () => {});
+    client.on('close', () => upstream.destroy());
+    let pending: Buffer = Buffer.alloc(0);
+    let sawXadd = false;
+    let inMulti = false;
+    let replyLost = false;
+    client.on('data', (chunk: Buffer) => {
+      if (dropped) return void upstream.write(chunk);
+      pending = Buffer.concat([pending, chunk]);
+      const { names, rest } = takeRespCommands(pending);
+      pending = rest;
+      for (const name of names) {
+        if (name === 'MULTI') inMulti = true;
+        if (name === 'XADD') sawXadd = true;
+      }
+      if (sawXadd && mode === 'before') {
+        drop();
+        return void client.destroy();
+      }
+      upstream.write(chunk);
+      // Publish wraps XADD in MULTI/EXEC when a TTL is set; wait for EXEC so
+      // Redis applies the write, then hide its reply by dropping the client.
+      if (sawXadd && (!inMulti || names.includes('EXEC'))) {
+        drop();
+        replyLost = true;
+        setTimeout(() => client.destroy(), 200);
+      }
+    });
+    upstream.on('data', (chunk: Buffer) => {
+      if (!replyLost) client.write(chunk);
+    });
+  });
+  const listening = new Promise<number>(resolve => {
+    server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port));
+  });
+  return {
+    listening,
+    get dropped() {
+      return dropped;
+    },
+    close() {
+      for (const s of sockets) s.destroy();
+      return new Promise<void>(r => server.close(() => r()));
+    },
+  };
+}
+
+/**
+ * TCP proxy in front of Redis that can simulate the two ways a broker goes
+ * away. `stop()`/`start()` behave like `docker stop`/`docker start`: every
+ * connection is severed and reconnects are refused until restarted.
+ * `pause()`/`unpause()` behave like `docker pause`: connections stay open but
+ * nothing is forwarded until unpaused, then queued bytes flow in order.
+ */
+export function makeOutageProxy(target: { host: string; port: number }) {
+  const sockets = new Set<Socket>();
+  let paused = false;
+  const queued: Array<[Socket, Buffer]> = [];
+  const relay = (from: Socket, to: Socket) =>
+    from.on('data', chunk => {
+      if (paused) queued.push([to, chunk]);
+      else to.write(chunk);
+    });
+  const server = createServer(client => {
+    const upstream = connect(target.port, target.host);
+    for (const s of [client, upstream]) {
+      sockets.add(s);
+      s.on('error', () => {});
+    }
+    client.on('close', () => {
+      sockets.delete(client);
+      upstream.destroy();
+    });
+    upstream.on('close', () => {
+      sockets.delete(upstream);
+      client.destroy();
+    });
+    relay(client, upstream);
+    relay(upstream, client);
+  });
+  const listening = new Promise<number>(resolve => {
+    server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port));
+  });
+  const sever = () => {
+    for (const s of sockets) s.destroy();
+    sockets.clear();
+  };
+  return {
+    listening,
+    async stop() {
+      await listening;
+      const closed = new Promise<void>(r => server.close(() => r()));
+      sever();
+      await closed;
+    },
+    async start() {
+      const port = await listening;
+      await new Promise<void>(r => server.listen(port, '127.0.0.1', () => r()));
+    },
+    pause: () => void (paused = true),
+    unpause() {
+      paused = false;
+      for (const [to, chunk] of queued.splice(0)) if (!to.destroyed) to.write(chunk);
+    },
+    close() {
+      paused = false;
+      queued.length = 0;
+      sever();
+      return new Promise<void>(r => (server.listening ? server.close(() => r()) : r()));
+    },
+  };
+}
+
+/**
  * TCP proxy in front of a Redis node. While stalled it still accepts new
  * connections (so node-redis's TCP-level connectTimeout is satisfied) but never
  * forwards them, exactly like a frozen server. Connections made before the

@@ -1,5 +1,30 @@
 # @mastra/auth-workos
 
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Upgraded `@workos-inc/node` to v12. `getWorkOS()` now returns a v12 `WorkOS` client, so if you call the WorkOS SDK directly, follow the [WorkOS v12 migration notes](https://github.com/workos/workos-node/releases). For example, admin portal links are now generated with `workos.adminPortal.generateLink()` instead of `workos.portal.generateLink()`, and `GeneratePortalLinkIntent` is now `GenerateLinkIntent`. `WorkOSAdminPortal` has been updated to use the new API and its behavior is unchanged. ([#30537](https://github.com/mastra-ai/mastra/pull/30537))
+
+### Patch Changes
+
+- dependencies updates: ([#30537](https://github.com/mastra-ai/mastra/pull/30537))
+  - Updated dependency [`@workos-inc/node@12.2.0` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/12.2.0) (from `8.13.0`, in `dependencies`)
+
+## 1.6.9
+
+### Patch Changes
+
+- Updated dependencies [[`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781)]:
+  - @mastra/auth@1.2.0
+
+## 1.6.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781)]:
+  - @mastra/auth@1.2.0-alpha.0
+
 ## 1.6.8
 
 ### Patch Changes

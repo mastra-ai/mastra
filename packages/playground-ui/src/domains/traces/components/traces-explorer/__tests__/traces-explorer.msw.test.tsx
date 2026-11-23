@@ -3,7 +3,7 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, ComponentProps } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TRACE_DATE_PRESET_PARAM,
@@ -12,11 +12,22 @@ import {
 } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../../trace-list-columns';
-import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
-import type { FeedbackOptions, TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
+import {
+  TracesExplorer,
+  useTracesConfig,
+  useTracesFilterBar,
+  useTracesFilterBarFields,
+  useTracesFilters,
+} from '../index';
+import type {
+  FeedbackOptions,
+  TracesExplorerFeatures,
+  TracesExplorerLayoutProps,
+  TracesExplorerPanelProps,
+  TracesExplorerRootProps,
+} from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from '../traces-explorer-actions';
-import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -46,7 +57,11 @@ import {
   weatherTraceSpans,
   weatherTraceUsage,
   workflowTracesPage,
+  weatherThreadLightTraces,
+  weatherThreadTraceSpans,
 } from './fixtures/traces-explorer';
+import { StudioFilterBar, StudioList, StudioPanel, StudioTracesExplorer } from './studio-traces-explorer';
+import type { StudioTracesExplorerProps } from './studio-traces-explorer';
 import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
@@ -155,6 +170,7 @@ type HarnessProps = {
   scope?: { entityId: string; entityType?: 'agent' };
   metricsSupport?: MetricsSupport;
   features?: TracesExplorerFeatures;
+  rootSource?: TracesExplorerRootProps['rootSource'];
   feedbackOptions?: FeedbackOptions;
   /** The host's default filters, passed to the explorer as `initialFilters`. */
   baselineFilters?: TracesFilters;
@@ -162,7 +178,7 @@ type HarnessProps = {
   onChange?: (next: TracesExplorerState) => void;
   initialSort?: TracesSort;
   onSortChange?: (next: TracesSort) => void;
-  traceHref?: TracesExplorerPanelProps['traceHref'];
+  traceHref?: StudioTracesExplorerProps['traceHref'];
   renderError?: TracesExplorerLayoutProps['renderError'];
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
@@ -185,9 +201,10 @@ function Harness({
   scope,
   metricsSupport = METRICS_SUPPORTED,
   features,
+  rootSource,
   feedbackOptions,
   baselineFilters,
-  filterBar = <TracesExplorer.FilterBar />,
+  filterBar,
   onChange,
   initialSort = DEFAULT_TRACES_SORT,
   onSortChange,
@@ -201,7 +218,7 @@ function Harness({
   const [sort, setSort] = useState<TracesSort>(initialSort);
 
   return (
-    <TracesExplorer
+    <StudioTracesExplorer
       selection={selection}
       filters={filters}
       onChange={next => {
@@ -217,8 +234,10 @@ function Harness({
       scope={scope}
       metricsSupport={metricsSupport}
       features={features}
+      rootSource={rootSource}
       feedbackOptions={feedbackOptions}
       initialFilters={baselineFilters}
+      traceHref={traceHref}
     >
       <TracesExplorer.Layout
         renderError={renderError}
@@ -230,21 +249,21 @@ function Harness({
         }
         actionRow={
           <div>
-            {filterBar}
+            {filterBar ?? <StudioFilterBar />}
             <TracesExplorer.ColumnsMenu />
           </div>
         }
       >
-        <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} {...panelProps} />
+        <StudioList />
+        <StudioPanel {...panelProps} />
       </TracesExplorer.Layout>
-    </TracesExplorer>
+    </StudioTracesExplorer>
   );
 }
 
-const renderExplorer = (props: HarnessProps = {}) =>
+const renderExplorer = (props: HarnessProps = {}, navigate?: ComponentProps<typeof TestLinkProvider>['navigate']) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider navigate={navigate}>
       <Harness {...props} />
     </TestLinkProvider>,
   );
@@ -257,7 +276,13 @@ const settle = async (queryClient: { isFetching: () => number }) => {
 };
 
 const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
-const getTimeRange = () => screen.getByRole('group', { name: 'Time range', hidden: true });
+// By its slot, not its accessible name: while the trace drawer is open, its modal `aria-hidden` can land on
+// the group itself, which then has no accessible name.
+const getTimeRange = () => {
+  const group = document.querySelector<HTMLElement>('[data-slot="filter-bar-time-range"]');
+  if (!group) throw new Error('The time range chip is not rendered');
+  return group;
+};
 const traceRow = (input: string) => screen.getByRole('button', { name: new RegExp(input) });
 const traceDialog = () => screen.queryByRole('dialog', { name: 'Trace details' });
 
@@ -408,30 +433,37 @@ describe('TracesExplorer', () => {
   });
 
   describe('when a trace is open', () => {
-    const openTrace = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
+    const openTrace = async (
+      traceHref?: StudioTracesExplorerProps['traceHref'],
+      navigate?: ComponentProps<typeof TestLinkProvider>['navigate'],
+    ) => {
       setExplorerHandlers();
-      const { queryClient } = renderExplorer({
-        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
-        traceHref,
-      });
+      const { queryClient } = renderExplorer(
+        {
+          initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+          traceHref,
+        },
+        navigate,
+      );
       await settle(queryClient);
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
       await within(dialog).findByRole('button', { name: 'Download trace JSON' });
       return dialog;
     };
 
-    it('links to the host trace page of the selected trace', async () => {
-      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`);
+    it('opens the host trace page of the selected trace', async () => {
+      const navigate = vi.fn();
+      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`, navigate);
 
-      expect(within(dialog).getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe(
-        '/observe/traces/trace-weather',
-      );
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace page' }));
+
+      expect(navigate).toHaveBeenCalledWith('/observe/traces/trace-weather');
     });
 
-    it('offers no trace page link without traceHref', async () => {
+    it('offers no trace page without traceHref', async () => {
       const dialog = await openTrace();
 
-      expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
+      expect(within(dialog).queryByRole('button', { name: 'Open trace page' })).toBeNull();
     });
   });
 
@@ -486,6 +518,50 @@ describe('TracesExplorer', () => {
       fireEvent.click(traceRow('What is the weather in Paris'));
 
       expect(await screen.findByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+  });
+
+  describe('when the reader opens the full thread of an agent trace', () => {
+    const openFullThread = async () => {
+      setExplorerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(weatherThreadLightTraces)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json(weatherThreadTraceSpans),
+        ),
+      );
+      const utils = renderExplorer();
+      await settle(utils.queryClient);
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+      const threadDialog = await screen.findByRole('dialog', { name: 'Thread weather-thread' });
+      return { ...utils, threadDialog };
+    };
+
+    it('stacks the thread in its own drawer above the trace drawer', async () => {
+      const { threadDialog } = await openFullThread();
+
+      expect(threadDialog.getAttribute('data-depth')).toBe('2');
+      expect(screen.getByRole('dialog', { name: 'Trace details', hidden: true })).toBeTruthy();
+    });
+
+    it('closes only the thread with "Back to trace"', async () => {
+      await openFullThread();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+
+    it('closes only the thread on Escape', async () => {
+      const { threadDialog } = await openFullThread();
+
+      fireEvent.keyDown(threadDialog, { key: 'Escape' });
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Thread weather-thread' })).toBeNull());
+      expect(screen.getByRole('dialog', { name: 'Trace details' })).toBeTruthy();
     });
   });
 
@@ -673,6 +749,22 @@ describe('TracesExplorer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
       expect(onChange.mock.calls.at(-1)?.[0].filters.tokens).toEqual(SCOPE_TOKENS);
+    });
+
+    it('does not count the scope tokens as applied filters', async () => {
+      function FiltersAppliedProbe() {
+        const { contentFiltersApplied } = useTracesFilters();
+        return <output aria-label="content filters applied">{String(contentFiltersApplied)}</output>;
+      }
+      setExplorerHandlers();
+      const result = renderExplorer({
+        scope: { entityId: 'weather-agent', entityType: 'agent' },
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: SCOPE_TOKENS },
+        tabs: <FiltersAppliedProbe />,
+      });
+      await settle(result.queryClient);
+
+      expect(screen.getByLabelText('content filters applied').textContent).toBe('false');
     });
   });
 
@@ -1402,8 +1494,8 @@ describe('TracesExplorer', () => {
       expect(within(dialog).getByRole('button', { name: 'Add to dataset' })).toBeTruthy();
     });
 
-    it('hides "Add to dataset" when the host turns it off', async () => {
-      const dialog = await openTracePanel({ withAddTraceToDataset: false });
+    it('hides "Add to dataset" when the host renders no dataset dialog', async () => {
+      const dialog = await openTracePanel({ renderDatasetDialog: undefined });
 
       expect(within(dialog).queryByRole('button', { name: 'Add to dataset' })).toBeNull();
       expect(within(dialog).getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
@@ -1508,57 +1600,138 @@ describe('TracesExplorer', () => {
     });
   });
 
+  describe('host-selected root sources', () => {
+    it('starts a fresh page without showing legacy rows while aggregated roots load', async () => {
+      setExplorerHandlers();
+      const { rerender, queryClient } = renderExplorer();
+      await settle(queryClient);
+      expect(screen.getByText('What is the weather in Paris?')).toBeTruthy();
+      onTraceQuery.mockClear();
+
+      let release = () => {};
+      const pending = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onTraceQuery(await request.json());
+          await pending;
+          return HttpResponse.json(emptyTracesPage);
+        }),
+      );
+      rerender(
+        <TestLinkProvider>
+          <Harness rootSource="aggregated" />
+        </TestLinkProvider>,
+      );
+      try {
+        await waitFor(() => expect(onTraceQuery).toHaveBeenCalled());
+        expect(onTraceQuery.mock.calls[0]?.[0]).toMatchObject({ rootSource: 'aggregated', page: { after: null } });
+        expect(screen.queryByText('What is the weather in Paris?')).toBeNull();
+      } finally {
+        release();
+      }
+      await settle(queryClient);
+      onTraceQuery.mockClear();
+      rerender(
+        <TestLinkProvider>
+          <Harness />
+        </TestLinkProvider>,
+      );
+      await settle(queryClient);
+      expect(onTraceQuery.mock.calls[0]?.[0]).not.toHaveProperty('rootSource');
+      expect(onTraceQuery.mock.calls[0]?.[0]).toMatchObject({ page: { after: null } });
+    });
+
+    it('surfaces a refused aggregated request without falling back to light traces', async () => {
+      setExplorerHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onTraceQuery(await request.json());
+          return HttpResponse.json({ error: 'Aggregated roots unavailable' }, { status: 404 });
+        }),
+      );
+      const { queryClient } = renderExplorer({ rootSource: 'aggregated', features: { traceQuery: false } });
+      await settle(queryClient);
+      expect(onTraceQuery.mock.calls[0]?.[0]).toMatchObject({ rootSource: 'aggregated' });
+      expect(onLightListRequest).not.toHaveBeenCalled();
+      expect(screen.queryByText('What is the weather in Paris?')).toBeNull();
+      expect(screen.getByText(/Aggregated roots unavailable/)).toBeTruthy();
+    });
+  });
+
   describe.each([
     {
+      rootSource: undefined,
       server: 'polls deltas',
       capabilities: traceQueryCapabilities,
       tickRequests: onDeltaPoll,
       interval: OBSERVABILITY_LIST_POLL_INTERVAL_MS,
     },
     {
+      rootSource: undefined,
       server: 'reloads the list',
       capabilities: noDeltaPollingCapabilities,
       tickRequests: onTraceQuery,
       interval: OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
     },
-  ])('when the auto-refresh tick fires and the explorer $server', ({ capabilities, tickRequests, interval }) => {
-    it('does not re-render the filter bar or the columns menu', async () => {
-      setExplorerHandlers(capabilities);
-      // Only the poll interval is faked: MSW, React Query and waitFor keep real timeouts.
-      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-      const onToolbarRender = vi.fn();
-      const toolbar = (
-        <Profiler id="toolbar" onRender={onToolbarRender}>
-          <TracesExplorer.FilterBar />
-          <TracesExplorer.ColumnsMenu />
-        </Profiler>
-      );
-      try {
-        const { queryClient } = renderExplorer({ filterBar: toolbar });
-        await settle(queryClient);
-        const requestsBefore = tickRequests.mock.calls.length;
-        onToolbarRender.mockClear();
+    {
+      rootSource: 'aggregated' as const,
+      server: 'reloads aggregated roots despite advertising delta polling',
+      capabilities: traceQueryCapabilities,
+      tickRequests: onTraceQuery,
+      interval: OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
+    },
+  ])(
+    'when the auto-refresh tick fires and the explorer $server',
+    ({ rootSource, capabilities, tickRequests, interval }) => {
+      it('does not re-render the filter bar or the columns menu', async () => {
+        setExplorerHandlers(capabilities);
+        // Only the poll interval is faked: MSW, React Query and waitFor keep real timeouts.
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const onToolbarRender = vi.fn();
+        const toolbar = (
+          <Profiler id="toolbar" onRender={onToolbarRender}>
+            <TracesExplorer.FilterBar />
+            <TracesExplorer.ColumnsMenu />
+          </Profiler>
+        );
+        try {
+          const { queryClient } = renderExplorer({ filterBar: toolbar, rootSource });
+          await settle(queryClient);
+          const requestsBefore = tickRequests.mock.calls.length;
+          onToolbarRender.mockClear();
 
-        act(() => {
-          vi.advanceTimersByTime(interval);
-        });
-        vi.useRealTimers();
-        await waitFor(() => expect(tickRequests.mock.calls.length).toBeGreaterThan(requestsBefore));
-        await settle(queryClient);
+          act(() => {
+            vi.advanceTimersByTime(interval);
+          });
+          vi.useRealTimers();
+          await waitFor(() => expect(tickRequests.mock.calls.length).toBeGreaterThan(requestsBefore));
+          await settle(queryClient);
 
-        expect(onToolbarRender).not.toHaveBeenCalled();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-  });
+          expect(onToolbarRender).not.toHaveBeenCalled();
+          if (rootSource === 'aggregated') {
+            expect(onDeltaPoll).not.toHaveBeenCalled();
+            expect(
+              onTraceQuery.mock.calls.every(
+                ([body]) =>
+                  typeof body === 'object' && body !== null && 'rootSource' in body && body.rootSource === 'aggregated',
+              ),
+            ).toBe(true);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    },
+  );
 });
 
 describe('TracesExplorer.Layout', () => {
   const renderLayout = () =>
     renderWithProviders(
       <TestLinkProvider>
-        <TracesExplorer
+        <StudioTracesExplorer
           selection={EMPTY_TRACES_SELECTION}
           filters={DEFAULT_TRACES_FILTERS}
           onChange={() => {}}
@@ -1571,13 +1744,13 @@ describe('TracesExplorer.Layout', () => {
             tabs={<nav aria-label="Views">Tabs</nav>}
             toolbar={
               <div role="toolbar" aria-label="Trace filters">
-                <TracesExplorer.FilterBar />
+                <StudioFilterBar />
               </div>
             }
           >
-            <TracesExplorer.List />
+            <StudioList />
           </TracesExplorer.Layout>
-        </TracesExplorer>
+        </StudioTracesExplorer>
       </TestLinkProvider>,
     );
 

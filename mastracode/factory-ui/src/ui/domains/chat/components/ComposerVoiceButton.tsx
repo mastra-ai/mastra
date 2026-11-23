@@ -1,11 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Loader2, Mic, MicOff, Square } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
 import { VOICE_INPUT_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
-import { useVoiceDictation, voiceDictationSupported } from './useVoiceDictation';
-import type { VoiceDictationState } from './useVoiceDictation';
+import { voiceDictationSupported } from './useVoiceDictation';
+import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';
+import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
+import { IconMicrophoneOff } from '@mastra/playground-ui/icons/central/IconMicrophoneOff';
+import { IconStop } from '@mastra/playground-ui/icons/central/IconStop';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 
 const TOOLTIPS: Record<VoiceDictationState, string> = {
   idle: 'Dictate',
@@ -17,35 +20,35 @@ const TOOLTIPS: Record<VoiceDictationState, string> = {
 interface ComposerVoiceButtonProps {
   factoryId: string;
   disabled: boolean;
-  onTranscript: (text: string) => void;
-  onError: (message: string) => void;
+  dictation: VoiceDictation;
 }
 
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
-  if (state === 'recording') return <Square size={14} />;
+  if (state === 'recording') return <IconStop className="size-icon-sm" />;
   if (state === 'transcribing')
-    return <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />;
-  return <Mic size={14} />;
+    return <IconLoadingCircle className="size-icon-sm motion-safe:animate-spin motion-reduce:animate-none" />;
+  return <IconMicrophone className="size-icon-sm" />;
 }
 
-function VoiceButton({ factoryId, disabled, onTranscript, onError }: ComposerVoiceButtonProps) {
+function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const settingsQuery = useVoiceSettings(factoryId);
-  const { state, start, stop } = useVoiceDictation({ factoryId, onTranscript, onError });
+  const { state, start, stop } = dictation;
   const needsSetup = settingsQuery.data !== undefined && settingsQuery.data.effective === null;
 
   if (needsSetup && state === 'idle') {
     return (
       <Button
         type="button"
+        variant="ghost"
         size="icon-sm"
         tooltip="Set up voice input in settings"
         onClick={() =>
           navigate(settingsSectionPath(factoryId, 'models', VOICE_INPUT_ANCHOR), { state: { from: location } })
         }
       >
-        <MicOff size={14} />
+        <IconMicrophoneOff />
       </Button>
     );
   }
@@ -57,6 +60,7 @@ function VoiceButton({ factoryId, disabled, onTranscript, onError }: ComposerVoi
   return (
     <Button
       type="button"
+      variant="ghost"
       size="icon-sm"
       disabled={blocked}
       onClick={recording ? stop : () => void start()}

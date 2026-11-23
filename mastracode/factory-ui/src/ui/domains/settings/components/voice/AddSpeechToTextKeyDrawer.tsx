@@ -7,10 +7,10 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
 import type { ProviderInfo } from '../../../../../api/types';
+import { useSidePanelDrawer } from '../../../../lib/hooks/useSidePanelDrawer';
 import { ProviderOptionRow } from '../models/providers/ProviderRows';
 
 interface SpeechToTextProviderOption {
@@ -29,12 +29,10 @@ export function AddSpeechToTextKeyDrawer({
   onAddKey: (provider: ProviderInfo) => void;
   onClose: () => void;
 }) {
-  const isMobile = useIsMobile();
+  const sidePanel = useSidePanelDrawer();
   return (
     <Drawer
-      side={isMobile ? 'bottom' : 'right'}
-      variant={isMobile ? 'default' : 'floating'}
-      overlay="visible"
+      {...sidePanel}
       open={open}
       onOpenChange={nextOpen => {
         if (!nextOpen) onClose();

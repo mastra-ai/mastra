@@ -11,10 +11,19 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
-import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardFlow,
+  boardForWorkItem,
+  resolveBoardToolRule,
+  reviewsPullRequest,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { workStageCarries } from '../boards/legacy-plan-role.js';
+import { exitToolSucceeded, PHASE_EXIT_METADATA_KEY } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
+import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, Card } from '../storage/domains/work-items/base.js';
 import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -36,6 +45,12 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
+// Bindings read at once by a reconcile pass, which yields between them.
+const RECONCILE_CONCURRENCY = 4;
+// The full walk of every active binding behind the routine reconcile pass.
+const FULL_RECONCILE_INTERVAL_MS = 10 * 60_000;
+
+const yieldToEventLoop = () => new Promise<void>(resolve => setImmediate(resolve));
 function ruleStage(boards: BoardRegistry, item: Card | null | undefined): string | undefined {
   return item && workItemPhaseSemantics(boards, item) ? item.stages[0] : undefined;
 }
@@ -71,6 +86,40 @@ function isApprovedPlanResult(result: CompletedToolResult): boolean {
   if (!result.value || typeof result.value !== 'object' || Array.isArray(result.value)) return false;
   const content = result.value.content;
   return typeof content === 'string' && content.startsWith('Plan approved.');
+}
+
+const STAMP_ATTEMPTS = 3;
+
+/** When the card's current visit to `stage` began, if it is in `stage` alone. */
+function openEntry(item: Card, stage: string): string | undefined {
+  if (item.stages.length !== 1 || item.stages[0] !== stage) return undefined;
+  return item.stageHistory?.findLast(entry => entry.stage === stage && entry.exitedAt === undefined)?.enteredAt;
+}
+
+/**
+ * The phase this result finishes: the card's phase whose exit tool succeeded (for `submit_plan`,
+ * with an approved plan) in the session that works the card there. Undefined otherwise.
+ */
+function finishedPhase(
+  boards: BoardRegistry,
+  board: string,
+  item: Card,
+  role: string,
+  toolResult: CompletedToolResult,
+): string | undefined {
+  const stage = item.stages.length === 1 ? item.stages[0]! : undefined;
+  const definition = boards.get(board);
+  const phase = stage === undefined ? undefined : definition?.phases[stage];
+  if (phase?.kind !== 'working' || phase.exitTool?.id !== toolResult.toolName) return undefined;
+  if (toolResult.status !== 'success') return undefined;
+  if (toolResult.toolName === 'submit_plan' && !isApprovedPlanResult(toolResult)) return undefined;
+  // Only the session that works the card in this phase finishes it: one in another context that
+  // still holds the card (a triage session, say) calling the same tool leaves the phase unfinished.
+  // A Work card planned before Planning ran in the `work` context still holds its `plan` session.
+  if (role !== phase.runner.context && workStageCarries(definition, stage!, role, undefined) !== true) {
+    return undefined;
+  }
+  return stage;
 }
 
 type RuntimeSnapshot = {
@@ -126,7 +175,9 @@ function boundedError(value: unknown): FactoryRuleJsonValue {
 
 function boundedResult(value: unknown): FactoryRuleJsonValue {
   try {
-    return normalizeFactoryRuleJsonValue(value);
+    // A result read during the run is the tool's in-memory value (submit_plan's holds undefined
+    // fields); read it as the JSON the thread stores, so it means the same now as after the run.
+    return normalizeFactoryRuleJsonValue(value === undefined ? null : JSON.parse(JSON.stringify(value)));
   } catch {
     return { message: 'Tool result was not serializable.' };
   }
@@ -154,10 +205,13 @@ function completedStepToolCallIds(steps: unknown[]): Set<string> {
   return ids;
 }
 
-function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
-  if (message.role !== 'assistant') return [];
-  const createdAt = message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt);
-  const completed: CompletedToolResult[] = [];
+function* completedInvocations(message: MastraDBMessage): Generator<{
+  invocation: Record<string, unknown>;
+  state: 'result' | 'error';
+  toolCallId: string;
+  toolName: string;
+}> {
+  if (message.role !== 'assistant') return;
   for (const rawPart of messageParts(message)) {
     if (!rawPart || typeof rawPart !== 'object') continue;
     const part = rawPart as Record<string, unknown>;
@@ -170,6 +224,25 @@ function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
     const toolCallId = invocation.toolCallId;
     const toolName = invocation.toolName ?? invocation.name;
     if (typeof toolCallId !== 'string' || typeof toolName !== 'string') continue;
+    yield { invocation, state, toolCallId, toolName };
+  }
+}
+
+/** Which tool calls a message holds a result for, without serializing the results. */
+function completedToolCallsKey(message: MastraDBMessage): string {
+  const keys: string[] = [];
+  for (const { state, toolCallId } of completedInvocations(message)) keys.push(`${toolCallId}:${state}`);
+  return keys.join('\n');
+}
+
+function messageTime(message: MastraDBMessage): number {
+  return (message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt)).getTime();
+}
+
+function completedToolResults(message: MastraDBMessage): CompletedToolResult[] {
+  const createdAt = message.createdAt instanceof Date ? message.createdAt : new Date(message.createdAt);
+  const completed: CompletedToolResult[] = [];
+  for (const { invocation, state, toolCallId, toolName } of completedInvocations(message)) {
     completed.push({
       assistantMessageId: message.id,
       messageCreatedAt: createdAt,
@@ -190,6 +263,20 @@ function currentCompletedToolMessage(
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!;
     if (completedToolResults(message).some(result => toolCallIds.has(result.toolCallId))) return message;
+  }
+  return undefined;
+}
+
+/**
+ * The tool results the step about to run follows: the latest assistant message, past any signals
+ * after it. A run continued after a tool call (such as submit_plan's approval) carries steps
+ * without their tool results, so the step ids alone can miss the result the agent acts on next.
+ */
+function latestToolResultMessage(messages: MastraDBMessage[]): MastraDBMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if ((message.role as string) === 'signal') continue;
+    return message.role === 'assistant' && completedToolResults(message).length > 0 ? message : undefined;
   }
   return undefined;
 }
@@ -267,6 +354,17 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
   readonly stateId = STATE_ID;
   /** Request contexts whose caller row is already resolved for this request. */
   private readonly loadedMemorySettings = new WeakSet<object>();
+  private readonly bindingReconciles = new Map<string, Promise<void>>();
+  /**
+   * Bindings a step ran on since they were last reconciled, or whose run was still
+   * going then. Only these can have tool results the step hook did not see, so a
+   * routine pass reads only them. `settled` marks one already read after its run
+   * stopped: it gets one trailing read, for results persisted after the run ended.
+   */
+  private readonly pendingReconciles = new Map<string, { binding: FactoryRunBindingRecord; settled: boolean }>();
+  /** Messages at each binding's cursor time already ingested, by id, with the tool calls they held results for. */
+  private readonly cursorBoundaries = new Map<string, { at: number; seen: Map<string, string> }>();
+  private lastFullReconcileAt: number | undefined;
   private readonly boards: ProjectBoardSource;
 
   constructor(
@@ -282,6 +380,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       defaultThinkingLevel?: (requestContext: ComputeStateSignalArgs['requestContext']) => Promise<ThinkingLevel>;
       /** Called on every step of a run on an active bound thread, so an idle dispatcher reconciles its tool results. */
       onBoundThreadRun?: () => void;
+      /** Whether a run is going on this thread in this process; its binding stays due for reconcile until it stops. */
+      isThreadRunning?: (threadId: string) => boolean;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -331,12 +431,16 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // recovered session reaches its project row from this hook too.
     await this.loadCallerMemorySettings(args.requestContext, binding);
     if (!binding || binding.status !== 'active') return;
+    this.pendingReconciles.set(binding.id, { binding, settled: false });
     this.options.onBoundThreadRun?.();
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
     if (completedMessage) {
       await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
+      return;
     }
+    const latest = latestToolResultMessage(args.messages);
+    if (latest) await this.ingestMessages(binding, [latest]);
   }
 
   /**
@@ -391,12 +495,21 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     if (!binding) return;
     if (binding.status !== 'active') {
       if (!hasBase || prior?.status !== 'active') return;
+      // Say where the card went, so the session stops its work instead of guessing why its phase vanished.
+      const moved = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+      const movedBoards = moved ? await this.boards.load(binding) : undefined;
+      const movedTo = moved && movedBoards ? ruleStage(movedBoards, moved) : undefined;
+      const movedName = movedTo
+        ? (movedBoards?.get(boardForWorkItem(moved!))?.phases[movedTo]?.name ?? movedTo)
+        : undefined;
       return {
         id: STATE_ID,
-        cacheKey: `factory:none:${prior.bindingId ?? 'revoked'}`,
+        cacheKey: `factory:none:${prior.bindingId ?? 'revoked'}${movedTo ? `:${movedTo}` : ''}`,
         mode: 'snapshot',
         tagName: 'factory-phase',
-        contents: '\n',
+        contents: movedName
+          ? `This session no longer works its Factory card; the card is now in ${escapeText(movedName)}. Your part is done: do not continue its work here. Answer questions only.\n`
+          : '\n',
         value: { phase: { status: 'none' } },
         attributes: { status: 'none' },
         metadata: { value: { phase: { status: 'none' } } },
@@ -407,13 +520,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const boards = await this.boards.load(binding);
     const stage = ruleStage(boards, item);
     if (!item || !stage) return;
-    const allItems = await this.options.storage.list({
-      orgId: binding.orgId,
-      factoryProjectId: binding.factoryProjectId,
-    });
-    const linked = allItems
-      .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
-      .slice(0, MAX_LINKED_ITEMS);
+    const linked = await this.options.storage.listLinked({ item, limit: MAX_LINKED_ITEMS });
     const board = boardForWorkItem(item);
     const baseValue: ActivePhaseSnapshotBase = {
       status: 'active',
@@ -424,9 +531,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       role: binding.role,
       configVersion: this.options.configVersion,
     };
+    const flow = boardFlow(boards.get(board));
     const value: ActivePhaseSnapshotValue = reviewsPullRequest({
-      board,
-      item: { source: workItemSource(item.externalSource) },
+      flow,
+      item: { source: workItemSource(item.externalSource), workItem: item.workItem },
     })
       ? {
           ...baseValue,
@@ -444,13 +552,48 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
-    const phase = boards.get(board)?.phases[stage];
+    const definition = boards.get(board);
+    const phase = definition?.phases[stage];
     const phaseLabel = phase?.name ?? stage;
+    const nextText = phase
+      ? `Next phases: ${
+          phase.nextPhases.length
+            ? phase.nextPhases
+                .map(key => `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})`)
+                .join('; ')
+            : 'none'
+        }\n`
+      : '';
     const exitText =
       phase?.kind === 'working' && phase.exitTool
-        ? boards.get(board)?.tools[phase.exitTool.id]
-          ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' and is approved' : ''}; that moves the card on. Next phases: ${phase.nextPhases.map(escapeText).join(', ')}. You can move it on to a working phase yourself with factory_transition_work_item only when ${escapeText(phase.exitTool.id)} is auto-approved for this card; otherwise a person approves the handoff.\n`
-          : `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
+        ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' with an approved plan' : ''}; until then the card stays here. ${
+            definition?.tools[phase.exitTool.id]
+              ? 'Its result moves the card on.'
+              : `Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.`
+          }\n`
+        : '';
+    // Skills name phases by role in the pull request loop, never by key: this line maps them.
+    const flowPhase = (key: string | undefined) =>
+      key ? `${escapeText(definition?.phases[key]?.name ?? key)} (${escapeText(key)})` : undefined;
+    const completed = flow.completed?.phase;
+    const canceled = flow.canceled?.phase === completed ? undefined : flow.canceled?.phase;
+    const flowParts = [
+      definition ? `rest: ${flowPhase(definition.initialPhase)}` : undefined,
+      flow.triage ? `triage: ${flowPhase(flow.triage)}` : undefined,
+      flow.build ? `build: ${flowPhase(flow.build)}` : undefined,
+      flow.selfReview ? `self-review: ${flowPhase(flow.selfReview)}` : undefined,
+      flow.pullRequestReview ? `pull request review: ${flowPhase(flow.pullRequestReview)}` : undefined,
+      completed ? `completed: ${flowPhase(completed)}` : undefined,
+      canceled ? `canceled: ${flowPhase(canceled)}` : undefined,
+    ].filter(part => part !== undefined);
+    const flowText = flowParts.length ? `Board phases by part: ${flowParts.join('; ')}\n` : '';
+    // The card moved to a phase another context works; this session's tools for it are gone.
+    const handedOnText =
+      phase?.kind === 'working' &&
+      phase.runner.context !== binding.role &&
+      // A Work card planned before Planning ran in `work` keeps its `plan` session there.
+      workStageCarries(definition, stage, binding.role, undefined) !== true
+        ? `This card is now in ${escapeText(phaseLabel)}, which runs in the ${escapeText(phase.runner.context)} context in another session. Your part is done: do not continue its work here. Answer questions, and move the card only if it must come back to you.\n`
         : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
@@ -461,10 +604,13 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       (runtime
         ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
-      ((board === 'work' || board === 'review') && stage === 'intake'
-        ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
+      (phase?.kind === 'resting'
+        ? `This card rests in ${escapeText(phaseLabel)}: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n`
         : '') +
+      nextText +
+      flowText +
       exitText +
+      handedOnText +
       `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
     const isDelta = hasBase && prior?.status === 'active';
     return {
@@ -487,21 +633,129 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     };
   }
 
-  async reconcileAllBoundThreads(): Promise<void> {
+  /**
+   * The dispatcher's recurring pass. Tool results reach the card from the step hook;
+   * this catches the ones it cannot see (results persisted after a run's last step,
+   * or while no process was watching). Only bindings a step ran on since the last
+   * pass can have new ones, so a routine pass reads just those. The first pass, and
+   * one every {@link FULL_RECONCILE_INTERVAL_MS}, walks every active binding instead.
+   */
+  async reconcileBoundThreads(now = Date.now()): Promise<void> {
+    if (!this.options.messageReader) return;
+    if (this.lastFullReconcileAt === undefined || now - this.lastFullReconcileAt >= FULL_RECONCILE_INTERVAL_MS) {
+      await this.reconcileAllBoundThreads(now);
+      return;
+    }
+    const pending = [...this.pendingReconciles.values()];
+    this.pendingReconciles.clear();
+    await this.reconcileEntries(pending, true);
+  }
+
+  /** Walks every active binding: the boot catch-up and the safety net behind {@link reconcileBoundThreads}. */
+  async reconcileAllBoundThreads(now = Date.now()): Promise<void> {
     if (!this.options.messageReader) return;
     const bindings = await this.options.storage.listActiveRunBindings();
-    for (const binding of bindings) await this.reconcileBinding(binding);
+    this.lastFullReconcileAt = now;
+    const pending = new Map(this.pendingReconciles);
+    this.pendingReconciles.clear();
+    const active = new Set(bindings.map(binding => binding.id));
+    for (const id of this.cursorBoundaries.keys()) if (!active.has(id)) this.cursorBoundaries.delete(id);
+    await this.reconcileEntries(
+      bindings.map(binding => ({ binding, settled: pending.get(binding.id)?.settled ?? true })),
+      false,
+    );
+  }
+
+  /**
+   * A few bindings at a time, yielding between them: a pass is background work and
+   * must not hold the event loop or the database for the runs it follows. A binding
+   * that fails stays due for the next pass; the first failure is rethrown at the end.
+   */
+  private async reconcileEntries(
+    entries: Array<{ binding: FactoryRunBindingRecord; settled: boolean }>,
+    refresh: boolean,
+  ): Promise<void> {
+    let next = 0;
+    let failure: { error: unknown } | undefined;
+    const worker = async () => {
+      while (next < entries.length) {
+        const entry = entries[next++]!;
+        try {
+          await this.reconcileEntry(entry, refresh);
+        } catch (error) {
+          failure ??= { error };
+          if (!this.pendingReconciles.has(entry.binding.id)) this.pendingReconciles.set(entry.binding.id, entry);
+        }
+        await yieldToEventLoop();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(RECONCILE_CONCURRENCY, entries.length) }, worker));
+    if (failure) throw failure.error;
+  }
+
+  private async reconcileEntry(
+    entry: { binding: FactoryRunBindingRecord; settled: boolean },
+    refresh: boolean,
+  ): Promise<void> {
+    let binding = entry.binding;
+    if (refresh) {
+      // Noted at its last step; the card may have moved on and revoked it since.
+      const current = await this.options.storage.findRunBindingById({
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        id: binding.id,
+      });
+      if (current?.status !== 'active') {
+        this.cursorBoundaries.delete(binding.id);
+        return;
+      }
+      binding = current;
+    }
+    // Read before the transcript: a run that stops after this check gets its trailing read next pass.
+    const running = this.options.isThreadRunning?.(binding.threadId) ?? false;
+    await this.reconcileBinding(binding);
+    // A step that ran meanwhile already queued it again.
+    if (this.pendingReconciles.has(binding.id)) return;
+    if (running) this.pendingReconciles.set(binding.id, { binding, settled: false });
+    else if (!entry.settled) this.pendingReconciles.set(binding.id, { binding, settled: true });
   }
 
   async reconcileBinding(binding: FactoryRunBindingRecord): Promise<void> {
+    const previous = this.bindingReconciles.get(binding.id);
+    const run = (async () => {
+      if (previous) await previous.catch(() => undefined);
+      await this.reconcileBindingNow(binding);
+    })();
+    this.bindingReconciles.set(binding.id, run);
+    try {
+      await run;
+    } finally {
+      if (this.bindingReconciles.get(binding.id) === run) this.bindingReconciles.delete(binding.id);
+    }
+  }
+
+  private async reconcileBindingNow(binding: FactoryRunBindingRecord): Promise<void> {
     const reader = this.options.messageReader;
     if (!reader || binding.status !== 'active') return;
     // One keyed read up front: a binding whose item is gone or no longer in a
     // single rule stage would ingest nothing, so skip the cursor and message
     // reads entirely instead of paying them on every walk.
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!itemInRuleStage(await this.boards.load(binding), item)) return;
+    if (!itemInRuleStage(await this.boards.load(binding), item)) {
+      this.cursorBoundaries.delete(binding.id);
+      return;
+    }
     const cursor = await this.options.storage.getToolResultCursor(binding.orgId, binding.factoryProjectId, binding.id);
+    // The cursor start is inclusive: a message at the cursor time can be rewritten in
+    // place (a suspended tool call that later resumes with its result), and several
+    // messages can share a timestamp. Messages there that were already ingested and
+    // still hold the same results are skipped instead of ingested again every pass.
+    const startAt = cursor ? new Date(cursor.lastMessageCreatedAt).getTime() : undefined;
+    const previous = this.cursorBoundaries.get(binding.id);
+    const ingested = previous && previous.at === startAt ? previous.seen : new Map<string, string>();
+    let cursorAt = startAt;
+    let boundary = new Map<string, string>();
+    let read = false;
     let page = 0;
     while (true) {
       const result = await reader.listMessages({
@@ -512,21 +766,34 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(cursor ? { filter: { dateRange: { start: cursor.lastMessageCreatedAt } } } : {}),
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
-      await this.ingestMessages(binding, result.messages, undefined, item);
+      const fresh = result.messages.filter(
+        message => messageTime(message) !== startAt || ingested.get(message.id) !== completedToolCallsKey(message),
+      );
+      if (fresh.length > 0) await this.ingestMessages(binding, fresh, undefined, item);
       const last = result.messages.at(-1);
       if (last) {
-        await this.options.storage.advanceToolResultCursor({
-          bindingId: binding.id,
-          orgId: binding.orgId,
-          factoryProjectId: binding.factoryProjectId,
-          lastMessageId: last.id,
-          lastMessageCreatedAt: last.createdAt instanceof Date ? last.createdAt : new Date(last.createdAt),
-          updatedAt: new Date(),
-        });
+        read = true;
+        const lastAt = messageTime(last);
+        if (lastAt !== cursorAt) {
+          await this.options.storage.advanceToolResultCursor({
+            bindingId: binding.id,
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            lastMessageCreatedAt: new Date(lastAt),
+            updatedAt: new Date(),
+          });
+          cursorAt = lastAt;
+          boundary = new Map();
+        }
+        for (const message of result.messages) {
+          if (messageTime(message) === lastAt) boundary.set(message.id, completedToolCallsKey(message));
+        }
       }
       if (!result.hasMore) break;
       page += 1;
+      await yieldToEventLoop();
     }
+    if (read && cursorAt !== undefined) this.cursorBoundaries.set(binding.id, { at: cursorAt, seen: boundary });
   }
 
   private async ingestMessages(
@@ -561,11 +828,56 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
 
   private async ingestToolResult(
     binding: FactoryRunBindingRecord,
-    item: Card,
+    loaded: Card,
     toolResult: CompletedToolResult,
   ): Promise<void> {
+    let item = loaded;
     const board = boardForWorkItem(item);
     const boards = await this.boards.load(binding);
+    const finished = finishedPhase(boards, board, item, binding.role, toolResult);
+    // The exit tool finished the phase: the card may now leave it (the agent moves it). A result
+    // read again later (the step, then the thread) stamps once: the stamp names its tool call.
+    const at = new Date().toISOString();
+    const stampedCall = (item.metadata?.[PHASE_EXIT_METADATA_KEY] as { toolCallId?: unknown } | undefined)?.toolCallId;
+    if (
+      finished !== undefined &&
+      stampedCall !== toolResult.toolCallId &&
+      !exitToolSucceeded(item, finished, toolResult.toolName)
+    ) {
+      const entry = openEntry(item, finished);
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const stamped = await this.options.storage.update({
+            orgId: binding.orgId,
+            id: item.id,
+            userId: `agent:${binding.id}`,
+            patch: {
+              metadata: {
+                [PHASE_EXIT_METADATA_KEY]: {
+                  phase: finished,
+                  tool: toolResult.toolName,
+                  toolCallId: toolResult.toolCallId,
+                  at,
+                },
+                ...(toolResult.toolName === 'submit_plan' ? { planApprovedAt: at } : {}),
+              },
+            },
+            expectedRevision: item.revision,
+          });
+          if (stamped) item = stamped.item;
+          break;
+        } catch (error) {
+          if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+          // Another write landed first. While the card is still in the same visit to the phase,
+          // the result still finishes it; once the card moved on, it no longer needs finishing.
+          const current = await this.options.storage.get({ orgId: binding.orgId, id: item.id });
+          if (!current || attempt >= STAMP_ATTEMPTS || openEntry(current, finished) !== entry || entry === undefined) {
+            return;
+          }
+          item = current;
+        }
+      }
+    }
     const rule = resolveBoardToolRule(boards, board, toolResult.toolName);
     if (!rule) return;
     const ingressId = JSON.stringify([
@@ -636,8 +948,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       orgId: binding.orgId,
       factoryProjectId: binding.factoryProjectId,
       workItemId: item.id,
-      ingress: { identity: ingressId, triggerType: 'tool.result' },
-      configVersion: this.options.configVersion,
+      ingress: { identity: ingressId },
       expectedRevision: item.revision,
       actor: { ...context.actor },
       outcome,

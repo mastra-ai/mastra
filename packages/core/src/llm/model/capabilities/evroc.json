@@ -34,6 +34,11 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -41,6 +46,11 @@
       }
     ],
     "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "evroc/roc": [
       {
         "type": "budget_tokens"
       }
@@ -57,16 +67,6 @@
     "Qwen/Qwen3.6-35B-A3B": [
       {
         "type": "toggle"
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "evroc/roc": [
-      {
-        "type": "budget_tokens"
       }
     ],
     "zai-org/GLM-5.2": [

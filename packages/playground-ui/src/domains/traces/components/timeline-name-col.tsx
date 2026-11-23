@@ -1,4 +1,3 @@
-import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
@@ -8,6 +7,8 @@ import { SpanTypeBadge } from './span-type-badge';
 import { Badge } from '@/ds/components/Badge';
 import { SegmentedName } from '@/ds/components/SegmentedName';
 import { Txt } from '@/ds/components/Txt';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -149,11 +150,11 @@ export function TimelineNameCol({
             aria-expanded={isExpanded}
             className={cn(
               'flex size-5 cursor-pointer items-center justify-center rounded-md',
-              'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
+              'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-icon-md [&>svg]:opacity-50',
               focusRing,
             )}
           >
-            {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+            {isExpanded ? <IconChevronDownMedium /> : <IconChevronRightMedium />}
           </button>
         )}
       </div>

@@ -64,6 +64,15 @@ interface SlackAdapterChannelConfigBase {
 
   /** Who can approve or deny tool calls in a channel. Defaults to the requester; use `'anyone'` for shared channels. */
   toolApprovers?: ChannelAdapterConfig['toolApprovers'];
+
+  /**
+   * **Experimental.** Give the agent a `render_card` tool that posts
+   * generative UI cards as native Block Kit. Needs `@json-render/chat`
+   * installed. See `ChannelAdapterConfig['generativeUI']`.
+   *
+   * @default false
+   */
+  generativeUI?: boolean;
 }
 
 /**

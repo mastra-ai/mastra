@@ -24,7 +24,7 @@ When the target's `Mastra` instance has storage configured, the pipeline fetches
 
 For example, a workflow that calls an agent, which in turn calls tools, produces:
 
-```
+```text
 workflow_run
   └─ workflow_step (validate-input)
   └─ workflow_step (process-data)
@@ -156,7 +156,7 @@ Omit `stepType` entirely to match any step by name only.
 ]}
 />
 
-### Simple expected steps
+### Expected steps
 
 ```typescript
 const steps: ExpectedStep[] = [
@@ -739,7 +739,7 @@ const result = await runEvals({
 })
 ```
 
-### Example: efficiency and blacklist
+### Example: Efficiency and blacklist
 
 ```typescript title="src/unified-scorer.ts"
 import { createTrajectoryScorerCode } from '@mastra/evals/scorers/prebuilt'

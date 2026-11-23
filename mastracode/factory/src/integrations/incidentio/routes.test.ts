@@ -9,52 +9,11 @@ import { INCIDENTIO_FOLLOW_UPS_SOURCE_ID } from './intake.js';
 import { IncidentioIntegration } from './integration.js';
 import { buildIncidentioRoutes } from './routes.js';
 
-// A real integration instance with the network edge spied out: item listing
-// and detail resolution run the production mapping code paths against the
-// seeded `:memory:` intake storage.
+// A real integration instance with the network edge spied out: detail
+// resolution runs the production code path against the seeded `:memory:`
+// intake storage.
 let incidentio!: IncidentioIntegration;
 let seed!: FactoryStorageTestSeed;
-
-const followUpItem = {
-  source: {
-    type: 'issue',
-    externalId: 'incidentio:follow-up:01HFOLLOWUP',
-    url: 'https://app.incident.io/org/follow-ups/01HFOLLOWUP',
-  },
-  sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
-  title: 'INC-42: Add database failover alert',
-  status: 'outstanding',
-  labels: ['reliability'],
-  assignee: 'Grace Hopper',
-  createdAt: '2026-09-02T10:00:00Z',
-  updatedAt: '2026-09-02T12:00:00Z',
-  metadata: {
-    identifier: 'INC-42',
-    stateType: 'unstarted',
-    priority: 'Urgent',
-    author: 'Ada Lovelace',
-    incidentioItemType: 'follow-up',
-    incidentioIncidentId: 'incident-1',
-  },
-};
-
-const incidentItem = {
-  source: {
-    type: 'issue',
-    externalId: 'incidentio:incident:incident-1',
-    url: 'https://app.incident.io/org/incidents/incident-1',
-  },
-  sourceId: 'incidentio:incidents',
-  title: 'INC-42: API unavailable',
-  status: 'Investigating',
-  labels: [],
-  assignee: null,
-  createdAt: '2026-09-01T10:00:00Z',
-  updatedAt: '2026-09-01T11:00:00Z',
-  metadata: { identifier: 'INC-42', stateType: 'started', incidentioItemType: 'incident' },
-};
-
-const listItems = vi.fn(async () => ({ items: [followUpItem, incidentItem], nextCursor: null }));
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
@@ -63,7 +22,6 @@ function buildApp(
     authEnabled?: boolean;
     withIncidentio?: boolean;
     withIntake?: boolean;
-    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
   } = {},
 ) {
   const app = new Hono();
@@ -77,7 +35,6 @@ function buildApp(
       incidentio: (options.withIncidentio ?? true) ? incidentio : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
-      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues as never } : {}),
     }),
   );
   return app;
@@ -100,7 +57,6 @@ const createProject = async (id: string) => {
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   incidentio = new IncidentioIntegration({ apiKey: 'incident-key' });
-  vi.spyOn(incidentio.intake, 'listItems').mockImplementation(listItems as never);
   await seed.intake.saveConfig({
     orgId: 'org1',
     config: { incidentio: { enabled: true, sourceIds: [INCIDENTIO_FOLLOW_UPS_SOURCE_ID] } },
@@ -119,7 +75,7 @@ describe('status route', () => {
     const app = buildApp(org1(), { authEnabled: false });
     const res = await app.request('/web/incidentio/status');
     expect(await res.json()).toMatchObject({ enabled: false, configured: true, reason: 'missing_config' });
-    expect((await app.request('/web/incidentio/issues')).status).toBe(404);
+    expect((await app.request(`/web/incidentio/issues/detail?factoryProjectId=${projectA}`)).status).toBe(404);
   });
 
   it('reports disabled without the integration instance', async () => {
@@ -176,107 +132,6 @@ describe('status route', () => {
   });
 });
 
-describe('issues route', () => {
-  beforeEach(async () => {
-    await createProject(projectA);
-  });
-
-  const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'incidentio', sourceId, factoryProjectId, board });
-
-  it('rejects unauthenticated users', async () => {
-    expect((await buildApp(null).request('/web/incidentio/issues')).status).toBe(401);
-  });
-
-  it('404s when incident.io intake is disabled in Settings', async () => {
-    await seed.intake.saveConfig({ orgId: 'org1', config: { incidentio: { enabled: false, sourceIds: [] } } });
-    const res = await buildApp(org1()).request('/web/incidentio/issues');
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: 'incidentio_intake_disabled' });
-  });
-
-  it('serves only follow-ups from sources routed to the Factory, never incidents', async () => {
-    await bind(INCIDENTIO_FOLLOW_UPS_SOURCE_ID, projectA);
-
-    const res = await buildApp(org1()).request(`/web/incidentio/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      issues: [
-        {
-          id: 'incidentio:follow-up:01HFOLLOWUP',
-          identifier: 'INC-42',
-          title: 'Add database failover alert',
-          url: 'https://app.incident.io/org/follow-ups/01HFOLLOWUP',
-          author: 'Ada Lovelace',
-          state: 'outstanding',
-          stateType: 'unstarted',
-          priorityLabel: 'Urgent',
-          assignee: 'Grace Hopper',
-          incident: 'incident-1',
-          labels: ['reliability'],
-          createdAt: '2026-09-02T10:00:00Z',
-          updatedAt: '2026-09-02T12:00:00Z',
-          sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
-        },
-      ],
-      nextCursor: null,
-    });
-    expect(listItems).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org1', userId: 'u1', sourceIds: [INCIDENTIO_FOLLOW_UPS_SOURCE_ID] }),
-    );
-  });
-
-  it('returns an empty page without fetching when no source is bound to the Factory', async () => {
-    const res = await buildApp(org1()).request(`/web/incidentio/issues?factoryProjectId=${projectA}`);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listItems).not.toHaveBeenCalled();
-  });
-
-  it('rejects a malformed pagination cursor', async () => {
-    const res = await buildApp(org1()).request('/web/incidentio/issues?after=%00bad%20cursor');
-    expect(res.status).toBe(400);
-  });
-
-  it('ingests a board-scoped listing through the Factory rules', async () => {
-    await bind(INCIDENTIO_FOLLOW_UPS_SOURCE_ID, projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/incidentio/issues?factoryProjectId=${projectA}`,
-    );
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId: projectA,
-      issues: [
-        expect.objectContaining({
-          id: 'incidentio:follow-up:01HFOLLOWUP',
-          identifier: 'INC-42',
-          stateType: 'unstarted',
-          assignee: 'Grace Hopper',
-          author: 'Ada Lovelace',
-          sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
-        }),
-      ],
-      intakeBoards: { [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]: 'work' },
-    });
-  });
-
-  it('does not ingest an unscoped listing', async () => {
-    await bind(INCIDENTIO_FOLLOW_UPS_SOURCE_ID, projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/incidentio/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).not.toHaveBeenCalled();
-  });
-});
-
 describe('issue detail route', () => {
   const detailUrl = `/web/incidentio/issues/detail?factoryProjectId=${projectA}&issueRef=incidentio:follow-up:01HFOLLOWUP`;
 
@@ -309,7 +164,6 @@ describe('issue detail route', () => {
       integrationId: 'incidentio',
       sourceId: INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
       factoryProjectId: projectA,
-      board: 'work',
     });
     vi.spyOn(incidentio.intake, 'getIssue').mockResolvedValue(followUpDetail);
 

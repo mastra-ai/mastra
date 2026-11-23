@@ -1,0 +1,298 @@
+import type { Mastra } from '@mastra/core/mastra';
+import type { MCPHttpTransportResult } from '../handlers/mcp';
+import { HTTPException } from '../http-exception';
+import type { ServerRoute } from '../server-adapter/routes';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { BuiltinMCPApps } from './catalogue';
+import {
+  BUILTIN_MCP_SERVER_ID,
+  DEFAULT_BUILTIN_MCP_PATH,
+  getBuiltinMCPTransportOptions,
+  isBuiltinMCPEnabled,
+  resolveBuiltinMCPConfig,
+  resolveBuiltinMCPPath,
+  warnOnReservedMCPServerId,
+} from './config';
+
+let requestStateKey: Uint8Array | undefined;
+
+/**
+ * Signs `input_required` continuation state. No built-in tool suspends, so the key is never used to resume a
+ * request; passing one keeps MCPServer from warning about its per-process default on every request.
+ * Created on first use: Cloudflare Workers refuses to start a Worker that generates random values in global scope.
+ */
+function getRequestStateKey(): Uint8Array {
+  return (requestStateKey ??= globalThis.crypto.getRandomValues(new Uint8Array(32)));
+}
+
+const MISSING_MCP_MESSAGE = 'Built-in MCP server needs @mastra/mcp: npm install @mastra/mcp';
+const reportedMissingMCP = new WeakSet<Mastra>();
+
+/** Whether `error` (or an error it wraps) says `@mastra/mcp` itself can't be resolved, not a module inside it. */
+export function isMissingMCPPackage(error: unknown): boolean {
+  for (let current = error; current instanceof Error; current = current.cause) {
+    const code = (current as { code?: unknown }).code;
+    if (
+      (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+      /Cannot find (package|module) '@mastra\/mcp'/.test(current.message)
+    ) {
+      return true;
+    }
+    // Cloudflare Workers (workerd) throws a plain Error without a `code`.
+    if (/^No such module "@mastra\/mcp"/.test(current.message)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Loads `@mastra/mcp` (an optional peer dependency) on the first MCP request, so apps that never serve the
+ * built-in MCP endpoint don't load the MCP SDK at startup. The only other import is the descriptor route's
+ * install check (./descriptor), which runs when Studio opens the MCP Servers page on an enabled server.
+ * When the package isn't installed the endpoint answers 501.
+ * The catalogue is loaded here as well: it imports the server adapter, which imports this route.
+ */
+async function loadBuiltinMCP(mastra: Mastra) {
+  let mcp: typeof import('@mastra/mcp');
+  try {
+    // Keep this import directly inside `try`: bundlers such as wrangler's esbuild only accept an unresolvable
+    // dynamic import there, so moving it out breaks builds of apps that don't install @mastra/mcp.
+    mcp = await import('@mastra/mcp');
+  } catch (error) {
+    if (!isMissingMCPPackage(error)) throw error;
+    if (!reportedMissingMCP.has(mastra)) {
+      reportedMissingMCP.add(mastra);
+      mastra.getLogger()?.error(MISSING_MCP_MESSAGE);
+    }
+    throw new HTTPException(501, {
+      message: MISSING_MCP_MESSAGE,
+      res: Response.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: MISSING_MCP_MESSAGE } }),
+    });
+  }
+  const { buildBuiltinMCPTools, modelSummaryOf } = await import('./catalogue');
+  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools, modelSummaryOf };
+}
+
+const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
+const EXPLORER_URI = 'ui://mastra/observability-explorer';
+const APPS_PACKAGE = '@mastra/mcp-apps-components';
+
+type AppResource = { name: string; description?: string; html: string };
+type BuiltinApps = {
+  appResources: Record<string, AppResource>;
+  apps: BuiltinMCPApps;
+};
+let builtinApps: Promise<BuiltinApps | undefined> | undefined;
+
+/**
+ * The MCP Apps the built-in server ships, from `@mastra/mcp-apps-components` (an optional peer dependency
+ * like `@mastra/mcp`): without it, tools carry no app link and clients get their JSON results as before.
+ * An app that's installed but fails to load is logged and left out, so it can't take down `/api/mcp`.
+ * Loaded once per process.
+ */
+function loadBuiltinApps(mastra: Mastra): Promise<BuiltinApps | undefined> {
+  builtinApps ??= (async () => {
+    // Keep each import directly inside its own `try`, like `@mastra/mcp` above (wrangler's esbuild only
+    // accepts an unresolvable dynamic import there). Separate subpaths let an older package without the
+    // observability explorer still serve the trace viewer.
+    let traceViewer: AppResource | undefined;
+    let observabilityExplorer: AppResource | undefined;
+    try {
+      traceViewer = (await import('@mastra/mcp-apps-components/trace-viewer')).traceViewerApp;
+    } catch (error) {
+      if (!isMissingAppsPackage(error)) reportAppLoadFailure(mastra, 'trace-viewer', error);
+    }
+    try {
+      observabilityExplorer = (await import('@mastra/mcp-apps-components/observability-explorer'))
+        .observabilityExplorerApp;
+    } catch (error) {
+      if (!isMissingAppsPackage(error)) reportAppLoadFailure(mastra, 'observability-explorer', error);
+    }
+    if (!traceViewer && !observabilityExplorer) return undefined;
+    const result: BuiltinApps = { appResources: {}, apps: {} };
+    if (traceViewer) {
+      result.appResources[TRACE_VIEWER_URI] = traceViewer;
+      result.apps.traceViewer = TRACE_VIEWER_URI;
+    }
+    if (observabilityExplorer) {
+      result.appResources[EXPLORER_URI] = observabilityExplorer;
+      result.apps.observabilityExplorer = EXPLORER_URI;
+    }
+    return result;
+  })();
+  return builtinApps;
+}
+
+function reportAppLoadFailure(mastra: Mastra, app: string, error: unknown) {
+  mastra.getLogger()?.warn(`Built-in MCP server: couldn't load the ${app} MCP App, serving its tools without it`, {
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+/** Whether `error` says `@mastra/mcp-apps-components` (or, in an older version, its app subpath) isn't installed. */
+export function isMissingAppsPackage(error: unknown): boolean {
+  for (let current = error; current instanceof Error; current = current.cause) {
+    const code = (current as { code?: unknown }).code;
+    if (
+      (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+      current.message.includes(`'${APPS_PACKAGE}`)
+    ) {
+      return true;
+    }
+    // An older version, without the app's subpath.
+    if (code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && current.message.includes(`/${APPS_PACKAGE}/package.json`)) {
+      return true;
+    }
+    // Cloudflare Workers (workerd) throws a plain Error without a `code`.
+    if (/^No such module "@mastra\/mcp-apps-components[/"]/.test(current.message)) return true;
+    // Vite (e.g. vitest running the app) replaces an uninstalled optional peer with a module that throws this.
+    if (/^Could not resolve "@mastra\/mcp-apps-components[/"]/.test(current.message)) return true;
+  }
+  return false;
+}
+
+/** Dispatched routes see only the bearer credential, never cookies or the Studio client-type header. */
+function bearerOnly(request: Request | undefined): Request | undefined {
+  if (!request) return undefined;
+  const authorization = request.headers.get('authorization');
+  return new Request(request.url, { method: 'GET', headers: authorization ? { authorization } : {} });
+}
+
+/**
+ * Streamable HTTP endpoint of the built-in Mastra MCP server (`/api/mcp` by default).
+ *
+ * Every request gets its own protocol engine holding only the tools this caller may use. Tool calls run
+ * the backing server routes in-process with this request's RequestContext.
+ */
+export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
+  method: 'ALL',
+  path: DEFAULT_BUILTIN_MCP_PATH,
+  responseType: 'mcp-http',
+  summary: 'Mastra MCP server',
+  description: 'Streamable HTTP endpoint of the built-in MCP server exposing agents, workflows, and tools',
+  tags: ['MCP'],
+  requiresAuth: true,
+  requiresPermission: 'mcp:read',
+  authTransport: 'bearer',
+  handler: async ({
+    mastra,
+    requestContext,
+    registeredTools,
+    taskStore,
+    routePrefix,
+    abortSignal,
+    request,
+  }): Promise<MCPHttpTransportResult> => {
+    if (!isBuiltinMCPEnabled(mastra)) {
+      throw new HTTPException(404, { message: 'Not Found' });
+    }
+    const config = resolveBuiltinMCPConfig(mastra, request);
+    const { MCPServer, buildBuiltinMCPTools, modelSummaryOf } = await loadBuiltinMCP(mastra);
+    const apps = config.apps ? await loadBuiltinApps(mastra) : undefined;
+    const tools = await buildBuiltinMCPTools(
+      {
+        mastra,
+        requestContext,
+        registeredTools,
+        taskStore,
+        routePrefix,
+        abortSignal,
+        request: bearerOnly(request),
+        mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
+        apps: apps?.apps,
+      },
+      config,
+    );
+    const { serverInfo } = config;
+    const server = new MCPServer({
+      id: BUILTIN_MCP_SERVER_ID,
+      name: serverInfo.name ?? 'Mastra',
+      version: serverInfo.version ?? '1.0.0',
+      title: serverInfo.title,
+      instructions: serverInfo.instructions,
+      tools,
+      // An app only opens from a tool the caller was given, and its own calls are tool calls.
+      appResources: apps?.appResources,
+      // Clients without MCP Apps support see no app links, resources, or `ui` capability.
+      appsRequireClientSupport: true,
+      toolResult: {
+        // Hosts give the model `content` and the app `structuredContent`: when the app renders the full
+        // output, the model reads a summary of it instead.
+        transform: ({ toolName, output, result, apps }) => {
+          if (!apps || result.isError) return undefined;
+          const withStudio = config.studioUrl
+            ? { ...result, _meta: { ...result._meta, 'mastra/studioUrl': config.studioUrl } }
+            : result;
+          const summary = modelSummaryOf(tools[toolName]);
+          if (!summary || typeof output !== 'object' || output === null || Array.isArray(output)) return withStudio;
+          // Routes can return dates as `Date`s; read the output as the client receives it.
+          const sent = JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
+          return {
+            ...withStudio,
+            structuredContent: sent,
+            content: [{ type: 'text', text: summary(sent) }],
+          };
+        },
+      },
+      legacy: 'stateless',
+      requestState: { key: getRequestStateKey() },
+    });
+    server.__setLogger(mastra.getLogger());
+    return {
+      server,
+      httpPath: getBuiltinMCPMountedPath(mastra),
+      mcpOptions: getBuiltinMCPTransportOptions(mastra),
+    };
+  },
+});
+
+const mountedPaths = new WeakMap<Mastra, string>();
+
+/** Path the built-in MCP route is served on (without the API prefix), after collision fallback. */
+export function getBuiltinMCPMountedPath(mastra: Mastra): string {
+  return mountedPaths.get(mastra) ?? resolveBuiltinMCPPath(mastra);
+}
+
+const warnedCollision = new WeakSet<Mastra>();
+
+/** Whether `path` would be served by `route` (`:param` matches one segment, `*` the rest). */
+function routeMatches(route: ServerRoute, path: string): boolean {
+  const pattern = route.path
+    .split('/')
+    .map(segment =>
+      segment === '*' ? '.*' : segment.startsWith(':') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    )
+    .join('/');
+  return new RegExp(`^${pattern}/?$`).test(path);
+}
+
+/**
+ * Returns the route as it is mounted for this Mastra instance: the built-in MCP route moves to
+ * `server.mcp.path`; every other route is returned unchanged. Adapters call this while registering
+ * `routes`, so the reserved-id warning and path collisions are reported at startup. A `server.mcp.path`
+ * that any of `routes` would also serve falls back to `/mcp`.
+ */
+export function resolveServerRoute(
+  route: ServerRoute,
+  mastra: Mastra,
+  routes: readonly ServerRoute[] = [],
+): ServerRoute {
+  if (route !== BUILTIN_MCP_HTTP_ROUTE) return route;
+  warnOnReservedMCPServerId(mastra);
+  let path = resolveBuiltinMCPPath(mastra);
+  const taken = routes.find(other => other !== BUILTIN_MCP_HTTP_ROUTE && routeMatches(other, path));
+  if (taken && path !== DEFAULT_BUILTIN_MCP_PATH) {
+    if (!warnedCollision.has(mastra)) {
+      warnedCollision.add(mastra);
+      mastra
+        .getLogger()
+        ?.error(
+          `server.mcp.path "${path}" collides with the ${taken.method} ${taken.path} route; using "${DEFAULT_BUILTIN_MCP_PATH}".`,
+        );
+    }
+    path = DEFAULT_BUILTIN_MCP_PATH;
+  }
+  mountedPaths.set(mastra, path);
+  return path === route.path ? route : { ...route, path };
+}

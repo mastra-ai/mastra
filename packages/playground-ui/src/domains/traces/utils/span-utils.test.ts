@@ -113,13 +113,9 @@ describe('getInputPreview', () => {
 
   it('falls back to JSON for anything else, truncating past the limit', () => {
     expect(getInputPreview({ query: 'weather' })).toBe('{"query":"weather"}');
-    expect(getInputPreview({ query: 'z'.repeat(200) })).toBe(
-      `${JSON.stringify({ query: 'z'.repeat(200) }).slice(0, 100)}…`,
-    );
+    expect(getInputPreview({ query: 'z'.repeat(200) })).toBe(`{"query":"${'z'.repeat(90)}…`);
     // `{"q":"..."}` is exactly 100 characters, so it is left whole.
-    const exactly100 = JSON.stringify({ q: 'z'.repeat(92) });
-    expect(exactly100).toHaveLength(100);
-    expect(getInputPreview({ q: 'z'.repeat(92) })).toBe(exactly100);
+    expect(getInputPreview({ q: 'z'.repeat(92) })).toBe(`{"q":"${'z'.repeat(92)}"}`);
   });
 });
 
@@ -132,7 +128,8 @@ describe('isTokenLimitExceeded', () => {
     expect(isTokenLimitExceeded(spanWith({}))).toBe(false);
     expect(isTokenLimitExceeded(undefined)).toBeFalsy();
     // A span may arrive with no attributes at all.
-    expect(isTokenLimitExceeded({} as SpanRecord)).toBeFalsy();
+    const spanWithoutAttributes = {} as SpanRecord;
+    expect(isTokenLimitExceeded(spanWithoutAttributes)).toBeFalsy();
   });
 });
 

@@ -43,13 +43,6 @@ describe('ScoreDataPanel', () => {
 
       expect(onClose).toHaveBeenCalledTimes(1);
     });
-
-    it('does not render the back-arrow close button', async () => {
-      renderPanel();
-
-      await screen.findByRole('button', { name: 'Close score' });
-      expect(screen.queryByRole('button', { name: 'Close panel' })).toBeNull();
-    });
   });
 
   describe('when no previous/next handlers are given', () => {

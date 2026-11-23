@@ -143,3 +143,59 @@ export const Compact: Story = {
     ),
   ],
 };
+
+// Imported Linear documents, keyed by their source ids under a connection's scope.
+const LINEAR_SCOPE = 'linear:Mastra:lin_01M6M0HHKH3T8VAWTWZ13MKNCE';
+const linearScope = page('lin-scope', null, { scopeId: 'lin-scope', name: LINEAR_SCOPE, address: LINEAR_SCOPE });
+const linearDocs = page('lin-docs', 'lin-scope', { scopeId: 'lin-scope', name: 'Documents', key: 'linear' });
+const investigation = page('mobs', 'lin-docs', {
+  scopeId: 'lin-scope',
+  name: 'MOBS Investigation',
+  key: '464a18f3-2607-4619-b1fa-6820548f0719',
+  body: 'Production CPU climbs with each discovery pass; this tracks why.',
+});
+const benchmarks = page('benchmarks', 'lin-docs', {
+  scopeId: 'lin-scope',
+  name: 'Incremental discovery benchmarks and production trial decision',
+  key: '9c1e0b7d-4e5f-8a6b-3f2a-1d0c9b8a7e6f',
+});
+const importer = 'importer:kimp_cbd1e92f-c828-41a8-a118-dc6cbd322a16/run:run_1';
+
+/**
+ * An importer's relation notes: each names its page by a long `[[scope#path]]` ref and is stamped to the
+ * connection's scope. Links show the page titles; the refs and long addresses stay inside their cards.
+ */
+export const LongImportedRefs: Story = {
+  args: {
+    // Only the related page is loaded: the open page reaches the notes through its own detail.
+    pagesById: new Map([[benchmarks.id, benchmarks]]),
+    page: investigation,
+    ancestors: [linearScope, linearDocs],
+    notes: [
+      {
+        ...note(
+          'n3',
+          `Related: [[${LINEAR_SCOPE}#linear/${benchmarks.key}]] — This benchmark quantifies incremental discovery as a potential remedy for the CPU issue.`,
+          importer,
+          1,
+          ['benchmarks'],
+        ),
+        pageId: 'mobs',
+        stampScopeIds: ['lin-scope'],
+      },
+    ],
+    mentionedBy: [
+      {
+        ...note(
+          'm1',
+          `Related: [[${LINEAR_SCOPE}#linear/${investigation.key}]] — This benchmark quantifies incremental discovery as a potential remedy for the production CPU issue documented in the MOBS investigation.`,
+          importer,
+          1,
+          ['mobs'],
+        ),
+        pageId: 'benchmarks',
+        stampScopeIds: ['lin-scope'],
+      },
+    ],
+  },
+};

@@ -1,11 +1,11 @@
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentProps } from 'react';
 import type { SidebarState } from '../root/sidebar-context';
 import { useMaybeSidebarState } from '../root/sidebar-context';
 import { textStyle } from '@/ds/primitives/text';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export type SidebarNavShowMoreProps = Omit<ComponentPropsWithoutRef<'button'>, 'children' | 'onClick'> & {
+export type SidebarNavShowMoreProps = Omit<ComponentProps<'button'>, 'children' | 'onClick'> & {
   foldedCount: number;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;

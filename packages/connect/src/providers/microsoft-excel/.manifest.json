@@ -18,7 +18,7 @@
     "tools/create-workbook.ts": "91fd0ae9ba50e821a42f0cbc2293ef511ee1ed2aa2eb798b0a854910f639045b",
     "tools/delete-defined-name.ts": "1aa68b49b4e0197ffed33993fd5e5019d12925d7c80de511f146a11f3575147d",
     "tools/delete-table.ts": "2b104ae73fd64ece92ac6329b26fafb2674fd0bfb6af59b8b49f0bff6b5106f0",
-    "tools/delete-workbook.ts": "bc5f2b380da6c3770a82cf2389c5932c24b14b4a8e83403aa6cfd931f0f28e42",
+    "tools/delete-workbook.ts": "df0d11bda74bd9304d11ac8285449fb06fe4fae750df6231735e871dc0d36601",
     "tools/delete-worksheet.ts": "5778113d53a3408f1109622257c4c69bb4aa3bf1c54eb5bd77b6c6af1bb05a2b",
     "tools/get-chart-image.ts": "ad05f32874a49a5517145b2926df76bd9d58f9d34f6fb5a07a0eb9a4bc6c1ef9",
     "tools/get-range.ts": "cd21b20a95111e79c8dc8c5195fa55753936c48fdbf9719100d3c7bcbfd91cf5",

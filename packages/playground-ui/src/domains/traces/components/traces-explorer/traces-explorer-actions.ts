@@ -13,7 +13,7 @@ import type {
 } from '../../trace-filters';
 import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
 import type { SpanTab, TraceDatePreset } from '../../types';
-import type { TraceSpanView } from '../trace-data-panel-view';
+import type { TraceSpanView } from '../trace-panel';
 
 export type TracesSelection = {
   traceId?: string;
@@ -139,7 +139,10 @@ const isQueryableToken = (token: TraceFilterToken, unqueryableFieldIds: Readonly
  */
 export const sanitizeTracesFilters = (filters: TracesFilters, support: TraceQueryFieldSupport): TracesFilters => {
   const unqueryableFieldIds = traceQueryUnqueryableFieldIds(support);
-  const tokens = filters.tokens.filter(token => isQueryableToken(token, unqueryableFieldIds));
+  const tokens = filters.tokens.filter(
+    token =>
+      isQueryableToken(token, unqueryableFieldIds) && (support.withTokenSearch || token.operatorId !== 'hasAllTokens'),
+  );
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
 
@@ -153,9 +156,11 @@ const selectsRunning = (node: TraceFilterGroup | TraceFilterToken): boolean => {
 export const selectsRunningStatus = (filters: TracesFilters): boolean =>
   filters.tokens.some(selectsRunning) || filters.groups.some(selectsRunning);
 
+/** Only positive tokens select a value; an excluded status or entity type selects nothing. */
 const tokenValue = (tokens: TraceFilterToken[], fieldId: string) => {
-  const value = tokens.find(token => token.fieldId === fieldId)?.value;
-  return typeof value === 'string' ? value : undefined;
+  const token = tokens.find(token => token.fieldId === fieldId);
+  if (!token || (token.operatorId && token.operatorId !== 'is' && token.operatorId !== 'in')) return undefined;
+  return typeof token.value === 'string' ? token.value : undefined;
 };
 
 export const getSelectedEntityOption = (tokens: TraceFilterToken[]): EntityOptions | undefined => {
@@ -186,6 +191,7 @@ export const buildTracesQueryRequest = ({
     tokens: filters.tokens,
     groups: filters.groups,
     excludedFieldIds: traceQueryUnqueryableFieldIds(support),
+    withTokenSearch: support.withTokenSearch,
     now,
   });
 
@@ -204,8 +210,9 @@ export const resolveTracesDateWindow = (
   datePreset: TraceDatePreset,
   dateFrom: Date | undefined,
   dateTo: Date | undefined,
+  now: Date = new Date(),
 ): { dateFrom?: Date; dateTo?: Date } => {
   if (datePreset === 'custom') return { dateFrom, dateTo };
   const ms = PRESET_MS[datePreset];
-  return { dateFrom: ms ? new Date(Date.now() - ms) : undefined, dateTo: undefined };
+  return { dateFrom: ms ? new Date(now.getTime() - ms) : undefined, dateTo: undefined };
 };

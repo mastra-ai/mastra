@@ -2,6 +2,7 @@ import type {
   AnyRecordedSpan,
   CorrelationContext,
   FeedbackEvent,
+  FeedbackReplacementEvent,
   FeedbackInput,
   RecordedSpan,
   RecordedTrace,
@@ -13,7 +14,7 @@ import type {
 import type { GetTraceResponse, SpanRecord } from '@mastra/core/storage';
 import { generateSignalId } from './ids';
 
-type RecordedAnnotationEvent = ScoreEvent | FeedbackEvent;
+type RecordedAnnotationEvent = ScoreEvent | FeedbackEvent | FeedbackReplacementEvent;
 type EmitRecordedEvent = (event: RecordedAnnotationEvent) => void | Promise<void>;
 type CanEmitRecordedEvent = () => boolean;
 type DebugRecordedAnnotationUnavailable = (args: {
@@ -156,48 +157,39 @@ function findSpanById(spans: SpanRecord[], spanId: string | undefined): SpanReco
   return spans.find(span => span.spanId === spanId);
 }
 
-export function buildRecordedScoreEventFromTrace(args: {
-  trace: GetTraceResponse;
-  score: ScoreInput;
-  spanId?: string;
-}): ScoreEvent | null {
-  const rootSpan = findRootSpan(args.trace.spans);
-  if (!rootSpan) return null;
-
-  const span = args.spanId ? findSpanById(args.trace.spans, args.spanId) : rootSpan;
+/** Resolve a storage exporter's copy without changing the event identity or other destinations' payloads. */
+export function resolveRecordedEventFromTrace(
+  trace: GetTraceResponse,
+  event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent,
+): ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | null {
+  const record = event.type === 'score' ? event.score : event.feedback;
+  const spans = trace.spans.filter(span => span.traceId === record.traceId);
+  const span = record.spanId ? findSpanById(spans, record.spanId) : spans.find(span => !span.parentSpanId);
   if (!span) return null;
-
-  const parent = span.parentSpanId ? findSpanById(args.trace.spans, span.parentSpanId) : undefined;
-
-  return buildScoreEvent({
-    traceId: span.traceId,
-    spanId: args.spanId,
-    correlationContext: buildCorrelationContext(span, rootSpan, parent),
-    score: args.score,
-    inheritedMetadata: span.metadata,
-  });
-}
-
-export function buildRecordedFeedbackEventFromTrace(args: {
-  trace: GetTraceResponse;
-  feedback: FeedbackInput;
-  spanId?: string;
-}): FeedbackEvent | null {
-  const rootSpan = findRootSpan(args.trace.spans);
-  if (!rootSpan) return null;
-
-  const span = args.spanId ? findSpanById(args.trace.spans, args.spanId) : rootSpan;
-  if (!span) return null;
-
-  const parent = span.parentSpanId ? findSpanById(args.trace.spans, span.parentSpanId) : undefined;
-
-  return buildFeedbackEvent({
-    traceId: span.traceId,
-    spanId: args.spanId,
-    correlationContext: buildCorrelationContext(span, rootSpan, parent),
-    feedback: args.feedback,
-    inheritedMetadata: span.metadata,
-  });
+  const byId = new Map(spans.map(span => [span.spanId, span]));
+  let root = span;
+  const visited = new Set<string>();
+  while (root.parentSpanId) {
+    if (visited.has(root.spanId)) return null;
+    visited.add(root.spanId);
+    const parent = byId.get(root.parentSpanId);
+    // Wait for the actual ancestor root: an unrelated root cannot supply this span's tags.
+    if (!parent) return null;
+    root = parent;
+  }
+  const context = {
+    correlationContext: buildCorrelationContext(
+      span,
+      root,
+      span.parentSpanId ? byId.get(span.parentSpanId) : undefined,
+    ),
+    metadata: mergeMetadata(span.metadata, record.metadata),
+  };
+  return event.type === 'score'
+    ? { type: 'score', score: { ...event.score, ...context } }
+    : event.type === 'feedback_replacement'
+      ? { type: 'feedback_replacement', feedback: { ...event.feedback, ...context } }
+      : { type: 'feedback', feedback: { ...event.feedback, ...context } };
 }
 
 class RecordedSpanImpl<TType extends SpanType = SpanType> implements RecordedSpan<TType> {

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { MessageList } from '../../../agent/message-list';
+import { getModelFacingValidationError, validateToolInput } from '../../../tools/validation';
 import { applyBackgroundToolResult } from './background-task-result-core';
 
 /**
@@ -209,5 +211,96 @@ describe('applyBackgroundToolResult identity scan', () => {
 
     await expect(applyBackgroundToolResult(deps)).rejects.toThrow(/Background task status conflict for task "task-1"/);
     expect(flush).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A background tool whose input, request context or output failed validation
+ * completes with a ValidationError. The mapper is typed to receive only the
+ * tool's output, so it must not run on the error, and the error must reach
+ * the model, without the raw values it quotes, tagged as an error result. A
+ * result that only has a validation error's fields is still mapped. Runs on
+ * every engine's background path, Inngest included, without per-engine setup. (#30211)
+ */
+describe('applyBackgroundToolResult toModelOutput', () => {
+  function placeholderList() {
+    const messageList = new MessageList();
+    messageList.add(
+      makeAssistantMessage(
+        [
+          makeBackgroundInvocationPart({
+            toolCallId: 'call_0',
+            taskId: 'task-1',
+            status: 'running',
+            result: 'Background task started. Task ID: task-1.',
+          }),
+        ],
+        'msg-1',
+      ),
+      'response',
+    );
+    return messageList;
+  }
+
+  function resultPart(messageList: MessageList) {
+    return messageList.get.all.db()[0]?.content?.parts?.find(p => p.type === 'tool-invocation') as any;
+  }
+
+  it('does not map a validation error, so the model reads the error itself', async () => {
+    const messageList = placeholderList();
+    const { error: validationError } = validateToolInput(
+      z.object({ query: z.string() }),
+      { note: 'jane.doe@example.com' },
+      'background-work',
+    );
+    const toModelOutput = vi.fn((output: any) => ({ type: 'json', value: { answer: output.answer } }));
+    const { deps } = makeDeps(messageList, { taskId: 'task-1', result: validationError });
+
+    await applyBackgroundToolResult({ ...deps, toModelOutput });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+    const part = resultPart(messageList);
+    expect(part.toolInvocation.result).toEqual(validationError);
+    expect(part.providerMetadata.mastra.modelOutput).toEqual({
+      type: 'error-json',
+      value: getModelFacingValidationError(validationError),
+    });
+    expect(part.providerMetadata.mastra.modelOutput.value.message).toContain(
+      'Tool input validation failed for background-work',
+    );
+    expect(JSON.stringify(part.providerMetadata.mastra.modelOutput)).not.toContain('jane.doe@example.com');
+  });
+
+  it("maps a result that only has a validation error's fields", async () => {
+    const messageList = placeholderList();
+    const lookalike = {
+      error: true,
+      message: 'Upstream rejected jane.doe@example.com',
+      validationErrors: { errors: [], fields: {} },
+    };
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'The upstream API rejected the request.' }));
+    const { deps } = makeDeps(messageList, { taskId: 'task-1', result: lookalike });
+
+    await applyBackgroundToolResult({ ...deps, toModelOutput });
+
+    expect(toModelOutput).toHaveBeenCalledWith(lookalike);
+    expect(resultPart(messageList).providerMetadata.mastra.modelOutput).toEqual({
+      type: 'text',
+      value: 'The upstream API rejected the request.',
+    });
+  });
+
+  it('still maps a successful result', async () => {
+    const messageList = placeholderList();
+    const toModelOutput = vi.fn((output: any) => ({ type: 'json', value: { answer: output.answer } }));
+    const { deps } = makeDeps(messageList, { taskId: 'task-1', result: { answer: '42', secret: 'internal' } });
+
+    await applyBackgroundToolResult({ ...deps, toModelOutput });
+
+    expect(toModelOutput).toHaveBeenCalledWith({ answer: '42', secret: 'internal' });
+    expect(resultPart(messageList).providerMetadata.mastra.modelOutput).toEqual({
+      type: 'json',
+      value: { answer: '42' },
+    });
   });
 });
