@@ -1,7 +1,9 @@
 import type { MastraServerCache } from '../../cache/base';
 import type { PubSub } from '../../events/pubsub';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import type { DeclaredAgentSchedule } from '../../schedules/define';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import type { DynamicArgument } from '../../types';
@@ -10,6 +12,8 @@ import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
 import type { AgentStreamBus } from '../streams/bus';
+import type { AgentRunRecord } from '../streams/run-records';
+import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from '../streams/run-records';
 import type { AgentStreamsConfig } from '../streams/types';
 import type { AgentDurableOption, ToolsInput } from '../types';
 
@@ -656,11 +660,16 @@ export class DurableAgent<
     return this.workflowEngine === 'evented' ? 'evented' : 'default';
   }
 
+  /** The wrapped agent */
+  readonly #wrappedAgent: Agent<TAgentId, TTools, TOutput>;
   readonly #streamConfig: AgentStreamsConfig;
   #wrapperStreamBus?: AgentStreamBus;
 
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
+
+  /** Mastra instance (set via __setMastra when registered) */
+  #mastra: Mastra | undefined;
 
   /**
    * User-supplied snapshot-persistence policy
@@ -693,9 +702,27 @@ export class DurableAgent<
     const agentId = idOverride ?? agent.id;
     const agentName = nameOverride ?? agent.name ?? agent.id;
 
+    // Call Agent constructor with minimal config - we delegate to the wrapped agent
     super({
-      ...DurableAgent.configurationDelegate(agent, agentId as TAgentId, agentName),
+      id: agentId as TAgentId,
+      name: agentName,
+      // Delegate to wrapped agent's instructions
+      instructions: ({ requestContext }) => agent.getInstructions({ requestContext }),
+      // Preserve dynamic model resolution until a request context is available.
+      model: ({ requestContext }) => agent.getModel({ requestContext }),
+      notifications: agent.__getNotificationConfig(),
       durable: { executionEngine: (new.target as unknown as typeof DurableAgent).executionEngine },
+    });
+
+    this.#wrappedAgent = agent;
+    // `maxRetries` is a public field on Agent, so read and write it through the wrapped agent.
+    Object.defineProperty(this, 'maxRetries', {
+      get: () => agent.maxRetries,
+      set: (value: number | undefined) => {
+        agent.maxRetries = value;
+      },
+      enumerable: true,
+      configurable: true,
     });
 
     this.#maxSteps = maxSteps;
@@ -704,7 +731,7 @@ export class DurableAgent<
     this.#storageVersion = storageVersion ?? 1;
 
     // Keep processor access on the wrapped agent, but dispatch through this wrapper.
-    this.agentForExecution.getChannels()?.__setDispatchAgent(this);
+    this.#wrappedAgent.getChannels()?.__setDispatchAgent(this);
   }
 
   // ===========================================================================
@@ -733,10 +760,7 @@ export class DurableAgent<
   }
 
   override __usesSharedRunLog(): boolean {
-    return (
-      !!this.getMastraInstance() &&
-      this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented'
-    );
+    return !!this.#mastra && this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented';
   }
 
   /** Durable execution uses its lifecycle publisher, not the plain Agent entry point. @internal */
@@ -751,20 +775,82 @@ export class DurableAgent<
 
   /** @internal */
   override __getStreamBus(): AgentStreamBus {
-    const bus = this.agentForExecution.__getStreamBus(true)!;
+    const bus = this.#wrappedAgent.__getStreamBus(true)!;
     if (!Object.values(this.#streamConfig).some(value => value !== undefined)) return bus;
     return (this.#wrapperStreamBus ??= bus.withConfig(this.#streamConfig));
+  }
+
+  /**
+   * Owner of a run this process still tracks (until its auto-cleanup clears
+   * the replay history), or undefined.
+   * @internal
+   */
+  override __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    if (!this.executionRunRegistry.has(runId)) return undefined;
+    return { ...this.executionRunRegistry.getMemoryInfo(runId) };
+  }
+
+  override async __getRunRecord(runId: string): Promise<AgentRunRecord | undefined> {
+    const bus = this.__getStreamBus();
+    return readAgentRunRecord(
+      bus.getRunRecordCache(this.__usesSharedRunLog()),
+      this.id,
+      runId,
+      durableReplayOwnerKey(this.id, runId),
+    );
+  }
+
+  /**
+   * Owner of a run whose replay history is still retained: the local owner,
+   * else the shared record, including legacy records without stream status.
+   * Undefined once the run's topic is cleared. Only used for replay access.
+   * Rejects when the shared cache cannot be read.
+   * @internal
+   */
+  async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
+    const local = this.__getRunOwner(runId);
+    if (local) return local;
+    const shared = await readDurableReplayOwner(
+      this.__getStreamBus().getRunRecordCache(this.__usesSharedRunLog()),
+      this.id,
+      runId,
+    );
+    if (!shared) return undefined;
+    return { resourceId: shared.resourceId, threadId: shared.threadId };
   }
 
   // ===========================================================================
   // Delegate to wrapped agent
   // ===========================================================================
 
+  protected override get agentForExecution(): Agent<TAgentId, TTools, TOutput> {
+    return this.#wrappedAgent;
+  }
+
   /**
    * Get the wrapped agent instance.
    */
   get agent(): Agent<TAgentId, TTools, TOutput> {
-    return this.agentForExecution;
+    return this.#wrappedAgent;
+  }
+
+  /**
+   * File-based schedules live on the wrapped agent: `assembleAgentFromFsEntry`
+   * attaches them to the inner `Agent` before it is wrapped for durable
+   * execution, and `#declaredSchedules` is private to each instance. Without
+   * this delegate the wrapper would report none of its own and Mastra would
+   * never sync a durable agent's `schedules/` directory.
+   */
+  public override getDeclaredSchedules(): DeclaredAgentSchedule[] {
+    return this.#wrappedAgent.getDeclaredSchedules();
+  }
+
+  /**
+   * Mirrors {@link getDeclaredSchedules} so attaching schedules to an
+   * already-wrapped agent lands on the instance the getter reads from.
+   */
+  public override __setDeclaredSchedules(schedules: DeclaredAgentSchedule[]): void {
+    this.#wrappedAgent.__setDeclaredSchedules(schedules);
   }
 
   /**
@@ -789,6 +875,347 @@ export class DurableAgent<
     return this.__getStreamBus().cleanupTimeoutMs;
   }
 
+  // ===========================================================================
+  // Delegate Agent methods to wrapped agent
+  //
+  // DurableAgent's super() only passes id, name, instructions, and model.
+  // All other private fields (#tools, #memory, #workspace, #processors, etc.)
+  // are empty on the DurableAgent instance. Every public/protected method that
+  // reads those fields must be overridden to delegate to the wrapped agent.
+  // ===========================================================================
+
+  override __setLogger(logger: IMastraLogger) {
+    super.__setLogger(logger);
+    this.#wrappedAgent.__setLogger(logger);
+  }
+
+  // --- Model & LLM ---
+  override getModel(options?: any) {
+    return this.#wrappedAgent.getModel(options);
+  }
+
+  override getLLM(options?: any) {
+    return this.#wrappedAgent.getLLM(options);
+  }
+
+  override async getModelList(requestContext?: any) {
+    return this.#wrappedAgent.getModelList(requestContext);
+  }
+  override __getModelAndModelList(options?: Parameters<Agent<TAgentId, TTools, TOutput>['__getModelAndModelList']>[0]) {
+    return this.#wrappedAgent.__getModelAndModelList(options);
+  }
+
+  override reorderModels(modelIds: string[]) {
+    return this.#wrappedAgent.reorderModels(modelIds);
+  }
+
+  override updateModelInModelList(update: Parameters<Agent<TAgentId, TTools, TOutput>['updateModelInModelList']>[0]) {
+    return this.#wrappedAgent.updateModelInModelList(update);
+  }
+
+  override __resetToOriginalModel() {
+    this.#wrappedAgent.__resetToOriginalModel();
+  }
+
+  override __getMaxRetriesConfigured() {
+    return this.#wrappedAgent.__getMaxRetriesConfigured();
+  }
+
+  override __getMaxProcessorRetries() {
+    return this.#wrappedAgent.__getMaxProcessorRetries();
+  }
+
+  // --- Instructions, description, metadata ---
+  override getInstructions(options?: any) {
+    return this.#wrappedAgent.getInstructions(options);
+  }
+
+  override getDescription() {
+    return this.#wrappedAgent.getDescription();
+  }
+
+  override getMetadata(options?: any) {
+    return this.#wrappedAgent.getMetadata(options);
+  }
+
+  override getTracingPolicy() {
+    return this.#wrappedAgent.getTracingPolicy();
+  }
+
+  // --- Tools ---
+  override listTools(options?: any) {
+    return this.#wrappedAgent.listTools(options);
+  }
+
+  override getConfiguredToolHooks() {
+    return this.#wrappedAgent.getConfiguredToolHooks();
+  }
+
+  // --- Default options ---
+  override getDefaultOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultOptions(options);
+  }
+
+  override getDefaultGenerateOptionsLegacy(options?: any) {
+    return this.#wrappedAgent.getDefaultGenerateOptionsLegacy(options);
+  }
+
+  override getDefaultStreamOptionsLegacy(options?: any) {
+    return this.#wrappedAgent.getDefaultStreamOptionsLegacy(options);
+  }
+
+  override getDefaultNetworkOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultNetworkOptions(options);
+  }
+
+  // --- Memory ---
+  override getMemory(options?: any) {
+    return this.#wrappedAgent.getMemory(options);
+  }
+
+  override getScopes(options?: any) {
+    return this.#wrappedAgent.getScopes(options);
+  }
+
+  override hasOwnMemory(): boolean {
+    return this.#wrappedAgent.hasOwnMemory();
+  }
+  override __hasFixedMemory(): boolean {
+    return this.#wrappedAgent.__hasFixedMemory();
+  }
+
+  override getKnowledge() {
+    return this.#wrappedAgent.getKnowledge();
+  }
+
+  // --- Workspace ---
+  override getWorkspace(options?: any) {
+    return this.#wrappedAgent.getWorkspace(options);
+  }
+
+  override hasOwnWorkspace(): boolean {
+    return this.#wrappedAgent.hasOwnWorkspace?.() ?? false;
+  }
+
+  // --- Voice ---
+  override getVoice(options?: any) {
+    return this.#wrappedAgent.getVoice(options);
+  }
+
+  override get voice() {
+    return this.#wrappedAgent.voice;
+  }
+
+  // --- Request context ---
+  override get requestContextSchema() {
+    return this.#wrappedAgent.requestContextSchema;
+  }
+
+  // --- Processors ---
+  override async getConfiguredProcessorWorkflows() {
+    return this.#wrappedAgent.getConfiguredProcessorWorkflows();
+  }
+
+  override async listInputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listInputProcessors(requestContext);
+  }
+
+  override async listOutputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listOutputProcessors(requestContext);
+  }
+
+  override async listErrorProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listErrorProcessors(requestContext);
+  }
+
+  override async resolveProcessorById<TId extends string = string>(processorId: TId, requestContext?: any) {
+    return this.#wrappedAgent.resolveProcessorById(processorId, requestContext);
+  }
+
+  override async listConfiguredInputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listConfiguredInputProcessors(requestContext);
+  }
+
+  override async listConfiguredOutputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listConfiguredOutputProcessors(requestContext);
+  }
+
+  override async getConfiguredProcessorIds(requestContext?: any) {
+    return this.#wrappedAgent.getConfiguredProcessorIds(requestContext);
+  }
+
+  override async getConfiguredErrorProcessorIds(requestContext?: any) {
+    return this.#wrappedAgent.getConfiguredErrorProcessorIds(requestContext);
+  }
+
+  override async __resolveRunErrorProcessors(requestContext: any, overrides?: any) {
+    return this.#wrappedAgent.__resolveRunErrorProcessors(requestContext, overrides);
+  }
+
+  override async __listLLMRequestProcessors(requestContext?: any, errorProcessorOverrides?: any) {
+    return this.#wrappedAgent.__listLLMRequestProcessors(requestContext, errorProcessorOverrides);
+  }
+
+  // --- Sub-agents ---
+  override listAgents(options?: any) {
+    return this.#wrappedAgent.listAgents(options);
+  }
+
+  override __getStaticAgents() {
+    return this.#wrappedAgent.__getStaticAgents();
+  }
+
+  override __hasSubAgentsConfigured() {
+    return this.#wrappedAgent.__hasSubAgentsConfigured();
+  }
+
+  // --- Workflows ---
+  override async listWorkflows(options?: any) {
+    return this.#wrappedAgent.listWorkflows(options);
+  }
+
+  // --- Skills ---
+  override async getSkill(skillName: string, options?: any) {
+    return this.#wrappedAgent.getSkill(skillName, options);
+  }
+
+  override async listSkills(options?: any) {
+    return this.#wrappedAgent.listSkills(options);
+  }
+
+  // --- Scorers ---
+  override async listScorers(options?: any) {
+    return this.#wrappedAgent.listScorers(options);
+  }
+
+  // --- Background tasks ---
+  override getBackgroundTasksConfig() {
+    return this.#wrappedAgent.getBackgroundTasksConfig();
+  }
+
+  override disableBackgroundTasks() {
+    this.#wrappedAgent.disableBackgroundTasks();
+  }
+
+  override enableBackgroundTasks() {
+    this.#wrappedAgent.enableBackgroundTasks();
+  }
+
+  // --- Tool payload transform & goal ---
+  override getToolPayloadTransform() {
+    return this.#wrappedAgent.getToolPayloadTransform();
+  }
+
+  override __getGoalConfig() {
+    return this.#wrappedAgent.__getGoalConfig();
+  }
+
+  // --- Browser ---
+  override get browser() {
+    return this.#wrappedAgent.browser;
+  }
+
+  override setBrowser(browser: any) {
+    this.#wrappedAgent.setBrowser(browser);
+  }
+
+  override hasOwnBrowser() {
+    return this.#wrappedAgent.hasOwnBrowser();
+  }
+
+  // --- Channels ---
+  override getChannels() {
+    return this.#wrappedAgent.getChannels();
+  }
+
+  override setChannels(agentChannels: any) {
+    this.#wrappedAgent.setChannels(agentChannels);
+    agentChannels.__setDispatchAgent(this);
+  }
+
+  // --- PubSub (base Agent fields — DurableAgent has its own pubsub) ---
+  override hasOwnPubSub() {
+    return this.#wrappedAgent.hasOwnPubSub();
+  }
+
+  override getPubSub() {
+    return this.#wrappedAgent.getPubSub();
+  }
+
+  // --- Setters called by AgentController — forward to BOTH wrapper and wrapped ---
+  // We propagate to both so that:
+  //  - The wrapped agent sees the value for its own internal use.
+  //  - The DurableAgent's inherited getMemory()/getWorkspace() also work.
+  override __setMemory(memory: any) {
+    super.__setMemory(memory);
+    this.#wrappedAgent.__setMemory(memory);
+  }
+
+  override __setPubSub(pubsub: any) {
+    super.__setPubSub(pubsub);
+    this.#wrappedAgent.__setPubSub(pubsub);
+  }
+
+  override __setWorkspace(workspace: any) {
+    super.__setWorkspace(workspace);
+    this.#wrappedAgent.__setWorkspace(workspace);
+  }
+
+  override __setKnowledge(knowledge: Parameters<Agent<TAgentId, TTools, TOutput>['__setKnowledge']>[0]) {
+    this.#wrappedAgent.__setKnowledge(knowledge);
+  }
+
+  // ===========================================================================
+  // Editor / fork delegation
+  //
+  // The base Agent serves tools/instructions/model from its own private fields,
+  // but a DurableAgent serves all of them from the wrapped agent (see the
+  // delegating getters above). The editor applies stored overrides per request
+  // by calling `__fork()` and then mutating the fork via `__updateInstructions`
+  // / `__updateModel` / `__setTools`, and inspecting it via `__getEditorConfig`
+  // / `__getOverridableFields`. If those operated on the DurableAgent's own
+  // (unused) base fields the served agent would silently lose its tools and
+  // ignore overrides, so forward them to the wrapped agent — it stays the single
+  // source of truth.
+  // ===========================================================================
+
+  override __getEditorConfig() {
+    return this.#wrappedAgent.__getEditorConfig();
+  }
+
+  override __getOverridableFields() {
+    return this.#wrappedAgent.__getOverridableFields();
+  }
+
+  override __updateInstructions(instructions: Parameters<Agent<TAgentId, TTools, TOutput>['__updateInstructions']>[0]) {
+    this.#wrappedAgent.__updateInstructions(instructions);
+  }
+
+  override __updateModel(config: Parameters<Agent<TAgentId, TTools, TOutput>['__updateModel']>[0]) {
+    this.#wrappedAgent.__updateModel(config);
+  }
+
+  override __setTools(tools: Parameters<Agent<TAgentId, TTools, TOutput>['__setTools']>[0]) {
+    this.#wrappedAgent.__setTools(tools);
+  }
+
+  /**
+   * Raw stored config lives on the wrapped agent for the same reason as the
+   * mutators above: durable preparation and tracing read
+   * `resolvedVersionId` from the wrapped agent's rawConfig, and the editor
+   * stamps it on the outer fork via `__setRawConfig` after
+   * `applyStoredOverrides`. Without this delegation the stamp lands on the
+   * (unread) DurableAgent-level field and version metadata silently
+   * disappears from spans and suspend snapshots.
+   */
+  override toRawConfig(): Record<string, unknown> | undefined {
+    return this.#wrappedAgent.toRawConfig();
+  }
+
+  override __setRawConfig(rawConfig: Record<string, unknown>): void {
+    this.#wrappedAgent.__setRawConfig(rawConfig);
+  }
+
   /**
    * Create a per-request clone for applying stored editor overrides.
    *
@@ -802,8 +1229,8 @@ export class DurableAgent<
    * @internal
    */
   override __fork(): Agent<TAgentId, TTools, TOutput> {
-    const sharedChannels = this.agentForExecution.getChannels();
-    const innerFork = this.agentForExecution.__fork();
+    const sharedChannels = this.#wrappedAgent.getChannels();
+    const innerFork = this.#wrappedAgent.__fork();
 
     const Ctor = this.constructor as new (
       config: DurableAgentConfig<TAgentId, TTools, TOutput>,
@@ -821,14 +1248,16 @@ export class DurableAgent<
 
     // A transient version fork must not take over the singleton's channel ingress.
     if (sharedChannels && sharedChannels === innerFork.getChannels()) {
-      sharedChannels.__setAgent(this.agentForExecution);
+      sharedChannels.__setAgent(this.#wrappedAgent);
       sharedChannels.__setDispatchAgent(this);
     }
 
     // Preserve Mastra registration without re-triggering its side effects.
     // The inner fork inherits registration and resolves its shared bus lazily.
-    const mastra = this.getMastraInstance();
-    if (mastra) fork.__inheritMastraForFork(mastra);
+    if (this.#mastra) {
+      fork.__inheritMastraForFork(this.#mastra);
+      fork.#mastra = this.#mastra;
+    }
     fork.source = this.source;
     // Share the untilIdle wrappers, so a task finishing under the fork's stream isn't
     // also reported by the registered agent (mirrors `Agent.__fork()`).
@@ -863,7 +1292,7 @@ export class DurableAgent<
   #warnIfStorageVersionUnsupported(): void {
     if (this.#storageVersion !== 2) return;
     // Read `stores` directly: getWorkflow() is synchronous.
-    const storage = this.getMastraInstance()?.getStorage();
+    const storage = this.#mastra?.getStorage();
     const workflowsStore = storage?.stores?.workflows;
     if (workflowsStore && !workflowsStore.supportsRunJournal()) {
       this.guardrailLogger?.warn(
@@ -937,5 +1366,22 @@ export class DurableAgent<
    */
   __setMastra(mastra: Mastra): void {
     this.__registerMastra(mastra);
+  }
+
+  /**
+   * Register the Mastra instance.
+   * Called by Mastra during agent registration (normal Agent path).
+   *
+   * Also wires mastra.pubsub as the inner pubsub (if the user didn't provide
+   * a custom one), so that the OBSERVE_AGENT_STREAM_ROUTE handler can subscribe
+   * to the same PubSub instance that this agent publishes to.
+   * @internal
+   */
+  __registerMastra(mastra: Mastra): void {
+    super.__registerMastra(mastra);
+    this.#mastra = mastra;
+    // Also set on wrapped agent
+    this.#wrappedAgent.__registerMastra(mastra);
+    this.#wrapperStreamBus?.registerMastra(mastra.pubsub);
   }
 }

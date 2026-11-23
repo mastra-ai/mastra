@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Improved durable and evented agents to share configuration handling with regular agents while preserving wrapper identity, execution settings, and streaming APIs. Wrapped agents now retain knowledge, retry settings, and model-list edits.
+Fixed durable and evented agents ignoring later changes to the agent they wrap. Knowledge, retry settings, and model-list edits made on the wrapped agent or through the wrapper now apply to wrapped runs.
