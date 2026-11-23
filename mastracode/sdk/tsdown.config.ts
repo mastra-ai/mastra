@@ -18,7 +18,6 @@ export default defineConfig({
   unbundle: true,
   clean: true,
   dts: false,
-  sourcemap: true,
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

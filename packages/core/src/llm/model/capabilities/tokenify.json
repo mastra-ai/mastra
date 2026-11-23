@@ -8,6 +8,12 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "z-ai/glm-5.2": [
       {
         "type": "toggle"
@@ -17,13 +23,7 @@
         "values": ["high", "max"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -32,7 +32,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },

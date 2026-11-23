@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.5.30-alpha.5",
+  "version": "1.5.30-alpha.6",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -67,7 +67,8 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
