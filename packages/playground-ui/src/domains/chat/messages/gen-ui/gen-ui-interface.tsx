@@ -3,7 +3,7 @@ import type { Spec } from '@json-render/core';
 import { JSONUIProvider, Renderer, buildSpecFromParts, defineRegistry } from '@json-render/react';
 import type { DataPart } from '@json-render/react';
 import { studioCatalog } from '@mastra/json-render/studio';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GenUiInteractiveContext } from './interactive-context';
 import { studioComponents } from './studio-components';
 
@@ -15,7 +15,7 @@ export type GenUiSend = (message: string, state: Record<string, unknown>) => voi
 export interface GenUiInterfaceProps {
   /** The reply's `data-spec` parts, in order. */
   parts: DataPart[];
-  /** Omit to render the interface read-only. The interface keeps the one it goes live with. */
+  /** Omit to render the interface read-only. */
   onSend?: GenUiSend;
   /** Disables the interface's controls, e.g. while the chat is replying. */
   disabled?: boolean;
@@ -69,12 +69,18 @@ function ReadOnlyInterface({ spec }: { spec: Spec }) {
 
 /**
  * Mounts once the interface can act, so its state starts from the complete spec, and keeps that state
- * from then on. json-render keeps the action handlers it mounts with, so they keep this `onSend`.
+ * from then on. json-render keeps the action handlers it mounts with, so they send through a ref to
+ * the latest `onSend`.
  */
 function LiveInterface({ spec, onSend, disabled }: { spec: Spec; onSend: GenUiSend; disabled: boolean }) {
+  const onSendRef = useRef(onSend);
+  useEffect(() => {
+    onSendRef.current = onSend;
+  }, [onSend]);
+
   const [live] = useState(() => {
     const store = createStateStore(spec.state ?? {});
-    const { registry, handlers } = studioRegistry(onSend);
+    const { registry, handlers } = studioRegistry((message, state) => onSendRef.current(message, state));
     return { store, registry, handlers: handlers(() => undefined, store.getSnapshot) };
   });
 
