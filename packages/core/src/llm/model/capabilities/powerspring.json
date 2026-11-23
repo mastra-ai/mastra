@@ -25,22 +25,16 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "gemma-4-26b-a4b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "glm-5.3-flash": [
+    "gemma-4-31b": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["none", "high"]
       }
     ],
     "gpt-oss-20b": [
@@ -55,10 +49,16 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "gemma-4-31b": [
+    "gemma-4-26b-a4b": [
       {
         "type": "effort",
         "values": ["none", "high"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
       }
     ]
   }

@@ -15,7 +15,7 @@ export function PageHeaderTitle({ children, className, isLoading, ...props }: Pa
       tone="ink"
       data-slot="page-header-title"
       className={cn(
-        'flex min-w-0 items-center gap-2',
+        'flex min-w-0 items-center gap-2 wrap-anywhere',
         isLoading && 'w-60 max-w-1/2 animate-pulse rounded-md bg-fill',
         className,
       )}

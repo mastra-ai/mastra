@@ -398,19 +398,6 @@ describe("a skill's page", () => {
     expect(unloadBlocked()).toBe(false);
   });
 
-  it('goes Back to where the skill was first opened from after browser back returns to it', async () => {
-    const boardConfigPage = `/factories/${FACTORY_ID}/work/config`;
-    const { router } = openAt(boardConfigPage);
-    const user = userEvent.setup();
-
-    await router.navigate(`${SKILLS_PAGE}/changelog-lint`);
-    await router.navigate(SKILLS_PAGE);
-    await router.navigate(-1);
-    await user.click(await screen.findByRole('button', { name: 'Back' }));
-
-    await waitFor(() => expect(router.state.location.pathname).toBe(boardConfigPage));
-  });
-
   it('reverts an edited skill to the original in place', async () => {
     const { writes, router, client } = openAt(SKILLS_PAGE, {
       catalog: skills.map(skill =>
@@ -516,7 +503,7 @@ describe("a skill's page", () => {
     const user = userEvent.setup();
 
     await screen.findByRole('heading', { name: 'changelog-lint' });
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('link', { name: 'Back to Skills' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(SKILLS_PAGE));
   });
 

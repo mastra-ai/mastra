@@ -73,6 +73,7 @@ function createWithStore(
   engine: 'default' | 'evented',
 ): {
   agent: DurableAgent;
+  baseAgent: Agent;
   store: InMemoryStore;
   mastra: Mastra;
 } {
@@ -89,7 +90,7 @@ function createWithStore(
     agents: { [agentId]: agent as any },
     storage: store,
   });
-  return { agent, store, mastra };
+  return { agent, baseAgent, store, mastra };
 }
 
 async function seed(store: InMemoryStore, snapshot: WorkflowRunState, resourceId?: string) {
@@ -142,6 +143,28 @@ describe.each(['default', 'evented'] as const)('DurableAgent.recoverActiveRuns (
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('recovers owned runs through the base Agent entry point', async () => {
+    await seed(store, makeSnapshot('owned', 'running', { agentId: agent.id }));
+    await seed(store, makeSnapshot('foreign', 'running', { agentId: 'another-agent' }));
+    const { restartedRunIds } = stubWorkflow(agent);
+
+    const result = await Agent.prototype.recoverActiveRuns.call(agent);
+
+    expect(result).toEqual({ recovered: [{ runId: 'owned', status: 'success' }], succeeded: 1, failed: 0 });
+    expect(restartedRunIds).toEqual(['owned']);
+  });
+
+  it('does not give the wrapped plain agent bulk recovery capability', async () => {
+    const { agent: wrapper, baseAgent } = createDurableWithStore('isolated-agent');
+    expect(await wrapper.recoverActiveRuns()).toEqual({ recovered: [], succeeded: 0, failed: 0 });
+    for (const options of [undefined, { runId: 'missing' }]) {
+      await expect(baseAgent.recoverActiveRuns(options)).rejects.toMatchObject({
+        id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+        details: { agentId: 'isolated-agent', method: 'recoverActiveRuns' },
+      });
+    }
   });
 
   it.each(['resolve', 'reject', 'transient-reject'] as const)(
