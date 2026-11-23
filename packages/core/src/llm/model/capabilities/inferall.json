@@ -23,16 +23,9 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "nvidia/nemotron-3.5-lightning-30b-a3b": [
@@ -46,9 +39,16 @@
         "values": ["none", "medium", "high"]
       }
     ],
-    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
+    "z-ai/glm-5.3-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

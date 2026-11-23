@@ -58,17 +58,15 @@ describe('RequestContextPopover', () => {
       renderWithProviders(<RequestContextPopover entityType="agent" entityId={AGENT_ID} />, 'agent', AGENT_ID);
 
       await open('Request context');
-      expect(
-        await screen.findByRole('textbox', { name: 'Request Context (JSON)' }, { timeout: 10_000 }),
-      ).not.toBeNull();
+      const editor = await screen.findByRole('textbox', { name: 'Request Context (JSON)' }, { timeout: 10_000 });
 
       fireEvent.click(screen.getByRole('combobox', { name: 'Request Context preset' }));
       const presetOption = await screen.findByRole('option', { name: 'French' });
       fireEvent.pointerDown(presetOption, { pointerType: 'mouse' });
       fireEvent.click(presetOption, { detail: 1 });
-      const saveButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Save' });
-      await waitFor(() => expect(saveButton.disabled).toBe(false));
-      fireEvent.click(saveButton);
+      // The preset is formatted asynchronously before it lands in the editor; saving earlier saves the old draft.
+      await waitFor(() => expect(editor.textContent).toContain('"locale": "fr"'), { timeout: 10_000 });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       await waitFor(() => {
         expect(window.localStorage.getItem(`mastra-request-context:agent:${AGENT_ID}`)).toBe('{"locale":"fr"}');
