@@ -30,9 +30,13 @@ interface RegistryData {
   version: string;
 }
 
+// On disk the registry has no top-level `models` map (registry files written by
+// older versions may still have one); it is derived from `providers[*].models` on load.
+type RegistryFileData = Omit<RegistryData, 'models'> & { models?: Record<string, string[]> };
+
 // JSON imports widen string literals to `string`, so fields like
 // `modelOverrides[*].shape` don't match their literal-union types.
-const staticRegistry = staticRegistryJson as RegistryData;
+const staticRegistry = staticRegistryJson as RegistryFileData;
 
 /**
  * Check if running in offline/air-gapped mode.
@@ -56,12 +60,14 @@ function getEnabledGatewayIds(gateways: MastraModelGatewayInterface[]): Set<stri
   return enabledGatewayIds;
 }
 
-function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: Set<string>): RegistryData {
+function sanitizeRegistryDataForRuntime(data: RegistryFileData, enabledGatewayIds: Set<string>): RegistryData {
   const providers = Object.fromEntries(
     Object.entries(data.providers).filter(([, config]) => enabledGatewayIds.has(config.gateway)),
   );
 
-  const models = Object.fromEntries(Object.entries(data.models).filter(([providerId]) => providerId in providers));
+  const models = Object.fromEntries(
+    Object.entries(providers).map(([providerId, config]) => [providerId, config.models]),
+  );
 
   return {
     ...data,
@@ -297,7 +303,7 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
   for (const jsonPath of possiblePaths) {
     try {
       const content = fs.readFileSync(jsonPath, 'utf-8');
-      const parsed = JSON.parse(content) as RegistryData;
+      const parsed = JSON.parse(content) as RegistryFileData;
       registryData = sanitizeRegistryDataForRuntime(parsed, enabledGatewayIds);
       return registryData;
     } catch (err) {
@@ -916,6 +922,8 @@ export class GatewayRegistry {
           temperatureCapabilities,
           structuredOutputCapabilities,
           reasoningCapabilities,
+          // The global cache is shared with older @mastra/core versions, which require the top-level `models` map.
+          { includeModelsKey: true },
         );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {

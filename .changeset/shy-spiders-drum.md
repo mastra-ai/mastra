@@ -6,7 +6,7 @@ Added execution-engine configuration with `Agent.durable.executionEngine` and `M
 
 ```typescript
 const mastra = new Mastra({
-  durable: { executionEngine: 'durable' },
+  durable: { executionEngine: 'default' },
   agents: { support: agent },
 })
 ```

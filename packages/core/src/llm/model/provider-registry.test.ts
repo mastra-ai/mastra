@@ -810,7 +810,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const firstJson = JSON.parse(fs.readFileSync(tempJsonPath, 'utf-8'));
     expect(firstJson.providers['test-provider']).toBeDefined();
     expect(firstJson.providers['new-provider']).toBeUndefined();
-    expect(firstJson.models['test-provider']).toEqual(['model-a', 'model-b']);
+    expect(firstJson.providers['test-provider'].models).toEqual(['model-a', 'model-b']);
 
     const firstTypes = fs.readFileSync(tempTypesPath, 'utf-8');
     expect(firstTypes).toContain("'test-provider': readonly ['model-a', 'model-b']");
@@ -824,8 +824,8 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const secondJson = JSON.parse(fs.readFileSync(tempJsonPath, 'utf-8'));
     expect(secondJson.providers['test-provider']).toBeDefined();
     expect(secondJson.providers['new-provider']).toBeDefined();
-    expect(secondJson.models['test-provider']).toEqual(['model-a', 'model-b', 'model-c']);
-    expect(secondJson.models['new-provider']).toEqual(['new-model-1', 'new-model-2']);
+    expect(secondJson.providers['test-provider'].models).toEqual(['model-a', 'model-b', 'model-c']);
+    expect(secondJson.providers['new-provider'].models).toEqual(['new-model-1', 'new-model-2']);
 
     const secondTypes = fs.readFileSync(tempTypesPath, 'utf-8');
     expect(secondTypes).toContain("'test-provider': readonly ['model-a', 'model-b', 'model-c']");
@@ -1474,7 +1474,7 @@ describe('Issue #10434: Concurrent write corruption', () => {
 
 describe('Runtime provider registry filtering', () => {
   type RegistryModule = typeof import('./provider-registry.js');
-  type RegistryJson = { providers: Record<string, ProviderConfig>; models: Record<string, string[]>; version: string };
+  type RegistryJson = { providers: Record<string, ProviderConfig>; version: string };
 
   const ENV_KEYS = ['MASTRA_DEV', 'MASTRA_AUTO_REFRESH_PROVIDERS', 'MASTRA_GATEWAY_API_KEY', 'MASTRA_OFFLINE'];
   let savedEnv: Record<string, string | undefined>;
@@ -1522,7 +1522,6 @@ describe('Runtime provider registry filtering', () => {
         },
         acme: { name: 'Acme', models: ['acme-1'], apiKeyEnvVar: 'ACME_API_KEY', gateway: 'acme' },
       },
-      models: { ...real.models, 'mastra/openai': ['gpt-4o'], acme: ['acme-1'] },
     };
     vi.doMock('./provider-registry.json', () => ({ default: bundled }));
     return import('./provider-registry.js');
@@ -1702,5 +1701,82 @@ describe('Runtime provider registry filtering', () => {
       vi.restoreAllMocks();
       fs.rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe('Provider model lists derived from the registry file', () => {
+  // The registry file no longer repeats every model list in a top-level `models` map; `getModels()`
+  // and `PROVIDER_MODELS` derive it from `providers[*].models`. The dev-mode loader can also read a
+  // registry file written by an older @mastra/core that still has the map.
+  const originalReadFileSync = fs.readFileSync;
+  let tempHome: string;
+  let originalHome: string | undefined;
+
+  beforeEach(() => {
+    // Keep the dev-mode loader away from the real ~/.cache/mastra registry
+    originalHome = process.env.HOME;
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-registry-home-'));
+    process.env.HOME = tempHome;
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.env.HOME = originalHome;
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  });
+
+  async function loadDynamicRegistryFrom(registryFile: object) {
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+      if (typeof filePath === 'string' && filePath.endsWith(path.join('dist', 'provider-registry.json'))) {
+        return JSON.stringify(registryFile);
+      }
+      return originalReadFileSync(filePath as any, ...(rest as [any]));
+    });
+    const fresh = await import('./provider-registry.js');
+    return { registry: fresh.GatewayRegistry.getInstance({ useDynamicLoading: true }), fresh };
+  }
+
+  const providers = {
+    openai: { name: 'OpenAI', models: ['gpt-4.1', 'gpt-5'], gateway: 'models.dev' },
+    'netlify/anthropic': { name: 'Anthropic', models: ['claude-haiku-4-5'], gateway: 'netlify' },
+  };
+
+  it('lists every bundled provider with exactly the models in its provider entry', async () => {
+    // A fresh module gives a fresh singleton; the shared one may have been switched to dynamic loading.
+    const fresh = await import('./provider-registry.js');
+    const registry = fresh.GatewayRegistry.getInstance({ useDynamicLoading: false });
+    const providerConfigs = registry.getProviders();
+    const models = registry.getModels();
+
+    expect(Object.keys(providerConfigs).length).toBeGreaterThan(100);
+    expect(Object.keys(models)).toEqual(Object.keys(providerConfigs));
+    for (const [providerId, config] of Object.entries(providerConfigs)) {
+      expect(models[providerId]).toEqual(config.models);
+    }
+  });
+
+  it('reads model lists from a registry file without the top-level map', async () => {
+    const { registry, fresh } = await loadDynamicRegistryFrom({ providers, version: '1.0.0' });
+
+    expect(registry.getModels()).toEqual({
+      openai: ['gpt-4.1', 'gpt-5'],
+      'netlify/anthropic': ['claude-haiku-4-5'],
+    });
+    expect(Object.keys(fresh.PROVIDER_MODELS)).toEqual(['openai', 'netlify/anthropic']);
+    expect(fresh.PROVIDER_MODELS.openai).toEqual(['gpt-4.1', 'gpt-5']);
+  });
+
+  it('reads model lists from a registry file written by an older version with the top-level map', async () => {
+    const { registry } = await loadDynamicRegistryFrom({
+      providers,
+      models: { openai: ['gpt-4.1', 'gpt-5'], 'netlify/anthropic': ['claude-haiku-4-5'] },
+      version: '1.0.0',
+    });
+
+    expect(registry.getModels()).toEqual({
+      openai: ['gpt-4.1', 'gpt-5'],
+      'netlify/anthropic': ['claude-haiku-4-5'],
+    });
   });
 });

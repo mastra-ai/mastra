@@ -32,7 +32,7 @@ import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
 import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
@@ -120,6 +120,7 @@ interface DurablePreparationAgent {
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel;
+    resolvedDefaultOptions?: AgentExecutionOptionsBase<any>;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -693,6 +694,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
+      resolvedDefaultOptions: await loadDefaultOptions(),
       toolsets: execOptions?.toolsets,
       clientTools: execOptions?.clientTools,
       threadId,

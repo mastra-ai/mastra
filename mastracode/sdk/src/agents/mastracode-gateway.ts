@@ -37,9 +37,11 @@ import {
   KIMI_CODING_PROVIDER_ID,
   normalizeAnthropicModelId,
   OPENAI_PREFIX,
+  parseCodexModelSelection,
   remapOpenAIModelForCodexOAuth,
   stripMastraGatewayPrefix,
 } from '../providers/model-ids.js';
+import type { CodexServiceTier } from '../providers/model-ids.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -364,7 +366,8 @@ export class MastraCodeGateway extends MastraModelGateway {
    * shared gateway router select MastraCode for auth resolution, so the status
    * bar and `/api-keys` reflect OAuth logins instead of only checking env vars.
    */
-  handlesModel(modelId: string): boolean {
+  handlesModel(selectionId: string): boolean {
+    const { modelId } = parseCodexModelSelection(selectionId);
     const parsed = parseGatewayRouterId(modelId, this);
     if (!parsed.providerId || !parsed.modelId) return false;
     if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) return true;
@@ -516,8 +519,19 @@ export class MastraCodeGateway extends MastraModelGateway {
     headers?: Record<string, string>;
     transport?: any;
     responsesWebSocket?: any;
+    codexServiceTier?: CodexServiceTier;
   }): GatewayLanguageModel {
+    // A custom provider named "OpenAI" shares the built-in id; on it `:fast`
+    // is part of the model name, not a Codex Fast request.
     const customProvider = this.#customProvider(args.providerId);
+    const selection = customProvider ? undefined : parseCodexModelSelection(`${args.providerId}/${args.modelId}`);
+    if (selection && selection.modelId !== `${args.providerId}/${args.modelId}`) {
+      args = {
+        ...args,
+        modelId: selection.modelId.slice(OPENAI_PREFIX.length),
+        ...(selection.codexServiceTier ? { codexServiceTier: selection.codexServiceTier } : {}),
+      };
+    }
     if (customProvider) {
       const provider = createOpenAICompatible({
         name: args.providerId,
@@ -698,6 +712,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     headers?: Record<string, string>;
     transport?: any;
     responsesWebSocket?: any;
+    codexServiceTier?: CodexServiceTier;
   }): GatewayLanguageModel | undefined {
     const storedCred = this.#credentials.get('openai-codex');
 
@@ -707,7 +722,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
         const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
-        const middleware = createCodexMiddleware(reasoningEffort);
+        const middleware = createCodexMiddleware(reasoningEffort, { serviceTier: args.codexServiceTier });
         const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(args.headers));
         const openai = createOpenAI({
           apiKey: 'oauth-gateway-placeholder',
@@ -732,6 +747,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: this.#thinkingLevel && getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel),
+        serviceTier: args.codexServiceTier,
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;

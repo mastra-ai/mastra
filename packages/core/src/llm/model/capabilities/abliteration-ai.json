@@ -14,12 +14,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "abliterated-model-large-v2": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "abliterated-model": [
       {
         "type": "toggle"
@@ -36,6 +30,12 @@
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "abliterated-model-large-v2": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
