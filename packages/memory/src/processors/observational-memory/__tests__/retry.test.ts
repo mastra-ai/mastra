@@ -1,14 +1,17 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   assertCompleteModelResponse,
   computeDelay,
+  isExhaustedAccountError,
   isTransientLLMError,
   OmIncompleteResponseError,
   OmModelCallTimeoutError,
   RETRY_CONFIG,
   withRetry,
 } from '../retry';
+import { openAiNoCredits } from './provider-errors';
 
 describe('isTransientLLMError', () => {
   it('matches undici "terminated" error messages', () => {
@@ -112,6 +115,33 @@ describe('isTransientLLMError', () => {
   });
 });
 
+describe('isExhaustedAccountError', () => {
+  it('matches the error OpenAI sends for an account with no credits left', () => {
+    expect(isExhaustedAccountError(openAiNoCredits())).toBe(true);
+  });
+
+  it('matches the quota code in the response body under a generic message', () => {
+    const error = new APICallError({
+      message: 'Too Many Requests',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 429,
+      responseBody: '{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}',
+    });
+    expect(isExhaustedAccountError(new Error('observer failed', { cause: { error } }))).toBe(true);
+  });
+
+  it.each([
+    "This request would exceed your account's rate limit. Please try again later.",
+    'Upstream provider rate limit reached. Try again shortly. Manage gateway keys, credits and budgets: https://projects.mastra.ai/',
+    // Gemini's per-minute limit, which clears on its own.
+    'You exceeded your current quota, please check your plan and billing details.\nQuota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20\nPlease retry in 45.06s.',
+  ])('does not match the rate limit %s', message => {
+    const error = new APICallError({ message, url: 'https://example.com', requestBodyValues: {}, statusCode: 429 });
+    expect(isExhaustedAccountError(error)).toBe(false);
+  });
+});
+
 describe('default retry schedule', () => {
   // Tyler review (#16454): lock the schedule so the stated "few-minute" budget
   // doesn't silently regress.
@@ -200,6 +230,13 @@ describe('withRetry', () => {
     const fn = vi.fn().mockRejectedValue(new Error('invalid api key'));
 
     await expect(withRetry(fn, { label: 'test' })).rejects.toThrow('invalid api key');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows an account with no credits left without retrying, though its status is 429', async () => {
+    const fn = vi.fn().mockRejectedValue(openAiNoCredits());
+
+    await expect(withRetry(fn, { label: 'test' })).rejects.toThrow('no credits remaining');
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

@@ -51,6 +51,12 @@ const TRANSIENT_MESSAGE_SUBSTRINGS = [
   'finished with finishreason "other"',
 ];
 
+// OpenAI answers an account with no credits or quota left with HTTP 429, the status of a rate
+// limit, but the account stays unusable until someone adds credits, so retrying only repeats the
+// failure. Its error code is the reliable signal; the message is a fallback when the body is gone.
+// Not "exceeded your current quota": Gemini uses that text for per-minute limits that do clear.
+const EXHAUSTED_ACCOUNT_SUBSTRINGS = ['insufficient_quota', 'no credits remaining'];
+
 const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown']);
 
 /**
@@ -220,6 +226,29 @@ export function isTransientLLMError(error: unknown): boolean {
 }
 
 /**
+ * Returns true when the error says the provider account has no credits or quota left. These
+ * carry a retryable status (OpenAI's are HTTP 429), so `withRetry` stops on them even though
+ * `isTransientLLMError` matches. A plain rate limit is not matched and is still retried.
+ * Walks the `cause`/`error` chain and reads both the message and the raw response body.
+ *
+ * @internal
+ */
+export function isExhaustedAccountError(error: unknown): boolean {
+  const visited = new Set<object>();
+  let current: unknown = error;
+  while (isRecord(current) && !visited.has(current)) {
+    visited.add(current);
+    for (const field of [current.message, current.responseBody]) {
+      if (typeof field !== 'string') continue;
+      const text = field.toLowerCase();
+      if (EXHAUSTED_ACCOUNT_SUBSTRINGS.some(sub => text.includes(sub))) return true;
+    }
+    current = current.cause ?? current.error;
+  }
+  return false;
+}
+
+/**
  * Compute the backoff delay (ms) for the Nth retry (0-indexed).
  *
  * Exponential growth (`initialDelayMs * backoffFactor^attempt`) capped at
@@ -327,7 +356,8 @@ async function attemptWithIdleTimeout<T>(
 /**
  * Run `fn` with retries on transient transport-class errors.
  *
- * Non-transient errors (auth, validation, schema, etc.) are rethrown
+ * Non-transient errors (auth, validation, schema, etc.) and errors from an
+ * account with no credits or quota left (see `isExhaustedAccountError`) are rethrown
  * immediately. User-initiated aborts are rethrown without delay.
  *
  * @internal
@@ -349,7 +379,7 @@ export async function withRetry<T>(
     } catch (error) {
       if (abortSignal?.aborted) throw error;
       if (!(error instanceof OmModelCallTimeoutError) && hasAbortInChain(error)) throw error;
-      if (attempt >= maxRetries || !isTransientLLMError(error)) {
+      if (attempt >= maxRetries || !isTransientLLMError(error) || isExhaustedAccountError(error)) {
         if (attempt > 0) {
           omDebug(
             `[OM:retry:${label}] giving up after ${attempt} retry/retries: ${

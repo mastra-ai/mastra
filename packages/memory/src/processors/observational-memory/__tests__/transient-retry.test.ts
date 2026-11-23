@@ -17,6 +17,7 @@ import { Memory } from '../../../index';
 import { OmModelExecutionError } from '../error';
 import { ObserverRunner } from '../observer-runner';
 import { RETRY_CONFIG } from '../retry';
+import { anthropicRateLimit, gatewayUpstreamRateLimit, openAiNoCredits } from './provider-errors';
 
 type StreamPart =
   | { type: 'stream-start'; warnings: unknown[] }
@@ -260,6 +261,25 @@ const observationsText = `<observations>
 - 🟢 User greeted and asked for help
 </observations>`;
 
+function createThrowingObserverModel(error: () => Error) {
+  const model = {
+    specificationVersion: 'v2' as const,
+    provider: 'mock-failing-observer',
+    modelId: 'mock-failing-observer-model',
+    supportedUrls: {},
+    calls: 0,
+    async doGenerate(): Promise<never> {
+      model.calls++;
+      throw error();
+    },
+    async doStream(): Promise<never> {
+      model.calls++;
+      throw error();
+    },
+  };
+  return model;
+}
+
 function createObserverRunner(maxRetries?: number) {
   return new ObserverRunner({
     observationConfig: {
@@ -437,4 +457,41 @@ describe('OM transient-error retry', { timeout: 30_000 }, () => {
     expect(result.text).toBe(longResponseText);
     expect(observerModel.__observerCallCount).toBeGreaterThan(failuresBeforeSuccess);
   });
+
+  it.each([
+    { name: 'an account with no credits left', error: openAiNoCredits, expectedCalls: 1 },
+    { name: 'a rate limit', error: anthropicRateLimit, expectedCalls: 4 },
+    { name: 'a gateway rate limit that mentions credits', error: gatewayUpstreamRateLimit, expectedCalls: 4 },
+  ])(
+    'calls the observer model $expectedCalls time(s) on $name, then fails the turn',
+    async ({ error, expectedCalls }) => {
+      const observerModel = createThrowingObserverModel(error);
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: { model: observerModel as any, messageTokens: 20, bufferTokens: false, maxRetries: 3 },
+            reflection: { observationTokens: 50_000 },
+          },
+        },
+      });
+
+      const agent = new Agent({
+        id: 'failing-observer-test-agent',
+        name: 'Failing Observer Test Agent',
+        instructions: 'You are a helpful assistant. Always use the test tool first.',
+        model: createMockActorModel(longResponseText) as any,
+        tools: { test: omTriggerTool },
+        memory,
+      });
+
+      const result = await agent.generate('Hello, I need help.', {
+        memory: { thread: 'failing-observer-thread', resource: 'failing-observer-resource' },
+      });
+
+      expect(observerModel.calls).toBe(expectedCalls);
+      expect(result.tripwire?.reason).toContain(error().message);
+    },
+  );
 });
