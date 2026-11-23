@@ -452,7 +452,7 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     }
     // Decided again once the overlapping resume settled, with a fresh in-memory release.
     await vi.waitFor(() => expect(settledWaits.mock.calls.length).toBeGreaterThan(testWaits));
-    expect(releases).toBeGreaterThan(1);
+    await vi.waitFor(() => expect(releases).toBeGreaterThan(1));
   }
 
   it.each([
