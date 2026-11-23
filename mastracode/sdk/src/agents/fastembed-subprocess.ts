@@ -191,8 +191,8 @@ export class FastembedWorker {
     if (reply.embeddings) {
       const result = { embeddings: reply.embeddings, warnings: reply.warnings ?? [] };
       this.#settle(job, () => job.resolve(result));
-    } else if (reply.loadError?.code === 'ERR_MODULE_NOT_FOUND') {
-      // `@mastra/fastembed` resolved but a package it imports did not.
+    } else if (reply.loadError?.code === 'ERR_MODULE_NOT_FOUND' || reply.loadError?.code === 'MODULE_NOT_FOUND') {
+      // `@mastra/fastembed` resolved but a package it imports (ESM) or requires (CommonJS) did not.
       const error = new EmbedderPackageMissingError(new Error(reply.loadError.message));
       this.#settle(job, () => job.reject(error));
     } else {
@@ -280,7 +280,7 @@ export function onEmbedderPackageMissing(listener: EmbedderPackageMissingListene
   unheardPackageMissing = undefined;
   if (unheard) {
     state.heard = true;
-    listener(unheard);
+    notify(listener, unheard);
   }
   return () => packageMissingListeners.delete(listener);
 }
@@ -295,12 +295,16 @@ function reportPackageMissing(error: EmbedderPackageMissingError): void {
   for (const [listener, state] of packageMissingListeners) {
     if (state.heard) continue;
     state.heard = true;
-    try {
-      listener(error);
-    } catch (listenerError) {
-      // The embed's own error must still reach memory, not the listener's.
-      console.warn(`Embedder notice listener failed: ${String(listenerError)}`);
-    }
+    notify(listener, error);
+  }
+}
+
+/** A listener that throws must not replace the embed error or break subscribing. */
+function notify(listener: EmbedderPackageMissingListener, error: EmbedderPackageMissingError): void {
+  try {
+    listener(error);
+  } catch (listenerError) {
+    console.warn(`Embedder notice listener failed: ${String(listenerError)}`);
   }
 }
 

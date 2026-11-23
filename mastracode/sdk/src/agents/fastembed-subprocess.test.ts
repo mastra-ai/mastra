@@ -200,6 +200,22 @@ describe('FastembedWorker when @mastra/fastembed cannot load', () => {
     }
   });
 
+  it('reports a CommonJS dependency that is not installed as a missing embedder package', async () => {
+    const worker = new FastembedWorker(
+      entry(
+        `import { createRequire } from 'node:module';\n` +
+          `createRequire(import.meta.url)('mc-test-cjs-package-that-is-not-installed');\n`,
+      ),
+    );
+    try {
+      const error = await worker.embed({ values: ['a'] }).catch(e => e);
+      expect(isEmbedderPackageMissingError(error)).toBe(true);
+      expect(error.message).toContain("Cannot find module 'mc-test-cjs-package-that-is-not-installed'");
+    } finally {
+      worker.close();
+    }
+  });
+
   it('does not call other load failures or model failures a missing package', async () => {
     const broken = new FastembedWorker(entry(`throw new Error('native binding failed');\n`));
     const working = new FastembedWorker(fixture());
@@ -260,6 +276,31 @@ describe('onEmbedderPackageMissing', () => {
       expect(second).toHaveBeenCalledTimes(1);
       expect(second.mock.calls[0]![0].code).toBe(EMBEDDER_PACKAGE_MISSING);
       stopFirst();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('still subscribes when a late listener throws on the replayed notice', async () => {
+    const hooks = registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier !== '@mastra/fastembed') return nextResolve(specifier, context);
+        throw Object.assign(new Error(`Cannot find package '@mastra/fastembed'`), { code: 'ERR_MODULE_NOT_FOUND' });
+      },
+    });
+    unblock = () => hooks.deregister();
+    vi.resetModules();
+    const { embedInSubprocess, onEmbedderPackageMissing } = await import('./fastembed-subprocess.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await embedInSubprocess({ values: ['a'] }).catch(() => {});
+      const throwing = vi.fn(() => {
+        throw new Error('listener bug');
+      });
+      const stop = onEmbedderPackageMissing(throwing);
+      expect(throwing).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenLastCalledWith('Embedder notice listener failed: Error: listener bug');
+      stop();
     } finally {
       warn.mockRestore();
     }
