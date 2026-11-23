@@ -162,6 +162,11 @@ packageExtensions:
     dependencies:
       parse-numeric-range: ^1.3.0
 
+# Stagehand 3 lists puppeteer-core 22 as optional and never loads it at runtime.
+# Skipping it drops extract-zip, basic-ftp 5 and chromium-bidi's zod 3.23.8.
+ignoredOptionalDependencies:
+  - puppeteer-core
+
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
@@ -476,7 +481,7 @@ overrides:
   cjs-module-lexer@<2.2.1: 2.2.1
   fast-copy@<4.1.1: 4.1.1
   '@fastify/busboy@<3.2.2': 3.2.2
-  tinypool@<2.1.2: 2.1.2
+  tinypool@<2.1.2: 2.2.0
   ajv@>=8.0.0 <8.20.0: 8.20.0
   # Vanta 2026-10-14: AIKIDO-2026-143019 fixed in 4.6.7
   zod@>=4.0.0 <4.6.7: 4.6.7
