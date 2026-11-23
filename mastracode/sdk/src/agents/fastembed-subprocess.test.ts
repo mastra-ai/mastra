@@ -1,13 +1,19 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
+import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FastembedWorker, WORKER_IDLE_TIMEOUT_MS } from './fastembed-subprocess.js';
+import {
+  EMBEDDER_PACKAGE_MISSING,
+  FastembedWorker,
+  isEmbedderPackageMissingError,
+  WORKER_IDLE_TIMEOUT_MS,
+} from './fastembed-subprocess.js';
 
 const MINUTE = 60_000;
 
@@ -168,6 +174,136 @@ describe('FastembedWorker', () => {
     controller.abort(new Error('stop'));
     await expect(worker.embed({ values: ['a'], abortSignal: controller.signal })).rejects.toThrow('stop');
     expect(worker.pid).toBeUndefined();
+  });
+});
+
+// The package is in place but cannot load, as with a partial install. A missing package has to be
+// told apart from other failures so a caller can offer to reinstall it rather than guess from text.
+describe('FastembedWorker when @mastra/fastembed cannot load', () => {
+  function entry(source: string): string {
+    const file = join(mkdtempSync(join(tmpdir(), 'fastembed-worker-')), 'fastembed.mjs');
+    writeFileSync(file, source);
+    return pathToFileURL(file).href;
+  }
+
+  it('reports a package it imports that is not installed as a missing embedder package', async () => {
+    const worker = new FastembedWorker(entry(`export * from 'mc-test-package-that-is-not-installed';\n`));
+    try {
+      const error = await worker.embed({ values: ['a'] }).catch(e => e);
+      expect(isEmbedderPackageMissingError(error)).toBe(true);
+      expect(error.code).toBe(EMBEDDER_PACKAGE_MISSING);
+      expect(error.message).toMatch(/^Memory recall is off: the local embedder package @mastra\/fastembed/);
+      expect(error.message).toContain("Cannot find package 'mc-test-package-that-is-not-installed'");
+      expect(error.message).toContain('Reinstall Mastra Code');
+    } finally {
+      worker.close();
+    }
+  });
+
+  it('reports a CommonJS dependency that is not installed as a missing embedder package', async () => {
+    const worker = new FastembedWorker(
+      entry(
+        `import { createRequire } from 'node:module';\n` +
+          `createRequire(import.meta.url)('mc-test-cjs-package-that-is-not-installed');\n`,
+      ),
+    );
+    try {
+      const error = await worker.embed({ values: ['a'] }).catch(e => e);
+      expect(isEmbedderPackageMissingError(error)).toBe(true);
+      expect(error.message).toContain("Cannot find module 'mc-test-cjs-package-that-is-not-installed'");
+    } finally {
+      worker.close();
+    }
+  });
+
+  it('does not call other load failures or model failures a missing package', async () => {
+    const broken = new FastembedWorker(entry(`throw new Error('native binding failed');\n`));
+    const working = new FastembedWorker(fixture());
+    try {
+      const loadError = await broken.embed({ values: ['a'] }).catch(e => e);
+      expect(loadError.message).toContain('native binding failed');
+      expect(isEmbedderPackageMissingError(loadError)).toBe(false);
+
+      const modelError = await working.embed({ values: ['fail'] }).catch(e => e);
+      expect(modelError.message).toContain('model missing');
+      expect(isEmbedderPackageMissingError(modelError)).toBe(false);
+    } finally {
+      broken.close();
+      working.close();
+    }
+  });
+});
+
+// What a UI subscribes to: memory swallows the embed error, so this is the only signal a session gets.
+describe('onEmbedderPackageMissing', () => {
+  let unblock: (() => void) | undefined;
+  afterEach(() => unblock?.());
+
+  it('tells each listener once, replays to a late listener, and never changes the embed error', async () => {
+    const hooks = registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier !== '@mastra/fastembed') return nextResolve(specifier, context);
+        throw Object.assign(new Error(`Cannot find package '@mastra/fastembed'`), { code: 'ERR_MODULE_NOT_FOUND' });
+      },
+    });
+    unblock = () => hooks.deregister();
+    vi.resetModules();
+    const { embedInSubprocess, onEmbedderPackageMissing } = await import('./fastembed-subprocess.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const embed = () => embedInSubprocess({ values: ['a'] }).catch(e => e);
+    try {
+      // Nobody listening yet (memory indexes while Mastra Code boots): one console line, kept for later.
+      expect(isEmbedderPackageMissingError(await embed())).toBe(true);
+      expect(isEmbedderPackageMissingError(await embed())).toBe(true);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      const first = vi.fn();
+      const stopFirst = onEmbedderPackageMissing(first);
+      expect(first).toHaveBeenCalledTimes(1);
+      await embed();
+      expect(first).toHaveBeenCalledTimes(1);
+
+      const throwing = vi.fn(() => {
+        throw new Error('listener bug');
+      });
+      const second = vi.fn();
+      onEmbedderPackageMissing(throwing);
+      onEmbedderPackageMissing(second);
+      expect(second).not.toHaveBeenCalled();
+      const error = await embed();
+      expect(isEmbedderPackageMissingError(error)).toBe(true);
+      expect(throwing).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(second.mock.calls[0]![0].code).toBe(EMBEDDER_PACKAGE_MISSING);
+      stopFirst();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('still subscribes when a late listener throws on the replayed notice', async () => {
+    const hooks = registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier !== '@mastra/fastembed') return nextResolve(specifier, context);
+        throw Object.assign(new Error(`Cannot find package '@mastra/fastembed'`), { code: 'ERR_MODULE_NOT_FOUND' });
+      },
+    });
+    unblock = () => hooks.deregister();
+    vi.resetModules();
+    const { embedInSubprocess, onEmbedderPackageMissing } = await import('./fastembed-subprocess.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await embedInSubprocess({ values: ['a'] }).catch(() => {});
+      const throwing = vi.fn(() => {
+        throw new Error('listener bug');
+      });
+      const stop = onEmbedderPackageMissing(throwing);
+      expect(throwing).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenLastCalledWith('Embedder notice listener failed: Error: listener bug');
+      stop();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

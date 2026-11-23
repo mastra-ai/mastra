@@ -295,7 +295,7 @@ function startsRun(decision: FactoryCommitDecision): decision is RunStartDecisio
 }
 
 // Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
-// A run that starts after its own agent's move is queued onto that agent's run instead.
+// A run that starts after its own agent's move waits for that agent's run to end instead.
 function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
   // A run-start cause marks an agent landing the card where its run already is — on its own
   // board. A cross-board request is never that, and its destination runner still queues.

@@ -18,6 +18,7 @@ export * from './EnvIcon';
 export * from './FiltersIcon';
 export * from './GithubCoinIcon';
 export * from './GithubIcon';
+export * from './GitlabIcon';
 export * from './GoogleIcon';
 export * from './RepoIcon';
 export * from './HomeIcon';

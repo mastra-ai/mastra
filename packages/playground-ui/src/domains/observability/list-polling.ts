@@ -11,9 +11,12 @@ export const OBSERVABILITY_LIST_HEAD_LIMIT = 50;
 /** Head rows kept across polls before the list reloads its first page instead. */
 export const OBSERVABILITY_LIST_HEAD_MAX_ROWS = 500;
 
-/** The server refused the request (e.g. a time range over its cap); retrying cannot change that. */
+/**
+ * The server refused the request (e.g. a time range over its cap); retrying cannot change that.
+ * A 429 is not a refusal: the rate-limit window moves on, so polling keeps going at its usual cadence.
+ */
 export function isRejectedListRequest(error: unknown): boolean {
-  return error instanceof MastraClientError && error.status >= 400 && error.status < 500;
+  return error instanceof MastraClientError && error.status >= 400 && error.status < 500 && error.status !== 429;
 }
 
 export function fixedWindowRefetchInterval(error: unknown): number | false {

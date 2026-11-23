@@ -1,4 +1,4 @@
-import { ComposerStatus } from '@mastra/playground-ui/components/Composer';
+import { ComposerStatus, ComposerStatusEnd, ComposerStatusStart } from '@mastra/playground-ui/components/Composer';
 import type { ReactNode } from 'react';
 
 import { ConnectionActivity } from './ConnectionActivity';
@@ -8,19 +8,22 @@ import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
 /**
- * Session status row above the composer, right-aligned and hidden when empty. Pure
- * composition root: each child reads its own slice of the existing chat/session context.
- * The model picker lives in the composer actions instead.
+ * Session status footer below the composer: session context on the left, runtime readings on the
+ * right. Pure composition root: each child reads its own slice of the existing chat/session context.
  */
 export function StatusLine({ children }: { children?: ReactNode }) {
   return (
     <ComposerStatus aria-label="Session status line">
-      {children}
-      <OperationalMemoryStatus />
-      <RuntimeActivity />
-      <ConnectionActivity />
-      <QueuedFollowUps />
-      <GoalStatus />
+      <ComposerStatusStart>
+        {children}
+        <ConnectionActivity />
+        <GoalStatus />
+        <QueuedFollowUps />
+      </ComposerStatusStart>
+      <ComposerStatusEnd>
+        <RuntimeActivity />
+        <OperationalMemoryStatus />
+      </ComposerStatusEnd>
     </ComposerStatus>
   );
 }
