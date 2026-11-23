@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentExecutionOptions } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import type { OutputProcessor } from '@mastra/core/processors';
 import type { ChunkType } from '@mastra/core/stream';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -69,6 +70,69 @@ const createQuestionAgent = (options: RunOptions) => {
       },
     }),
   });
+};
+
+/** Rejects the model's first draft and asks it to retry, like a guardrail processor. */
+const rejectDraft: OutputProcessor = {
+  id: 'reject-draft',
+  processOutputStep: ({ text, abort, messageList }) => {
+    if (text?.includes('Rejected draft')) abort('Ask the user instead', { retry: true });
+    return messageList;
+  },
+};
+
+/**
+ * The chunks of a run whose first draft a processor rejected and retried before
+ * the model called `askQuestion`, which `stopWhen` stops on. The retry re-runs
+ * the step, so the run used one of its `maxSteps` though it reports two steps.
+ */
+export const streamRetriedQuestionAgent = async ({ maxSteps }: { maxSteps: number }): Promise<ChunkType[]> => {
+  let modelCalls = 0;
+  const agent = new Agent({
+    id: 'agent-1',
+    name: 'Poster agent',
+    instructions: 'Ask the user which style they want before designing.',
+    tools: { askQuestion },
+    model: new MastraLanguageModelV2Mock({
+      doStream: async () => {
+        const draft = modelCalls++ === 0;
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              if (draft) {
+                controller.enqueue({ type: 'text-start', id: 'draft' });
+                controller.enqueue({ type: 'text-delta', id: 'draft', delta: 'Rejected draft' });
+                controller.enqueue({ type: 'text-end', id: 'draft' });
+              } else {
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'askQuestion',
+                  input: JSON.stringify({ question: 'Which style?' }),
+                });
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: draft ? 'stop' : 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    }),
+  });
+  const output = await agent.stream('Make me a poster', {
+    maxSteps,
+    maxProcessorRetries: 1,
+    stopWhen: stopAfterQuestion,
+    outputProcessors: [rejectDraft],
+  });
+  const chunks: ChunkType[] = [];
+  for await (const chunk of output.fullStream) chunks.push(chunk);
+  return chunks;
 };
 
 /** The chunks the agent's own stream produced, as the agent stream route sends them. */

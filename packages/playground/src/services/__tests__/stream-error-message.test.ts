@@ -9,6 +9,7 @@ import {
   endTurnFromHook,
   stopAfterQuestion,
   streamQuestionAgent,
+  streamRetriedQuestionAgent,
 } from '../../lib/ai-ui/chat/__tests__/fixtures/question-agent';
 
 type Chunk = Parameters<typeof isMaxStepsFinishChunk>[0]['chunk'];
@@ -73,6 +74,14 @@ describe('stream error messages', () => {
         finishOf(await streamQuestionAgent({ maxSteps: 10, stopWhen: stopAfterQuestion })),
       );
       expect(isMaxStepsFinishChunk({ chunk: finish, maxSteps: 10 })).toBe(false);
+    });
+
+    // A processor retry re-runs its step, so core's limit does not count it. Core 1.83.0
+    // sends both attempts in `steps`, and counting the retry warned on a run with a step left.
+    it('does not count a processor retry as a used step', async () => {
+      const finish = withoutStopCause(finishOf(await streamRetriedQuestionAgent({ maxSteps: 2 })));
+      expect(finish.payload.output.steps?.map(step => step.tripwire?.retry === true)).toEqual([true, false]);
+      expect(isMaxStepsFinishChunk({ chunk: finish, maxSteps: 2 })).toBe(false);
     });
 
     it('does not warn without a known limit', async () => {

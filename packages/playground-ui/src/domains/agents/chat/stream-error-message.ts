@@ -15,6 +15,20 @@ const getMaxStepsErrorText = (maxSteps?: number) => {
   return `Agent stopped because it reached maxSteps${limit} while tool calls were still pending. Increase maxSteps in advanced settings and try again.`;
 };
 
+type FinishStep = NonNullable<FinishChunk['payload']['output']['steps']>[number];
+
+/**
+ * A retried step re-runs, so core's step limit does not count it. A processor
+ * retry keeps its rejection as `tripwire.retry`, which the finish chunk carries
+ * even where it leaves `finishReason` empty (core 1.83.0). Core also sends
+ * `'retry'` as the finish reason, a value outside the AI SDK union the type
+ * declares, so the reason is widened to a string to compare it.
+ */
+const isRetriedStep = (step: FinishStep) => {
+  const finishReason: string | undefined = step.finishReason;
+  return step.tripwire?.retry === true || finishReason === 'retry';
+};
+
 /**
  * A server on a @mastra/core that predates `stopCause` only says how many steps
  * the run took, and only on the caller's own stream: thread subscription copies
@@ -24,7 +38,7 @@ const getMaxStepsErrorText = (maxSteps?: number) => {
 const usedEveryStep = ({ chunk, maxSteps }: { chunk: FinishChunk; maxSteps: number | undefined }) => {
   const steps = chunk.payload.output?.steps;
   if (typeof maxSteps !== 'number' || maxSteps < 1 || !Array.isArray(steps)) return false;
-  return steps.length >= maxSteps;
+  return steps.filter(step => !isRetriedStep(step)).length >= maxSteps;
 };
 
 /**

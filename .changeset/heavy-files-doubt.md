@@ -14,4 +14,4 @@ for await (const chunk of subscription.stream) {
 }
 ```
 
-Also fixed `Agent` traces reporting `max_steps` when `onIterationComplete` returned `{ continue: false }` on the last allowed step. They now report `iteration_hook`, as durable agents already did.
+Also fixed traces reporting `max_steps` for runs that were stopped on purpose on their last allowed step. When `onIterationComplete` returns `{ continue: false }` there, with or without `feedback`, `Agent` traces now report `iteration_hook`, as durable agents already did. When a `stopWhen` condition matches there, every agent now reports `stop_condition`.

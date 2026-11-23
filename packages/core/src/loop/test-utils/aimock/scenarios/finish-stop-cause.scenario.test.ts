@@ -52,8 +52,10 @@ const askUser = createTool({
 const cases: Array<{
   name: string;
   toolName: 'lookup' | 'askUser';
-  options: Pick<RunLoopScenarioOptions, 'clientTools' | 'onIterationComplete'>;
+  options: Pick<RunLoopScenarioOptions, 'clientTools' | 'onIterationComplete' | 'stopWhen'>;
   stopCause: NonNullable<FinishChunk['payload']['stopCause']>;
+  /** Inngest's agentic loop has no onIterationComplete step yet, so the hook cannot stop it. */
+  hookStop?: true;
 }> = [
   { name: 'it runs out of steps mid tool loop', toolName: 'lookup', options: {}, stopCause: 'max_steps' },
   {
@@ -67,6 +69,21 @@ const cases: Array<{
     toolName: 'lookup',
     options: { onIterationComplete: () => ({ continue: false }) },
     stopCause: 'iteration_hook',
+    hookStop: true,
+  },
+  {
+    name: 'onIterationComplete stops it with feedback on its last allowed step',
+    toolName: 'lookup',
+    options: { onIterationComplete: () => ({ continue: false, feedback: 'Wait for the user to pick a style.' }) },
+    stopCause: 'iteration_hook',
+    hookStop: true,
+  },
+  {
+    // The default loop also receives maxSteps as a stop condition, which matches on this step too.
+    name: 'stopWhen stops it on its last allowed step',
+    toolName: 'lookup',
+    options: { stopWhen: ({ steps }: { steps: unknown[] }) => steps.length > 0 },
+    stopCause: 'stop_condition',
   },
 ];
 
@@ -80,7 +97,11 @@ describeForAllEngines('AIMock scenario: the finish chunk says why the run stoppe
     );
   };
 
-  it.each(cases)('on the stream when $name at maxSteps 1', async ({ toolName, options, stopCause }) => {
+  // Pinned with it.fails on Inngest until its loop runs onIterationComplete; it reports max_steps.
+  const runsOnEngine = cases.filter(c => !(engine === 'inngest' && c.hookStop));
+  const failsOnEngine = cases.filter(c => engine === 'inngest' && c.hookStop);
+
+  const onStream = async ({ toolName, options, stopCause }: (typeof cases)[number]) => {
     const { chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -95,9 +116,9 @@ describeForAllEngines('AIMock scenario: the finish chunk says why the run stoppe
     const finish = chunks?.find((chunk): chunk is FinishChunk => chunk.type === 'finish');
     expect(finish?.payload.stepResult.reason).toBe('tool-calls');
     expect(finish?.payload.stopCause).toBe(stopCause);
-  });
+  };
 
-  it.each(cases)('on the thread subscription when $name at maxSteps 1', async ({ toolName, options, stopCause }) => {
+  const onThreadSubscription = async ({ toolName, options, stopCause }: (typeof cases)[number]) => {
     const memory = new MockMemory();
     const shared = await createSharedAgent(getMock(), { memory, engine, tools: { lookup } });
     const run = (threadId: string) =>
@@ -129,5 +150,16 @@ describeForAllEngines('AIMock scenario: the finish chunk says why the run stoppe
     } finally {
       subscription.unsubscribe();
     }
-  });
+  };
+
+  const streamName = 'on the stream when $name at maxSteps 1';
+  const threadName = 'on the thread subscription when $name at maxSteps 1';
+  if (runsOnEngine.length > 0) {
+    it.each(runsOnEngine)(streamName, onStream);
+    it.each(runsOnEngine)(threadName, onThreadSubscription);
+  }
+  if (failsOnEngine.length > 0) {
+    it.fails.each(failsOnEngine)(streamName, onStream);
+    it.fails.each(failsOnEngine)(threadName, onThreadSubscription);
+  }
 });

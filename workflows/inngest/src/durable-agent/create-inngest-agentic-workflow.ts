@@ -564,8 +564,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
-        if (!shouldContinue || !underMaxSteps) {
-          recordStopCause(shouldContinue ? 'max_steps' : 'model_finished');
+        if (!shouldContinue) {
+          recordStopCause('model_finished');
           await emitStepFinish(false);
           return false;
         }
@@ -608,9 +608,15 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           return conditions.some(Boolean);
         });
 
-        if (stopped) recordStopCause('stop_condition');
-        await emitStepFinish(!stopped);
-        return !stopped;
+        // stopWhen also runs on the last allowed step: the run stops there either way, but a
+        // match says the caller ended it, not the step budget (#29612).
+        if (stopped || !underMaxSteps) {
+          recordStopCause(stopped ? 'stop_condition' : 'max_steps');
+          await emitStepFinish(false);
+          return false;
+        }
+        await emitStepFinish(true);
+        return true;
       })
       // Map final state to output format, close agent span, and emit finish event
       .map(
@@ -838,6 +844,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
               ...(textRewritten && { textRewritten }),
+              ...(stopCause && { stopCause }),
             });
           }
 

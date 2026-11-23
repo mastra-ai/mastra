@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ContinuationDeps } from './continuation-core';
-import { decideContinuation } from './continuation-core';
+import { decideContinuation, markStepBudgetCondition } from './continuation-core';
 
 describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)', mode => {
   const deps = (overrides: Partial<ContinuationDeps> = {}) =>
@@ -35,15 +35,46 @@ describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)'
     ).toMatchObject({ isFinal: true, stopCause: 'iteration_hook' });
   });
 
-  // Agent passes maxSteps as a stepCountIs(maxSteps) stopWhen, which also matches on the last step.
+  // The default engine gets maxSteps as a marked stop condition; durable gets only the caller's.
+  const stepBudget = () => (mode === 'default' ? [markStepBudgetCondition(() => true)] : []);
+
   it('does not attribute a hook stop on the last allowed step to the step-count stop condition', async () => {
     expect(
       await decideContinuation(
         deps({
           underMaxSteps: false,
           llmWantsToContinue: true,
-          stopWhen: () => true,
+          stopWhen: stepBudget(),
           onIterationComplete: () => ({ continue: false }),
+        }),
+      ),
+    ).toMatchObject({ isFinal: true, forceContinue: false, stopCause: 'iteration_hook' });
+  });
+
+  it('reports a step limit when only the maxSteps condition matches on the last allowed step', async () => {
+    expect(
+      await decideContinuation(
+        deps({ underMaxSteps: false, llmWantsToContinue: true, stopWhen: [...stepBudget(), () => false] }),
+      ),
+    ).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+  });
+
+  it("reports the caller's stop condition when it matches on the last allowed step", async () => {
+    expect(
+      await decideContinuation(
+        deps({ underMaxSteps: false, llmWantsToContinue: true, stopWhen: [...stepBudget(), () => true] }),
+      ),
+    ).toMatchObject({ isFinal: true, forceContinue: false, stopCause: 'stop_condition' });
+  });
+
+  it('does not attribute a hook stop with feedback on the last allowed step to the step limit', async () => {
+    expect(
+      await decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: stepBudget(),
+          onIterationComplete: () => ({ continue: false, feedback: 'Wait for the user.' }),
         }),
       ),
     ).toMatchObject({ isFinal: true, forceContinue: false, stopCause: 'iteration_hook' });

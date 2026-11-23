@@ -475,6 +475,27 @@ describe('ChatProvider', () => {
       expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
     });
 
+    it('shows no maxSteps warning when stopWhen matches on its only step', async () => {
+      const chunks = await runAgent({ maxSteps: 1, stopWhen: stopAfterQuestion });
+      expectToolCallFinish(chunks, 1);
+
+      await renderRun({ maxSteps: 1, chunks });
+
+      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
+    });
+
+    it('shows no maxSteps warning when a stopping hook returns feedback on its only step', async () => {
+      const chunks = await runAgent({
+        maxSteps: 1,
+        onIterationComplete: () => ({ continue: false, feedback: 'Wait for the user to choose a style.' }),
+      });
+      expectToolCallFinish(chunks, 1);
+
+      await renderRun({ maxSteps: 1, chunks });
+
+      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
+    });
+
     it('shows no maxSteps warning when the run stopped on a client tool on its only step', async () => {
       const chunks = await runAgent({ maxSteps: 1, clientTools: { askQuestion: askQuestionInBrowser } });
       expectToolCallFinish(chunks, 1);
