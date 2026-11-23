@@ -17,6 +17,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
+import { detachSealMetadata } from './detach-seal-metadata';
 import { getOmFailureMetadata } from './error';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
@@ -345,20 +346,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // serialize() preserves nested references. Detach the fields OM seals in place without
       // structuredClone(), which cannot copy provider functions carried in message parts.
       if (preStepMessages) {
-        preStepMessages.messages = preStepMessages.messages.map(message => ({
-          ...message,
-          content: {
-            ...message.content,
-            metadata: message.content.metadata && {
-              ...message.content.metadata,
-              mastra: { ...(message.content.metadata.mastra as object) },
-            },
-            parts: message.content.parts?.map(part => {
-              const metadata = (part as { metadata?: { mastra?: object } }).metadata;
-              return { ...part, ...(metadata && { metadata: { ...metadata, mastra: { ...metadata.mastra } } }) };
-            }),
-          },
-        }));
+        preStepMessages.messages = preStepMessages.messages.map(detachSealMetadata);
       }
       let previousRecord: ObservationalMemoryRecord | undefined;
       let loadedContextMessages: MastraDBMessage[] | undefined;
@@ -407,6 +395,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             messageList,
             systemMessages,
             continuationMessage: undefined,
+            hasObservations: Boolean(previousRecord?.activeObservations),
             threadId,
             resourceId,
           });
@@ -471,22 +460,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           this.turn.agent = args.agent;
           this.turn.requestContext = requestContext;
           await this.turn.start(this.memory, runState);
-          loadedContextMessages = this.turn.context.messages
-            .filter(message => message.role !== 'system')
-            .map(message => ({
-              ...message,
-              content: {
-                ...message.content,
-                metadata: message.content.metadata && {
-                  ...message.content.metadata,
-                  mastra: { ...(message.content.metadata.mastra as object) },
-                },
-                parts: message.content.parts?.map(part => {
-                  const metadata = (part as { metadata?: { mastra?: object } }).metadata;
-                  return { ...part, ...(metadata && { metadata: { ...metadata, mastra: { ...metadata.mastra } } }) };
-                }),
-              },
-            }));
+          // Only the continue policy restores loaded history after a failure; abort-policy turns throw
+          // before using it, so skip the copy for them.
+          if (this.engine.config.observation.failurePolicy === 'continue') {
+            loadedContextMessages = this.turn.context.messages
+              .filter(message => message.role !== 'system')
+              .map(detachSealMetadata);
+          }
           if (stepNumber > 0) {
             // A background result may have landed in storage after the durable snapshot was saved.
             // Reconcile those response messages before the unread-part scan; the snapshot's part

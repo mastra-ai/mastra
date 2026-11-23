@@ -140,8 +140,10 @@ async function runStepOnStorage(
     retryCount: 0,
     messageId: responseId,
     rotateResponseMessageId,
-    abort: (() => {
-      throw new Error('aborted');
+    // Input failures go through the observation failure policy (abort by default), which
+    // trips the run with the error's message.
+    abort: ((message: string) => {
+      throw new Error(message);
     }) as any,
   } as any);
 

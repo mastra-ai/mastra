@@ -1122,8 +1122,7 @@ function formatObserverSignalAttributes(attributes: unknown): string {
 function getObserverMessageLabel(msg: MastraDBMessage): string {
   if (msg.role === 'signal') {
     const signal = msg.content?.metadata?.signal as
-      | { type?: string; tagName?: string; attributes?: unknown }
-      | undefined;
+      { type?: string; tagName?: string; attributes?: unknown } | undefined;
     return signal?.type === 'user'
       ? `User${formatObserverSignalAttributes(signal.attributes)}`
       : (signal?.tagName ?? signal?.type ?? 'Signal');

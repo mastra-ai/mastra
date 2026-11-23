@@ -8,7 +8,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+import { detachSealMetadata } from '../detach-seal-metadata';
 import { ObservationalMemory } from '../observational-memory';
+
+vi.mock('../detach-seal-metadata', async importOriginal => {
+  const actual = await importOriginal<typeof import('../detach-seal-metadata')>();
+  return { detachSealMetadata: vi.fn(actual.detachSealMetadata) };
+});
 
 const filler = Array.from({ length: 400 }, (_, i) => `shipment event ${i} at depot`).join('\n');
 let mock: LLMock;
@@ -19,6 +25,7 @@ beforeAll(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.mocked(detachSealMetadata).mockClear();
   mock.clearFixtures();
   mock.clearRequests();
   mock.resetMatchCounts();
@@ -184,6 +191,11 @@ describe('OM continue policy for input failures', () => {
     expect(result.text).toBe('The order shipped.');
     expect(readded).toHaveLength(2);
     expect(readded[1]).toEqual({ sealed: undefined, sealedAt: undefined });
+    expect(detachSealMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ id: history.id }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('restores message seals when observation fails after mutating the live list', async () => {
@@ -237,6 +249,32 @@ describe('OM continue policy for input failures', () => {
     expect(requests).toHaveLength(1);
   });
 
+  it('does not copy loaded history for recovery when the observation policy is abort', async () => {
+    const history: MastraDBMessage = {
+      id: 'abort-policy-history',
+      role: 'user',
+      type: 'text',
+      content: { format: 2, parts: [{ type: 'text', text: 'Earlier order HISTORY_MARKER' }] },
+      createdAt: new Date(),
+    };
+    vi.spyOn(ObservationalMemory.prototype, 'buildContextSystemMessages').mockImplementationOnce(async () => {
+      throw new Error('context build failed');
+    });
+    const agent = setup(new InMemoryStore(), undefined, 'abort', false, memory => {
+      const getContext = memory.getContext.bind(memory);
+      vi.spyOn(memory, 'getContext').mockImplementation(async args => {
+        const context = await getContext(args);
+        return { ...context, messages: [...context.messages, history] };
+      });
+    });
+    const result = await agent.generate('Find order 4471', {
+      memory: { thread: 'abort-policy-history', resource: 'r' },
+      maxSteps: 3,
+    });
+    expect(result.tripwire?.reason).toContain('context build failed');
+    expect(detachSealMetadata).not.toHaveBeenCalled();
+  });
+
   it.each(['generate', 'stream'] as const)(
     'does not report a successful %s turn when saving its final response fails',
     async method => {
@@ -262,8 +300,10 @@ describe('OM continue policy for input failures', () => {
       if (method === 'generate') {
         await expect(agent.generate('Find order 4471', options)).rejects.toThrow('final write unavailable');
       } else {
-        const result = await (await agent.stream('Find order 4471', options)).getFullOutput();
-        expect(JSON.stringify(result)).toContain('final write unavailable');
+        // A failed output processor rejects getFullOutput().
+        await expect((await agent.stream('Find order 4471', options)).getFullOutput()).rejects.toThrow(
+          'final write unavailable',
+        );
       }
       const { messages } = await store.listMessages({ threadId: `write-failure-${method}` });
       expect(JSON.stringify(messages)).not.toContain('The order shipped.');
