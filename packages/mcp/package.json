@@ -34,7 +34,7 @@
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test:compat": "bash integration-tests/compat.sh",
     "test:compat:version-packages": "node integration-tests/version-packages-regression.mjs",
-    "test:conformance": "tsx ./src/conformance/run.ts",
+    "test:conformance": "node ./src/conformance/launch.mjs",
     "test:typegen": "vitest run src/cli/typegen.test.ts src/cli/generate.test.ts src/cli/package.test.ts",
     "test": "pnpm test:server && pnpm test:client && pnpm test:typegen && pnpm test:integration",
     "lint": "oxlint --type-aware .",

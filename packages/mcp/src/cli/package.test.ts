@@ -94,6 +94,22 @@ describe('built MCP package', () => {
     }
   });
 
+  it('tells a contributor without tsx how to install it before any conformance scenario runs', () => {
+    const result = spawnSync(process.execPath, ['--import', blocker, join(root, 'src/conformance/launch.mjs')], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, NODE_OPTIONS: '' },
+      timeout: 20_000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'The MCP conformance runner (pnpm --filter ./packages/mcp test:conformance) requires tsx',
+    );
+    expect(result.stderr).toContain('pnpm --filter ./packages/mcp add --save-dev tsx@4');
+    // Nothing ran: the official scenario and the stdio checks print their own output.
+    expect(result.stdout).toBe('');
+  });
+
   it('packs the bin, chunks and declarations without installing the generator helpers', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'mcp-package-test-'));
     try {
