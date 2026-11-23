@@ -18,7 +18,6 @@ export default defineConfig({
   nodeProtocol: 'strip',
   dts: false,
   clean: true,
-  sourcemap: true,
   onSuccess: async () => {
     const studioPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
     const factoryUIPath = dirname(fileURLToPath(import.meta.resolve('@internal/factory-ui/package.json')));

@@ -1,3 +1,4 @@
+import { stripJsSourcemaps } from '@internal/types-builder/strip-js-sourcemaps';
 import { defineConfig } from 'tsdown';
 
 // @chat-adapter/discord (Vercel Chat SDK) is ESM-only — its package `exports`
@@ -26,8 +27,8 @@ export default defineConfig([
     fixedExtension: false,
     nodeProtocol: 'strip',
     dts: true,
+    plugins: [stripJsSourcemaps()],
     clean: true,
-    sourcemap: true,
     deps: {
       neverBundle: ['@mastra/core'],
     },
@@ -39,7 +40,6 @@ export default defineConfig([
     nodeProtocol: 'strip',
     dts: false,
     clean: false,
-    sourcemap: true,
     deps: {
       alwaysBundle: ADAPTER,
       onlyBundle: false,

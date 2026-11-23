@@ -1,5 +1,6 @@
 import { cp } from 'node:fs/promises';
 import { join } from 'node:path';
+import { stripJsSourcemaps } from '@internal/types-builder/strip-js-sourcemaps';
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
@@ -11,8 +12,8 @@ export default defineConfig({
   fixedExtension: false,
   nodeProtocol: 'strip',
   dts: true,
+  plugins: [stripJsSourcemaps()],
   clean: true,
-  sourcemap: true,
   onSuccess: async () => {
     await cp(join('src', 'ee', 'workspace'), join('dist', 'ee', 'workspace'), { recursive: true });
   },
