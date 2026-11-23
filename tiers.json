@@ -27983,9 +27983,9 @@
     },
     "packages/server/src/server/handlers/agents.test.ts": {
       "tier": "in",
-      "since": "2026-10-30",
-      "last_failure": "2026-11-17",
-      "reason": "pr-catch",
+      "since": "2026-11-23",
+      "last_failure": "2026-11-23",
+      "reason": "versioning-fail",
       "pr_failures": {
         "134176153502": {
           "date": "2026-11-17",
@@ -37832,10 +37832,10 @@
       }
     },
     "job:workspace-docker/s3": {
-      "tier": "out",
-      "since": "2026-11-01",
-      "last_failure": "2026-09-18",
-      "reason": "seed-30d-nofail"
+      "tier": "in",
+      "since": "2026-11-23",
+      "last_failure": "2026-11-23",
+      "reason": "versioning-fail"
     },
     "job:workspace-unit/agentcore": {
       "tier": "out",
