@@ -35,7 +35,8 @@ export const elevenlabsAgent = new Agent({
   instructions: 'You narrate messages, transcribe recordings, and compose music with ElevenLabs.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools({
-    providers: { elevenlabs: { requireApproval: ['elevenlabs_clone_voice'] } },
+    providers: ['elevenlabs'],
+    requireApproval: ['elevenlabs_clone_voice'],
   }),
 })
 ```
