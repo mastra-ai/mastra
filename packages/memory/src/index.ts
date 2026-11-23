@@ -3528,7 +3528,12 @@ Notes:
         };
       }
       const moved = new Set<string>();
-      for (;;) {
+      // Eventually consistent stores may keep returning an updated page for minutes.
+      // Bound the whole index migration, including retries across multiple pages.
+      const deadline = Date.now() + 120_000;
+      let retryDelayMs = 1_000;
+      let complete = false;
+      migration: while (Date.now() < deadline) {
         // `queryText` is accepted only by self-embedding stores, so it is not on the shared
         // QueryVectorParams.
         const stale = await vector.query({
@@ -3538,9 +3543,22 @@ Notes:
           topK: 20,
           filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
         } as never);
+        if (stale.length === 0) {
+          complete = true;
+          break;
+        }
         const pending = stale.filter(result => !moved.has(result.id));
-        if (pending.length === 0) break;
+        if (pending.length === 0) {
+          const delayMs = Math.min(retryDelayMs, Math.max(0, deadline - Date.now()));
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+          continue;
+        }
+        retryDelayMs = 1_000;
         for (const result of pending) {
+          // A slow query or earlier updates can use up the budget mid-page. Start no new write after
+          // the deadline; completed updates stay in place so a same-resource retry finishes the rest.
+          if (Date.now() >= deadline) break migration;
           moved.add(result.id);
           // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
           if (!result.metadata) {
@@ -3560,6 +3578,12 @@ Notes:
             },
           });
         }
+      }
+      if (!complete) {
+        throw new Error(
+          `Observation vector migration in index "${indexName}" did not complete within 120 seconds ` +
+            `(${moved.size} vector IDs processed). The store may still be returning stale results; retry the transfer.`,
+        );
       }
     }
   }
