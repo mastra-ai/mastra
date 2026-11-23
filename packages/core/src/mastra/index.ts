@@ -1227,9 +1227,6 @@ export class Mastra<
    * Kept separate from `#workersStarted`, which partial `startWorkers(name)`
    * calls also set without starting the workflow consumer.
    */
-  #durableAgentInitialization?: Promise<void>;
-  // Bumped by addAgent() so push deliveries can tell when a registration landed after initialization settled.
-  #agentRegistrations = 0;
   #executionWorkersStarted = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
@@ -3288,8 +3285,6 @@ export class Mastra<
 
     mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
     agents[agentKey] = mastraAgent;
-    this.#durableAgentInitialization = undefined;
-    this.#agentRegistrations++;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
       if (!registrations) {
@@ -7977,24 +7972,10 @@ export class Mastra<
     await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
-  async #initializeDurableAgents(): Promise<void> {
-    // addAgent() clears the memo. When that happens while this waits, the awaited promise
-    // never saw the new agent, so initialize again before the caller checks event ownership.
-    while (true) {
-      const initialization = (this.#durableAgentInitialization ??= Promise.all(
-        Object.values(this.#agents ?? {}).map(async agent => {
-          if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) {
-            await agent.__initializeDurableExecution();
-          }
-        }),
-      ).then(() => undefined));
-      try {
-        await initialization;
-      } catch (error) {
-        if (this.#durableAgentInitialization === initialization) this.#durableAgentInitialization = undefined;
-        throw error;
-      }
-      if (this.#durableAgentInitialization === initialization) return;
+  /** Build native durable agents' engines and register their workflows, so event ownership checks can find them. */
+  #initializeDurableAgents(): void {
+    for (const agent of Object.values(this.#agents ?? {})) {
+      if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) agent.__initializeDurableExecution();
     }
   }
 
@@ -8010,7 +7991,7 @@ export class Mastra<
    */
   public async handleWorkflowEvent(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     try {
-      await this.#initializeDurableAgents();
+      this.#initializeDurableAgents();
     } catch (error) {
       this.#logger.error('Failed to initialize durable agents for workflow event', { error });
       return { ok: false, retry: true };
@@ -8047,7 +8028,7 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    await this.#initializeDurableAgents();
+    this.#initializeDurableAgents();
 
     // Skip the boot probe when it cannot affect startup. Besides avoiding an
     // unnecessary query, this preserves request-scoped storage behavior from
@@ -8205,11 +8186,12 @@ export class Mastra<
     const modes = this.#pubsub.supportedModes ?? ['pull'];
     const pushOnly = modes.includes('push') && !modes.includes('pull');
     if (pushOnly && !this.#pushSubscription) {
-      const deliver = async (
-        event: Parameters<EventCallback>[0],
-        ack?: () => Promise<void>,
-        nack?: () => Promise<void>,
-      ) => {
+      // Tracked so a concurrent stopWorkers() drain waits for the acknowledgement too.
+      const track = (delivery: Promise<unknown>) => {
+        this.#inFlightPushEvents.add(delivery);
+        void delivery.finally(() => this.#inFlightPushEvents.delete(delivery));
+      };
+      const cb: EventCallback = (event, ack, nack) => {
         // In cross-process push environments (e.g. UnixSocketPubSub),
         // every subscriber receives every event — including events for
         // internal workflows registered on a different process. Skip
@@ -8221,25 +8203,21 @@ export class Mastra<
         const data = event.data as Record<string, unknown> | undefined;
         const wfId = data?.workflowId as string | undefined;
         const rId = data?.runId as string | undefined;
-        while (true) {
-          const registrations = this.#agentRegistrations;
-          try {
-            await this.#initializeDurableAgents();
-          } catch (error) {
-            this.#logger.error('Failed to initialize durable agents for push delivery', { error });
-            if (nack) await nack().catch(err => this.#logger.error('Error nacking workflow event', err));
-            return;
-          }
-          if (!wfId || !rId || this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) break;
-          // An agent registered after initialization settled may own this workflow; initialize it before skipping.
-          if (this.#agentRegistrations !== registrations) continue;
+        try {
+          this.#initializeDurableAgents();
+        } catch (error) {
+          this.#logger.error('Failed to initialize durable agents for push delivery', { error });
+          if (nack) track(nack().catch(err => this.#logger.error('Error nacking workflow event', err)));
+          return;
+        }
+        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
           if (ack) {
-            await ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+            track(ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err)));
           }
           return;
         }
 
-        await this.handleWorkflowEvent(event)
+        const inFlight = this.handleWorkflowEvent(event)
           .then(result => {
             if (result.ok) {
               if (ack) {
@@ -8278,13 +8256,7 @@ export class Mastra<
             }
           })
           .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-      };
-      const cb: EventCallback = (event, ack, nack) => {
-        // Track the whole delivery, including native engine initialization, so a
-        // concurrent stopWorkers() drain cannot finish before this event is handled.
-        const inFlight = deliver(event, ack, nack);
-        this.#inFlightPushEvents.add(inFlight);
-        void inFlight.finally(() => this.#inFlightPushEvents.delete(inFlight));
+        track(inFlight);
       };
       await this.#pubsub.subscribe('workflows', cb);
       this.#pushSubscription = { topic: 'workflows', cb };
@@ -8336,7 +8308,7 @@ export class Mastra<
   }
 
   async #startExecutionWorkers(): Promise<void> {
-    await this.#initializeDurableAgents();
+    this.#initializeDurableAgents();
     // Storage init is memoized (see augmentWithInit) — cheap when already run.
     if (this.#storage) {
       await this.#storage.init();

@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { DurableStepIds } from '../agent/durable/constants';
 import { globalRunRegistry } from '../agent/durable/run-registry';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSubDeliveryMode } from '../events/pubsub';
@@ -367,88 +368,38 @@ describe('Mastra shutdown lifecycle', () => {
     }
   });
 
-  it('stopWorkers waits for a push event still initializing a late-registered native engine', async () => {
-    const initializing = deferred();
-    const initStarted = deferred();
-    const pubsub = new PushOnlyPubSub();
+  it('handles a push event for the loop of a native evented agent registered after workers started', async () => {
+    const pubsub = new CapturingPushPubSub();
     const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
     const handle = vi.spyOn(mastra, 'handleWorkflowEvent').mockResolvedValue({ ok: true });
 
     try {
       await mastra.startWorkers();
-      const agent = new Agent({
-        id: 'late-native',
-        name: 'late-native',
-        instructions: 'test',
-        model: 'openai/gpt-4o',
-        durable: { executionEngine: 'default' },
-      });
-      vi.spyOn(agent, '__hasDurableExecution').mockReturnValue(true);
-      vi.spyOn(agent, '__initializeDurableExecution').mockImplementation(async () => {
-        initStarted.resolve();
-        await initializing.promise;
-      });
-      mastra.addAgent(agent, 'late-native');
+      mastra.addAgent(
+        new Agent({
+          id: 'late-native',
+          name: 'late-native',
+          instructions: 'test',
+          model: 'openai/gpt-4o',
+          durable: { executionEngine: 'evented' },
+        }),
+        'late-native',
+      );
 
-      await pubsub.publish('workflows', { type: 'workflow.start', runId: 'run-1', data: {} } as any);
-      await initStarted.promise;
+      const ack = vi.fn(async () => {});
+      await pubsub.deliver(
+        {
+          type: 'workflow.step.run',
+          runId: 'run-1',
+          data: { workflowId: DurableStepIds.AGENTIC_LOOP, runId: 'run-1' },
+        } as any,
+        ack,
+      );
+      await mastra.stopWorkers();
 
-      let stopped = false;
-      const stop = mastra.stopWorkers().then(() => {
-        stopped = true;
-      });
-      await new Promise(r => setTimeout(r, 20));
-      expect(stopped).toBe(false);
-
-      initializing.resolve();
-      await stop;
       expect(handle).toHaveBeenCalledOnce();
+      expect(ack).toHaveBeenCalledOnce();
     } finally {
-      initializing.resolve();
-      await mastra.shutdown();
-      mastra.__unregisterHooks();
-    }
-  });
-
-  it('initializes an agent registered while a workflow event waits on earlier initialization', async () => {
-    const firstInit = deferred();
-    const firstStarted = deferred();
-    const mastra = new Mastra({ logger: false, workers: false, storage: new MockStore() });
-    const makeNative = (id: string) => {
-      const agent = new Agent({
-        id,
-        name: id,
-        instructions: 'test',
-        model: 'openai/gpt-4o',
-        durable: { executionEngine: 'default' },
-      });
-      vi.spyOn(agent, '__hasDurableExecution').mockReturnValue(true);
-      return agent;
-    };
-
-    try {
-      const early = makeNative('early-native');
-      vi.spyOn(early, '__initializeDurableExecution').mockImplementation(async () => {
-        firstStarted.resolve();
-        await firstInit.promise;
-      });
-      mastra.addAgent(early, 'early-native');
-
-      const delivery = mastra.handleWorkflowEvent({ type: 'workflow.unknown', runId: 'run-1', data: {} } as any);
-      await firstStarted.promise;
-
-      const late = makeNative('late-native');
-      let lateInitialized = false;
-      vi.spyOn(late, '__initializeDurableExecution').mockImplementation(async () => {
-        lateInitialized = true;
-      });
-      mastra.addAgent(late, 'late-native');
-
-      firstInit.resolve();
-      await delivery;
-      expect(lateInitialized).toBe(true);
-    } finally {
-      firstInit.resolve();
       await mastra.shutdown();
       mastra.__unregisterHooks();
     }
@@ -485,53 +436,6 @@ describe('Mastra shutdown lifecycle', () => {
       await mastra.shutdown();
       mastra.__unregisterHooks();
     }
-  });
-
-  it('handles a push event whose native agent registers after initialization settles', async () => {
-    let windowHit = false;
-    // Sweep the registration point across the microtask hops between initialization settling
-    // and the ownership check, so the interval CodeRabbit modelled is exercised deterministically.
-    for (let hops = 0; hops < 40; hops++) {
-      const pubsub = new CapturingPushPubSub();
-      const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
-      let lateInitialized = false;
-      let registeredAtLastCheck = false;
-      vi.spyOn(mastra, '__hasInternalWorkflow').mockImplementation(() => {
-        registeredAtLastCheck = Boolean(mastra.listAgents()['late-native']);
-        if (registeredAtLastCheck && !lateInitialized) windowHit = true;
-        return lateInitialized;
-      });
-      const handle = vi.spyOn(mastra, 'handleWorkflowEvent').mockResolvedValue({ ok: true });
-
-      try {
-        await mastra.startWorkers();
-        void pubsub.deliver(
-          { type: 'workflow.step.run', runId: 'run-1', data: { workflowId: 'late-loop', runId: 'run-1' } } as any,
-          vi.fn(async () => {}),
-        );
-        for (let i = 0; i < hops; i++) await Promise.resolve();
-
-        const late = new Agent({
-          id: 'late-native',
-          name: 'late-native',
-          instructions: 'test',
-          model: 'openai/gpt-4o',
-          durable: { executionEngine: 'default' },
-        });
-        vi.spyOn(late, '__hasDurableExecution').mockReturnValue(true);
-        vi.spyOn(late, '__initializeDurableExecution').mockImplementation(async () => {
-          lateInitialized = true;
-        });
-        mastra.addAgent(late, 'late-native');
-
-        await mastra.stopWorkers();
-        if (registeredAtLastCheck) expect(handle, `registration after ${hops} hops`).toHaveBeenCalledOnce();
-      } finally {
-        await mastra.shutdown();
-        mastra.__unregisterHooks();
-      }
-    }
-    expect(windowHit).toBe(true);
   });
 
   it('rejects an invalid drainTimeout', async () => {
