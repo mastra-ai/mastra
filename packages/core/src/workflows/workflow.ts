@@ -2098,11 +2098,17 @@ export class Workflow<
    * Forgets an evicted run once nobody holds it. Its persistence override goes with it: a later
    * reopen builds a new instance from storage and options, as a reopen in a new process would.
    */
-  #forgetEvictedRun = new FinalizationRegistry<{ runId: string; ref: WeakRef<object> }>(({ runId, ref }) => {
-    if (this.#evictedRuns.get(runId) !== ref) return;
-    this.#evictedRuns.delete(runId);
-    if (!this.#runs.has(runId)) this.executionEngine.clearRunPersistenceOverride(runId);
-  });
+  // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, provide neither
+  // WeakRef nor FinalizationRegistry. There, a suspended run stays strongly cached until it finishes or is
+  // forgotten, as before eviction existed; every other path is unchanged.
+  #forgetEvictedRun =
+    typeof FinalizationRegistry === 'function' && typeof WeakRef === 'function'
+      ? new FinalizationRegistry<{ runId: string; ref: WeakRef<object> }>(({ runId, ref }) => {
+          if (this.#evictedRuns.get(runId) !== ref) return;
+          this.#evictedRuns.delete(runId);
+          if (!this.#runs.has(runId)) this.executionEngine.clearRunPersistenceOverride(runId);
+        })
+      : undefined;
 
   /** Reopens of a run id in flight, so concurrent reopens resolve to one instance. */
   #runOpenings = new Map<string, Promise<void>>();
@@ -2159,12 +2165,14 @@ export class Workflow<
         // Unlike cleanup, eviction keeps the run's persistence override: the run is not finished,
         // and a later resume of it must persist under the same policy.
         evict: () => {
+          const forgetEvictedRun = this.#forgetEvictedRun;
+          if (!forgetEvictedRun) return;
           const run = getRun();
           if (this.#runs.get(runId) !== run) return;
           this.#runs.delete(runId);
           const ref = new WeakRef(run);
           this.#evictedRuns.set(runId, ref);
-          this.#forgetEvictedRun.register(run, { runId, ref });
+          forgetEvictedRun.register(run, { runId, ref });
         },
         reattach: () => {
           const run = getRun();

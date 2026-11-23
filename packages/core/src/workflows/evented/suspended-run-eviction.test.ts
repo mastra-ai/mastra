@@ -93,6 +93,24 @@ describe.each(engines)('$engine engine: suspended run eviction', ({ createWorkfl
     expect(resumed.status).toBe('success');
   });
 
+  it('keeps a suspended run cached on a runtime without WeakRef or FinalizationRegistry', async () => {
+    const { WeakRef: weakRef, FinalizationRegistry: finalizationRegistry } = globalThis as any;
+    delete (globalThis as any).WeakRef;
+    delete (globalThis as any).FinalizationRegistry;
+    try {
+      const { workflow } = await setup();
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(workflow.runs.get(run.runId)).toBe(run);
+
+      const resumed = await run.resume({ step: 'approve', resumeData: { by: 'ops' } });
+      expect(resumed.status).toBe('success');
+    } finally {
+      Object.assign(globalThis, { WeakRef: weakRef, FinalizationRegistry: finalizationRegistry });
+    }
+  });
+
   it('evicts a run started in the background once its suspension is persisted', async () => {
     const { workflow } = await setup();
     const run = await workflow.createRun();
