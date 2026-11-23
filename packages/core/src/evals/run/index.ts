@@ -6,7 +6,7 @@ import type {
   AiMessageType,
   UIMessageWithMetadata,
 } from '../../agent';
-import { isSupportedLanguageModel } from '../../agent';
+import { isSupportedLanguageModel } from '../../agent/utils';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
