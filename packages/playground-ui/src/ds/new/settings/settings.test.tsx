@@ -105,15 +105,15 @@ describe('Settings', () => {
   });
 
   describe('when a setting is required', () => {
-    it('announces the requirement in the control name', () => {
+    it('marks the label and announces the requirement on the control', () => {
       render(
         <SettingsRow label="Model" required>
           <Input />
         </SettingsRow>,
       );
 
-      expect(screen.getByText('*', { selector: '[aria-hidden]' })).toBeTruthy();
-      expect(screen.getByRole('textbox', { name: /^Model\s*\(required\)$/ })).toBeTruthy();
+      expect(document.querySelector('[data-slot=field-required-mark]')).not.toBeNull();
+      expect(screen.getByRole('textbox', { name: 'Model' }).getAttribute('aria-required')).toBe('true');
     });
   });
 

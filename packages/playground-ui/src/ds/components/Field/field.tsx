@@ -20,7 +20,7 @@ const orientationClassName = {
   responsive: 'flex flex-col gap-2 sm:flex-row sm:items-center',
 } satisfies Record<NonNullable<FieldProps['orientation']>, string>;
 
-function Field({ className, orientation = 'vertical', invalid = false, ...props }: FieldProps) {
+function Field({ className, orientation = 'vertical', invalid = false, children, ...props }: FieldProps) {
   const id = React.useId();
   const [hasDescription, setHasDescription] = React.useState(false);
   const [required, setRequired] = React.useState(false);
@@ -30,6 +30,7 @@ function Field({ className, orientation = 'vertical', invalid = false, ...props 
       descriptionId: `${id}-description`,
       errorId: `${id}-error`,
       controlId: `${id}-control`,
+      requiredId: `${id}-required`,
       invalid,
       required,
       setRequired,
@@ -47,7 +48,15 @@ function Field({ className, orientation = 'vertical', invalid = false, ...props 
         data-orientation={orientation}
         className={cn('min-w-0 text-foreground', orientationClassName[orientation], className)}
         {...props}
-      />
+      >
+        {children}
+        {/* For controls that can't take `aria-required`; see `useFieldControlAria`. */}
+        {required ? (
+          <span id={ariaIds.requiredId} hidden>
+            (required)
+          </span>
+        ) : null}
+      </FieldPrimitive.Root>
     </FieldAriaContext.Provider>
   );
 }

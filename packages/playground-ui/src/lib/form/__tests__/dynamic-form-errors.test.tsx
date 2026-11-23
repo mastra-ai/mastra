@@ -34,6 +34,26 @@ describe.each(requiredFields)('a required $kind field submitted empty', ({ schem
   });
 });
 
+describe('a required field', () => {
+  it('says so in the name of its control when that is a button', () => {
+    render(<DynamicForm schema={z.object({ value: z.string().datetime() })} onSubmit={() => {}} />);
+
+    expect(screen.getByRole('button', { name: 'Value (required)' }).getAttribute('aria-required')).toBeNull();
+  });
+
+  it('keeps the label as the name of a control that announces it', () => {
+    render(<DynamicForm schema={z.object({ value: z.string() })} onSubmit={() => {}} />);
+
+    expect(screen.getByRole('textbox', { name: 'Value' }).getAttribute('aria-required')).toBe('true');
+  });
+
+  it('adds nothing to the name of an optional button control', () => {
+    render(<DynamicForm schema={z.object({ value: z.string().datetime().optional() })} onSubmit={() => {}} />);
+
+    expect(screen.getByRole('button', { name: 'Value' })).toBeTruthy();
+  });
+});
+
 describe('a cross-field error shown on one field', () => {
   it('lets the form submit once another field fixes it', async () => {
     const onSubmit = vi.fn();

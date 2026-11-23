@@ -5,6 +5,7 @@ export type FieldAriaIds = {
   descriptionId: string;
   errorId: string;
   controlId: string;
+  requiredId: string;
   invalid: boolean;
   required: boolean;
   setRequired: (required: boolean) => void;
@@ -36,16 +37,25 @@ export function useFieldRequired(): { 'aria-required'?: true } {
   return useFieldAriaIds()?.required ? { 'aria-required': true } : {};
 }
 
+type FieldControlOptions = {
+  /** The control's role supports `aria-required` (a textbox does, a button doesn't). Otherwise its name says it. */
+  supportsRequired?: boolean;
+};
+
 // Base UI controls are wired by the Field; only non-Base-UI controls (CodeMirror) need this.
-export function useFieldControlAria(nameProps: ControlNameProps = {}) {
+export function useFieldControlAria(
+  nameProps: ControlNameProps = {},
+  { supportsRequired = false }: FieldControlOptions = {},
+) {
   const field = useFieldAriaIds();
   if (!field) return {};
+  const labelledByIds = [field.labelId, field.required && !supportsRequired && field.requiredId].filter(Boolean);
   const describedByIds = [field.hasDescription && field.descriptionId, field.invalid && field.errorId].filter(Boolean);
   return {
     id: field.controlId,
-    'aria-labelledby': hasOwnAccessibleName(nameProps) ? undefined : field.labelId,
+    'aria-labelledby': hasOwnAccessibleName(nameProps) ? undefined : labelledByIds.join(' '),
     'aria-describedby': describedByIds.length > 0 ? describedByIds.join(' ') : undefined,
     'aria-invalid': field.invalid || undefined,
-    'aria-required': field.required || undefined,
+    'aria-required': (supportsRequired && field.required) || undefined,
   };
 }

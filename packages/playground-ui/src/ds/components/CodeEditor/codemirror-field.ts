@@ -126,7 +126,7 @@ type ContentAttributes = {
 };
 
 export function useCodemirrorFieldAttributes(props: CodemirrorFieldAriaProps, fallbackLabel: string) {
-  const fieldAria = useFieldControlAria({ 'aria-label': props['aria-label'] });
+  const fieldAria = useFieldControlAria({ 'aria-label': props['aria-label'] }, { supportsRequired: true });
   const ariaLabel = props['aria-label'] ?? fallbackLabel;
   const controlId = props.id ?? fieldAria.id;
   const ariaLabelledBy = props['aria-labelledby'] ?? fieldAria['aria-labelledby'];
