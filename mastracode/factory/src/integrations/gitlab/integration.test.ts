@@ -825,6 +825,63 @@ describe('PlatformGitLabIntegration', () => {
       expect(stored?.providerMetadata.host).toBe('gitlab.example.com');
     });
 
+    it('uses the instance a stored link names, not the one a restarted process happened to see first', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const storage = new SourceControlStorageInMemory('gitlab');
+      const first = discovering();
+      first.versionControl.initialize({ storage });
+      const installation = await first.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: {
+          externalId: 'a1b_selfhosted',
+          accountName: 'ops',
+          accountType: 'GitLab',
+          metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+        },
+      });
+      const [repository] = await first.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '7', slug: 'ops/infra', defaultBranch: 'main' }],
+      });
+
+      // The connection moves while no process is running; the restarted one
+      // sees the other instance first.
+      hostname = 'gitlab.other.com';
+      const restarted = discovering();
+      restarted.versionControl.initialize({ storage });
+      await restarted.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      const target = () => restarted.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository!.id });
+      await expect(target()).rejects.toMatchObject({ status: 409 });
+
+      // Moving it back to the linked instance works without another restart.
+      hostname = 'gitlab.example.com';
+      await expect(target()).resolves.toMatchObject({ sourceId: '7:ops/infra' });
+    });
+
+    it('refuses a write through a context built before the connection moved to another instance', async () => {
+      let hostname = 'gitlab.example.com';
+      const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const gitlab = discovering();
+      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      const proxyCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('a1b_selfhosted/proxy')).length;
+      const before = proxyCalls();
+
+      // Reconnected to another instance inside the connection list's cache window.
+      hostname = 'gitlab.other.com';
+      await expect(
+        gitlab.versionControl.createComment({
+          connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' },
+          sourceId: '7:ops/infra',
+          pullRequestId: '3',
+          body: 'hello',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(proxyCalls()).toBe(before);
+    });
+
     it('stops using a self-hosted connection that moved to another instance once the connection list refreshes', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       try {

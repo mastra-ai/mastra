@@ -143,9 +143,31 @@ export class PlatformGitLabIntegration
   }
 
   protected async contextById(connectionId: string): Promise<PlatformGitLabContext> {
+    return this.#context(await this.#activeConnection(connectionId));
+  }
+
+  /**
+   * A stored repository link records the instance the connection was linked
+   * on, which outlasts this process: it replaces whatever instance this
+   * process happened to see first, so a connection moved back to its linked
+   * instance works again without a restart.
+   */
+  protected override async contextByIdForLinkedHost(connectionId: string, host: string): Promise<PlatformGitLabContext> {
+    const connection = await this.#activeConnection(connectionId);
+    const linked = selfHostedHostname(host);
+    if (connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID && linked) {
+      if (this.#instances.get(connection.id) !== linked) {
+        this.#instances.set(connection.id, linked);
+        this.#hosts.delete(connection);
+      }
+    }
+    return this.#context(connection);
+  }
+
+  async #activeConnection(connectionId: string): Promise<PlatformConnection> {
     const connection = (await this.#activeConnections()).find(candidate => candidate.id === connectionId);
     if (!connection) throw new GitLabApiError('GitLab connection is unavailable or requires reauthentication.', 401);
-    return this.#context(connection);
+    return connection;
   }
 
   /**
@@ -202,16 +224,22 @@ export class PlatformGitLabIntegration
 
   async #context(connection: PlatformConnection): Promise<PlatformGitLabContext> {
     const host = await this.#host(connection);
+    const selfHosted = connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID;
     return {
       id: connection.id,
       label: connection.accountLabel,
-      api: new GitLabApiClient({ client: this.binding, connectionId: connection.id }),
+      api: new GitLabApiClient({
+        client: this.binding,
+        connectionId: connection.id,
+        // The proxy reaches whichever instance the connection names now, so a
+        // write first confirms that is still the instance this context is for.
+        ...(selfHosted ? { beforeWrite: async () => void (await this.#freshHost(connection)) } : {}),
+      }),
       connection: gitlabConnection(connection.id),
       host,
       repositoryAccessToken: async () => {
         // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
         // Never persist or log the returned credential.
-        const selfHosted = connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID;
         // Read the instance fresh on both sides of the credential fetch; either
         // read refuses if the connection has left the instance it was first seen on.
         if (selfHosted) await this.#freshHost(connection);

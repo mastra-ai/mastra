@@ -447,7 +447,14 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       const [direct] = await this.activeContexts();
       if (direct && normalizeGitLabHost(host) === normalizeGitLabHost(direct.host)) return direct;
     }
+    const connectionId = connectionIdFromConnection(connection);
+    if (connectionId && host) return this.contextByIdForLinkedHost(connectionId, host);
     return this.#versionControlContext(connection);
+  }
+
+  /** The context for a connection a stored repository link says belongs to `host`. */
+  protected contextByIdForLinkedHost(connectionId: string, _host: string): Promise<GitLabConnectionContext> {
+    return this.contextById(connectionId);
   }
   async #contextForReference(reference: GitLabSourceReference): Promise<GitLabConnectionContext> {
     if (reference.connectionId) return this.contextById(reference.connectionId);

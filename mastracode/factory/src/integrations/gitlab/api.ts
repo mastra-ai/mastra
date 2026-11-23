@@ -182,6 +182,8 @@ export interface PlatformGitLabApiClientConfig {
   /** Reaches GitLab through the connection proxy: a `ConnectClient`, or a Platform integration's binding. */
   client: Pick<ConnectClient, 'proxy'>;
   connectionId: string;
+  /** Runs before every request that changes GitLab state; throwing stops the request. */
+  beforeWrite?: () => Promise<void>;
 }
 
 export class GitLabApiClient {
@@ -639,6 +641,7 @@ export class GitLabApiClient {
     });
 
     if (this.#platform) {
+      if (method !== 'GET') await this.#platform.beforeWrite?.();
       try {
         const data = await this.#platform.client.proxy(this.#platform.connectionId, {
           method,
