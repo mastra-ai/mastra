@@ -13,6 +13,7 @@ export default defineConfig({
     'playground-ui/placeholder-text': 'error',
     'playground-ui/icon-size-from-parent': 'error',
     'playground-ui/page-layout-props': 'error',
+    'playground-ui/no-page-spacing': 'error',
     'mastra/import-order': 'off',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',

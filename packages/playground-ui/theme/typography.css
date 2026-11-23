@@ -33,7 +33,7 @@
   --text-lead--letter-spacing: 0.01em;
 
   --text-display-lg: 1.75rem;
-  --text-display-lg--line-height: 127%;
+  --text-display-lg--line-height: 2.25rem;
   --text-display-lg--font-weight: var(--font-weight-medium);
   --text-display-lg--letter-spacing: -0.01em;
 
@@ -59,11 +59,11 @@
   --text-body--font-weight: var(--font-weight-normal);
 
   --text-label: 0.8125rem; /* 13px — control labels, nav items, buttons */
-  --text-label--line-height: 150%;
+  --text-label--line-height: 1.25rem;
   --text-label--font-weight: var(--font-weight-medium);
 
   --text-card-title: 0.8125rem;
-  --text-card-title--line-height: 150%;
+  --text-card-title--line-height: 1.25rem;
   --text-card-title--font-weight: 550;
   --text-card-title--letter-spacing: 0em;
 
@@ -78,7 +78,7 @@
   --text-card-title-strong--letter-spacing: var(--text-card-title--letter-spacing);
 
   --text-body-sm: 0.8125rem; /* 13px — dense body: table cells and field values */
-  --text-body-sm--line-height: 150%;
+  --text-body-sm--line-height: 1.25rem;
   --text-body-sm--font-weight: var(--font-weight-normal);
 
   /* Menus read at the regular weight, with their own tracking so they do not
@@ -89,15 +89,15 @@
   --text-menu--letter-spacing: -0.01em;
 
   --text-column: 0.75rem; /* 12px — column headers and small strong labels */
-  --text-column--line-height: 150%;
+  --text-column--line-height: 1rem;
   --text-column--font-weight: var(--font-weight-medium);
 
   --text-caption: 0.75rem; /* 12px — secondary and supporting copy */
-  --text-caption--line-height: 150%;
+  --text-caption--line-height: 1rem;
   --text-caption--font-weight: var(--font-weight-normal);
 
   --text-eyebrow: 0.75rem; /* 12px — small-caps section labels */
-  --text-eyebrow--line-height: 150%;
+  --text-eyebrow--line-height: 1rem;
   --text-eyebrow--font-weight: var(--font-weight-medium);
   --text-eyebrow--letter-spacing: 0.08em;
 

@@ -331,6 +331,79 @@ const PAGE_WIDTH_MESSAGE = `Let PageLayout set the page width instead of buildin
 const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
 const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
 
+const PAGE_SPACING_MESSAGE = cls =>
+  `Drop ${cls}: PageLayout puts 16px under the header and 48px at the end of the page. Stack the page's sections with gap-6 (or space-y-6) and nothing else.`;
+
+const SPACING_UTILITY = /^-?(m|p)[xytrblse]?-/;
+const COLUMN_GAP_UTILITY = /^(space-y|gap-y|gap)-(.+)$/;
+
+function classLiterals(node, found = []) {
+  if (!node) return found;
+  const next = child => classLiterals(child, found);
+  if (node.type === 'Literal' && /^['"]/.test(node.raw)) found.push({ node, text: node.value });
+  else if (node.type === 'TemplateLiteral') {
+    node.quasis.forEach(quasi => found.push({ node: quasi, text: quasi.value.raw }));
+    node.expressions.forEach(next);
+  } else if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') next(node.expression);
+  else if (node.type === 'LogicalExpression') [node.left, node.right].forEach(next);
+  else if (node.type === 'ConditionalExpression') [node.consequent, node.alternate].forEach(next);
+  else if (node.type === 'CallExpression') node.arguments.forEach(next);
+  else if (node.type === 'ArrayExpression') node.elements.forEach(next);
+  return found;
+}
+
+function pageRoots(node, { throughFragments = true } = {}, roots = []) {
+  if (!node) return roots;
+  const next = child => pageRoots(child, { throughFragments }, roots);
+  if (node.type === 'JSXElement') roots.push(node);
+  else if (node.type === 'JSXFragment' && throughFragments) node.children.forEach(next);
+  else if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') next(node.expression);
+  else if (node.type === 'LogicalExpression') next(node.right);
+  else if (node.type === 'ConditionalExpression') {
+    next(node.consequent);
+    next(node.alternate);
+  }
+  return roots;
+}
+
+function stacksColumn(classes) {
+  if (classes.some(cls => cls.startsWith('space-y-') || cls.startsWith('gap-y-'))) return true;
+  if (classes.includes('flex-col')) return true;
+  return classes.includes('grid') && !classes.some(cls => cls.startsWith('grid-cols-'));
+}
+
+function noPageSpacing(context) {
+  const check = (root, isBody) => {
+    const attribute = root.openingElement.attributes.find(
+      item => item.type === 'JSXAttribute' && item.name.name === 'className',
+    );
+    if (!attribute) return;
+    const literals = classLiterals(attribute.value);
+    const classes = literals.flatMap(({ text }) => text.split(/\s+/)).map(cls => cls.split(':').pop());
+    const column = stacksColumn(classes);
+    for (const { node, text } of literals) {
+      for (const raw of text.split(/\s+/).filter(Boolean)) {
+        const cls = raw.split(':').pop();
+        const gap = COLUMN_GAP_UTILITY.exec(cls);
+        const spacing = SPACING_UTILITY.test(cls) && cls !== 'mx-auto';
+        const offRhythmGap = isBody && gap && (gap[1] !== 'gap' || column) && gap[2] !== '6';
+        if (spacing || offRhythmGap) context.report({ node, message: PAGE_SPACING_MESSAGE(raw) });
+      }
+    }
+  };
+  return {
+    JSXElement(node) {
+      const { name } = node.openingElement;
+      if (name.type !== 'JSXIdentifier' || name.name !== 'PageLayout') return;
+      const attribute = attributeName =>
+        node.openingElement.attributes.find(item => item.type === 'JSXAttribute' && item.name.name === attributeName);
+      const fixedBody = literalAttribute(attribute('body')?.value) === 'fixed';
+      if (!fixedBody) for (const child of node.children) for (const root of pageRoots(child)) check(root, true);
+      for (const root of pageRoots(attribute('header')?.value, { throughFragments: false })) check(root, false);
+    },
+  };
+}
+
 const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
 // The variants PageLayout used to take, and what each became.
 const REMOVED_PAGE_LAYOUT_VARIANTS = {
@@ -379,6 +452,7 @@ const plugin = {
     'no-text-layout-spacing': noTextLayoutSpacing,
     'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
     'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
+    'no-page-spacing': { meta: { type: 'suggestion', schema: false }, create: noPageSpacing },
   },
 };
 
@@ -407,6 +481,7 @@ export const recommended = {
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
   'playground-ui/page-layout-props': 'error',
+  'playground-ui/no-page-spacing': 'error',
   ...copyRules,
 };
 

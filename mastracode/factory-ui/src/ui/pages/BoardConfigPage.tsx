@@ -111,7 +111,7 @@ export function BoardConfigPage() {
     <PageLayout
       variant="page"
       body="fixed"
-      header={configHeader && <div className={cn(SETTINGS_COLUMN, 'pb-3')}>{configHeader}</div>}
+      header={configHeader && <div className={SETTINGS_COLUMN}>{configHeader}</div>}
       {...slots}
     >
       <div className={query.isSuccess ? OVERVIEW_SURFACE : cn(SETTINGS_COLUMN, 'px-4')}>{body}</div>
