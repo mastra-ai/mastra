@@ -671,6 +671,27 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       expect(callbacks.onError).not.toHaveBeenCalled();
     });
 
+    // No write lands between the steps, and a forced takeover leaves the local lease looking fresh,
+    // so the next step asks storage before it starts.
+    it('does not start the next step after a forced takeover when the run persists no running status', async () => {
+      const ran: string[] = [];
+      const stalled = gate();
+      const { store, workflow, callbacks } = await setup(stalledThenNext(ran, stalled), {
+        shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'waiting',
+      });
+
+      const run = await workflow.createRun();
+      const done = run.start({ inputData: {} });
+      await vi.waitFor(() => expect(ran).toEqual(['a']));
+      await takeOver(store, run.runId);
+      stalled.open();
+      const result = await done;
+
+      expect(result.status).toBe('waiting');
+      expect(ran).toEqual(['a']);
+      expect(callbacks.onFinish).not.toHaveBeenCalled();
+    });
+
     // A nested run resumed on its own flips its suspended parent to running and holds the parent's
     // lease. When it loses that lease, the parent belongs to another process: the child must not set
     // it back to suspended.

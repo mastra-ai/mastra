@@ -5,6 +5,7 @@ import type { StateRef, StepResultSummary } from '../storage/domains/workflows/j
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import { diffState } from '../storage/domains/workflows/state-patch';
 import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
+import { currentWorkflowRunClaim } from './run-ownership';
 import { getStepResult, getStepResultAsync } from './step';
 import { stepRefId } from './step-refs';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from './types';
@@ -441,6 +442,7 @@ export class RunJournal {
       }
       lastSeq = written?.lastSeq;
       this.#startStateSeq = undefined;
+      currentWorkflowRunClaim(this.runId)?.noteWriteAccepted();
     } catch (error) {
       if (checkpoint) this.#needsCheckpoint = true;
       throw error;

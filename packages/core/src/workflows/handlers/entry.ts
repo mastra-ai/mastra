@@ -324,6 +324,7 @@ export async function persistStepUpdate(
         snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
         ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
       });
+      if (workflowsStore) claim?.noteWriteAccepted();
       if (atomicGuard && written === false) {
         engine.setLastPersistedStatus(runId, 'canceled');
         return;

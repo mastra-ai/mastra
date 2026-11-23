@@ -216,7 +216,8 @@ export async function executeStep(
 
   // A step body never starts, or announces a start, on a run another process took over. Foreach
   // items and runs that don't persist `running` write nothing first, so this check is what stops them.
-  await currentWorkflowRunClaim(runId)?.ensureOwned();
+  const claim = currentWorkflowRunClaim(runId);
+  await claim?.ensureOwnedBeforeStep();
 
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
@@ -398,6 +399,7 @@ export async function executeStep(
   const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
   const delay = executionContext.retryConfig.delay ?? 0;
 
+  claim?.stepBodyStarting();
   // Use executeStepWithRetry to handle retry logic
   // Default engine: internal retry loop
   // Inngest engine: throws RetryAfterError for external retry handling
@@ -715,7 +717,7 @@ export async function executeStep(
   );
 
   // The run was taken over while the body ran: publish and record nothing of it.
-  currentWorkflowRunClaim(runId)?.throwIfLost();
+  claim?.throwIfLost();
 
   // Check if step execution failed
   if (!stepRetryResult.ok) {

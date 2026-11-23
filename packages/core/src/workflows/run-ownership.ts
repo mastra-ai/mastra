@@ -228,6 +228,9 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
   #released = false;
   #leaseConfirmedAt: number;
   #warnedStoreMismatch = false;
+  /** Storage confirmed the claim (an accepted write, or a renewal) since the last step body started. */
+  #confirmedSinceStepBody = true;
+  #inlineRenewal?: Promise<void>;
 
   constructor({
     store,
@@ -256,6 +259,7 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
       onError: error => logger?.warn('Failed to renew workflow run ownership lease', { runId: fence.runId, error }),
       onRenewed: renewedAt => {
         this.#leaseConfirmedAt = Math.max(this.#leaseConfirmedAt, renewedAt);
+        this.#confirmedSinceStepBody = true;
       },
     });
   }
@@ -329,6 +333,7 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
         const result = await this.#store.renewRunOwnership({ ...this.fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
         if (result.renewed) {
           this.#leaseConfirmedAt = Math.max(this.#leaseConfirmedAt, sentAt);
+          this.#confirmedSinceStepBody = true;
           break;
         }
         if (isOwnRelease(result.record, this.fence)) break;
@@ -341,6 +346,32 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
       this.throwIfLost();
     }
     this.throwIfLost();
+  }
+
+  /**
+   * Before a step starts. A forced takeover leaves the local lease looking fresh, so unless storage
+   * confirmed the claim since the previous step body started (its result write, or a renewal), this
+   * asks storage once. With writes at every step (the default) that confirmation is always there; a
+   * run whose `shouldPersistSnapshot` skips them, and foreach items, pay one renewal, shared by
+   * steps that start together.
+   */
+  async ensureOwnedBeforeStep(): Promise<void> {
+    if (this.#confirmedSinceStepBody) return this.ensureOwned();
+    this.#inlineRenewal ??= this.ensureOwned({ renew: true }).finally(() => {
+      this.#inlineRenewal = undefined;
+    });
+    await this.#inlineRenewal;
+    this.throwIfLost();
+  }
+
+  /** A step body is about to run: confirmations before this point don't cover what it does. */
+  stepBodyStarting(): void {
+    this.#confirmedSinceStepBody = false;
+  }
+
+  /** Storage accepted a write carrying this claim. */
+  noteWriteAccepted(): void {
+    if (!this.#lost) this.#confirmedSinceStepBody = true;
   }
 
   #leaseMayHaveLapsed(): boolean {
