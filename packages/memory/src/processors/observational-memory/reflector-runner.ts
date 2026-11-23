@@ -201,12 +201,16 @@ type TryActivateResult =
   | { status: 'suppressed'; reason: 'composition' | 'size' };
 
 /**
- * Outcome of the buffered-reflection activation commit. `head-changed` means the queued head no
- * longer matched the activation snapshot, so no swap ran and nothing was activated.
+ * Outcome of the buffered-reflection activation commit.
+ * - `not-applied`: this invocation created no generation. `headId` is the head it observed, which
+ *   tells the caller whether the snapshot's generation is still current.
+ * - `applied`: this invocation's swap created a new generation. `snapshotBufferActivated` says
+ *   whether that generation holds exactly the snapshot's buffered reflection; it is false when
+ *   another writer extended the buffer between the head check and the swap.
  */
 type BufferedReflectionCommit =
-  | { kind: 'head-changed'; head: ObservationalMemoryRecord }
-  | { kind: 'swapped'; record: ObservationalMemoryRecord };
+  | { kind: 'not-applied'; headId: string }
+  | { kind: 'applied'; record: ObservationalMemoryRecord; snapshotBufferActivated: boolean };
 
 /** A reflection commit that created nothing because the reflected record is no longer the head. */
 class ReflectionNotAppliedError extends Error {
@@ -234,25 +238,21 @@ export function isReflectionApplied(
 }
 
 /**
- * Whether a swap wrote this snapshot's buffered reflection, followed by `\n\n` and the
- * snapshot's unreflected tail plus anything appended to it since. Storage trims the tail it
- * reads at swap time, so after a concurrent append, whitespace that ended the snapshot tail
- * stays in the middle of the text. A buffer extended after the snapshot fails the tail check.
+ * The active observations a buffered-reflection swap writes: the buffered reflection replaces the
+ * first `reflectedLineCount` lines, and the trimmed remainder follows after a blank line. Mirrors
+ * `swapBufferedReflectionToActive` in the storage adapters.
  */
-function isSnapshotBufferActivated({
-  activeObservations,
+function bufferedActivationText({
   bufferedReflection,
-  snapshotTail,
+  observations,
+  reflectedLineCount,
 }: {
-  activeObservations: string;
   bufferedReflection: string;
-  snapshotTail: string;
-}): boolean {
-  if (activeObservations === bufferedReflection) return true;
-  const prefix = `${bufferedReflection}\n\n`;
-  if (!activeObservations.startsWith(prefix)) return false;
-  const tail = activeObservations.slice(prefix.length);
-  return tail === snapshotTail.trim() || tail.startsWith(snapshotTail.trimStart());
+  observations: string;
+  reflectedLineCount: number;
+}): string {
+  const unreflected = observations.split('\n').slice(reflectedLineCount).join('\n').trim();
+  return unreflected ? `${bufferedReflection}\n\n${unreflected}` : bufferedReflection;
 }
 
 /**
@@ -1016,6 +1016,55 @@ export class ReflectorRunner {
   }
 
   /**
+   * Decide what a buffered-reflection swap did. Storage builds the new generation from the stored
+   * buffer and line count, which another writer may have extended between the head check and the
+   * swap. So the swap activated the snapshot's buffer only if its result equals what that buffer
+   * and line count produce from the text the swap retired. Retired records are never written
+   * again, so that text is exactly what the swap read.
+   */
+  private async classifyBufferedReflectionSwap({
+    result,
+    newRecordId,
+    snapshot,
+    bufferedReflection,
+    reflectedLineCount,
+  }: {
+    result: ObservationalMemoryRecord;
+    newRecordId: string;
+    snapshot: ObservationalMemoryRecord;
+    bufferedReflection: string;
+    reflectedLineCount: number;
+  }): Promise<BufferedReflectionCommit> {
+    // The stored observations were rewritten since the snapshot, so nothing was created.
+    if (result.id === snapshot.id) return { kind: 'not-applied', headId: result.id };
+    const createdByThisSwap = result.id === newRecordId;
+    // Adapters that honour `newRecordId` report `supersededBy`; another id means another writer.
+    if (!createdByThisSwap && result.supersededBy !== undefined) return { kind: 'not-applied', headId: result.id };
+
+    let snapshotBufferActivated = false;
+    try {
+      const history = await this.storage.getObservationalMemoryHistory(snapshot.threadId, snapshot.resourceId, 1, {
+        recordId: snapshot.id,
+      });
+      const retired = history.find(candidate => candidate.id === snapshot.id);
+      snapshotBufferActivated =
+        retired !== undefined &&
+        result.activeObservations ===
+          bufferedActivationText({ bufferedReflection, observations: retired.activeObservations, reflectedLineCount });
+    } catch (error) {
+      omError('[OM] Failed to read the generation retired by buffered reflection activation', error);
+    }
+
+    if (createdByThisSwap) return { kind: 'applied', record: result, snapshotBufferActivated };
+    // Adapters that ignore `newRecordId` return the successor both when this swap created it and
+    // when another writer retired the snapshot first. Only a successor holding exactly this
+    // snapshot's activation is treated as this invocation's.
+    return snapshotBufferActivated
+      ? { kind: 'applied', record: result, snapshotBufferActivated }
+      : { kind: 'not-applied', headId: result.id };
+  }
+
+  /**
    * Try to activate buffered reflection when threshold is reached.
    * Returns a discriminated result so the caller can distinguish between
    * "activated", "no buffer present", and "suppressed by overshoot guard"
@@ -1083,12 +1132,13 @@ export class ReflectorRunner {
     const currentObservations = freshRecord.activeObservations ?? '';
     const allLines = currentObservations.split('\n');
     const unreflectedLines = allLines.slice(reflectedLineCount);
-    const unreflectedTail = unreflectedLines.join('\n');
-    const unreflectedContent = unreflectedTail.trim();
+    const unreflectedContent = unreflectedLines.join('\n').trim();
     const bufferedReflection = freshRecord.bufferedReflection;
-    const combinedObservations = unreflectedContent
-      ? `${bufferedReflection}\n\n${unreflectedContent}`
-      : bufferedReflection;
+    const combinedObservations = bufferedActivationText({
+      bufferedReflection,
+      observations: currentObservations,
+      reflectedLineCount,
+    });
     const combinedTokenCount = this.tokenCounter.countObservations(combinedObservations);
 
     // Early-trigger overshoot guard:
@@ -1150,48 +1200,53 @@ export class ReflectorRunner {
           (head.id !== freshRecord.id ||
             head.bufferedReflection !== freshRecord.bufferedReflection ||
             head.reflectedObservationLineCount !== freshRecord.reflectedObservationLineCount)
-        )
-          return { kind: 'head-changed', head };
+        ) {
+          // Another writer changed the head after the snapshot read. No swap runs, so the head
+          // says nothing about this activation.
+          return { kind: 'not-applied', headId: head.id };
+        }
         const result = await this.storage.swapBufferedReflectionToActive({
           currentRecord: freshRecord,
           tokenCount: combinedTokenCount,
           newRecordId,
         });
-        if (
-          isReflectionApplied(result, newRecordId, freshRecord.id) &&
-          isSnapshotBufferActivated({
-            activeObservations: result.activeObservations,
-            bufferedReflection,
-            snapshotTail: unreflectedTail,
-          })
-        ) {
+        const outcome = await this.classifyBufferedReflectionSwap({
+          result,
+          newRecordId,
+          snapshot: freshRecord,
+          bufferedReflection,
+          reflectedLineCount,
+        });
+        if (outcome.kind === 'applied' && outcome.snapshotBufferActivated) {
           try {
             await publishBufferedReflectionValues(this.storage, this.reflectionConfig.extractors, freshRecord);
           } catch (error) {
             omError('[OM] Failed to publish buffered reflection values after activation', error);
           }
         }
-        return { kind: 'swapped', record: result };
+        return outcome;
       },
       { priority: 'reflection', abortSignal },
     );
-    if (commit.kind === 'head-changed') {
-      // Another writer changed the head after the snapshot read. No swap ran, so the head says
-      // nothing about this activation (a newer generation looks applied on adapters that omit
-      // `supersededBy`). The next turn re-evaluates against the head.
+    if (commit.kind === 'not-applied') {
+      // Nothing was created by this invocation; the next turn re-evaluates against the head.
       omDebug(
-        `[OM:reflect] tryActivateBufferedReflection: head changed from ${freshRecord.id} to ${commit.head.id} before the swap; not applied`,
+        `[OM:reflect] tryActivateBufferedReflection: buffered reflection on ${freshRecord.id} not applied (head is ${commit.headId})`,
       );
+      if (commit.headId !== freshRecord.id && !this.buffering.isAsyncBufferingInProgress(bufferKey)) {
+        // Another writer retired the snapshot's generation. Its buffering boundary and cycle
+        // describe a buffer that can never activate, and would stop this process from buffering
+        // for the current generation. Only this process's coordinator state is dropped: the
+        // stored state belongs to the winning generation, and no marker is emitted.
+        BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+        BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
+      }
       return { status: 'not-applied' };
     }
-    const swapped = commit.record;
-    if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
-      // The record was retired by another reflection, or its observations were rewritten
-      // after this read. Nothing changed; the next turn re-evaluates against the head.
+    if (!commit.snapshotBufferActivated) {
       omDebug(
-        `[OM:reflect] tryActivateBufferedReflection: buffered reflection on ${freshRecord.id} not applied (head is ${swapped.id})`,
+        `[OM:reflect] tryActivateBufferedReflection: ${commit.record.id} does not hold exactly the snapshot's buffered reflection (extended by another writer, or unverifiable); staged values stay unpublished`,
       );
-      return { status: 'not-applied' };
     }
     BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
 

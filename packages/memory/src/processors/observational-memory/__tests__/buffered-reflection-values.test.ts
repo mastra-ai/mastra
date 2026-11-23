@@ -4,6 +4,7 @@ import { MessageList } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
+import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
@@ -60,7 +61,7 @@ async function prepare(memory: Memory, threadId: string, resourceId: string, wri
   return om;
 }
 
-async function setup(reply: () => string | Promise<string>) {
+async function setup(reply: () => string | Promise<string>, initialTokens = 800) {
   const storage = new InMemoryStore();
   const memory = createMemory(storage, reply);
   const threadId = randomUUID();
@@ -86,7 +87,7 @@ async function setup(reply: () => string | Promise<string>) {
   await store.updateActiveObservations({
     id: record.id,
     observations: '* original fact',
-    tokenCount: 800,
+    tokenCount: initialTokens,
     lastObservedAt: new Date(),
   });
   return { storage, memory, om, store, threadId, resourceId };
@@ -126,6 +127,29 @@ function recordingWriter() {
         (chunk.data as { operationType?: string } | undefined)?.operationType === 'reflection',
     );
   return { writer, reflectionActivations };
+}
+
+type Fixture = Awaited<ReturnType<typeof setup>>;
+
+/**
+ * Runs `write` as another writer whose storage write lands after the activation's head check but
+ * before its swap reads storage. Only real storage calls run, so the adapter's swap logic is used.
+ * With `legacy`, the adapter behaves like one that predates `newRecordId`: it ignores the id and
+ * never reports `supersededBy`.
+ */
+function writeDuringSwap(
+  f: Fixture,
+  write: (snapshot: ObservationalMemoryRecord) => Promise<unknown>,
+  { legacy = false }: { legacy?: boolean } = {},
+) {
+  const swap = f.store.swapBufferedReflectionToActive.bind(f.store);
+  return vi.spyOn(f.store, 'swapBufferedReflectionToActive').mockImplementationOnce(async input => {
+    await write(input.currentRecord);
+    if (!legacy) return swap(input);
+    const result = { ...(await swap({ ...input, newRecordId: undefined })) };
+    delete result.supersededBy;
+    return result;
+  });
 }
 
 describe('buffered reflection extracted thread values (#27262)', () => {
@@ -299,40 +323,6 @@ describe('buffered reflection extracted thread values (#27262)', () => {
     );
   });
 
-  // Technical: the snapshot tail ends in spaces, and another process appends an observation
-  // between the snapshot read and the swap. The swap trims only the outer ends of the tail it
-  // reads, so the spaces stay in the middle of the new active observations. (#27262)
-  it('publishes values when observations are appended during activation after a tail ending in spaces', async () => {
-    const f = await setup(() => reflection('prepared'));
-    await prepare(f.memory, f.threadId, f.resourceId);
-    const swap = f.store.swapBufferedReflectionToActive.bind(f.store);
-    const concurrentAppend = vi.spyOn(f.store, 'swapBufferedReflectionToActive').mockImplementationOnce(async input => {
-      const head = await f.store.getObservationalMemory(f.threadId, f.resourceId);
-      if (!head) throw new Error('Missing head');
-      await f.store.updateActiveObservations({
-        id: head.id,
-        observations: `${head.activeObservations}\n* concurrent fact`,
-        tokenCount: 1150,
-        lastObservedAt: new Date(),
-      });
-      return swap(input);
-    });
-    try {
-      await reachActivation(f, f.memory, { tail: '\n* later fact  ' });
-    } finally {
-      concurrentAppend.mockRestore();
-    }
-    const head = await f.om.getRecord(f.threadId, f.resourceId);
-    expect(head?.generationCount).toBe(1);
-    expect(head?.activeObservations).toContain('condensed prepared');
-    expect(head?.activeObservations).toContain('* later fact  \n* concurrent fact');
-    expect(await values(f.memory, f.threadId)).toMatchObject({
-      currentTask: 'prepared task',
-      threadTitle: 'prepared title',
-      extracted: { priority: 'prepared' },
-    });
-  });
-
   // Technical: another process creates a new generation after this activation read the head but
   // before its commit ran, on an adapter that does not report `supersededBy`. The commit must not
   // treat the other process's generation as its own activation. (#27262)
@@ -371,5 +361,187 @@ describe('buffered reflection extracted thread values (#27262)', () => {
     const head = await f.om.getRecord(f.threadId, f.resourceId);
     expect(head?.activeObservations).toBe('* winning fact');
     expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'original' } });
+  });
+  // Another writer (a second process sharing the store) writes between this activation's head
+  // check and its swap. Storage builds the new generation from what it stores at swap time, not
+  // from the activation's snapshot. (#27262)
+  describe('when another writer lands during activation', () => {
+    // Technical: the swap trims only the outer ends of the tail it reads, so whitespace around the
+    // snapshot tail ends up in the middle of the new active observations after an append.
+    it.each([
+      ['an empty tail', '', '\n\n* appended\n', '* appended'],
+      ['a whitespace-only tail', '\n \t\n', '\n\n* appended\n', '* appended'],
+      ['blank lines around the tail', '\n\n  * later\n\n', '\n  * appended\n\n', '* later\n\n\n  * appended'],
+      ['a whitespace-only append', '\n  * later \t\n', '\n\t\n', '* later'],
+      ['a tail ending in spaces', '\n  * later \t\n', '\n\n\t* appended  \n', '* later \t\n\n\n\t* appended'],
+    ])('publishes values when observations are appended, after %s', async (_label, tail, append, expectedTail) => {
+      const f = await setup(() => reflection('prepared'), 500);
+      await prepare(f.memory, f.threadId, f.resourceId);
+      const prepared = await f.om.getRecord(f.threadId, f.resourceId);
+      // Copy it now: some stores return live records, which the swap clears.
+      const preparedBuffer = prepared?.bufferedReflection;
+      expect(prepared?.reflectedObservationLineCount).toBe(1);
+      writeDuringSwap(f, snapshot =>
+        f.store.updateActiveObservations({
+          id: snapshot.id,
+          observations: snapshot.activeObservations + append,
+          tokenCount: 1150,
+          lastObservedAt: new Date(),
+        }),
+      );
+      const { writer, reflectionActivations } = recordingWriter();
+      await reachActivation(f, f.memory, { tail, writer });
+      expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+        generationCount: 1,
+        activeObservations: `${preparedBuffer}\n\n${expectedTail}`,
+      });
+      expect(reflectionActivations()).toHaveLength(1);
+      expect(await values(f.memory, f.threadId)).toMatchObject({
+        currentTask: 'prepared task',
+        threadTitle: 'prepared title',
+        extracted: { priority: 'prepared' },
+      });
+    });
+
+    it('keeps the buffer when observations are rewritten, and activates it on the next turn', async () => {
+      const f = await setup(() => reflection('prepared'), 500);
+      await prepare(f.memory, f.threadId, f.resourceId);
+      writeDuringSwap(f, snapshot =>
+        f.store.updateActiveObservations({
+          id: snapshot.id,
+          observations: '* original fact\n* later\n\n* appended',
+          tokenCount: 1150,
+          lastObservedAt: new Date(),
+        }),
+      );
+      const { writer, reflectionActivations } = recordingWriter();
+      await reachActivation(f, f.memory, { tail: '\n  * later \t', writer });
+      expect(reflectionActivations()).toEqual([]);
+      expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+        generationCount: 0,
+        bufferedReflection: expect.stringContaining('condensed prepared'),
+      });
+      expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'original' } });
+
+      await prepare(f.memory, f.threadId, f.resourceId, writer);
+      expect(reflectionActivations()).toHaveLength(1);
+      expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'prepared' } });
+    });
+
+    // Technical: updateBufferedReflection appends to the stored buffer, so the activated text
+    // starts with the snapshot's buffer and can look like the snapshot's buffer plus an append.
+    it.each([
+      ['an empty tail', '', 0, '* newer buffered fact'],
+      ['a whitespace-only tail', '\n \t', 1, '* newer buffered fact'],
+      ['a tail the extension also reflected', '\n* later fact', 1, '* later fact condensed by the other writer'],
+    ] as const)(
+      'does not publish staged values when the buffer is extended, after %s',
+      async (_label, tail, extraReflectedLines, extension) => {
+        const f = await setup(() => reflection('stale'), 500);
+        await prepare(f.memory, f.threadId, f.resourceId);
+        const prepared = await f.om.getRecord(f.threadId, f.resourceId);
+        // Copy it now: some stores return live records, which the swap clears.
+        const preparedBuffer = prepared?.bufferedReflection;
+        expect(prepared?.reflectedObservationLineCount).toBe(1);
+        writeDuringSwap(f, snapshot =>
+          f.store.updateBufferedReflection({
+            id: snapshot.id,
+            reflection: extension,
+            tokenCount: 50,
+            inputTokenCount: 100,
+            reflectedObservationLineCount: (snapshot.reflectedObservationLineCount ?? 0) + extraReflectedLines,
+          }),
+        );
+        await reachActivation(f, f.memory, { tail });
+        expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+          generationCount: 1,
+          activeObservations: `${preparedBuffer}\n\n${extension}`,
+        });
+        expect(await values(f.memory, f.threadId)).toMatchObject({
+          currentTask: 'original task',
+          threadTitle: 'original title',
+          extracted: { priority: 'original' },
+        });
+      },
+    );
+
+    it.each([false, true])(
+      'shows no activation and keeps values when the generation is replaced (legacy adapter=%s)',
+      async legacy => {
+        const f = await setup(() => reflection('losing'));
+        await prepare(f.memory, f.threadId, f.resourceId);
+        writeDuringSwap(
+          f,
+          snapshot =>
+            f.store.createReflectionGeneration({
+              currentRecord: snapshot,
+              reflection: '* winning fact',
+              tokenCount: 100,
+            }),
+          { legacy },
+        );
+        const { writer, reflectionActivations } = recordingWriter();
+        await reachActivation(f, f.memory, { writer, tail: '' });
+        expect(reflectionActivations()).toEqual([]);
+        expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+          generationCount: 1,
+          activeObservations: '* winning fact',
+        });
+        expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'original' } });
+      },
+    );
+
+    // Technical: the losing activation must drop this process's reflection buffering boundary for
+    // the retired generation, or the boundary blocks buffering for the generation that won.
+    it.each([false, true])(
+      'buffers the next reflection for the generation that won (legacy adapter=%s)',
+      async legacy => {
+        let reply = 'losing';
+        const f = await setup(() => reflection(reply));
+        await prepare(f.memory, f.threadId, f.resourceId);
+        reply = 'next';
+        let winnerId: string | undefined;
+        writeDuringSwap(
+          f,
+          async snapshot => {
+            winnerId = (
+              await f.store.createReflectionGeneration({
+                currentRecord: snapshot,
+                reflection: '* winning fact',
+                tokenCount: 800,
+              })
+            ).id;
+          },
+          { legacy },
+        );
+        const { writer, reflectionActivations } = recordingWriter();
+        await reachActivation(f, f.memory, { writer });
+        expect(reflectionActivations()).toEqual([]);
+        // The winning generation's stored state is left as the other writer made it.
+        const winner = await f.om.getRecord(f.threadId, f.resourceId);
+        expect(winner).toMatchObject({
+          id: winnerId,
+          activeObservations: '* winning fact',
+          observationTokenCount: 800,
+        });
+        expect(winner?.bufferedReflection).toBeUndefined();
+
+        await prepare(f.memory, f.threadId, f.resourceId);
+        expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+          bufferedReflection: expect.stringContaining('condensed next'),
+        });
+        expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'original' } });
+      },
+    );
+
+    it('publishes values and shows the activation on an adapter without newRecordId support', async () => {
+      const f = await setup(() => reflection('prepared'));
+      await prepare(f.memory, f.threadId, f.resourceId);
+      writeDuringSwap(f, async () => {}, { legacy: true });
+      const { writer, reflectionActivations } = recordingWriter();
+      await reachActivation(f, f.memory, { writer });
+      expect(reflectionActivations()).toHaveLength(1);
+      expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'prepared' } });
+    });
   });
 });
