@@ -1,0 +1,1149 @@
+{
+  "attachment": [
+    "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-fable-5-2",
+    "claude-haiku-4-5",
+    "claude-haiku-5-5",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-opus-5-5",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-sonnet-5-5",
+    "codestral",
+    "deepseek-r1",
+    "deepseek-r1-0528",
+    "deepseek-v3-1",
+    "deepseek-v4-1-fast",
+    "deepseek-v4-1-flash",
+    "deepseek-v4-1-flash-1017",
+    "deepseek-v4-1-flash-fast",
+    "deepseek-v4-flash-0423",
+    "deepseek-v4-flash-0731",
+    "deepseek-v4-flash-vision-exp",
+    "deepseek-v4-pro",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-pro-preview",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+    "gemini-4-argon",
+    "gemini-4-carbon",
+    "gemini-4-hydrogen",
+    "gemini-4-neon",
+    "gemma-3-12b",
+    "gemma-4-26b",
+    "gemma-4-31b",
+    "glm-4.5",
+    "glm-4.5v",
+    "glm-4.6",
+    "glm-4.6v",
+    "glm-4.7",
+    "glm-5",
+    "glm-5.1",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4o-mini",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-5.1",
+    "gpt-5.4",
+    "gpt-5.4-pro",
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
+    "gpt-6.1-sol",
+    "gpt-6.1-terra",
+    "gpt-6.2-astra",
+    "gpt-6.2-sol",
+    "gpt-oss-safeguard-20b",
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-non-reasoning",
+    "grok-4.3",
+    "grok-4.5",
+    "grok-4.6",
+    "grok-4.7",
+    "grok-build-0.1",
+    "hy3",
+    "hy4",
+    "ibm-granite-micro",
+    "inkling",
+    "kimi-k2-5",
+    "kimi-k2-6",
+    "kimi-k2-7-code",
+    "kimi-k3",
+    "kimi-k3-1-pro",
+    "kimi-k3-1-pro-highspeed",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
+    "minimax-m2",
+    "minimax-m2-1",
+    "minimax-m2-1-highspeed",
+    "minimax-m2-5",
+    "minimax-m2-5-highspeed",
+    "minimax-m2-7",
+    "minimax-m2-7-highspeed",
+    "minimax-m3",
+    "minimax-m3-1-flash",
+    "ministral-3-3b",
+    "ministral-3-8b",
+    "mistral-large-4",
+    "mistral-medium-3",
+    "mistral-medium-3.1",
+    "mistral-small-3.1",
+    "mistral-small-3.2",
+    "muse-ember",
+    "muse-spark-1.1",
+    "muse-spark-1.2",
+    "muse-spark-1.2-contributor",
+    "muse-spark-open",
+    "muse-wonder",
+    "nemotron-3-120b",
+    "nemotron-3-nano-30b",
+    "nemotron-3-ultra-nvfp4",
+    "nemotron-3.5-super-vl",
+    "nova-2-lite",
+    "nova-lite",
+    "nova-micro",
+    "nova-pro",
+    "o3",
+    "qwen-flash",
+    "qwen-plus",
+    "qwen3-235b-a22b-instruct",
+    "qwen3-30b",
+    "qwen3-coder-480b-a35b",
+    "qwen3-coder-flash",
+    "qwen3-coder-next",
+    "qwen3-max",
+    "qwen3-next-80b-a3b",
+    "qwen3-vl-235b-a22b",
+    "qwen3-vl-30b-a3b",
+    "qwen3-vl-plus",
+    "qwen3.5-122b-a10b",
+    "qwen3.5-27b",
+    "qwen3.5-35b-a3b",
+    "qwen3.5-397b-a17b",
+    "qwen3.5-9b",
+    "qwen3.5-flash",
+    "qwen3.5-plus",
+    "qwen3.6-27b",
+    "qwen3.6-35b",
+    "qwen3.6-flash",
+    "qwen3.6-plus",
+    "qwen3.7-flash",
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen3.8-27b",
+    "qwen3.8-flash",
+    "qwen3.8-max",
+    "qwen3.8-omni-flash",
+    "qwen4-max",
+    "step-3-7-flash"
+  ],
+  "temperature": [
+    "apodex-1.1-mini",
+    "beam-1.0-501b-a23b",
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "codestral",
+    "deepseek-r1",
+    "deepseek-r1-0528",
+    "deepseek-v3-1",
+    "deepseek-v4-1-fast",
+    "deepseek-v4-1-flash",
+    "deepseek-v4-1-flash-1017",
+    "deepseek-v4-1-flash-fast",
+    "deepseek-v4-flash-0423",
+    "deepseek-v4-flash-0731",
+    "deepseek-v4-flash-vision-exp",
+    "deepseek-v4-pro",
+    "deepseek-v4-pro-0813",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-pro-preview",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+    "gemma-3-12b",
+    "gemma-4-26b",
+    "gemma-4-31b",
+    "glm-4.5",
+    "glm-4.5v",
+    "glm-4.6",
+    "glm-4.6v",
+    "glm-4.7",
+    "glm-5",
+    "glm-5.1",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4o-mini",
+    "gpt-5.1",
+    "gpt-5.4",
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-6-luna",
+    "gpt-6-sol",
+    "gpt-6.1-terra",
+    "gpt-oss-safeguard-20b",
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-non-reasoning",
+    "grok-4.3",
+    "grok-4.5",
+    "grok-4.6",
+    "grok-4.7",
+    "grok-build-0.1",
+    "hy3",
+    "hy4",
+    "ibm-granite-micro",
+    "inkling",
+    "kimi-k2-6",
+    "ling-3.1-flash",
+    "mercury-3",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
+    "minimax-m2",
+    "minimax-m2-1",
+    "minimax-m2-1-highspeed",
+    "minimax-m2-5",
+    "minimax-m2-5-highspeed",
+    "minimax-m2-7",
+    "minimax-m2-7-highspeed",
+    "minimax-m3",
+    "minimax-m3-1-flash",
+    "ministral-3-3b",
+    "ministral-3-8b",
+    "mistral-large-4",
+    "mistral-medium-3",
+    "mistral-medium-3.1",
+    "mistral-small-3.1",
+    "mistral-small-3.2",
+    "muse-ember",
+    "muse-spark-1.1",
+    "muse-spark-1.2",
+    "muse-spark-1.2-contributor",
+    "muse-spark-open",
+    "muse-wonder",
+    "nemotron-3-120b",
+    "nemotron-3-nano-30b",
+    "nemotron-3-ultra-nvfp4",
+    "nemotron-3.5-super-vl",
+    "nemotron-lightning-3.5-30b",
+    "nova-2-lite",
+    "nova-lite",
+    "nova-micro",
+    "nova-pro",
+    "qwen-flash",
+    "qwen-plus",
+    "qwen3-235b-a22b-instruct",
+    "qwen3-30b",
+    "qwen3-30b-a3b-instruct",
+    "qwen3-coder-480b-a35b",
+    "qwen3-coder-flash",
+    "qwen3-coder-next",
+    "qwen3-max",
+    "qwen3-next-80b-a3b",
+    "qwen3-vl-235b-a22b",
+    "qwen3-vl-30b-a3b",
+    "qwen3-vl-plus",
+    "qwen3.5-122b-a10b",
+    "qwen3.5-27b",
+    "qwen3.5-35b-a3b",
+    "qwen3.5-397b-a17b",
+    "qwen3.5-9b",
+    "qwen3.5-flash",
+    "qwen3.5-plus",
+    "qwen3.6-27b",
+    "qwen3.6-35b",
+    "qwen3.6-flash",
+    "qwen3.6-plus",
+    "qwen3.7-flash",
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen3.8-2.4t-a95b",
+    "qwen3.8-27b",
+    "qwen3.8-flash",
+    "qwen3.8-max",
+    "qwen3.8-omni-flash",
+    "qwen4-max",
+    "step-3-7-flash"
+  ],
+  "structuredOutput": [
+    "beam-1.0-501b-a23b",
+    "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-fable-5-2",
+    "claude-haiku-4-5",
+    "claude-haiku-5-5",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-opus-5-5",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-sonnet-5-5",
+    "codestral",
+    "deepseek-r1-0528",
+    "deepseek-v3-1",
+    "deepseek-v4-1-fast",
+    "deepseek-v4-1-flash",
+    "deepseek-v4-1-flash-1017",
+    "deepseek-v4-1-flash-fast",
+    "deepseek-v4-flash-0423",
+    "deepseek-v4-flash-0731",
+    "deepseek-v4-flash-vision-exp",
+    "deepseek-v4-pro",
+    "deepseek-v4-pro-0813",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-pro-preview",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+    "gemini-4-argon",
+    "gemini-4-carbon",
+    "gemini-4-hydrogen",
+    "gemini-4-neon",
+    "gemma-3-12b",
+    "gemma-4-26b",
+    "gemma-4-31b",
+    "glm-4.6",
+    "glm-4.7",
+    "glm-5.1",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4o-mini",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-5.1",
+    "gpt-5.4",
+    "gpt-5.4-pro",
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
+    "gpt-6.1-sol",
+    "gpt-6.1-terra",
+    "gpt-6.2-astra",
+    "gpt-6.2-sol",
+    "gpt-oss-safeguard-20b",
+    "grok-4.20-0309-reasoning",
+    "grok-4.20-non-reasoning",
+    "grok-4.3",
+    "grok-4.5",
+    "grok-4.6",
+    "grok-4.7",
+    "grok-build-0.1",
+    "hy3",
+    "hy4",
+    "ibm-granite-micro",
+    "inkling",
+    "kimi-k2-5",
+    "kimi-k2-6",
+    "kimi-k2-7-code",
+    "kimi-k3",
+    "kimi-k3-1-pro",
+    "kimi-k3-1-pro-highspeed",
+    "mercury-3",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
+    "minimax-m2",
+    "minimax-m3",
+    "minimax-m3-1-flash",
+    "ministral-3-3b",
+    "ministral-3-8b",
+    "mistral-large-4",
+    "mistral-medium-3",
+    "mistral-medium-3.1",
+    "mistral-small-3.1",
+    "mistral-small-3.2",
+    "muse-ember",
+    "muse-spark-1.1",
+    "muse-spark-1.2",
+    "muse-spark-1.2-contributor",
+    "muse-spark-open",
+    "muse-wonder",
+    "nemotron-3-120b",
+    "nemotron-3-nano-30b",
+    "nemotron-3-ultra-nvfp4",
+    "nemotron-3.5-super-vl",
+    "nemotron-lightning-3.5-30b",
+    "o3",
+    "qwen-flash",
+    "qwen-plus",
+    "qwen3-235b-a22b-instruct",
+    "qwen3-30b",
+    "qwen3-30b-a3b-instruct",
+    "qwen3-coder-480b-a35b",
+    "qwen3-coder-next",
+    "qwen3-next-80b-a3b",
+    "qwen3-vl-235b-a22b",
+    "qwen3-vl-30b-a3b",
+    "qwen3-vl-plus",
+    "qwen3.5-122b-a10b",
+    "qwen3.5-27b",
+    "qwen3.5-35b-a3b",
+    "qwen3.5-397b-a17b",
+    "qwen3.5-9b",
+    "qwen3.6-27b",
+    "qwen3.6-35b",
+    "qwen3.8-27b",
+    "qwen3.8-max",
+    "qwen4-max",
+    "step-3-7-flash"
+  ],
+  "reasoning": {
+    "gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-6.2-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3.5-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-9b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemma-4-26b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "grok-4.6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-6.2-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3-30b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "claude-haiku-4-5": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "qwen3.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "mimo-v2.6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4-flash-0423": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "claude-sonnet-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "kimi-k3-1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nova-2-lite": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-k2-6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mercury-3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "muse-ember": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-4-carbon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "grok-4.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3.8-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "nemotron-3-nano-30b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-2.4t-a95b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "qwen3.6-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5.4-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "beam-1.0-501b-a23b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemma-4-31b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "muse-spark-1.1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v3-1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "o3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm-4.6v": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-v4-1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "muse-wonder": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3.5-35b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "qwen3.7-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-5-nano": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "qwen3-vl-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-5.1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gemini-3.1-pro-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3.6-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "grok-4.3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-4.5v": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "qwen3.7-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemini-3-flash-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "step-3-7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "nemotron-3-120b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
+      }
+    ],
+    "claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "minimax-m3-1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "ling-3.1-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "apodex-1.1-mini": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3-1-pro-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-1-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "nemotron-lightning-3.5-30b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemini-4-neon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "qwen3.6-35b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-fable-5-1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "qwen3.6-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-sonnet-4-5": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-4.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "claude-opus-4-7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "glm-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemini-3.1-flash-lite-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "claude-opus-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-flash-vision-exp": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-4-hydrogen": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "nemotron-3-ultra-nvfp4": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "qwen3.7-max": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen4-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
+      }
+    ],
+    "qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemini-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.5-122b-a10b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "muse-spark-1.2-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gemini-3.5-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "qwen-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "grok-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v4-1-flash-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "claude-fable-5-2": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "qwen3.8-omni-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "muse-spark-1.2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3.5-super-vl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemini-3.5-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ]
+  }
+}

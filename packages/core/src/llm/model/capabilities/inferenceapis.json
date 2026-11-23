@@ -20,6 +20,15 @@
   ],
   "structuredOutput": ["MiniMaxAI/MiniMax-M3", "meta-llama/Llama-3.3-70B-Instruct-Turbo"],
   "reasoning": {
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4-Flash": [
       {
         "type": "toggle"
@@ -36,20 +45,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
       }
     ],
     "openai/gpt-oss-120b": [
@@ -69,10 +64,14 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "MiniMaxAI/MiniMax-M3": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
       }
     ],
     "zai-org/GLM-5.3": [
@@ -81,9 +80,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "zai-org/GLM-5.3-Flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

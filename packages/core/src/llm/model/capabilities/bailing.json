@@ -8,17 +8,17 @@
         "type": "toggle"
       }
     ],
-    "Ling-3.1-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "Ling-3.0-flash-VL": [
       {
         "type": "toggle"
       }
     ],
     "Ling-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Ling-3.1-flash": [
       {
         "type": "toggle"
       }
