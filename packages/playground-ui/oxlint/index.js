@@ -337,19 +337,28 @@ const PAGE_SPACING_MESSAGE = cls =>
 const SPACING_UTILITY = /^-?(m|p)[xytrblse]?-/;
 const COLUMN_GAP_UTILITY = /^(space-y|gap-y|gap)-(.+)$/;
 
-function classLiterals(node, found = []) {
-  if (!node) return found;
-  const next = child => classLiterals(child, found);
-  if (node.type === 'Literal' && /^['"]/.test(node.raw)) found.push({ node, text: node.value });
-  else if (node.type === 'TemplateLiteral') {
-    node.quasis.forEach(quasi => found.push({ node: quasi, text: quasi.value.raw }));
-    node.expressions.forEach(next);
-  } else if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') next(node.expression);
-  else if (node.type === 'LogicalExpression') [node.left, node.right].forEach(next);
-  else if (node.type === 'ConditionalExpression') [node.consequent, node.alternate].forEach(next);
-  else if (node.type === 'CallExpression') node.arguments.forEach(next);
-  else if (node.type === 'ArrayExpression') node.elements.forEach(next);
-  return found;
+const product = parts =>
+  parts.reduce((combos, options) => combos.flatMap(combo => options.map(option => [...combo, ...option])), [[]]);
+
+function classAlternatives(node) {
+  if (!node) return [[]];
+  if (node.type === 'Literal' && /^['"]/.test(node.raw)) return [[{ node, text: node.value }]];
+  if (node.type === 'TemplateLiteral')
+    return product([
+      [node.quasis.map(quasi => ({ node: quasi, text: quasi.value.raw }))],
+      ...node.expressions.map(classAlternatives),
+    ]);
+  if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression')
+    return classAlternatives(node.expression);
+  if (node.type === 'LogicalExpression')
+    return node.operator === '&&'
+      ? [[], ...classAlternatives(node.right)]
+      : [...classAlternatives(node.left), ...classAlternatives(node.right)];
+  if (node.type === 'ConditionalExpression')
+    return [...classAlternatives(node.consequent), ...classAlternatives(node.alternate)];
+  if (node.type === 'CallExpression') return product(node.arguments.map(classAlternatives));
+  if (node.type === 'ArrayExpression') return product(node.elements.map(classAlternatives));
+  return [[]];
 }
 
 function pageRoots(node, { throughFragments = true } = {}, roots = []) {
@@ -369,7 +378,7 @@ function pageRoots(node, { throughFragments = true } = {}, roots = []) {
 function stacksColumn(classes) {
   if (classes.some(cls => cls.startsWith('space-y-') || cls.startsWith('gap-y-'))) return true;
   if (classes.includes('flex-col')) return true;
-  return classes.includes('grid') && !classes.some(cls => cls.startsWith('grid-cols-'));
+  return classes.includes('grid') && !classes.some(cls => cls.startsWith('grid-cols-') && cls !== 'grid-cols-1');
 }
 
 function noPageSpacing(context) {
@@ -378,16 +387,21 @@ function noPageSpacing(context) {
       item => item.type === 'JSXAttribute' && item.name.name === 'className',
     );
     if (!attribute) return;
-    const literals = classLiterals(attribute.value);
-    const classes = literals.flatMap(({ text }) => text.split(/\s+/)).map(cls => cls.split(':').pop());
-    const column = stacksColumn(classes);
-    for (const { node, text } of literals) {
-      for (const raw of text.split(/\s+/).filter(Boolean)) {
-        const cls = raw.split(':').pop();
-        const gap = COLUMN_GAP_UTILITY.exec(cls);
-        const spacing = SPACING_UTILITY.test(cls) && cls !== 'mx-auto';
-        const offRhythmGap = isBody && gap && (gap[1] !== 'gap' || column) && gap[2] !== '6';
-        if (spacing || offRhythmGap) context.report({ node, message: PAGE_SPACING_MESSAGE(raw) });
+    const reported = new Map();
+    for (const literals of classAlternatives(attribute.value)) {
+      const classes = literals.flatMap(({ text }) => text.split(/\s+/)).map(cls => cls.split(':').pop());
+      const column = stacksColumn(classes);
+      for (const { node, text } of literals) {
+        for (const raw of text.split(/\s+/).filter(Boolean)) {
+          const cls = raw.split(':').pop();
+          const gap = COLUMN_GAP_UTILITY.exec(cls);
+          const spacing = SPACING_UTILITY.test(cls) && cls !== 'mx-auto';
+          const offRhythmGap = isBody && gap && (gap[1] !== 'gap' || column) && gap[2] !== '6';
+          const seen = reported.get(node) ?? new Set();
+          if (!(spacing || offRhythmGap) || seen.has(raw)) continue;
+          reported.set(node, seen.add(raw));
+          context.report({ node, message: PAGE_SPACING_MESSAGE(raw) });
+        }
       }
     }
   };

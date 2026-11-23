@@ -19,8 +19,10 @@ export function Processor() {
     error,
   } = useProcessor({ processorId: processorId!, queryOptions: { enabled: !!processorId } });
 
+  const authError = is401UnauthorizedError(error) || is403ForbiddenError(error);
+
   // If this is a workflow processor, redirect to the workflow graph UI
-  if (!isLoading && processor?.isWorkflow) {
+  if (!isLoading && !authError && processor?.isWorkflow) {
     return <Navigate to={`/workflows/${processorId}/graph`} replace />;
   }
 
