@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.11.5-alpha.1
+
+### Patch Changes
+
+- Fixed missing `traceId` and `spanId` on `createInngestAgent` results. `stream()`, `generate()`, `resume()`, and `observe()` results now name the trace of the run, and every stream chunk carries the trace ID, so you can link a score, feedback, or a log line to the run. Fixes #30871. ([#31013](https://github.com/mastra-ai/mastra/pull/31013))
+
+- Updated dependencies [[`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18)]:
+  - @mastra/core@1.86.0-alpha.3
+
 ## 1.11.5-alpha.0
 
 ### Patch Changes
