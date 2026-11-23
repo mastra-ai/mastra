@@ -37,6 +37,7 @@ async function listAll<T>(
 }
 
 const normalize = (text: string) => text.toLowerCase().replace(/^[#@]/, '').trim();
+const searchName = z.string().refine(name => normalize(name) !== '', 'Give a name to search for.');
 
 function matchesImageFormat(mimeType: string, data: Buffer): boolean {
   if (mimeType === 'image/jpeg') {
@@ -96,11 +97,10 @@ export function createSlackTools(options: CreateChannelToolsOptions = {}): Chann
       id: 'findChannel',
       description:
         'Find Slack channels by name, e.g. "eng" or "#eng-proj-factories". Returns full channel ids (slack:C…) to pass to the other Slack tools, and whether the app is a member. `incomplete: true` means the workspace was too large to check every channel.',
-      inputSchema: z.object({ name: z.string().min(1).describe('All or part of the channel name') }),
+      inputSchema: z.object({ name: searchName.describe('All or part of the channel name') }),
       execute: async ({ name }, context) => {
         const { client } = await slack(context);
         const query = normalize(name);
-        if (!query) throw new Error('Give a name to search for.');
         const { items: found, incomplete } = await listAll(async cursor => {
           const page = await client.conversations.list({
             types: 'public_channel,private_channel',
@@ -127,11 +127,10 @@ export function createSlackTools(options: CreateChannelToolsOptions = {}): Chann
       id: 'findUser',
       description:
         'Find people in Slack by name, e.g. "Caleb" or "@caleb". Returns their user ids (U…), to mention them as <@U…> in a message or to DM them. `incomplete: true` means the workspace was too large to check everyone.',
-      inputSchema: z.object({ name: z.string().min(1).describe('All or part of their name or display name') }),
+      inputSchema: z.object({ name: searchName.describe('All or part of their name or display name') }),
       execute: async ({ name }, context) => {
         const { client } = await slack(context);
         const query = normalize(name);
-        if (!query) throw new Error('Give a name to search for.');
         const { items: people, incomplete } = await listAll(async cursor => {
           const page = await client.users.list({ limit: 200, cursor });
           return { items: page.members, response_metadata: page.response_metadata };
