@@ -80,7 +80,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`. They work on any run in a channel-backed thread, including runs that did not start from a chat message, such as a schedule or a Studio prompt.',
+      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`. For tools that read and post messages, see [Channel tools](#channel-tools). They work on any run in a channel-backed thread, including runs that did not start from a chat message, such as a schedule or a Studio prompt.',
   },
   {
     name: 'state',
@@ -883,6 +883,72 @@ Extra log arguments become fields on the record:
 | Anything else | `args`, `component` |
 
 An `Error` passed directly or under an object's `error` key is normalized so it keeps its message and stack when serialized.
+
+## Channel tools
+
+`createChannelTools()` from `@mastra/core/channels` returns tools that read and post in the agent's chat platforms through the Chat SDK: `fetchMessages`, `fetchChannelMessages`, `fetchThread`, `listThreads`, `getThreadParticipants`, `getChannelInfo`, `postMessage` and `postChannelMessage`, plus `sendDirectMessage` when `directMessages` is `'anyone'`. Nothing is added to the agent for you. Spread the tools into `tools`:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createChannelTools } from '@mastra/core/channels'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You are a helpful support assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    ...(await createChannelTools({ channels: 'selected', channelIds: ['slack:C0123ABC'] })),
+  },
+  channels: { adapters: { slack: createSlackAdapter() } },
+})
+```
+
+Each call works out the channel thread of the run that makes it, the same way `add_reaction` does, so the tools also work on schedules and Studio prompts in a channel-backed thread. A call outside a channel-backed run fails with an error. The tools post without asking for approval. The tools require zod 4.2 or newer.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'channels',
+    type: "'session' | 'selected' | 'all'",
+    isOptional: true,
+    defaultValue: "'session'",
+    description:
+      "Which channels the tools may read and post in: only the conversation's own channel, that channel plus `channelIds`, or any channel the bot is a member of.",
+  },
+  {
+    name: 'channelIds',
+    type: 'string[]',
+    isOptional: true,
+    defaultValue: '[]',
+    description:
+      "Full channel ids, such as `'slack:C0123ABC'`, the tools may use when `channels` is `'selected'`. Ids without a platform prefix are rejected.",
+  },
+  {
+    name: 'access',
+    type: "'read' | 'post'",
+    isOptional: true,
+    defaultValue: "'post'",
+    description: "With `'read'`, the tools read every allowed channel but post only in the conversation's own channel.",
+  },
+  {
+    name: 'directMessages',
+    type: "'none' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'none'",
+    description:
+      "With `'anyone'`, adds `sendDirectMessage`. Other people's direct messages with the bot can never be read, whatever the other options grant.",
+  },
+  {
+    name: 'scope',
+    type: 'ChannelToolScope',
+    isOptional: true,
+    description:
+      'A fixed conversation for every call, built with `createChannelToolScope()`. Its settings replace the options above. Use it when you build tools for one conversation yourself instead of resolving the run.',
+  },
+]}
+/>
 
 ## Related
 
