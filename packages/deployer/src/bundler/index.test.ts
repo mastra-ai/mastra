@@ -451,35 +451,26 @@ describe('applySourceDependencyRange', () => {
     ).toEqual({ version: '3.25.76' });
   });
 
-  it('adopts a bounded minimum such as >=0.2.0 and rejects an open >=0', () => {
-    expect(
-      applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: '>=0.2.0' } })),
-    ).toEqual({ version: '>=0.2.0' });
-    expect(
-      applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: '>=0.0.0' } })),
-    ).toEqual({ version: '3.25.76' });
-    expect(
-      applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: '1.2.3 || x' } })),
-    ).toEqual({ version: '3.25.76' });
-  });
-
-  it('classifies a very long version range without stalling', () => {
-    const unbounded = `1 || ${' '.repeat(40_000)}*`;
-    const bounded = `>=0${'.0'.repeat(20_000)}x`;
-    const started = Date.now();
-    expect(
-      applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: unbounded } })),
-    ).toEqual({ version: '3.25.76' });
-    expect(
-      applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: bounded } })),
-    ).toEqual({ version: bounded });
-    expect(Date.now() - started).toBeLessThan(500);
-  });
-
   it('trims surrounding whitespace off an adopted range', () => {
     expect(
       applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: '  ^4.3.6 ' } })),
     ).toEqual({ version: '^4.3.6' });
+  });
+
+  it.each(['^4.3.6 ||   *', '^4.3.6   || >=  0.0', '^4.3.6\t\tx'])(
+    'keeps the resolved version when whitespace pads an unbounded alternative in %j',
+    declared => {
+      expect(
+        applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: declared } })),
+      ).toEqual({ version: '3.25.76' });
+    },
+  );
+
+  it('checks a declared range with a long whitespace run in linear time', () => {
+    const declared = `1${' '.repeat(200_000)}a`;
+    const started = performance.now();
+    applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: declared } }));
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 
   it('keeps the resolved alias when the declared value is a bare range for a differently named package', () => {

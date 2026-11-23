@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { ChunkType } from '@mastra/core/stream';
 
 type StreamErrorChunk = {
   runId?: string;
@@ -7,31 +8,25 @@ type StreamErrorChunk = {
   };
 };
 
-type FinishChunkLike = {
-  type?: string;
-  runId?: string;
-  payload?: {
-    stepResult?: {
-      reason?: unknown;
-    };
-  };
-};
-
-const MAX_STEPS_FINISH_REASON = 'tool-calls';
-
 const getMaxStepsErrorText = (maxSteps?: number) => {
   const limit = typeof maxSteps === 'number' ? ` (${maxSteps})` : '';
   return `Agent stopped because it reached maxSteps${limit} while tool calls were still pending. Increase maxSteps in advanced settings and try again.`;
 };
 
-const getFinishReason = (chunk: FinishChunkLike) => {
-  if (chunk.type !== 'finish') return undefined;
-
-  const reason = chunk.payload?.stepResult?.reason;
-  return typeof reason === 'string' ? reason : undefined;
+/**
+ * True when a run stopped because it used its whole step budget while the model
+ * still wanted to call tools. A `'tool-calls'` finish reason alone only says the
+ * last step called a tool: a `stopWhen` match, a client tool or an
+ * `onIterationComplete` stop end a run the same way, even on the last allowed
+ * step (#29612). Core reports why its loop stopped as `stopCause`, on both the
+ * agent stream and thread subscription copies. When `stopCause` is absent (for
+ * example from an older `@mastra/core` server), do not infer exhaustion from
+ * step count, because intentional boundary stops look identical.
+ */
+export const isMaxStepsFinishChunk = ({ chunk }: { chunk: ChunkType; maxSteps?: number | undefined }) => {
+  if (chunk.type !== 'finish' || chunk.payload.stepResult?.reason !== 'tool-calls') return false;
+  return chunk.payload.stopCause === 'max_steps';
 };
-
-export const isMaxStepsFinishChunk = (chunk: FinishChunkLike) => getFinishReason(chunk) === MAX_STEPS_FINISH_REASON;
 
 /**
  * Build a `MastraDBMessage` representing a stream `error` chunk so it can be
@@ -77,7 +72,7 @@ export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraDBMessag
   };
 };
 
-export const buildMaxStepsStreamErrorMessage = (chunk: FinishChunkLike, maxSteps?: number) =>
+export const buildMaxStepsStreamErrorMessage = (chunk: Pick<ChunkType, 'runId'>, maxSteps?: number) =>
   buildStreamErrorMessage({
     runId: chunk.runId,
     payload: { error: getMaxStepsErrorText(maxSteps) },

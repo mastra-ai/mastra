@@ -120,6 +120,19 @@ describe('findWorkspaces', () => {
     expect(found?.map(w => w.package.name)).toEqual(['keep']);
   });
 
+  it('strips trailing separators from globs, including long runs, in linear time', async () => {
+    await writePackage(root, 'r', {
+      workspaces: ['packages/*//\\', `!packages/skip${'/'.repeat(200_000)}x`, '!packages/skip//'],
+    });
+    await writePackage(join(root, 'packages', 'keep'), 'keep');
+    await writePackage(join(root, 'packages', 'skip'), 'skip');
+
+    const started = performance.now();
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(found?.map(w => w.package.name)).toEqual(['keep']);
+  });
+
   it('finds nested packages with a ** glob without listing the root itself', async () => {
     await writeFile(join(root, 'pnpm-workspace.yaml'), '');
     await writePackage(root, 'root');
@@ -158,16 +171,6 @@ describe('findWorkspaces', () => {
     const byName = Object.fromEntries((found ?? []).map(w => [w.package.name, w]));
     expect(Object.keys(byName).sort()).toEqual(['a', 'linked']);
     expect(byName['linked']!.location).toBe(join(root, 'packages', 'link').split('\\').join('/'));
-  });
-
-  it('still finds a package when a glob ends in a very long slash run', async () => {
-    await writePackage(root, 'r', { workspaces: [`packages/*${'/'.repeat(50_000)}`, `x${'/'.repeat(20_000)}y`] });
-    await writePackage(join(root, 'packages', 'web'), 'web');
-
-    const started = Date.now();
-    const found = await findWorkspaces(root, { stopDir: tmpdir() });
-    expect(found?.map(workspace => workspace.package.name)).toEqual(['web']);
-    expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it('accepts ./-prefixed, trailing-slash and brace globs', async () => {

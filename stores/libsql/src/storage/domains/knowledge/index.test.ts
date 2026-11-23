@@ -8,6 +8,7 @@ import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
   createKnowledgeLegacyUpgradeTests,
   createKnowledgeSchemaResetTests,
+  createKnowledgeHostWriteTests,
   createKnowledgePageStoreTests,
 } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
@@ -48,6 +49,7 @@ describe('Knowledge Core compatibility', () => {
 });
 
 createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+createKnowledgeHostWriteTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
 async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
   const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');

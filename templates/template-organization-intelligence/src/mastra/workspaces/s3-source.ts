@@ -12,7 +12,6 @@ import { S3Filesystem } from '@mastra/s3';
 
 import type { S3Source } from './catalog.js';
 import { normalizeS3Prefix } from './catalog.js';
-import { trimEdgeSlashes } from './s3-path.js';
 import { ExtractionError, MAX_RECORD_BYTES } from './extractors.js';
 
 export const MAX_S3_ENTRIES = 1_000;
@@ -105,6 +104,15 @@ function pathFor(prefix: string, path: string): string {
   return prefix + relative;
 }
 
+/** Strips leading and trailing slashes without /^\/+|\/+$/g, which is quadratic on inner slash runs. */
+export function trimSlashes(path: string): string {
+  let start = 0;
+  let end = path.length;
+  while (start < end && path[start] === '/') start++;
+  while (end > start && path[end - 1] === '/') end--;
+  return path.slice(start, end);
+}
+
 export function supportedS3Path(path: string): boolean {
   return /\.(md|markdown|pdf|docx)$/i.test(path);
 }
@@ -186,7 +194,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const normalized = trimEdgeSlashes(path);
+    const normalized = trimSlashes(path);
     if (!normalized)
       return {
         name: '',
@@ -230,7 +238,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
   }
 
   async exists(path: string): Promise<boolean> {
-    if (!trimEdgeSlashes(path)) return true;
+    if (!trimSlashes(path)) return true;
     return (await this.isFile(path)) || (await this.isDirectory(path));
   }
 
@@ -247,7 +255,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const requested = trimEdgeSlashes(path);
+    const requested = trimSlashes(path);
     if (!requested) return true;
     try {
       const prefix = normalizeS3Prefix(this.source.prefix) + pathFor('', requested) + '/';
@@ -268,7 +276,7 @@ export class BoundedS3Filesystem extends S3Filesystem {
     path: string,
     options?: ListOptions,
   ): Promise<Array<{ name: string; type: 'file' | 'directory'; size?: number }>> {
-    const requested = trimEdgeSlashes(path);
+    const requested = trimSlashes(path);
     const prefix = normalizeS3Prefix(this.source.prefix) + (requested ? pathFor('', requested) + '/' : '');
     const listed = await new ScopedS3Reader(this.source, this.client).list(prefix);
     if (!listed.complete) throw new Error('S3 directory listing is incomplete.');

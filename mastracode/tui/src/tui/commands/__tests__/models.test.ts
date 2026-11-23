@@ -138,6 +138,74 @@ describe('handleModelCommand', () => {
     expect(ctx.showInfo).not.toHaveBeenCalled();
   });
 
+  it('lists Fast entries for supported OpenAI models only with Codex sign-in', async () => {
+    const sol = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
+    const older = { id: 'openai/gpt-5.3', provider: 'openai', modelName: 'gpt-5.3', hasApiKey: true };
+    const listFor = async (credential: { type: string } | undefined) => {
+      mocks.selectorOptions = undefined;
+      const ctx = {
+        state: {
+          controller: { listAvailableModels: vi.fn(async () => [sol, older]) },
+          session: {
+            model: { get: vi.fn(() => 'openai/gpt-6.2-sol:fast') },
+            thread: { getId: vi.fn(() => null) },
+          },
+          ui: {},
+        },
+        authStorage: { get: vi.fn((id: string) => (id === 'openai-codex' ? credential : undefined)) },
+        showInfo: vi.fn(),
+        showError: vi.fn(),
+      } as any;
+      void handleModelCommand(ctx);
+      await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+      return mocks.selectorOptions;
+    };
+
+    const signedIn = await listFor({ type: 'oauth' });
+    expect(signedIn.models.map((model: { id: string }) => model.id)).toEqual([
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+      'openai/gpt-5.3',
+    ]);
+    expect(signedIn.currentModelId).toBe('openai/gpt-6.2-sol:fast');
+
+    const apiKey = await listFor({ type: 'api_key' });
+    expect(apiKey.models.map((model: { id: string }) => model.id)).toEqual(['openai/gpt-6.2-sol', 'openai/gpt-5.3']);
+  });
+
+  it("lists a Factory's models as the Factory sends them, whatever this machine is signed in to", async () => {
+    const sol = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
+    const solFast = { ...sol, id: 'openai/gpt-6.2-sol:fast', modelName: 'gpt-6.2-sol:fast' };
+    const listFor = async (factoryModels: (typeof sol)[], localCredential: { type: string } | undefined) => {
+      mocks.selectorOptions = undefined;
+      const ctx = {
+        state: {
+          factory: { projectName: 'mastra', repositorySlug: 'mastra-ai/mastra', branch: 'b', url: 'https://f' },
+          controller: { listAvailableModels: vi.fn(async () => factoryModels) },
+          session: {
+            model: { get: vi.fn(() => 'openai/gpt-6.2-sol') },
+            thread: { getId: vi.fn(() => 'thread-1') },
+          },
+          ui: {},
+        },
+        authStorage: { get: vi.fn((id: string) => (id === 'openai-codex' ? localCredential : undefined)) },
+        showInfo: vi.fn(),
+        showError: vi.fn(),
+      } as any;
+      void handleModelCommand(ctx);
+      await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+      return mocks.selectorOptions.models.map((model: { id: string }) => model.id);
+    };
+
+    // The Factory's credentials decide Fast: a local ChatGPT sign-in adds nothing...
+    await expect(listFor([sol], { type: 'oauth' })).resolves.toEqual(['openai/gpt-6.2-sol']);
+    // ...and a Fast entry the Factory lists stays without one.
+    await expect(listFor([sol, solFast], undefined)).resolves.toEqual([
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ]);
+  });
+
   it('limits built-in packs to models from the pack provider', async () => {
     const openai = {
       id: 'openai/gpt-5.4',
@@ -353,7 +421,7 @@ describe('handleModelCommand', () => {
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('cancelled');
 
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
@@ -405,7 +473,7 @@ describe('handleModelCommand', () => {
     mocks.loadSettings.mockReturnValue(settings);
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
@@ -479,7 +547,7 @@ describe('handleModelCommand', () => {
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
     const setSetting = vi.fn(async (_setting: { key: string; value: unknown }) => undefined);
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
@@ -550,7 +618,7 @@ describe('handleModelCommand', () => {
     });
     const switchModel = vi.fn(async () => undefined);
     const ctx = {
-      authStorage: {},
+      authStorage: { get: vi.fn() },
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),

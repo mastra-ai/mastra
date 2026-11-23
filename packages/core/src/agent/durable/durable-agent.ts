@@ -17,7 +17,6 @@ import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } fro
 import type { AgentStreamsConfig } from '../streams/types';
 import type { AgentDurableOption, ToolsInput } from '../types';
 
-import { DurableExecutionEngine } from './execution-engine';
 import type { ExtendedRunRegistry } from './run-registry';
 import type {
   AgentAbortEventData,
@@ -522,10 +521,10 @@ export interface DurableAgent<
    * `suspendPayload` will be populated. Use {@link DurableAgent.resumeGenerate}
    * to continue.
    *
-   * Note on suspend persistence: both `DurableAgent` and `EventedAgent` track
-   * the workflow engine's `run.start()` through snapshot persistence, so
-   * awaiting `workflowExecution` on suspend is sufficient for a subsequent
-   * `resumeGenerate()` to find the snapshot.
+   * Note on suspend persistence: `DurableAgent` reports a suspension only
+   * after the suspended snapshot is saved. `EventedAgent` can report it before
+   * the snapshot is readable from another process, so a `resumeGenerate()`
+   * issued elsewhere immediately afterwards may not find it yet.
    */
   generate(messages: MessageListInput, options?: DurableAgentStreamOptions<TOutput>): Promise<FullOutput<TOutput>>;
 
@@ -649,14 +648,16 @@ export class DurableAgent<
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
 > extends Agent<TAgentId, TTools, TOutput> {
-  /** @internal Subclasses supply their default engine without changing workflow fallback policy. */
-  protected override createExecutionEngine(mastra?: Mastra): DurableExecutionEngine {
-    return new DurableExecutionEngine(this.id, mastra);
+  /** Engine this wrapper class runs on, selected through the Agent's `durable` policy. @internal */
+  protected static readonly executionEngine: 'default' | 'evented' = 'default';
+
+  protected override get returnsDurableStreamResult(): boolean {
+    return true;
   }
 
   /** @internal Forced strategy, without resolving host/storage fallback. */
-  __getExecutionEngineStrategy(): 'durable' | 'evented' {
-    return this.workflowEngine === 'evented' ? 'evented' : 'durable';
+  __getExecutionEngineStrategy(): 'default' | 'evented' {
+    return this.workflowEngine === 'evented' ? 'evented' : 'default';
   }
 
   /** The wrapped agent */
@@ -710,6 +711,7 @@ export class DurableAgent<
       // Preserve dynamic model resolution until a request context is available.
       model: ({ requestContext }) => agent.getModel({ requestContext }),
       notifications: agent.__getNotificationConfig(),
+      durable: { executionEngine: (new.target as unknown as typeof DurableAgent).executionEngine },
     });
 
     this.#wrappedAgent = agent;
