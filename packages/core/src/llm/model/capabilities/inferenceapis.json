@@ -32,7 +32,17 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "moonshotai/Kimi-K2.7-Code": [
+      {
+        "type": "toggle"
+      }
+    ],
     "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
       }
@@ -47,11 +57,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
@@ -79,11 +84,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K2.7-Code": [
-      {
-        "type": "toggle"
       }
     ]
   }

@@ -31,6 +31,18 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "google/diffusiongemma-26B-A4B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "medium"]
+      }
+    ],
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "medium"]
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -49,28 +61,16 @@
         "values": ["none", "medium"]
       }
     ],
-    "google/diffusiongemma-26B-A4B-it": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["none", "medium"]
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "effort",
-        "values": ["none", "medium"]
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [

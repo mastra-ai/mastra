@@ -603,6 +603,20 @@ describe('Workspace Handlers', () => {
       }
     });
 
+    it('returns 404 for an unknown workspace without logging an error', async () => {
+      const mastra = createMastra();
+      const trackException = vi.spyOn(mastra.getLogger(), 'trackException');
+
+      await expect(
+        WORKSPACE_FS_READ_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent-workspace',
+          path: '/test.txt',
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(trackException).not.toHaveBeenCalled();
+    });
+
     it('should throw 400 when path parameter missing', async () => {
       const workspace = createWorkspace('test-workspace');
       const mastra = createMastra(workspace);
