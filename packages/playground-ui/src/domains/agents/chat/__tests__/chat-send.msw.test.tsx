@@ -9,7 +9,8 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -71,11 +72,21 @@ function serveAgent(id: string, reply: string) {
 
 type ChatSend = ReturnType<typeof useChatSend>;
 
+function Messages() {
+  const messages = useChatMessages();
+  return (
+    <>
+      {messages.map(message => (
+        <MessageRow key={message.id} message={message} />
+      ))}
+    </>
+  );
+}
+
 function Chat({ sends }: { sends: Set<ChatSend> }) {
   const send = useChatSend();
   const [keptSend] = useState(() => send);
   const { isRunning } = useChatRunning();
-  const messages = useChatMessages();
   useEffect(() => {
     sends.add(send);
   }, [send, sends]);
@@ -84,21 +95,28 @@ function Chat({ sends }: { sends: Set<ChatSend> }) {
       <button disabled={isRunning} onClick={() => void keptSend({ message: 'Hello' })}>
         Ask
       </button>
-      {messages.map(message => (
-        <MessageRow key={message.id} message={message} />
-      ))}
+      <Messages />
     </>
   );
 }
 
-function renderChat(agentId: string, sends: Set<ChatSend>) {
+function SendsWhenTheAgentChanges({ agentId }: { agentId: string }) {
+  const send = useChatSend();
+  const [firstAgentId] = useState(agentId);
+  useLayoutEffect(() => {
+    if (agentId !== firstAgentId) void send({ message: 'Hello' });
+  }, [agentId, firstAgentId, send]);
+  return <Messages />;
+}
+
+function renderChat(agentId: string, content: (agentId: string) => ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const chatWith = (id: string) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <ChatProvider agentId={id} threadId="thread-1" supportsMemory={false}>
-            <Chat sends={sends} />
+          <ChatProvider agentId={id} threadId="thread-1" supportsMemory={false} requestContext={{ team: id }}>
+            {content(id)}
           </ChatProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -122,7 +140,7 @@ describe('the send a chat hands out', () => {
       const support = serveAgent('support', 'Support is on it.');
       const billing = serveAgent('billing', 'Billing is on it.');
       const sends = new Set<ChatSend>();
-      const chat = renderChat('support', sends);
+      const chat = renderChat('support', () => <Chat sends={sends} />);
 
       await ask();
       await screen.findByText('Support is on it.', undefined, TURN);
@@ -134,6 +152,26 @@ describe('the send a chat hands out', () => {
       expect(support).toHaveLength(1);
       expect(billing).toHaveLength(1);
       expect(sends.size).toBe(1);
+    },
+  );
+
+  it(
+    "never pairs one agent's endpoint with another agent's context, even when sent from a layout effect as the agent switches",
+    { timeout: 30_000 },
+    async () => {
+      const support = serveAgent('support', 'Support is on it.');
+      const billing = serveAgent('billing', 'Billing is on it.');
+      const chat = renderChat('support', agentId => <SendsWhenTheAgentChanges agentId={agentId} />);
+
+      chat.switchTo('billing');
+      await screen.findByText(/ is on it\.$/, undefined, TURN);
+
+      const sent = [
+        ...support.map(body => ({ to: 'support', context: body.requestContext })),
+        ...billing.map(body => ({ to: 'billing', context: body.requestContext })),
+      ];
+      expect(sent).toHaveLength(1);
+      expect(sent[0].context).toMatchObject({ team: sent[0].to });
     },
   );
 });
