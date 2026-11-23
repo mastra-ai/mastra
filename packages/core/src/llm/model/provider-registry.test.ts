@@ -1742,8 +1742,10 @@ describe('Provider model lists derived from the registry file', () => {
     'netlify/anthropic': { name: 'Anthropic', models: ['claude-haiku-4-5'], gateway: 'netlify' },
   };
 
-  it('lists every bundled provider with exactly the models in its provider entry', () => {
-    const registry = GatewayRegistry.getInstance({ useDynamicLoading: false });
+  it('lists every bundled provider with exactly the models in its provider entry', async () => {
+    // A fresh module gives a fresh singleton; the shared one may have been switched to dynamic loading.
+    const fresh = await import('./provider-registry.js');
+    const registry = fresh.GatewayRegistry.getInstance({ useDynamicLoading: false });
     const providerConfigs = registry.getProviders();
     const models = registry.getModels();
 
