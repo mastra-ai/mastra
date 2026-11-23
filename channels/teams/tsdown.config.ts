@@ -8,9 +8,8 @@ export default defineConfig([
     format: ['esm'],
     fixedExtension: false,
     nodeProtocol: 'strip',
-    dts: true,
+    dts: { sourcemap: false },
     clean: true,
-    sourcemap: true,
     deps: {
       neverBundle: ['@mastra/core'],
     },
@@ -22,7 +21,6 @@ export default defineConfig([
     nodeProtocol: 'strip',
     dts: false,
     clean: false,
-    sourcemap: true,
     deps: {
       alwaysBundle: ADAPTER,
       onlyBundle: false,

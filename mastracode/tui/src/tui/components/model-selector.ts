@@ -5,6 +5,7 @@
 
 import { Box, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
+import { parseCodexModelSelection } from '@mastra/code-sdk/providers/model-ids';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
 import { PickerList } from './picker-list.js';
@@ -75,6 +76,7 @@ export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem 
 }
 
 const MASTRACODE_GATEWAY_PREFIX = 'mastracode/';
+const FAST_SUFFIX = ':fast';
 
 /**
  * The shared catalog namespaces the MastraCode gateway's providers (the user's
@@ -134,8 +136,13 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
     this.titleColor = options.titleColor;
-    this.allModels = this.sortModels(toCanonicalModelItems(options.models), options.currentModelId);
-    this.currentModelId = options.currentModelId;
+    const models = toCanonicalModelItems(options.models);
+    // A Fast selection marks its own row when the picker offers one, else its standard model's row.
+    this.currentModelId =
+      options.currentModelId && !models.some(model => model.id === options.currentModelId)
+        ? parseCodexModelSelection(options.currentModelId).modelId
+        : options.currentModelId;
+    this.allModels = this.sortModels(models, this.currentModelId);
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.filteredModels = this.allModels;
@@ -211,7 +218,35 @@ export class ModelSelectorComponent extends Box implements Focusable {
       return a.modelName.localeCompare(b.modelName);
     });
 
-    return sorted;
+    return this.keepFastEntriesNextToStandard(sorted, currentModelId);
+  }
+
+  /**
+   * Puts each Codex Fast entry directly under its standard model. A Fast entry that is the current model stays first,
+   * with its standard model right below it. `:fast` on any other provider is part of the model name and stays put.
+   */
+  private keepFastEntriesNextToStandard(sorted: ModelItem[], currentModelId?: string): ModelItem[] {
+    const byId = new Map(sorted.map(model => [model.id, model]));
+    const isFastEntry = (model: ModelItem | undefined) =>
+      model !== undefined && parseCodexModelSelection(model.id).codexServiceTier === 'fast';
+    const standardOf = (model: ModelItem) =>
+      isFastEntry(model) ? byId.get(parseCodexModelSelection(model.id).modelId) : undefined;
+    const placed = new Set<string>();
+    const result: ModelItem[] = [];
+    for (const model of sorted) {
+      if (placed.has(model.id)) continue;
+      const standard = standardOf(model);
+      if (standard && model.id !== currentModelId) continue;
+      result.push(model);
+      placed.add(model.id);
+      const fastEntry = byId.get(`${model.id}${FAST_SUFFIX}`);
+      const partner = standard ?? (isFastEntry(fastEntry) ? fastEntry : undefined);
+      if (partner && !placed.has(partner.id)) {
+        result.push(partner);
+        placed.add(partner.id);
+      }
+    }
+    return result;
   }
 
   /** Whether the custom "Use: ..." item is showing at the top */

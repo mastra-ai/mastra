@@ -51,7 +51,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   inputOptions: {
     plugins: [adaptEsbuildOnLoadPlugin(esbuildCompileZod())],
   },

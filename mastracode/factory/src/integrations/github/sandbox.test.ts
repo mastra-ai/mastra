@@ -1458,12 +1458,18 @@ describe('runSetupCommand', () => {
   });
 
   it('forwards the hang-guard budget to the provider so it can kill the process', async () => {
-    const sandbox = new FakeSandbox();
-    const spy = vi.spyOn(sandbox, 'executeCommand');
+    // The budget is the deadline minus the clock, so a real clock ticking mid-call sends 899999.
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox();
+      const spy = vi.spyOn(sandbox, 'executeCommand');
 
-    await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
 
-    expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
+      expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

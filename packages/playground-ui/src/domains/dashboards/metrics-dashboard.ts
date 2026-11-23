@@ -100,7 +100,7 @@ const failedAgentRuns = [
   { fieldId: 'status', value: 'error' },
 ];
 
-/** Agent runs, with Failure rate in its title menu, as the Agent runs card. */
+/** Agent runs, with Failure rate as its second tab, as the Agent runs card. */
 const agentRunsWidget: DashboardWidget = {
   id: 'agent-runs',
   span: 6,

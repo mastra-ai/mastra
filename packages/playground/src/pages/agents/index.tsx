@@ -29,7 +29,7 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -38,7 +38,7 @@ function Agents() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <PermissionDenied variant="fill" resource="agents" />
       </PageLayout>
@@ -47,7 +47,7 @@ function Agents() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load agents" descriptionSlot={error.message} />
       </PageLayout>
@@ -56,7 +56,7 @@ function Agents() {
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <NoAgentsInfo />
       </PageLayout>
@@ -85,6 +85,7 @@ function Agents() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<AgentHeaderCreateAction />}
       actionRow={

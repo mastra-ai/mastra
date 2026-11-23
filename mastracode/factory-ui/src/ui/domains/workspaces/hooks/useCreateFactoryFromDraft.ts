@@ -93,6 +93,7 @@ export function useCreateFactoryFromDraft({
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await onCreated(factory);
+      return factory;
     },
   });
 }
