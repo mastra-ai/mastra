@@ -636,6 +636,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "defaultModelId",
       "defaultThinkingLevel",
       "description",
+      "fallbackModelIds",
       "modelScope",
       "name",
       "reviewTestChecksEnabled",
@@ -1502,6 +1503,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               {
                 "type": "object",
                 "properties": {
+                  "fallbackModelIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "fallbackModelIds"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
                   "repositories": {
                     "type": "array",
                     "items": {
@@ -1589,11 +1604,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "project": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "allOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fallbackModelIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "fallbackModelIds"
+              ]
+            }
+          ]
         }
       },
       "required": [
@@ -5965,22 +5998,25 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "$ref": "#/$defs/__schema2"
         },
         "modelScope": {
-          "$ref": "#/$defs/__schema3"
-        },
-        "defaultThinkingLevel": {
           "$ref": "#/$defs/__schema4"
         },
-        "autoRunEnabled": {
+        "defaultThinkingLevel": {
           "$ref": "#/$defs/__schema5"
         },
-        "autoApprovePlans": {
+        "fallbackModelIds": {
           "$ref": "#/$defs/__schema6"
         },
-        "reviewTestChecksEnabled": {
+        "autoRunEnabled": {
           "$ref": "#/$defs/__schema7"
         },
-        "selfReviewEnabled": {
+        "autoApprovePlans": {
           "$ref": "#/$defs/__schema8"
+        },
+        "reviewTestChecksEnabled": {
+          "$ref": "#/$defs/__schema9"
+        },
+        "selfReviewEnabled": {
+          "$ref": "#/$defs/__schema10"
         }
       },
       "$defs": {
@@ -6003,15 +6039,27 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "__schema2": {
           "anyOf": [
             {
-              "type": "string",
-              "maxLength": 200
+              "$ref": "#/$defs/__schema3"
             },
             {
-              "type": "null"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           ]
         },
         "__schema3": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^[^\\s/]+\\/\\S+$"
+        },
+        "__schema4": {
           "type": "string",
           "enum": [
             "factory",
@@ -6019,7 +6067,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "hybrid"
           ]
         },
-        "__schema4": {
+        "__schema5": {
           "type": "string",
           "enum": [
             "off",
@@ -6030,16 +6078,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "max"
           ]
         },
-        "__schema5": {
-          "type": "boolean"
-        },
         "__schema6": {
-          "type": "boolean"
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
         },
         "__schema7": {
           "type": "boolean"
         },
         "__schema8": {
+          "type": "boolean"
+        },
+        "__schema9": {
+          "type": "boolean"
+        },
+        "__schema10": {
           "type": "boolean"
         }
       }
@@ -6049,11 +6104,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "project": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "allOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fallbackModelIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "fallbackModelIds"
+              ]
+            }
+          ]
         }
       },
       "required": [
@@ -8233,11 +8306,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "project": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "allOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            {
+              "type": "object",
+              "properties": {
+                "fallbackModelIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "fallbackModelIds"
+              ]
+            }
+          ]
         }
       },
       "required": [
