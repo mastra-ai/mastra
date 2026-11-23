@@ -361,7 +361,7 @@ import { createAgentStreamPublisher } from './streams/publisher';
 import type { ResponseMessagesReplay } from './streams/response-messages';
 import { replayResponseMessages, withRebuiltResponseMessages } from './streams/response-messages';
 import type { AgentRunRecord } from './streams/run-records';
-import { readAgentRunRecord } from './streams/run-records';
+import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from './streams/run-records';
 import type { AgentStreamStepFinishPayload } from './streams/wire';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import type { ActiveThreadRun, AgentThreadRunRegistration } from './thread-stream-runtime';
@@ -2282,12 +2282,35 @@ export class Agent<
   }
 
   /**
-   * Owner of a run executing in this process, or undefined. DurableAgent
-   * overrides this with its run registry.
+   * Owner of a run this process tracks, or undefined. Native engine runs are tracked by
+   * the run registry until auto-cleanup clears their replay history. DurableAgent
+   * overrides this with the same registry lookup.
    * @internal
    */
   __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
-    return this.__getPublishedRunOwner(runId);
+    if (!this.__hasDurableExecution()) return this.__getPublishedRunOwner(runId);
+    if (!this.executionRunRegistry.has(runId)) return undefined;
+    return { ...this.executionRunRegistry.getMemoryInfo(runId) };
+  }
+
+  /**
+   * Owner of an engine run whose replay history is still retained: the local owner,
+   * else the shared record, including legacy records without stream status.
+   * Undefined once the run's topic is cleared or when no engine is selected. Only used
+   * for replay access. Rejects when the shared cache cannot be read. DurableAgent overrides this.
+   * @internal
+   */
+  async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
+    if (!this.__hasDurableExecution()) return undefined;
+    const local = this.__getRunOwner(runId);
+    if (local) return local;
+    const shared = await readDurableReplayOwner(
+      this.__getStreamBus(true)!.getRunRecordCache(this.__usesSharedRunLog()),
+      this.id,
+      runId,
+    );
+    if (!shared) return undefined;
+    return { resourceId: shared.resourceId, threadId: shared.threadId };
   }
 
   /**
@@ -2299,6 +2322,14 @@ export class Agent<
    * @internal Used by the server's observe and run abort routes.
    */
   async __getRunRecord(runId: string): Promise<AgentRunRecord | undefined> {
+    if (this.__hasDurableExecution()) {
+      return readAgentRunRecord(
+        this.__getStreamBus(true)!.getRunRecordCache(this.__usesSharedRunLog()),
+        this.id,
+        runId,
+        durableReplayOwnerKey(this.id, runId),
+      );
+    }
     const local = this.#publishedRuns.get(runId);
     if (local) {
       const { resourceId, threadId } = local;

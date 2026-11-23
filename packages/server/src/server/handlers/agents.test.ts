@@ -3324,6 +3324,55 @@ describe('Agent Routes Authorization', () => {
       vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({});
     });
 
+    describe.each(['default', 'evented'] as const)('native Agent on the %s execution engine', executionEngine => {
+      let nativeAgent: Agent<any, any, any, any>;
+
+      beforeEach(() => {
+        nativeAgent = new Agent({
+          id: 'native-durable-agent',
+          name: 'native-durable-agent',
+          instructions: 'test-instructions',
+          model: { specificationVersion: 'v2' } as any,
+          durable: { executionEngine },
+        });
+        mastra = new Mastra({ agents: { 'native-durable-agent': nativeAgent }, storage, logger: false });
+      });
+
+      /** A finished run whose workflow rows are gone but whose replay history is still retained. */
+      async function retainReplay(runId: string, resourceId: string) {
+        const cache = nativeAgent.__getStreamBus(true)!.getRunRecordCache(nativeAgent.__usesSharedRunLog());
+        await cache.set(`agent.durable.replay-owner.native-durable-agent.${runId}`, {
+          agentId: 'native-durable-agent',
+          runId,
+          resourceId,
+        });
+      }
+
+      const observeAs = (runId: string, resourceId: string) =>
+        OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'native-durable-agent',
+          runId,
+          requestContext: createContextWithReservedKeys({ resourceId }),
+        } as any);
+
+      it('lets the owner reconnect to a retained replay', async () => {
+        const runId = crypto.randomUUID();
+        await retainReplay(runId, 'user-a');
+
+        const stream = (await observeAs(runId, 'user-a')) as ReadableStream<any>;
+        expect(stream).toBeInstanceOf(ReadableStream);
+        await stream.cancel();
+      });
+
+      it('rejects another resource reconnecting to a retained replay', async () => {
+        const runId = crypto.randomUUID();
+        await retainReplay(runId, 'user-a');
+
+        await expect(observeAs(runId, 'user-b')).rejects.toMatchObject({ status: 403 });
+      });
+    });
+
     describe('authorization', () => {
       const observeAs = (runId: string, resourceId?: string) =>
         OBSERVE_AGENT_STREAM_ROUTE.handler({
