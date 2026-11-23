@@ -3,14 +3,18 @@
  * evented engine, real in-memory storage, and a real workflow as the target.
  */
 import { randomUUID } from 'node:crypto';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { createScorer } from '../../../evals/base';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import { createStep, createWorkflow } from '../../../workflows';
+import { EXPERIMENT_NOT_DURABLE } from '../durable';
+import type { StartExperimentAsyncConfig } from '../types';
 import { EXPERIMENT_WORKFLOW_ID } from '../workflow';
 import type { ExperimentWorkflowInput } from '../workflow';
 
@@ -88,16 +92,19 @@ async function resultRows(storage: InMemoryStore, experimentId: string) {
   return results;
 }
 
-async function workflowStatus(storage: InMemoryStore, runId: string) {
+async function workflowStatus(storage: InMemoryStore, runId: string, timeoutMs = 5_000) {
   const workflows = (await storage.getStore('workflows'))!;
-  const deadline = Date.now() + 5_000;
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: EXPERIMENT_WORKFLOW_ID, runId });
     if (snapshot && snapshot.status !== 'running' && snapshot.status !== 'pending') return snapshot.status;
     await new Promise(resolve => setTimeout(resolve, 20));
   }
-  return 'running';
+  const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: EXPERIMENT_WORKFLOW_ID, runId });
+  return snapshot ? 'running' : 'no run';
 }
+
+const alwaysOne = createScorer({ id: 'always-one', description: 'Scores every item 1' }).generateScore(() => 1);
 
 describe('durable experiment workflow', () => {
   const started: Mastra[] = [];
@@ -110,6 +117,7 @@ describe('durable experiment workflow', () => {
     const storage = new InMemoryStore();
     const mastra = new Mastra({
       workflows: { 'echo-target': echoTarget(log, delayMs) },
+      scorers: { 'always-one': alwaysOne },
       storage,
       pubsub: new EventEmitterPubSub(),
       logger: false,
@@ -218,6 +226,81 @@ describe('durable experiment workflow', () => {
     expect(await waitForExperiment(storage, input.experimentId)).toMatchObject({
       status: 'completed',
       succeededCount: 2,
+    });
+  });
+
+  describe('startExperimentAsync({ durable: true })', () => {
+    const echoConfig = { targetType: 'workflow', targetId: 'echo-target' } as const;
+
+    it('runs the experiment as the experiment workflow, keyed by the experiment id', async () => {
+      const log = newLog();
+      const { mastra, storage } = await setup(log);
+      const dataset = await mastra.datasets.create({ name: 'durable-start' });
+      await dataset.addItems({ items: ['paris', 'boom', 'tokyo'].map(text => ({ input: { text } })) });
+
+      const started = await dataset.startExperimentAsync({
+        ...echoConfig,
+        durable: true,
+        maxConcurrency: 2,
+        scorers: ['always-one'],
+      });
+
+      expect(started).toMatchObject({ status: 'pending', totalItems: 3 });
+      const experiment = await waitForExperiment(storage, started.experimentId);
+      expect(experiment).toMatchObject({
+        status: 'completed',
+        succeededCount: 2,
+        failedCount: 1,
+        scorerIds: ['always-one'],
+      });
+      expect(await workflowStatus(storage, started.experimentId)).toBe('success');
+      expect(log.calls.sort()).toEqual(['boom', 'paris', 'tokyo']);
+
+      const scores = (await storage.getStore('scores'))!;
+      const { scores: rows } = await scores.listScoresByRunId({
+        runId: started.experimentId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(rows.map(row => row.score)).toEqual([1, 1, 1]);
+    });
+
+    it('keeps the in-process path without the option', async () => {
+      const log = newLog();
+      const { mastra, storage } = await setup(log);
+      const dataset = await mastra.datasets.create({ name: 'in-process-start' });
+      await dataset.addItems({ items: [{ input: { text: 'paris' } }] });
+
+      const started = await dataset.startExperimentAsync(echoConfig);
+
+      expect(await waitForExperiment(storage, started.experimentId)).toMatchObject({ status: 'completed' });
+      expect(await workflowStatus(storage, started.experimentId, 0)).toBe('no run');
+    });
+
+    const rejected: [option: string, config: Partial<StartExperimentAsyncConfig>][] = [
+      ['task', { targetType: undefined, targetId: undefined, task: ({ input }) => input }],
+      ['targetType', { targetType: undefined, targetId: undefined }],
+      ['beforeAll', { beforeAll: () => {} }],
+      ['beforeEach', { beforeEach: () => {} }],
+      ['afterEach', { afterEach: () => {} }],
+      ['afterAll', { afterAll: () => {} }],
+      ['onEvent', { onEvent: async () => {} }],
+      ['signal', { signal: new AbortController().signal }],
+      ['scorers', { scorers: [alwaysOne] }],
+      ['persistence', { persistence: { experiments: 'none' } }],
+      ['persistence', { persistence: { scores: 'none' } }],
+      ['agentModel', { targetType: 'agent', targetId: 'any-agent', agentModel: new MockLanguageModelV2() }],
+    ];
+
+    it.each(rejected)('rejects `%s` before creating anything', async (option, overrides) => {
+      const { mastra } = await setup(newLog());
+      const dataset = await mastra.datasets.create({ name: `rejects-${option}` });
+      await dataset.addItems({ items: [{ input: { text: 'paris' } }] });
+
+      const start = dataset.startExperimentAsync({ ...echoConfig, ...overrides, durable: true });
+
+      await expect(start).rejects.toMatchObject({ id: EXPERIMENT_NOT_DURABLE });
+      await expect(start).rejects.toThrow(`\`${option}\``);
+      expect((await dataset.listExperiments()).experiments).toEqual([]);
     });
   });
 });

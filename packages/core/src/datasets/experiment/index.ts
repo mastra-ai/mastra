@@ -64,8 +64,10 @@ export type {
   ItemWithScores,
   ItemResult,
   ScorerResult,
+  StartExperimentAsyncConfig,
   StartExperimentConfig,
 } from './types';
+export { EXPERIMENT_NOT_DURABLE } from './durable';
 export type {
   ExperimentEvent,
   ExperimentEventObserver,

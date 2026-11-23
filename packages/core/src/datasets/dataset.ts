@@ -31,10 +31,17 @@ import type {
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/agent-model.js';
+import { durableRunOptions } from './experiment/durable.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import type { ExperimentItemRunOptions } from './experiment/item.js';
 import { experimentScoreId } from './experiment/scorer.js';
-import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
+import type {
+  ExperimentConfig,
+  StartExperimentAsyncConfig,
+  StartExperimentConfig,
+  ExperimentSummary,
+} from './experiment/types.js';
+import { EXPERIMENT_WORKFLOW_ID } from './experiment/workflow-id.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
 
 /**
@@ -384,11 +391,16 @@ export class Dataset {
   /**
    * Start an experiment asynchronously (fire-and-forget).
    * Returns immediately with the experiment ID and pending status.
+   *
+   * With `durable: true` the experiment runs as an evented workflow whose run
+   * id is the experiment id; see {@link StartExperimentAsyncConfig.durable}.
    */
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
-    config: StartExperimentConfig<I, O, E>,
+    asyncConfig: StartExperimentAsyncConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
+    const { durable, ...config } = asyncConfig;
     assertAgentModelTarget(config);
+    const durableRun = durable ? durableRunOptions(config) : undefined;
     const persistExperiments = config.persistence?.experiments !== 'none';
     const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
@@ -439,7 +451,28 @@ export class Dataset {
         agentVersion: config.agentVersion,
         organizationId: dataset.organizationId ?? null,
         projectId: dataset.projectId ?? null,
+        ...(durableRun ? { scorerIds: durableRun.scorerIds ?? null } : {}),
       });
+    }
+
+    if (durableRun) {
+      try {
+        await this.#mastra.__ensureExperimentWorkflow();
+        const run = await this.#mastra.__getInternalWorkflow(EXPERIMENT_WORKFLOW_ID).createRun({ runId: experimentId });
+        await run.startAsync({
+          inputData: {
+            datasetId: this.id,
+            experimentId,
+            organizationId: this.#scope?.organizationId,
+            projectId: this.#scope?.projectId,
+            ...durableRun.runOptions,
+          },
+        });
+      } catch (err) {
+        await experimentsStore?.updateExperiment({ id: experimentId, status: 'failed', completedAt: new Date() });
+        throw err;
+      }
+      return { experimentId, status: 'pending' as const, totalItems: items.length };
     }
 
     // Fire-and-forget — runExperiment resolves the applicable run, item, or dataset scorer source
