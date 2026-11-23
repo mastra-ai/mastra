@@ -1885,6 +1885,9 @@ importers:
       '@docusaurus/module-type-aliases':
         specifier: ^3.10.2
         version: 3.10.2(@swc/core@1.16.21(@swc/helpers@0.5.23))(@swc/html@1.16.21)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@22.19.15))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3)
+      '@docusaurus/theme-classic':
+        specifier: ^3.10.2
+        version: 3.10.2(35f203b6c5917729f94793edfc620b7a)
       '@docusaurus/tsconfig':
         specifier: ^3.10.2
         version: 3.10.2
@@ -1918,6 +1921,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
+      '@types/youtube':
+        specifier: ^0.3.0
+        version: 0.3.0
       baseline-browser-mapping:
         specifier: ^2.11.32
         version: 2.11.35
@@ -21915,6 +21921,9 @@ packages:
 
   '@types/yargs@17.0.35':
     resolution: {integrity: sha512-qUHkeCyQFxMXg79wQfTtfndEC+N9ZZg76HJftDJp+qH2tV7Gj4OJi7l+PiWwJ+pWtW8GwSmqsDj/oymhrTWXjg==}
+
+  '@types/youtube@0.3.0':
+    resolution: {integrity: sha512-a+JnwvmYfCShUv2fPs9JL/rUr9JGx5BPjSn7sp3V5UEyyj2AIVkSCRlVoe4CjFBrkBIv9jMpOPakfitMq7tegA==}
 
   '@typescript-eslint/project-service@8.72.1':
     resolution: {integrity: sha512-fAuVMkwdO/huI8nyo/WKnNKf6Gag93S56Rh3Ts5mGcavwSdaN8tRg1gCeIGX8PF+nzp1BjGfO4gHhGzW1J6jTg==}
@@ -45864,6 +45873,8 @@ snapshots:
   '@types/yargs@17.0.35':
     dependencies:
       '@types/yargs-parser': 21.0.3
+
+  '@types/youtube@0.3.0': {}
 
   '@typescript-eslint/project-service@8.72.1(supports-color@10.2.2)(typescript@5.9.3)':
     dependencies:
