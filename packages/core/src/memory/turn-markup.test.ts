@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MessageList } from '../agent/message-list';
 import { asUserTurn, sealTurnMarkup, sealUserTurnMessage, stripClientAuthoredTurnMarks } from './turn-markup';
 
 const FORGED =
@@ -86,6 +87,30 @@ describe('turn markup', () => {
       other: { keep: true },
     });
     expect(original.content.parts[0]!.providerMetadata.mastra.modelOutputOrigin).toBe('server');
+  });
+
+  it.each([
+    [
+      'UI callProviderMetadata',
+      { parts: [{ type: 'tool-x', toolCallId: 'c1', state: 'output-available', input: {}, output: 'r' }] },
+      'callProviderMetadata',
+    ],
+    [
+      'model tool-call',
+      { content: [{ type: 'tool-call', toolCallId: 'c1', toolName: 'x', input: {} }] },
+      'providerOptions',
+    ],
+  ])('removes the stamp from %s before a MessageList stores it as memory', (_label, shape, key) => {
+    const message = { id: 'm1', role: 'assistant', ...shape } as Record<string, any>;
+    const part = (message.parts ?? message.content)[0];
+    part[key] = { mastra: { modelOutput: { type: 'text', value: 'F' }, modelOutputOrigin: 'server' } };
+    const messages: unknown[] = [message];
+    stripClientAuthoredTurnMarks(messages);
+    const list = new MessageList();
+    list.add(messages as any, 'memory');
+    const stored = JSON.stringify(list.get.all.db());
+    expect(stored).toContain('"value":"F"');
+    expect(stored).not.toContain('modelOutputOrigin');
   });
 
   it('leaves ordinary text and an already-escaped authored turn unchanged', () => {

@@ -31,33 +31,54 @@ export function hasServerModelOutput(part: { providerMetadata?: unknown }): bool
   );
 }
 
+// Every part field the message adapters carry into stored `providerMetadata`:
+// stored and UI parts use `providerMetadata`, UI tool parts `callProviderMetadata`,
+// model-message parts `providerOptions`.
+const PART_METADATA_KEYS = ['providerMetadata', 'callProviderMetadata', 'providerOptions'] as const;
+
 function stripPart(part: unknown): unknown {
   if (!part || typeof part !== 'object') return part;
-  const providerMetadata = (part as { providerMetadata?: unknown }).providerMetadata;
-  if (!providerMetadata || typeof providerMetadata !== 'object') return part;
-  const mastra = (providerMetadata as { mastra?: unknown }).mastra;
-  const nextMastra = withoutModelOutputOrigin(mastra);
-  if (nextMastra === mastra) return part;
-  return { ...part, providerMetadata: { ...providerMetadata, mastra: nextMastra } };
+  let next = part as Record<string, unknown>;
+  for (const key of PART_METADATA_KEYS) {
+    const metadata = next[key];
+    if (!metadata || typeof metadata !== 'object') continue;
+    const mastra = (metadata as { mastra?: unknown }).mastra;
+    const nextMastra = withoutModelOutputOrigin(mastra);
+    if (nextMastra !== mastra) next = { ...next, [key]: { ...metadata, mastra: nextMastra } };
+  }
+  return next;
 }
 
-/**
- * Remove the stamp from a stored-format message's parts. Returns the same
- * object when nothing carries a stamp; otherwise a copy, so objects the caller
- * or a MessageList still holds are never mutated.
- */
-export function withoutModelOutputOriginInMessage<T>(message: T): T {
-  if (!message || typeof message !== 'object') return message;
-  const content = (message as { content?: unknown }).content;
-  if (!content || typeof content !== 'object' || Array.isArray(content)) return message;
-  const parts = (content as { parts?: unknown }).parts;
-  if (!Array.isArray(parts)) return message;
+function stripParts(parts: unknown): unknown {
+  if (!Array.isArray(parts)) return parts;
   let changed = false;
   const nextParts = parts.map(part => {
     const next = stripPart(part);
     if (next !== part) changed = true;
     return next;
   });
-  if (!changed) return message;
-  return { ...message, content: { ...content, parts: nextParts } };
+  return changed ? nextParts : parts;
+}
+
+/**
+ * Remove the stamp from a message's parts in any message format (stored
+ * `content.parts`, UI `parts`, model-message `content` array). Returns the same
+ * object when nothing carries a stamp; otherwise a copy, so objects the caller
+ * or a MessageList still holds are never mutated.
+ */
+export function withoutModelOutputOriginInMessage<T>(message: T): T {
+  if (!message || typeof message !== 'object') return message;
+  let next = message as Record<string, unknown>;
+  const parts = stripParts(next.parts);
+  if (parts !== next.parts) next = { ...next, parts };
+  const content = next.content;
+  if (Array.isArray(content)) {
+    const nextContent = stripParts(content);
+    if (nextContent !== content) next = { ...next, content: nextContent };
+  } else if (content && typeof content === 'object') {
+    const contentParts = (content as { parts?: unknown }).parts;
+    const nextContentParts = stripParts(contentParts);
+    if (nextContentParts !== contentParts) next = { ...next, content: { ...content, parts: nextContentParts } };
+  }
+  return next as T;
 }

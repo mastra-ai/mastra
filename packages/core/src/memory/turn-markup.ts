@@ -76,7 +76,7 @@ function withoutUserTurn(metadata: unknown): unknown {
 
 /**
  * Drop client-supplied trust marks: the authored-turn mark and the
- * `mastra.modelOutputOrigin` stamp on stored-format parts. In-process
+ * `mastra.modelOutputOrigin` stamp on message parts. In-process
  * `asUserTurn` calls are not passed through this.
  */
 export function stripClientAuthoredTurnMarks(messages: unknown): void {
