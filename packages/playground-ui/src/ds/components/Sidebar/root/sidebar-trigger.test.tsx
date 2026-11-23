@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SidebarSearchTrigger } from '../header/sidebar-search-trigger';
+import { useSidebar } from './sidebar-context';
 import { SidebarProvider } from './sidebar-provider';
 import { SidebarTrigger } from './sidebar-trigger';
 import { TooltipProvider } from '@/ds/components/Tooltip';
@@ -44,7 +47,7 @@ describe('SidebarTrigger tooltip', () => {
     fireEvent.focus(screen.getByRole('button', { name: 'Toggle sidebar' }));
 
     const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.textContent).toContain('Toggle Sidebar');
+    expect(tooltip.textContent).toContain('Toggle sidebar');
     expect(tooltip.querySelector('kbd')?.textContent).toBe('[');
   });
 });
@@ -65,5 +68,48 @@ describe('SidebarSearchTrigger tooltip', () => {
     const tooltip = await screen.findByRole('tooltip');
     expect(tooltip.textContent).toContain('Search');
     expect(tooltip.querySelector('kbd')?.textContent).toBe('⌘ K');
+  });
+});
+
+describe('SidebarProvider on a phone', () => {
+  it('knows it is on a phone from the first render, so phone-only controls never pop in', () => {
+    mockMatchMedia(true);
+    const seen: boolean[] = [];
+    function Probe() {
+      seen.push(useSidebar().isMobile);
+      return null;
+    }
+
+    render(
+      <SidebarProvider>
+        <Probe />
+      </SidebarProvider>,
+    );
+
+    expect(seen[0]).toBe(true);
+  });
+
+  it('hydrates server HTML on a phone without a mismatch, then switches to the phone layout', async () => {
+    const tree = (
+      <TooltipProvider>
+        <SidebarProvider>
+          <SidebarTrigger />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+    mockMatchMedia(false);
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(tree);
+    document.body.appendChild(container);
+    mockMatchMedia(true);
+    const hydrationErrors: unknown[] = [];
+
+    await act(async () => {
+      hydrateRoot(container, tree, { onRecoverableError: error => hydrationErrors.push(error) });
+    });
+
+    expect(hydrationErrors).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
+    container.remove();
   });
 });

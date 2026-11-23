@@ -1,41 +1,36 @@
-import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
-import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { SpanRecord } from '../types';
-import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
-import {
-  SpanErrorRenderer,
-  SpanInputRenderer,
-  SpanOutputRenderer,
-  SpanPayloadSection,
-  SpanProcessorAttributes,
-} from './span-payload';
-import { asCoreSpan } from './span-payload/span-payload-registry';
-import { SpanSummaryDescription } from './span-summary-description';
-import { SpanTokenUsage } from './span-token-usage';
-import type { TokenUsage } from './span-token-usage';
-import { TraceIdButton } from './trace-id-button';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { DataPanel } from '@/ds/components/DataPanel';
-import { Notice } from '@/ds/components/Notice';
-import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
-import { cn } from '@/lib/utils';
+import type { SpanRecord, SpanTab, TraceSpanRecord } from '../types';
+import { SpanDataPanel } from './span-data-panel';
+import type { RegisteredTools } from './span-payload/span-tools-section';
+import type { TraceNavigation } from './trace-navigation';
+import type { TraceToolCallsProps } from './trace-tool-calls';
 
-// Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
-const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
-
-export interface SpanDataPanelViewProps {
+export interface SpanDataPanelViewProps extends TraceToolCallsProps {
   traceId: string;
   spanId: string;
-  /** Full span record. Caller fetches via useSpanDetail. */
+  /** Full span record (`getSpan`). The panel never fetches: the host hands it down (Studio: `useSpanDetail`). */
   span: SpanRecord | undefined;
   isLoading?: boolean;
+  /**
+   * Every span of the trace with its payload (`getTrace`). The Output tab pairs each tool call the span
+   * requested with the result its tool span recorded; without it, the calls show no result.
+   */
+  traceSpans?: TraceSpanRecord[];
+  /** The tool registry (`listTools`), so the tools a span offered link to their pages. */
+  registeredTools?: RegisteredTools;
+  /** Previous/next buttons show only when one is provided; omit both where a span tree already navigates. */
   onPrevious?: () => void;
   onNext?: () => void;
   /** When provided, an × button in the header closes the span column. */
   onClose?: () => void;
-  activeTab?: string;
-  onTabChange?: (tab: string) => void;
+  /**
+   * When provided, a "Go to trace" button in the header calls it with the span's ids.
+   * The caller decides where the trace opens (e.g. its own traces route).
+   */
+  onShowTrace?: (span: { traceId: string; spanId: string }) => void;
+  /** Controls the open tab; the panel keeps its own when omitted. Defaults to Details. */
+  activeTab?: SpanTab;
+  onTabChange?: (tab: SpanTab) => void;
   /**
    * When provided, a "Feedback" tab appears; the slot receives the loaded span and renders
    * whatever feedback UI the consumer wants.
@@ -43,244 +38,79 @@ export interface SpanDataPanelViewProps {
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
+  /** Where the span opens its tools, delegated agents and workflows; defaults to the navigation of the root around it. */
+  navigation?: TraceNavigation;
   /**
-   * Whether this span is the displayed root of the current view (trace root or
-   * branch anchor). Controls visibility of trace-level metadata fields. Defaults
-   * to `span.parentSpanId == null` (trace case) when omitted.
+   * Replaces the Input tab, e.g. with a part that loads the tool registry when the tab opens (Studio:
+   * `LiveSpanInput`). `registeredTools` is then unused.
    */
-  isAnchor?: boolean;
+  input?: ReactNode;
+  /**
+   * Replaces the Output tab, e.g. with a part that loads the trace's spans when the tab opens (Studio:
+   * `LiveSpanOutput`). `traceSpans`, `mcpAppTools` and `renderToolCall` are then unused.
+   */
+  output?: ReactNode;
   /** Extra classes for the panel root (e.g. flattening the card when nested in the trace panel). */
   className?: string;
 }
 
+/**
+ * The standard span detail: a ready-made composition of `SpanDataPanel` parts with every tab. Compose
+ * `SpanDataPanel` directly to drop, reorder or replace parts.
+ */
 export function SpanDataPanelView({
   traceId,
   spanId,
   span,
   isLoading,
+  traceSpans,
+  registeredTools,
   onPrevious,
   onNext,
   onClose,
+  onShowTrace,
   activeTab,
   onTabChange,
   feedbackTabSlot,
   feedbackTabBadge,
-  isAnchor,
+  mcpAppTools,
+  renderToolCall,
+  navigation,
+  input,
+  output,
   className,
 }: SpanDataPanelViewProps) {
-  // Not a DataPanel: this is the span column rendered inside `TraceDataPanelView`,
-  // which already provides the panel chrome.
   return (
-    <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
-      <DataPanel.Header>
-        <DataPanel.HeaderContent>
-          <DataPanel.Heading>
-            Span
-            <TraceIdButton id={spanId} />
-          </DataPanel.Heading>
-          {span && <SpanSummaryDescription span={span} />}
-        </DataPanel.HeaderContent>
-        <DataPanel.HeaderActions>
-          <DataPanel.NextPrevNav
-            onPrevious={onPrevious}
-            onNext={onNext}
-            previousLabel="Go to previous span"
-            nextLabel="Go to next span"
-          />
-          {onClose && <DataPanel.CloseButton icon="x" onClick={onClose} label="Close span" tooltip="Close span" />}
-        </DataPanel.HeaderActions>
-      </DataPanel.Header>
-
-      {isLoading ? (
-        <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>
-      ) : !span ? (
-        <DataPanel.NoData>Span not found.</DataPanel.NoData>
-      ) : (
-        <SpanDataPanelContent
-          span={span}
-          traceId={traceId}
-          spanId={spanId}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          feedbackTabSlot={feedbackTabSlot}
-          feedbackTabBadge={feedbackTabBadge}
-          isAnchor={isAnchor}
-        />
-      )}
-    </section>
-  );
-}
-
-function SpanDataPanelContent({
-  span,
-  traceId,
-  spanId,
-  activeTab,
-  onTabChange,
-  feedbackTabSlot,
-  feedbackTabBadge,
-  isAnchor,
-}: {
-  span: SpanRecord;
-  traceId: string;
-  spanId: string;
-  activeTab?: string;
-  onTabChange?: (tab: string) => void;
-  feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  feedbackTabBadge?: ReactNode;
-  isAnchor?: boolean;
-}) {
-  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
-  const usage = span.attributes?.usage as TokenUsage | undefined;
-  const hasContext =
-    (isAnchor ?? span.parentSpanId == null) &&
-    Boolean(
-      span.tags?.length || span.sessionId || span.requestId || span.userId || span.organizationId || span.experimentId,
-    );
-
-  const detailsBody = (
-    <>
-      {isTokenLimitExceeded(span) && (
-        <div className="mb-3">
-          <Notice variant="warning" title="Token Limit Exceeded">
-            <Notice.Message>{getTokenLimitMessage(span)}</Notice.Message>
-          </Notice>
-        </div>
-      )}
-
-      <SpanPayloadSection title="Error" raw={span.error} framed={false} className="mb-3">
-        <SpanErrorRenderer span={span} />
-      </SpanPayloadSection>
-
-      {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
-
-      {hasContext && (
-        <DataKeysAndValues>
-          {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
-           *  lightweight payload, so they only have values once the full span is loaded. */}
-          {(isAnchor ?? span.parentSpanId == null) && (
+    <SpanDataPanel
+      traceId={traceId}
+      spanId={spanId}
+      span={span}
+      isLoading={isLoading}
+      activeTab={activeTab}
+      onTabChange={onTabChange}
+      className={className}
+      navigation={navigation}
+      header={
+        <SpanDataPanel.Header
+          identity={<SpanDataPanel.Identity />}
+          actions={
             <>
-              {span.tags && span.tags.length > 0 && (
-                <>
-                  <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
-                  <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
-                </>
-              )}
-              {span.sessionId && (
-                <>
-                  <DataKeysAndValues.Key>Session Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Session Id to clipboard"
-                    copyValue={span.sessionId}
-                  >
-                    {span.sessionId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.requestId && (
-                <>
-                  <DataKeysAndValues.Key>Request Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Request Id to clipboard"
-                    copyValue={span.requestId}
-                  >
-                    {span.requestId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.userId && (
-                <>
-                  <DataKeysAndValues.Key>User Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy User Id to clipboard" copyValue={span.userId}>
-                    {span.userId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.organizationId && (
-                <>
-                  <DataKeysAndValues.Key>Organization Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Organization Id to clipboard"
-                    copyValue={span.organizationId}
-                  >
-                    {span.organizationId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.experimentId && (
-                <>
-                  <DataKeysAndValues.Key>Experiment Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Experiment Id to clipboard"
-                    copyValue={span.experimentId}
-                  >
-                    {span.experimentId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
+              {onShowTrace && <SpanDataPanel.ShowTraceButton onShowTrace={onShowTrace} />}
+              <SpanDataPanel.Navigation onPrevious={onPrevious} onNext={onNext} />
+              {onClose && <SpanDataPanel.CloseButton onClose={onClose} />}
             </>
-          )}
-        </DataKeysAndValues>
-      )}
-
-      <div className={cn('grid gap-4', hasContext && 'mt-4')}>
-        <SpanPayloadSection
-          title="Input"
-          icon={<FileInputIcon />}
-          raw={span.input}
-          hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
-        >
-          <SpanInputRenderer span={span} />
-        </SpanPayloadSection>
-        <SpanPayloadSection
-          title="Output"
-          icon={<FileOutputIcon />}
-          raw={span.output}
-          hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
-        >
-          <SpanOutputRenderer span={span} />
-        </SpanPayloadSection>
-        <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
-          {null}
-        </SpanPayloadSection>
-        <SpanPayloadSection
-          title="Attributes"
-          icon={<BracesIcon />}
-          raw={span.attributes}
-          hasPreview={describeProcessorPipeline(asCoreSpan(span)) !== undefined}
-        >
-          <SpanProcessorAttributes span={span} />
-        </SpanPayloadSection>
-      </div>
-    </>
-  );
-
-  // No extra tab slots → render details directly without the Tabs/TabList wrapper.
-  if (!feedbackTabSlot) {
-    return <div className={BODY_CLASS}>{detailsBody}</div>;
-  }
-
-  // Same chrome as the trace column: tab list in a header row, content scrolling beneath it.
-  return (
-    <Tabs
-      defaultTab="details"
-      value={activeTab}
-      onValueChange={onTabChange}
-      className="grid min-h-0 flex-1 grid-rows-[auto_1fr]"
-    >
-      <DataPanel.Header>
-        <TabList variant="pill-ghost" size="sm">
-          <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
-        </TabList>
-      </DataPanel.Header>
-
-      <TabContent value="details" flush>
-        <div className={BODY_CLASS}>{detailsBody}</div>
-      </TabContent>
-      <TabContent value="feedback" flush>
-        <div className={BODY_CLASS}>{feedbackTabSlot({ span, traceId, spanId })}</div>
-      </TabContent>
-    </Tabs>
+          }
+        />
+      }
+      details={<SpanDataPanel.Details />}
+      input={input ?? <SpanDataPanel.Input registeredTools={registeredTools} />}
+      output={
+        output ?? (
+          <SpanDataPanel.Output traceSpans={traceSpans} mcpAppTools={mcpAppTools} renderToolCall={renderToolCall} />
+        )
+      }
+      feedback={span && feedbackTabSlot?.({ span, traceId, spanId })}
+      feedbackCount={feedbackTabBadge}
+    />
   );
 }

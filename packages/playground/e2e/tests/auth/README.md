@@ -7,7 +7,6 @@ End-to-end tests for WorkOS authentication and role-based access control (RBAC) 
 ```
 tests/auth/
 ├── README.md                 # This file
-├── infrastructure.spec.ts    # F001: Test infrastructure validation
 ├── login.spec.ts            # F002: Login flow tests (TODO)
 ├── signup.spec.ts           # F003: Sign-up flow tests (TODO)
 ├── logout.spec.ts           # F004: Logout flow tests (TODO)
@@ -87,7 +86,7 @@ await setupMockAuth(page, {
 CI=true npx playwright test -c playwright.config.ts tests/auth/
 
 # Run specific test file
-CI=true npx playwright test -c playwright.config.ts tests/auth/infrastructure.spec.ts
+CI=true npx playwright test -c playwright.config.ts tests/auth/login-flow.spec.ts
 
 # Run with UI mode for debugging
 npx playwright test --ui tests/auth/
@@ -110,7 +109,6 @@ For mocked tests (default), no environment variables are needed.
 
 ### P0 (Critical)
 
-- **F001**: E2E Test Infrastructure Setup
 - **F002**: Login Flow E2E Tests
 - **F005**: Admin Role E2E Tests
 - **F006**: Member Role E2E Tests

@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 77 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 81 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -359,9 +359,21 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 2.85,
     "outputCost": 14.25
+  },
+  {
+    "model": "deepinfra/moonshotai/Kimi-K3.1-Pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "deepinfra/openai/gpt-oss-120b",
@@ -592,16 +604,28 @@ for await (const chunk of stream) {
     "outputCost": 4.951
   },
   {
-    "model": "deepinfra/stepfun-ai/Step-5-Preview",
+    "model": "deepinfra/Qwen/Qwen4-Max",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 1.413,
+    "outputCost": 4.24
+  },
+  {
+    "model": "deepinfra/tencent/Hy4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 1000000,
-    "inputCost": 1,
-    "outputCost": 2.7
+    "maxOutput": 65536,
+    "inputCost": 0.834,
+    "outputCost": 2.501
   },
   {
     "model": "deepinfra/tencent/Hy4-preview",
@@ -616,16 +640,16 @@ for await (const chunk of stream) {
     "outputCost": 2.501
   },
   {
-    "model": "deepinfra/thinkingmachines/Inkling",
+    "model": "deepinfra/thinkingmachines/Inkling-2-Small",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 524288,
-    "maxOutput": 1048576,
-    "inputCost": 0.95,
-    "outputCost": 4.05
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1
   },
   {
     "model": "deepinfra/thinkingmachines/Inkling-Small",
@@ -635,7 +659,7 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 524288,
-    "maxOutput": 1048576,
+    "maxOutput": 524288,
     "inputCost": 0.45,
     "outputCost": 1.2
   },
@@ -733,6 +757,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -749,6 +775,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

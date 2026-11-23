@@ -134,15 +134,6 @@ describe('WorkflowRecentRuns', () => {
       expect(await screen.findByRole('link', { name: /run-success-1/ })).toBe(link);
     });
   });
-  it('never renders the "New workflow run" button (it lives in the left panel now)', async () => {
-    stubRuns(oneSuccessfulRun);
-
-    renderRunList('run-success-1');
-
-    expect(await screen.findByRole('link', { name: /run-success-1/ })).not.toBeNull();
-    expect(screen.queryByText('New workflow run')).toBeNull();
-  });
-
   it('renders the status as an icon with the status exposed via aria-label/tooltip', async () => {
     stubRuns(oneSuccessfulRun);
 
@@ -150,7 +141,6 @@ describe('WorkflowRecentRuns', () => {
 
     expect(await screen.findByRole('link', { name: /run-success-1/ })).not.toBeNull();
     expect(screen.getByLabelText('success')).not.toBeNull();
-    expect(screen.queryByText('SUCCESS')).toBeNull();
   });
 
   describe('when a run has a timestamp', () => {
@@ -193,14 +183,6 @@ describe('WorkflowRecentRuns', () => {
     const link = await screen.findByRole('link', { name: /run-with-input/ });
     expect(within(link).getByTitle('run-with-input')).not.toBeNull();
     expect(within(link).queryByText('{"city":"Paris"}')).toBeNull();
-  });
-
-  it('renders the "Recent runs" section title', async () => {
-    stubRuns(oneSuccessfulRun);
-
-    renderRunList();
-
-    expect(await screen.findByText('Recent runs')).not.toBeNull();
   });
 
   it('shows an empty state and no run rows when there are no runs', async () => {

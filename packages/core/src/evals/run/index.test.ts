@@ -402,7 +402,9 @@ describe('runEvals', () => {
       expect(mockScorers[1].run).toHaveBeenCalled();
     });
 
-    it('should run scorers on individual step results', async () => {
+    // On storage v2 the first step's result is evicted by the end of the run, so its scorer only
+    // sees it if the result's lazy `steps` is loaded back from storage.
+    it.each([1, 2] as const)('should run scorers on individual step results (storage v%s)', async storageVersion => {
       const mockStep = createStep({
         id: 'test-step',
         inputSchema: z.object({ input: z.string() }),
@@ -411,15 +413,25 @@ describe('runEvals', () => {
           return { output: `Processed: ${inputData.input}` };
         },
       });
+      const passOn = (id: string) =>
+        createStep({
+          id,
+          inputSchema: z.object({ output: z.string() }),
+          outputSchema: z.object({ output: z.string() }),
+          execute: async ({ inputData }) => inputData,
+        });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        options: { validateInputs: false },
+        options: { validateInputs: false, storageVersion },
       })
         .then(mockStep)
+        .then(passOn('second-step'))
+        .then(passOn('third-step'))
         .commit();
+      const mastra = new Mastra({ workflows: { workflow }, logger: false, storage: new InMemoryStore() });
 
       // Mock the scorer to track what it receives
       const mockScorer = createMockScorer('step-scorer', 0.8);
@@ -432,7 +444,7 @@ describe('runEvals', () => {
             'test-step': [mockScorer],
           },
         },
-        target: workflow,
+        target: mastra.getWorkflow('workflow'),
       });
 
       // Verify the scorer was called with step-specific data

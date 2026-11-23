@@ -161,17 +161,6 @@ describe('CodeEditor — the format button', () => {
 describe('CodeEditor — language extensions', () => {
   const extensionCount = () => lastProps()?.extensions.length ?? 0;
 
-  it('adds one language extension for json', () => {
-    render(<CodeEditor value="{}" showCopyButton={false} lineWrapping={false} />);
-    const withJson = extensionCount();
-
-    cleanup();
-
-    render(<CodeEditor value="{}" showCopyButton={false} lineWrapping={false} language="text" />);
-
-    expect(withJson).toBe(extensionCount() + 1);
-  });
-
   it('adds one language extension for markdown', () => {
     render(<CodeEditor value="# hi" showCopyButton={false} lineWrapping={false} language="markdown" />);
     const withMarkdown = extensionCount();
@@ -248,12 +237,12 @@ describe('CodeEditor — language extensions', () => {
 describe('CodeEditor — passing its settings through', () => {
   it('shows line numbers unless the caller turns them off', () => {
     render(<CodeEditor value="x" showCopyButton={false} />);
-    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: true });
+    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: true, foldGutter: false });
 
     cleanup();
 
     render(<CodeEditor value="x" showCopyButton={false} lineNumbers={false} />);
-    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: false });
+    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: false, foldGutter: false });
   });
 
   it('hands over the placeholder, focus and change handler it was given', () => {

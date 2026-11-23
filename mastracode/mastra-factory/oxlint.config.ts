@@ -3,5 +3,5 @@ import rootConfig from '../../oxlint.config.ts';
 
 export default defineConfig({
   extends: [rootConfig],
-  ignorePatterns: ['template-out/**', 'dist/**'],
+  ignorePatterns: ['dist/**'],
 });

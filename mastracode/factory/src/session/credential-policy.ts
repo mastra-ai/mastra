@@ -4,17 +4,20 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { UUID_PATTERN } from '../routes/contracts.js';
+import { tenantOrgId } from '../routes/provider-credentials.js';
+import type { ModelDefaultRecord, ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
+import { threadRunBinding } from './session-threads.js';
+import type { ThreadRunBindings } from './session-threads.js';
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
-interface FactoryModelPolicyDependencies {
+export interface FactoryModelPolicyDependencies {
   projects: Pick<FactoryProjectsStorage, 'getById'>;
   sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId'>;
-  workItems: Pick<WorkItemsStorage, 'findRunBindingByThread'>;
+  workItems: ThreadRunBindings;
 }
 
 /** Resolve billing authority from authenticated identity and durable bindings, never session state. */
@@ -37,16 +40,14 @@ export async function resolveFactoryModelPolicy(
   const { sessionId, resourceId } = controller;
 
   const sourceSession = await deps.sourceControl.getBySessionId(sessionId);
-  const binding =
-    principal.orgId && controller.threadId
-      ? await deps.workItems.findRunBindingByThread({
-          orgId: principal.orgId,
-          resourceId,
-          sessionId,
-          threadId: controller.threadId,
-          rejectAmbiguous: true,
-        })
-      : null;
+  const binding = principal.orgId
+    ? await threadRunBinding(deps.workItems, {
+        orgId: principal.orgId,
+        resourceId,
+        sessionId,
+        threadId: controller.threadId,
+      })
+    : null;
   if (!sourceSession) {
     if (!binding && (resourceId === principal.userId || resourceId.startsWith('channel:')))
       return { tenant: principal };
@@ -85,4 +86,14 @@ export async function resolveFactoryModelPolicy(
       credentialScope: effectiveModelScope(project.modelScope, binding ? 'run' : 'session'),
     },
   };
+}
+
+/** The personal defaults a policy's tenant runs on; none on Factory routing. */
+export async function routedPersonalDefaults(
+  tenant: CredentialTenant,
+  modelDefaults: Pick<ModelDefaultsStorage, 'ensureReady' | 'get'>,
+): Promise<ModelDefaultRecord | null> {
+  if (tenant.credentialScope === 'factory') return null;
+  await modelDefaults.ensureReady();
+  return modelDefaults.get({ orgId: tenantOrgId(tenant), userId: tenant.userId });
 }

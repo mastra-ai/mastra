@@ -1,8 +1,9 @@
 {
   "extends": "../../tsconfig.node.json",
   "include": ["src/**/*", "vitest.config.ts", "tsdown.config.ts", "scripts/**/*"],
-  "exclude": ["node_modules", "**/*.test.ts"],
+  "exclude": ["node_modules", "**/*.test.ts", "src/workflows/test-utils/**"],
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "lib": ["DOM", "DOM.Iterable", "ES2023"]
   }
 }

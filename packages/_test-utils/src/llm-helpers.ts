@@ -135,9 +135,8 @@ export async function agentGenerate(
     }
 
     return agent.generate(message, transformedOptions as any);
-  } else {
-    return (agent as any).generateLegacy(message, options);
   }
+  return (agent as any).generateLegacy(message, options);
 }
 
 /**
@@ -177,9 +176,8 @@ export async function agentStream(
     }
 
     return agent.stream(message, transformedOptions as any);
-  } else {
-    return (agent as any).streamLegacy(message, options);
   }
+  return (agent as any).streamLegacy(message, options);
 }
 
 /**

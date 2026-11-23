@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { posix as posixPath } from 'node:path';
 
 import { ATTACH_TIMEOUT_MS, CommandsApiProcessHandle, CommandsApiProcessManager } from '@internal/workspace';
 import type { CommandsApi, CommandsApiHandle, CommandsApiOperation } from '@internal/workspace';
@@ -12,6 +13,7 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxNetworking,
   SandboxStartResult,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
@@ -98,6 +100,12 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   template?: PlatformSandboxTemplate;
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
+  /**
+   * Let anyone with a port's URL reach it, without signing in. Off by default:
+   * ports are private and open through a signed-in preview link. The URL is
+   * the same either way. Fixed when the sandbox is created.
+   */
+  publicPorts?: boolean;
   env?: Record<string, string>;
   timeout?: number;
   instructions?: InstructionsOption;
@@ -298,6 +306,22 @@ export type CaptureCheckpointResult =
   | { status: 'coalesced'; checkpointName: string }
   | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
 
+/** E2B's sandbox control port (envd). Never a preview. */
+const E2B_CONTROL_PORT = 49983;
+
+/** A cookie that signs a browser in to a sandbox port, in the shape browsers like Playwright accept. */
+export interface SandboxPortAuthCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  /** Unix time in seconds. */
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'Lax';
+}
+
 /**
  * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
  * (Railway destroy, quota reclamation, etc.). The client cannot recover from
@@ -347,6 +371,33 @@ function buildCommand(command: string, args?: string[]): string {
 function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9._\-/=:@]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * `command` run from `cwd` by a leading shell `cd`, with the transports left to
+ * start in the working directory. The exec transports report a `cwd` that
+ * doesn't exist as a broken connection (retried, then "transport failed"), so
+ * changing directory in the shell turns it into an ordinary failed command.
+ *
+ * A relative `cwd` resolves under `workingDirectory`. An absolute one outside it
+ * that doesn't exist falls back to the same path under `workingDirectory`: the
+ * workspace file tools read absolute paths that way (`/repo` is
+ * `<workingDirectory>/repo`), so agents pass command `cwd`s the same way.
+ */
+export function commandInCwd(command: string, cwd: string | undefined, workingDirectory: string | undefined): string {
+  if (!cwd) return command;
+  const normalize = (dir: string) => posixPath.normalize(dir).replace(/(.)\/$/, '$1');
+  const base = workingDirectory ? normalize(workingDirectory) : undefined;
+  const target = normalize(base && !cwd.startsWith('/') ? posixPath.join(base, cwd) : cwd);
+  if (target === base) return command;
+  const candidates = [target];
+  if (base && cwd.startsWith('/') && !target.startsWith(`${base}/`)) candidates.push(posixPath.join(base, target));
+  const branches = candidates.map(
+    (dir, i) => `${i === 0 ? 'if' : 'elif'} [ -d ${shellQuote(dir)} ]; then cd -- ${shellQuote(dir)} || exit 1`,
+  );
+  const tried = candidates.length > 1 ? ` (also tried ${candidates[1]})` : '';
+  const notFound = shellQuote(`Working directory not found: ${target}${tried}`);
+  return `${branches.join('; ')}; else echo ${notFound} >&2; exit 1; fi\n${command}`;
 }
 
 class PlatformProcessHandle extends ProcessHandle {
@@ -427,6 +478,11 @@ const withCommands = Symbol('withCommands');
  * process runs, `kill` stops it, and `list` reports what is running in the VM.
  */
 class PlatformCommandsProcessManager extends CommandsApiProcessManager<PlatformSandbox> {
+  async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
+    const { cwd, ...rest } = options;
+    return super.spawn(commandInCwd(command, cwd, this.sandbox.workingDirectory), rest);
+  }
+
   runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {
     return this.sandbox[withCommands](operation, fn);
   }
@@ -532,6 +588,61 @@ export class PlatformSandbox extends MastraSandbox {
     return this.status === 'running' ? this._sandboxId : undefined;
   }
 
+  /**
+   * Port URLs for a running sandbox. Ports are private by default: anyone
+   * in the sandbox's organization can open a port's URL in a browser after
+   * signing in to the platform, and anyone else is turned away. The URL
+   * doesn't expire, so it's the one to share.
+   *
+   * Absent on sandboxes whose ports can't be opened, so `supportsNetworking()`
+   * reports them correctly.
+   */
+  declare readonly networking?: SandboxNetworking;
+
+  private readonly _networking: SandboxNetworking = {
+    getPortUrl: async (port: number): Promise<string | null> => (await this._previewGrant(port))?.url ?? null,
+  };
+
+  /**
+   * A cookie that signs a browser you control, such as an agent's own
+   * browser, in to a port for an hour, so it opens the port's URL without
+   * signing in. Never share it.
+   *
+   * `null` in the same cases as `networking.getPortUrl()`.
+   */
+  async getPortAuthCookie(port: number): Promise<SandboxPortAuthCookie | null> {
+    return (await this._previewGrant(port))?.cookie ?? null;
+  }
+
+  private async _previewGrant(port: number): Promise<{ url: string; cookie: SandboxPortAuthCookie } | null> {
+    if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
+    // Only E2B-backed sandboxes serve their ports.
+    if (this._client.sandboxProvider !== 'e2b') return null;
+    const sandboxId = this.sandboxId;
+    if (!sandboxId) return null;
+    try {
+      // The proxy builds the address for the sandbox's region. The one-time
+      // sign-in link it comes with isn't needed here: it's single-use and
+      // expires after a minute, so dropping it costs nothing.
+      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/preview-grants`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ port }),
+      });
+      const { url, cookie } = (await response.json()) as { url: string; cookie: SandboxPortAuthCookie };
+      return { url: `${new URL(url).origin}/`, cookie };
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.status === 410) {
+        // Destroyed upstream: stop pointing at it, unless a new sandbox replaced it meanwhile.
+        if (this._sandboxId === sandboxId) this._clearDestroyedState(sandboxId);
+        return null;
+      }
+      // A platform that doesn't serve previews yet.
+      if (error instanceof PlatformApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
@@ -544,6 +655,7 @@ export class PlatformSandbox extends MastraSandbox {
   private _templateResolutionInFlight?: Promise<void>;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
+  private readonly _publicPorts?: boolean;
   private readonly _env: Record<string, string>;
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
@@ -638,6 +750,8 @@ export class PlatformSandbox extends MastraSandbox {
     this._hasRecoveryKey = options.id !== undefined;
     this.id = options.id ?? this.generateId();
     this._client = new PlatformClient(options);
+    // Only E2B-backed sandboxes serve their ports.
+    if (this._client.sandboxProvider === 'e2b') this.networking = this._networking;
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
@@ -647,6 +761,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._template = options.template;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
+    this._publicPorts = options.publicPorts;
     this._env = options.env ?? {};
     this._timeout = options.timeout;
     this._instructionsOverride = options.instructions;
@@ -723,6 +838,7 @@ export class PlatformSandbox extends MastraSandbox {
       ...(this._template !== undefined && { template: this._template }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
+      ...(this._publicPorts !== undefined && { publicPorts: this._publicPorts }),
       env: options.env ?? this._env,
       ...(this._timeout !== undefined && { timeout: this._timeout }),
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
@@ -801,6 +917,7 @@ export class PlatformSandbox extends MastraSandbox {
         environmentId: this._environmentId,
         idleTimeoutMinutes: this._idleTimeoutMinutes,
         networkIsolation: this._networkIsolation,
+        publicPorts: this._publicPorts,
         env: this._env,
       });
     // Provisioning is observed to fail intermittently with proxy 500s while
@@ -1339,8 +1456,10 @@ export class PlatformSandbox extends MastraSandbox {
     // transport below (private network, WebSocket lease, E2B lease) receives
     // these options, and none of them route through the process manager.
     const sandboxEnv = this.getEnv();
-    const execCallOptions =
-      Object.keys(sandboxEnv).length > 0 ? { ...options, env: { ...sandboxEnv, ...options?.env } } : options;
+    const { cwd, ...restOptions } = options ?? {};
+    const execCommand = commandInCwd(fullCommand, cwd, this.workingDirectory);
+    const execCallOptions: ExecuteCommandOptions =
+      Object.keys(sandboxEnv).length > 0 ? { ...restOptions, env: { ...sandboxEnv, ...options?.env } } : restOptions;
 
     // Wait for the transport to become ready before proceeding. During the
     // sidecar boot window (immediately after start()), concurrent execs all
@@ -1364,7 +1483,7 @@ export class PlatformSandbox extends MastraSandbox {
     if (instanceUrl) {
       const privateNet = await this._tryExecViaPrivateNetwork(
         instanceUrl,
-        fullCommand,
+        execCommand,
         effectiveTimeout,
         execCallOptions,
       );
@@ -1392,7 +1511,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
+    const result = await this._runDirectExec(execCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.

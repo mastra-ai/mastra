@@ -1,7 +1,7 @@
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { canViewSourceControlSession, createSessionAccessGuard } from './session-access.js';
@@ -14,8 +14,11 @@ const SHARED_ID = '00000000-0000-4000-8000-0000000000a2';
 const UNMOVED_SHARED_ID = '00000000-0000-4000-8000-0000000000a3';
 /** From before resources were shared: runs on its own id. */
 const LEGACY_PRIVATE_ID = '00000000-0000-4000-8000-0000000000a4';
-const FACTORY_ID = 'factory-1';
-const OTHER_FACTORY_ID = 'factory-2';
+const FACTORY_ID = '00000000-0000-4000-8000-0000000000f1';
+const OTHER_FACTORY_ID = '00000000-0000-4000-8000-0000000000f2';
+/** A Factory whose lookup fails, standing in for a storage error on one run's resource. */
+const BROKEN_FACTORY_ID = '00000000-0000-4000-8000-0000000000f3';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function row(sessionId: string, visibility: SourceControlSession['visibility']): SourceControlSession {
   return { sessionId, orgId: 'org-1', userId: 'owner', visibility } as SourceControlSession;
@@ -64,14 +67,25 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
       auth: fakeRouteAuth({ enabled: options.authEnabled }),
       sessions: { getBySessionId: async id => rows.get(id) ?? null },
       projects: {
-        get: async ({ orgId, id }) => (projects.get(id) === orgId ? ({ id, orgId } as never) : null),
+        get: async ({ orgId, id }) => {
+          // `factory_projects.id` is a uuid column: Postgres rejects anything else instead of finding no row.
+          if (!UUID.test(id)) throw new Error(`invalid input syntax for type uuid: "${id}"`);
+          if (id === BROKEN_FACTORY_ID) throw new Error('connection terminated');
+          return projects.get(id) === orgId ? ({ id, orgId } as never) : null;
+        },
       },
       controller: () => controller,
     }),
   );
   // Downstream handlers echo the body the way the Mastra server adapter reads
   // it (`request.raw.clone()` in getParams), proving the guard left it unread.
-  const adapterBody = async (c: Context) => JSON.parse(await c.req.raw.clone().text());
+  const adapterBody = async (c: Context) => {
+    const request = c.req.raw.clone();
+    if (c.req.header('content-type')?.includes('multipart/form-data')) {
+      return Object.fromEntries(await request.formData());
+    }
+    return JSON.parse(await request.text());
+  };
   app.post('/api/agent-controller/:controllerId/sessions', async c =>
     c.json({ reached: true, body: await adapterBody(c) }),
   );
@@ -90,6 +104,12 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
         { runId: 'run-factory', resourceId: FACTORY_ID, threadId: SHARED_ID },
         { runId: 'run-legacy', resourceId: LEGACY_PRIVATE_ID, threadId: LEGACY_PRIVATE_ID },
         { runId: 'run-teammate', resourceId: 'teammate', threadId: 'thread-teammate' },
+        // Slack runs: a DM runs on the sender's user id, a chat-only channel on a `channel:` resource.
+        { runId: 'run-slack-dm', resourceId: 'user_01KN7GDHE5MMQ23SRB1XHFX2EJ', threadId: 'thread-slack-dm' },
+        { runId: 'run-slack-channel', resourceId: 'channel:slack:C0123456789', threadId: 'thread-slack-channel' },
+        ...(c.req.query('broken')
+          ? [{ runId: 'run-broken', resourceId: BROKEN_FACTORY_ID, threadId: 'thread-broken' }]
+          : []),
       ],
     }),
   );
@@ -104,6 +124,17 @@ const outsider = buildApp({ workosId: 'outsider', organizationId: 'org-2' });
 
 const post = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const put = (app: Hono, path: string, body: unknown) =>
+  app.request(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+/** A form body: the server adapter JSON-parses each field that parses, so structured values travel as JSON text. */
+const multipart = (app: Hono, method: 'POST' | 'PUT', path: string, fields: Record<string, unknown>) => {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) {
+    form.set(name, typeof value === 'string' ? value : JSON.stringify(value));
+  }
+  return app.request(path, { method, body: form });
+};
 
 describe('canViewSourceControlSession', () => {
   it('lets the owner and same-org teammates see org sessions, and only the owner see private ones', () => {
@@ -151,8 +182,40 @@ describe('createSessionAccessGuard', () => {
     expect((await owner.request(sessionPath('owner-side-thread', 'threads'))).status).toBe(200);
   });
 
+  it("403s a teammate changing a shared session's model or thinking level, while they still steer it", async () => {
+    const switchModel = { modelId: 'openai/gpt-5-mini' };
+    expect((await post(teammate, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(403);
+    const refused = await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } });
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toEqual({ error: 'Only the session’s owner can change its model' });
+    expect((await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: null } })).status).toBe(403);
+
+    expect(
+      (await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { factoryProjectId: FACTORY_ID } })).status,
+    ).toBe(200);
+    expect((await post(teammate, sessionPath(SHARED_ID, 'messages'), { content: 'Ship it' })).status).toBe(200);
+    expect((await post(owner, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
+    expect((await put(owner, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
+    expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
+  });
+
   it('passes through a session on its own id that no Factory session row claims', async () => {
     expect((await teammate.request(sessionPath('teammate-scratch', 'stream'))).status).toBe(200);
+  });
+
+  it('reads a multipart body the way the server adapter does, so form fields cannot slip past the checks', async () => {
+    const state = sessionPath(SHARED_ID, 'state');
+    expect((await multipart(teammate, 'PUT', state, { state: { thinkingLevel: 'high' } })).status).toBe(403);
+    expect((await multipart(owner, 'PUT', state, { state: { thinkingLevel: 'high' } })).status).toBe(200);
+
+    const create = '/api/agent-controller/code/sessions';
+    expect((await multipart(teammate, 'POST', create, { sessionId: 'new-session', resourceId: 'owner' })).status).toBe(
+      404,
+    );
+    const rekey = sessionPath('teammate-scratch', 'resource');
+    expect((await multipart(teammate, 'POST', rekey, { newResourceId: 'owner' })).status).toBe(404);
+    const allowed = await multipart(teammate, 'POST', rekey, { newResourceId: FACTORY_ID });
+    await expect(allowed.json()).resolves.toEqual({ reached: true, body: { newResourceId: FACTORY_ID } });
   });
 
   it('guards get-or-create by the session and resource it names, leaving the body readable', async () => {
@@ -242,5 +305,39 @@ describe('createSessionAccessGuard', () => {
     expect(await runIds(teammate)).toEqual(['run-factory', 'run-teammate']);
     expect(await runIds(owner)).toEqual(['run-owner', 'run-factory', 'run-legacy']);
     expect(await runIds(outsider)).toEqual([]);
+  });
+
+  it("hides other people's Slack DM and channel runs, and still shows the sender their own DM run", async () => {
+    const path = '/api/agent-controller/code/active-runs';
+    const res = await teammate.request(path);
+    expect(res.status).toBe(200);
+    const { runs } = (await res.json()) as { runs: { runId: string }[] };
+    expect(runs.map(run => run.runId)).toEqual(['run-factory', 'run-teammate']);
+
+    const sender = buildApp({ workosId: 'user_01KN7GDHE5MMQ23SRB1XHFX2EJ', organizationId: 'org-1' });
+    const own = (await (await sender.request(path)).json()) as { runs: { runId: string }[] };
+    expect(own.runs.map(run => run.runId)).toEqual(['run-factory', 'run-slack-dm']);
+  });
+
+  it("answers 404 for another person's user id without asking the Factory store about it", async () => {
+    expect((await teammate.request('/api/memory/threads?resourceId=owner')).status).toBe(404);
+    expect((await post(teammate, '/api/agent-controller/code/sessions', { resourceId: 'owner' })).status).toBe(404);
+  });
+
+  it('drops a run whose resource cannot be checked instead of failing the whole active-runs list', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await owner.request('/api/agent-controller/code/active-runs?broken=1');
+      expect(res.status).toBe(200);
+      const { runs } = (await res.json()) as { runs: { runId: string }[] };
+      expect(runs.map(run => run.runId)).toEqual(['run-owner', 'run-factory', 'run-legacy']);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[Factory Sessions]'),
+        expect.objectContaining({ resourceId: BROKEN_FACTORY_ID, error: expect.any(Error) }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

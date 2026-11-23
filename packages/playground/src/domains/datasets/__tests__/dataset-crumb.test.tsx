@@ -92,11 +92,11 @@ describe('DatasetCrumb', () => {
     renderCrumb({ isCurrent: false });
 
     await screen.findByRole('link', { name: 'Weather evals' });
-    expect(screen.queryByPlaceholderText('Search datasets...')).toBeNull();
+    expect(screen.queryByPlaceholderText('Search datasets')).toBeNull();
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Switch dataset' }));
 
-    expect(await screen.findByPlaceholderText('Search datasets...')).toBeDefined();
+    expect(await screen.findByPlaceholderText('Search datasets')).toBeDefined();
     expect(screen.getByText('Support evals')).toBeDefined();
   });
 });

@@ -53,7 +53,7 @@ export function nodeGypDetector(): Plugin {
       this.emitFile({
         type: 'asset',
         name: 'binary-map.json',
-        source: `${JSON.stringify(binaryMapJson, null, 2)}`,
+        source: JSON.stringify(binaryMapJson, null, 2),
       });
     },
   } satisfies Plugin;

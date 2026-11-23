@@ -3,11 +3,12 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { raisedSurfaceStyle, surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { NetworkIcon, WorkflowIcon } from 'lucide-react';
+import { NetworkIcon } from 'lucide-react';
 import { getRepoName } from './get-repo-name';
 
 type Template = {
@@ -55,7 +56,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
           <article
             className={cn(
               raisedSurfaceStyle,
-              'state-layer grid w-full grid-cols-[1fr_auto] overflow-hidden rounded-lg',
+              'grid w-full grid-cols-[1fr_auto] overflow-hidden rounded-lg state-layer',
             )}
             key={template.slug}
           >
@@ -85,7 +86,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                   {template.title}
                 </Txt>
                 <Txt className={cn(quietTextHoverInGroup, controlStateColorTransition)}>{template.description}</Txt>
-                <div className="mt-3 hidden flex-wrap items-center gap-4 text-muted-foreground 2xl:flex">
+                <div className="mt-3 hidden flex-wrap items-center gap-x-8 gap-y-4 text-muted-foreground 2xl:flex">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
@@ -130,13 +131,6 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                         </li>
                       )}
                     </ul>
-                  )}
-                  {hasMetaInfo && template.supportedProviders && (
-                    <small>
-                      <Txt as="span" variant="body">
-                        |
-                      </Txt>
-                    </small>
                   )}
                   <div className="flex items-center gap-4">
                     {template.supportedProviders.map(provider => (

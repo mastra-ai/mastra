@@ -29,13 +29,13 @@ const baseSpan = {
 
 export const experimentTraceRootSpan = {
   ...baseSpan,
-  spanId: 'span-root',
+  spanId: 'root01',
   name: 'Experiment agent run',
   parentSpanId: null,
 };
 export const experimentTraceChildSpan = {
   ...baseSpan,
-  spanId: 'span-child',
+  spanId: 'child1',
   name: 'Experiment tool call',
   spanType: SpanType.TOOL_CALL,
   parentSpanId: experimentTraceRootSpan.spanId,
@@ -220,4 +220,31 @@ export const experimentResultScoresResponse: ListScoresResponse = {
     scorer: { ...score.scorer, hasJudge: false },
   })),
   pagination: { total: 1, page: 0, perPage: 100, hasMore: false },
+};
+
+type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
+type MetricAggregateResponse = Awaited<ReturnType<MastraClient['getMetricAggregate']>>;
+
+/** `POST /api/observability/metrics/aggregate` before any metric has been recorded. */
+export const emptyMetricAggregate: MetricAggregateResponse = { value: null };
+
+/** `DELETE /api/experiments/:experimentId`. */
+export const experimentDeletedResponse: RouteResponse<'DELETE /experiments/:experimentId'> = { success: true };
+
+/** `POST /api/observability/metrics/breakdown` for the shared `TRACE_ID`: 1,200 in + 300 out tokens, $0.0015. */
+export const experimentUsageBreakdown: MetricBreakdownResponse = {
+  groups: [
+    {
+      dimensions: { traceId: TRACE_ID, name: 'mastra_model_total_input_tokens' },
+      value: 1200,
+      estimatedCost: 0.001,
+      costUnit: 'usd',
+    },
+    {
+      dimensions: { traceId: TRACE_ID, name: 'mastra_model_total_output_tokens' },
+      value: 300,
+      estimatedCost: 0.0005,
+      costUnit: 'usd',
+    },
+  ],
 };

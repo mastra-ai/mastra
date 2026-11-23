@@ -1,5 +1,6 @@
 import { createSampleThreadWithParams } from '@internal/storage-test-utils';
 import type { StorageThreadType } from '@mastra/core/memory';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { TEST_CONFIG } from './test-utils';
@@ -306,6 +307,154 @@ describe('PG retention', () => {
         `SELECT COUNT(*) AS c FROM "${SCHEMA}"."mastra_experiment_results" r WHERE NOT EXISTS (SELECT 1 FROM "${SCHEMA}"."mastra_experiments" e WHERE e."id" = r."experimentId")`,
       );
       expect(Number(orphans!.c)).toBe(0);
+    });
+  });
+
+  // The workflowSnapshot policy also covers storage v2 runs, anchored on the header's
+  // `updatedAtZ`; each pruned run takes its entries with it.
+  describe('storage v2 workflow runs', () => {
+    const RUNS = `"${SCHEMA}"."mastra_workflow_runs"`;
+    const ENTRIES = `"${SCHEMA}"."mastra_workflow_run_entries"`;
+    const SNAPSHOTS = `"${SCHEMA}"."mastra_workflow_snapshot"`;
+
+    beforeEach(async () => {
+      await store.stores.workflows!.dangerouslyClearAll();
+    });
+
+    const snapshotFor = (runId: string, context: Record<string, unknown>) =>
+      ({
+        runId,
+        status: 'running',
+        value: {},
+        context,
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        serializedStepGraph: [],
+        waitingPaths: {},
+        timestamp: 1,
+      }) as unknown as WorkflowRunState;
+
+    const step = (output: unknown) => ({ status: 'success' as const, output, payload: {}, startedAt: 1, endedAt: 2 });
+
+    // A checkpoint then one append per step, so each run has several entries.
+    async function seedRun(runId: string, ageDays: number, storageVersion: 1 | 2 = 2) {
+      const workflows = store.stores.workflows!;
+      const context: Record<string, unknown> = { input: {}, a: step(1) };
+      if (storageVersion === 1) {
+        await workflows.persistWorkflowSnapshot({ workflowName: 'wf', runId, snapshot: snapshotFor(runId, context) });
+      } else {
+        const { context: steps, value: state, ...header } = snapshotFor(runId, context);
+        await workflows.writeWorkflowRunCheckpoint({ workflowName: 'wf', runId, header, steps, state });
+        for (const id of ['b', 'c']) {
+          await workflows.appendWorkflowRunEntries({ workflowName: 'wf', runId, header, steps: { [id]: step(id) } });
+        }
+      }
+      await backdate(runId, ageDays, storageVersion === 2 ? RUNS : SNAPSHOTS);
+    }
+
+    async function backdate(runId: string, ageDays: number, table = RUNS) {
+      const at = new Date(Date.now() - ageDays * DAY);
+      await store.db.none(`UPDATE ${table} SET "updatedAt" = $2, "updatedAtZ" = $3 WHERE run_id = $1`, [runId, at, at]);
+    }
+
+    async function runIds(table: string): Promise<string[]> {
+      const rows = await store.db.manyOrNone<{ run_id: string }>(
+        `SELECT DISTINCT run_id FROM ${table} ORDER BY run_id`,
+      );
+      return rows.map(r => r.run_id);
+    }
+
+    it('deletes aged v2 runs with their entries and keeps recent runs and their entries', async () => {
+      await seedRun('v2-old-1', 40);
+      await seedRun('v2-old-2', 40);
+      await seedRun('v2-new', 5);
+      await seedRun('v1-old', 40, 1);
+      await seedRun('v1-new', 5, 1);
+
+      const results = await store.stores.workflows!.prune({ workflowSnapshot: { maxAge: '30d' } });
+
+      expect(results.map(r => [r.table, r.deleted, r.done])).toEqual([
+        ['mastra_workflow_snapshot', 1, true],
+        ['mastra_workflow_runs', 2, true],
+      ]);
+      expect(await runIds(RUNS)).toEqual(['v2-new']);
+      expect(await runIds(ENTRIES)).toEqual(['v2-new']);
+      expect(await runIds(SNAPSHOTS)).toEqual(['v1-new']);
+      expect(await store.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v2-new' })).toEqual(
+        snapshotFor('v2-new', { input: {}, a: step(1), b: step('b'), c: step('c') }),
+      );
+    });
+
+    it('removes whole runs per batch and honors maxRows and maxBatches', async () => {
+      for (let i = 0; i < 5; i++) await seedRun(`v2-old-${i}`, 40 + i);
+
+      const bounded = await store.stores.workflows!.prune(
+        { workflowSnapshot: { maxAge: '30d', batchSize: 1 } },
+        { maxBatches: 2 },
+      );
+      expect(bounded.find(r => r.table === 'mastra_workflow_runs')).toMatchObject({ deleted: 2, done: false });
+      // Oldest first, and the survivors keep every entry.
+      expect(await runIds(RUNS)).toEqual(['v2-old-0', 'v2-old-1', 'v2-old-2']);
+      expect(await runIds(ENTRIES)).toEqual(['v2-old-0', 'v2-old-1', 'v2-old-2']);
+      const entries = await store.db.one<{ c: string }>(`SELECT COUNT(*) AS c FROM ${ENTRIES}`);
+      expect(Number(entries.c)).toBe(3 * 5); // checkpoint (input, a, state) + 2 appends
+
+      const capped = await store.stores.workflows!.prune({ workflowSnapshot: { maxAge: '30d' } }, { maxRows: 2 });
+      expect(capped.find(r => r.table === 'mastra_workflow_runs')).toMatchObject({ deleted: 2, done: false });
+
+      const rest = await store.stores.workflows!.prune({ workflowSnapshot: { maxAge: '30d' } });
+      expect(rest.find(r => r.table === 'mastra_workflow_runs')).toMatchObject({ deleted: 1, done: true });
+      expect(await runIds(RUNS)).toEqual([]);
+      expect(await runIds(ENTRIES)).toEqual([]);
+    });
+
+    it('keeps the state of a recent run built on a pruned run', async () => {
+      const workflows = store.stores.workflows!;
+      const { context: _context, value: _value, ...header } = snapshotFor('v2-parent', {});
+      const { lastSeq } = await workflows.writeWorkflowRunCheckpoint({
+        workflowName: 'wf',
+        runId: 'v2-parent',
+        header,
+        steps: {},
+        state: { list: ['a'] },
+      });
+      await workflows.writeWorkflowRunCheckpoint({
+        workflowName: 'wf',
+        runId: 'v2-child',
+        header: { ...header, runId: 'v2-child' },
+        steps: {},
+        stateBase: { workflowName: 'wf', runId: 'v2-parent', seq: lastSeq },
+        statePatch: [{ op: 'set', path: ['c'], value: 1 }],
+      });
+      await backdate('v2-parent', 40);
+
+      await workflows.prune({ workflowSnapshot: { maxAge: '30d' } });
+
+      expect(await runIds(RUNS)).toEqual(['v2-child']);
+      expect(await runIds(ENTRIES)).toEqual(['v2-child']);
+      expect(await workflows.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v2-child' })).toEqual({
+        ...snapshotFor('v2-child', {}),
+        value: { list: ['a'], c: 1 },
+      });
+    });
+
+    it('recreates a pruned run from the next append, with only what it carries', async () => {
+      await seedRun('v2-revived', 40);
+      await store.stores.workflows!.prune({ workflowSnapshot: { maxAge: '30d' } });
+
+      const { context: _context, value: _value, ...header } = snapshotFor('v2-revived', {});
+      await store.stores.workflows!.appendWorkflowRunEntries({
+        workflowName: 'wf',
+        runId: 'v2-revived',
+        header,
+        steps: { d: step('d') },
+      });
+
+      expect(await store.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v2-revived' })).toEqual(
+        snapshotFor('v2-revived', { d: step('d') }),
+      );
     });
   });
 

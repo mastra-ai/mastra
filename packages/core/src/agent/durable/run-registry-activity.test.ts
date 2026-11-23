@@ -10,6 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Mastra } from '../../mastra';
 import {
   __resetRunRegistryActivityForTests,
   abandonDurableAgentExecutions,
@@ -108,7 +109,7 @@ describe('globalRunRegistry shutdown helpers', () => {
   // `get()` on a missing runId refreshes the TTL of a key with no value, so
   // iterating the cache yields `undefined` until that key expires.
   it('skip keys that were read but never set', async () => {
-    const mastra = {} as any;
+    const mastra = new Mastra({ logger: false });
     const execution = Promise.resolve();
     const abandon = vi.fn(async () => {});
     globalRunRegistry.set('run-live', { mastra, workflowExecution: execution, executionFence: { abandon } } as any);

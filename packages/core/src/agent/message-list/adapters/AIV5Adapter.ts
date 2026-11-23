@@ -23,6 +23,7 @@ import type {
 } from '../state/types';
 import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
+import { hasReplayableReasoningMetadata } from '../utils/reasoning-metadata';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
@@ -387,7 +388,10 @@ export class AIV5Adapter {
               return p;
             }, '') ??
               '');
-          if (text || part.details?.length) {
+          // Signed-but-empty reasoning (Anthropic thinking with no visible text) still has to
+          // reach the model prompt: dropping it here loses the signature before the provider
+          // conversion ever sees it (GRWTH-1919).
+          if (text || part.details?.length || hasReplayableReasoningMetadata(part.providerMetadata)) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,
               text: text || '',
@@ -920,36 +924,33 @@ export class AIV5Adapter {
 
     if (data instanceof URL) {
       return data.toString();
-    } else {
-      if (data instanceof Buffer) {
-        const base64 = data.toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else if (typeof data === 'string') {
-        // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
-        // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
-        // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
-        // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
-        // attachment that can't be downloaded.
-        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
-          return data;
-        }
-        return `data:${mimeType};base64,${data}`;
-      } else if (data instanceof Uint8Array) {
-        const base64 = Buffer.from(data).toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else if (data instanceof ArrayBuffer) {
-        const base64 = Buffer.from(data).toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else {
-        throw new MastraError({
-          id: 'MASTRA_AIV5_DATA_PART_INVALID',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'Unrecognized file data in message part',
-          details: { dataType: typeof data },
-        });
+    } else if (data instanceof Buffer) {
+      const base64 = data.toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } else if (typeof data === 'string') {
+      // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
+      // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
+      // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
+      // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
+      // attachment that can't be downloaded.
+      if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
+        return data;
       }
+      return `data:${mimeType};base64,${data}`;
+    } else if (data instanceof Uint8Array) {
+      const base64 = Buffer.from(data).toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } else if (data instanceof ArrayBuffer) {
+      const base64 = Buffer.from(data).toString('base64');
+      return `data:${mimeType};base64,${base64}`;
     }
+    throw new MastraError({
+      id: 'MASTRA_AIV5_DATA_PART_INVALID',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'Unrecognized file data in message part',
+      details: { dataType: typeof data },
+    });
   }
 
   /**

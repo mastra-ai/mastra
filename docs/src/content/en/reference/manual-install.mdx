@@ -23,7 +23,7 @@ Use this guide to manually build a standalone Mastra server step by step. In mos
 
 ## Instructions
 
-If you prefer not to use our automatic CLI tool, you can set up your project yourself by following the guide below.
+If you prefer not to use the `mastra` CLI, you can set up your project yourself by following the guide below.
 
 <Steps>
   <StepItem>
@@ -112,7 +112,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     :::
 
     <Inject>
-      You can also use OpenAI (`OPENAI_API_KEY`) or Anthropic (`ANTHROPIC_API_KEY`) instead of Google Gemini. Go to [https://mastra.ai/models/environment-variables](https://mastra.ai/models/environment-variables) for a full list of supported providers and their environment variable names.
+      You can also use OpenAI (`OPENAI_API_KEY`) or Anthropic (`ANTHROPIC_API_KEY`) instead of Google Gemini. Go to [https://mastra.ai/models/environment-variables](/models/environment-variables) for a full list of supported providers and their environment variable names.
     </Inject>
   </StepItem>
 
@@ -152,7 +152,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
     :::note
 
-    We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/tools).
+    The `weatherTool` example is shortened here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/tools).
 
     :::
   </StepItem>
@@ -189,7 +189,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
           Use the weatherTool to fetch current weather data.
     `,
-      model: '__GATEWAY_GOOGLE_MODEL__',
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
       tools: { weatherTool },
     })
     ```

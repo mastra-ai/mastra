@@ -1,0 +1,46 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "## New Message History to Observe"
+      },
+      "response": {
+        "content": "<observations>\nDate: Jun 13, 2026\n* 🟡 (06:20) User asked to search memory for the earlier setup notes.\n</observations>\n<current-task>\nSearch memory for the earlier setup notes.\n</current-task>"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "systemMessage": "You are Mastra Code",
+        "userMessage": "MC_MISSING_EMBEDDER_PROMPT",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_missing_embedder_recall",
+            "name": "recall",
+            "arguments": {
+              "mode": "search",
+              "query": "earlier setup notes"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_missing_embedder_recall"
+      },
+      "response": {
+        "content": "MC missing embedder turn done"
+      }
+    }
+  ]
+}

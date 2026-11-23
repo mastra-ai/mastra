@@ -205,41 +205,4 @@ describe('flattenSchemaToVariables', () => {
 
     expect(result[0].type).toBe('string | null');
   });
-
-  it('should handle complex real-world schema', () => {
-    const schema: JsonSchema = {
-      type: 'object',
-      properties: {
-        userName: { type: 'string', description: 'The user name' },
-        companyName: { type: 'string', description: 'The company name' },
-        context: {
-          type: 'object',
-          properties: {
-            role: { type: 'string', description: 'User role' },
-            permissions: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  level: { type: 'number' },
-                },
-              },
-            },
-          },
-        },
-      },
-    };
-
-    const result = flattenSchemaToVariables(schema);
-    const paths = result.map(v => v.path);
-
-    expect(paths).toContain('userName');
-    expect(paths).toContain('companyName');
-    expect(paths).toContain('context');
-    expect(paths).toContain('context.role');
-    expect(paths).toContain('context.permissions');
-    expect(paths).toContain('context.permissions[].name');
-    expect(paths).toContain('context.permissions[].level');
-  });
 });

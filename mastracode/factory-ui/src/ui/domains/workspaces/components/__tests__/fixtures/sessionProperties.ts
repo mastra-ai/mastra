@@ -2,6 +2,11 @@ import { act, screen, waitFor } from '@testing-library/react';
 import type { UserEvent } from '@testing-library/user-event';
 import { expect } from 'vitest';
 
+/** The sidebar opens ungrouped; suites that exercise board groups start from a stored Board grouping. */
+export function groupSessionsByBoard() {
+  localStorage.setItem('mastracode.sessionListView', JSON.stringify({ groupBy: 'board' }));
+}
+
 export function sessionPropertiesTrigger(changedCount = 0): HTMLElement {
   return screen.getByRole('button', {
     name: changedCount === 0 ? 'Sessions properties' : `Sessions properties, ${changedCount} changed`,

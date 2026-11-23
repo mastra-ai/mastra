@@ -1,13 +1,14 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { codeFoldGutter, useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import type {
   ProcessorDetail,
@@ -17,7 +18,6 @@ import type {
 } from '@mastra/react/hooks/processors';
 import { useProcessor, useExecuteProcessor } from '@mastra/react/hooks/processors';
 import CodeMirror from '@uiw/react-codemirror';
-import { Play } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export interface ProcessorPanelProps {
@@ -182,18 +182,18 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             <Textarea
               value={testMessage}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
-              placeholder="Enter a test message..."
+              placeholder="Enter a test message"
               rows={4}
             />
           </Field>
 
           <Button
-            icon={<Play />}
+            icon={<IconPlay />}
             onClick={handleExecute}
             disabled={executeProcessor.isPending || selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
             className="w-full"
           >
-            {executeProcessor.isPending ? 'Running...' : 'Run Processor'}
+            {executeProcessor.isPending ? 'Running...' : 'Run processor'}
           </Button>
 
           {selectedPhase === 'outputStream' && (
@@ -239,7 +239,13 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
       </div>
 
       <div className="relative h-full overflow-x-auto overflow-y-auto p-5">
-        <CodeMirror value={errorString || resultCode} editable={true} theme={theme} extensions={[jsonLanguage]} />
+        <CodeMirror
+          value={errorString || resultCode}
+          editable
+          theme={theme}
+          extensions={[jsonLanguage, codeFoldGutter]}
+          basicSetup={{ foldGutter: false }}
+        />
       </div>
     </div>
   );

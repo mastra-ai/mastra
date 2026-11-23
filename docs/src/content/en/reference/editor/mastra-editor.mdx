@@ -93,7 +93,7 @@ export const mastra = new Mastra({
     name: 'source',
     type: "'code' | 'db'",
     description:
-      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See [Editor storage options](/docs/studio/editor#choose-where-changes-are-stored) for the difference.",
+      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files at `codePath` (routed through a local FilesystemStore) and Studio shows filesystem actions. When `source` is 'code' and a source-control provider is configured, agent overrides are persisted through source-control operations instead of the local filesystem, and the provider controls the repository path. A provider passed as `sourceControlProvider` uses its own `pathPrefix`; the provider created from environment variables uses `MASTRA_SOURCE_STORAGE_PATH_PREFIX` when it is set, and `codePath` otherwise. The environment provider is created only when `MASTRA_SOURCE_PROVIDER` is `github`, an endpoint is set (`MASTRA_SOURCE_PROVIDER_ENDPOINT`, `MASTRA_SHARED_API_URL`, or `MASTRA_CLOUD_API_ENDPOINT`), and a token is set (`MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_CLOUD_ACCESS_TOKEN`). Each list is checked in order and the first defined variable wins, so an empty higher-priority variable disables the provider instead of falling back. The endpoint is a Mastra platform API that brokers the GitHub operations, so the provider never calls the GitHub API directly. Without a provider, overrides stay in the local files at `codePath`. See [Editor storage options](/docs/studio/editor#choose-where-changes-are-stored) for the difference.",
     isOptional: true,
     defaultValue: "'db'",
   },
@@ -102,7 +102,7 @@ export const mastra = new Mastra({
     type: 'string',
     description: "Directory used by the 'code' source for per-agent JSON files. Ignored when source is not 'code'.",
     isOptional: true,
-    defaultValue: "'./mastra/editor/'",
+    defaultValue: "'./mastra/editor'",
   },
 ]}
 />

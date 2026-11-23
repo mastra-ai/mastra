@@ -1,6 +1,6 @@
-import type { CSSProperties, Ref } from 'react';
+import type { CSSProperties, Ref, RefObject } from 'react';
 import { useImperativeHandle, useRef, useState } from 'react';
-import type { PanelProps } from 'react-resizable-panels';
+import type { PanelImperativeHandle, PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelEdgeIcon } from './panel-edge-icon';
 import { panelIconButtonClass } from './panel-icon-button';
@@ -18,7 +18,9 @@ export interface CollapsiblePanelHandle {
   toggle: () => void;
 }
 
-export interface CollapsiblePanelProps extends PanelProps {
+export interface CollapsiblePanelProps extends Omit<PanelProps, 'panelRef'> {
+  /** Must be an object ref: the panel reads `.current` to collapse and expand. */
+  panelRef?: RefObject<PanelImperativeHandle | null>;
   direction: 'left' | 'right';
   /** Key shown in the expand button tooltip when the caller binds a shortcut to `toggle()`. */
   expandShortcut?: string;

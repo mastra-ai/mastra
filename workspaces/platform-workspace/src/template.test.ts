@@ -195,6 +195,7 @@ describe('Template', () => {
     expectTypeOf<Keys>().toEqualTypeOf<
       | 'cpuCount'
       | 'memoryMB'
+      | 'docker'
       | 'build'
       | 'runCmd'
       | 'setWorkdir'

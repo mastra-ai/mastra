@@ -4,21 +4,27 @@ This directory contains example agents demonstrating various Mastra features.
 
 ## Getting Started
 
-1. From the `mastra` repository root, change into this example directory and install dependencies:
+1. The example links the repository's packages, so build them first from the `mastra` repository root:
+
+   ```bash
+   pnpm setup
+   ```
+
+2. Change into this example directory and install dependencies:
 
    ```bash
    cd examples/agent
    pnpm install --ignore-workspace
    ```
 
-2. Set up environment variables:
+3. Set up environment variables:
 
    ```bash
    cp .env.example .env
    # Edit .env with your API keys
    ```
 
-3. Run the example:
+4. Run the example:
    ```bash
    pnpm start
    ```
@@ -230,8 +236,11 @@ Then in Studio:
    {
      "teamName": "Platform",
      "notes": [
-       { "author": "Alex", "text": "yesterday shipped the auth fix. today wiring up the retry queue. blocked on staging creds." },
-       { "author": "Sam",  "text": "finished the migration script. moving on to the dashboard rewrite. no blockers." }
+       {
+         "author": "Alex",
+         "text": "yesterday shipped the auth fix. today wiring up the retry queue. blocked on staging creds."
+       },
+       { "author": "Sam", "text": "finished the migration script. moving on to the dashboard rewrite. no blockers." }
      ]
    }
    ```
@@ -241,7 +250,7 @@ Then in Studio:
      "teamName": "Platform",
      "notes": [
        { "author": "Alex", "text": "shipped auth fix. today: retry queue. no blockers." },
-       { "author": "Sam",  "text": "migration done. today: dashboard rewrite. no blockers." }
+       { "author": "Sam", "text": "migration done. today: dashboard rewrite. no blockers." }
      ]
    }
    ```

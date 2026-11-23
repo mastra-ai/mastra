@@ -1,7 +1,10 @@
 import { useMastraClient } from '@mastra/react';
 import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useMemo } from 'react';
+import { useMcpAppHostContext } from '../context/mcp-app-host-context-value';
+import type { McpAppModelContextParams, McpAppRef } from '../context/mcp-app-host-context-value';
+import { useMcpAppToolCall } from '../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from './mcp-app-viewer';
 import { Txt } from '@/ds/components/Txt';
 
@@ -9,7 +12,10 @@ interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;
   toolArgs?: Record<string, unknown>;
   toolResult?: unknown;
+  /** The chat tool call that rendered this app. Required for an `McpAppHostProvider` to reach the app. */
+  toolCallId?: string;
   onSendMessage?: (content: string) => void;
+  onUpdateModelContext?: (context: string | undefined) => void;
   readOnly?: boolean;
 }
 
@@ -21,8 +27,28 @@ interface McpAppToolResultProps {
  * (ui/notifications/tool-input and ui/notifications/tool-result), enabling
  * the app to hydrate with data from the tool call.
  */
-export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage, readOnly }: McpAppToolResultProps) {
+export function McpAppToolResult({
+  appInfo,
+  toolArgs,
+  toolResult,
+  toolCallId,
+  onSendMessage,
+  onUpdateModelContext,
+  readOnly,
+}: McpAppToolResultProps) {
   const client = useMastraClient();
+  const host = useMcpAppHostContext();
+  const { toolName, resourceUri } = appInfo;
+  const app: McpAppRef | undefined = useMemo(
+    () => (toolCallId === undefined ? undefined : { toolName, toolCallId, resourceUri }),
+    [toolName, toolCallId, resourceUri],
+  );
+  const hostContext = useMemo(() => (app && host?.hostContext?.(app)) || undefined, [app, host]);
+  const onModelContext = useMemo(() => {
+    const handler = host?.onModelContext;
+    if (!app || !handler || readOnly) return undefined;
+    return (params: McpAppModelContextParams) => handler(app, params);
+  }, [app, host, readOnly]);
 
   const { data: html, isLoading } = useQuery({
     queryKey: ['mcp-app-html', appInfo.serverId, appInfo.resourceUri],
@@ -35,13 +61,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
     refetchOnWindowFocus: false,
   });
 
-  const handleToolCall = useCallback(
-    async (toolName: string, args: Record<string, unknown>) => {
-      const tool = client.getMcpServerTool(appInfo.serverId, toolName);
-      return tool.execute({ data: args });
-    },
-    [client, appInfo.serverId],
-  );
+  const handleToolCall = useMcpAppToolCall(appInfo.serverId);
 
   if (isLoading || !html) {
     return (
@@ -59,6 +79,9 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
       toolResult={toolResult}
       onToolCall={readOnly ? undefined : handleToolCall}
       onSendMessage={readOnly ? undefined : onSendMessage}
+      onUpdateModelContext={readOnly ? undefined : onUpdateModelContext}
+      onModelContext={onModelContext}
+      hostContext={hostContext}
       className="rounded-md border border-border"
     />
   );

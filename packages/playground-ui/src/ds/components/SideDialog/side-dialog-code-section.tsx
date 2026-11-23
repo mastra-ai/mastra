@@ -1,13 +1,14 @@
 import { json } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
 import ReactCodeMirror from '@uiw/react-codemirror';
-import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
+import { codeFoldGutter, useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Section } from '@/ds/components/Section';
+import { IconAlignmentJustify } from '@/ds/icons/central/IconAlignmentJustify';
+import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 export type SideDialogCodeSectionProps = {
@@ -42,10 +43,11 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
           <CopyButton content={codeStr || 'No content'} />
           {hasMultilineText && (
             <Button
+              size="icon-md"
               aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
               onClick={() => setShowAsMultilineText(!showAsMultilineText)}
             >
-              {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+              {showAsMultilineText ? <IconAlignmentLeft /> : <IconAlignmentJustify />}
             </Button>
           )}
         </ButtonsGroup>
@@ -59,7 +61,12 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (
-            <ReactCodeMirror extensions={[json(), EditorView.lineWrapping]} theme={theme} value={finalCodeStr} />
+            <ReactCodeMirror
+              extensions={[json(), EditorView.lineWrapping, codeFoldGutter]}
+              basicSetup={{ foldGutter: false }}
+              theme={theme}
+              value={finalCodeStr}
+            />
           )}
         </div>
       )}

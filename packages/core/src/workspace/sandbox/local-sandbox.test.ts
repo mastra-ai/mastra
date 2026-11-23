@@ -1083,6 +1083,7 @@ describe('LocalSandbox', () => {
   describe('seatbelt isolation (macOS)', () => {
     beforeEach(async () => {
       if (os.platform() !== 'darwin' || !isSeatbeltAvailable()) {
+        // oxlint-disable-next-line no-useless-return -- Keep the platform availability probe in the shared setup.
         return;
       }
     });

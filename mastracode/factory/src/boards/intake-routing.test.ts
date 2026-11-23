@@ -1,0 +1,340 @@
+import { describe, expect, it } from 'vitest';
+
+import type { RuleGroup } from '../rules/rule-group.js';
+import type { Card } from '../storage/domains/work-items/base.js';
+import { cardRuleFacts } from './card-facts.js';
+import { defineBoard } from './define-board.js';
+import {
+  compareIntakeOrder,
+  INTAKE_ORDER_SAMPLE,
+  intakeEvaluatorFrom,
+  intakeTargetProblem,
+  planEventMove,
+  resolveIntake,
+  resolveIntakePlacement,
+} from './intake-routing.js';
+import { boardRegistryOf, createBoardRegistry } from './registry.js';
+import { createTestBoard, createTriageWorkRegistry } from './test-utils.js';
+
+// Work with Triage, as projects stored before new projects' Work dropped it: routes here target Triage.
+const registry = createTriageWorkRegistry(createTestBoard());
+
+const DOCS: RuleGroup = {
+  operator: 'AND',
+  conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }],
+};
+
+function route(overrides: Partial<Parameters<typeof resolveIntakePlacement>[0][number]> = {}) {
+  return {
+    id: 'route',
+    enabled: true,
+    when: null,
+    target: { boardKey: 'work', phaseKey: 'triage' },
+    // Files issues and pull requests alike, as stored routes always have.
+    on: ['work_item.created'],
+    ...overrides,
+  } as Parameters<typeof resolveIntakePlacement>[0][number];
+}
+
+const placing = (target: { boardKey: string; phaseKey: string }) => ({ target, on: ['work_item.opened'] });
+
+const issue = (labels: string[] = []) =>
+  cardRuleFacts({
+    title: 'Card',
+    metadata: { labels },
+    externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+  });
+
+const pullRequest = cardRuleFacts({
+  title: 'Patch',
+  metadata: {},
+  externalSource: { integrationId: 'github', type: 'pull-request', externalId: '2' },
+});
+
+/** A board whose first phase can't reach `fixing` directly: cards go through `triaged`. */
+const stepwise = boardRegistryOf([
+  defineBoard({
+    id: 'stepwise',
+    name: 'Stepwise',
+    initialPhase: 'reported',
+    phases: {
+      reported: { name: 'Reported', kind: 'resting', nextPhases: ['triaged'] },
+      triaged: { name: 'Triaged', kind: 'resting', nextPhases: ['fixing'] },
+      fixing: { name: 'Fixing', kind: 'working', nextPhases: ['fixed'] },
+      fixed: { name: 'Fixed', kind: 'terminal' },
+    },
+  }),
+]);
+
+const simpleBoard = (id: string, name = id.toUpperCase()) =>
+  defineBoard({
+    id,
+    name,
+    initialPhase: 'inbox',
+    phases: {
+      inbox: { name: 'Inbox', kind: 'resting' },
+      done: { name: 'Done', kind: 'terminal' },
+    },
+  });
+
+describe('resolveIntake', () => {
+  const twoBoards = boardRegistryOf([simpleBoard('work'), simpleBoard('ship')]);
+  const labelled = (id: string, boardKey: string, label: string) =>
+    route({
+      id,
+      target: { boardKey, phaseKey: null },
+      when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: label }] },
+    });
+  const everything = (id: string, boardKey: string) => route({ id, target: { boardKey, phaseKey: null } });
+  const both = (routes: ReturnType<typeof route>[], order: string[], facts: ReturnType<typeof issue>) =>
+    (['route-list', 'intake-order'] as const).map(evaluator =>
+      resolveIntake({ evaluator, routes, order, facts, registry: twoBoards }),
+    );
+
+  it('names no fallback board: without a `work` board, nothing matching is still Not routed', () => {
+    const renamed = boardRegistryOf([simpleBoard('platform', 'Work'), simpleBoard('ship')]);
+    const resolution = resolveIntake({
+      evaluator: 'intake-order',
+      routes: [labelled('ship', 'ship', 'ship')],
+      order: ['platform', 'ship'],
+      facts: issue(['docs']),
+      registry: renamed,
+    });
+    expect(resolution).toMatchObject({ outcome: 'not_routed' });
+  });
+
+  it('places only with a board’s own rules, skips join and disabled rules, and boards not installed', () => {
+    const routes = [
+      route({ id: 'join', target: { boardKey: 'ship', phaseKey: null, joinClosedIssue: true } }),
+      { ...everything('off', 'ship'), enabled: false },
+      everything('gone', 'docs'),
+      everything('all', 'work'),
+    ];
+    const resolution = resolveIntake({
+      evaluator: 'intake-order',
+      routes,
+      order: ['docs', 'ship', 'work'],
+      facts: pullRequest,
+      registry: twoBoards,
+    });
+    expect(resolution).toMatchObject({ outcome: 'placed', board: 'work', routeId: 'all' });
+  });
+
+  it('forces the evaluator from a valid FACTORY_INTAKE_EVALUATOR, else none', () => {
+    // Nothing forced: each project uses its own setting.
+    expect(intakeEvaluatorFrom({})).toBeUndefined();
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBeUndefined();
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toBe('intake-order');
+    expect(intakeEvaluatorFrom({ FACTORY_INTAKE_EVALUATOR: 'route-list' })).toBe('route-list');
+  });
+});
+
+describe('compareIntakeOrder', () => {
+  const twoBoards = boardRegistryOf([simpleBoard('work'), simpleBoard('ship')]);
+  const labelled = (id: string, boardKey: string, label: string) =>
+    route({
+      id,
+      target: { boardKey, phaseKey: null },
+      when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: label }] },
+    });
+  const everything = (id: string, boardKey: string) => route({ id, target: { boardKey, phaseKey: null } });
+  /** The facts intake reads of a card: its title, labels and source. */
+  const card = (labels: string[]) =>
+    ({
+      title: 'Card',
+      metadata: { labels },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+    }) as unknown as Card;
+  const compare = (routes: ReturnType<typeof route>[], order: string[], cards: Card[]) =>
+    compareIntakeOrder({ routes, order, registry: twoBoards, cards });
+
+  it('counts the cards the order would place elsewhere, and those no board takes', () => {
+    // Work is asked first, and its catch-all takes the `ship` cards the old list sent to Ship.
+    const interleaved = [labelled('bug', 'work', 'bug'), labelled('ship', 'ship', 'ship'), everything('all', 'work')];
+    const cards = [card(['ship']), card(['ship', 'x']), card(['bug']), card([])];
+    expect(compare(interleaved, ['work', 'ship'], cards)).toEqual({ compared: 4, differing: 2, notRouted: 0 });
+    // The same rules with Ship asked first route as before.
+    expect(compare(interleaved, ['ship', 'work'], cards)).toMatchObject({ differing: 0 });
+    // The old list filed unmatched cards on Work; now no board takes them.
+    expect(
+      compare([labelled('ship', 'ship', 'ship')], ['ship', 'work'], [card(['ship']), card(['docs']), card([])]),
+    ).toEqual({
+      compared: 3,
+      differing: 2,
+      notRouted: 2,
+    });
+  });
+
+  it('compares only the newest cards', () => {
+    const cards = Array.from({ length: INTAKE_ORDER_SAMPLE + 50 }, () => card([]));
+    expect(compare([everything('all', 'work')], ['work', 'ship'], cards)).toMatchObject({
+      compared: INTAKE_ORDER_SAMPLE,
+    });
+  });
+});
+
+describe('resolveIntakePlacement', () => {
+  it("lands a card in the route's phase even when the first phase can't move to it", () => {
+    const target = (phaseKey: string) => [route({ target: { boardKey: 'stepwise', phaseKey } })];
+    expect(resolveIntakePlacement(target('triaged'), issue(), stepwise)).toEqual({
+      board: 'stepwise',
+      phase: 'triaged',
+      routeId: 'route',
+    });
+    expect(resolveIntakePlacement(target('fixing'), issue(), stepwise)).toEqual({
+      board: 'stepwise',
+      phase: 'fixing',
+      routeId: 'route',
+    });
+    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'fixing' }))).toBeUndefined();
+    expect(intakeTargetProblem(stepwise, placing({ boardKey: 'stepwise', phaseKey: 'triaged' }))).toBeUndefined();
+    // A phase gone since the rule was saved still falls back to the first phase.
+    expect(resolveIntakePlacement(target('gone'), issue(), stepwise)).toEqual({
+      board: 'stepwise',
+      phase: 'reported',
+      routeId: 'route',
+    });
+  });
+
+  it('places nothing without routes', () => {
+    expect(resolveIntakePlacement([], issue(), registry)).toBeUndefined();
+  });
+
+  it('takes the first enabled route that matches and whose board is installed', () => {
+    const routes = [
+      route({ id: 'disabled', enabled: false, target: { boardKey: 'release', phaseKey: 'shipping' } }),
+      route({ id: 'docs', when: DOCS, target: { boardKey: 'work', phaseKey: 'planning' } }),
+      route({ id: 'gone', target: { boardKey: 'gone', phaseKey: null } }),
+      route({ id: 'release', target: { boardKey: 'release', phaseKey: null } }),
+      route({ id: 'last' }),
+    ];
+    expect(resolveIntakePlacement(routes, issue(['docs']), registry)).toEqual({
+      board: 'work',
+      phase: 'planning',
+      routeId: 'docs',
+    });
+    expect(resolveIntakePlacement(routes, issue(), registry)).toEqual({
+      board: 'release',
+      phase: 'queued',
+      routeId: 'release',
+    });
+  });
+
+  it('skips a board that is not installed and lands a missing or terminal phase in the initial phase', () => {
+    expect(
+      resolveIntakePlacement([route({ target: { boardKey: 'gone', phaseKey: null } }), route()], issue(), registry),
+    ).toEqual({ board: 'work', phase: 'triage', routeId: 'route' });
+    expect(
+      resolveIntakePlacement([route({ target: { boardKey: 'work', phaseKey: 'gone' } })], issue(), registry),
+    ).toEqual({ board: 'work', phase: 'intake', routeId: 'route' });
+    expect(
+      resolveIntakePlacement([route({ target: { boardKey: 'work', phaseKey: 'done' } })], issue(), registry),
+    ).toEqual({ board: 'work', phase: 'intake', routeId: 'route' });
+  });
+
+  it('lands pull requests on Work only in Intake or PR review, keeps everything else out of PR review, and never on the retired Review board', () => {
+    const to = (boardKey: string, phaseKey: string) => [route({ target: { boardKey, phaseKey } })];
+    expect(resolveIntakePlacement(to('work', 'pr-review'), pullRequest, registry)).toEqual({
+      board: 'work',
+      phase: 'pr-review',
+      routeId: 'route',
+    });
+    expect(resolveIntakePlacement(to('work', 'intake'), pullRequest, registry)).toEqual({
+      board: 'work',
+      phase: 'intake',
+      routeId: 'route',
+    });
+    // A pull request card never enters the builder's lanes, so the next route places it.
+    expect(
+      resolveIntakePlacement(
+        [route({ id: 'triage' }), route({ id: 'next', target: { boardKey: 'work', phaseKey: 'pr-review' } })],
+        pullRequest,
+        registry,
+      ),
+    ).toEqual({ board: 'work', phase: 'pr-review', routeId: 'next' });
+    expect(resolveIntakePlacement(to('work', 'pr-review'), issue(), registry)).toBeUndefined();
+    // A route a user pointed at the retired Review board no longer matches anything.
+    expect(resolveIntakePlacement(to('review', 'review'), issue(), registry)).toBeUndefined();
+    expect(resolveIntakePlacement(to('review', 'review'), pullRequest, registry)).toBeUndefined();
+  });
+
+  it('places new cards only by routes that handle an arrival event', () => {
+    const reopened = route({
+      id: 'reopened',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'intake' },
+    });
+    const both = route({ id: 'both', on: ['work_item.reopened', 'work_item.opened'] });
+    expect(resolveIntakePlacement([reopened], issue(), registry)).toBeUndefined();
+    expect(resolveIntakePlacement([reopened, both], issue(), registry)).toEqual({
+      board: 'work',
+      phase: 'triage',
+      routeId: 'both',
+    });
+  });
+});
+
+describe('intakeTargetProblem', () => {
+  it('lets a route that only moves existing cards name a terminal phase too', () => {
+    const closes = (boardKey: string, phaseKey: string) => ({
+      target: { boardKey, phaseKey },
+      on: ['work_item.closed'],
+    });
+    expect(intakeTargetProblem(registry, closes('work', 'done'))).toBeUndefined();
+    expect(intakeTargetProblem(stepwise, closes('stepwise', 'fixing'))).toBeUndefined();
+    expect(intakeTargetProblem(registry, placing({ boardKey: 'work', phaseKey: 'done' }))).toMatchObject({
+      code: 'terminal_phase',
+    });
+    // The board and phase must still exist.
+    expect(intakeTargetProblem(registry, closes('work', 'gone'))).toMatchObject({ code: 'unknown_phase' });
+    expect(intakeTargetProblem(registry, closes('gone', 'done'))).toMatchObject({ code: 'unknown_board' });
+  });
+});
+
+describe('card-move traces', () => {
+  const twoBoards = boardRegistryOf([simpleBoard('work', 'Work'), simpleBoard('ship', 'Ship')]);
+  const toShip = route({
+    id: 'to-ship',
+    on: ['work_item.updated'],
+    target: { boardKey: 'work', phaseKey: null, moveToBoardKey: 'ship' },
+  });
+  const gone = route({
+    id: 'gone',
+    on: ['work_item.updated'],
+    target: { boardKey: 'work', phaseKey: null, moveToBoardKey: 'platform' },
+  });
+  const card = {
+    id: 'card-1',
+    board: 'work',
+    stages: ['inbox'],
+    title: 'Card',
+    metadata: {},
+    externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+  } as unknown as Card;
+
+  // Filing logs a skip only on its way to the winner; the trace names every skip, never as beaten.
+  it.each([
+    { routes: [gone, toShip], logged: ['gone'] },
+    { routes: [toShip, gone], logged: [] },
+  ])('shows a match whose target is gone as skipped, wherever it sits', ({ routes, logged }) => {
+    const seen: string[] = [];
+    const plan = planEventMove(
+      {
+        routes,
+        event: { type: 'work_item.updated', labels: { added: ['x'], removed: [] } },
+        item: card,
+        registry: twoBoards,
+        onSkip: skipped => seen.push(skipped.routeId),
+      },
+      { full: true },
+    );
+    expect(plan.move).toEqual({ board: 'ship', phase: 'inbox', routeId: 'to-ship' });
+    expect(plan.rules.find(rule => rule.routeId === 'gone')).toEqual({
+      routeId: 'gone',
+      name: null,
+      outcome: 'skipped',
+      reason: 'board "platform" is not installed',
+    });
+    expect(seen).toEqual(logged);
+  });
+});

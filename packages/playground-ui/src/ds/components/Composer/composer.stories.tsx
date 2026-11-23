@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixtures/composer';
 
 import { Button } from '../Button';
 import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from './composer';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 
 const meta: Meta<typeof Composer> = {
   title: 'AI/Composer',
@@ -14,7 +14,7 @@ const meta: Meta<typeof Composer> = {
     docs: {
       description: {
         component:
-          'ComposerRing owns the pointer spotlight and busy rotation. Its typed tone defaults to green; purple and orange select the same light/dark colors used by ComposerToneLabel. The default tone uses the accent ring and a neutral label. Applications map their own modes to tones. ComposerInput uses the inline height by default, or variant="textarea" for a taller draft; maxHeight remains available. Compose the shared surface, input, and actions with application-owned controls, draft state, attachments, and send/cancel callbacks. See [Composer Attachments](?path=/docs/ai-composer-attachments--docs) for the shared Studio and Factory attachment cards, previews, and removal controls. Changing mode never implies a running state. The interactive previews simulate sending and stopping; they do not call an agent.',
+          'ComposerRing owns the rim: it lights from the top on hover and focus, and while busy faint mono threads of light wander its top edge around the centre, so it always reads as working. ComposerToneLabel colours a mode label green, purple or orange; the default tone keeps it neutral. Applications map their own modes to tones. ComposerInput uses the inline height by default, or variant="textarea" for a taller draft; maxHeight remains available. Compose the shared surface, input, and actions with application-owned controls, draft state, attachments, and send/cancel callbacks. See [Composer Attachments](?path=/docs/ai-composer-attachments--docs) for the shared Studio and Factory attachment cards, previews, and removal controls. Changing mode never implies a running state. The interactive previews simulate sending and stopping; they do not call an agent.',
       },
     },
   },
@@ -27,11 +27,11 @@ export const Empty: Story = {
   render: () => (
     <Composer aria-label="Message composer">
       <ComposerBox>
-        <ComposerInput aria-label="Message" placeholder="Enter your message..." />
+        <ComposerInput aria-label="Message" placeholder="Enter your message" />
         <ComposerActions>
           <span />
           <Button type="submit" size="icon-md" aria-label="Send message" disabled>
-            <ArrowUp />
+            <IconArrowUp />
           </Button>
         </ComposerActions>
       </ComposerBox>
@@ -59,11 +59,11 @@ const RingStory = ({ busy }: { busy: boolean }) => (
   <Composer aria-label="Message composer">
     <ComposerRing busy={busy}>
       <ComposerBox>
-        <ComposerInput aria-label="Message" placeholder="Enter your message..." />
+        <ComposerInput aria-label="Message" placeholder="Enter your message" />
         <ComposerActions>
           <span />
           <Button type="submit" size="icon-md" aria-label="Send message">
-            <ArrowUp />
+            <IconArrowUp />
           </Button>
         </ComposerActions>
       </ComposerBox>
@@ -94,11 +94,9 @@ export const WithModeControls: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('combobox', { name: 'Session mode' }));
     await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('option', { name: 'Plan' }));
-    const label = canvas.getByText('Plan');
-    const ring = canvasElement.querySelector('[data-slot="composer-ring"]');
-    if (!ring) throw new Error('Composer ring is missing');
-    await expect(getComputedStyle(ring).getPropertyValue('--composer-tone-color')).toBe(
-      getComputedStyle(label).getPropertyValue('--composer-tone-color'),
+    await expect(canvas.getByText('Plan').closest('[data-composer-tone]')).toHaveAttribute(
+      'data-composer-tone',
+      'purple',
     );
     const input = canvas.getByRole('textbox', { name: 'Message' });
     await userEvent.type(input, 'Review this plan.{shift>}{enter}{/shift}Keep both lines.');

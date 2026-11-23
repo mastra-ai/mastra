@@ -7,12 +7,14 @@ afterEach(cleanup);
 
 describe('TraceStatusValue', () => {
   it.each([
-    ['success', 'Success'],
-    ['error', 'Error'],
-    ['running', 'Running'],
-  ] as const)('reads a %s status, and shimmers only while it runs', (status, label) => {
+    ['success', 'Success', 'bg-badge-green-subtle'],
+    ['error', 'Error', 'bg-badge-red-subtle'],
+    ['running', 'Running', 'bg-fill-subtle'],
+  ] as const)('reads a %s status in a matching badge, and shimmers only while it runs', (status, label, tone) => {
     render(<TraceStatusValue status={status} />);
 
-    expect(screen.getByText(label).classList.contains('shimmer-text')).toBe(status === 'running');
+    const text = screen.getByText(label);
+    expect(text.classList.contains('shimmer-text')).toBe(status === 'running');
+    expect(text.parentElement?.classList.contains(tone)).toBe(true);
   });
 });

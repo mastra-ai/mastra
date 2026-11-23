@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -21,17 +21,19 @@ afterEach(() => {
 import {
   buildFsRoutes,
   listArtifacts,
+  listSessionWorkspaceFiles,
   listSessionWorkspaceTree,
   listSessionRenderedPath,
   listSessionWorkspaceChanges,
+  listSessionWorkspacePatches,
   listWorkspaceRenderedPath,
   parseWorkspaceChanges,
   parseWorkspaceChangeStats,
   parseWorkspaceTrackedChanges,
-  readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.js';
+import type { SessionFsDeps } from './fs.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -223,6 +225,15 @@ describe('readWorkspaceFile', () => {
 const WORKDIR = '/workspaces/acme/repo';
 const BASE_SHA = '0123456789abcdef0123456789abcdef01234567';
 
+const COMMIT_IDENTITY = [
+  '-c',
+  'user.name=Factory',
+  '-c',
+  'user.email=factory@example.com',
+  '-c',
+  'commit.gpgsign=false',
+];
+
 function makeSession(overrides: Partial<SourceControlSession> = {}): SourceControlSession {
   return {
     id: 'row-1',
@@ -230,6 +241,7 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
     projectRepositoryId: 'pr-1',
     orgId: 'org-1',
     userId: 'user-1',
+    visibility: 'org',
     branch: 'main',
     title: null,
     baseBranch: 'main',
@@ -296,7 +308,14 @@ function seedSessionSandbox(
   return { executeCommand };
 }
 
-function makeSessionFs({ session = makeSession() }: { session?: SourceControlSession } = {}) {
+function makeSessionFs({
+  session = makeSession(),
+  ownThreadResourceId,
+}: {
+  session?: SourceControlSession;
+  /** The memory resource the session's own thread is on; no thread when omitted. */
+  ownThreadResourceId?: string;
+} = {}) {
   const ensureUser = vi.fn(async () => undefined);
   return {
     ensureUser,
@@ -308,6 +327,11 @@ function makeSessionFs({ session = makeSession() }: { session?: SourceControlSes
         isOrganizationAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => session) },
+      controller: {
+        queryThreadById: vi.fn(async () =>
+          ownThreadResourceId ? ({ id: session.sessionId, resourceId: ownThreadResourceId } as never) : null,
+        ),
+      },
     },
   };
 }
@@ -321,11 +345,101 @@ async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof ma
   return (query: string) => app.request(`http://localhost/${query}`);
 }
 
-/**
- * A real git checkout on the host behind a sandbox whose commands run on the
- * host and whose native filesystem is the host's, so the tree and file routes
- * run real `git check-ignore`, real directory listings and real symlink checks.
- */
+describe('local filesystem routes auth', () => {
+  const localRoutes = ['/web/fs/list', '/web/artifacts/list', '/web/codebase/resolve'];
+
+  async function requestLocalRoute({
+    path,
+    root,
+    sessionFs,
+  }: {
+    path: string;
+    root: string;
+    sessionFs?: SessionFsDeps;
+  }) {
+    const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+    if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+
+    const app = new Hono<any>();
+    app.get('/', context => route.handler(context as never, async () => {}));
+    return app.request(`http://localhost/?path=${encodeURIComponent(root)}`);
+  }
+
+  it('rejects anonymous callers when an auth provider is active', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-'));
+    await writeFile(join(root, 'secret.txt'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    for (const path of localRoutes) {
+      const response = await requestLocalRoute({ path, root, sessionFs });
+      expect(response.status, path).toBe(401);
+      expect(await response.json(), path).toEqual({ error: 'unauthorized' });
+    }
+  });
+
+  it('rejects anonymous callers on the workspace fallback routes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-fallback-'));
+    await mkdir(join(root, 'ws'));
+    await writeFile(join(root, 'ws', 'README.md'), 'secret');
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => true,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      // An unresolved session must not fall through to the host workspace.
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const request = async (path: string, query: string) => {
+      const route = buildFsRoutes({ root, sessionFs }).find(candidate => candidate.path === path);
+      if (!route || !('handler' in route)) throw new Error(`Missing route: ${path}`);
+      const app = new Hono<any>();
+      app.get('/', context => route.handler(context as never, async () => {}));
+      return app.request(`http://localhost/?${query}`);
+    };
+
+    const file = await request('/web/workspace/file', 'workspacePath=ws&path=README.md');
+    expect(file.status).toBe(401);
+    expect(await file.json()).toEqual({ error: 'unauthorized' });
+
+    const rendered = await request('/web/workspace/rendered/list', 'workspacePath=ws&root=output');
+    expect(rendered.status).toBe(401);
+    expect(await rendered.json()).toEqual({ error: 'unauthorized' });
+  });
+
+  it('serves local roots when no auth provider is configured', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-fs-auth-off-'));
+    await mkdir(join(root, 'browsable'));
+    const sessionFs: SessionFsDeps = {
+      auth: {
+        enabled: () => false,
+        ensureUser: vi.fn(async () => undefined),
+        tenant: () => undefined,
+        isOrganizationAdmin: async () => false,
+      },
+      sessions: { getBySessionId: vi.fn(async () => null) },
+    };
+
+    const response = await requestLocalRoute({ path: '/web/fs/list', root, sessionFs });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        entries: [expect.objectContaining({ name: 'browsable' })],
+      }),
+    );
+  });
+});
+
 /**
  * Answers the tree's checks for a mocked sandbox with no symlinks and nothing
  * ignored: `realpath` maps each path under the root, `check-ignore` matches none.
@@ -356,32 +470,81 @@ async function seedHostCheckouts(repos: string[] = ['acme/repo']) {
     await writeFile(join(dir, 'dist', 'out.js'), '');
     await execFileAsync('git', ['init', '-q', dir]);
   }
+  const executeCommand = attachHostSandbox(parent, repos);
+  return { parent, executeCommand };
+}
+
+function failedHostCommand(error: unknown) {
+  if (!(error instanceof Error)) throw error;
+  return {
+    exitCode: 'code' in error && typeof error.code === 'number' ? error.code : 1,
+    stdout: 'stdout' in error && typeof error.stdout === 'string' ? error.stdout : '',
+    stderr: 'stderr' in error && typeof error.stderr === 'string' ? error.stderr : '',
+  };
+}
+
+function attachHostSandbox(parent: string, slugs: string[]) {
   const executeCommand = vi.fn(async (command: string, args: string[] = [], options?: { cwd?: string }) => {
     try {
-      const { stdout, stderr } = await execFileAsync(command, args, { cwd: options?.cwd ?? parent });
+      const { stdout, stderr } = await execFileAsync(command, args, {
+        cwd: options?.cwd ?? parent,
+        maxBuffer: 64 * 1024 * 1024,
+      });
       return { exitCode: 0, stdout, stderr };
     } catch (error) {
-      const failed = error as { code?: number; stdout?: string; stderr?: string };
-      return {
-        exitCode: typeof failed.code === 'number' ? failed.code : 1,
-        stdout: failed.stdout ?? '',
-        stderr: failed.stderr ?? '',
-      };
+      return failedHostCommand(error);
     }
   });
   const filesystem = new LocalFilesystem({ basePath: '/', contained: false });
   getSessionSandbox(
     'row-1',
-    repos[0]!,
+    slugs[0]!,
     () => ({ id: 'sbx-1', provider: 'local', workingDirectory: parent, executeCommand, filesystem }) as never,
-    repos.length > 1 ? repos : undefined,
+    slugs.length > 1 ? slugs : undefined,
   );
-  return { parent, executeCommand };
+  return executeCommand;
 }
 
 describe('live session file tree', () => {
   const names = (listing: { entries: Array<{ name: string; type: string }> }) =>
     listing.entries.map(entry => `${entry.type === 'directory' ? 'd' : 'f'} ${entry.name}`);
+
+  it('reads a submitted plan in a checkout of a multi-repository session', async () => {
+    const { parent } = await seedHostCheckouts(['acme/mastra', 'acme/website']);
+    const planPath = 'mastra/.artifacts/plans/issue-30361.md';
+    await mkdir(join(parent, 'mastra', '.artifacts', 'plans'), { recursive: true });
+    await writeFile(join(parent, 'mastra', '.gitignore'), '.env\n.artifacts/\n');
+    await writeFile(join(parent, planPath), '# Approved scope\n');
+
+    const listing = await listSessionRenderedPath(makeSession(), 'mastra/.artifacts');
+    expect(listing.rootPath).toBe(join(parent, 'mastra', '.artifacts'));
+    expect(listing.entries).toContainEqual(expect.objectContaining({ path: 'plans/issue-30361.md' }));
+    await expect(readSessionWorkspaceFile(makeSession(), planPath)).resolves.toMatchObject({
+      path: planPath,
+      content: '# Approved scope\n',
+    });
+    await expect(listSessionRenderedPath(makeSession(), 'unrelated/.artifacts')).rejects.toThrow(
+      'Root is not approved for rendered workspace access',
+    );
+    await writeFile(join(parent, 'mastra', '.env'), 'SECRET=123');
+    await symlink(join(parent, 'mastra', '.env'), join(parent, 'mastra', '.artifacts', 'plans', 'secret.md'));
+    await expect(readSessionWorkspaceFile(makeSession(), 'mastra/.artifacts/plans/secret.md')).rejects.toThrow(
+      'Path is not available in this session',
+    );
+  });
+
+  it('rejects a symlinked checkout before listing external artifacts', async () => {
+    const { parent } = await seedHostCheckouts(['acme/mastra', 'acme/website']);
+    const outside = await realpath(await mkdtemp(join(tmpdir(), 'factory-external-artifacts-')));
+    await mkdir(join(outside, '.artifacts'), { recursive: true });
+    await writeFile(join(outside, '.artifacts', 'hidden-plan.md'), 'private plan');
+    await rm(join(parent, 'mastra'), { recursive: true });
+    await symlink(outside, join(parent, 'mastra'));
+
+    await expect(listSessionRenderedPath(makeSession(), 'mastra/.artifacts')).rejects.toThrow(
+      'Path is not available in this session',
+    );
+  });
 
   it('lists one directory, folders first, without git internals or ignored entries', async () => {
     await seedHostCheckouts();
@@ -449,7 +612,9 @@ describe('live session file tree', () => {
     readFile.mockRestore();
   });
 
-  it('reports a large file it cannot read instead of showing it empty', async () => {
+  // Root ignores file permissions, so the unreadable file can't be produced (CI runs as root).
+  const runningAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+  it.skipIf(runningAsRoot)('reports a large file it cannot read instead of showing it empty', async () => {
     const { parent } = await seedHostCheckouts();
     const path = join(parent, 'repo', 'locked.log.txt');
     await writeFile(path, 'a'.repeat(512 * 1024 + 1));
@@ -576,6 +741,216 @@ describe('live session file tree', () => {
     await expect(listSessionWorkspaceTree(makeSession(), 'docs/../..')).rejects.toThrow('escapes');
   });
 
+  it('indexes every file the tree could open, in every checkout', async () => {
+    const { parent } = await seedHostCheckouts(['acme/repo', 'acme/docs']);
+    const repo = join(parent, 'repo');
+    await writeFile(join(repo, 'gone.ts'), '');
+    await writeFile(join(repo, '.gitmodules'), '[submodule "lib"]\n\tpath = vendor/lib\n\turl = ../lib.git\n');
+    await execFileAsync('git', ['-C', repo, 'add', 'gone.ts', 'README.md']);
+    await execFileAsync('git', [
+      '-C',
+      repo,
+      'update-index',
+      '--add',
+      '--cacheinfo',
+      `160000,${'a'.repeat(40)},vendor/lib`,
+    ]);
+    await rm(join(repo, 'gone.ts'));
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index).toMatchObject({ workspacePath: makeSession().sessionId, available: true, truncated: false });
+    expect(index.paths.toSorted()).toEqual([
+      'docs/.gitignore',
+      'docs/README.md',
+      'docs/src/agent.ts',
+      'docs/src/nested/deep.ts',
+      'repo/.gitignore',
+      'repo/.gitmodules',
+      'repo/README.md',
+      'repo/src/agent.ts',
+      'repo/src/nested/deep.ts',
+    ]);
+  });
+
+  it('indexes the files at a multi-repository root that the tree opens, without listing a checkout twice', async () => {
+    const { parent } = await seedHostCheckouts(['acme/repo', 'acme/docs']);
+    await writeFile(join(parent, 'notes.md'), '# notes');
+    await mkdir(join(parent, '.artifacts', 'plans'), { recursive: true });
+    await writeFile(join(parent, '.artifacts', 'plans', 'x.md'), '# plan');
+    await mkdir(join(parent, '.git'));
+    await writeFile(join(parent, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    for (const dir of [parent, join(parent, 'repo')]) {
+      await mkdir(join(dir, '.mastra-sandbox'));
+      await writeFile(join(dir, '.mastra-sandbox', 'setup'), 'done');
+    }
+    await symlink('repo/README.md', join(parent, 'readme-link.md'));
+    await symlink('repo/.env', join(parent, 'env-link'));
+    await symlink('docs', join(parent, 'docs-link'));
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.truncated).toBe(false);
+    expect(index.paths.toSorted()).toEqual([
+      '.artifacts/plans/x.md',
+      'docs/.gitignore',
+      'docs/README.md',
+      'docs/src/agent.ts',
+      'docs/src/nested/deep.ts',
+      'notes.md',
+      'readme-link.md',
+      'repo/.gitignore',
+      'repo/README.md',
+      'repo/src/agent.ts',
+      'repo/src/nested/deep.ts',
+    ]);
+    for (const path of index.paths) await expect(readSessionWorkspaceFile(makeSession(), path)).resolves.toBeTruthy();
+  });
+
+  it('indexes a file with a merge conflict once', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
+    const git = (...args: string[]) => execFileAsync('git', ['-C', repo, ...COMMIT_IDENTITY, ...args]);
+    await git('add', 'README.md');
+    await git('commit', '-q', '-m', 'base');
+    await git('checkout', '-q', '-b', 'theirs');
+    await writeFile(join(repo, 'README.md'), 'theirs');
+    await git('commit', '-q', '-am', 'theirs');
+    await git('checkout', '-q', '-');
+    await writeFile(join(repo, 'README.md'), 'ours');
+    await git('commit', '-q', '-am', 'ours');
+    await expect(git('merge', '-q', 'theirs')).rejects.toThrow();
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.paths.toSorted()).toEqual(['.gitignore', 'README.md', 'src/agent.ts', 'src/nested/deep.ts']);
+  });
+
+  it('leaves out a gitlink with no .gitmodules entry and an untracked nested repository', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
+    const git = (dir: string, ...args: string[]) => execFileAsync('git', ['-C', dir, ...COMMIT_IDENTITY, ...args]);
+    await execFileAsync('git', ['init', '-q', join(repo, 'tools')]);
+    await writeFile(join(repo, 'tools', 'run.sh'), 'echo run');
+    await execFileAsync('git', ['init', '-q', join(repo, 'vendor', 'kit')]);
+    await writeFile(join(repo, 'vendor', 'kit', 'index.ts'), 'export {};\n');
+    await git(join(repo, 'vendor', 'kit'), 'add', 'index.ts');
+    await git(join(repo, 'vendor', 'kit'), 'commit', '-q', '-m', 'kit');
+    await git(repo, 'add', 'vendor/kit');
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.paths.toSorted()).toEqual(['.gitignore', 'README.md', 'src/agent.ts', 'src/nested/deep.ts']);
+    for (const path of index.paths) await expect(readSessionWorkspaceFile(makeSession(), path)).resolves.toBeTruthy();
+  });
+
+  it('indexes only the symlinks that open to a readable file', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
+    const outside = await mkdtemp(join(tmpdir(), 'factory-index-outside-'));
+    await writeFile(join(outside, 'secret.txt'), 'secret');
+    await symlink('../README.md', join(repo, 'src', 'readme-link.md'));
+    await symlink('nested', join(repo, 'src', 'nested-link'));
+    await symlink('../.env', join(repo, 'src', 'env-link.txt'));
+    await symlink(join(outside, 'secret.txt'), join(repo, 'src', 'secret-link.txt'));
+    await symlink('missing.ts', join(repo, 'src', 'broken.ts'));
+    await execFileAsync('git', ['-C', repo, 'add', 'src/readme-link.md', 'src/nested-link', 'src/env-link.txt']);
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.paths.toSorted()).toEqual([
+      '.gitignore',
+      'README.md',
+      'src/agent.ts',
+      'src/nested/deep.ts',
+      'src/readme-link.md',
+    ]);
+    for (const path of index.paths) await expect(readSessionWorkspaceFile(makeSession(), path)).resolves.toBeTruthy();
+  });
+
+  it('says the index is partial past its size cap, keeping only whole paths', async () => {
+    const { parent } = await seedHostCheckouts();
+    const folder = ['a', 'b', 'c'].map(letter => letter.repeat(240)).join('/');
+    await mkdir(join(parent, 'repo', folder), { recursive: true });
+    const created = Array.from(
+      { length: 5_200 },
+      (_, i) => `${folder}/${'f'.repeat(110)}-${String(i).padStart(5, '0')}.ts`,
+    );
+    for (let start = 0; start < created.length; start += 200) {
+      await Promise.all(created.slice(start, start + 200).map(path => writeFile(join(parent, 'repo', path), '')));
+    }
+    const whole = new Set([...created, '.gitignore', 'README.md', 'src/agent.ts', 'src/nested/deep.ts']);
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.truncated).toBe(true);
+    expect(index.paths.length).toBeGreaterThan(4_000);
+    expect(index.paths.length).toBeLessThan(whole.size);
+    expect(index.paths.filter(path => !whole.has(path))).toEqual([]);
+  });
+
+  it('indexes the checkouts that answer when one cannot be listed, and says the index is partial', async () => {
+    const { parent, executeCommand } = await seedHostCheckouts(['acme/repo', 'acme/docs']);
+    const host = executeCommand.getMockImplementation()!;
+    executeCommand.mockImplementation(async (command, args = [], options) =>
+      args.includes(join(parent, 'docs')) && args.includes('--deleted')
+        ? { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
+        : host(command, args, options),
+    );
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index).toMatchObject({ available: true, truncated: true });
+    expect(index.paths.toSorted()).toEqual([
+      'repo/.gitignore',
+      'repo/README.md',
+      'repo/src/agent.ts',
+      'repo/src/nested/deep.ts',
+    ]);
+  });
+
+  it('leaves out a checkout replaced by a symlink to a repository outside the working directory', async () => {
+    const { parent } = await seedHostCheckouts(['acme/repo', 'acme/docs']);
+    const outside = await realpath(await mkdtemp(join(tmpdir(), 'factory-index-outside-')));
+    await execFileAsync('git', ['init', '-q', outside]);
+    await writeFile(join(outside, 'secret.txt'), 'secret');
+    await execFileAsync('git', ['-C', outside, 'add', 'secret.txt']);
+    await execFileAsync('git', ['-C', outside, ...COMMIT_IDENTITY, 'commit', '-q', '-m', 'outside']);
+    await rm(join(parent, 'docs'), { recursive: true });
+    await symlink(outside, join(parent, 'docs'));
+
+    const index = await listSessionWorkspaceFiles(makeSession());
+
+    expect(index.paths.toSorted()).toEqual([
+      'repo/.gitignore',
+      'repo/README.md',
+      'repo/src/agent.ts',
+      'repo/src/nested/deep.ts',
+    ]);
+    expect(index.truncated).toBe(true);
+  });
+
+  it('fails the index when no checkout can be listed', async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const host = executeCommand.getMockImplementation()!;
+    executeCommand.mockImplementation(async (command, args = [], options) =>
+      args.includes('--deleted')
+        ? { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
+        : host(command, args, options),
+    );
+
+    await expect(listSessionWorkspaceFiles(makeSession())).rejects.toThrow('Unable to list files');
+  });
+
+  it('indexes nothing for a session with no sandbox in this process', async () => {
+    await expect(listSessionWorkspaceFiles(makeSession())).resolves.toEqual({
+      workspacePath: makeSession().sessionId,
+      available: false,
+      paths: [],
+      truncated: false,
+    });
+  });
+
   it('reports a session with no sandbox in this process as unavailable without starting one', async () => {
     await expect(listSessionWorkspaceTree(makeSession(), 'src')).resolves.toEqual({
       workspacePath: makeSession().sessionId,
@@ -598,11 +973,12 @@ describe('live session file tree', () => {
     await expect(readSessionWorkspaceFile(makeSession(), 'README.md')).rejects.toThrow('Unable to check ignored files');
   });
 
-  it('serves the tree and file routes after authorizing the caller', async () => {
+  it('serves the tree, file and file index routes after authorizing the caller', async () => {
     await seedHostCheckouts();
     const { deps, ensureUser } = makeSessionFs();
     const tree = await requestSessionRoute('/web/workspace/tree', deps);
     const file = await requestSessionRoute('/web/workspace/file', deps);
+    const files = await requestSessionRoute('/web/workspace/files', deps);
     const id = makeSession().sessionId;
 
     const listing = await tree(`?workspacePath=${id}&path=src`);
@@ -613,23 +989,76 @@ describe('live session file tree', () => {
 
     expect((await file(`?workspacePath=${id}&path=src/agent.ts`)).status).toBe(200);
     expect((await file(`?workspacePath=${id}&path=.env`)).status).toBe(403);
-    expect(ensureUser).toHaveBeenCalledTimes(5);
+    const index = await files(`?workspacePath=${id}`);
+    expect(index.status).toBe(200);
+    expect((await index.json()).paths.toSorted()).toEqual([
+      '.gitignore',
+      'README.md',
+      'src/agent.ts',
+      'src/nested/deep.ts',
+    ]);
+    expect(ensureUser).toHaveBeenCalledTimes(6);
   });
 
-  it("refuses another user's session before touching its sandbox", async () => {
+  it("refuses another user's private session before touching its sandbox", async () => {
     const { executeCommand } = await seedHostCheckouts();
-    const { deps } = makeSessionFs();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'private' }) });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+    const files = await requestSessionRoute('/web/workspace/files', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect((await files(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("serves another org member's org-visible session on its Factory's memory", async () => {
+    await seedHostCheckouts();
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'fp-1',
+    });
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+    const rendered = await requestSessionRoute('/web/workspace/rendered/list', deps);
+    const id = makeSession().sessionId;
+
+    expect((await tree(`?workspacePath=${id}&path=src`)).status).toBe(200);
+    expect((await rendered(`?workspacePath=${id}&root=.artifacts`)).status).toBe(200);
+  });
+
+  it("refuses another member an org-visible session still on its owner's memory", async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({
+      session: makeSession({ visibility: 'org', factoryProjectId: 'fp-1' }),
+      ownThreadResourceId: 'user-1',
+    });
     deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
     const tree = await requestSessionRoute('/web/workspace/tree', deps);
 
     expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
     expect(executeCommand).not.toHaveBeenCalled();
   });
+
+  it('refuses an org-visible session to a caller from another org', async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const { deps } = makeSessionFs({ session: makeSession({ visibility: 'org' }) });
+    deps.auth.tenant = () => ({ orgId: 'org-2', userId: 'user-1' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+    const files = await requestSessionRoute('/web/workspace/files', deps);
+
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect((await files(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
 });
 
 describe('listSessionRenderedPath', () => {
-  it('lists rendered entries from the session sandbox in one command', async () => {
+  it('confines the rendered root before listing session sandbox entries', async () => {
     const { executeCommand } = seedSessionSandbox(script => {
+      if (script.includes('readlink -f')) {
+        return { exitCode: 0, stdout: `${WORKDIR}\0${WORKDIR}/.artifacts\0` };
+      }
       expect(script).toContain(`'${WORKDIR}/.artifacts'`);
       return {
         exitCode: 0,
@@ -651,8 +1080,8 @@ describe('listSessionRenderedPath', () => {
       expect.objectContaining({ name: 'understand-pr', path: 'understand-pr', type: 'directory', size: 0 }),
       expect.objectContaining({ name: 'HISTORY.md', path: 'understand-pr/HISTORY.md', type: 'file', size: 5 }),
     ]);
-    expect(executeCommand).toHaveBeenCalledTimes(1);
-    expect(executeCommand.mock.calls[0]?.[2]?.maxRetainedBytes).toBe(Infinity);
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+    expect(executeCommand.mock.calls[1]?.[2]?.maxRetainedBytes).toBe(Infinity);
   });
 
   it('returns an empty listing when this process holds no sandbox for the session', async () => {
@@ -699,7 +1128,8 @@ describe('readSessionWorkspaceFile', () => {
       const check = treeCheck(args);
       if (check) return check;
       if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
+      if (script.startsWith('stat -L -c'))
+        return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
@@ -736,7 +1166,7 @@ describe('readSessionWorkspaceFile', () => {
       if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
         return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
       }
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
+      if (script.startsWith('stat -L -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };
     });
 
@@ -839,17 +1269,14 @@ describe('workspace changes', () => {
   });
 
   it('lists pending changes with per-file and total line counts', async () => {
-    const { executeCommand } = seedSessionSandbox((script, command, args) => {
+    const { executeCommand } = seedSessionSandbox((_script, command, args) => {
       if (command === 'git') {
         expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
         return { exitCode: 0, stdout: ' M src/edited.ts\0?? src/new.ts\0' };
       }
 
       expect(command).toBe('sh');
-      expect(script).toContain('diff --numstat -z --find-renames');
-      expect(script).toContain('ls-files --others --exclude-standard -z');
-      expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
-      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA]);
+      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA, '--numstat', '-z']);
       // oxlint-disable-next-line no-useless-concat -- Keep NUL-delimited records separate from the next record's leading digit.
       return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
@@ -907,174 +1334,167 @@ describe('workspace changes', () => {
       changes: [{ path: 'src/edited.ts', status: 'modified' }],
     });
   });
+});
 
-  it('returns a bounded unified diff for one selected file', async () => {
-    const patch = [
-      'diff --git a/src/edited.ts b/src/edited.ts',
-      '--- a/src/edited.ts',
-      '+++ b/src/edited.ts',
-      '@@ -1 +1 @@',
-      '-old',
-      '+new',
-      '',
-    ].join('\n');
-    const { executeCommand } = seedSessionSandbox((script, command, args) => {
-      expect(command).toBe('sh');
-      expect(script).toContain('head -c 524289');
-      expect(args.slice(3)).toEqual([
-        '0',
-        '--literal-pathspecs',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--find-renames',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        BASE_SHA,
-        '--',
-        'src/edited.ts',
-      ]);
-      return { exitCode: 0, stdout: patch };
+describe('workspace patches', () => {
+  async function seedRepositories(slugs: string[] = ['acme/repo']) {
+    const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-patches-')));
+    const dirs = slugs.map(slug => join(parent, slug.split('/')[1]!));
+    for (const dir of dirs) await execFileAsync('git', ['init', '-q', '-b', 'main', dir]);
+    attachHostSandbox(parent, slugs);
+    return dirs;
+  }
+
+  async function commitAll(dir: string, message: string) {
+    await execFileAsync('git', ['-C', dir, 'add', '-A']);
+    await execFileAsync('git', ['-C', dir, ...COMMIT_IDENTITY, 'commit', '-q', '--no-verify', '-m', message]);
+  }
+
+  async function publishBase(dir: string) {
+    await execFileAsync('git', ['-C', dir, 'update-ref', 'refs/remotes/origin/main', 'HEAD']);
+  }
+
+  async function seedSessionWork() {
+    const [dir] = await seedRepositories();
+    await writeFile(join(dir!, 'keep.txt'), 'a\nb\nc\n');
+    await writeFile(join(dir!, 'old name.txt'), 'same\n');
+    await writeFile(join(dir!, 'gone.txt'), 'bye\n');
+    await writeFile(join(dir!, 'logo.png'), Buffer.from([0, 1, 2, 3]));
+    await commitAll(dir!, 'base');
+    await publishBase(dir!);
+
+    await writeFile(join(dir!, 'keep.txt'), 'a\nB\nc\n');
+    await commitAll(dir!, 'session commit');
+
+    await execFileAsync('git', ['-C', dir!, 'mv', 'old name.txt', 'new näme.txt']);
+    await execFileAsync('git', ['-C', dir!, 'rm', '-q', 'gone.txt']);
+    await writeFile(join(dir!, 'logo.png'), Buffer.from([0, 1, 2, 4]));
+    await writeFile(join(dir!, 'say "hi".md'), 'hello\n');
+    await writeFile(join(dir!, 'tab\tname.txt'), 'tabbed\n');
+  }
+
+  it('gives every change of the session branch its own diff, committed or not', async () => {
+    await seedSessionWork();
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'branch');
+
+    expect(result.changes.map(change => [change.path, change.status])).toEqual([
+      ['gone.txt', 'deleted'],
+      ['keep.txt', 'modified'],
+      ['logo.png', 'modified'],
+      ['new näme.txt', 'renamed'],
+      ['say "hi".md', 'untracked'],
+      ['tab\tname.txt', 'untracked'],
+    ]);
+    expect(new Set(Object.keys(result.patches))).toEqual(new Set(result.changes.map(change => change.path)));
+    for (const patch of Object.values(result.patches)) expect(patch.match(/^diff --git /gm)).toHaveLength(1);
+    expect(result.patches['gone.txt']).toContain('-bye\n');
+    expect(result.patches['keep.txt']).toContain('-b\n+B\n');
+    expect(result.patches['logo.png']).toContain('Binary files');
+    expect(result.patches['new näme.txt']).toContain('rename from old name.txt');
+    expect(result.patches['say "hi".md']).toContain('+hello\n');
+    expect(result.patches['tab\tname.txt']).toContain('+tabbed\n');
+  });
+
+  it('leaves committed work out of the uncommitted scope', async () => {
+    await seedSessionWork();
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'uncommitted');
+
+    expect(result.scope).toBe('uncommitted');
+    expect(result.changes.map(change => change.path)).toEqual([
+      'gone.txt',
+      'logo.png',
+      'new näme.txt',
+      'say "hi".md',
+      'tab\tname.txt',
+    ]);
+    expect(new Set(Object.keys(result.patches))).toEqual(new Set(result.changes.map(change => change.path)));
+  });
+
+  it('lists a change without a diff when its diff passes 512 KB or no longer fits in 8 MB, never cutting one', async () => {
+    const [dir] = await seedRepositories();
+    await writeFile(join(dir!, 'small.txt'), 'one\n');
+    await commitAll(dir!, 'base');
+    await publishBase(dir!);
+
+    const line = `${'x'.repeat(99)}\n`;
+    const bulkLines = 4096;
+    const bulkFiles = Array.from({ length: 22 }, (_, index) => `bulk-${String(index).padStart(2, '0')}.txt`);
+    await writeFile(join(dir!, 'small.txt'), 'two\n');
+    await writeFile(join(dir!, 'big.txt'), line.repeat(6000));
+    for (const file of bulkFiles) await writeFile(join(dir!, file), line.repeat(bulkLines));
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'branch');
+
+    expect(result.changes).toHaveLength(24);
+    expect(result.patches['small.txt']).toContain('-one\n+two\n');
+    expect(result.patches['big.txt']).toBeUndefined();
+    expect(result.omittedPatches['big.txt']).toBe('file-too-large');
+    const shown = bulkFiles.filter(file => result.patches[file] !== undefined);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(bulkFiles.length);
+    expect(shown).toEqual(bulkFiles.slice(0, shown.length));
+    for (const file of shown) {
+      const added = result.patches[file]!.split('\n').filter(patchLine => /^\+x/.test(patchLine));
+      expect(added).toHaveLength(bulkLines);
+    }
+    const skipped = bulkFiles.slice(shown.length);
+    expect(skipped.map(file => result.omittedPatches[file])).toEqual(skipped.map(() => 'total-too-large'));
+    expect(result.omittedPatches['small.txt']).toBeUndefined();
+  });
+
+  it('keeps listing the changes with git’s error when git cannot diff them, as in a repository without a commit', async () => {
+    const [dir] = await seedRepositories();
+    await writeFile(join(dir!, 'first.txt'), 'hello\n');
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'branch');
+
+    expect(result.available).toBe(true);
+    expect(result.changes.map(change => [change.path, change.status])).toEqual([['first.txt', 'untracked']]);
+    expect(result.patches).toEqual({});
+    expect(result.omittedPatches).toEqual({});
+    expect(result.diffError).toMatch(/^fatal: .*HEAD/);
+  });
+
+  it('keys each repository’s diffs by its prefixed path', async () => {
+    const [repoDir, docsDir] = await seedRepositories(['acme/repo', 'acme/docs']);
+    const session = makeSession({ baseBranch: 'main' });
+    recordSessionEnvironment(session.sessionId, {
+      workingDirectory: join(repoDir!, '..'),
+      repositories: [
+        {
+          slug: 'acme/repo',
+          dir: repoDir!,
+          branch: 'factory/issue-1',
+          defaultBranch: 'main',
+          setupStatus: 'ok',
+        },
+        { slug: 'acme/docs', dir: docsDir!, branch: 'main', defaultBranch: 'main', setupStatus: 'ok' },
+      ],
     });
+    for (const dir of [repoDir!, docsDir!]) {
+      await writeFile(join(dir, 'README.md'), 'base\n');
+      await commitAll(dir, 'base');
+      await publishBase(dir);
+      await writeFile(join(dir, 'README.md'), `changed in ${dir.split('/').at(-1)}\n`);
+    }
 
-    const session = makeSession();
-    await expect(readSessionWorkspaceDiff(session, 'src/edited.ts')).resolves.toEqual({
-      workspacePath: session.sessionId,
-      path: 'src/edited.ts',
-      patch,
-      truncated: false,
-    });
-    expect(executeCommand).toHaveBeenCalledTimes(2);
+    const result = await listSessionWorkspacePatches(session, 'branch');
+    __clearSessionEnvironmentsForTests();
+
+    expect(result.changes.map(change => change.path)).toEqual(['docs/README.md', 'repo/README.md']);
+    expect(result.patches['docs/README.md']).toContain('+changed in docs\n');
+    expect(result.patches['repo/README.md']).toContain('+changed in repo\n');
   });
 
-  it('marks and limits a diff that exceeds the output boundary', async () => {
-    const maxDiffBytes = 512 * 1024;
-    seedSessionSandbox(() => ({ exitCode: 0, stdout: 'a'.repeat(maxDiffBytes + 1) }));
+  it('rejects a scope it does not know', async () => {
+    const { deps } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/changes/patches', deps);
 
-    const result = await readSessionWorkspaceDiff(makeSession(), 'src/large.ts');
+    const response = await request(`?workspacePath=${makeSession().sessionId}&scope=last-turn`);
 
-    expect(result.truncated).toBe(true);
-    expect(Buffer.byteLength(result.patch)).toBe(maxDiffBytes);
-  });
-
-  it('does not emit a replacement character when truncation splits UTF-8', async () => {
-    const maxDiffBytes = 512 * 1024;
-    const prefix = 'a'.repeat(maxDiffBytes - 1);
-    seedSessionSandbox(() => ({ exitCode: 0, stdout: `${prefix}€` }));
-
-    const result = await readSessionWorkspaceDiff(makeSession(), 'src/unicode.ts');
-
-    expect(result.truncated).toBe(true);
-    expect(result.patch).toBe(prefix);
-    expect(result.patch).not.toContain('\uFFFD');
-  });
-
-  it('includes both paths when reading a renamed file diff', async () => {
-    seedSessionSandbox((_script, command, args) => {
-      expect(command).toBe('sh');
-      expect(args.slice(3)).toEqual([
-        '0',
-        '--literal-pathspecs',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--find-renames',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        BASE_SHA,
-        '--',
-        'src/old.ts',
-        'src/renamed.ts',
-      ]);
-      return { exitCode: 0, stdout: 'rename diff' };
-    });
-
-    await expect(readSessionWorkspaceDiff(makeSession(), 'src/renamed.ts', 'src/old.ts')).resolves.toEqual(
-      expect.objectContaining({ path: 'src/renamed.ts', patch: 'rename diff' }),
-    );
-  });
-
-  it('treats pathspec magic in file names literally', async () => {
-    const path = 'src/:(exclude)*.ts';
-    seedSessionSandbox((_script, command, args) => {
-      expect(command).toBe('sh');
-      expect(args.slice(3)).toEqual([
-        '0',
-        '--literal-pathspecs',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--find-renames',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        BASE_SHA,
-        '--',
-        path,
-      ]);
-      return { exitCode: 0, stdout: 'literal path diff' };
-    });
-
-    await expect(readSessionWorkspaceDiff(makeSession(), path)).resolves.toEqual(
-      expect.objectContaining({ path, patch: 'literal path diff' }),
-    );
-  });
-
-  it('creates a bounded diff for an untracked file', async () => {
-    let commandIndex = 0;
-    const { executeCommand } = seedSessionSandbox((script, command, args) => {
-      commandIndex += 1;
-      if (commandIndex === 1) {
-        expect(command).toBe('sh');
-        return { exitCode: 0, stdout: '' };
-      }
-      if (commandIndex === 2) {
-        expect(command).toBe('git');
-        expect(args).toEqual([
-          '--literal-pathspecs',
-          '-C',
-          WORKDIR,
-          'ls-files',
-          '--others',
-          '--exclude-standard',
-          '--',
-          'src/new.ts',
-        ]);
-        return { exitCode: 0, stdout: 'src/new.ts\n' };
-      }
-      expect(command).toBe('sh');
-      expect(script).toContain('head -c 524289');
-      expect(args.slice(3)).toEqual([
-        '1',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--no-index',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        '--',
-        '/dev/null',
-        'src/new.ts',
-      ]);
-      return { exitCode: 0, stdout: 'new file diff' };
-    });
-
-    await expect(readSessionWorkspaceDiff(makeSession(), 'src/new.ts')).resolves.toEqual(
-      expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
-    );
-    expect(executeCommand).toHaveBeenCalledTimes(4);
-    const lsFiles = executeCommand.mock.calls.find(([, args]) => args?.includes('ls-files'));
-    expect(lsFiles?.[2]?.maxRetainedBytes).toBe(Infinity);
-  });
-
-  it('rejects diff paths that escape the workspace before running git', async () => {
-    const { executeCommand } = seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
-
-    await expect(readSessionWorkspaceDiff(makeSession(), '../secret')).rejects.toThrow('path escapes workspace');
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(response.status).toBe(400);
   });
 });
 
@@ -1089,15 +1509,10 @@ describe('workspace changes across environment repositories', () => {
    * sandbox answers each git call by the checkout it names.
    */
   function seedEnvironment(
-    answer: (
-      dir: string,
-      kind: 'merge-base' | 'status' | 'tracked' | 'numstat' | 'diff' | 'other',
-      args: string[],
-    ) => Answer,
+    answer: (dir: string, kind: 'merge-base' | 'status' | 'tracked' | 'numstat' | 'other', args: string[]) => Answer,
     { recorded = ['acme/repo', 'acme/docs', 'acme/site'] }: { recorded?: string[] } = {},
   ) {
     const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
-      const script = args[1] ?? '';
       const dirIndex = args.indexOf('-C');
       const dir = dirIndex >= 0 ? args[dirIndex + 1]! : (args[3] ?? '');
       const kind =
@@ -1107,11 +1522,9 @@ describe('workspace changes across environment repositories', () => {
             ? 'status'
             : command === 'git' && args[2] === 'diff'
               ? 'tracked'
-              : script.includes('diff --numstat')
+              : args.includes('--numstat')
                 ? 'numstat'
-                : script.includes('head -c')
-                  ? 'diff'
-                  : 'other';
+                : 'other';
       const result = answer(dir, kind, args);
       return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
     });
@@ -1124,12 +1537,11 @@ describe('workspace changes across environment repositories', () => {
     const session = makeSession({ baseBranch: 'main' });
     recordSessionEnvironment(session.sessionId, {
       workingDirectory: ROOT,
-      repositories: recorded.map((slug, index) => ({
+      repositories: recorded.map(slug => ({
         slug,
         dir: DIRS[slug as keyof typeof DIRS],
         branch: slug === 'acme/repo' ? 'factory/issue-1' : 'develop',
         defaultBranch: 'develop',
-        position: index + 1,
         setupStatus: 'ok' as const,
       })),
     });
@@ -1266,65 +1678,6 @@ describe('workspace changes across environment repositories', () => {
     });
   });
 
-  it('runs the diff of a prefixed path inside its checkout and echoes the prefixed path', async () => {
-    const patch = 'diff --git a/guide.md b/guide.md\n+hello\n';
-    const { executeCommand, session } = seedEnvironment((dir, kind, args) => {
-      if (kind === 'merge-base') {
-        expect(args).toEqual(['-C', DIRS['acme/docs'], 'merge-base', 'HEAD', 'origin/develop']);
-        return { exitCode: 0, stdout: `${BASE_SHA}\n` };
-      }
-      if (kind === 'diff') {
-        expect(dir).toBe(DIRS['acme/docs']);
-        expect(args.slice(-3)).toEqual([BASE_SHA, '--', 'guide.md']);
-        return { exitCode: 0, stdout: patch };
-      }
-      return { exitCode: 1, stdout: '', stderr: `unexpected ${kind}` };
-    });
-
-    await expect(readSessionWorkspaceDiff(session, 'docs/guide.md')).resolves.toEqual({
-      workspacePath: session.sessionId,
-      path: 'docs/guide.md',
-      patch,
-      truncated: false,
-    });
-    expect(executeCommand).toHaveBeenCalledTimes(2);
-  });
-
-  it('passes both halves of a rename relative to their checkout', async () => {
-    const { session } = seedEnvironment((_dir, kind, args) => {
-      if (kind === 'merge-base') return { exitCode: 0, stdout: `${BASE_SHA}\n` };
-      if (kind === 'diff') {
-        expect(args.slice(-4)).toEqual([BASE_SHA, '--', 'old.md', 'new.md']);
-        return { exitCode: 0, stdout: 'renamed' };
-      }
-      return { exitCode: 1, stdout: '' };
-    });
-
-    await expect(readSessionWorkspaceDiff(session, 'docs/new.md', 'docs/old.md')).resolves.toMatchObject({
-      path: 'docs/new.md',
-      patch: 'renamed',
-    });
-  });
-
-  it('rejects a rename whose previous path lives in another repository before running git', async () => {
-    const { executeCommand, session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
-
-    await expect(readSessionWorkspaceDiff(session, 'docs/new.md', 'repo/old.md')).rejects.toThrow(
-      'previousPath is not available',
-    );
-    expect(executeCommand).not.toHaveBeenCalled();
-  });
-
-  it('rejects a bare repository prefix, an unknown prefix and a traversal through a prefix before running git', async () => {
-    const { executeCommand, session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
-
-    await expect(readSessionWorkspaceDiff(session, 'docs')).rejects.toThrow('path is not available');
-    await expect(readSessionWorkspaceDiff(session, 'docs/')).rejects.toThrow('path is not available');
-    await expect(readSessionWorkspaceDiff(session, '.workspace-setup-ran')).rejects.toThrow('path is not available');
-    await expect(readSessionWorkspaceDiff(session, 'docs/../repo/x')).rejects.toThrow('path escapes workspace');
-    expect(executeCommand).not.toHaveBeenCalled();
-  });
-
   it('reads a root artifact and a prefixed file on the workspace root filesystem', async () => {
     const files: Record<string, string> = {
       [`${ROOT}/.artifacts/report.md`]: '# Report',
@@ -1338,7 +1691,7 @@ describe('workspace changes across environment repositories', () => {
       const abs = match?.[1];
       if (abs && files[abs] !== undefined && script.includes('readlink'))
         return { exitCode: 0, stdout: `${ROOT}\n${abs}` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
+      if (script.startsWith('stat -L -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
       const read = /base64 < '([^']+)'/.exec(script);
       if (read && files[read[1]!] !== undefined) {
         return { exitCode: 0, stdout: Buffer.from(files[read[1]!]!, 'utf8').toString('base64') };

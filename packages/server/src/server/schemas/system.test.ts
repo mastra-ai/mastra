@@ -3,6 +3,24 @@ import { NO_OBSERVABILITY_STORAGE_CAPABILITIES } from '../handlers/observability
 import { observabilityStorageCapabilitiesSchema } from './system';
 
 describe('observabilityStorageCapabilitiesSchema', () => {
+  it('treats omitted search capabilities from older servers as unavailable', () => {
+    const {
+      traceQueryAggregatedRoots: _roots,
+      spanQueryTokenSearch: _span,
+      traceQueryTokenSearch: _trace,
+      traceAggregateTokenSearch: _traceAggregate,
+      spanAggregateTokenSearch: _spanAggregate,
+      ...legacyCapabilities
+    } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+    expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
+      traceQueryAggregatedRoots: false,
+      spanQueryTokenSearch: false,
+      traceQueryTokenSearch: false,
+      traceAggregateTokenSearch: false,
+      spanAggregateTokenSearch: false,
+    });
+  });
+
   it('treats an omitted span context capability from an older server as unavailable', () => {
     const { spanQueryContextFields: _, ...legacyCapabilities } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
     expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
@@ -33,4 +51,14 @@ describe('observabilityStorageCapabilitiesSchema', () => {
       }).success,
     ).toBe(false);
   });
+});
+
+it('treats missing duration ordering support from an older server as unavailable', () => {
+  const { spanQueryDurationSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+  expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryDurationSort).toBe(false);
+});
+
+it('treats missing model/provider ordering support from an older server as unavailable', () => {
+  const { spanQueryModelProviderSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+  expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryModelProviderSort).toBe(false);
 });
