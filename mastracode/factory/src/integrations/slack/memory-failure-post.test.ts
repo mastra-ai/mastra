@@ -4,7 +4,7 @@ import type { AgentChannels } from '@mastra/core/channels';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { observeSessionMemoryFailurePosts } from './memory-failure-post.js';
 
@@ -26,6 +26,7 @@ async function mount({ platform = 'slack' }: { platform?: string } = {}) {
   await controller.init();
   const session = await controller.createSession({ id: 'session-1', resourceId: 'project-1', ownerId: 'user-1' });
   await session.thread.create();
+  await session.state.set({ factoryProjectId: 'factory-1' });
   const post = vi.fn(async () => ({}));
   const buildRenderContextForThread = vi.fn(async () => ({ platform, chatThread: { post } }));
   const channels = { buildRenderContextForThread } as unknown as AgentChannels;
@@ -47,6 +48,13 @@ const observerFailed = {
 };
 
 describe('observeSessionMemoryFailurePosts', () => {
+  beforeEach(() => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('posts the run error card to the Slack thread when a memory failure stops the run', async () => {
     const { session, post, buildRenderContextForThread, run } = await mount();
 
@@ -56,7 +64,8 @@ describe('observeSessionMemoryFailurePosts', () => {
     expect(buildRenderContextForThread).toHaveBeenCalledWith(session.thread.getId());
     const card = JSON.stringify(post.mock.calls[0]);
     expect(card).toContain('Observational memory observation run failed');
-    expect(card).toContain('memory model');
+    expect(card).toContain('Change memory model');
+    expect(card).toContain('https://factory.example.com/factories/factory-1/settings/memory');
   });
 
   it('posts nothing for a run someone stopped, or on a thread not linked to Slack', async () => {
