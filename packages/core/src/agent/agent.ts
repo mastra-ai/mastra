@@ -11150,7 +11150,8 @@ export class Agent<
    * @internal Drops a suspended run's workflow registration and its snapshot rows under `workflowNames`
    * (default: {@link __suspendedRunWorkflowNames}). When `isResuming` is given it is checked after the last
    * await, right before the deletes are issued, and a run it reports as resuming is left untouched (resolves
-   * `false`). A resume that starts after that finds no snapshot, as if it started after the delete.
+   * `false`). A resume that starts after that check is ordered after the delete: it may find no snapshot, or
+   * lose its row to a delete still in flight (only a storage-level fence would close that).
    * Rejects if a delete fails.
    */
   async __deleteSuspendedRun(
