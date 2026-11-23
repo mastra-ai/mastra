@@ -1228,6 +1228,8 @@ export class Mastra<
    * calls also set without starting the workflow consumer.
    */
   #durableAgentInitialization?: Promise<void>;
+  // Bumped by addAgent() so push deliveries can tell when a registration landed after initialization settled.
+  #agentRegistrations = 0;
   #executionWorkersStarted = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
@@ -3287,6 +3289,7 @@ export class Mastra<
     mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
     agents[agentKey] = mastraAgent;
     this.#durableAgentInitialization = undefined;
+    this.#agentRegistrations++;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
       if (!registrations) {
@@ -8207,13 +8210,6 @@ export class Mastra<
         ack?: () => Promise<void>,
         nack?: () => Promise<void>,
       ) => {
-        try {
-          await this.#initializeDurableAgents();
-        } catch (error) {
-          this.#logger.error('Failed to initialize durable agents for push delivery', { error });
-          if (nack) await nack().catch(err => this.#logger.error('Error nacking workflow event', err));
-          return;
-        }
         // In cross-process push environments (e.g. UnixSocketPubSub),
         // every subscriber receives every event — including events for
         // internal workflows registered on a different process. Skip
@@ -8225,9 +8221,20 @@ export class Mastra<
         const data = event.data as Record<string, unknown> | undefined;
         const wfId = data?.workflowId as string | undefined;
         const rId = data?.runId as string | undefined;
-        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+        while (true) {
+          const registrations = this.#agentRegistrations;
+          try {
+            await this.#initializeDurableAgents();
+          } catch (error) {
+            this.#logger.error('Failed to initialize durable agents for push delivery', { error });
+            if (nack) await nack().catch(err => this.#logger.error('Error nacking workflow event', err));
+            return;
+          }
+          if (!wfId || !rId || this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) break;
+          // An agent registered after initialization settled may own this workflow; initialize it before skipping.
+          if (this.#agentRegistrations !== registrations) continue;
           if (ack) {
-            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+            await ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
           }
           return;
         }

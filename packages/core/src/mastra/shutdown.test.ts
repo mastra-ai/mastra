@@ -25,6 +25,20 @@ class PushOnlyPubSub extends EventEmitterPubSub {
   }
 }
 
+/** Push-only pubsub that exposes the workflow subscriber so tests control ack timing. */
+class CapturingPushPubSub extends PushOnlyPubSub {
+  #workflowCallbacks: Array<(event: any, ack?: () => Promise<void>, nack?: () => Promise<void>) => unknown> = [];
+
+  override async subscribe(topic: string, cb: any, ...rest: any[]): Promise<void> {
+    if (topic === 'workflows') this.#workflowCallbacks.push(cb);
+    return (super.subscribe as any)(topic, cb, ...rest);
+  }
+
+  async deliver(event: any, ack?: () => Promise<void>): Promise<void> {
+    await Promise.all(this.#workflowCallbacks.map(cb => cb(event, ack)));
+  }
+}
+
 /**
  * Two-step evented workflow whose first step blocks until `gate` resolves, so a
  * test can call shutdown() while a step is mid-execution.
@@ -438,6 +452,86 @@ describe('Mastra shutdown lifecycle', () => {
       await mastra.shutdown();
       mastra.__unregisterHooks();
     }
+  });
+
+  it('stopWorkers waits for the acknowledgement of a skipped foreign push event', async () => {
+    const acking = deferred();
+    const pubsub = new CapturingPushPubSub();
+    const flush = vi.spyOn(pubsub, 'flush');
+    const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
+
+    try {
+      await mastra.startWorkers();
+      const ack = vi.fn(() => acking.promise);
+      void pubsub.deliver(
+        { type: 'workflow.step.run', runId: 'run-1', data: { workflowId: 'foreign-loop', runId: 'run-1' } } as any,
+        ack,
+      );
+      await vi.waitFor(() => expect(ack).toHaveBeenCalledOnce());
+
+      let stopped = false;
+      const stop = mastra.stopWorkers().then(() => {
+        stopped = true;
+      });
+      await new Promise(r => setTimeout(r, 20));
+      expect(stopped).toBe(false);
+      expect(flush).not.toHaveBeenCalled();
+
+      acking.resolve();
+      await stop;
+      expect(flush).toHaveBeenCalled();
+    } finally {
+      acking.resolve();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('handles a push event whose native agent registers after initialization settles', async () => {
+    let windowHit = false;
+    // Sweep the registration point across the microtask hops between initialization settling
+    // and the ownership check, so the interval CodeRabbit modelled is exercised deterministically.
+    for (let hops = 0; hops < 40; hops++) {
+      const pubsub = new CapturingPushPubSub();
+      const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
+      let lateInitialized = false;
+      let registeredAtLastCheck = false;
+      vi.spyOn(mastra, '__hasInternalWorkflow').mockImplementation(() => {
+        registeredAtLastCheck = Boolean(mastra.listAgents()['late-native']);
+        if (registeredAtLastCheck && !lateInitialized) windowHit = true;
+        return lateInitialized;
+      });
+      const handle = vi.spyOn(mastra, 'handleWorkflowEvent').mockResolvedValue({ ok: true });
+
+      try {
+        await mastra.startWorkers();
+        void pubsub.deliver(
+          { type: 'workflow.step.run', runId: 'run-1', data: { workflowId: 'late-loop', runId: 'run-1' } } as any,
+          vi.fn(async () => {}),
+        );
+        for (let i = 0; i < hops; i++) await Promise.resolve();
+
+        const late = new Agent({
+          id: 'late-native',
+          name: 'late-native',
+          instructions: 'test',
+          model: 'openai/gpt-4o',
+          durable: { executionEngine: 'durable' },
+        });
+        vi.spyOn(late, '__hasDurableExecution').mockReturnValue(true);
+        vi.spyOn(late, '__initializeDurableExecution').mockImplementation(async () => {
+          lateInitialized = true;
+        });
+        mastra.addAgent(late, 'late-native');
+
+        await mastra.stopWorkers();
+        if (registeredAtLastCheck) expect(handle, `registration after ${hops} hops`).toHaveBeenCalledOnce();
+      } finally {
+        await mastra.shutdown();
+        mastra.__unregisterHooks();
+      }
+    }
+    expect(windowHit).toBe(true);
   });
 
   it('rejects an invalid drainTimeout', async () => {
