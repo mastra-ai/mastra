@@ -1,3 +1,4 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { AgentControllerEvent, PermissionRules } from '@mastra/core/agent-controller';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
@@ -5,6 +6,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
+import { buildModelCatalog } from '../routes/config.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { fakeRouteAuth } from '../routes/test-utils.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
@@ -194,9 +196,12 @@ async function setup(
     deploymentProviders,
     tenantCredentials = false,
     interactive = true,
+    localAuthStorage,
   }: {
     /** False for a turn nobody signed in started: a notification wake, webhook, or rule notice. */
     interactive?: boolean;
+    /** Local mode: the server's own sign-ins, as the Settings picker reads them. */
+    localAuthStorage?: AuthStorage;
     /** Deployed mode: model switches check the target session's stored credentials. */
     tenantCredentials?: boolean;
     deploymentProviders?: ReadonlySet<string>;
@@ -265,6 +270,7 @@ async function setup(
     sessionModel: {
       projects: seeded.seed.projects,
       modelDefaults: seeded.seed.modelDefaults,
+      ...(localAuthStorage ? { localAuthStorage: () => localAuthStorage } : {}),
       ...(tenantCredentials
         ? {
             tenantCatalog: {
@@ -333,6 +339,27 @@ describe('factory_switch_session_model', () => {
       modelId: 'openai/gpt-6.1-sol',
       live: true,
     });
+  });
+
+  it('offers and switches to the Fast models the Settings picker lists for a local ChatGPT sign-in', async () => {
+    const codexSignIn = {
+      get: (id: string) => (id === 'openai-codex' ? { type: 'oauth' } : undefined),
+      hasStoredApiKey: () => false,
+    } as unknown as AuthStorage;
+    const env = await setup('org', { localAuthStorage: codexSignIn });
+    const settingsIds = (await buildModelCatalog({ controller: env.controller, authStorage: codexSignIn })).map(
+      model => model.id,
+    );
+    expect(settingsIds).toContain('openai/gpt-6.1-sol:fast');
+
+    const started = (await env.start({ prompt: 'Go.', model: 'openai/gpt-6.1-sol:fast' })) as { sessionId: string };
+    await expect(env.switchModel({ sessionId: started.sessionId })).resolves.toEqual({
+      sessionId: started.sessionId,
+      models: settingsIds,
+    });
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6:fast' }),
+    ).resolves.toMatchObject({ modelId: 'openai/gpt-5.6:fast', live: true });
   });
 
   it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {

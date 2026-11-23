@@ -48,9 +48,33 @@ const text = await output.text
 cleanup()
 ```
 
-### Plain agent stream configuration
+### Native agent execution
 
-The `durable` option on a plain `Agent` controls resumable streams only. It never wraps the agent or enables checkpoints. Use `createDurableAgent({ agent })` explicitly for durable execution, and pass execution options such as `maxSteps` and `shouldPersistSnapshot` to that factory.
+Set `durable.executionEngine` on an `Agent` to enable checkpointed execution without wrapping it:
+
+```typescript
+import { Agent, type AgentStreamOutput } from '@mastra/core/agent'
+
+const agent = new Agent({
+  id: 'support',
+  name: 'Support agent',
+  instructions: 'Help customers with their orders.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  durable: { executionEngine: 'default' },
+})
+
+const output: AgentStreamOutput = await agent.stream('Where is my order?')
+console.log(await output.text)
+output.cleanup?.()
+```
+
+Both engines checkpoint each step. Use `'default'` to run on the default in-process engine, `'evented'` to run on workers over pubsub, or `false` for the plain agent loop, which doesn't checkpoint. Evented execution falls back to in-process durable execution when the agent has no Mastra host, or when the host's workflows store doesn't support concurrent updates. A host with no workflows store keeps evented execution.
+
+Set `Mastra.durable.executionEngine` to provide a default for agents registered through `agents` or `addAgent()`. An agent's explicit setting takes precedence. The engine selection is fixed at registration or first execution, carries over to editor forks, and remains unchanged when the agent is wrapped.
+
+Native `stream()` and `resumeStream()` return `MastraModelOutput`. When durable execution is selected, the output also carries `abort()`, `cleanup()`, `threadId`, and `resourceId`. Type it as `AgentStreamOutput` to access them. `generate()` keeps its usual result shape. The wrapper factories keep returning `DurableAgentStreamResult`, whose model output is in `.output`.
+
+`durable: true` enables resumable-stream publication and inherits any Mastra execution default. `durable: false` opts out of both publication and inherited execution defaults. Without a Mastra execution default, neither boolean form enables checkpoint execution. Set `executionEngine` explicitly to select an execution backend. Configure `shouldPersistSnapshot` alongside it to control snapshot persistence.
 
 ## `createDurableAgent(options)`
 
@@ -633,7 +657,7 @@ await output.text
 cleanup()
 ```
 
-Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that includes `'running'`. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. Enabling persistence after a crash can't reconstruct a missing checkpoint.
+Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that returns `true` for `workflowStatus: 'running'`, including when `stepResults` is `{}`. On a plain `DurableAgent`, a custom `shouldPersistSnapshot` policy replaces the default, so its `'running'` result decides whether running checkpoints are saved, including when `recovery: { durableAgents: 'auto' }` is enabled. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. Before a run with memory saves the user's message, it calls the policy with `{ workflowStatus: 'running', stepResults: {} }`. If that call returns `true`, the run saves a restartable checkpoint first, so a crash after the message is saved can be recovered. Enabling persistence after a crash can't reconstruct a missing checkpoint.
 
 Model and tool calls after the checkpoint may run again. Make tool side effects idempotent. Recovery doesn't guarantee exactly-once execution.
 

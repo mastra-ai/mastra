@@ -28,6 +28,23 @@ export interface FactorySessionSourceLookup {
   ): Promise<{ orgId: string; projectRepositoryId: string | null; baseBranch: string } | null>;
 }
 
+/**
+ * The role whose Factory tools this request was built with. Tools are built once per request, so
+ * when the binding rotates mid-request (the agent moved the card into another context's phase) the
+ * request keeps the earlier role's tools; the phase signal reports that role, not the new one.
+ */
+const FACTORY_TOOLS_ROLE_KEY = 'mastra__factoryToolsRole';
+
+export function setFactoryToolsRole(requestContext: RequestContext, role: string): void {
+  requestContext.set(FACTORY_TOOLS_ROLE_KEY, role);
+}
+
+export function getFactoryToolsRole(requestContext: RequestContext | undefined): string | undefined {
+  if (!requestContext || typeof requestContext.get !== 'function') return undefined;
+  const role = requestContext.get(FACTORY_TOOLS_ROLE_KEY);
+  return typeof role === 'string' ? role : undefined;
+}
+
 export function getFactorySessionCoordinates(
   requestContext: RequestContext | undefined,
 ): FactoryRunBindingSessionAddress | null {

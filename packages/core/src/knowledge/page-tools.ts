@@ -1081,7 +1081,8 @@ function listTool(host: KnowledgePageToolHost) {
   });
 }
 
-const NUMBERED_LINE = /^\s*\d+│/;
+// U+2502, the bar knowledge_read writes after each line number; escaped to keep published JS ASCII.
+const NUMBERED_LINE = /^\s*\d+\u2502/;
 
 /**
  * The body a write stores. With `range`, its text spliced into the body read at `expectedVersion`.

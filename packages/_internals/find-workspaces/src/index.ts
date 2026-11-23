@@ -137,7 +137,11 @@ export async function findWorkspaces(
 function toManifestGlobs(globs: string[]): string[] {
   return globs.map(pattern => {
     const negated = pattern.startsWith('!');
-    const base = (negated ? pattern.slice(1) : pattern).replace(/[\\/]+$/, '');
+    const body = negated ? pattern.slice(1) : pattern;
+    // Trim trailing separators with a loop; /[\\/]+$/ is quadratic on long separator runs.
+    let end = body.length;
+    while (end > 0 && (body[end - 1] === '/' || body[end - 1] === '\\')) end--;
+    const base = body.slice(0, end);
     return `${negated ? '!' : ''}${base}/package.json`;
   });
 }

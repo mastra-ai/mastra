@@ -1,4 +1,5 @@
 import type {
+  ClientScoreRowData,
   CompareExperimentsResponse,
   DatasetExperimentResult,
   DatasetItem,
@@ -7,8 +8,8 @@ import type {
 } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
+import type { ScoresByItemId } from '@mastra/playground-ui/domains/experiments/components/comparison/build-comparison-rows';
 import type { ExperimentUsage } from '@mastra/react/hooks/experiments';
-import type { ScoresByItemId } from '../../build-comparison-rows';
 
 export const DATASET_ID = 'dataset-1';
 export const BASELINE_ID = 'exp-baseline';
@@ -162,13 +163,20 @@ export const usageBreakdownByExperimentId: Record<string, MetricBreakdownRespons
 };
 
 /** Raw score rows as `GET /api/scores/run/:experimentId` returns them (`entityId` = dataset item id). */
-const makeScoreRow = (runId: string, entityId: string, scorerId: string, score: number, reason: string | null) => ({
+const makeScoreRow = (
+  runId: string,
+  entityId: string,
+  scorerId: string,
+  score: number,
+  reason?: string,
+): ClientScoreRowData => ({
   id: `score-${runId}-${entityId}-${scorerId}`,
   runId,
   entityId,
-  entityType: 'DATASET_ITEM',
+  entity: { id: entityId },
   scorerId,
   scorer: { name: scorerId },
+  output: null,
   score,
   reason,
   source: 'TEST',
@@ -178,14 +186,14 @@ const makeScoreRow = (runId: string, entityId: string, scorerId: string, score: 
 
 export const baselineScoreRows = [
   makeScoreRow(BASELINE_ID, 'item-a', 'accuracy', 0.5, 'Missing the country'),
-  makeScoreRow(BASELINE_ID, 'item-a', 'relevancy', 0.9, null),
+  makeScoreRow(BASELINE_ID, 'item-a', 'relevancy', 0.9),
   makeScoreRow(BASELINE_ID, 'item-b', 'accuracy', 1, 'Exact match'),
-  makeScoreRow(BASELINE_ID, 'item-c', 'accuracy', 0.7, null),
+  makeScoreRow(BASELINE_ID, 'item-c', 'accuracy', 0.7),
 ];
 
 export const contenderScoreRows = [
   makeScoreRow(CONTENDER_ID, 'item-a', 'accuracy', 0.9, 'Complete answer'),
-  makeScoreRow(CONTENDER_ID, 'item-a', 'relevancy', 0.9, null),
+  makeScoreRow(CONTENDER_ID, 'item-a', 'relevancy', 0.9),
 ];
 
 /** Scorer runs, grouped by dataset item id like `useScoresByExperimentId` returns them. */
@@ -260,7 +268,7 @@ export const challengerResults: DatasetExperimentResult[] = [
 
 export const challengerScoreRows = [
   makeScoreRow(CHALLENGER_ID, 'item-a', 'accuracy', 0.6, 'Close enough'),
-  makeScoreRow(CHALLENGER_ID, 'item-a', 'relevancy', 0.8, null),
+  makeScoreRow(CHALLENGER_ID, 'item-a', 'relevancy', 0.8),
   makeScoreRow(CHALLENGER_ID, 'item-b', 'accuracy', 1, 'Exact match'),
 ];
 

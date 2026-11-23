@@ -1,5 +1,10 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import { isRunFenceConflictError, safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  isRunFenceConflictError,
+  isWorkflowStepConflictError,
+  safelyParseJSON,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { SqliteInValue as InValue } from './client';
@@ -202,8 +207,9 @@ export function createExecuteWriteOperationWithRetry({
       try {
         return await operationFn();
       } catch (error: any) {
-        // A superseded run's write: expected after a takeover, and never retryable.
-        if (isRunFenceConflictError(error)) throw error;
+        // A superseded run's write, or a stale or duplicate workflow step delivery: expected
+        // outcomes, and never retryable.
+        if (isRunFenceConflictError(error) || isWorkflowStepConflictError(error)) throw error;
         const details = describeWriteError(error);
         getLogger().debug(`LibSQLStore: Error caught in retry loop for ${operationDescription}`, {
           ...details,
