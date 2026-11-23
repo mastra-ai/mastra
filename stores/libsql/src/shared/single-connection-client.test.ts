@@ -121,6 +121,46 @@ describe('gateSingleConnectionClient', () => {
     await expect(client.transaction('write')).rejects.toThrow('The client is closed');
   });
 
+  it('settles work already waiting when the client closes', async () => {
+    const client = await setup();
+    const tx = await client.transaction('write');
+    await tx.execute({ sql: 'INSERT INTO t (v) VALUES (?)', args: ['never-committed'] });
+
+    // Both are already queued on the gate when the client closes, and nothing calls the
+    // wrapper again afterwards, so freeing the gate at close is what lets them settle.
+    const queuedCall = expect(client.execute('SELECT COUNT(*) AS n FROM t')).rejects.toThrow('The client is closed');
+    const queuedTransaction = expect(client.transaction('write')).rejects.toThrow('The client is closed');
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    client.close();
+    expect(tx.closed).toBe(true);
+
+    await queuedCall;
+    await queuedTransaction;
+  });
+
+  it('frees the gate when SQLite rolls the transaction back on its own', async () => {
+    const raw = createClient({ url: ':memory:' });
+    const client = gateSingleConnectionClient(raw);
+    await client.execute('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT UNIQUE)');
+    const tx = await client.transaction('write');
+    await tx.execute({ sql: 'INSERT INTO t (v) VALUES (?)', args: ['dup'] });
+
+    const queued = client.execute('SELECT COUNT(*) AS n FROM t');
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    // SQLite rolls the whole transaction back on this conflict, and the caller never rolls back
+    // or closes it. The connection has to come back for this to serve the queued call at all.
+    await expect(tx.execute({ sql: 'INSERT OR ROLLBACK INTO t (v) VALUES (?)', args: ['dup'] })).rejects.toThrow(
+      /UNIQUE/,
+    );
+    expect(tx.closed).toBe(true);
+
+    const rows = await queued;
+    expect(rows.rows[0]!.n).toBe(0);
+    client.close();
+  });
+
   it('queues batch and executeMultiple behind an open transaction too', async () => {
     const raw = createClient({ url: ':memory:' });
     const client = gateSingleConnectionClient(raw);
