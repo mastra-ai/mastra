@@ -2203,6 +2203,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepExecutor: this.stepExecutor,
           runStorage: this.#runStorage(workflowId, runId),
           step,
+          logger: this.mastra.getLogger(),
         },
       );
     } else if (step?.type === 'sleepUntil') {
@@ -2231,6 +2232,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepExecutor: this.stepExecutor,
           runStorage: this.#runStorage(workflowId, runId),
           step,
+          logger: this.mastra.getLogger(),
         },
       );
     } else if (step?.type === 'foreach') {
@@ -4810,6 +4812,31 @@ export class WorkflowEventProcessor extends EventProcessor {
       } else {
         stepResults = { ...newStepResults, [stepId]: storedResult };
       }
+    } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
+      // A sleep's timer publishes this event once the sleep is over (see sleep.ts).
+      delete activeStepsPath[stepId];
+      // A redelivered end must not save the sleep again or rewrite state from
+      // this event. Routing below still runs, so on stores that do not guard
+      // step starts the next step can run twice.
+      const stored = (await runStorage.loadSteps([stepId]))[stepId];
+      if (stored?.status !== 'success') {
+        await runStorage.writeStepResult({
+          stepId,
+          result: this.pruneStepResultForPersist({
+            workflow,
+            runId,
+            state: currentState,
+            stepId,
+            storedResult: prevResult,
+            stepResults,
+            executionPath,
+            activeStepsPath,
+          }),
+          requestContext: withoutAuthToken(requestContext),
+          state: currentState,
+        });
+      }
+      stepResults = { ...stepResults, [stepId]: prevResult };
     }
 
     // Update stepResults with current state
@@ -4946,7 +4973,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step && isSingleStepEntry(step) && workflow.options.emitStepEvents !== false) {
+    if (
+      step &&
+      (isSingleStepEntry(step) || step.type === 'sleep' || step.type === 'sleepUntil') &&
+      workflow.options.emitStepEvents !== false
+    ) {
       await this.#pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
