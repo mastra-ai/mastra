@@ -156,13 +156,14 @@ export function dropUnmappedClientToolMarkers({
   messageList: MessageList;
   tools?: Record<string, unknown>;
 }): void {
-  if (!tools) return;
+  const isUnmapped = (tool: CoreTool | undefined) =>
+    !!tool && isClientTool(tool) && typeof tool.toModelOutput !== 'function';
+  if (!tools || !Object.values(tools).some(tool => isUnmapped(tool as CoreTool))) return;
   for (const message of messageList.get.all.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
     for (const part of message.content.parts) {
       if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
-      const tool = tools[part.toolInvocation.toolName] as CoreTool | undefined;
-      if (tool && isClientTool(tool) && typeof tool.toModelOutput !== 'function') stripModelOutputMarkers(part);
+      if (isUnmapped(tools[part.toolInvocation.toolName] as CoreTool | undefined)) stripModelOutputMarkers(part);
     }
   }
 }
@@ -180,7 +181,8 @@ export function dropUnmappedClientToolMarkers({
  * Only this request's input messages are mapped: results in memory-recalled
  * history either already carry the cached mapping from the request that
  * ingested them, or predate it and stay raw — re-mapping them here would
- * re-run user code on every request without ever persisting.
+ * re-run user code on every request without ever persisting. Their stored
+ * mappings on tools that define none are dropped by `dropUnmappedClientToolMarkers`.
  *
  * Mutates the MessageList's stored messages in place on purpose: prompt
  * building reads these same part objects, and messages saved to memory carry
@@ -203,8 +205,6 @@ export async function applyClientToolModelOutput({
   if (!tools) return;
   if (!Object.values(tools).some(isClientTool)) return;
 
-  // Memory-recalled history is not re-mapped (see above), but its stored
-  // mappings on tools that define none are dropped.
   dropUnmappedClientToolMarkers({ messageList, tools });
 
   for (const message of messageList.get.input.db()) {
