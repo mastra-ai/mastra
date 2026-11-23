@@ -101,20 +101,24 @@ export function KeyLabel({ children, face }: KeyLabelProps) {
     if (typeof child !== 'string') return child;
 
     const keys = Array.from(child.matchAll(keyPattern));
+    const last = keys.length - 1;
+    if (last < 0) return child;
+
     const label = keys.map(([, text = '', space], index) => {
       const Key = Object.hasOwn(keySymbols, text) ? SymbolKey : TextKey;
 
       return (
         <Fragment key={index}>
           <Key text={text} face={face} first={index === 0} />
-          {space && <span style={textOnly}>{space}</span>}
+          {space && (index < last ? <span style={textOnly}>{space}</span> : space)}
         </Fragment>
       );
     });
 
     // Letter spacing adds to the gap after a letter; a lone key has none.
     return (
-      <span key={childIndex} className={cn('whitespace-nowrap', keys.length > 1 && 'tracking-normal')}>
+      <span key={childIndex} className={cn('whitespace-nowrap', last > 0 && 'tracking-normal')}>
+        {child.slice(0, keys[0]?.index)}
         {label}
       </span>
     );
