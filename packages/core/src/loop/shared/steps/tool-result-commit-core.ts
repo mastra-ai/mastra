@@ -252,8 +252,10 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   });
 }
 
+// Only this run's response: a recalled part sharing the id (providers may reuse
+// ids like `call_0`) is stored data, and stamping its output would launder it.
 function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string) {
-  const messages = messageList.get.all.db();
+  const messages = messageList.get.response.db();
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
