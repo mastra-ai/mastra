@@ -12,8 +12,10 @@ import {
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
+  expectedStaleEmptyActivationPreservesRecreatedBuffer,
   expectedStaleHigherGenBeforeClearPreservesRecreatedGen0,
   expectedStaleTurnPreservesNewerGenerationBuffer,
+  expectedSuccessfulActivationPreservesNextGenerationCycle,
   prepare,
   reachActivation as reachFixtureActivation,
   recordingWriter,
@@ -23,8 +25,10 @@ import {
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
+  runStaleEmptyActivationPreservesRecreatedBuffer,
   runStaleHigherGenBeforeClearPreservesRecreatedGen0,
   runStaleTurnPreservesNewerGenerationBuffer,
+  runSuccessfulActivationPreservesNextGenerationCycle,
   setup as setupFixture,
   values,
   writeDuringSwap,
@@ -489,6 +493,22 @@ describe('buffered reflection extracted thread values (#27262)', () => {
       const outcome = await runStaleHigherGenBeforeClearPreservesRecreatedGen0(env);
       expect(outcome).toEqual(expectedStaleHigherGenBeforeClearPreservesRecreatedGen0(outcome));
       expect(outcome.newerCycleId).toEqual(expect.any(String));
+    });
+
+    it.each([false, true])(
+      'keeps the recreated buffer when an unbuffered pre-clear activation read resolves late (holdNewer=%s)',
+      async holdNewer => {
+        const outcome = await runStaleEmptyActivationPreservesRecreatedBuffer(env, { holdNewer });
+        expect(outcome).toEqual(expectedStaleEmptyActivationPreservesRecreatedBuffer(outcome));
+        expect(outcome.newerCycleId).toEqual(expect.any(String));
+      },
+    );
+
+    it('keeps both cycle ids when the next generation buffers before the old activation emits its marker', async () => {
+      const outcome = await runSuccessfulActivationPreservesNextGenerationCycle(env);
+      expect(outcome).toEqual(expectedSuccessfulActivationPreservesNextGenerationCycle(outcome));
+      expect(outcome.firstCycleId).toEqual(expect.any(String));
+      expect(outcome.nextCycleId).toEqual(expect.any(String));
     });
 
     it('publishes values and shows the activation on an adapter without newRecordId support', async () => {

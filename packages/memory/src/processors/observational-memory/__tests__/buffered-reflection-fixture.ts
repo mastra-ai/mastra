@@ -819,3 +819,203 @@ export function expectedStaleHigherGenBeforeClearPreservesRecreatedGen0(outcome:
     values: { priority: 'recreated' },
   };
 }
+
+/**
+ * A turn holding an unbuffered pre-clear generation-1 snapshot pauses during
+ * `tryActivateBufferedReflection`'s storage read while memory is cleared, recreated at
+ * generation 0, and buffered. When the stale turn resumes with no buffer, it must neither
+ * start a duplicate reflection on the recreated head nor disturb the recreated buffer's cycle
+ * or extracted values.
+ */
+export async function runStaleEmptyActivationPreservesRecreatedBuffer(
+  env: BufferedReflectionEnv,
+  { holdNewer }: { holdNewer: boolean },
+) {
+  const pause = gate();
+  const newerHook = gate();
+  let shouldHold = holdNewer;
+  let reflectorCalls = 0;
+  let reply = 'newer';
+  const observations = factLines(200, 60);
+  const f = await setup(env, () => reflection(reply), 1100, {
+    activateAfterIdle: IDLE_TTL_MS,
+    onReflectorCall: () => {
+      reflectorCalls++;
+    },
+    onReflectionEnd: async () => {
+      if (!shouldHold) return;
+      shouldHold = false;
+      newerHook.entered();
+      await newerHook.released;
+    },
+  });
+  const initial = await f.om.getRecord(f.threadId, f.resourceId);
+  if (!initial) throw new Error('Missing initial head');
+  const retired = await f.store.createReflectionGeneration({
+    currentRecord: initial,
+    reflection: observations,
+    tokenCount: 1100,
+  });
+  await f.store.updateActiveObservations({
+    id: retired.id,
+    observations,
+    tokenCount: 1100,
+    lastObservedAt: new Date(),
+  });
+
+  const origGetThread = f.store.getThreadById.bind(f.store);
+  const origGetOM = f.store.getObservationalMemory.bind(f.store);
+  let sawThreadRead = false;
+  let armed = true;
+  f.store.getThreadById = async args => {
+    const res = await origGetThread(args);
+    sawThreadRead = true;
+    return res;
+  };
+  f.store.getObservationalMemory = async (threadId, resourceId) => {
+    const found = await origGetOM(threadId, resourceId);
+    if (armed && sawThreadRead && found?.id === retired.id) {
+      armed = false;
+      const snapshot = { ...found };
+      pause.entered();
+      await pause.released;
+      return snapshot;
+    }
+    return found;
+  };
+
+  const pausedTurn = f.turn(undefined, { settle: false });
+  try {
+    await pause.reached;
+    await f.om.clear(f.threadId, f.resourceId);
+    const winner = await f.om.getOrCreateRecord(f.threadId, f.resourceId);
+    await f.store.updateActiveObservations({
+      id: winner.id,
+      observations,
+      tokenCount: 800,
+      lastObservedAt: new Date(),
+    });
+    const { writer, reflectionActivations, reflectionBufferingStarts } = recordingWriter();
+    await f.turn(writer, { settle: !holdNewer });
+    if (holdNewer) await newerHook.reached;
+    const newerCycleId = reflectionBufferingStarts()[0]?.cycleId;
+    const newerBuffer = (await f.om.getRecord(f.threadId, f.resourceId))?.bufferedReflection;
+    const callsAfterNewer = reflectorCalls;
+
+    reply = 'duplicate';
+    pause.release();
+    await pausedTurn;
+    newerHook.release();
+    await f.om.settled();
+    const bufferBeforeActivation = (await f.om.getRecord(f.threadId, f.resourceId))?.bufferedReflection;
+    await reachActivation(f, undefined, { writer, tail: '' });
+    return {
+      bufferUnchanged: bufferBeforeActivation === newerBuffer,
+      reflectorCalls,
+      callsAfterNewer,
+      newerCycleId,
+      activationCycleIds: reflectionActivations().map(marker => marker.cycleId),
+      values: (await values(f.memory, f.threadId))?.extracted,
+    };
+  } finally {
+    pause.release();
+    newerHook.release();
+    f.store.getThreadById = origGetThread;
+    f.store.getObservationalMemory = origGetOM;
+    await pausedTurn;
+    await f.om.settled();
+  }
+}
+
+export function expectedStaleEmptyActivationPreservesRecreatedBuffer(outcome: { newerCycleId?: string }) {
+  return {
+    bufferUnchanged: true,
+    reflectorCalls: 1,
+    callsAfterNewer: 1,
+    newerCycleId: outcome.newerCycleId,
+    activationCycleIds: [outcome.newerCycleId],
+    values: { priority: 'newer' },
+  };
+}
+
+/**
+ * After `swapBufferedReflectionToActive` commits generation 1, the next generation may start
+ * buffering before the old activation reads `afterRecord` and emits its activation marker.
+ * Both activations must keep their own buffering cycle id and extracted values.
+ */
+export async function runSuccessfulActivationPreservesNextGenerationCycle(env: BufferedReflectionEnv) {
+  const gateAfterCommit = gate();
+  let reply = 'first';
+  const f = await setup(env, () => reflection(reply));
+  const first = recordingWriter();
+  const next = recordingWriter();
+  await f.turn(first.writer);
+  const firstCycleId = first.reflectionBufferingStarts()[0]?.cycleId;
+
+  const origSwap = f.store.swapBufferedReflectionToActive.bind(f.store);
+  const origGetOM = f.store.getObservationalMemory.bind(f.store);
+  let didSwap = false;
+  let armed = true;
+  f.store.swapBufferedReflectionToActive = async input => {
+    const result = await origSwap(input);
+    didSwap = true;
+    return result;
+  };
+  f.store.getObservationalMemory = async (threadId, resourceId) => {
+    const found = await origGetOM(threadId, resourceId);
+    if (armed && didSwap) {
+      armed = false;
+      const snapshot = found ? { ...found } : found;
+      gateAfterCommit.entered();
+      await gateAfterCommit.released;
+      return snapshot;
+    }
+    return found;
+  };
+
+  const firstActivation = reachActivation(f, undefined, { writer: first.writer });
+  try {
+    await gateAfterCommit.reached;
+    const nextHead = await f.om.getRecord(f.threadId, f.resourceId);
+    if (!nextHead) throw new Error('Missing activated head');
+    await f.store.updateActiveObservations({
+      id: nextHead.id,
+      observations: factLines(300, 40),
+      tokenCount: 800,
+      lastObservedAt: new Date(),
+    });
+    reply = 'next';
+    await f.turn(next.writer);
+    const nextCycleId = next.reflectionBufferingStarts()[0]?.cycleId;
+
+    gateAfterCommit.release();
+    await firstActivation;
+    await reachActivation(f, undefined, { writer: next.writer });
+    return {
+      firstCycleId,
+      nextCycleId,
+      firstActivationCycleIds: first.reflectionActivations().map(marker => marker.cycleId),
+      nextActivationCycleIds: next.reflectionActivations().map(marker => marker.cycleId),
+      values: (await values(f.memory, f.threadId))?.extracted,
+    };
+  } finally {
+    gateAfterCommit.release();
+    f.store.getObservationalMemory = origGetOM;
+    f.store.swapBufferedReflectionToActive = origSwap;
+    await firstActivation;
+    await f.om.settled();
+  }
+}
+
+export function expectedSuccessfulActivationPreservesNextGenerationCycle(outcome: {
+  firstCycleId?: string;
+  nextCycleId?: string;
+}) {
+  return {
+    firstCycleId: outcome.firstCycleId,
+    nextCycleId: outcome.nextCycleId,
+    firstActivationCycleIds: [outcome.firstCycleId],
+    nextActivationCycleIds: [outcome.nextCycleId],
+    values: { priority: 'next' },
+  };
+}

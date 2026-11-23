@@ -818,9 +818,9 @@ export class ReflectorRunner {
           }
         }
         omError('[OM] Async buffered reflection failed', error);
-        // Clear the boundary so a failed reflection doesn't permanently block
-        // future async reflection attempts.
-        BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+        // Clear the boundary once this op finishes so a failed reflection doesn't
+        // permanently block future async reflection attempts, without disturbing a newer op.
+        owner.retired = true;
       } finally {
         try {
           await reflectionHooks?.onReflectionEnd?.({
@@ -875,6 +875,13 @@ export class ReflectorRunner {
   > {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
+    if (freshRecord?.bufferedReflection) {
+      omDebug(
+        `[OM:reflect] doAsyncBufferedReflection: live head ${freshRecord.id} already has a buffered reflection; skipping duplicate run`,
+      );
+      owner.retired = true;
+      return undefined;
+    }
     const observationTokens = currentRecord.observationTokenCount ?? 0;
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(currentRecord));
     const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
@@ -1268,7 +1275,7 @@ export class ReflectorRunner {
         `[OM:reflect] tryActivateBufferedReflection: ${commit.record.id} does not hold exactly the snapshot's buffered reflection (extended by another writer, or unverifiable); staged values stay unpublished`,
       );
     }
-    BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+    const originalCycleId = BufferingCoordinator.consumeReflectionBuffer(bufferKey, freshRecord.id);
 
     const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const afterTokens = afterRecord?.observationTokenCount ?? 0;
@@ -1277,7 +1284,6 @@ export class ReflectorRunner {
     );
 
     if (writer) {
-      const originalCycleId = BufferingCoordinator.reflectionBufferCycleIds.get(bufferKey);
       const activationMarker = createActivationMarker({
         cycleId: originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         operationType: 'reflection',
@@ -1310,9 +1316,6 @@ export class ReflectorRunner {
         abortSignal,
       );
     }
-
-    BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
-    BufferingCoordinator.reflectionBufferOwners.delete(bufferKey);
 
     return { status: 'activated' };
   }
@@ -1486,6 +1489,16 @@ export class ReflectorRunner {
         if (observationTokens < activationPoint) {
           omDebug(
             `[OM:reflect] skipping async reflection — observationTokens (${observationTokens}) below activation point (${activationPoint}), triggered by ${activationTriggeredBy}`,
+          );
+          return;
+        }
+        const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
+        if (
+          this.buffering.isAsyncBufferingInProgress(bufferKey) ||
+          BufferingCoordinator.lastBufferedBoundary.has(bufferKey)
+        ) {
+          omDebug(
+            `[OM:reflect] skipping async reflection — reflection buffer already active or present for ${bufferKey}`,
           );
           return;
         }

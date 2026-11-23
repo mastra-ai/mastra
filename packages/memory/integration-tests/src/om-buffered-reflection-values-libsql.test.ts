@@ -19,15 +19,19 @@ import {
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
+  expectedStaleEmptyActivationPreservesRecreatedBuffer,
   expectedStaleHigherGenBeforeClearPreservesRecreatedGen0,
   expectedStaleTurnPreservesNewerGenerationBuffer,
+  expectedSuccessfulActivationPreservesNextGenerationCycle,
   runBufferExtendedWithUnreflectedTail,
   runCrossProcessClearAllowsRecreatedGen0Buffering,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
+  runStaleEmptyActivationPreservesRecreatedBuffer,
   runStaleHigherGenBeforeClearPreservesRecreatedGen0,
   runStaleTurnPreservesNewerGenerationBuffer,
+  runSuccessfulActivationPreservesNextGenerationCycle,
 } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
 import type { BufferedReflectionEnv } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
 
@@ -96,5 +100,21 @@ describe('buffered reflection extracted values (LibSQL file database)', () => {
     const outcome = await runStaleHigherGenBeforeClearPreservesRecreatedGen0(env);
     expect(outcome).toEqual(expectedStaleHigherGenBeforeClearPreservesRecreatedGen0(outcome));
     expect(outcome.newerCycleId).toEqual(expect.any(String));
+  });
+
+  it.each([false, true])(
+    'keeps the recreated buffer when an unbuffered pre-clear activation read resolves late (holdNewer=%s)',
+    async holdNewer => {
+      const outcome = await runStaleEmptyActivationPreservesRecreatedBuffer(env, { holdNewer });
+      expect(outcome).toEqual(expectedStaleEmptyActivationPreservesRecreatedBuffer(outcome));
+      expect(outcome.newerCycleId).toEqual(expect.any(String));
+    },
+  );
+
+  it('keeps both cycle ids when the next generation buffers before the old activation emits its marker', async () => {
+    const outcome = await runSuccessfulActivationPreservesNextGenerationCycle(env);
+    expect(outcome).toEqual(expectedSuccessfulActivationPreservesNextGenerationCycle(outcome));
+    expect(outcome.firstCycleId).toEqual(expect.any(String));
+    expect(outcome.nextCycleId).toEqual(expect.any(String));
   });
 });

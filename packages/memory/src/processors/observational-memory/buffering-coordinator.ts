@@ -146,6 +146,23 @@ export class BufferingCoordinator {
     BufferingCoordinator.clearReflectionBuffer(bufferKey);
   }
 
+  /**
+   * Take the buffered-reflection cycle id for generation `recordId` and release its
+   * coordinator state after its buffer activates. State owned by another generation
+   * is left untouched.
+   */
+  static consumeReflectionBuffer(bufferKey: string, recordId: string): string | undefined {
+    const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
+    if (owner && owner.recordId !== recordId) return undefined;
+    const cycleId = BufferingCoordinator.reflectionBufferCycleIds.get(bufferKey);
+    if (owner && BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+      owner.retired = true;
+    } else {
+      BufferingCoordinator.clearReflectionBuffer(bufferKey);
+    }
+    return cycleId;
+  }
+
   /** Called when the op that started as `owner` finishes; completes a deferred retirement. */
   static finishReflectionBuffer(bufferKey: string, owner: ReflectionBufferOwner): void {
     if (BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner) return;
