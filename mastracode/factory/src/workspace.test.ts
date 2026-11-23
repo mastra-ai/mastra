@@ -827,6 +827,13 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('Verification executed');
     expect(gates).toContain('Existing signal dispositioned');
     expect(gates).not.toContain('No pending bot');
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const gitlab = await read(name);
+      expect(gitlab, `${name} does not block approval on a pending bot`).not.toMatch(
+        /do not approve\.|no known bot review is pending|remains an approval gap/,
+      );
+      expect(gitlab).toContain('non-blocking heads-up');
+    }
     expect(gates).toContain('Behavior is tested');
     expect(gates).toContain('Adversarial check survived');
     expect(gates).toContain('related-issue context and external CI status must still be reported in the handoff');
