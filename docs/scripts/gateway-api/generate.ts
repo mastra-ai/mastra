@@ -81,8 +81,6 @@ export interface TransformResult {
   unmapped: string[]
 }
 
-type Schema = { $ref?: string; description?: string; properties?: Record<string, Schema> }
-
 /**
  * The spec lists every error status separately, mostly pointing at the same shared error response, so the
  * page showed a row of status tabs that all looked the same. Statuses whose response is identical to `default`
@@ -113,34 +111,6 @@ function resolveResponse(spec: OpenApiDocument, response: Record<string, unknown
   return resolved
 }
 
-/** Adds the descriptions from `pages.ts` to the operation's request body fields the spec leaves undescribed. */
-function describeFields(spec: OpenApiDocument, operation: Operation, fields: Record<string, string> | undefined) {
-  if (!fields) return
-  const content = (operation.requestBody as { content?: Record<string, { schema?: Schema }> } | undefined)?.content
-  if (!content || Object.keys(content).length === 0) {
-    throw new Error(
-      `${operation.operationId} has no inline request body, but pages.ts describes its fields. Update pages.ts.`,
-    )
-  }
-  for (const [contentType, media] of Object.entries(content)) {
-    let schema = media.schema
-    if (schema?.$ref) {
-      const name = schema.$ref.replace('#/components/schemas/', '')
-      schema = (spec.components as { schemas: Record<string, Schema> }).schemas[name]
-    }
-    for (const [field, description] of Object.entries(fields)) {
-      const property = schema?.properties?.[field]
-      if (!property) {
-        throw new Error(`${operation.operationId} (${contentType}) has no request field "${field}". Update pages.ts.`)
-      }
-      // A `$ref` sibling would be ignored by some tools, so wrap referenced properties.
-      if (property.$ref) {
-        schema!.properties![field] = { allOf: [property], description: property.description ?? description } as Schema
-      } else property.description ??= description
-    }
-  }
-}
-
 export function transformSpec(source: OpenApiDocument): TransformResult {
   const spec = structuredClone(source)
   const unmapped: string[] = []
@@ -156,7 +126,6 @@ export function transformSpec(source: OpenApiDocument): TransformResult {
         continue
       }
       if (!missing.delete(id)) unmapped.push(id)
-      describeFields(spec, pathItem[method] as Operation, GATEWAY_API_PAGES[id]?.fields)
       mergeDefaultResponses(spec, pathItem[method] as Operation)
     }
     if (!Object.keys(pathItem).some(key => HTTP_METHODS.includes(key))) delete spec.paths[route]

@@ -5,13 +5,12 @@ import { GATEWAY_API_PAGES } from '../pages'
 
 type Spec = Parameters<typeof transformSpec>[0]
 
-/** A spec with one POST per mapped operation, each with the request fields `pages.ts` describes. */
+/** A spec with one POST per mapped operation. */
 function buildSpec(): Spec {
   const paths: Spec['paths'] = {}
   const schemas: Record<string, unknown> = {}
-  for (const [id, page] of Object.entries(GATEWAY_API_PAGES)) {
-    const properties = Object.fromEntries(Object.keys(page.fields ?? {}).map(field => [field, { type: 'string' }]))
-    schemas[`${id}Request`] = { type: 'object', properties }
+  for (const id of Object.keys(GATEWAY_API_PAGES)) {
+    schemas[`${id}Request`] = { type: 'object', properties: {} }
     paths[`/v1/${id}`] = {
       post: {
         operationId: id,
@@ -25,11 +24,6 @@ function buildSpec(): Spec {
   paths['/openapi.json'] = { get: { operationId: 'getOpenApi', responses: {} } }
   return { openapi: '3.1.0', servers: [{ url: '/' }], paths, components: { schemas } }
 }
-
-const requestSchema = (spec: Spec, id: string) =>
-  (spec.components as { schemas: Record<string, { properties: Record<string, Record<string, unknown>> }> }).schemas[
-    `${id}Request`
-  ]
 
 describe('transformSpec', () => {
   test('drops infrastructure operations and their now-empty paths', () => {
@@ -115,47 +109,6 @@ describe('transformSpec', () => {
     const source = buildSpec()
     source.paths['/v1/anonymous'] = { get: { responses: {} } }
     expect(() => transformSpec(source)).toThrow('GET /v1/anonymous has no operationId')
-  })
-
-  test('fills undescribed request fields and keeps descriptions the spec already has', () => {
-    const source = buildSpec()
-    requestSchema(source, 'createVideo').properties.seed.description = 'From the spec.'
-    const { spec } = transformSpec(source)
-    const { properties } = requestSchema(spec, 'createVideo')
-    expect(properties.seed.description).toBe('From the spec.')
-    expect(properties.generate_audio.description).toBe(GATEWAY_API_PAGES.createVideo.fields!.generate_audio)
-  })
-
-  test('wraps referenced request fields in allOf to describe them', () => {
-    const source = buildSpec()
-    requestSchema(source, 'createVideo').properties.resolution = { $ref: '#/components/schemas/Resolution' }
-    const { spec } = transformSpec(source)
-    expect(requestSchema(spec, 'createVideo').properties.resolution).toEqual({
-      allOf: [{ $ref: '#/components/schemas/Resolution' }],
-      description: GATEWAY_API_PAGES.createVideo.fields!.resolution,
-    })
-  })
-
-  test('keeps the spec description of a referenced request field', () => {
-    const source = buildSpec()
-    requestSchema(source, 'createVideo').properties.resolution = {
-      $ref: '#/components/schemas/Resolution',
-      description: 'From the spec.',
-    }
-    const { spec } = transformSpec(source)
-    expect(requestSchema(spec, 'createVideo').properties.resolution.description).toBe('From the spec.')
-  })
-
-  test('fails when pages.ts describes a request field the spec no longer has', () => {
-    const source = buildSpec()
-    delete requestSchema(source, 'createVideo').properties.seed
-    expect(() => transformSpec(source)).toThrow('createVideo (application/json) has no request field "seed"')
-  })
-
-  test('fails when pages.ts describes fields of an operation that lost its request body', () => {
-    const source = buildSpec()
-    delete (source.paths['/v1/createVideo'].post as { requestBody?: unknown }).requestBody
-    expect(() => transformSpec(source)).toThrow('createVideo has no inline request body')
   })
 
   test('does not modify the source document', () => {

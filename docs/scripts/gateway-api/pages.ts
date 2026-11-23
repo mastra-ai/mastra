@@ -12,11 +12,6 @@ export interface GatewayApiPage {
   title: string
   description: string
   /**
-   * Descriptions for request body fields, keyed by property name. The spec doesn't describe most fields, so
-   * these fill the gap in the generated request schema. A field the spec already describes keeps its own text.
-   */
-  fields?: Record<string, string>
-  /**
    * The provider API reference this endpoint is compatible with. The generated AI-agent note points there for
    * fields the spec leaves as open objects, such as streaming event payloads.
    */
@@ -39,29 +34,12 @@ const COMPATIBLE_APIS = {
   models: openai('Models', 'models'),
 }
 
-const MODEL_FROM_CATALOG = 'A `provider/model` ID from [`/v1/models`](/docs/mastra-platform/gateway/api/models).'
-
 export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
   createChatCompletion: {
     slug: 'chat-completions',
     compatibleWith: COMPATIBLE_APIS.chat,
     title: 'Chat Completions',
     description: 'Send OpenAI-compatible chat completion requests, with streaming and tools, to any Gateway model.',
-    fields: {
-      model: MODEL_FROM_CATALOG,
-      messages: 'System, developer, user, assistant, and tool messages.',
-      stream: 'Stream server-sent events. Set `stream_options.include_usage` to receive a final usage chunk.',
-      tools: 'Function tools, plus Gateway tools such as [web search](/docs/mastra-platform/gateway/web-search).',
-      tool_choice: 'Controls which tool the model calls.',
-      response_format: 'Text, JSON object, or JSON schema output.',
-      max_tokens: 'Maximum tokens to generate.',
-      max_completion_tokens: 'Maximum completion tokens, including reasoning tokens.',
-      temperature: 'Sampling temperature.',
-      top_p: 'Nucleus sampling probability.',
-      stop: 'Sequences that stop generation.',
-      seed: 'Seed for best-effort deterministic sampling.',
-      web_search_options: 'Search context size and approximate user location for web search.',
-    },
   },
   createResponse: {
     slug: 'responses',
@@ -110,22 +88,11 @@ export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
     compatibleWith: COMPATIBLE_APIS.decisions,
     title: 'Decisions',
     description: 'Ask a model structured predicate, choice, and score questions about an input in a single request.',
-    fields: {
-      model: 'A model that supports Decisions.',
-      input: 'A string, or messages whose content can include `input_text`, `input_image`, and `input_json` parts.',
-      questions: '1 to 400 questions. Each `name` is optional but must be unique.',
-    },
   },
   createRerank: {
     slug: 'rerank',
     title: 'Rerank',
     description: "Rank documents by relevance to a query with Gateway's rerank endpoint.",
-    fields: {
-      model: 'A rerank model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).',
-      query: 'The search query.',
-      documents: '1 to 1,000 non-empty strings.',
-      top_n: "Number of results to return. Can't exceed the number of documents.",
-    },
   },
   generateImage: {
     slug: 'images',
@@ -143,15 +110,6 @@ export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
     slug: 'videos',
     title: 'Create a video',
     description: 'Generate videos through Gateway as asynchronous jobs.',
-    fields: {
-      model: 'A video model ID.',
-      prompt: 'The video description.',
-      duration: 'Length in whole seconds.',
-      resolution: 'Output resolution.',
-      aspect_ratio: 'Output aspect ratio.',
-      generate_audio: '`true` to generate an audio track.',
-      seed: 'Seed for best-effort deterministic generation.',
-    },
   },
   listVideos: {
     slug: 'videos/list',
@@ -173,12 +131,6 @@ export const GATEWAY_API_PAGES: Record<string, GatewayApiPage> = {
     compatibleWith: COMPATIBLE_APIS.audio,
     title: 'Create speech',
     description: 'Generate speech through Gateway with the OpenAI Audio API.',
-    fields: {
-      model: 'A speech model from [`/v1/models`](/docs/mastra-platform/gateway/api/models).',
-      input: 'Text to speak.',
-      voice: 'A voice supported by the model.',
-      response_format: 'Audio format. `pcm` is available only on models that support it.',
-    },
   },
   createTranscription: {
     slug: 'audio/transcriptions',
