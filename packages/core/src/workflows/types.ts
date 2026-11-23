@@ -472,6 +472,12 @@ export interface WorkflowRunState {
    */
   tracingContext?: WorkflowStateTracingContext;
   parentWorkflow?: NestedWorkflowParent;
+  /**
+   * Set on the `pending` snapshot of a nested run saved with its input in `context.input`, so a
+   * restart before its first step recognizes it even when JSON storage dropped an `undefined` input.
+   * @internal
+   */
+  pendingInput?: true;
 }
 
 /**

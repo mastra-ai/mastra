@@ -3449,6 +3449,7 @@ export class Workflow<
         value: nestedRunStart?.state ?? {},
         // @ts-expect-error - context type mismatch
         context: nestedRunStart ? { input: nestedRunStart.input } : {},
+        ...(nestedRunStart ? { pendingInput: true as const } : {}),
         activePaths: [],
         activeStepsPath: {},
         serializedStepGraph: this.serializedStepGraph,
