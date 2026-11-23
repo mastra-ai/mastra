@@ -1,3 +1,4 @@
+import { KeyLabel } from './key-label';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +15,13 @@ const sizeClasses: Record<NonNullable<KbdProps['size']>, string> = {
   xs: 'h-4 min-w-4 rounded px-1 text-meta leading-none',
 };
 
+// Match the letters' stems. At the small sizes those are bold: Commit Mono has no medium, so it uses Bold
+const symbolStroke: Record<NonNullable<KbdProps['size']>, number> = {
+  default: 2.2,
+  sm: 2.8,
+  xs: 2.8,
+};
+
 export const Kbd = ({ children, size = 'default', className }: KbdProps) => {
   return (
     <kbd
@@ -27,7 +35,9 @@ export const Kbd = ({ children, size = 'default', className }: KbdProps) => {
     >
       {/* Trim to cap height so the letters center in the fixed height whatever the font: a system mono
           (an app without Commit Mono) sits them high. An inline box, since trim doesn't apply to the flex box */}
-      <span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
+      <span className="[text-box:trim-both_cap_alphabetic]">
+        <KeyLabel strokeWidth={symbolStroke[size]}>{children}</KeyLabel>
+      </span>
     </kbd>
   );
 };

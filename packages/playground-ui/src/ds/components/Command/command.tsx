@@ -3,6 +3,7 @@ import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
 import type { DialogSize } from '@/ds/components/Dialog';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
@@ -304,7 +305,7 @@ const CommandItem = React.forwardRef<
 ));
 CommandItem.displayName = CommandPrimitive.Item.displayName;
 
-const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+const CommandShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
     <Txt
       as="span"
@@ -312,7 +313,9 @@ const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanE
       tone="muted"
       className={cn('ml-auto tracking-wider tabular-nums', className)}
       {...props}
-    />
+    >
+      <KeyLabel>{children}</KeyLabel>
+    </Txt>
   );
 };
 CommandShortcut.displayName = 'CommandShortcut';
