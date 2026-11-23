@@ -631,7 +631,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             loggedRejection = true;
             safeWarn('A stopWhen condition failed after the step budget ran out; ignoring its result', {
               runId: state.runId,
-              error: getErrorFromUnknown(reason),
+              error: reason,
             });
           };
 
