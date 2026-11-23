@@ -45,6 +45,7 @@ describe('beforeObservation and trusted token counts', () => {
       [msg],
       context,
     );
+    expect((msg.content.parts[0] as { text: string }).text).toBe('redacted');
     expect(new TokenCounter().countMessage(result[0]!)).toBe(freshCount('redacted'));
   });
 
