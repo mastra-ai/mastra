@@ -251,37 +251,6 @@ function isStoredPartEntry(entry: TokenEstimateCacheEntry | undefined, key: stri
   );
 }
 
-/**
- * True when `value` holds only JSON data: primitives, plain objects and arrays, with no cycles.
- * Only such values get a stored estimate, so a by-reference object (a Buffer, a class instance)
- * that someone edits in place can never sit behind a count that is read without checking.
- */
-function isPlainJsonValue(value: unknown, ancestors: Set<object> = new Set()): boolean {
-  if (value === null || value === undefined) return true;
-  const type = typeof value;
-  if (type === 'string' || type === 'number' || type === 'boolean') return true;
-  if (type !== 'object') return false;
-  const object = value as object;
-  if (ancestors.has(object)) return false;
-  if (Array.isArray(object)) {
-    ancestors.add(object);
-    const plain = object.every(item => isPlainJsonValue(item, ancestors));
-    ancestors.delete(object);
-    return plain;
-  }
-  const prototype = Object.getPrototypeOf(object);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-  ancestors.add(object);
-  for (const key of Object.keys(object)) {
-    if (!isPlainJsonValue((object as Record<string, unknown>)[key], ancestors)) {
-      ancestors.delete(object);
-      return false;
-    }
-  }
-  ancestors.delete(object);
-  return true;
-}
-
 function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCacheEntry | undefined {
   return getCacheEntry(getPartMastraMetadata(part)?.tokenEstimate, key);
 }
@@ -1364,16 +1333,10 @@ export class TokenCounter {
   /**
    * Count one content-only piece of a part (its text, a tool's args or result) and keep the count
    * on the part, read back by presence with no hashing. `getPayload` runs only on a miss, so a hit
-   * also skips serializing the value. `value` is checked for plain JSON before anything is stored;
-   * anything else keeps the payload-keyed v8 path. Everything here runs synchronously, so the
-   * part cannot change between counting it and storing the count.
+   * also skips serializing the value. Everything here runs synchronously, so the part cannot
+   * change between counting it and storing the count.
    */
-  private readOrPersistStoredPartEstimate(
-    part: CacheablePart,
-    kind: string,
-    getPayload: () => string,
-    value?: unknown,
-  ): number {
+  private readOrPersistStoredPartEstimate(part: CacheablePart, kind: string, getPayload: () => string): number {
     if (!this.usesStoredEstimates) {
       return this.readOrPersistPartEstimate(part, kind, getPayload());
     }
@@ -1384,12 +1347,7 @@ export class TokenCounter {
       return cached.tokens;
     }
 
-    const payload = getPayload();
-    if (value !== undefined && !isPlainJsonValue(value)) {
-      return this.readOrPersistPartEstimate(part, kind, payload);
-    }
-
-    const tokens = this.countString(payload);
+    const tokens = this.countString(getPayload());
     const entry = { v: V9_TOKEN_ESTIMATE_VERSION, source: V9_TOKEN_ESTIMATE_SOURCE, key, tokens };
     setPartCacheEntry(part, key, entry);
     countedParts.add(part);
@@ -1851,9 +1809,9 @@ export class TokenCounter {
     let overheadDelta = 0;
     // Args of a call that is still streaming grow in place, so they keep the payload-keyed count.
     const storable = invocation.state !== 'partial-call';
-    const count = (kind: string, getPayload: () => string, value?: unknown) =>
+    const count = (kind: string, getPayload: () => string) =>
       storable
-        ? this.readOrPersistStoredPartEstimate(part, kind, getPayload, value)
+        ? this.readOrPersistStoredPartEstimate(part, kind, getPayload)
         : this.readOrPersistPartEstimate(part, kind, getPayload());
 
     if (invocation.toolName) {
@@ -1865,7 +1823,7 @@ export class TokenCounter {
       if (typeof args === 'string') {
         tokens += count('tool-call-args', () => args);
       } else {
-        tokens += count('tool-call-args-json', () => JSON.stringify(args), args);
+        tokens += count('tool-call-args-json', () => JSON.stringify(args));
         overheadDelta -= 12;
       }
     }
@@ -1942,7 +1900,6 @@ export class TokenCounter {
               part,
               usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
               () => serializeToolResultForTokenCounting(resultForCounting),
-              resultForCounting,
             );
           }
 

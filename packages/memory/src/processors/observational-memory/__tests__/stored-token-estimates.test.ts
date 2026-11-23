@@ -105,11 +105,31 @@ describe('stored per-part token counts', () => {
     expect(Object.values(estimateOf(custom.content.parts[0]!)).some(entry => entry.v === 9)).toBe(false);
   });
 
-  it('a non-plain tool result keeps the payload-keyed count', () => {
+  it.each([
+    ['a Map', () => new Map([['a', 1]])],
+    ['a Buffer', () => Buffer.from('hello world')],
+    [
+      'a class instance',
+      () =>
+        new (class Box {
+          value = 'x';
+        })(),
+    ],
+    [
+      'a cycle',
+      () => {
+        const result: Record<string, unknown> = { name: 'loop' };
+        result.self = result;
+        return result;
+      },
+    ],
+  ])('a tool result that is %s gets a stored count', (_label, make) => {
     const part = toolPart() as any;
-    part.toolInvocation.result = new Map([['a', 1]]);
+    part.toolInvocation.result = make();
     new TokenCounter().countMessage(message([part]));
-    expect(Object.keys(estimateOf(part)).some(key => key === 'trusted:tool-result-json')).toBe(false);
+    const entries = estimateOf(part);
+    expect(entries['trusted:tool-result-json']).toMatchObject({ v: 9, source: 'v9:tokenx' });
+    expect(Object.values(entries).some(entry => entry.v === 8)).toBe(false);
   });
 
   it('an edit without a clear keeps the old count (the documented contract)', () => {
