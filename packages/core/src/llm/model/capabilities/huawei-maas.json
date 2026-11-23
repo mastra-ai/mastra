@@ -34,16 +34,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.2": [
+    "openpangu-2.0-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "openpangu-2.0-flash": [
+    "openpangu-2.0-pro": [
       {
         "type": "toggle"
       },
@@ -61,16 +61,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "openpangu-2.0-pro": [
+    "glm-5.2": [
       {
         "type": "toggle"
       },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

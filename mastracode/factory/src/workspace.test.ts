@@ -826,8 +826,14 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('Behavior independently established');
     expect(gates).toContain('Verification executed');
     expect(gates).toContain('Existing signal dispositioned');
-    expect(gates).toContain('No pending bot');
-    expect(gates).toContain("regardless of the bot's history");
+    expect(gates).not.toContain('No pending bot');
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const gitlab = await read(name);
+      expect(gitlab, `${name} does not block approval on a pending bot`).not.toMatch(
+        /do not approve\.|no known bot review is pending|remains an approval gap/,
+      );
+      expect(gitlab).toContain('non-blocking heads-up');
+    }
     expect(gates).toContain('Behavior is tested');
     expect(gates).toContain('Adversarial check survived');
     expect(gates).toContain('related-issue context and external CI status must still be reported in the handoff');
@@ -858,9 +864,11 @@ describe('bundled Factory skill assets', () => {
     const signal = section('## Phase 2: Existing Review Signal', '## Phase 3');
     expect(signal).toContain('pageInfo { hasNextPage endCursor }');
     expect(signal).toContain('Paginate to exhaustion');
-    // A bot that outlasts the wait blocks approval — the timeout releases the
-    // review, not the verdict.
-    expect(signal).toContain('fails the no-pending-bot approval gate');
+    // A bot that outlasts the wait is a non-blocking heads-up, never a
+    // request-changes verdict on its own, and plain CI checks are not waited on.
+    expect(signal).toContain('never by itself makes the verdict request changes');
+    expect(signal).toContain('Ordinary CI, build, security-scan, and status checks are not review bots');
+    expect(signal).not.toContain('no-pending-bot approval gate');
 
     // Blocking findings stay out of follow-up PRs, and only supplemental tests
     // qualify as follow-up work — both rules inside the follow-up procedure.

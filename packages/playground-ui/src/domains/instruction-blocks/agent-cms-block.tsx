@@ -1,0 +1,325 @@
+import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AgentCMSRefBlock } from './agent-cms-ref-block';
+import { DisplayConditionsDialog } from './display-conditions-dialog';
+import type { InstructionBlock, InlineInstructionBlock } from './types';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ContentBlock } from '@/ds/components/ContentBlocks';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/ds/components/Dialog';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { Notice } from '@/ds/components/Notice';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconBookmarkPlus } from '@/ds/icons/central/IconBookmarkPlus';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
+import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
+import type { JsonSchema } from '@/utils/json-schema';
+import type { RuleGroup } from '@/utils/rule-engine';
+
+export interface AgentCMSBlockProps {
+  index: number;
+  block: InstructionBlock;
+  onBlockChange: (block: InstructionBlock) => void;
+  onDelete?: (index: number) => void;
+  onDereference?: (index: number, content: string) => void;
+  onConvertToRef?: (sourceBlockId: string, promptBlockId: string) => void;
+  placeholder?: string;
+  className?: string;
+  schema?: JsonSchema;
+  autoFocus?: boolean;
+  readOnly?: boolean;
+}
+
+interface InlineBlockContentProps {
+  index: number;
+  block: InlineInstructionBlock;
+  onBlockChange: (block: InstructionBlock) => void;
+  onConvertToRef?: (blockId: string) => void;
+  placeholder?: string;
+  dragHandleProps?: DraggableProvidedDragHandleProps | null;
+  onDelete?: () => void;
+  schema?: JsonSchema;
+  autoFocus?: boolean;
+  readOnly?: boolean;
+}
+
+const SaveAsPromptBlockDialog = ({
+  open,
+  onOpenChange,
+  onSave,
+  isPending,
+  error,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (name: string, description: string) => void;
+  isPending: boolean;
+  error: string | null;
+}) => {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+
+  const handleSubmit = useCallback(
+    (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!name.trim()) return;
+      onSave(name.trim(), description.trim());
+    },
+    [name, description, onSave],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      setName('');
+      setDescription('');
+    }
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Save as prompt block</DialogTitle>
+          <DialogDescription>Create a reusable prompt block from this content.</DialogDescription>
+        </DialogHeader>
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Tone guidelines"
+                autoFocus
+              />
+            </Field>
+            <Field>
+              <FieldLabel>Description (optional)</FieldLabel>
+              <Input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Brief description"
+              />
+            </Field>
+            {error ? (
+              <div role="alert">
+                <Notice variant="destructive">{error}</Notice>
+              </div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
+              {isPending ? 'Saving...' : 'Save'}
+            </DialogAction>
+          </DialogFooter>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const InlineBlockContent = ({
+  index,
+  block,
+  onBlockChange,
+  onConvertToRef,
+  placeholder,
+  dragHandleProps,
+  onDelete,
+  schema,
+  autoFocus = false,
+  readOnly = false,
+}: InlineBlockContentProps) => {
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
+
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { createStoredPromptBlock } = useStoredPromptBlockMutations();
+
+  useEffect(() => {
+    if (autoFocus) {
+      editorRef.current?.editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [autoFocus]);
+
+  const handleContentChange = (content: string) => {
+    onBlockChange({ ...block, content });
+  };
+
+  const handleRulesChange = (ruleGroup: RuleGroup | undefined) => {
+    onBlockChange({ ...block, rules: ruleGroup });
+  };
+
+  const handleSaveAsPromptBlock = useCallback(
+    (name: string, description: string) => {
+      setSaveError(null);
+      createStoredPromptBlock.mutate(
+        {
+          name,
+          description: description || undefined,
+          content: block.content,
+          rules: block.rules,
+        },
+        {
+          onSuccess: data => {
+            setSaveDialogOpen(false);
+            onConvertToRef?.(data.id);
+          },
+          onError: (err: Error) => {
+            setSaveError(err.message || 'Failed to create prompt block');
+          },
+        },
+      );
+    },
+    [block.content, block.rules, createStoredPromptBlock, onConvertToRef],
+  );
+
+  return (
+    <>
+      <div className="group relative rounded-md hover:bg-fill-subtle">
+        {!readOnly && (
+          <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+            <div
+              {...dragHandleProps}
+              className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Icon>
+                    <IconDotGrid2x3 />
+                  </Icon>
+                </TooltipTrigger>
+                <TooltipContent side="left">Drag to reorder</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        )}
+
+        {!readOnly && (
+          <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+            <DisplayConditionsDialog
+              entityName={`Block ${index + 1}`}
+              schema={schema}
+              rules={block.rules}
+              onRulesChange={handleRulesChange}
+            />
+
+            {onConvertToRef && block.content.trim().length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSaveDialogOpen(true)}
+                tooltip="Save as prompt block"
+              >
+                <IconBookmarkPlus />
+              </Button>
+            )}
+
+            {onDelete && (
+              <Button variant="ghost" size="icon-sm" onClick={onDelete} tooltip="Delete block">
+                <IconCrossMedium />
+              </Button>
+            )}
+          </div>
+        )}
+
+        <CodeEditor
+          ref={editorRef}
+          value={block.content}
+          onChange={handleContentChange}
+          placeholder={placeholder}
+          variant="embedded"
+          className="min-h-12"
+          language="markdown"
+          highlightVariables
+          showCopyButton={false}
+          schema={schema}
+          autoFocus={autoFocus}
+          lineNumbers={false}
+          editable={!readOnly}
+        />
+      </div>
+
+      <SaveAsPromptBlockDialog
+        open={saveDialogOpen}
+        onOpenChange={open => {
+          setSaveDialogOpen(open);
+          if (open) setSaveError(null);
+        }}
+        onSave={handleSaveAsPromptBlock}
+        isPending={createStoredPromptBlock.isPending}
+        error={saveError}
+      />
+    </>
+  );
+};
+
+export const AgentCMSBlock = ({
+  index,
+  block,
+  onBlockChange,
+  onDelete,
+  onDereference,
+  onConvertToRef,
+  placeholder,
+  className,
+  schema,
+  autoFocus,
+  readOnly = false,
+}: AgentCMSBlockProps) => {
+  if (block.type === 'prompt_block_ref') {
+    return (
+      <AgentCMSRefBlock
+        index={index}
+        block={block}
+        onBlockChange={onBlockChange}
+        onDelete={readOnly ? undefined : onDelete}
+        onDereference={readOnly ? undefined : onDereference}
+        className={className}
+        schema={schema}
+        readOnly={readOnly}
+      />
+    );
+  }
+
+  return (
+    <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
+      {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
+        <InlineBlockContent
+          index={index}
+          block={block}
+          onBlockChange={onBlockChange}
+          onConvertToRef={
+            onConvertToRef ? (promptBlockId: string) => onConvertToRef(block.id, promptBlockId) : undefined
+          }
+          placeholder={placeholder}
+          dragHandleProps={dragHandleProps}
+          onDelete={onDelete ? () => onDelete(index) : undefined}
+          schema={schema}
+          autoFocus={autoFocus}
+          readOnly={readOnly}
+        />
+      )}
+    </ContentBlock>
+  );
+};

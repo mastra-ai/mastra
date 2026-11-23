@@ -10,7 +10,6 @@ export default defineConfig({
   dts: false,
   fixedExtension: false,
   treeshake: true,
-  sourcemap: true,
   inputOptions: {
     plugins: [
       {

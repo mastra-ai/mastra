@@ -46,13 +46,43 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B-FP8": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B-FP8": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -70,55 +100,7 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "Qwen/Qwen3.6-35B-A3B-FP8": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "Qwen/Qwen3.8-27B-FP8": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "meta/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta-models/Muse-Glimmer-30B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -130,16 +112,34 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4": [
+    "meta-models/Muse-Glimmer-30B": [
       {
         "type": "effort",
-        "values": ["none", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "google/gemma-4-31B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

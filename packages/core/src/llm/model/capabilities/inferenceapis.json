@@ -20,6 +20,28 @@
   ],
   "structuredOutput": ["MiniMaxAI/MiniMax-M3", "meta-llama/Llama-3.3-70B-Instruct-Turbo"],
   "reasoning": {
+    "MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4-Pro": [
       {
         "type": "toggle"
@@ -47,31 +69,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-120b": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K2.7-Code": [
-      {
-        "type": "toggle"
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [
@@ -80,10 +81,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "moonshotai/Kimi-K2.7-Code": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ]
   }
