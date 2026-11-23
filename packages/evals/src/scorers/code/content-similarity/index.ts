@@ -8,7 +8,7 @@ interface ContentSimilarityOptions {
 }
 
 export function createContentSimilarityScorer(
-  { ignoreCase, ignoreWhitespace }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
+  { ignoreCase, ignoreWhitespace = true }: ContentSimilarityOptions = { ignoreCase: true },
 ) {
   return createScorer({
     id: 'content-similarity-scorer',
@@ -36,9 +36,20 @@ export function createContentSimilarityScorer(
       };
     })
     .generateScore(({ results }) => {
+      // compareTwoStrings strips whitespace, so when it counts, rename each distinct character to a non-whitespace one
+      const codes = new Map<string, string>();
+      const encode = (text: string) =>
+        ignoreWhitespace
+          ? text
+          : text.replace(/[^]/g, char => {
+              const code = codes.get(char) ?? String.fromCharCode(0x4e00 + codes.size);
+              codes.set(char, code);
+              return code;
+            });
+
       const similarity = stringSimilarity.compareTwoStrings(
-        results.preprocessStepResult?.processedInput,
-        results.preprocessStepResult?.processedOutput,
+        encode(results.preprocessStepResult?.processedInput),
+        encode(results.preprocessStepResult?.processedOutput),
       );
 
       return similarity;
