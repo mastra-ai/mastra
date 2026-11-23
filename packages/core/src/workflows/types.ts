@@ -683,8 +683,10 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    *
    * On storage version 2 it's called once, when the run finishes, with every
    * step result, and only for a workflow that sets `storageVersion: 2` itself.
-   * A redelivered finish event doesn't prune again: the run remembers it was
-   * pruned until a restart or time travel re-runs it.
+   * A redelivered finish event doesn't prune the stored run again: the run
+   * remembers it was pruned until a restart or time travel re-runs it.
+   * Concurrent duplicate deliveries can still each invoke the hook, always
+   * with the same unpruned results, so keep the hook side-effect-free.
    * Suspended runs aren't pruned: their later steps read earlier results from
    * storage. Step results the hook returns as the same object aren't written
    * again, and the run's result keeps the unpruned step results. Replace step

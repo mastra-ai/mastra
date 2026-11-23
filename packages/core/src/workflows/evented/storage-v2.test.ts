@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { runInRunFenceScope } from '../../agent/durable/run-fence-scope';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
@@ -485,6 +486,230 @@ describe('evented step messages on storage v2', () => {
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ fromA: { keep: 1, heavy: BIG } });
     expect(pruned).toEqual([]);
+  });
+
+  it("doesn't let an execution that lost its run during the finish prune continue the parent", async () => {
+    // The ownership fence is checked before the finish prune, which awaits storage and the user
+    // hook; an execution taken over in that window has its checkpoint rejected by the store, but
+    // the parent handoff is a publish nothing fences. The end handler must re-check ownership
+    // after the prune, so a superseded nested execution can't drive its parent with stale state.
+    const workflowsStore = async (storage: MockStore) => (await storage.getStore('workflows'))!;
+    let innerFence: { runId: string; generation: number; ownerId: string } | undefined;
+    const storage = new MockStore();
+    const store = await workflowsStore(storage);
+
+    const claiming = createStep({
+      id: 'claiming',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ runId }) => {
+        // The inner execution holds the run's claim, as a durable-agent-driven run would.
+        const claim = await store.claimRunOwnership({ runId, ownerId: 'owner-a', leaseMs: 60_000 });
+        if (!claim.acquired) throw new Error('claim failed');
+        innerFence = { runId, generation: claim.record.generation, ownerId: claim.record.ownerId };
+        return { done: true };
+      },
+    });
+    const inner = createWorkflow({
+      id: 'fenced-inner',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: 2, pruneSnapshot: ({ snapshot }) => snapshot },
+    })
+      .then(claiming)
+      .commit();
+    const outer = createWorkflow({
+      id: 'fenced-outer',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: 2 },
+    })
+      .then(inner)
+      .commit();
+
+    // Hold the finish prune's checkpoint write (the pending write has a non-terminal status).
+    let enteredPrune!: () => void;
+    const pruneEntered = new Promise<void>(resolve => (enteredPrune = resolve));
+    let releasePrune!: () => void;
+    const pruneGate = new Promise<void>(resolve => (releasePrune = resolve));
+    const realWrite = store.writeWorkflowRunCheckpoint.bind(store);
+    vi.spyOn(store, 'writeWorkflowRunCheckpoint').mockImplementation(async args => {
+      if (args.runId === innerFence?.runId && (args.header as any)?.status === 'success') {
+        enteredPrune();
+        await pruneGate;
+      }
+      return realWrite(args);
+    });
+
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { wf: outer as any },
+      pubsub,
+    });
+    await mastra.startWorkers();
+    try {
+      const scope = {
+        fenceFor: (_store: object, runId?: string) => (runId === innerFence?.runId ? innerFence : undefined),
+      };
+      const run = await outer.createRun();
+      const started = runInRunFenceScope(scope, () => run.start({ inputData: {} })).then(
+        result => ({ type: 'resolved' as const, status: result.status }),
+        () => ({ type: 'rejected' as const }),
+      );
+
+      await pruneEntered;
+      // Another execution takes the run over while the prune holds the write.
+      const takeover = await store.claimRunOwnership({
+        runId: innerFence!.runId,
+        ownerId: 'intruder',
+        leaseMs: 60_000,
+        force: true,
+      });
+      expect(takeover.acquired).toBe(true);
+      releasePrune();
+
+      const outcome = await Promise.race([
+        started,
+        new Promise<{ type: 'pending' }>(resolve => setTimeout(() => resolve({ type: 'pending' }), 400)),
+      ]);
+      // The superseded execution must not complete the parent with its stale result.
+      expect(outcome).not.toEqual({ type: 'resolved', status: 'success' });
+      const parent = await storage.stores.workflows!.loadWorkflowSnapshot({
+        workflowName: 'fenced-outer',
+        runId: run.runId,
+        storageVersion: 2,
+      });
+      expect(parent?.context['fenced-inner']?.status).not.toBe('success');
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('stores a bailed step as completed, so the finish prune sees its result', async () => {
+    // A bail ends the run directly instead of publishing workflow.step.end, which is what
+    // persists a leaf's result on v2. Without its own write, the stored leaf stays 'running'
+    // under a success run, and the finish prune (which reloads from storage) gets no output.
+    const hookSaw: any[] = [];
+    const bailing = createStep({
+      id: 'bailing',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ bail }) => bail({ answer: 42 }),
+    });
+    const workflow = createWorkflow({
+      id: 'bail-v2',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: {
+        storageVersion: 2,
+        pruneSnapshot: ({ snapshot }) => {
+          hookSaw.push(snapshot.context.bailing);
+          return snapshot;
+        },
+      },
+    })
+      .then(bailing)
+      .commit();
+
+    const storage = new MockStore();
+    const { result, run } = await runWorkflow(workflow, storage);
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ answer: 42 });
+
+    const stored = (await storage.stores.workflows!.loadWorkflowSnapshot({
+      workflowName: 'bail-v2',
+      runId: run.runId,
+      storageVersion: 2,
+    }))!;
+    expect(stored.context.bailing).toMatchObject({ status: 'success', output: { answer: 42 } });
+    expect(hookSaw[0]).toMatchObject({ status: 'success', output: { answer: 42 } });
+  });
+
+  it('gives overlapping finish deliveries the same unpruned input, and stores one pruned run', async () => {
+    // Two concurrent deliveries of the same workflow.end can both load the run before either
+    // writes the pruned copy, so both invoke the hook. That's the at-least-once reality the hook
+    // contract allows; what must hold is that no invocation ever reads a pruned run (the marker
+    // closes the sequential path), and the store ends single-pruned whichever write lands last.
+    const hookInputs: any[] = [];
+    const big = createStep({
+      id: 'big',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async () => ({ data: BIG }),
+    });
+    const workflow = createWorkflow({
+      id: 'overlap-v2',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: {
+        storageVersion: 2,
+        pruneSnapshot: ({ snapshot }) => {
+          hookInputs.push(snapshot.context.big!.output);
+          return {
+            ...snapshot,
+            context: {
+              ...snapshot.context,
+              big: {
+                ...snapshot.context.big,
+                output: { preview: JSON.stringify(snapshot.context.big!.output).slice(0, 60) },
+              },
+            },
+          };
+        },
+      },
+    })
+      .then(big)
+      .commit();
+
+    const storage = new MockStore();
+    const store = (await storage.getStore('workflows'))!;
+    const pubsub = new EventEmitterPubSub();
+    let endEvent: any;
+    const publish = pubsub.publish.bind(pubsub);
+    pubsub.publish = async (topic, event) => {
+      if (topic === 'workflows' && event.type === 'workflow.end') endEvent ??= event;
+      return publish(topic, event);
+    };
+    // Hold the pruned checkpoint writes, so the duplicate delivery loads before either lands.
+    let enteredWrite!: () => void;
+    const writeEntered = new Promise<void>(resolve => (enteredWrite = resolve));
+    let releaseWrites!: () => void;
+    const writeGate = new Promise<void>(resolve => (releaseWrites = resolve));
+    const realWrite = store.writeWorkflowRunCheckpoint.bind(store);
+    vi.spyOn(store, 'writeWorkflowRunCheckpoint').mockImplementation(async args => {
+      if ((args.header as any)?.status === 'success') {
+        enteredWrite();
+        await writeGate;
+      }
+      return realWrite(args);
+    });
+
+    const mastra = new Mastra({ logger: false, storage, workflows: { wf: workflow as any }, pubsub });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const started = run.start({ inputData: {} });
+      await writeEntered;
+      expect(hookInputs).toEqual([{ data: BIG }]);
+
+      const duplicate = publish('workflows', endEvent);
+      await vi.waitFor(() => expect(hookInputs.length).toBe(2));
+      releaseWrites();
+      await Promise.all([started, duplicate]);
+
+      // Every invocation read the original, never another invocation's output.
+      expect(hookInputs).toEqual([{ data: BIG }, { data: BIG }]);
+      const stored = (await storage.stores.workflows!.loadWorkflowSnapshot({
+        workflowName: 'overlap-v2',
+        runId: run.runId,
+        storageVersion: 2,
+      }))!;
+      expect((stored.context.big!.output as any).preview.startsWith('{"data"')).toBe(true);
+    } finally {
+      await mastra.stopWorkers();
+    }
   });
 
   it('prunes a finished run once, even when its workflow.end is delivered again', async () => {

@@ -1608,6 +1608,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     let loopFailure: RunFailure | undefined;
     if (parentWorkflow) {
+      // The prune above awaited storage and the user hook; an execution that lost the run during
+      // it had its checkpoint rejected by the store's fence, but nothing fences this publish.
+      // Re-check, so a superseded execution can't continue the parent with its stale result: the
+      // new owner's own end hands off.
+      await this.assertCurrentRunFence(runId);
       await this.#handNestedSuccessToParent({
         parentWorkflow,
         nestedRunId: runId,
@@ -3803,6 +3808,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       // @ts-expect-error - bailed status not in type
       stepResult.status = 'success';
       const updatedState = (stepResult as any).__state ?? currentState;
+
+      // A bail skips workflow.step.end (publishing it would advance the graph), so nothing else
+      // persists this leaf: write its completed result and state, or the stored run keeps the
+      // leaf 'running' and the finish prune, which reloads from storage, never sees its output.
+      await this.#runStorage(workflowId, runId).writeStepResult({
+        stepId: leafId,
+        result: stepResult,
+        requestContext: withoutAuthToken(requestContext),
+        state: updatedState,
+      });
 
       // A bail ends this run, so it doesn't pause it.
       await this.endWorkflow(
