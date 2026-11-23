@@ -11,6 +11,7 @@ import {
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
+  expectedStaleTurnPreservesNewerGenerationBuffer,
   prepare,
   reachActivation as reachFixtureActivation,
   recordingWriter,
@@ -19,6 +20,7 @@ import {
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
+  runStaleTurnPreservesNewerGenerationBuffer,
   setup as setupFixture,
   values,
   writeDuringSwap,
@@ -464,6 +466,12 @@ describe('buffered reflection extracted thread values (#27262)', () => {
     it("keeps a newer buffered reflection's state when the retired operation finishes", async () => {
       const outcome = await runNewerReflectionBufferSurvivesRetiredHook(env);
       expect(outcome).toEqual(expectedNewerReflectionBufferSurvivesRetiredHook(outcome));
+      expect(outcome.newerCycleId).toEqual(expect.any(String));
+    });
+
+    it("keeps a newer generation's buffer and cycle when a stale turn resumes with an older snapshot", async () => {
+      const outcome = await runStaleTurnPreservesNewerGenerationBuffer(env);
+      expect(outcome).toEqual(expectedStaleTurnPreservesNewerGenerationBuffer(outcome));
       expect(outcome.newerCycleId).toEqual(expect.any(String));
     });
 

@@ -620,3 +620,72 @@ export function expectedNewerReflectionBufferSurvivesRetiredHook(outcome: { newe
     values: { priority: 'newer' },
   };
 }
+
+/**
+ * A turn on generation 0 stalls after reading its snapshot (during the thread metadata read in
+ * `maybeReflect`). Meanwhile another writer advances to generation 1 and generation 1 buffers its
+ * own reflection. When the stale generation-0 turn resumes, it must not clear generation 1's
+ * boundary or cycle (which would trigger a duplicate reflection and lose generation 1's cycle ID
+ * and staged values).
+ */
+export async function runStaleTurnPreservesNewerGenerationBuffer(env: BufferedReflectionEnv) {
+  const staleMetaRead = gate();
+  let reflectorCalls = 0;
+  const f = await setup(env, () => reflection('newer'), 800, {
+    activateAfterIdle: IDLE_TTL_MS,
+    onReflectionEnd: async () => {},
+    onReflectorCall: () => {
+      reflectorCalls++;
+    },
+  });
+  const gen0 = await f.om.getRecord(f.threadId, f.resourceId);
+  if (!gen0) throw new Error('Missing gen0');
+
+  // Hold the first turn's `getThreadById` inside `maybeReflect` (after it already captured `gen0`).
+  const origGetThread = f.store.getThreadById.bind(f.store);
+  let holdNext = true;
+  f.store.getThreadById = async args => {
+    const res = await origGetThread(args);
+    if (holdNext) {
+      holdNext = false;
+      staleMetaRead.entered();
+      await staleMetaRead.released;
+    }
+    return res;
+  };
+  const staleTurn = f.turn(undefined, { settle: false });
+  await staleMetaRead.reached;
+
+  // Another writer retires gen0 -> gen1, and gen1 buffers its reflection cleanly.
+  await f.store.createReflectionGeneration({
+    currentRecord: gen0,
+    reflection: factLines(100, 40),
+    tokenCount: 800,
+  });
+  const { writer, reflectionActivations, reflectionBufferingStarts } = recordingWriter();
+  await f.turn(writer);
+  const newerCycleId = reflectionBufferingStarts()[0]?.cycleId;
+
+  // Release the stale gen0 turn; it must ignore the older snapshot and leave gen1's state intact.
+  staleMetaRead.release();
+  await staleTurn;
+  await f.om.settled();
+  f.store.getThreadById = origGetThread;
+
+  await reachActivation(f, undefined, { writer, tail: '' });
+  return {
+    reflectorCalls,
+    newerCycleId,
+    activationCycleIds: reflectionActivations().map(marker => marker.cycleId),
+    values: (await values(f.memory, f.threadId))?.extracted,
+  };
+}
+
+export function expectedStaleTurnPreservesNewerGenerationBuffer(outcome: { newerCycleId?: string }) {
+  return {
+    reflectorCalls: 1,
+    newerCycleId: outcome.newerCycleId,
+    activationCycleIds: [outcome.newerCycleId],
+    values: { priority: 'newer' },
+  };
+}

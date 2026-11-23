@@ -18,10 +18,12 @@ import {
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
+  expectedStaleTurnPreservesNewerGenerationBuffer,
   runBufferExtendedWithUnreflectedTail,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
+  runStaleTurnPreservesNewerGenerationBuffer,
 } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
 import type { BufferedReflectionEnv } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
 
@@ -71,6 +73,12 @@ describe('buffered reflection extracted values (LibSQL file database)', () => {
   it("keeps a newer buffered reflection's state when the retired operation finishes", async () => {
     const outcome = await runNewerReflectionBufferSurvivesRetiredHook(env);
     expect(outcome).toEqual(expectedNewerReflectionBufferSurvivesRetiredHook(outcome));
+    expect(outcome.newerCycleId).toEqual(expect.any(String));
+  });
+
+  it("keeps a newer generation's buffer and cycle when a stale turn resumes with an older snapshot", async () => {
+    const outcome = await runStaleTurnPreservesNewerGenerationBuffer(env);
+    expect(outcome).toEqual(expectedStaleTurnPreservesNewerGenerationBuffer(outcome));
     expect(outcome.newerCycleId).toEqual(expect.any(String));
   });
 });

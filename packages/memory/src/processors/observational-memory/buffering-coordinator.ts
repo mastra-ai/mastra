@@ -10,6 +10,8 @@ import { waitWithAbort } from './wait-with-abort';
 export interface ReflectionBufferOwner {
   /** The generation the op buffers for. */
   recordId: string;
+  /** The generation count of `recordId`, used to ignore stale snapshots from older generations. */
+  generationCount: number;
   /** Another writer retired `recordId` while the op was still running. */
   retired: boolean;
 }
@@ -87,9 +89,17 @@ export class BufferingCoordinator {
    */
   static reflectionBufferOwners = new Map<string, ReflectionBufferOwner>();
 
-  /** Set the reflection boundary for a new buffered-reflection op on generation `recordId`. */
-  static startReflectionBuffer(bufferKey: string, tokens: number, recordId: string): ReflectionBufferOwner {
-    const owner: ReflectionBufferOwner = { recordId, retired: false };
+  /** Set the reflection boundary for a new buffered-reflection op on generation `record`. */
+  static startReflectionBuffer(
+    bufferKey: string,
+    tokens: number,
+    record: Pick<ObservationalMemoryRecord, 'id' | 'generationCount'>,
+  ): ReflectionBufferOwner {
+    const owner: ReflectionBufferOwner = {
+      recordId: record.id,
+      generationCount: record.generationCount ?? 0,
+      retired: false,
+    };
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, tokens);
     BufferingCoordinator.reflectionBufferOwners.set(bufferKey, owner);
     return owner;
@@ -119,14 +129,18 @@ export class BufferingCoordinator {
   }
 
   /**
-   * Reconcile this process's reflection buffer state against the current head `headRecordId`.
-   * If the tracked buffer belongs to a retired generation (`owner.recordId !== headRecordId`),
-   * drop it now, or mark it retired so cleanup runs when its still-running background op finishes.
-   * State owned by `headRecordId` is untouched.
+   * Reconcile this process's reflection buffer state against an observed head record.
+   * Only a strictly newer generation (`head.generationCount > owner.generationCount`) proves
+   * `owner`'s generation was retired; a stale snapshot from an older generation is ignored so it
+   * never clears a newer generation's boundary or cycle.
    */
-  static reconcileReflectionBufferHead(bufferKey: string, headRecordId: string): void {
+  static reconcileReflectionBufferHead(
+    bufferKey: string,
+    head: Pick<ObservationalMemoryRecord, 'id' | 'generationCount'>,
+  ): void {
     const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
-    if (!owner || owner.recordId === headRecordId) return;
+    if (!owner || owner.recordId === head.id) return;
+    if ((head.generationCount ?? 0) <= owner.generationCount) return;
     if (BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
       owner.retired = true;
       return;

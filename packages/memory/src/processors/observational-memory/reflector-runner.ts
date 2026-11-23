@@ -762,7 +762,7 @@ export class ReflectorRunner {
       return;
     }
 
-    const owner = BufferingCoordinator.startReflectionBuffer(bufferKey, observationTokens, record.id);
+    const owner = BufferingCoordinator.startReflectionBuffer(bufferKey, observationTokens, record);
 
     registerOp(record.id, 'bufferingReflection');
     const flagSet = this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
@@ -883,6 +883,7 @@ export class ReflectorRunner {
 
     // The buffer is written for the generation read here, which may be newer than `record`.
     owner.recordId = currentRecord.id;
+    owner.generationCount = currentRecord.generationCount ?? 0;
     BufferingCoordinator.reflectionBufferCycleIds.set(bufferKey, cycleId);
 
     const fullObservations = currentRecord.activeObservations ?? '';
@@ -1136,7 +1137,7 @@ export class ReflectorRunner {
     );
 
     if (freshRecord) {
-      BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, freshRecord.id);
+      BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, freshRecord);
     }
 
     if (!freshRecord?.bufferedReflection) {
@@ -1380,7 +1381,7 @@ export class ReflectorRunner {
           this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
         }
         const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
-        BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, record.id);
+        BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, record);
         if (this.buffering.isAsyncBufferingInProgress(bufferKey)) return false;
         if (BufferingCoordinator.lastBufferedBoundary.has(bufferKey)) return false;
         if (record.bufferedReflection) return false;
