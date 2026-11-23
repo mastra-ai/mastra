@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elasticsearch",
-  "version": "1.4.6",
+  "version": "1.4.7-alpha.0",
   "description": "ElasticSearch vector store provider for Mastra",
   "license": "Apache-2.0",
   "type": "module",

@@ -3,16 +3,10 @@
   "temperature": ["MiniMaxAI/MiniMax-M3.1-Flash", "Qwen/Qwen3.8-27B", "zai-org/GLM-5.3", "zai-org/GLM-5.3-Flash"],
   "structuredOutput": ["Qwen/Qwen3.8-27B", "zai-org/GLM-5.3-Flash"],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "Qwen/Qwen3.8-27B": [
@@ -21,10 +15,16 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

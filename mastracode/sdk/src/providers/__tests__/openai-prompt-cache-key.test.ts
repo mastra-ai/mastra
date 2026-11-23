@@ -75,13 +75,18 @@ describe.each(Object.entries(routes))('OpenAI prompt cache key sent by the %s', 
     vi.unstubAllEnvs();
   });
 
-  async function send(threadId: string) {
-    const sent: Array<{ url: string; body: any; headers: Headers }> = [];
+  async function send(
+    threadId: string,
+    modelId = 'gpt-5.4',
+    providerOptions?: { mastracode: { codexServiceTier: 'fast' } },
+  ) {
+    const sent: Array<{ url: string; body: any; raw: string; headers: Headers }> = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const request = input instanceof Request ? input : new Request(input, init);
-        sent.push({ url: request.url, body: JSON.parse(await request.text()), headers: request.headers });
+        const raw = await request.text();
+        sent.push({ url: request.url, body: JSON.parse(raw), raw, headers: request.headers });
         return new Response(JSON.stringify(responsesBody()), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -100,12 +105,13 @@ describe.each(Object.entries(routes))('OpenAI prompt cache key sent by the %s', 
     });
     const model = gateway.resolveLanguageModel({
       providerId: 'openai',
-      modelId: 'gpt-5.4',
+      modelId,
       apiKey: 'test',
       headers: { 'x-thread-id': threadId, 'x-resource-id': 'resource-1' },
     });
 
     await (model as any).doGenerate({
+      ...(providerOptions ? { providerOptions } : {}),
       prompt: [
         { role: 'system', content: 'Instructions' },
         { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
@@ -115,6 +121,35 @@ describe.each(Object.entries(routes))('OpenAI prompt cache key sent by the %s', 
     expect(sent.map(request => request.url)).toEqual([route.url]);
     return sent[0]!;
   }
+
+  it.each(['gpt-6.2-sol', 'gpt-6.2-astra'])(
+    'scopes the fast preference to Codex OAuth requests for %s',
+    async modelId => {
+      const standard = await send('thread-fast', modelId);
+      const fast = await send('thread-fast', modelId, { mastracode: { codexServiceTier: 'fast' } });
+      const next = await send('thread-fast', modelId);
+
+      expect(standard.body).not.toHaveProperty('service_tier');
+      expect(fast.body).toEqual(route.sessionHeaders ? { ...standard.body, service_tier: 'priority' } : standard.body);
+      expect([...fast.headers]).toEqual([...standard.headers]);
+      expect(next.raw).toBe(standard.raw);
+    },
+  );
+
+  it('strips the alias before applying the route-specific model remap, without Fast on a model that lacks it', async () => {
+    const standard = await send('thread-fast', 'gpt-5.3');
+    const aliased = await send('thread-fast', 'gpt-5.3:fast');
+
+    expect(standard.body.model).toBe(route.sessionHeaders ? 'gpt-5.3-codex' : 'gpt-5.3');
+    expect(aliased.body).toEqual(standard.body);
+  });
+
+  it('requests Fast from the model suffix on a model that supports it', async () => {
+    const standard = await send('thread-fast', 'gpt-6.2-sol');
+    const aliased = await send('thread-fast', 'gpt-6.2-sol:fast');
+
+    expect(aliased.body).toEqual(route.sessionHeaders ? { ...standard.body, service_tier: 'priority' } : standard.body);
+  });
 
   it("keeps a caller's own prompt cache key", async () => {
     const sent: Array<{ body: any }> = [];
