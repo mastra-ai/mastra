@@ -91,8 +91,8 @@ const CODEX_FAST_MODELS = new Set([
   'gpt-6-luna',
   'gpt-5.6',
   'gpt-5.6-sol',
-  'gpt-5.5',
-  'gpt-5.4',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
 ]);
 
 /** `:fast` is reserved on native OpenAI selections, not a catalog model suffix. */
