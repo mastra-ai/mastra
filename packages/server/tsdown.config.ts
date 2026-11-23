@@ -21,7 +21,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   // The `@mastra/agent-builder` package has `typescript` as a peer dependency and we don't want to bundle it
   deps: {
     neverBundle: ['typescript'],

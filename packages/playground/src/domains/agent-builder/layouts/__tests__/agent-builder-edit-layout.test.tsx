@@ -1,6 +1,6 @@
+import { AgentBuilderEditLayout } from '@mastra/playground-ui/domains/agents/components/agent-builder-edit-layout';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AgentBuilderEditLayout } from '../agent-builder-edit-layout';
 
 describe('AgentBuilderEditLayout', () => {
   afterEach(() => {

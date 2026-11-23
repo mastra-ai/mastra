@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mesa",
-  "version": "0.3.3",
+  "version": "0.3.4-alpha.0",
   "description": "Mesa filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -47,7 +47,8 @@
     "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

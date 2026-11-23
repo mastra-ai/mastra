@@ -2,10 +2,10 @@
   "attachment": ["claude-opus-5-5", "claude-sonnet-5-5"],
   "temperature": ["deepseek-v4-pro"],
   "reasoning": {
-    "claude-opus-5-5": [
+    "deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "claude-sonnet-5-5": [
@@ -14,10 +14,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-pro": [
+    "claude-opus-5-5": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

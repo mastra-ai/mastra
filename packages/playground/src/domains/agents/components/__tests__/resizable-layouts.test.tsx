@@ -1,11 +1,10 @@
+import { ThreadsPanelProvider, useThreadsPanel } from '@mastra/playground-ui/domains/agents/chat';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
-import { ThreadsPanelProvider } from '../../context/threads-panel-context';
-import { useThreadsPanel } from '../../context/use-threads-panel';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
@@ -132,11 +131,10 @@ function expectPanelGroupsShrinkable() {
   expect(panelGroups.length).toBeGreaterThan(0);
 
   for (const panelGroup of panelGroups) {
-    expect(panelGroup.className).toContain('h-full');
-    expect(panelGroup.className).toContain('min-h-0');
-    expect(panelGroup.className).toContain('w-full');
-    expect(panelGroup.className).toContain('min-w-0');
-    expect(panelGroup.className).not.toContain('min-w-min');
+    expect(panelGroup.classList.contains('size-full')).toBe(true);
+    expect(panelGroup.classList.contains('min-h-0')).toBe(true);
+    expect(panelGroup.classList.contains('min-w-0')).toBe(true);
+    expect(panelGroup.classList.contains('min-w-min')).toBe(false);
   }
 }
 

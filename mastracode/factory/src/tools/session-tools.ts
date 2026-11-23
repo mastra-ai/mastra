@@ -1,3 +1,4 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -33,6 +34,11 @@ export interface FactorySessionToolDependencies {
   sessionModel: {
     projects: FactoryProjectsStorage;
     modelDefaults: ModelDefaultsStorage;
+    /**
+     * The server's own sign-ins, for local mode without tenant credentials, so
+     * model switches see the same catalog as the Settings picker.
+     */
+    localAuthStorage?: () => AuthStorage | undefined;
     /**
      * Tenant credential stores, present when auth is on. Model switches then
      * check the target session's credential scope, like the Settings picker;
@@ -84,7 +90,9 @@ export function createFactorySessionTools(
     const known = new Set(models.flatMap(model => (typeof model.id === 'string' ? [model.id] : [])));
     const tenantCatalog = deps.sessionModel.tenantCatalog;
     if (!tenantCatalog) {
-      const usable = (await buildModelCatalog({ controller })).map(model => model.id);
+      const usable = (await buildModelCatalog({ controller, authStorage: deps.sessionModel.localAuthStorage?.() })).map(
+        model => model.id,
+      );
       return { usable, known, scopeLabel: 'server' };
     }
     const requestContext = new RequestContext();
@@ -196,7 +204,7 @@ export function createFactorySessionTools(
       'Start a side session in this Factory with a prompt. It runs on its own sandbox and branch as you, and reports back to this session with `factory-session` notifications.',
       'A side session uses this session’s model. Pass `model` to start it on another model the session credentials can run.',
       'Use it when the person asks for a side session, and for work no card stage does: investigations and research, experiments, pushing fixes to an existing pull request or taking one over, or work that should leave the board alone.',
-      "When someone asks for a card's own stage work without saying where, run it on the card instead, as the board's buttons do: \"review this pull request\" moves the pull request's card to its review stage or reruns it there, so the review is recorded on the card and posted on the pull request, and new work that should land as a pull request goes on its issue's card, or a card filed for it.",
+      "When someone asks for a card's own stage work without saying where, run it on the card instead, as the board's buttons do: \"review this pull request\" moves the pull request's card to its review stage or reruns it there, so the review is recorded on the card and posted on the pull request, and new work that should land as a pull request goes on its issue's card, or a card filed for it and started.",
       'Find cards with factory_list_work_items (a pasted link works) and move them, or rerun their stage, with factory_transition_work_item.',
     ].join(' '),
     inputSchema: z

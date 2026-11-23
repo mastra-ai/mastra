@@ -5048,6 +5048,55 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  #attachInvocationOutput<OUTPUT>(
+    state: AgentThreadRuntimeState,
+    agent: Agent<any, any, any, any>,
+    output: MastraModelOutput<OUTPUT>,
+    streamOptions: AgentExecutionOptions<OUTPUT>,
+    pubsub: PubSub | undefined,
+    threadId: string,
+    resourceId: string | undefined,
+    registrationOptions?: AgentThreadStrictRegistrationOptions | AgentThreadStreamRegistrationOptions,
+    leaseOwner?: string,
+  ) {
+    const key = this.#threadKey(resourceId, threadId);
+    const { streamId, streamSeq } = this.#nextStreamIdentity(state, output.runId);
+    const broadcast = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1, () => record.generation);
+    if (!registrationOptions?.strict) {
+      const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
+      if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
+      else this.#clearSuspendedRun(state, output.runId);
+    }
+    const record: AgentThreadRunRecord<OUTPUT> = {
+      agent,
+      output: broadcast.output,
+      currentSegmentOutput: output,
+      runId: output.runId,
+      streamId,
+      streamSeq,
+      generation: registrationOptions?.generation,
+      ...(registrationOptions?.strict ? { supersedes: registrationOptions.generation !== undefined, leaseOwner } : {}),
+      ownershipLost: registrationOptions?.ownershipLost,
+      stepOwner: registrationOptions?.stepOwner,
+      lifecycle: 'running',
+      threadId,
+      resourceId,
+      streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
+      createSubscriberStream: broadcast.createSubscriberStream,
+      suspensions: state.suspensionMetadataByRunId.get(output.runId),
+      broadcastFinished: broadcast.broadcastFinished,
+      continuation:
+        registrationOptions?.continuation === 'across-suspension'
+          ? {
+              sourceOutput: output,
+              canContinue: broadcast.canContinueBroadcast,
+              didPublishTerminal: broadcast.didPublishTerminal,
+            }
+          : undefined,
+    };
+    return { record, streamId, streamSeq, ...broadcast };
+  }
+
   registerRun<OUTPUT>(
     agent: Agent<any, any, any, any>,
     output: MastraModelOutput<OUTPUT>,
@@ -5097,45 +5146,16 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     this.#sweepStaleSuspendedRecords(state, pubsub);
     const key = this.#threadKey(resourceId, threadId);
-    const { streamId, streamSeq } = this.#nextStreamIdentity(state, output.runId);
-    const {
-      output: outputForSubscribers,
-      createSubscriberStream,
-      startBroadcast,
-      canContinueBroadcast,
-      setSuspensionBoundaryHandler,
-      didPublishTerminal,
-      broadcastFinished,
-    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1, () => record.generation);
-    const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
-    if (resumedToolCallId) {
-      this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
-    } else {
-      this.#clearSuspendedRun(state, output.runId);
-    }
-
-    const record: AgentThreadRunRecord<OUTPUT> = {
+    const { record, streamId, streamSeq, startBroadcast, setSuspensionBoundaryHandler } = this.#attachInvocationOutput(
+      state,
       agent,
-      output: outputForSubscribers,
-      currentSegmentOutput: output,
-      runId: output.runId,
-      streamId,
-      streamSeq,
-      generation: registrationOptions?.generation,
-      ownershipLost: registrationOptions?.ownershipLost,
-      stepOwner: registrationOptions?.stepOwner,
-      lifecycle: 'running',
+      output,
+      streamOptions,
+      pubsub,
       threadId,
       resourceId,
-      streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
-      createSubscriberStream,
-      suspensions: state.suspensionMetadataByRunId.get(output.runId),
-      broadcastFinished,
-      continuation:
-        registrationOptions?.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
-          : undefined,
-    };
+      registrationOptions,
+    );
 
     // A run parked on a tool suspension keeps renewing the thread lease while it
     // waits. A run that starts on the thread anyway takes the thread over, so it
@@ -5249,41 +5269,18 @@ export class AgentThreadStreamRuntime {
 
     this.#stopLeaseRenewal(resolvedPubSub, output.runId);
     this.#startLeaseRenewal(resolvedPubSub, key, output.runId, owner);
-    const { streamId, streamSeq } = this.#nextStreamIdentity(state, output.runId);
-    const {
-      output: outputForSubscribers,
-      createSubscriberStream,
-      startBroadcast,
-      cancelBroadcast,
-      canContinueBroadcast,
-      setSuspensionBoundaryHandler,
-      didPublishTerminal,
-      broadcastFinished,
-    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1, () => record.generation);
-    const record: AgentThreadRunRecord<OUTPUT> = {
-      agent,
-      output: outputForSubscribers,
-      currentSegmentOutput: output,
-      runId: output.runId,
-      streamId,
-      streamSeq,
-      generation: registrationOptions.generation,
-      supersedes: registrationOptions.generation !== undefined,
-      leaseOwner: owner,
-      ownershipLost: registrationOptions.ownershipLost,
-      stepOwner: registrationOptions.stepOwner,
-      lifecycle: 'running',
-      threadId,
-      resourceId,
-      streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
-      createSubscriberStream,
-      suspensions: state.suspensionMetadataByRunId.get(output.runId),
-      broadcastFinished,
-      continuation:
-        registrationOptions.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
-          : undefined,
-    };
+    const { record, streamId, streamSeq, startBroadcast, cancelBroadcast, setSuspensionBoundaryHandler } =
+      this.#attachInvocationOutput(
+        state,
+        agent,
+        output,
+        streamOptions,
+        pubsub,
+        threadId,
+        resourceId,
+        registrationOptions,
+        owner,
+      );
 
     let rolledBack = false;
     let registrationPublished = false;

@@ -312,8 +312,13 @@ describeParity('prepare-step parity', target => {
     hosts.push(new Mastra({ agents: { [baseAgent.id]: wrapper }, storage: new InMemoryStore(), logger: false }));
 
     const prepareStep = vi.fn();
-    const { workflowInput, registryEntry } = await wrapper.prepare('hello', { prepareStep });
+    const runId = `prepared-${target}`;
+    const prepared = await wrapper.prepare('hello', { runId, prepareStep });
+    const { workflowInput, registryEntry } = prepared;
 
+    expect(prepared.runId).toBe(runId);
+    expect(workflowInput.runId).toBe(runId);
+    expect(workflowInput.messageId).toBe(prepared.messageId);
     expect(workflowInput.options).not.toHaveProperty('prepareStep');
     expect(JSON.parse(JSON.stringify(workflowInput))).toEqual(workflowInput);
     expect(registryEntry.prepareStep).toBe(prepareStep);

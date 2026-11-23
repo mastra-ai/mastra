@@ -1,0 +1,162 @@
+diff --git a/lib/theme/ApiItem/index.js b/lib/theme/ApiItem/index.js
+index 5d6e1b5cc90e9f5e1c99005ab19dec0baa60f2bd..65fbad554b8dc9fe235add6ae741e75b41697af2 100644
+--- a/lib/theme/ApiItem/index.js
++++ b/lib/theme/ApiItem/index.js
+@@ -14,9 +14,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.default = ApiItem;
+ const react_1 = __importDefault(require("react"));
+ const BrowserOnly_1 = __importDefault(require("@docusaurus/BrowserOnly"));
+-const ExecutionEnvironment_1 = __importDefault(
+-  require("@docusaurus/ExecutionEnvironment")
+-);
+ const client_1 = require("@docusaurus/plugin-content-docs/client");
+ const theme_common_1 = require("@docusaurus/theme-common");
+ const useDocusaurusContext_1 = __importDefault(
+@@ -26,7 +23,7 @@ const useIsBrowser_1 = __importDefault(require("@docusaurus/useIsBrowser"));
+ const slice_1 = require("@theme/ApiExplorer/Authorization/slice");
+ const persistenceMiddleware_1 = require("@theme/ApiExplorer/persistenceMiddleware");
+ const storage_utils_1 = require("@theme/ApiExplorer/storage-utils");
+-const Layout_1 = __importDefault(require("@theme/ApiItem/Layout"));
++const Layout_1 = __importDefault(require("@theme/DocItem/Layout"));
+ const CodeBlock_1 = __importDefault(require("@theme/CodeBlock"));
+ const Metadata_1 = __importDefault(require("@theme/DocItem/Metadata"));
+ const SchemaExpansion_1 = require("@theme/SchemaExpansion");
+@@ -35,10 +32,6 @@ const clsx_1 = __importDefault(require("clsx"));
+ const pako_1 = require("pako");
+ const react_redux_1 = require("react-redux");
+ const store_1 = require("./store");
+-let ApiExplorer = (_) => react_1.default.createElement("div", null);
+-if (ExecutionEnvironment_1.default.canUseDOM) {
+-  ApiExplorer = require("@theme/ApiExplorer").default;
+-}
+ function base64ToUint8Array(base64) {
+   const binary = atob(base64);
+   const len = binary.length;
+@@ -172,33 +165,11 @@ function ApiItem(props) {
+             react_1.default.createElement(
+               SchemaExpansion_1.SchemaExpansionProvider,
+               null,
++              // Reference only: no API Explorer column.
+               react_1.default.createElement(
+                 "div",
+-                { className: (0, clsx_1.default)("row", "theme-api-markdown") },
+-                react_1.default.createElement(
+-                  "div",
+-                  { className: "col col--7 openapi-left-panel__container" },
+-                  react_1.default.createElement(MDXComponent, null)
+-                ),
+-                react_1.default.createElement(
+-                  "div",
+-                  { className: "col col--5 openapi-right-panel__container" },
+-                  react_1.default.createElement(
+-                    BrowserOnly_1.default,
+-                    {
+-                      fallback: react_1.default.createElement(
+-                        SkeletonLoader_1.default,
+-                        { size: "lg" }
+-                      ),
+-                    },
+-                    () => {
+-                      return react_1.default.createElement(ApiExplorer, {
+-                        item: api,
+-                        infoPath: infoPath,
+-                      });
+-                    }
+-                  )
+-                )
++                { className: "theme-api-markdown openapi-left-panel__container" },
++                react_1.default.createElement(MDXComponent, null)
+               )
+             )
+           )
+diff --git a/lib/theme/ParamsDetails/index.js b/lib/theme/ParamsDetails/index.js
+index 24069f350ad6892b1f231ef31371cf88c4b5de00..603875c477c632098b03b098e75786170fad112c 100644
+--- a/lib/theme/ParamsDetails/index.js
++++ b/lib/theme/ParamsDetails/index.js
+@@ -74,19 +74,6 @@ const ParamsDetailsComponent = ({ parameters }) => {
+     })
+   );
+ };
+-const ParamsDetails = (props) => {
+-  return react_1.default.createElement(
+-    BrowserOnly_1.default,
+-    {
+-      fallback: react_1.default.createElement(SkeletonLoader_1.default, {
+-        size: "sm",
+-      }),
+-    },
+-    () => {
+-      return react_1.default.createElement(ParamsDetailsComponent, {
+-        ...props,
+-      });
+-    }
+-  );
+-};
++// Rendered on the server too, so the reference is in the static HTML (and llms.txt).
++const ParamsDetails = (props) => react_1.default.createElement(ParamsDetailsComponent, props);
+ exports.default = ParamsDetails;
+diff --git a/lib/theme/RequestSchema/index.js b/lib/theme/RequestSchema/index.js
+index 8f1a8e44646932c7b4f75b0003177a172ba8cbec..6ed02e75b3ce243ed3df3fd536deaae74b29996b 100644
+--- a/lib/theme/RequestSchema/index.js
++++ b/lib/theme/RequestSchema/index.js
+@@ -259,19 +259,6 @@ const RequestSchemaComponent = ({ title, body, style }) => {
+     )
+   );
+ };
+-const RequestSchema = (props) => {
+-  return react_1.default.createElement(
+-    BrowserOnly_1.default,
+-    {
+-      fallback: react_1.default.createElement(SkeletonLoader_1.default, {
+-        size: "sm",
+-      }),
+-    },
+-    () => {
+-      return react_1.default.createElement(RequestSchemaComponent, {
+-        ...props,
+-      });
+-    }
+-  );
+-};
++// Rendered on the server too, so the reference is in the static HTML (and llms.txt).
++const RequestSchema = (props) => react_1.default.createElement(RequestSchemaComponent, props);
+ exports.default = RequestSchema;
+diff --git a/lib/theme/ResponseSchema/index.js b/lib/theme/ResponseSchema/index.js
+index d3a220445642c44acf1f2a54a4ab2e8f0f9b28f3..ac3db170a0b46f7595d3386d9bd269b8f7d0ce2c 100644
+--- a/lib/theme/ResponseSchema/index.js
++++ b/lib/theme/ResponseSchema/index.js
+@@ -158,19 +158,6 @@ const ResponseSchemaComponent = ({ title, body, style }) => {
+   }
+   return undefined;
+ };
+-const ResponseSchema = (props) => {
+-  return react_1.default.createElement(
+-    BrowserOnly_1.default,
+-    {
+-      fallback: react_1.default.createElement(SkeletonLoader_1.default, {
+-        size: "md",
+-      }),
+-    },
+-    () => {
+-      return react_1.default.createElement(ResponseSchemaComponent, {
+-        ...props,
+-      });
+-    }
+-  );
+-};
++// Rendered on the server too, so the reference is in the static HTML (and llms.txt).
++const ResponseSchema = (props) => react_1.default.createElement(ResponseSchemaComponent, props);
+ exports.default = ResponseSchema;
+diff --git a/lib/theme/Schema/index.js b/lib/theme/Schema/index.js
+index aee672a182a3e7c22fdfa8e150836bec757cd74e..3382f215d97bb70c448264d88f3eccc24e930f09 100644
+--- a/lib/theme/Schema/index.js
++++ b/lib/theme/Schema/index.js
+@@ -203,7 +203,7 @@ const AnyOneOf = ({ schema, schemaType, schemaPath }) => {
+     ),
+     react_1.default.createElement(
+       SchemaTabs_1.default,
+-      { groupId: `schema-${uniqueId}`, lazy: true, onChange: handleTabChange },
++      { groupId: `schema-${uniqueId}`, lazy: false, onChange: handleTabChange },
+       schema[key]?.map((anyOneSchema, index) => {
+         // Use getSchemaName to include format info (e.g., "string<date-time>")
+         const computedSchemaName = (0, schema_1.getSchemaName)(anyOneSchema);
