@@ -359,25 +359,22 @@ type SearchArgs = Omit<Parameters<NonNullable<RecallMemory['searchMessages']>>[0
 function searchWithTimeout(memory: RecallMemory, args: SearchArgs, timeoutMs: number, runSignal?: AbortSignal) {
   const timeout = AbortSignal.timeout(timeoutMs);
   const abortSignal = runSignal ? AbortSignal.any([timeout, runSignal]) : timeout;
-  return new Promise<{ results: RecallSearchResult[] }>((resolve, reject) => {
-    const onAbort = () =>
-      reject(runSignal?.aborted ? runSignal.reason : new Error(`search did not finish within ${timeoutMs}ms`));
-    if (abortSignal.aborted) return onAbort();
+  const stopped = () =>
+    runSignal?.aborted ? runSignal.reason : new Error(`search did not finish within ${timeoutMs}ms`);
+  if (abortSignal.aborted) return Promise.reject(stopped());
+  let onAbort = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(stopped());
     abortSignal.addEventListener('abort', onAbort, { once: true });
-    // A search that answers first doesn't need the listener any more, so drop it rather than keep the
-    // settled search reachable from the signal until the timeout fires.
-    const done = () => abortSignal.removeEventListener('abort', onAbort);
-    memory.searchMessages!({ ...args, abortSignal }).then(
-      result => {
-        done();
-        resolve(result);
-      },
-      error => {
-        done();
-        reject(error);
-      },
-    );
   });
+  // Wrapping the call also turns a synchronous throw from searchMessages into a rejection, so every
+  // outcome goes through the same cleanup below.
+  const search = new Promise<{ results: RecallSearchResult[] }>(resolve =>
+    resolve(memory.searchMessages!({ ...args, abortSignal })),
+  );
+  // A search that settles first doesn't need the listener any more, so drop it rather than keep the
+  // settled search reachable from the signal until the timeout fires.
+  return Promise.race([search, aborted]).finally(() => abortSignal.removeEventListener('abort', onAbort));
 }
 
 function describeSearchFailure(error: unknown) {

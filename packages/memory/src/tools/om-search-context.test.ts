@@ -597,4 +597,42 @@ describe('recall search when the search itself fails', () => {
     expect(searchSignal?.aborted).toBe(true);
     expect(log.error).not.toHaveBeenCalled();
   });
+  it.each([
+    ['resolves', () => Promise.resolve({ results: [] as RecallSearchResult[] })],
+    ['rejects', () => Promise.reject(new Error('vector store down'))],
+    [
+      'throws synchronously',
+      () => {
+        throw new Error('not connected');
+      },
+    ],
+  ])('removes the abort listener as soon as the search %s', async (_, outcome) => {
+    const { memory } = setup([]);
+    let searchSignal: AbortSignal | undefined;
+    memory.searchMessages = vi.fn(({ abortSignal }) => {
+      searchSignal = abortSignal;
+      return outcome() as ReturnType<NonNullable<RecallMemory['searchMessages']>>;
+    });
+    const add = vi.spyOn(AbortSignal.prototype, 'addEventListener');
+    const remove = vi.spyOn(AbortSignal.prototype, 'removeEventListener');
+    const abortListeners = (spy: typeof add) =>
+      spy.mock.calls.filter(([type], i) => type === 'abort' && spy.mock.contexts[i] === searchSignal).map(c => c[1]);
+
+    try {
+      await searchMessagesForResource({
+        memory,
+        resourceId,
+        query: 'topic',
+        abortSignal: new AbortController().signal,
+        logger: logger(),
+      });
+
+      // Checked right after the search settles, well before the 30s timeout or any run abort.
+      expect(abortListeners(add)).toHaveLength(1);
+      expect(abortListeners(remove)).toEqual(abortListeners(add));
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
+    }
+  });
 });
