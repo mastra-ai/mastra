@@ -396,6 +396,50 @@ describe('Mastra shutdown lifecycle', () => {
     }
   });
 
+  it('initializes an agent registered while a workflow event waits on earlier initialization', async () => {
+    const firstInit = deferred();
+    const firstStarted = deferred();
+    const mastra = new Mastra({ logger: false, workers: false, storage: new MockStore() });
+    const makeNative = (id: string) => {
+      const agent = new Agent({
+        id,
+        name: id,
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+        durable: { executionEngine: 'durable' },
+      });
+      vi.spyOn(agent, '__hasDurableExecution').mockReturnValue(true);
+      return agent;
+    };
+
+    try {
+      const early = makeNative('early-native');
+      vi.spyOn(early, '__initializeDurableExecution').mockImplementation(async () => {
+        firstStarted.resolve();
+        await firstInit.promise;
+      });
+      mastra.addAgent(early, 'early-native');
+
+      const delivery = mastra.handleWorkflowEvent({ type: 'workflow.unknown', runId: 'run-1', data: {} } as any);
+      await firstStarted.promise;
+
+      const late = makeNative('late-native');
+      let lateInitialized = false;
+      vi.spyOn(late, '__initializeDurableExecution').mockImplementation(async () => {
+        lateInitialized = true;
+      });
+      mastra.addAgent(late, 'late-native');
+
+      firstInit.resolve();
+      await delivery;
+      expect(lateInitialized).toBe(true);
+    } finally {
+      firstInit.resolve();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
   it('rejects an invalid drainTimeout', async () => {
     const mastra = new Mastra({ logger: false, workers: false });
     try {

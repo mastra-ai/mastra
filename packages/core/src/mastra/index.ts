@@ -7974,18 +7974,25 @@ export class Mastra<
     await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
-  #initializeDurableAgents(): Promise<void> {
-    const initialization = (this.#durableAgentInitialization ??= Promise.all(
-      Object.values(this.#agents ?? {}).map(async agent => {
-        if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) {
-          await agent.__initializeDurableExecution();
-        }
-      }),
-    ).then(() => undefined));
-    return initialization.catch(error => {
-      if (this.#durableAgentInitialization === initialization) this.#durableAgentInitialization = undefined;
-      throw error;
-    });
+  async #initializeDurableAgents(): Promise<void> {
+    // addAgent() clears the memo. When that happens while this waits, the awaited promise
+    // never saw the new agent, so initialize again before the caller checks event ownership.
+    while (true) {
+      const initialization = (this.#durableAgentInitialization ??= Promise.all(
+        Object.values(this.#agents ?? {}).map(async agent => {
+          if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) {
+            await agent.__initializeDurableExecution();
+          }
+        }),
+      ).then(() => undefined));
+      try {
+        await initialization;
+      } catch (error) {
+        if (this.#durableAgentInitialization === initialization) this.#durableAgentInitialization = undefined;
+        throw error;
+      }
+      if (this.#durableAgentInitialization === initialization) return;
+    }
   }
 
   /**

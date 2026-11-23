@@ -294,8 +294,19 @@ const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
 // Same as RESUME_SNAPSHOT_POLL_INTERVAL_MS in @mastra/core/workflows, which older supported core versions don't export.
 const DURABLE_SNAPSHOT_WAIT_INTERVAL_MS = 25;
 
-function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
-  return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
+function getDurableLoopWorkflowName(agent: DurableAgentLike | Agent): string {
+  return (agent as Partial<DurableAgentLike>).durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
+}
+
+/**
+ * Whether the agent's runs execute on a durable engine and persist durable-loop snapshots:
+ * legacy wrappers, or a native Agent whose execution engine is durable/evented. Structural
+ * so agents from another `@mastra/core` copy are still recognized.
+ */
+function runsOnDurableEngine(agent: Agent): boolean {
+  if (isDurableAgentLike(agent)) return true;
+  const native = agent as unknown as { __hasDurableExecution?: () => boolean };
+  return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
 }
 
 async function validateDurableToolCallAccess({
@@ -315,7 +326,7 @@ async function validateDurableToolCallAccess({
   threadId?: string;
   abortSignal?: AbortSignal;
 }): Promise<void> {
-  if (!isDurableAgentLike(agent)) return;
+  if (!runsOnDurableEngine(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   if (!workflowsStore) {

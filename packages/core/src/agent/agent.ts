@@ -12356,6 +12356,16 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // A durable/evented run keeps its resume intent in the engine's snapshot, not the plain
+    // loop's; refuse before the plain lookup reports the suspension as missing.
+    if (!this.returnsDurableStreamResult && (this.#readyExecutionEngine() ?? (await this.#initializeExecutionEngine())))
+      throw new MastraError({
+        id: 'AGENT_RECOVER_RESUME_UNSUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" recoverResume() is not supported when the agent runs on a durable or evented execution engine. Use recover(runId) to continue an interrupted run.`,
+        details: { agentName: this.name, runId: options.runId },
+      });
     return this.#resumeStream<OUTPUT>(undefined, options, true);
   }
 

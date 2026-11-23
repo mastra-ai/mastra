@@ -2816,6 +2816,55 @@ describe('Agent Routes Authorization', () => {
         expect(execution).toHaveBeenCalled();
       },
     );
+
+    describe('native Agent with a durable execution engine', () => {
+      beforeEach(() => {
+        mockAgent = new Agent({
+          id: 'test-agent',
+          name: 'test-agent',
+          instructions: 'test-instructions',
+          model: {} as any,
+          memory: mockMemory,
+          durable: { executionEngine: 'durable' },
+        });
+        mastra = new Mastra({ agents: { 'test-agent': mockAgent }, storage, logger: false });
+      });
+
+      it.each([...approvalRoutes, ...resumeRoutes])(
+        '$name rejects a run owned by another resource',
+        async ({ route, method }) => {
+          await persistSuspendedDurableRun({ resourceId: 'user-b' });
+          const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+            fullStream: new ReadableStream(),
+          });
+
+          await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+          );
+          expect(execution).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(resumeRoutes)('$name rejects a run on another thread', async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-b' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-a' })).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        );
+        expect(execution).not.toHaveBeenCalled();
+      });
+
+      it('allows the owner to approve its own suspended tool call', async () => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await callResume(APPROVE_TOOL_CALL_ROUTE, { resourceId: 'user-a' });
+        expect(execution).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('RECOVER_ROUTE', () => {

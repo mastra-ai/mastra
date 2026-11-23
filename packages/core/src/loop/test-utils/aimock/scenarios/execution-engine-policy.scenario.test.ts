@@ -376,9 +376,10 @@ describe('Configured native engines preserve Agent outputs', () => {
         tools: { lookupOrder: tool },
       });
       const mastra = new Mastra({ agents: { agent }, durable: { executionEngine, cleanupTimeoutMs: 0 } });
-      const output = await agent.stream('Where is my order?', { maxSteps: 3 });
-      const text = output.text;
+      let output: Awaited<ReturnType<typeof agent.stream>> | undefined;
       try {
+        output = await agent.stream('Where is my order?', { maxSteps: 3 });
+        const text = output.text;
         await started.promise;
         const bus = agent.__getStreamBus();
         const wrap = executionEngine === 'evented' ? createEventedAgent : createDurableAgent;
@@ -396,7 +397,7 @@ describe('Configured native engines preserve Agent outputs', () => {
         expect(JSON.stringify(llm.getRequests()[1]?.body)).toContain('shipped');
       } finally {
         release.resolve();
-        await output.consumeStream();
+        await output?.consumeStream();
         await mastra.shutdown();
       }
     },
@@ -435,6 +436,27 @@ describe('Configured native engines preserve Agent outputs', () => {
         expect(calls).toBe(3);
       } finally {
         warn.mockRestore();
+        await mastra.shutdown();
+      }
+    },
+  );
+
+  it.each(['durable', 'evented'] as const)(
+    'recoverResume() reports the %s engine as unsupported instead of a missing suspension',
+    async executionEngine => {
+      const agent = new Agent({
+        id: 'recover-native',
+        name: 'Recover native',
+        instructions: 'Help.',
+        model: 'openai/gpt-4o',
+        durable: { executionEngine },
+      });
+      const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+      try {
+        await expect(agent.recoverResume({ runId: 'claimed-run' })).rejects.toMatchObject({
+          id: 'AGENT_RECOVER_RESUME_UNSUPPORTED',
+        });
+      } finally {
         await mastra.shutdown();
       }
     },
