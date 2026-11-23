@@ -6,11 +6,16 @@ import { join } from 'node:path';
 import test from 'node:test';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
-import { runtimeFixture, syntheticSafetyPolicy } from '../fixtures/runtime.ts';
+import { fixtureFetch, runtimeFixture, syntheticSafetyPolicy } from '../fixtures/runtime.ts';
 import type { ModelScript } from '../fixtures/model-server.ts';
 import { datasets } from '../../src/examples/datasets.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
+import {
+  confirmationMetadataSchema,
+  confirmationText,
+  decodeConfirmationReference,
+} from '../../src/mastra/review/confirmation.ts';
 
 const execute = promisify(execFile);
 const guide = 'docs:north#guides/connectivity';
@@ -48,8 +53,7 @@ const supportScript: ModelScript = body => {
   const tools = turnTools(body);
   if (question.includes('CONFIRMED_THREAD_OBSERVATION'))
     return {
-      content:
-        'Technician alex confirms CONFIRMED_THREAD_OBSERVATION in this thread. This remains an unreviewed technician observation.',
+      content: 'The chat records CONFIRMED_THREAD_OBSERVATION. This remains an unreviewed technician observation.',
     };
   if (question.includes('no applicable evidence'))
     return {
@@ -216,9 +220,8 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
     const state = await snapshot(f);
     assert.match(
       await turn(f, own, 'Technician confirms CONFIRMED_THREAD_OBSERVATION: cable restored connectivity'),
-      /Technician alex confirms/u,
+      /unreviewed technician observation/u,
     );
-    assert.deepEqual(await snapshot(f), state, 'Confirmation must not publish Knowledge');
     const saved: { messages: MastraDBMessage[] } = await json(
       await f.request(`/memory/threads/${own}/messages?agentId=support`),
     );
@@ -230,9 +233,40 @@ test('preflight_precedes_model_and_distinguishes_history_outcomes', { timeout: 1
             part => part.type === 'text' && part.text?.includes('CONFIRMED_THREAD_OBSERVATION'),
           ),
       ),
-      'The attributed confirmation must be saved as a technician user message',
+      'The original chat observation must be saved as a user message',
     );
     assert.doesNotMatch(JSON.stringify(saved), /Customer history preflight/u);
+    const { profile: technician, token } = f.credentials[0]!;
+    const confirmation = {
+      threadId: own,
+      observation: 'The technician noticed that the Ethernet cable was loose.',
+      outcome: 'Connectivity returned after an authorized technician secured the cable.',
+    };
+    const response = await fixtureFetch(`${f.base}/support/confirmations`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(confirmation),
+    });
+    const created = await response.text();
+    assert.equal(response.status, 201, created);
+    const locator = decodeConfirmationReference(JSON.parse(created).confirmationReference);
+    assert.equal(locator.threadId, own);
+    const memory = await f.storage.getStore('memory');
+    assert.ok(memory);
+    const {
+      messages: [stored],
+    } = await memory.listMessagesById({ messageIds: [locator.messageId] });
+    assert.ok(stored);
+    assert.equal(stored.role, 'user');
+    assert.equal(stored.threadId, own);
+    assert.equal(stored.resourceId, resourceId(technician));
+    assert.equal(locator.sourceActorId, technician.actorId);
+    const { confirmedAt, ...attribution } = confirmationMetadataSchema.parse(
+      stored.content.metadata?.supportConfirmation,
+    );
+    assert.deepEqual(attribution, { ...confirmation, version: 1, sourceActorId: technician.actorId });
+    assert.deepEqual(stored.content.parts, [{ type: 'text', text: confirmationText(confirmation) }]);
+    assert.deepEqual(await snapshot(f), state, 'Confirmation must not publish Knowledge');
     const separate = await thread(f);
     const start = f.model.requests.length;
     await turn(f, separate, 'network connectivity');
@@ -385,13 +419,17 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
     const policyFile = join(config.directory, 'policy.md');
     const revision = '\n\nPOLICY_REVISION_TWO: ask the authorized lead for a safe recovery review.';
     const body = (await readFile(policyFile, 'utf8')).trimEnd();
+    const revised = body.replace('## Before changes\n\n', '## Before changes\n\n### Backups\n\n') + revision;
     const store = await f.supportKnowledge.getStorage();
     const [home] = await store.getScopesByAddress(['tenant:north']);
     const policy = await store.getPageByPath({ scopeId: home!.id, path: ['policies', 'safe-changes'], read: 'all' });
     const rendered = body.replace('[[connection-guide]]', `[[${guide}]]`);
     assert.ok(policy?.body?.includes(rendered));
-    await f.approvePolicy(policyRef, policy!.body!.replace(rendered, rendered + revision));
-    await writeFile(policyFile, body + revision + '\n');
+    await f.approvePolicy(
+      policyRef,
+      policy!.body!.replace(rendered, revised.replace('[[connection-guide]]', `[[${guide}]]`)),
+    );
+    await writeFile(policyFile, revised + '\n');
     const report = await seedDataset(config, { databaseUrl: f.databaseUrl, policyApprovalFile: f.policyApprovalFile });
     assert.equal(report.pages.find(page => page.key === 'safety-policy')?.status, 'updated');
     const next = f.model.requests.length;
@@ -412,7 +450,11 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
       'Policy update is a native persisted state signal',
     );
     const before = await snapshot(f);
-    for (const prompt of ['attempt pin foreign', 'attempt pin own', 'attempt pin unpin']) {
+    for (const [prompt, refusal] of [
+      ['attempt pin foreign', /customer:south:store-1#cases\/synthetic.*not found/u],
+      ['attempt pin own', /Pinning a page needs editor on .*docs:north/u],
+      ['attempt pin unpin', /Unpinning a page needs editor on .*tenant:north/u],
+    ] as const) {
       const index = f.model.requests.length;
       await turn(f, id, prompt);
       const inputs = JSON.stringify(f.model.requests.slice(index).map(request => request.messages));
@@ -421,7 +463,7 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
         .flatMap(request => turnTools(request))
         .map(message => message.content)
         .join('\n');
-      assert.match(results, /denied|editor|permission|not found|not readable/iu);
+      assert.match(results, refusal);
       assert.doesNotMatch(inputs, /SYNTHETIC_PRIVATE_2/u);
       assert.deepEqual(await snapshot(f), before, `Denied operation cannot mutate Knowledge: ${prompt}`);
     }

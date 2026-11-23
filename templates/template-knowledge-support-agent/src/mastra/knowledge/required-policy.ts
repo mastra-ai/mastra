@@ -59,6 +59,7 @@ export function requiredPolicyContentIssue(body: string, ref: string, approved: 
       instructions?.push(instructionText(node));
       continue;
     }
+    if (node.depth > 2) continue;
     instructions = undefined;
     if (node.depth !== 2 || node.children.length !== 1 || node.children[0]?.type !== 'text') continue;
     const name = node.children[0].value;

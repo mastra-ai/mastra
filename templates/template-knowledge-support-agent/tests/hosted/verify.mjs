@@ -213,7 +213,7 @@ async function database(directory) {
       return port;
     });
     const base = `postgresql://support@${host}:${port}`;
-    const pgEnv = { ...process.env, PGPASSWORD: password };
+    const pgEnv = { ...process.env, PGHOSTADDR: host, PGPASSWORD: password };
     const authenticatedUrl = name => `postgresql://support:${password}@${host}:${port}/${name}`;
     const unauthenticated = new Client({ host, port, database: 'postgres', user: 'support', password: token() });
     try {
@@ -323,6 +323,23 @@ async function verifyInterruptedSeed(db, env, [first, second]) {
   const admin = new Client({ connectionString: db.url });
   await admin.connect();
   try {
+    const {
+      rows: [{ id: firstPageArgument }],
+    } = await admin.query('SELECT quote_literal($1::text) AS id', [first.id]);
+    // Sequence increments remain visible even when the writer transaction rolls back.
+    await admin.query(`
+      CREATE SEQUENCE public.support_seed_first_page_updates;
+      CREATE FUNCTION public.observe_support_seed_update() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.id = TG_ARGV[0] AND NEW.name = OLD.name || ' (revised)' AND NEW.version = OLD.version + 1 THEN
+          PERFORM nextval('public.support_seed_first_page_updates');
+        END IF;
+        RETURN NEW;
+      END;
+      $$;
+      CREATE TRIGGER observe_support_seed_update AFTER UPDATE ON public.mastra_knowledge_pages
+      FOR EACH ROW EXECUTE FUNCTION public.observe_support_seed_update(${firstPageArgument});
+    `);
     const snapshot = async () =>
       (
         await admin.query('SELECT id, name, version FROM mastra_knowledge_pages WHERE id = ANY($1) ORDER BY id', [
@@ -330,13 +347,12 @@ async function verifyInterruptedSeed(db, env, [first, second]) {
         ])
       ).rows;
     const original = await snapshot();
-    await admin.query('BEGIN');
-    try {
-      await admin.query('SELECT id FROM mastra_knowledge_pages WHERE id = $1 FOR UPDATE', [second.id]);
+
+    async function startBlockedSeed(expectedUpdates) {
       const seedSession = `support-seed-${randomUUID()}`;
-      const interrupted = start(process.execPath, args, { ...workerEnv, PGAPPNAME: seedSession });
+      const proc = start(process.execPath, args, { ...workerEnv, PGAPPNAME: seedSession });
       let lockOwner;
-      for (let attempt = 0; attempt < 100 && interrupted.child.exitCode === null; attempt++) {
+      for (let attempt = 0; attempt < 100 && proc.child.exitCode === null; attempt++) {
         // Refresh session activity while the admin transaction holds the blocking row lock.
         await admin.query('SELECT pg_stat_clear_snapshot()');
         const { rows } = await admin.query(
@@ -354,16 +370,31 @@ async function verifyInterruptedSeed(db, env, [first, second]) {
         }
         await delay(50);
       }
-      assert.ok(lockOwner, `Revised seed did not reach the blocked page: ${interrupted.output()}`);
+      assert.ok(lockOwner, `Revised seed did not reach the blocked page: ${proc.output()}`);
+      const { rows } = await admin.query(
+        'SELECT CASE WHEN is_called THEN last_value::int ELSE 0 END AS updates FROM public.support_seed_first_page_updates',
+      );
+      assert.equal(
+        rows[0].updates,
+        expectedUpdates,
+        'The seed must update the first page before blocking on the second',
+      );
+      return { proc, lockOwner };
+    }
+
+    await admin.query('BEGIN');
+    try {
+      await admin.query('SELECT id FROM mastra_knowledge_pages WHERE id = $1 FOR UPDATE', [second.id]);
+      const { proc: interrupted, lockOwner } = await startBlockedSeed(1);
       const terminated = await admin.query('SELECT pg_terminate_backend($1, 5000) AS terminated', [lockOwner]);
       assert.equal(terminated.rows[0].terminated, true);
       const [code] = await waitForExit(interrupted);
       assert.equal(code, 1, interrupted.output());
       assert.deepEqual(await snapshot(), original, 'Losing the writer session must roll back the entire seed');
-      await assert.rejects(
-        exec(process.execPath, args, { cwd: template, env: workerEnv, timeout: 15000 }),
-        error => error.code === 1 && /canceling statement due to lock timeout/u.test(error.stderr),
-      );
+      const { proc: blocked } = await startBlockedSeed(2);
+      const [timedOut] = await waitForExit(blocked);
+      assert.equal(timedOut, 1, blocked.output());
+      assert.match(blocked.output(), /canceling statement due to lock timeout/u);
       assert.deepEqual(await snapshot(), original, 'Lock timeout must roll back the entire seed');
       await admin.query('ROLLBACK');
       await exec(process.execPath, args, { cwd: template, env: workerEnv, timeout: 30000 });
@@ -377,7 +408,15 @@ async function verifyInterruptedSeed(db, env, [first, second]) {
       await admin.query('ROLLBACK');
     }
   } finally {
-    await admin.end();
+    try {
+      await admin.query(`
+        DROP TRIGGER IF EXISTS observe_support_seed_update ON public.mastra_knowledge_pages;
+        DROP FUNCTION IF EXISTS public.observe_support_seed_update();
+        DROP SEQUENCE IF EXISTS public.support_seed_first_page_updates;
+      `);
+    } finally {
+      await admin.end();
+    }
   }
 }
 

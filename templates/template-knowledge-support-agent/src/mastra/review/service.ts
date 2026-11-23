@@ -198,12 +198,11 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         ? proposal.bindings.find(binding => binding.kind === 'target')?.id
         : undefined;
     const storage = memory.storage;
-    return hasDuplicatePage(
-      home.id,
-      proposal.candidate.content,
-      targetId,
-      postgres ?? (storage instanceof PostgresStore ? storage.db : undefined),
-    );
+    const database = postgres ?? (storage instanceof PostgresStore ? storage.db : undefined);
+    const { action, content } = proposal.candidate;
+    const pageExists = await hasDuplicatePage(home.id, content, targetId, database);
+    if (pageExists || action !== 'note') return pageExists;
+    return (await matchingNoteIds(targetBinding(proposal)!.id, content, 'live-content', database)).length > 0;
   }
 
   async function prepare(

@@ -217,21 +217,20 @@ export const proposalSchema = proposalFields.superRefine(validateProposalDraft).
         path: ['candidate'],
         message: 'Shared text contains private links, credentials, or payment-like data',
       });
-    const privateIdentifiers = [
-      proposal.reviewer.customerId,
-      source.sourceActorId,
-      source.messageId,
-      ...candidate.evidence.map(item => item.ref),
-    ];
+    const privateIdentifiers = [source.sourceActorId, source.messageId, ...candidate.evidence.map(item => item.ref)];
     const normalized = sharedText.toLowerCase();
-    const threadId = source.threadId.toLowerCase();
-    // UUIDs can also be embedded in formatted or prefixed references.
-    const mentionsThread =
-      reviewInputSchema.shape.threadId.safeParse(source.threadId).success &&
-      (z.uuid().safeParse(threadId).success
-        ? normalized.includes(threadId)
-        : new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${threadId}(?![\\p{L}\\p{M}\\p{N}])`, 'iu').test(sharedText));
-    if (mentionsThread || privateIdentifiers.some(value => normalized.includes(value.toLowerCase())))
+    const mentionsIdentifier = (id: string) => {
+      const lower = id.toLowerCase();
+      // UUIDs can also be embedded in formatted or prefixed references.
+      if (z.uuid().safeParse(id).success) return normalized.includes(lower);
+      const literal = lower.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+      return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${literal}(?![\\p{L}\\p{M}\\p{N}])`, 'iu').test(normalized);
+    };
+    if (
+      mentionsIdentifier(source.threadId) ||
+      mentionsIdentifier(proposal.reviewer.customerId) ||
+      privateIdentifiers.some(value => normalized.includes(value.toLowerCase()))
+    )
       context.addIssue({
         code: 'custom',
         path: ['candidate'],

@@ -389,6 +389,25 @@ test('a short thread ID blocks explicit references and permits ordinary shared w
     assert.equal(proposalSchema.parse({ ...draft, revision, owner: longOwner }).owner, longOwner);
     assert.equal(proposalDraftSchema.safeParse({ ...draft, owner: 'a'.repeat(1001) }).success, false);
     assert.equal(proposalSchema.safeParse({ ...draft, revision, owner: 'a'.repeat(1001) }).success, false);
+    for (const [customerId, ordinary, explicit] of [
+      ['pos', 'Reposition the terminal.', 'POS'],
+      ['p+s', 'Check the ps indicator.', 'P+S'],
+      ['İD', 'Check the indicator.', 'i\u0307d'],
+    ] as const) {
+      const profile = { ...safe.proposal.reviewer, customerId };
+      const shared = { ...safe.proposal, reviewer: profile, owner: resourceId(profile) };
+      assert.equal(
+        proposalSchema.safeParse({ ...shared, candidate: { ...shared.candidate, content: ordinary } }).success,
+        true,
+      );
+      assert.equal(
+        proposalSchema.safeParse({
+          ...shared,
+          candidate: { ...shared.candidate, content: `Contact the (_${explicit}_) customer.` },
+        }).success,
+        false,
+      );
+    }
     const invalid = proposalSchema.safeParse({ ...safe.proposal, source: { ...safe.proposal.source, threadId: '(' } });
     assert.ok(!invalid.success);
     assert.ok(invalid.error.issues.some(issue => issue.path.join('.') === 'source.threadId'));
@@ -711,11 +730,24 @@ test('review detects exact duplicates and publishes new content in a large scope
     assert.equal((await resume(f, legacyRun)).result.reference, `${evidence}?note=${legacy.id}`);
 
     const duplicate = await pending(f, input);
+    assert.equal(duplicate.proposal.candidate.action, 'duplicate');
     const duplicateResult = await resume(f, duplicate);
-    assert.equal(duplicateResult.status, 'failed');
-    assert.match(JSON.stringify(duplicateResult), /duplicate note now exists/u);
+    assert.equal(duplicateResult.result.status, 'duplicate');
 
     await store.removeNote({ id: legacy.id, deletedBy: 'fixture', provenance: { author: 'fixture' } });
+    const raced = await pending(f, input);
+    assert.equal(raced.proposal.candidate.action, 'note');
+    const added = await store.addNote({
+      pageId: target.id,
+      text: supplement.content,
+      stampScopeIds: [target.scopeId],
+      mentions: [],
+      provenance: { author: 'fixture' },
+    });
+    const racedResult = await resume(f, raced);
+    assert.equal(racedResult.status, 'failed');
+    assert.match(JSON.stringify(racedResult), /duplicate note now exists/u);
+    await store.removeNote({ id: added.id, deletedBy: 'fixture', provenance: { author: 'fixture' } });
     const deletedRun = await pending(f, input);
     const deleted = await store.addNote({
       pageId: target.id,

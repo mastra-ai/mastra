@@ -302,7 +302,7 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     const changed = await f.revisePolicy();
     assert.ok(changed.pages.some(page => page.key === 'safety-policy-0' && page.version === 2));
     start = f.model.requests.length;
-    const refreshed = await turn(f, id, 'F5:policy factory reset with pending offline payments');
+    const refreshed = await turn(f, id, 'F5:policy-revision factory reset with pending offline payments');
     assert.match(refreshed.text, new RegExp(sentinels.policy));
     assert.equal(f.model.requests.length - start, 1, 'Updated policy requires no search/read round trip');
     assert.equal(latest(f.model.requests[start]!).tools.length, 0);
@@ -332,6 +332,8 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     assert.equal(history(alternate.model.requests[start]!).status, 'ready');
     assert.match(answer.text, /401 alone does not prove/u);
     await assertCitations(alternate, answer.text);
+    const protectedAnswer = await turn(alternate, id, 'F5:policy should I log credential values?');
+    assert.match(protectedAnswer.text, /\[tenant:software#policies\/safe-changes\]/u);
     const source = await confirm(alternate, id);
     const lifecycle = await approveLifecycle(alternate, source);
     const reused = await turn(
@@ -564,8 +566,11 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
         const timestamp = new Date(row.startedAt).getTime();
         return timestamp >= start && timestamp <= end;
       };
-      const reuse = samples.filter(
-        row => row.metadata.labels?.operation === 'resolution-reuse' && row.metadata.labels?.status === 'ready',
+      const reuse = rows.filter(
+        row =>
+          row.isEvent &&
+          row.name === 'support_operation_count' &&
+          row.metadata?.labels?.operation === 'resolution-reuse',
       );
       for (const [label, start, end, expected] of [
         ['shared finding', sharedReadStart, sharedReadEnd, 1],
@@ -577,14 +582,12 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       ] as const) {
         const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row, start, end));
         const [read] = reads;
-        const counts = reuse.filter(
-          row =>
-            row.name === 'support_operation_count' &&
-            read &&
-            row.traceId === read.traceId &&
-            row.parentSpanId === read.spanId,
-        );
-        if (reads.length !== 1 || counts.length !== expected || counts.some(row => row.metadata.value !== 1))
+        const counts = reuse.filter(row => read && row.traceId === read.traceId && row.parentSpanId === read.spanId);
+        if (
+          reads.length !== 1 ||
+          counts.length !== expected ||
+          counts.some(row => row.metadata.value !== 1 || row.metadata.labels?.status !== 'ready')
+        )
           missing.push(`${expected} resolution reuse events linked to the ${label} read span`);
       }
       const historyRun = rows.find(

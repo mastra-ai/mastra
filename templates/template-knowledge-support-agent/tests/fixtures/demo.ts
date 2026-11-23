@@ -108,15 +108,25 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
           content: 'The confirmed observation remains in this conversation until a separate reviewer approves it.',
         };
       if (question.includes('F5:policy')) {
-        const pins = list
-          .map(message => message.content)
-          .filter(text => text.startsWith('<pinned-knowledge'))
-          .join('\n');
-        assert.match(pins, /factory reset|credential values/u);
+        const policyRef = `tenant:${tenant}#policies/safe-changes`;
+        const policy = list
+          .filter(message => message.content.startsWith('<pinned-knowledge'))
+          .flatMap(message => message.content.split(/\n {2}(?:•|\+|~ changed|- removed) \{id: [^}]+\}/u).slice(1))
+          .reverse()
+          .find(pin => pin.split('\n', 1)[0]?.includes(` (${policyRef}, v`));
+        assert.ok(policy, `Provider must receive the required policy pin ${policyRef}`);
+        assert.match(
+          policy,
+          alternate
+            ? /Never request, paste, or log credential values/u
+            : /factory resetting while offline payments remain pending/u,
+        );
+        const revised = question.includes('F5:policy-revision');
+        if (revised) assert.ok(policy.includes(sentinels.policy), 'The required policy pin must contain the revision');
         return {
-          content: pins.includes(sentinels.policy)
+          content: revised
             ? `${sentinels.policy}. The required current policy blocks this unsafe change.`
-            : `The required current policy blocks this unsafe change [tenant:${tenant}#policies/safe-changes].`,
+            : `The required current policy blocks this unsafe change [${policyRef}].`,
         };
       }
       if (question.includes('F5:conflict')) {

@@ -291,6 +291,13 @@ test('seed_rejects_an_invalid_rendered_policy_without_changing_stored_knowledge'
         complete.replace(/(## Prohibited actions\n\n)[^\n]+/u, '$1[[connection-guide]]'),
         /substantive policy instructions under the Prohibited actions heading/u,
       ],
+      [
+        complete.replace(
+          /(## Before changes\n\n)[^\n]+/u,
+          '$1### Prepare verified recovery copies\n\n## Other guidance\n\nCreate verified recovery copies.',
+        ),
+        /substantive policy instructions under the Before changes heading/u,
+      ],
       ...['Source:', '**Source:**'].map(
         label =>
           [
