@@ -36935,9 +36935,9 @@
     },
     "job:store/duckdb": {
       "tier": "in",
-      "since": "2026-11-01",
-      "last_failure": "2026-11-11",
-      "reason": "pr-job-fail",
+      "since": "2026-11-23",
+      "last_failure": "2026-11-23",
+      "reason": "versioning-fail",
       "pr_failures": {
         "130595815782": {
           "date": "2026-11-11",
