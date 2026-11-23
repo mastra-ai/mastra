@@ -1355,6 +1355,9 @@ export class InMemoryMemory extends MemoryStorage {
     const tokenCount =
       input.tokenCount + Math.max(0, (record.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
     const newRecord = this.rollOverObservationalMemory(record, newObservations, tokenCount, input.newRecordId);
+    // Mark the successor before clearing the retired record: a caller holding the live stored
+    // record (as getObservationalMemory returns it) passes that same object as currentRecord.
+    const result = withBufferedReflectionVerified(newRecord, currentRecord);
 
     // Clear buffered state on old record
     record.bufferedReflection = undefined;
@@ -1362,7 +1365,7 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedReflectionInputTokens = undefined;
     record.reflectedObservationLineCount = undefined;
 
-    return withBufferedReflectionVerified(newRecord, currentRecord);
+    return result;
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
