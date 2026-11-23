@@ -32,7 +32,7 @@ export function SettingsFrame({
       <div
         data-slot="settings-layout"
         className={cn(
-          'mx-auto grid min-h-full w-full max-w-160 min-w-0 gap-4 pt-6',
+          'mx-auto grid min-h-full w-full max-w-160 min-w-0 gap-8 pt-6',
           header != null || title != null ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
         )}
       >

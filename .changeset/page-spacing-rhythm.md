@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Pages share one spacing rhythm. `PageLayout` puts 16px under the page header and 48px at the end of every scrolling page. Settings and form pages keep 24px above the title, put 16px under it and space their sections 24px apart (was 32px and 28px).
+Pages share one spacing rhythm. `PageLayout` puts 16px under the page header and 48px at the end of every scrolling page. Settings and form pages keep 24px above the title and 32px under it, and space their sections 24px apart (was 28px).
 
 Small text sits on whole-pixel lines: 13px roles (`label`, `body-sm`, `card-title`) use a 20px line, 12px roles (`caption`, `eyebrow`, `column`) a 16px line, and `display-lg` a 36px line.
 
