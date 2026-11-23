@@ -1,5 +1,6 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { CSSProperties } from 'react';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/lib/utils';
 
 import './knowledge-graph-loader.css';
 
@@ -12,12 +13,12 @@ const branches = [
   { angle: 151, length: 75, delay: 1500, size: 18 },
 ];
 
-export function KnowledgeGraphLoader() {
+export function KnowledgeGraphLoader({ className }: { className?: string }) {
   return (
     <div
       role="status"
       aria-label="Loading knowledge"
-      className="border-border flex flex-1 flex-col items-center justify-center overflow-hidden rounded-lg border"
+      className={cn('flex flex-1 flex-col items-center justify-center overflow-hidden', className)}
     >
       <div aria-hidden="true" className="knowledge-loader-scene relative h-38 w-58 max-w-full">
         {branches.map(({ angle, length, delay, size }) => {

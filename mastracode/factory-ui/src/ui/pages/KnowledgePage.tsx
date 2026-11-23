@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { KnowledgeGraphLoader } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeGraphLoader';
 import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import type {
   KnowledgeExplorerSource,
@@ -19,7 +20,6 @@ import {
   useKnowledgeTreeLevels,
 } from '../../hooks/useKnowledgeGraph';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { KnowledgeGraphLoader } from '../domains/factory/components/knowledge/KnowledgeGraphLoader';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /**
@@ -82,7 +82,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) return <KnowledgeGraphLoader />;
+  if (graph.isPending) return <KnowledgeGraphLoader className="border-border rounded-lg border" />;
   if (graph.isError) return <Notice variant="destructive">{graph.error.message}</Notice>;
   if (graph.data.pages.length === 0) {
     return (
