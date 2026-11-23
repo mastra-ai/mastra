@@ -710,6 +710,59 @@ describe('Agent signals: state and notification signals', () => {
     }
   });
 
+  it.each([
+    ['an immediate', () => ({ action: 'deliver' as const })],
+    [
+      'summary',
+      ({ now }: { now: Date }) => ({ action: 'summarize' as const, summaryAt: now, reason: 'test-summary-now' }),
+    ],
+  ])('keeps %s notification dismissed while routing was blocked', async (_, decide) => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'dismissed-routing-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'dismissed-routing-agent',
+      name: 'Dismissed Routing Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: { deliveryPolicy: { decide } },
+    });
+    const mastra = new Mastra({ agents: { dismissedRoutingAgent: agent }, storage, logger: false });
+    const ensureDispatch = vi.spyOn(mastra, '__ensureNotificationDispatchReady').mockResolvedValue(undefined as any);
+    // Start the record on its last attempt, so a failure write would mark it `failed`.
+    const create = notifications.createNotification.bind(notifications);
+    vi.spyOn(notifications, 'createNotification').mockImplementation(async input => {
+      const record = await create(input);
+      return notifications.updateNotification({ id: record.id, threadId: record.threadId, deliveryAttempts: 4 });
+    });
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockImplementation(
+      () =>
+        ({
+          accepted: (async () => {
+            // The user dismisses the notification while the signal is being routed.
+            const [record] = await notifications.listNotifications({ threadId: 'dismissed-thread' });
+            await notifications.updateNotification({ id: record!.id, threadId: record!.threadId, status: 'dismissed' });
+            return { action: 'blocked', reason: 'thread-blocked', runId: 'run-blocked' };
+          })(),
+          signal: createSignal({ type: 'notification', tagName: 'notification', contents: 'Blocked' }),
+        }) as any,
+    );
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'Dismissed while routing' },
+        { resourceId: 'dismissed-user', threadId: 'dismissed-thread' },
+      );
+
+      expect(result.record).toMatchObject({ status: 'dismissed', deliveryAttempts: 4 });
+      await expect(
+        notifications.getNotification({ threadId: 'dismissed-thread', id: result.record.id }),
+      ).resolves.toMatchObject({ status: 'dismissed', deliveryAttempts: 4 });
+    } finally {
+      sendSignal.mockRestore();
+      ensureDispatch.mockRestore();
+    }
+  });
+
   it('counts each blocked attempt when a batch coalesces into one record', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'coalesced-attempt-storage', domains: { notifications } });

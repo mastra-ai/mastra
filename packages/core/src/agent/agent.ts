@@ -2294,8 +2294,7 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent<string, TRequestContext>>
-    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents ? resolveDynamicArgument(this.#agents, { requestContext }) : {};
 
     return resolveMaybePromise(agentsToUse, agents => {
@@ -3021,8 +3020,7 @@ export class Agent<
    */
   #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
     const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
-      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
-      | undefined;
+      { agentId: string; memory: DynamicArgument<MastraMemory, any> } | undefined;
     return inherited?.agentId === this.id
       ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
       : undefined;
@@ -3473,8 +3471,7 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentInstructions
-    | Promise<AgentInstructions> {
+    AgentInstructions | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = resolveDynamicArgument(this.#instructions, {
         requestContext,
@@ -3611,9 +3608,7 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, unknown>
-    | undefined
-    | Promise<Record<string, unknown> | undefined> {
+    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -3764,8 +3759,7 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | PublicAgentExecutionOptions<TOutput>
-    | Promise<PublicAgentExecutionOptions<TOutput>> {
+    PublicAgentExecutionOptions<TOutput> | Promise<PublicAgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3808,8 +3802,7 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+    NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -10341,8 +10334,7 @@ export class Agent<
     resourceId: string;
     threadId: string;
     streamOptions?:
-      | AgentExecutionOptions<OUTPUT>
-      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to
@@ -10874,14 +10866,26 @@ export class Agent<
       );
     }
 
-    // Several inputs in one batch can coalesce into a single stored record, so
-    // `records` can hold stale snapshots of the same notification (same id).
-    // Track the latest saved version per id: repeated failures in one batch must
-    // count up from the last write, not each recompute from the same snapshot.
-    const latestRecords = new Map<string, NotificationRecord>();
-    for (const record of records) {
-      latestRecords.set(record.id, record);
-    }
+    // Records a failed delivery attempt against the stored record, not the snapshot
+    // this batch started from. Several inputs in one batch can coalesce into one
+    // stored record, so repeated failures must count up from the last write; and a
+    // record dismissed or delivered while routing was in flight is left untouched,
+    // so the failure write can't overwrite a dismissal with `failed`.
+    // `recorded` is false when the record was no longer pending and was left as is.
+    const recordDeliveryFailure = async (
+      record: NotificationRecord,
+      update: Omit<Parameters<typeof notifications.updateNotification>[0], 'id' | 'threadId'>,
+    ): Promise<{ record: NotificationRecord; recorded: boolean }> => {
+      const current = await notifications.getNotification({ threadId: record.threadId, id: record.id });
+      if (!current || current.status !== 'pending') return { record: current ?? record, recorded: false };
+      const failed = await notifications.updateNotification({
+        id: record.id,
+        threadId: record.threadId,
+        ...update,
+        ...resolveDeliveryFailureUpdate(current),
+      });
+      return { record: failed, recorded: true };
+    };
 
     const threadState = agentThreadStreamRuntime.getThreadState(
       { resourceId: target.resourceId, threadId: target.threadId },
@@ -10915,18 +10919,14 @@ export class Agent<
         // would leave it pending forever: no dispatch pass considers it due.
         // Fail this attempt and give it a due time, as a dispatch-time throw
         // does, so the dispatcher retries it up to the attempt limit.
-        const failed = await notifications.updateNotification({
-          id: record.id,
-          threadId: record.threadId,
+        const failed = await recordDeliveryFailure(record, {
           deliverAt: now,
-          ...resolveDeliveryFailureUpdate(latestRecords.get(record.id) ?? record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: entry.error instanceof Error ? entry.error.message : String(entry.error),
         });
-        latestRecords.set(record.id, failed);
-        needsDispatcher = true;
+        if (failed.recorded) needsDispatcher = true;
         results.push({
-          record: failed,
+          record: failed.record,
           decision: { action: 'defer', deliverAt: now, reason: 'delivery-policy-failed' },
         });
         continue;
@@ -11001,23 +11001,19 @@ export class Agent<
               throw new Error(`Notification summary signal was blocked: ${summaryAccepted.reason}`);
             }
           } catch (error) {
-            const failed = await notifications.updateNotification({
-              id: updated.id,
-              threadId: updated.threadId,
+            const failed = await recordDeliveryFailure(updated, {
               // `summaryAt` was cleared to emit this summary. Restore it so the
               // record stays due and the dispatcher can retry it.
               summaryAt: now,
-              ...resolveDeliveryFailureUpdate(latestRecords.get(updated.id) ?? updated),
               lastDeliveryAttemptAt: new Date(),
               lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
-            latestRecords.set(updated.id, failed);
             // The emit-now branch cleared `summaryAt` before sending, so the
             // arming check above saw no schedule and left `needsDispatcher`
             // false. This catch restored `summaryAt`, so activate the dispatcher
             // here too, or the record stays pending with no pass to retry it.
-            needsDispatcher = true;
-            results.push({ record: failed, decision });
+            if (failed.recorded) needsDispatcher = true;
+            results.push({ record: failed.record, decision });
             continue;
           }
           // The routing policy can resolve to `persist`/`discard` (no run, no
@@ -11083,18 +11079,14 @@ export class Agent<
         // signal could never learn it terminally failed. Give it a due time so
         // the dispatcher retries it up to MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
         // and activate the dispatcher schedule for it.
-        const failed = await notifications.updateNotification({
-          id: record.id,
-          threadId: record.threadId,
+        const failed = await recordDeliveryFailure(record, {
           deliverAt: now,
-          ...resolveDeliveryFailureUpdate(latestRecords.get(record.id) ?? record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
-        latestRecords.set(record.id, failed);
-        needsDispatcher = true;
-        results.push({ record: failed, decision });
+        if (failed.recorded) needsDispatcher = true;
+        results.push({ record: failed.record, decision });
         continue;
       }
 

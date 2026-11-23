@@ -1,4 +1,5 @@
 import { StorageDomain } from '../storage/domains/base';
+import { isNotificationDue, notificationDueTime } from './due';
 import type {
   CreateNotificationInput,
   ListDueNotificationsInput,
@@ -88,21 +89,6 @@ const valueMatches = <T extends string>(value: T, filter?: T | T[]) => {
   if (!filter) return true;
   return Array.isArray(filter) ? filter.includes(value) : value === filter;
 };
-
-/** When a record next becomes due, or Infinity when it has no due time at all. */
-export const notificationDueTime = (record: NotificationRecord): number => {
-  const deliverAt = record.deliverAt?.getTime();
-  const summaryAt = record.summaryAt?.getTime();
-  if (deliverAt !== undefined && summaryAt !== undefined) return Math.min(deliverAt, summaryAt);
-  return deliverAt ?? summaryAt ?? Number.POSITIVE_INFINITY;
-};
-
-/**
- * Whether a record still occupies the due list at `now`. A record a dispatch pass
- * summarized but that keeps its `deliverAt` stays due for the full delivery.
- */
-export const isNotificationDue = (record: NotificationRecord, now: Date): boolean =>
-  record.status === 'pending' && notificationDueTime(record) <= now.getTime();
 
 export class InMemoryNotificationsStorage extends NotificationsStorage {
   #notifications = new Map<string, NotificationRecord>();

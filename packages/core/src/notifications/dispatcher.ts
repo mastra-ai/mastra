@@ -8,7 +8,7 @@ import { resolveDeliveryFailureUpdate } from './delivery-policy';
 import { readNotificationRoutingRequirement } from './routing';
 import { createNotificationSignal, createNotificationSummarySignal, summarizeNotifications } from './signals';
 import type { NotificationsStorage } from './storage';
-import { isNotificationDue } from './storage';
+import { isNotificationDue } from './due';
 import type { NotificationDeliveryDecision, NotificationDeliveryThreadState, NotificationRecord } from './types';
 
 type NotificationDispatchAgent = {
@@ -179,8 +179,8 @@ const groupKey = (record: NotificationRecord): string | undefined => {
 };
 
 /**
- * Records a failed delivery attempt and reports whether the record left the due
- * list. A record dismissed or delivered between the read that picked it up and
+ * Records a failed delivery attempt and reports whether it was written and
+ * whether the record left the due list. A record dismissed or delivered between the read that picked it up and
  * this write is left untouched (so a dismissal is never resurrected), and a
  * record that reaches the attempt cap is marked `failed`. Either way it is no
  * longer due; a record that failed below the cap stays due for a later pass.
@@ -195,9 +195,9 @@ async function recordDeliveryFailure({
   record: NotificationRecord;
   now: Date;
   error: unknown;
-}): Promise<boolean> {
+}): Promise<{ recorded: boolean; departed: boolean }> {
   const current = await storage.getNotification({ threadId: record.threadId, id: record.id });
-  if (!current || current.status !== 'pending') return true;
+  if (!current || current.status !== 'pending') return { recorded: false, departed: true };
   const update = resolveDeliveryFailureUpdate(current);
   await storage.updateNotification({
     id: record.id,
@@ -206,7 +206,7 @@ async function recordDeliveryFailure({
     lastDeliveryAttemptAt: now,
     lastDeliveryError: errorMessage(error),
   });
-  return update.status === 'failed';
+  return { recorded: true, departed: update.status === 'failed' };
 }
 
 async function sendNotificationRecord({
@@ -430,8 +430,11 @@ async function dispatchRecords({
   // caller uses this to keep the records still due from eating the next page.
   let departed = 0;
   const fail = async (record: NotificationRecord, error: unknown) => {
-    if (await recordDeliveryFailure({ storage, record, now, error })) departed += 1;
-    failed.push({ record, error: errorMessage(error) });
+    const outcome = await recordDeliveryFailure({ storage, record, now, error });
+    if (outcome.departed) departed += 1;
+    // A record dismissed or delivered while this pass routed it was skipped, not
+    // failed, so it doesn't belong in `failed` or count against the pass budget.
+    if (outcome.recorded) failed.push({ record, error: errorMessage(error) });
   };
 
   for (const record of due) {

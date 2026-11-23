@@ -923,12 +923,14 @@ describe('notification inbox', () => {
       deliverAt: now,
     });
 
-    await dispatchDueNotifications({ mastra, storage, now });
+    const result = await dispatchDueNotifications({ mastra, storage, now });
 
     const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
     expect(stored).toMatchObject({ status: 'dismissed' });
     expect(stored?.deliveryAttempts ?? 0).toBe(0);
     expect(stored?.lastDeliveryError).toBeUndefined();
+    // Skipped, not failed: it must not be reported as a failure or use up the pass budget.
+    expect(result.failed).toEqual([]);
   });
 
   it('terminates instead of re-reading a page of already-seen records when summaries stay due', async () => {
