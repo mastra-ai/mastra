@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryStore } from '../../storage';
-import { Knowledge } from '../index';
+import { Knowledge, createKnowledgeImporterHost } from '../index';
 import { importerHostConformance } from './conformance';
 import { KnowledgeImporter } from './define';
 import type { KnowledgeImporterHost } from './host';
@@ -18,9 +18,20 @@ function localHost(): KnowledgeImporterHost {
   return knowledge.importers!.host;
 }
 
-async function failures(wrap: (host: KnowledgeImporterHost) => KnowledgeImporterHost): Promise<string[]> {
+function leasedHost(): KnowledgeImporterHost {
+  const knowledge = new Knowledge({ storage: new InMemoryStore(), scopes: { 'docs:$orgId': {} } });
+  return createKnowledgeImporterHost(knowledge, {
+    leaseMs: 90_000,
+    bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
+  });
+}
+
+async function failures(
+  wrap: (host: KnowledgeImporterHost) => KnowledgeImporterHost,
+  make: () => KnowledgeImporterHost = localHost,
+): Promise<string[]> {
   const failed: string[] = [];
-  for (const c of importerHostConformance(async () => ({ host: wrap(localHost()), bindingId: 'b1' }))) {
+  for (const c of importerHostConformance(async () => ({ host: wrap(make()), bindingId: 'b1' }))) {
     await c.run().catch(() => failed.push(c.name));
   }
   return failed;
@@ -29,6 +40,24 @@ async function failures(wrap: (host: KnowledgeImporterHost) => KnowledgeImporter
 describe('importerHostConformance', () => {
   it('passes the local host', async () => {
     expect(await failures(host => host)).toEqual([]);
+  });
+
+  it('passes a strict-lease service host, which refuses heartbeats for runs it no longer holds', async () => {
+    expect(await failures(host => host, leasedHost)).toEqual([]);
+  });
+
+  it('catches a host that tells a finished run to keep going', async () => {
+    const failed = await failures(host => ({
+      ...host,
+      startRun: host.startRun.bind(host),
+      flush: host.flush.bind(host),
+      finishRun: host.finishRun.bind(host),
+      heartbeat: async () => ({ cancel: false }),
+    }));
+    expect(failed).toEqual([
+      'refuses a flush or finish from another generation',
+      'after a finish, refuses new flushes and still replays committed ones',
+    ]);
   });
 
   it('catches a host that applies a replayed seq again instead of returning its receipt', async () => {

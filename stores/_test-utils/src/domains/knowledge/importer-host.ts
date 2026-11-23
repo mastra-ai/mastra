@@ -2,6 +2,7 @@ import {
   Knowledge,
   KnowledgeImporterHostConflictError,
   KnowledgeImporter,
+  createKnowledgeImporterHost,
   importerHostConformance,
   knowledgeImporterFlushDigest,
 } from '@mastra/core/knowledge';
@@ -633,6 +634,18 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
     // Each case gets the fresh store from beforeEach; the suite's own cleanup runs in afterEach.
     for (const c of importerHostConformance(async () => ({
       host: setup().knowledge.importers!.host,
+      bindingId: 'b1',
+    }))) {
+      it(c.name, c.run);
+    }
+  });
+
+  describe('importer host conformance (strict-lease service host)', () => {
+    for (const c of importerHostConformance(async () => ({
+      host: createKnowledgeImporterHost(new Knowledge({ scopes: { 'docs:$orgId': {} }, storage: fixture.storage }), {
+        leaseMs: 90_000,
+        bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
+      }),
       bindingId: 'b1',
     }))) {
       it(c.name, c.run);

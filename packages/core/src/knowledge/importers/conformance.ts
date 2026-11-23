@@ -104,8 +104,7 @@ export function importerHostConformance(
         const stale = { ...run, generation: run.generation + 1 };
         await refused(() => t.flush(stale, 1, [upsert('a')]), 409, 'stale_generation');
         await refused(() => t.finish(stale, { lastSeq: 0 }), 409, 'stale_generation');
-        const beat = await t.host.heartbeat(run.runId, run.generation + 1);
-        check(beat.cancel === true, 'a heartbeat from another generation is told to cancel');
+        await toldToStop(() => t.host.heartbeat(run.runId, run.generation + 1), 'stale_generation');
       },
     ],
     [
@@ -178,8 +177,7 @@ export function importerHostConformance(
         await t.finish(run, { lastSeq: 1 });
         check(same(first, await t.flush(run, 1, ops)), 'a committed flush still replays after the finish');
         await refused(() => t.flush(run, 2, []), 409, 'run_not_active');
-        const beat = await t.host.heartbeat(run.runId, run.generation);
-        check(beat.cancel === true, 'a finished run is told to cancel');
+        await toldToStop(() => t.host.heartbeat(run.runId, run.generation), 'run_not_active');
       },
     ],
     [
@@ -284,6 +282,27 @@ function check(condition: unknown, message: string): asserts condition {
 /** Equal as JSON, key order aside: a host may store receipts in a store that reorders keys. */
 function same(a: unknown, b: unknown): boolean {
   return canonicalJson(JSON.parse(JSON.stringify(a))) === canonicalJson(JSON.parse(JSON.stringify(b)));
+}
+
+/**
+ * A heartbeat for a run the host no longer holds must not keep it going: it answers
+ * `{ cancel: true }`, or (a host that enforces a lease) refuses with a 409 and `code`. The runner
+ * ignores a refused heartbeat; its next flush or finish gets the same refusal.
+ */
+async function toldToStop(beat: () => Promise<{ cancel: boolean }>, code: string): Promise<void> {
+  let answer: { cancel: boolean } | undefined;
+  let error: { status?: unknown; code?: unknown } | undefined;
+  try {
+    answer = await beat();
+  } catch (e) {
+    error = e as typeof error;
+  }
+  check(
+    answer ? answer.cancel === true : error?.status === 409 && error.code === code,
+    answer
+      ? 'a heartbeat for a run the host no longer holds is told to cancel'
+      : `a refused heartbeat is a 409 ${code}, got ${String(error?.status)} ${String(error?.code)}: ${String(error)}`,
+  );
 }
 
 async function refused(call: () => Promise<unknown>, status: number, code?: string): Promise<void> {
