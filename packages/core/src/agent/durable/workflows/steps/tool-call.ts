@@ -991,8 +991,9 @@ export function createDurableToolCallStep() {
         }
         // This turn's message: the response recorded at step start, else the one in the LLM step's
         // transcript. A tool call id alone may recur in older turns.
-        let current =
-          responseInvocationId && persistMessageList?.get.all.db().find(message => message.id === responseInvocationId);
+        let current = responseInvocationId
+          ? persistMessageList?.get.all.db().find(message => message.id === responseInvocationId)
+          : undefined;
         if (!current) {
           if (!transcript) {
             const read = await readForRecovery(readTranscript);
