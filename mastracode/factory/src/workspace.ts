@@ -974,6 +974,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const publishStartSideEffects = async () => {
         await storage.sessions.setSandbox({
           id: session.id,
+          // A vault VM is its builder's: once the session changes owner (which clears the id), the previous
+          // owner's instance must not hand its VM to the new one.
+          ...(sandboxAcceptsGithubToken(target) ? {} : { expectedUserId: session.userId }),
           // Persist the provider's PHYSICAL, reattachable VM id so resume can
           // reattach to the same VM. Providers with no separate physical id
           // (e.g. local) persist nothing: a logical id handed back as a

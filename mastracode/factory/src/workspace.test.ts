@@ -338,8 +338,9 @@ function addSession(overrides: Record<string, unknown> = {}) {
 }
 
 function fakeGithubIntegration() {
-  const setSandbox = vi.fn(async ({ id, sandboxId, sandboxWorkdir }) => {
+  const setSandbox = vi.fn(async ({ id, sandboxId, sandboxWorkdir, expectedUserId }) => {
     const session = mocks.sessions.find(row => row.id === id);
+    if (session && expectedUserId !== undefined && session.userId !== expectedUserId) return;
     if (session) Object.assign(session, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
     mocks.updates.push({ set: { sandboxId, sandboxWorkdir }, where: { id } });
   });
@@ -3056,21 +3057,43 @@ describe('GitHub session workspace preparation', () => {
         expect(mocks.createSandbox).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 'owner-1' }));
         expect(row.sandboxId).toBe('vm-session-a');
 
-        // What the owner-transfer route does on a vault host: move the row, then release the sandbox.
-        row.userId = 'member-2';
-        await new SessionRetirementCoordinator({
+        const previous = mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> };
+        const previousExecs = previous.exec.mock.calls.length;
+        // Hold the previous owner's VM mid-destroy, after the release has fenced and evicted it.
+        const memo = peekSessionSandbox('session-a')!.sandbox as unknown as { destroy: () => Promise<void> };
+        let finishDestroy!: () => void;
+        let destroying!: () => void;
+        const destroyStarted = new Promise<void>(resolve => (destroying = resolve));
+        memo.destroy = () => {
+          destroying();
+          return new Promise<void>(resolve => (finishDestroy = resolve));
+        };
+
+        // What the owner-transfer route does on a vault host: move the row and clear its VM id in one
+        // write, then release the previous owner's VM by the id the transfer cleared.
+        Object.assign(row, { userId: 'member-2', sandboxId: null, sandboxWorkdir: '' });
+        const release = new SessionRetirementCoordinator({
           invalidateSession: sessionId => registry.invalidateSession(sessionId),
-        }).recreateSessionSandbox({
+        }).releasePreviousOwnerSandbox({
           sourceControl: github.sourceControlStorage as never,
           orgId: 'org-1',
           sessionId: 'session-a',
+          previousOwnerId: 'owner-1',
+          sandboxId: 'vm-session-a',
         });
+        await destroyStarted;
 
+        // Rebuilt while the previous owner's VM is still being destroyed: never reattached to it.
         await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
         expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
         const created = mocks.createSandbox.mock.calls[1]![0] as { userId?: string; sandboxId?: string };
         expect(created.userId).toBe('member-2');
         expect(created.sandboxId).toBeUndefined();
+        expect(previous.exec.mock.calls.length).toBe(previousExecs);
+
+        finishDestroy();
+        await release;
+        expect((memo as unknown as { status: string }).status).toBe('destroyed');
       });
     });
   });

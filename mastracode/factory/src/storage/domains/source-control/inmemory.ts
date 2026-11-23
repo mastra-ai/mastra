@@ -572,10 +572,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       sessionId,
       expectedUserId,
       toUserId,
+      releaseSandbox,
     }: {
       sessionId: string;
       expectedUserId: string;
       toUserId: string;
+      releaseSandbox?: boolean;
     }) => {
       const index = this.sessionsRows.findIndex(row => row.sessionId === sessionId);
       const session = this.sessionsRows[index] ?? null;
@@ -594,21 +596,34 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       );
       if (branchOwned) return { status: 'conflict' as const, reason: 'branch_owned' as const, session };
       // A new row, so a caller holding the old one keeps its pre-transfer snapshot like base.ts.
-      const updated = { ...session, userId: toUserId, updatedAt: new Date() };
+      const updated = {
+        ...session,
+        userId: toUserId,
+        ...(releaseSandbox ? { sandboxId: null, sandboxWorkdir: '' } : {}),
+        updatedAt: new Date(),
+      };
       this.sessionsRows[index] = updated;
-      return { status: 'updated' as const, session: updated };
+      return {
+        status: 'updated' as const,
+        session: updated,
+        ...(releaseSandbox ? { releasedSandboxId: session.sandboxId } : {}),
+      };
     },
     setSandbox: async ({
       id,
       sandboxId,
       sandboxWorkdir,
+      expectedUserId,
     }: {
       id: string;
       sandboxId: string | null;
       sandboxWorkdir: string;
+      expectedUserId?: string;
     }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
+      if (row && (expectedUserId === undefined || row.userId === expectedUserId)) {
+        Object.assign(row, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
+      }
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);

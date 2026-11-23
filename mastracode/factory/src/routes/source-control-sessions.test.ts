@@ -1967,13 +1967,13 @@ describe('session sandbox recreate', () => {
       const sessionRetirement = new SessionRetirementCoordinator();
       let releasing!: () => void;
       const released = new Promise<void>(resolve => (releasing = resolve));
-      const recreate = sessionRetirement.recreateSessionSandbox.bind(sessionRetirement);
+      const release = sessionRetirement.releasePreviousOwnerSandbox.bind(sessionRetirement);
       let entered!: () => void;
       const releaseStarted = new Promise<void>(resolve => (entered = resolve));
-      vi.spyOn(sessionRetirement, 'recreateSessionSandbox').mockImplementation(async args => {
+      vi.spyOn(sessionRetirement, 'releasePreviousOwnerSandbox').mockImplementation(async args => {
         entered();
         await released;
-        return recreate(args);
+        return release(args);
       });
       const app = buildRecreateApp(seed, sourceControl, {
         caller: taker,
@@ -1989,9 +1989,11 @@ describe('session sandbox recreate', () => {
 
       const takeover = takeOwnership(app, session.sessionId, 'user-1');
       await releaseStarted;
-      // The new owner is committed; the previous owner's instance is still memoized.
+      // The new owner is committed with the VM id already cleared, so nothing rebuilt now can resume the
+      // previous owner's VM; their instance is still memoized.
       await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
         userId: 'user-2',
+        sandboxId: null,
       });
       const start = await app.request(`/web/user-sessions/${session.sessionId}/sandbox/start`, { method: 'POST' });
 
@@ -2006,7 +2008,7 @@ describe('session sandbox recreate', () => {
     it('releases a VM this process holds no instance for, since its mode is unknown', async () => {
       const { seed, sourceControl, session } = await materialized();
       const sessionRetirement = new SessionRetirementCoordinator();
-      const recreate = vi.spyOn(sessionRetirement, 'recreateSessionSandbox');
+      const release = vi.spyOn(sessionRetirement, 'releasePreviousOwnerSandbox').mockResolvedValue();
       const app = buildRecreateApp(seed, sourceControl, {
         caller: taker,
         vaultSandboxes: true,
@@ -2017,26 +2019,46 @@ describe('session sandbox recreate', () => {
       const response = await takeOwnership(app, session.sessionId, 'user-1');
 
       expect(response.status).toBe(200);
-      expect(recreate).toHaveBeenCalledWith({ sourceControl, orgId: 'org-1', sessionId: session.sessionId });
+      expect(release).toHaveBeenCalledWith({
+        sourceControl,
+        orgId: 'org-1',
+        sessionId: session.sessionId,
+        previousOwnerId: 'user-1',
+        sandboxId: 'vm-1',
+      });
       await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
         userId: 'user-2',
         sandboxId: null,
       });
     });
 
-    it('keeps the ownership with the previous owner when their sandbox cannot be released', async () => {
+    it("keeps the VM id cleared when the previous owner's VM can't be destroyed", async () => {
       const error = vi.spyOn(console, 'error').mockImplementation(() => {});
       onTestFinished(() => error.mockRestore());
       const { seed, sourceControl, session } = await materialized();
       heldSandbox(session.id, true);
       const sessionRetirement = new SessionRetirementCoordinator();
-      vi.spyOn(sessionRetirement, 'recreateSessionSandbox').mockRejectedValue(new Error('proxy unavailable'));
+      vi.spyOn(sessionRetirement, 'releasePreviousOwnerSandbox').mockRejectedValue(new Error('proxy unavailable'));
       const app = buildRecreateApp(seed, sourceControl, {
         caller: taker,
         vaultSandboxes: true,
         workItems: noRuns,
         sessionRetirement,
       });
+
+      const response = await takeOwnership(app, session.sessionId, 'user-1');
+
+      expect(response.status).toBe(200);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-2',
+        sandboxId: null,
+      });
+    });
+
+    it("doesn't change the owner where the previous owner's sandbox can't be released", async () => {
+      const { seed, sourceControl, session } = await materialized();
+      heldSandbox(session.id, true);
+      const app = buildRecreateApp(seed, sourceControl, { caller: taker, vaultSandboxes: true, workItems: noRuns });
 
       const response = await takeOwnership(app, session.sessionId, 'user-1');
 
