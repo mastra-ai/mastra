@@ -497,6 +497,68 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     expect((await workflows.listWorkflowRuns({})).runs).toEqual([]);
   });
 
+  it.each([1, 2] as const)(
+    'deletes the suspended row when a newer row of the run under another workflow name is not suspended (storage v%i)',
+    async storageVersion => {
+      const { agent, controller, storage } = await setup({ storageVersion });
+      await park(controller, 0);
+      const workflows = (await storage.getStore('workflows'))!;
+      const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
+      const runId = parked!.runId;
+      // A nested workflow step stores its child under the parent's run id; here the child row is newer and running.
+      const childName = [...agent.__suspendedRunWorkflowNames()].find(name => name !== parked!.workflowName)!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: childName,
+        runId,
+        snapshot: { ...(parked!.snapshot as any), runId, status: 'running' },
+        createdAt: new Date(Date.now() + 60_000),
+        updatedAt: new Date(Date.now() + 60_000),
+      });
+      expect((await workflows.getWorkflowRunById({ runId }))?.workflowName).toBe(childName);
+
+      expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
+
+      expect((await workflows.listWorkflowRuns({ status: 'suspended' })).runs).toEqual([]);
+    },
+  );
+
+  it.each([
+    [1, 'resume first'],
+    [2, 'resume first'],
+    [1, 'reject first'],
+    [2, 'reject first'],
+  ] as const)(
+    'retries the release after an overlapping resume settles when a snapshot delete fails (storage v%i, %s)',
+    async (storageVersion, first) => {
+      const { agent, controller, storage } = await setup({ storageVersion });
+      await park(controller, 0);
+      const workflows = (await storage.getStore('workflows'))!;
+      const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
+      const runId = parked!.runId;
+      const remove = workflows.deleteWorkflowRunById.bind(workflows);
+      let resumed: Promise<unknown> | undefined;
+      let failing = true;
+      // The first attempt's deletes start a resume that parks the run again, then fail without removing a row.
+      // 'reject first': one delete fails at once while the others are still in flight when the resume starts.
+      let calls = 0;
+      vi.spyOn(workflows, 'deleteWorkflowRunById').mockImplementation(async args => {
+        if (!failing) return remove(args);
+        if (first === 'reject first' && ++calls === 1) throw new Error('delete failed');
+        // The resume starts only after the failed delete has rejected.
+        if (first === 'reject first') await new Promise(resolve => setTimeout(resolve, 10));
+        resumed ??= agent.resume(runId, { a: 'again' }).finally(() => (failing = false));
+        await vi.waitFor(() => expect(agent.__isResumingRun(runId)).toBe(true));
+        throw new Error('delete failed');
+      });
+
+      await controller.deleteSession({ sessionId: 's-0' });
+      await resumed;
+      await agent.__resumesSettled(runId);
+
+      await expectReleased(agent, workflows, runId);
+    },
+  );
+
   it('keeps the parked run in memory when the session moves to a new thread', async () => {
     const { agent, controller } = await setup();
     const session = await park(controller, 0);

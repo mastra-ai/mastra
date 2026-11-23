@@ -1813,19 +1813,35 @@ export class AgentController<TState = {}> {
     try {
       if (agents.some(agent => agent.__isResumingRun(runId))) return false;
       const resumed = () => watchers.some(watcher => watcher.started);
-      await releaseInMemory();
-      const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
-      const run = await workflowsStore?.getWorkflowRunById({ runId });
-      const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
-      if (snapshot && snapshot.status !== 'suspended') return !resumed();
-      // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
-      const deleted = await agents[0]!.__deleteSuspendedRun(runId, {
-        isResuming: resumed,
-        workflowNames: new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()])),
-      });
-      // A resume that started while the deletes were in flight may have parked the run again; the retry releases it
-      // when the deletes landed first. A delete that erases the re-parked row needs a storage fence to rule out.
-      return deleted && !resumed();
+      try {
+        await releaseInMemory();
+        const workflowNames = new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()]));
+        const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
+        // Every row the delete would remove: a nested workflow stores its child under the parent's run id, and
+        // a lookup without the name and version answers with whichever row is newest.
+        const rows = await Promise.all(
+          [...workflowNames].flatMap(workflowName =>
+            ([1, 2] as const).map(storageVersion =>
+              workflowsStore?.getWorkflowRunById({ runId, workflowName, storageVersion }),
+            ),
+          ),
+        );
+        const statuses = rows.flatMap(run => {
+          const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
+          return snapshot ? [snapshot.status] : [];
+        });
+        // Nothing left suspended: a resume moved the run on, here or (a claim in storage) in another process.
+        if (statuses.length > 0 && !statuses.includes('suspended')) return !resumed();
+        // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
+        const deleted = await agents[0]!.__deleteSuspendedRun(runId, { isResuming: resumed, workflowNames });
+        // A resume that started while the deletes were in flight may have parked the run again; the retry releases
+        // it when the deletes landed first. A delete that erases the re-parked row needs a storage fence to rule out.
+        return deleted && !resumed();
+      } catch (error) {
+        // A resume overlapped the failed attempt: decide once it settles rather than leave what it parks.
+        if (resumed()) return false;
+        throw error;
+      }
     } finally {
       for (const watcher of watchers) watcher.stop();
     }

@@ -11189,9 +11189,14 @@ export class Agent<
     const workflowsStore = await mastra.getStorage()?.getStore('workflows');
     if (isResuming?.(runId)) return false;
     mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
-    await Promise.all(
-      [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
-    );
+    // Every delete settles before this resolves, so a caller watching for resumes sees the whole delete.
+    const failures = (
+      await Promise.allSettled(
+        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+      )
+    ).flatMap(result => (result.status === 'rejected' ? [result.reason] : []));
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, `Deleting suspended run ${runId} failed`);
     return true;
   }
 
