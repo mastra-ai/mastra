@@ -164,6 +164,4 @@
 'mastracode': patch
 ---
 
-Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages (about 50 MB of the 94 MB `@mastra/core` package) and pointed at `src/*.ts` files that are not included in the package.
-
-Declaration maps (`.d.ts.map`) are not affected by this change.
+Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package.
