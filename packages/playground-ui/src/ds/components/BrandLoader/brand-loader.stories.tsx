@@ -94,17 +94,25 @@ export const SuperposedOnLogo: Story = {
   ),
 };
 
+export const Fill: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <div className="h-120 border border-dashed border-border">
+      <BrandLoader fill size="lg" />
+    </div>
+  ),
+};
+
 /**
- * Renders the `BrandLoader` centered in a full-viewport container to preview
- * the brand moment as it appears on app boot.
+ * `fill="screen"` centers it in the window, as on app boot.
  */
 export const FullHeightPage: Story = {
   parameters: {
     layout: 'fullscreen',
   },
   render: () => (
-    <div className="flex h-screen w-screen items-center justify-center bg-sidebar">
-      <BrandLoader size="lg" aria-label="Loading app" />
+    <div className="bg-sidebar">
+      <BrandLoader fill="screen" size="lg" aria-label="Loading app" />
     </div>
   ),
 };

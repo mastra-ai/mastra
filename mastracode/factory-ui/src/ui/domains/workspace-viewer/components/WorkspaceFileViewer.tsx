@@ -92,11 +92,7 @@ export function WorkspaceFileViewer({
         </Txt>
       ) : null}
 
-      {isLoading ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center">
-          <Spinner size="sm" />
-        </div>
-      ) : null}
+      {isLoading ? <Spinner fill size="sm" /> : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
           <Txt variant="caption" className="text-destructive-foreground">

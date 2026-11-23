@@ -2,6 +2,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import type { ComponentPropsWithoutRef } from 'react';
 
+import { LoaderFill } from '../LoaderFill/loader-fill';
 import { cn } from '@/lib/utils';
 
 import './spinner.css';
@@ -30,8 +31,8 @@ export type SpinnerSize = NonNullable<SpinnerVariantsProps['size']>;
 
 export type SpinnerProps = Omit<ComponentPropsWithoutRef<'svg'>, 'color' | 'size' | 'fill'> &
   SpinnerVariantsProps & {
-    /** Center the spinner in the full height of its parent — the parent must have a definite height. */
-    fill?: boolean;
+    /** Center the spinner in its parent, or in the window with `screen`. See `LoaderFill`. */
+    fill?: boolean | 'screen';
   };
 
 function Spinner({
@@ -68,13 +69,7 @@ function Spinner({
     </svg>
   );
 
-  if (fill) {
-    return (
-      <div data-slot="spinner-fill" className="flex h-full items-center-safe justify-center-safe">
-        {svg}
-      </div>
-    );
-  }
+  if (fill) return <LoaderFill area={fill === 'screen' ? 'screen' : 'parent'}>{svg}</LoaderFill>;
 
   return svg;
 }

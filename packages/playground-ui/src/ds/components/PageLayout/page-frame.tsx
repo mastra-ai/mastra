@@ -13,7 +13,14 @@ export interface PageFrameProps {
 }
 
 const scrollBodyWithHeader =
-  'flex h-full min-h-min flex-col [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:grow [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:basis-0';
+  'flex h-full min-h-min flex-col [&>:last-child:is([data-slot=empty-state-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=loader-fill]))]:grow [&>:last-child:is([data-slot=empty-state-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=loader-fill]))]:basis-0';
+
+// A loader that is the page's own content centers on the whole frame, header included: where a route's loader sits
+// before the frame mounts. The scroll area around it steps aside as the containing block.
+const pageLoader =
+  '*:data-[slot=loader-fill]:pointer-events-none *:data-[slot=loader-fill]:absolute *:data-[slot=loader-fill]:inset-0';
+const aroundPageLoader =
+  'has-[>*>*>[data-slot=loader-fill],>*>*>[data-slot=page-layout-fixed]>[data-slot=loader-fill]]:static!';
 
 /** The frame every page variant renders into: the header bar, the action row and the scrolling body. */
 export function PageFrame({
@@ -27,7 +34,7 @@ export function PageFrame({
   const fixed = body === 'fixed';
 
   return (
-    <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
+    <div data-slot="page-layout" className="relative flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (
         <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
           {breadcrumbs}
@@ -42,14 +49,18 @@ export function PageFrame({
         </div>
       )}
       <main className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className={cn('min-h-0 flex-1', aroundPageLoader)}>
           <ScrollAreaViewport
             className={fixed ? 'p-0' : 'p-4'}
             contentClassName={
               fixed
                 ? // Locked to the viewport height, so the panels inside scroll on their own instead of the page.
                   cn('grid size-full min-h-0 grid-cols-1', header ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-1')
-                : cn('mx-auto w-full max-w-(--breakpoint-2xl)', header ? scrollBodyWithHeader : 'h-full min-h-min')
+                : cn(
+                    'mx-auto w-full max-w-(--breakpoint-2xl)',
+                    header ? scrollBodyWithHeader : 'h-full min-h-min',
+                    pageLoader,
+                  )
             }
           >
             {header && (
@@ -58,7 +69,10 @@ export function PageFrame({
               </div>
             )}
             {fixed ? (
-              <div data-slot="page-layout-fixed" className="grid min-h-0 min-w-0 grid-cols-1 grid-rows-1">
+              <div
+                data-slot="page-layout-fixed"
+                className={cn('grid min-h-0 min-w-0 grid-cols-1 grid-rows-1', pageLoader)}
+              >
                 {children}
               </div>
             ) : (

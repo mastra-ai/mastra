@@ -171,14 +171,7 @@ export function ExperimentsComparison({
     [rows, experimentIds, usageById],
   );
 
-  if (isLoading) {
-    // Centred on the viewport, like the app boot spinner, so swapping from one to the other doesn't shift.
-    return (
-      <div className="pointer-events-none fixed inset-0 flex items-center justify-center">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <Spinner fill />;
 
   if (error) {
     return (

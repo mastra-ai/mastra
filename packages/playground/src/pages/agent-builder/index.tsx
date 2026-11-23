@@ -7,11 +7,7 @@ export const AgentBuilderRoot = () => {
   const { isLoading, hasAgents } = useAgentBuilderInternalRedirect();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <Spinner fill="screen" />;
   }
 
   if (hasAgents) {

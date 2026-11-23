@@ -44,11 +44,7 @@ export default function AgentBuilderSkillsEdit() {
   return <AgentBuilderSkillEditPage id={id!} storedSkill={storedSkill} initialUserMessage={initialUserMessage} />;
 }
 
-const AgentBuilderSkillEditSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderSkillEditSkeleton = () => <Spinner fill />;
 
 interface PageProps {
   id: string;

@@ -328,8 +328,4 @@ const ProfileSlot = () => {
   );
 };
 
-const AgentBuilderAgentEditSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderAgentEditSkeleton = () => <Spinner fill />;

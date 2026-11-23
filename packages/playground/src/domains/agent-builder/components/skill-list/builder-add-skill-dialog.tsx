@@ -13,7 +13,7 @@ import {
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -200,64 +200,64 @@ export function BuilderAddSkillDialog({
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
               </Txt>
               <ScrollArea className="flex-1 rounded-lg border border-border">
-                {isLoadingPopular || isSearching ? (
-                  <div className="flex items-center justify-center py-5">
-                    <Spinner className="text-muted-foreground" />
-                  </div>
-                ) : displaySkills.length === 0 ? (
-                  <EmptyState
-                    iconSlot={<IconPackage />}
-                    titleSlot={hasSearchResults ? 'No skills found' : 'No skills available'}
-                  />
-                ) : (
-                  <div className="space-y-1 p-2">
-                    {displaySkills.map(skill => {
-                      const skillUniqueId = getSkillUniqueId(skill);
-                      const isInstalled = installedSkillIds.includes(skill.name);
-                      const selectedUniqueId = selectedSkill ? getSkillUniqueId(selectedSkill) : null;
-                      return (
-                        <button
-                          key={skillUniqueId}
-                          onClick={() => setSelectedSkill(skill)}
-                          className={cn(
-                            'w-full rounded-md px-3 py-2 text-left',
-                            'hover:bg-fill-subtle',
-                            selectedUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <Txt as="span" variant="subheading" tone="ink" className="truncate">
-                                  {skill.name}
-                                </Txt>
-                                {isInstalled && (
-                                  <Txt
-                                    as="span"
-                                    variant="meta"
-                                    className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
-                                  >
-                                    <IconCheckmark2Medium className="size-icon-xs" />
-                                    Installed
+                <ScrollAreaViewport contentClassName={isLoadingPopular || isSearching ? 'h-full' : undefined}>
+                  {isLoadingPopular || isSearching ? (
+                    <Spinner fill className="text-muted-foreground" />
+                  ) : displaySkills.length === 0 ? (
+                    <EmptyState
+                      iconSlot={<IconPackage />}
+                      titleSlot={hasSearchResults ? 'No skills found' : 'No skills available'}
+                    />
+                  ) : (
+                    <div className="space-y-1 p-2">
+                      {displaySkills.map(skill => {
+                        const skillUniqueId = getSkillUniqueId(skill);
+                        const isInstalled = installedSkillIds.includes(skill.name);
+                        const selectedUniqueId = selectedSkill ? getSkillUniqueId(selectedSkill) : null;
+                        return (
+                          <button
+                            key={skillUniqueId}
+                            onClick={() => setSelectedSkill(skill)}
+                            className={cn(
+                              'w-full rounded-md px-3 py-2 text-left',
+                              'hover:bg-fill-subtle',
+                              selectedUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Txt as="span" variant="subheading" tone="ink" className="truncate">
+                                    {skill.name}
                                   </Txt>
-                                )}
+                                  {isInstalled && (
+                                    <Txt
+                                      as="span"
+                                      variant="meta"
+                                      className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
+                                    >
+                                      <IconCheckmark2Medium className="size-icon-xs" />
+                                      Installed
+                                    </Txt>
+                                  )}
+                                </div>
+                                <Txt as="p" variant="caption" tone="muted" className="truncate">
+                                  {skill.topSource}
+                                </Txt>
                               </div>
-                              <Txt as="p" variant="caption" tone="muted" className="truncate">
-                                {skill.topSource}
-                              </Txt>
+                              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                                <IconArrowInbox className="size-icon-xs" />
+                                <Txt as="span" variant="caption">
+                                  {skill.installs.toLocaleString()}
+                                </Txt>
+                              </div>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                              <IconArrowInbox className="size-icon-xs" />
-                              <Txt as="span" variant="caption">
-                                {skill.installs.toLocaleString()}
-                              </Txt>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollAreaViewport>
               </ScrollArea>
             </div>
 
@@ -305,9 +305,7 @@ export function BuilderAddSkillDialog({
                   </div>
 
                   {isLoadingPreview ? (
-                    <div className="flex flex-1 items-center justify-center">
-                      <Spinner className="text-muted-foreground" />
-                    </div>
+                    <Spinner fill className="text-muted-foreground" />
                   ) : previewContent ? (
                     <ScrollArea className="flex-1">
                       <div className="p-4">

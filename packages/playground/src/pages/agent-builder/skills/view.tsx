@@ -38,11 +38,7 @@ export default function AgentBuilderSkillsView() {
   return <AgentBuilderSkillViewPage skill={storedSkill} />;
 }
 
-const AgentBuilderSkillViewSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderSkillViewSkeleton = () => <Spinner fill />;
 
 interface PageProps {
   skill: NonNullable<ReturnType<typeof useStoredSkill>['data']>;

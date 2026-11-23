@@ -220,15 +220,13 @@ export function WorkspaceAddSkillDialog({
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 <ScrollAreaViewport
                   className={
-                    !isLoadingPopular && !isSearching && displaySkills.length === 0
+                    isLoadingPopular || isSearching || displaySkills.length === 0
                       ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
                       : undefined
                   }
                 >
                   {isLoadingPopular || isSearching ? (
-                    <div className="flex items-center justify-center py-5">
-                      <Spinner className="text-muted-foreground" />
-                    </div>
+                    <Spinner fill className="text-muted-foreground" />
                   ) : displaySkills.length === 0 ? (
                     <EmptyState
                       className="flex-1"
@@ -338,9 +336,7 @@ export function WorkspaceAddSkillDialog({
                     </div>
 
                     {isLoadingPreview ? (
-                      <div className="flex flex-1 items-center justify-center">
-                        <Spinner className="text-muted-foreground" />
-                      </div>
+                      <Spinner fill className="text-muted-foreground" />
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
                         <div className="p-4">

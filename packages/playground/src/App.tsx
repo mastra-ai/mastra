@@ -537,11 +537,7 @@ function App() {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
     // The instance probe can also be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <Spinner fill="screen" />;
   }
 
   if (!baseUrl) {

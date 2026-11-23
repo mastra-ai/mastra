@@ -3,10 +3,12 @@ import type { ComponentProps, ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
 import { ActionRow } from '../ActionRow';
+import { BrandLoader } from '../BrandLoader';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
 import { Input } from '../Input';
+import { Spinner } from '../Spinner';
 import { Txt } from '../Txt';
 import { PageLayout } from './index';
 import type { PageLayoutPageProps } from './index';
@@ -225,6 +227,41 @@ export const PageWithSectionsAndEmptyState: Story = {
     await expect(fill.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().bottom, 0);
     await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
   },
+};
+
+async function expectLoaderInPageCenter({ canvasElement }: { canvasElement: HTMLElement }) {
+  const card = canvasElement.querySelector('[data-slot=main-card]')?.getBoundingClientRect();
+  const loader = canvasElement.querySelector('[data-slot=loader-fill]')?.getBoundingClientRect();
+  if (!card || !loader) throw new Error('Missing the page parts');
+  await expect(loader.top + loader.height / 2).toBeCloseTo(card.top + card.height / 2, 0);
+  await expect(loader.left + loader.width / 2).toBeCloseTo(card.left + card.width / 2, 0);
+}
+
+export const PageLoading: Story = {
+  args: {
+    header: pageHeader,
+    actionRow: <Input placeholder="Filter resources" className="max-w-120" />,
+    children: <Spinner fill />,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "A page's loader centers on the whole page whatever sits above the body, so it takes over from the route's loader without a jump.",
+      },
+    },
+  },
+  play: expectLoaderInPageCenter,
+};
+
+export const PageRouteLoading: Story = {
+  args: { breadcrumbs: undefined, headerActions: undefined, children: <BrandLoader fill size="lg" /> },
+  play: expectLoaderInPageCenter,
+};
+
+export const FixedPageLoading: Story = {
+  args: { body: 'fixed', children: <BrandLoader fill size="lg" /> },
+  play: expectLoaderInPageCenter,
 };
 
 function ComparisonHeader({

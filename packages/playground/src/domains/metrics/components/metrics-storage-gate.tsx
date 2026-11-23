@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { LoaderFill } from '@mastra/playground-ui/components/LoaderFill';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -26,12 +27,12 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   if (isLoading) {
     return (
       <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery}>
-        <div className="flex h-full items-center justify-center gap-2">
+        <LoaderFill>
           <Spinner aria-label="Loading storage capabilities" />
           <Txt as="span" variant="caption" tone="muted">
             Loading storage capabilities
           </Txt>
-        </div>
+        </LoaderFill>
       </MetricsPageLayout>
     );
   }

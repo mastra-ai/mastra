@@ -22,11 +22,7 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
   const { data: authCapabilities, isLoading } = useAuthCapabilities();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <Spinner fill="screen" />;
   }
 
   if (authCapabilities?.enabled && !isAuthenticated(authCapabilities)) {
@@ -43,11 +39,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
   const { isLoading, denialReason, hasAgentFeature } = useBuilderAgentAccess();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <Spinner fill="screen" />;
   }
 
   if (denialReason === 'permission-denied') {

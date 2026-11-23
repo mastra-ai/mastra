@@ -43,11 +43,7 @@ export function RoutePermissionsGate({ children, baseUrl }: RoutePermissionsGate
   const { patterns, isLoading, error } = usePermissionPatterns();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <Spinner fill="screen" />;
   }
 
   if (error) {

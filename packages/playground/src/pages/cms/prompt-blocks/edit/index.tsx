@@ -59,9 +59,7 @@ function CmsPromptBlocksEditPage() {
     return (
       <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{blockId}</h1>
-        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
-          <Spinner fill size="lg" />
-        </AgentEditLayout>
+        <Spinner fill size="lg" />
       </PageLayout>
     );
   }

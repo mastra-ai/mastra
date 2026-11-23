@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { LoaderFill } from '@/ds/components/LoaderFill';
 import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 
@@ -29,12 +30,12 @@ export function ObservabilityCapabilityGate({
     <>
       <h1 className="sr-only">{heading}</h1>
       {isLoading ? (
-        <div className="flex h-full items-center justify-center gap-2">
+        <LoaderFill>
           <Spinner aria-label="Loading storage capabilities" />
           <Txt as="span" variant="caption" tone="muted">
             Loading storage capabilities
           </Txt>
-        </div>
+        </LoaderFill>
       ) : (
         <EmptyState variant="fill" titleSlot={title} descriptionSlot={description} />
       )}

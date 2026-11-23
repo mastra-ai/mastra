@@ -12,11 +12,7 @@ import type { StackedDiffsHandle } from './diffs/StackedDiffs';
 
 const StackedDiffs = lazy(() => import('./diffs/StackedDiffs').then(({ StackedDiffs }) => ({ default: StackedDiffs })));
 
-const centeredSpinner = (
-  <div className="flex min-h-0 flex-1 items-center justify-center">
-    <Spinner size="sm" />
-  </div>
-);
+const centeredSpinner = <Spinner fill size="sm" />;
 
 interface ChangesBodyProps {
   workspacePath: string;

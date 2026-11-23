@@ -21,11 +21,7 @@ export function RoutePermissionGuard({ children }: { children: React.ReactNode }
   // content before gating can run. The authoritative permission patterns are
   // already loaded and validated by RoutePermissionsGate higher in the tree.
   if (isLoading) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <Spinner fill />;
   }
 
   // No RBAC or not authenticated — no gating
