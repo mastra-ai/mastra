@@ -1,11 +1,14 @@
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
+import type { VersionOverrides } from '../../mastra/types';
 import type { Experiment, ExperimentResult } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
 import { resolveTarget } from './resolve-target';
+import { executeWithRetries } from './retries';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
@@ -14,6 +17,7 @@ import {
   resolveScorers,
   runScorersForItem,
 } from './scorer';
+import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ScorerResult } from './types';
 
 /** Item shape consumed by {@link executeExperimentItem}. */
@@ -28,9 +32,29 @@ export interface ExperimentItemInput {
   metadata?: Record<string, unknown>;
   /** Item-level scorer IDs. An empty array explicitly disables scoring. */
   scorerIds?: string[];
+  /** Item-level static tool mocks (agent targets only). */
+  toolMocks?: ItemToolMock[];
+  /** Item-level override for undeclared agent tool calls. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
 }
 
-export interface ExecuteExperimentItemArgs {
+/**
+ * Per-item run options. They match the `runExperiment` options of the same name, so an item behaves the same whichever loop runs it.
+ */
+export interface ExperimentItemRunOptions {
+  /** Model override for agent targets, passed per call to `agent.generate()`. */
+  agentModel?: MastraModelConfig;
+  /** Default handling for agent tool calls not declared in the item's `toolMocks` (default: `allow`). */
+  unmockedToolPolicy?: UnmockedToolPolicy;
+  /** Item execution timeout in milliseconds, covering all retries. */
+  itemTimeout?: number;
+  /** Retries on failure (default: 0). Abort/timeout and tool-mock errors are never retried. */
+  maxRetries?: number;
+  /** Version overrides for sub-agent delegation. */
+  versions?: VersionOverrides;
+}
+
+export interface ExecuteExperimentItemArgs extends ExperimentItemRunOptions {
   mastra: Mastra;
   /** The experiment record. Must carry a non-null target. */
   experiment: Experiment;
@@ -63,9 +87,9 @@ export interface ExecuteExperimentItemOutput {
  * ({@link EXPERIMENT_ITEM_SCORER_NOT_FOUND}): the target is not executed and
  * the error is recorded on the row.
  *
- * Deliberately excludes the runner's loop-level concerns: hooks, event
- * dispatch, tool mocks, and internal retries — retries/timeouts belong to the
- * caller's orchestrator.
+ * Applies the same per-item run options as the in-process runner (model
+ * override, tool mocks, timeout, retries) but excludes its loop-level concerns:
+ * hooks, event dispatch, and step scorers.
  */
 export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Promise<ExecuteExperimentItemOutput> {
   const { mastra, experiment, item } = args;
@@ -132,12 +156,24 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
   const mergedRequestContext =
     args.requestContext || item.requestContext ? { ...args.requestContext, ...item.requestContext } : undefined;
 
-  const execResult: ExecutionResult = scorerConfigError
-    ? { output: null, error: scorerConfigError, traceId: null }
-    : await executeTarget(resolved.target, experiment.targetType, item, {
-        requestContext: mergedRequestContext,
-        experimentId: experiment.id,
-      });
+  const targetType = experiment.targetType;
+  const isAgent = targetType === 'agent';
+  const signal = args.itemTimeout ? AbortSignal.timeout(args.itemTimeout) : undefined;
+  const { execResult, retryCount } = scorerConfigError
+    ? { execResult: { output: null, error: scorerConfigError, traceId: null }, retryCount: 0 }
+    : await executeWithRetries(
+        () =>
+          executeTarget(resolved.target, targetType, item, {
+            signal,
+            requestContext: mergedRequestContext,
+            experimentId: experiment.id,
+            versions: args.versions,
+            agentModel: args.agentModel,
+            toolMocks: isAgent ? item.toolMocks : undefined,
+            unmockedToolPolicy: isAgent ? (item.unmockedToolPolicy ?? args.unmockedToolPolicy ?? 'allow') : undefined,
+          }),
+        { maxRetries: args.maxRetries ?? 0 },
+      );
 
   const completedAt = new Date();
 
@@ -184,8 +220,9 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
     error: execResult.error,
     startedAt,
     completedAt,
-    retryCount: 0,
+    retryCount,
     traceId: execResult.traceId,
+    toolMockReport: execResult.toolMockReport ?? null,
     organizationId: args.organizationId ?? null,
     projectId: args.projectId ?? null,
   });

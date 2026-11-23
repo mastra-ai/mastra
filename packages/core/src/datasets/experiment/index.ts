@@ -8,6 +8,7 @@ import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonVa
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
 import { resolveTarget } from './resolve-target';
+import { executeWithRetries } from './retries';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
@@ -17,7 +18,6 @@ import {
   runScorersForItem,
   runStepScorersForItem,
 } from './scorer';
-import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from './tool-mocks';
 import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -565,38 +565,13 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
           // Resolve item scorer configuration before executing the target. Invalid item
           // references are deterministic and therefore skip both target execution and retries.
-          let retryCount = 0;
           const preflightError = scorerConfigError ?? beforeEachError;
-          let execResult: ExecutionResult = preflightError
-            ? { output: null, error: preflightError, traceId: null }
-            : await execFn(itemWithMetadataSnapshot(), itemSignal);
-
-          while (execResult.error && !preflightError && retryCount < maxRetries) {
-            // Don't retry abort errors
-            if (execResult.error.message.toLowerCase().includes('abort')) break;
-
-            // Don't retry deterministic tool-mock failures — the matcher state cannot
-            // change between attempts, so retrying would always fail identically.
-            if (
-              execResult.error.code === TOOL_MOCK_MISMATCH ||
-              execResult.error.code === TOOL_MOCK_EXHAUSTED ||
-              execResult.error.code === TOOL_MOCK_NOT_DECLARED
-            ) {
-              break;
-            }
-
-            retryCount++;
-            const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
-            const jitter = delay * 0.2 * Math.random();
-            await new Promise(r => setTimeout(r, delay + jitter));
-
-            // Re-check cancellation before retry
-            if (executionSignal?.aborted) {
-              throw new DOMException('Aborted', 'AbortError');
-            }
-
-            execResult = await execFn(itemWithMetadataSnapshot(), itemSignal);
-          }
+          const { execResult, retryCount } = preflightError
+            ? { execResult: { output: null, error: preflightError, traceId: null }, retryCount: 0 }
+            : await executeWithRetries(() => execFn(itemWithMetadataSnapshot(), itemSignal), {
+                maxRetries,
+                cancelSignal: executionSignal,
+              });
 
           const itemCompletedAt = new Date();
 

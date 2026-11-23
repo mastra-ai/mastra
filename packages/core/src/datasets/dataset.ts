@@ -32,6 +32,7 @@ import type {
 } from '../storage/types.js';
 import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/agent-model.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
+import type { ExperimentItemRunOptions } from './experiment/item.js';
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
@@ -852,22 +853,28 @@ export class Dataset {
    * keyed by `(experimentId, itemId, attempt)`.
    *
    * Built for caller-driven loops (mode 2): a durable orchestrator (e.g. a
-   * Temporal workflow) fans out one call per item and owns retries/timeouts —
-   * a retried call converges on the same row. Requires an experiment created
-   * with a target via {@link Dataset.createExperiment}.
+   * Temporal workflow) fans out one call per item — a retried call converges
+   * on the same row. Requires an experiment created with a target via
+   * {@link Dataset.createExperiment}. The run options (`agentModel`,
+   * `unmockedToolPolicy`, `itemTimeout`, `maxRetries`, `versions`) behave as
+   * they do in {@link Dataset.startExperiment}; the experiment record doesn't
+   * store them, so pass them on every call.
    *
    * Scorer precedence: experiment `scorers` → item `scorerIds` → dataset
    * `scorerIds` → none.
    */
-  async runExperimentItem(args: {
-    experimentId: string;
-    itemId: string;
-    /** Zero-based repetition index for repeated trials. Defaults to `0`. */
-    attempt?: number;
-    /** Request context merged with the item's own request context (item wins). */
-    requestContext?: Record<string, unknown>;
-  }): Promise<{ result: ExperimentResult; scores: Awaited<ReturnType<typeof executeExperimentItem>>['scores'] }> {
+  async runExperimentItem(
+    args: ExperimentItemRunOptions & {
+      experimentId: string;
+      itemId: string;
+      /** Zero-based repetition index for repeated trials. Defaults to `0`. */
+      attempt?: number;
+      /** Request context merged with the item's own request context (item wins). */
+      requestContext?: Record<string, unknown>;
+    },
+  ): Promise<{ result: ExperimentResult; scores: Awaited<ReturnType<typeof executeExperimentItem>>['scores'] }> {
     const experiment = await this.#getOwnedExperiment(args.experimentId);
+    assertAgentModelTarget({ agentModel: args.agentModel, targetType: experiment.targetType ?? undefined });
     if (experiment.targetType === null) {
       throw new MastraError({
         id: 'EXPERIMENT_HAS_NO_TARGET',
@@ -912,10 +919,17 @@ export class Dataset {
         requestContext: item.requestContext ?? undefined,
         metadata: item.metadata ?? undefined,
         scorerIds: item.scorerIds ?? undefined,
+        toolMocks: item.toolMocks ?? undefined,
+        unmockedToolPolicy: item.unmockedToolPolicy ?? undefined,
       },
       datasetScorerIds: dataset?.scorerIds ?? null,
       attempt: args.attempt ?? 0,
       requestContext: args.requestContext,
+      agentModel: args.agentModel,
+      unmockedToolPolicy: args.unmockedToolPolicy,
+      itemTimeout: args.itemTimeout,
+      maxRetries: args.maxRetries,
+      versions: args.versions,
       organizationId: experiment.organizationId ?? dataset?.organizationId ?? null,
       projectId: experiment.projectId ?? dataset?.projectId ?? null,
     });
