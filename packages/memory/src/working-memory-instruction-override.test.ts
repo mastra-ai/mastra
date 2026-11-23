@@ -405,6 +405,32 @@ describe.each(['current core', 'older core without an instruction provider'] as 
       expect(systemPromptSentToModel()).toContain('TRIMMED_WM:empty');
     });
 
+    it('renders built-in empty fallback consistently when getWorkingMemoryInstruction returns undefined for non-string metadata', async () => {
+      class FallbackMemory extends Memory {
+        override getWorkingMemoryInstruction(): string | undefined {
+          return undefined;
+        }
+      }
+      llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      const memory = createMemory(FallbackMemory, {
+        workingMemory: { ...markdownWorkingMemory, scope: 'thread' },
+      });
+      await memory.createThread({
+        threadId: 'thread-object-fallback',
+        resourceId: RESOURCE,
+        metadata: { workingMemory: { name: 'Ada' } },
+      });
+
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-object-fallback', resource: RESOURCE } });
+
+      const fromMemory = await memory.getSystemMessage({ threadId: 'thread-object-fallback', resourceId: RESOURCE });
+      const system = systemPromptSentToModel();
+      expect(fromMemory).toContain('No working memory data available.');
+      expect(fromMemory).not.toContain('[object Object]');
+      expect(system).toContain(fromMemory!);
+      expect(system).not.toContain('[object Object]');
+    });
+
     it('with useStateSignals the instruction methods are not used', async () => {
       llm.on({ endpoint: 'chat' }, { content: 'ok' });
       const memory = createMemory(DurableFactsMemory, {
