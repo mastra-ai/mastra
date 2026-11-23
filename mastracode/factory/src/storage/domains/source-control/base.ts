@@ -177,6 +177,10 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
+      // The setup command the sandbox is running, set while it runs and cleared when it ends.
+      setup_target: { type: 'text', nullable: true },
+      setup_started_at: { type: 'timestamp', nullable: true },
+      setup_deadline_at: { type: 'timestamp', nullable: true },
       // When the session's threads reached their Factory or owner memory resource.
       // Null only on sessions from before shared resources, until the startup migration moves them.
       resources_migrated_at: { type: 'timestamp', nullable: true },
@@ -384,8 +388,18 @@ export interface SourceControlSession {
   firstMessageAt: Date | null;
   /** When the agent's first successful sandbox exec finished. Write-once. */
   firstMeaningfulExecAt: Date | null;
+  /** The setup command the sandbox is running; null when none is. */
+  setupInProgress: SessionSetupInProgress | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface SessionSetupInProgress {
+  /** A repository slug, or `workspace` for the environment's own command. */
+  target: string;
+  startedAt: Date;
+  /** When the command is stopped if it is still running. */
+  deadline: Date;
 }
 
 export function isSeenBy(session: Pick<SourceControlSession, 'visibility' | 'userId'>, viewerUserId: string): boolean {
@@ -601,6 +615,10 @@ export interface SourceControlStorageHandle {
      * `sessionId`.
      */
     markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+    /** Mark the setup command the session's sandbox is running. */
+    setSetupInProgress(args: { sessionId: string; setup: SessionSetupInProgress }): Promise<void>;
+    /** Clear the mark, only while it is still the one started at `startedAt`: a later setup keeps its own. */
+    clearSetupInProgress(args: { sessionId: string; startedAt: Date }): Promise<void>;
     /** Removes the session and its repository rows. */
     delete(id: string): Promise<void>;
   };
@@ -683,6 +701,9 @@ interface SessionDbRow extends Record<string, unknown> {
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
+  setup_target?: string | null;
+  setup_started_at?: Date | null;
+  setup_deadline_at?: Date | null;
   resources_migrated_at?: Date | null;
   visibility_checked_at?: Date | null;
   created_at: Date;
@@ -803,6 +824,10 @@ function toSession(row: SessionDbRow): SourceControlSession {
     materializedAt: row.materialized_at,
     firstMessageAt: row.first_message_at,
     firstMeaningfulExecAt: row.first_meaningful_exec_at,
+    setupInProgress:
+      row.setup_target && row.setup_started_at && row.setup_deadline_at
+        ? { target: row.setup_target, startedAt: row.setup_started_at, deadline: row.setup_deadline_at }
+        : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1860,6 +1885,20 @@ export class SourceControlStorage extends FactoryStorageDomain {
         markFirstMessage: ({ sessionId }) => this.#stampOnce({ session_id: sessionId }, 'first_message_at'),
         markFirstMeaningfulExec: ({ sessionId }) =>
           this.#stampOnce({ session_id: sessionId }, 'first_meaningful_exec_at'),
+        setSetupInProgress: async ({ sessionId, setup }) => {
+          await db().updateMany(
+            SESSIONS,
+            { session_id: sessionId },
+            { setup_target: setup.target, setup_started_at: setup.startedAt, setup_deadline_at: setup.deadline },
+          );
+        },
+        clearSetupInProgress: async ({ sessionId, startedAt }) => {
+          await db().updateMany(
+            SESSIONS,
+            { session_id: sessionId, setup_started_at: startedAt },
+            { setup_target: null, setup_started_at: null, setup_deadline_at: null },
+          );
+        },
         delete: async id => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { id });
           if (!row) return;

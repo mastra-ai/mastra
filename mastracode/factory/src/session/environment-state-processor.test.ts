@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { SetupInProgress } from '../sandbox/setup-progress.js';
 import {
   __clearSessionEnvironmentsForTests,
   clearSessionEnvironment,
@@ -75,6 +76,58 @@ describe('FactoryEnvironmentStateProcessor', () => {
 
     expect(signal).toMatchObject({ id: 'factory-environment', attributes: { repositories: 2 } });
     await expect(processor.computeStateSignal(stateArgs(requestContext('other', {})))).resolves.toBeUndefined();
+  });
+
+  it('says a setup command is running, with its clock times, and drops a mark past its deadline', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const startedAt = new Date(Date.now() - 60_000);
+    let row = {
+      setupInProgress: { target: 'acme/mastra', startedAt, deadline: new Date(startedAt.getTime() + 15 * 60_000) },
+    };
+    const processor = new FactoryEnvironmentStateProcessor({ getSession: async () => row });
+
+    const running = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(running?.contents).toContain(
+      `running the setup command for acme/mastra, started at ${startedAt.toISOString().slice(11, 16)} UTC`,
+    );
+    expect(running?.contents).toContain("don't recreate the sandbox");
+
+    // The process running setup died before clearing it: past the deadline the command was stopped anyway.
+    row = { setupInProgress: { ...row.setupInProgress, deadline: new Date(Date.now() - 1) } };
+    const stale = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(stale?.contents).not.toContain('setup command');
+    expect(stale?.cacheKey).not.toBe(running?.cacheKey);
+  });
+
+  it('replaces a setup snapshot once setup ended with no environment recorded, then stays quiet', async () => {
+    const now = Date.now();
+    let row: { setupInProgress: SetupInProgress | null } = {
+      setupInProgress: { target: 'acme/mastra', startedAt: new Date(now), deadline: new Date(now + 60_000) },
+    };
+    const processor = new FactoryEnvironmentStateProcessor({ getSession: async () => row });
+    const running = await processor.computeStateSignal(stateArgs(requestContext()));
+    const inWindow = (signal: typeof running) =>
+      stateArgs(requestContext(), {
+        lastSnapshot: { metadata: { state: { cacheKey: signal?.cacheKey } } },
+        contextWindow: { hasSnapshot: true },
+      });
+
+    // The setup failed, so the boot never recorded an environment.
+    row = { setupInProgress: null };
+    const ended = await processor.computeStateSignal(inWindow(running));
+    expect(ended?.contents).toBe('No setup command is running in the sandbox now.');
+    await expect(processor.computeStateSignal(inWindow(ended))).resolves.toBeUndefined();
+  });
+
+  it('tells a session with no booted environment yet that setup is running', async () => {
+    const now = Date.now();
+    const processor = new FactoryEnvironmentStateProcessor({
+      getSession: async () => ({
+        setupInProgress: { target: 'the workspace', startedAt: new Date(now), deadline: new Date(now + 60_000) },
+      }),
+    });
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(signal?.contents).toContain('running the setup command for the workspace');
   });
 
   it('describes every booted repository with its directory, branch and setup status', async () => {
