@@ -53,8 +53,10 @@
  *
  * For a thread with nothing stored, the entire input is the seed. Assistant provider metadata is
  * stripped there, because item ids name server-side items that this request never created — that
- * is exactly the orphaned-reference shape from #24052. Tool results keep their metadata: that
- * data came from the client.
+ * is exactly the orphaned-reference shape from #24052. The one exception is Mastra's own
+ * `providerMetadata.mastra.tokenEstimate`: it names no provider item, and keeping it is what lets a
+ * resent token count survive. Any other Mastra-owned key under `providerMetadata` is stripped.
+ * Tool results keep their metadata: that data came from the client.
  *
  * A caller that assembled the input itself can opt out of all of the above with
  * `retainFullInput`. The input is then processed exactly as supplied — no trim, no seed strip —
