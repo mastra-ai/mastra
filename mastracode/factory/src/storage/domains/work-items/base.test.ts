@@ -13,6 +13,7 @@ import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
   isAgentActor,
+  FactoryRunBindingSupersededError,
   WorkItemRelationError,
   WorkItemsStorage,
 } from './base.js';
@@ -182,6 +183,30 @@ describe('WorkItemsStorage', () => {
 
     expect(rows.map(row => row.id).sort()).toEqual([first.item.id, second.item.id].sort());
     expect(rows.every(row => row.orgId === 'org1')).toBe(true);
+  });
+
+  it('does not commit a binding or pending start for a card that became terminal before preparation', async () => {
+    const storage = await makeStorage();
+    storage.useTerminalPhasePredicate(item => item.stages.includes('done'));
+    const { item } = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    await storage.update({ orgId: 'org1', userId: 'user1', id: item.id, patch: { stages: ['done'] } });
+
+    await expect(
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { id: item.id, input: { ...input } },
+        role: 'work',
+        session: { sessionId: 'session-terminal', branch: 'factory/42', threadId: 'thread-terminal' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-terminal',
+        kickoffMessage: null,
+      }),
+    ).rejects.toThrow(FactoryRunBindingSupersededError);
+    expect(await storage.listRunBindings('org1', 'project1', item.id)).toEqual([]);
+    expect(await storage.listPendingStarts('org1', 'project1')).toEqual([]);
+    expect((await storage.get({ orgId: 'org1', id: item.id }))?.stages).toEqual(['done']);
   });
 
   it('mints a fresh binding when re-entered after the prior binding is revoked', async () => {

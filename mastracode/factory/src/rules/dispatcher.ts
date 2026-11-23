@@ -1400,6 +1400,15 @@ export class FactoryDecisionDispatcher {
   // `autoStartWhen` matches). Anything else waits for a person.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
     if (record.approvedAt !== null) return false;
+    if (decision.type === 'sendMessage' && decision.prepareBinding && decision.role !== undefined) {
+      if (await this.#liveSeat(record, decision.role)) return false;
+      if (
+        (await this.#roleSuperseded(record, decision.role)) ||
+        (await this.#decisionOvertaken(record, decision.role))
+      ) {
+        throw new FactoryDecisionSuperseded();
+      }
+    }
     const boards = await this.#boards.load(record);
     if (!requestsConsent(boards, record, decision)) return false;
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;

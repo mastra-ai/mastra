@@ -3737,6 +3737,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           // dead-run artifact: discard it and mint a fresh binding below. The
           // unique kickoff_key index requires removing the stale row before
           // re-inserting.
+          if (itemRow && this.#isTerminal(toRow(itemRow))) throw new FactoryRunBindingSupersededError();
           if (bindingRow && itemRow && bindingRow.status === 'active') {
             return {
               item: toRow(itemRow),
@@ -3769,6 +3770,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         let item: Card;
         if (row) {
           row = await this.#cards(ops, { transaction: true }).updateAtomic({ id: row.id }, current => {
+            if (this.#isTerminal(toRow(current))) throw new FactoryRunBindingSupersededError();
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
             // The binding below shares this clock, so a run started on an existing card
@@ -3812,6 +3814,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             created_at: now,
             updated_at: now,
           });
+          if (this.#isTerminal(toRow(row))) throw new FactoryRunBindingSupersededError();
           item = toRow(row);
         }
         await ops.updateMany(
