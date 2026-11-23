@@ -62,13 +62,13 @@ describe('clearTokenEstimates', () => {
 });
 
 describe('places that change a part clear its trusted count', () => {
-  it('caller input is stripped; memory-loaded parts keep their counts', () => {
+  it('caller input and memory-loaded parts both keep their counts', () => {
     const list = new MessageList({ threadId: 't', resourceId: 'r' });
     list.add(dbMessage('user', [withTrusted({ type: 'text', text: 'from memory' })], 'mem'), 'memory');
     list.add(dbMessage('user', [withTrusted({ type: 'text', text: 'from caller' })], 'in'), 'input');
     const [fromMemory, fromInput] = list.get.all.db();
     expect(trustedKeys(fromMemory!.content.parts[0])).toEqual(['trusted:text']);
-    expect(trustedKeys(fromInput!.content.parts[0])).toEqual([]);
+    expect(trustedKeys(fromInput!.content.parts[0])).toEqual(['trusted:text']);
     expect((fromInput!.content.parts[0] as any).providerMetadata.other).toEqual({ keep: 1 });
   });
 

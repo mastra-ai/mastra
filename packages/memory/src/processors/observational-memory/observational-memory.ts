@@ -345,7 +345,7 @@ import {
   resolveBlockAfter,
   resolveBufferTokens,
 } from './thresholds';
-import { TokenCounter, takeNewTokenEstimates } from './token-counter';
+import { TokenCounter } from './token-counter';
 import type { TokenCounterModelContext } from './token-counter';
 import { applyTextTransform } from './transform-hooks';
 import type {
@@ -1769,41 +1769,6 @@ export class ObservationalMemory {
         },
       ],
     });
-  }
-
-  /**
-   * @internal Write the token counts OM made for stored messages back to storage, so the next
-   * request reads them instead of counting the same parts again. Only messages of `threadId` are
-   * written: saving another thread's messages would bump that thread's `updatedAt` and reorder
-   * the recent-thread list. Each stored part takes the count of the in-memory part at the same
-   * position when the two have the same type.
-   *
-   * This re-saves each message whole, so an edit or marker written to the same message between
-   * the read and the write here is overwritten, and a part edited in place in that window keeps a stale count. That risk is accepted for now.
-   */
-  async persistTokenEstimates(messages: MastraDBMessage[], threadId: string): Promise<void> {
-    const counted = messages.filter(message => message.threadId === threadId).filter(takeNewTokenEstimates);
-    if (counted.length === 0) return;
-    const live = new Map(counted.map(message => [message.id, message]));
-    const { messages: stored } = await this.storage.listMessagesById({ messageIds: [...live.keys()] });
-    const updates: { id: string; content: MastraDBMessage['content'] }[] = [];
-    for (const row of stored) {
-      const liveParts = live.get(row.id)?.content.parts ?? [];
-      let changed = false;
-      const parts = row.content.parts.map((part, index) => {
-        const livePart = liveParts[index] as any;
-        const tokenEstimate = livePart?.providerMetadata?.mastra?.tokenEstimate;
-        if (!tokenEstimate || livePart?.type !== part.type) return part;
-        changed = true;
-        const providerMetadata = (part as any).providerMetadata ?? {};
-        return {
-          ...part,
-          providerMetadata: { ...providerMetadata, mastra: { ...providerMetadata.mastra, tokenEstimate } },
-        };
-      });
-      if (changed) updates.push({ id: row.id, content: { ...row.content, parts } });
-    }
-    if (updates.length > 0) await this.storage.updateMessages({ messages: updates });
   }
 
   /**

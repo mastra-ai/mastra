@@ -313,6 +313,11 @@ export class MessageList {
   // read and update it, so whichever runs second skips what the first one embedded.
   #embeddedMessages = new Map<string, string>();
 
+  // Ids of stored messages that changed after loading (e.g. a token count added to a part) and must be
+  // saved again. Kept apart from newUserMessages and newResponseMessages so they never show up as new
+  // input, output or source. Keyed by id, which survives the serialize/deserialize in a response split.
+  #messagesToResave = new Set<string>();
+
   // Legacy getters for backward compatibility - delegate to stateManager
   private get memoryMessages() {
     return this.stateManager.getMemoryMessages();
@@ -693,11 +698,13 @@ export class MessageList {
 
   /** @internal */
   public clone(): MessageList {
-    return new MessageList({
+    const clone = new MessageList({
       generateMessageId: this.generateMessageId,
       logger: this.logger,
       filterIncompleteToolCalls: this.filterIncompleteToolCalls,
     }).deserialize(this.serialize());
+    for (const id of this.#messagesToResave) clone.#messagesToResave.add(id);
+    return clone;
   }
 
   /**
@@ -1733,6 +1740,23 @@ export class MessageList {
     return updates;
   }
 
+  /**
+   * Mark a message already in this list as changed after it was loaded, so the next save writes it
+   * again through the normal whole-message save. It is not reported as new input, output or source.
+   * Messages that are not in the list are ignored.
+   */
+  public markForResave(message: MastraDBMessage): void {
+    if (this.messages.some(m => m.id === message.id)) this.#messagesToResave.add(message.id);
+  }
+
+  /**
+   * The messages marked with {@link markForResave} and not yet drained. For save paths that read the
+   * list instead of draining it; they pick these up next to the new input and response.
+   */
+  public getMessagesToResave(): MastraDBMessage[] {
+    return this.messages.filter(m => this.#messagesToResave.has(m.id));
+  }
+
   public drainUnsavedMessages(): MastraDBMessage[] {
     return this.drainUnsavedMessagesForSave().messages;
   }
@@ -1744,9 +1768,13 @@ export class MessageList {
   public drainUnsavedMessagesForSave(): { messages: MastraDBMessage[]; restore: () => void } {
     const userMessages = [...this.newUserMessages];
     const responseMessages = [...this.newResponseMessages];
-    const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
+    const resaveIds = [...this.#messagesToResave];
+    const messages = this.messages.filter(
+      m => this.newUserMessages.has(m) || this.newResponseMessages.has(m) || this.#messagesToResave.has(m.id),
+    );
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
+    this.#messagesToResave.clear();
     return {
       messages: messages.map(message => this.transformMessageForTranscript(message)),
       restore: () => {
@@ -1755,6 +1783,9 @@ export class MessageList {
         }
         for (const message of responseMessages) {
           if (this.messages.includes(message)) this.newResponseMessages.add(message);
+        }
+        for (const id of resaveIds) {
+          if (this.messages.some(m => m.id === id)) this.#messagesToResave.add(id);
         }
       },
     };
@@ -2705,10 +2736,6 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
-    // Caller-supplied parts can't carry token counts Memory trusts without checking.
-    if (messageSource === 'input' && Array.isArray(messageV2.content?.parts)) {
-      messageV2.content.parts = messageV2.content.parts.map(part => clearTokenEstimates(part));
-    }
     if (messageDeclaresAuthoredTurn(message) && messageV2.role === 'user' && !messageDeclaresAuthoredTurn(messageV2)) {
       const metadata = messageV2.content.metadata ?? {};
       const mastra =

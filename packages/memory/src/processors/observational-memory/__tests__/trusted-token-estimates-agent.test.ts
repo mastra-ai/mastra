@@ -139,7 +139,7 @@ describe('trusted token counts across requests', () => {
     expect(spy.mock.calls.map(call => call[0])).toEqual(['user']);
   });
 
-  it('a trusted count in caller input to the Agent is dropped, in either shape', async () => {
+  it('a count in caller input to the Agent is kept, in either shape', async () => {
     mock.on({ endpoint: 'chat', userMessage: 'Caller input' }, { content: 'Ok.' });
     const { agent, memory } = createAgent(new InMemoryStore());
     const text = `Caller input. ${'Some words to count. '.repeat(30)}`.trim();
@@ -158,7 +158,44 @@ describe('trusted token counts across requests', () => {
         ],
         { memory: { thread: THREAD, resource: RESOURCE } },
       );
-      expect(await storedCount(memory, id)).toBe(freshCount(text));
+      const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+      const part = (messages.find(message => message.id === id)!.content.parts as StoredPart[])[0]!;
+      expect(trustedEntries(part).map(entry => (entry as { tokens: number }).tokens)).toEqual([1]);
+    }
+  });
+
+  it('a client that resends its history with counts gets no recount of that history', async () => {
+    mock.on({ endpoint: 'chat', userMessage: 'Next question' }, { content: 'Ok.' });
+    const { agent, memory } = createAgent(new InMemoryStore());
+    // Counts the way an earlier request stored them, then made wrong for the text: if the Agent counted the
+    // history again, they would be replaced.
+    const withCount = (id: string, role: 'user' | 'assistant', at: number, text: string) => {
+      const message = {
+        id,
+        role,
+        createdAt: new Date(Date.UTC(2026, 10, 1, 0, 0, at)),
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
+      };
+      new TokenCounter().countMessage(message as any);
+      for (const part of message.content.parts as StoredPart[]) {
+        const estimate = part.providerMetadata!.mastra!.tokenEstimate as { tokens: number };
+        estimate.tokens = 1;
+      }
+      return message;
+    };
+    const history = [
+      withCount('resent-0', 'user', 0, `First message. ${'Resent history words. '.repeat(30)}`),
+      withCount('resent-1', 'user', 1, `Second message. ${'Resent history words. '.repeat(30)}`),
+    ];
+
+    await agent.generate([...(history as any[]), { id: 'next', role: 'user', content: 'Next question' }], {
+      memory: { thread: THREAD, resource: RESOURCE },
+    });
+
+    const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+    for (const id of ['resent-0', 'resent-1']) {
+      const part = (messages.find(message => message.id === id)!.content.parts as StoredPart[])[0]!;
+      expect(trustedEntries(part).map(entry => (entry as { tokens: number }).tokens)).toEqual([1]);
     }
   });
 });

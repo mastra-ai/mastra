@@ -179,81 +179,86 @@ describe('Observational Memory token counts for stored history', () => {
     expect(textPart).toMatchObject({ type: 'text', text: 'OK.' });
     expect(trustedEntries(textPart)).toHaveLength(1);
   });
-  it('matches stored parts to counted parts by position and type only, accepting a stale count after a same-slot edit', async () => {
-    const { memory } = open(join(dbDir, 'tool-edit.db'));
+  it('saves the counts with the messages through the normal save, not a separate storage write', async () => {
+    const { storage, memory, agent } = open(join(dbDir, 'normal-save.db'));
     const threadId = randomUUID();
     await memory.saveThread({
       thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
     });
-    const toolPart = (result: string) => ({
-      type: 'tool-invocation' as const,
-      toolInvocation: { state: 'result' as const, toolCallId: 'call-1', toolName: 'lookup', args: { q: 'x' }, result },
-    });
-    const id = `${threadId}-tool`;
+    const ids = Array.from({ length: 4 }, (_, i) => `${threadId}-n${i}`);
     await memory.saveMessages({
-      messages: [
-        {
-          id,
-          threadId,
-          resourceId: RESOURCE,
-          role: 'assistant',
-          createdAt: new Date(Date.UTC(2026, 10, 1)),
-          content: { format: 2, parts: [toolPart('original result')] },
-        },
-      ],
+      messages: ids.map((id, i) => ({
+        id,
+        threadId,
+        resourceId: RESOURCE,
+        role: i % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        createdAt: new Date(Date.UTC(2026, 10, 1, 0, 0, i)),
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: `Note ${i}. ${'Plan. '.repeat(40)}` }] },
+      })),
+    });
+    const memoryStore = (await storage.getStore('memory'))!;
+    const saved: MastraDBMessage[][] = [];
+    const originalSave = memoryStore.saveMessages.bind(memoryStore);
+    vi.spyOn(memoryStore, 'saveMessages').mockImplementation(async (args: any) => {
+      saved.push(args.messages);
+      return originalSave(args);
+    });
+    const updatedIds: string[] = [];
+    const originalUpdate = memoryStore.updateMessages.bind(memoryStore);
+    vi.spyOn(memoryStore, 'updateMessages').mockImplementation(async (args: any) => {
+      updatedIds.push(...args.messages.map((m: any) => m.id));
+      return originalUpdate(args);
     });
 
-    // OM loads and counts the message.
-    const engine = (await memory.omEngine)!;
-    const [live] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
-    engine.getTokenCounter().countMessages([live!]);
-    expect(trustedEntries(live!.content.parts[0]).length).toBeGreaterThan(0);
+    const turn = await agent.stream('Question.', { memory: { thread: threadId, resource: RESOURCE } });
+    await turn.consumeStream();
+    expect(await turn.text).toBe('OK.');
 
-    // The result is edited in storage before the write-back runs. The slot and type still match,
-    // so the count is copied: the accepted write-back race.
-    await memory.updateMessages({
-      messages: [{ id, content: { format: 2, parts: [toolPart('a much longer edited result '.repeat(20))] } } as any],
-    });
-
-    await engine.persistTokenEstimates([live!], threadId);
-
-    const [stored] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
-    expect((stored!.content.parts[0] as any).toolInvocation.result).toContain('edited result');
-    expect(trustedEntries(stored!.content.parts[0]).length).toBeGreaterThan(0);
+    // The history went back through saveMessages, carrying its counts...
+    const resaved = saved.flat().filter(message => ids.includes(message.id));
+    expect(resaved.map(message => message.id).sort()).toEqual([...ids].sort());
+    expect(resaved.every(message => trustedEntries(message.content.parts[0]).length === 1)).toBe(true);
+    // ...and nothing wrote those counts with a separate updateMessages call.
+    expect(updatedIds.filter(id => ids.includes(id))).toEqual([]);
+    const rows = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages.filter(m =>
+      ids.includes(m.id),
+    );
+    expect(rows.every(row => trustedEntries(row.content.parts[0]).length === 1)).toBe(true);
   });
 
-  it('does not copy a count onto a stored part of a different type at the same position', async () => {
-    const { memory } = open(join(dbDir, 'type-mismatch.db'));
+  it('keeps a count made after the last save in memory, and the next turn saves it', async () => {
+    const dbPath = join(dbDir, 'after-final-drain.db');
+    const first = open(dbPath);
     const threadId = randomUUID();
-    await memory.saveThread({
+    await first.memory.saveThread({
       thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
     });
-    const id = `${threadId}-mismatch`;
-    await memory.saveMessages({
+    const id = `${threadId}-late`;
+    await first.memory.saveMessages({
       messages: [
         {
           id,
           threadId,
           resourceId: RESOURCE,
-          role: 'assistant',
+          role: 'user',
           createdAt: new Date(Date.UTC(2026, 10, 1)),
-          content: { format: 2, parts: [{ type: 'text', text: 'hello '.repeat(50) }] },
+          content: { format: 2, parts: [{ type: 'text', text: `Late ${'words '.repeat(60)}` }] },
         },
       ],
     });
-    const engine = (await memory.omEngine)!;
-    const [live] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
-    engine.getTokenCounter().countMessages([live!]);
-    expect(trustedEntries(live!.content.parts[0]).length).toBeGreaterThan(0);
+    // A count made outside any save (the Agent has already drained its last save) is not stored.
+    const [live] = (await first.memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
+    (await first.memory.omEngine)!.getTokenCounter().countMessages([live!]);
+    const readStored = async () =>
+      (await first.memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages.find(m => m.id === id);
+    expect(trustedEntries((await readStored())!.content.parts[0])).toEqual([]);
 
-    await memory.updateMessages({
-      messages: [{ id, content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'x', details: [] }] } } as any],
-    });
-    await engine.persistTokenEstimates([live!], threadId);
-
-    const [stored] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
-    expect(stored!.content.parts[0]!.type).toBe('reasoning');
-    expect(trustedEntries(stored!.content.parts[0])).toEqual([]);
+    // The next turn loads the message without a count, counts it again and saves it.
+    const second = open(dbPath);
+    const turn = await second.agent.stream('Next.', { memory: { thread: threadId, resource: RESOURCE } });
+    await turn.consumeStream();
+    expect(await turn.text).toBe('OK.');
+    expect(trustedEntries((await readStored())!.content.parts[0])).toHaveLength(1);
   });
 
   it("does not touch another thread's messages or updatedAt when the resource has several threads", async () => {
