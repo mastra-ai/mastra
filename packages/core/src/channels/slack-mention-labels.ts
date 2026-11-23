@@ -7,7 +7,7 @@ import type { StateAdapter } from 'chat';
  */
 const SLACK_MENTION_TOKEN = /<@([A-Z0-9_]+)(?:\|([^<>]*))?>/g;
 
-/** Shape the Slack adapter caches under `slack:user:${id}`. */
+/** Shape the Slack adapter caches under `slack:user:${installationScope}${id}`. */
 interface CachedSlackUser {
   displayName?: string;
 }
@@ -48,10 +48,16 @@ export async function annotateSlackMentions({
   state,
   raw,
   text,
+  cacheScope = '',
 }: {
   state: Pick<StateAdapter, 'get'>;
   raw: unknown;
   text: string;
+  /**
+   * The adapter's installation prefix for user-cache keys (`${installationId}:` in
+   * multi-workspace mode, empty otherwise), so lookups read `slack:user:${scope}${id}`.
+   */
+  cacheScope?: string;
 }): Promise<string> {
   if (!text) return text;
 
@@ -70,21 +76,36 @@ export async function annotateSlackMentions({
   // resolved mentions appear as the display name, while the bot's own mention
   // is deliberately left unresolved by the adapter (to keep mention detection
   // working) and so appears as the bare id.
-  const replacements = new Map<string, string>();
-  await Promise.all(
+  const resolved = await Promise.all(
     [...tokens].map(async ([id, pipeLabel]) => {
-      const cached = await state.get<CachedSlackUser>(`slack:user:${id}`);
-      const label = cached?.displayName || pipeLabel;
-      if (!label) return;
-      const token = `<@${id}|${label}>`;
-      replacements.set(`@${id}`, token);
-      replacements.set(`@${label}`, token);
+      const cached = await state.get<CachedSlackUser>(`slack:user:${cacheScope}${id}`);
+      return { id, label: cached?.displayName || pipeLabel };
     }),
   );
+
+  const replacements = new Map<string, string>();
+  const labelOwners = new Map<string, number>();
+  for (const { label } of resolved) {
+    if (label) labelOwners.set(label, (labelOwners.get(label) ?? 0) + 1);
+  }
+  for (const { id, label } of resolved) {
+    // `>` or `|` in a label would end the token early, so leave that mention alone.
+    if (!label || /[|>]/.test(label)) continue;
+    const token = `<@${id}|${label}>`;
+    replacements.set(`@${id}`, token);
+    // Two mentioned users with the same display name can't be told apart by `@label`,
+    // so only their `@id` spelling is annotated.
+    if (labelOwners.get(label) === 1) replacements.set(`@${label}`, token);
+  }
   if (replacements.size === 0) return text;
 
   // Longest needle first so `@Cal` never shadows `@Caleb Barnes`, and a single
-  // pass so restored tokens are never rescanned.
+  // pass so restored tokens are never rescanned. A needle only matches when the
+  // next character isn't a letter, digit or `_`, so `@Cal` doesn't match inside
+  // `@Calendar` and `@U1` doesn't match inside `@U12`.
   const needles = [...replacements.keys()].sort((a, b) => b.length - a.length).map(escapeRegex);
-  return text.replace(new RegExp(needles.join('|'), 'g'), match => replacements.get(match) ?? match);
+  return text.replace(
+    new RegExp(`(?:${needles.join('|')})(?![\\p{L}\\p{N}_])`, 'gu'),
+    match => replacements.get(match) ?? match,
+  );
 }

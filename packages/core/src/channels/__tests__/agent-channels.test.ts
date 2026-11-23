@@ -1535,6 +1535,47 @@ describe('AgentChannels', () => {
       );
     });
 
+    it.each([
+      ['slack', '<@U123|Name> can you look?'],
+      ['discord', '@Name can you look?'],
+    ])('restores Slack mention ids in the agent text (%s)', async (platform, expected) => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+        getLogger: () => noopLogger,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+      await (agentChannels as any).stateAdapter.set('slack:user:U123', { displayName: 'Name' });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: true,
+        adapter: (agentChannels.adapters as any)[platform],
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: '@Name can you look?',
+        raw: { event: { text: '<@U123> can you look?' } },
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+      const sent = JSON.stringify(mockAgent.sendMessage.mock.calls[0]);
+      expect(sent).toContain(JSON.stringify(expected).slice(1, -1));
+      if (platform !== 'slack') expect(sent).not.toContain('<@U123|Name>');
+    });
+
     it('consumes the run stream when the signal outcome is `wake`', async () => {
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });

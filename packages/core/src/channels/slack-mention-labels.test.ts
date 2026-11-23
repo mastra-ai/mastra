@@ -93,4 +93,42 @@ describe('annotateSlackMentions', () => {
     });
     expect(out).toBe('@Caleb Barnes hi');
   });
+  it('does not match a mention inside a longer word or id', async () => {
+    const out = await annotateSlackMentions({
+      state: stateWith({ U1: 'Cal' }),
+      raw: { text: '<@U1> check @Calendar and @U12' },
+      text: '@Cal check @Calendar and @U12',
+    });
+    expect(out).toBe('<@U1|Cal> check @Calendar and @U12');
+  });
+
+  it('annotates two users who share a display name only by id', async () => {
+    const out = await annotateSlackMentions({
+      state: stateWith({ U1: 'Sam', U2: 'Sam' }),
+      raw: { text: '<@U1> and <@U2>' },
+      text: '@U1 and @U2, also @Sam',
+    });
+    expect(out).toBe('<@U1|Sam> and <@U2|Sam>, also @Sam');
+  });
+
+  it('skips a label that would break the token', async () => {
+    const out = await annotateSlackMentions({
+      state: stateWith({ U1: 'a>b', U2: 'c|d' }),
+      raw: { text: '<@U1> <@U2>' },
+      text: '@a>b @c|d',
+    });
+    expect(out).toBe('@a>b @c|d');
+  });
+  it('reads the installation-scoped cache key in multi-workspace mode', async () => {
+    const state = {
+      get: vi.fn(async (key: string) => (key === 'slack:user:T1:U123' ? { displayName: 'Name' } : null)),
+    };
+    const out = await annotateSlackMentions({
+      state: state as any,
+      raw: { text: '<@U123> hi' },
+      text: '@Name hi',
+      cacheScope: 'T1:',
+    });
+    expect(out).toBe('<@U123|Name> hi');
+  });
 });
