@@ -191,11 +191,6 @@ export class DurableAgent<
     return true;
   }
 
-  /** @internal Forced strategy, without resolving host/storage fallback. */
-  __getExecutionEngineStrategy(): 'default' | 'evented' {
-    return this.workflowEngine === 'evented' ? 'evented' : 'default';
-  }
-
   /** The wrapped agent */
   readonly #wrappedAgent: Agent<TAgentId, TTools, TOutput>;
   readonly #streamConfig: AgentStreamsConfig;

@@ -334,7 +334,7 @@ describe('Configured native engines preserve Agent outputs', () => {
           expect(agent.__getExecutionEnginePolicy()).toBe(
             typeof durable === 'object' ? durable.executionEngine : false,
           );
-          expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
+          expect(wrapped.__getExecutionEnginePolicy()).toBe(strategy);
           expect(hasDurableExecution(agent)).toBe(typeof durable === 'object' && durable.executionEngine !== false);
           if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
           else expect(output).not.toBeInstanceOf(MastraModelOutput);
