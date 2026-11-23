@@ -131,6 +131,23 @@ describe('isExhaustedAccountError', () => {
     expect(isExhaustedAccountError(new Error('observer failed', { cause: { error } }))).toBe(true);
   });
 
+  it('finds the error beside an unrelated cause, and through a cyclic wrapper', () => {
+    const sibling = Object.assign(new Error('observer failed', { cause: new Error('stream closed') }), {
+      error: openAiNoCredits(),
+    });
+    expect(isExhaustedAccountError(sibling)).toBe(true);
+
+    const cyclic: Record<string, unknown> = { message: 'wrapper' };
+    cyclic.cause = cyclic;
+    cyclic.error = { cause: openAiNoCredits() };
+    expect(isExhaustedAccountError(cyclic)).toBe(true);
+
+    const rateLimit = Object.assign(new Error('observer failed', { cause: new Error('stream closed') }), {
+      error: openAiRateLimit(),
+    });
+    expect(isExhaustedAccountError(rateLimit)).toBe(false);
+  });
+
   it('does not match an OpenAI rate limit', () => {
     expect(isExhaustedAccountError(openAiRateLimit())).toBe(false);
   });
@@ -242,6 +259,20 @@ describe('withRetry', () => {
 
     await expect(withRetry(fn, { label: 'test' })).rejects.toThrow('no credits remaining');
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { name: 'no credits beside an unrelated cause', error: openAiNoCredits, expectedCalls: 1 },
+    { name: 'a rate limit beside an unrelated cause', error: openAiRateLimit, expectedCalls: 4 },
+  ])('makes $expectedCalls call(s) for $name', async ({ error, expectedCalls }) => {
+    const wrapped = () =>
+      Object.assign(new Error('observer failed', { cause: new Error('stream closed') }), { error: error() });
+    const fn = vi.fn().mockImplementation(async () => {
+      throw wrapped();
+    });
+
+    await expect(withRetry(fn, { label: 'test' })).rejects.toThrow('observer failed');
+    expect(fn).toHaveBeenCalledTimes(expectedCalls);
   });
 
   it('rethrows AbortError immediately without retrying', async () => {

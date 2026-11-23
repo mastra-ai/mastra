@@ -235,17 +235,20 @@ export function isTransientLLMError(error: unknown): boolean {
  */
 export function isExhaustedAccountError(error: unknown): boolean {
   const visited = new Set<object>();
-  let current: unknown = error;
-  while (isRecord(current) && !visited.has(current)) {
-    visited.add(current);
-    for (const field of [current.message, current.responseBody]) {
+
+  function visit(candidate: unknown): boolean {
+    if (!isRecord(candidate) || visited.has(candidate)) return false;
+    visited.add(candidate);
+    for (const field of [candidate.message, candidate.responseBody]) {
       if (typeof field !== 'string') continue;
       const text = field.toLowerCase();
       if (EXHAUSTED_ACCOUNT_SUBSTRINGS.some(sub => text.includes(sub))) return true;
     }
-    current = current.cause ?? current.error;
+    // Both wrapper shapes are walked: an error can carry an unrelated `cause` next to the real `error`.
+    return visit(candidate.cause) || visit(candidate.error);
   }
-  return false;
+
+  return visit(error);
 }
 
 /**
