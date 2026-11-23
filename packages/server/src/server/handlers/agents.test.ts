@@ -231,9 +231,8 @@ describe('getProvidersHandler', () => {
     expect(openaiProvider?.models).toBeDefined();
     expect(openaiProvider?.models.length).toBeGreaterThan(0);
 
-    // Should include common OpenAI models
-    expect(openaiProvider?.models).toContain('gpt-4');
-    expect(openaiProvider?.models).toContain('gpt-3.5-turbo');
+    // Should expose the models listed in the registry
+    expect(openaiProvider?.models).toEqual(PROVIDER_REGISTRY.openai.models);
   });
 
   it('should match the structure of PROVIDER_REGISTRY', async () => {
