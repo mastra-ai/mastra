@@ -162,11 +162,11 @@ describe('Fast entries next to their standard model', () => {
         tui: { requestRender: vi.fn() } as unknown as TUI,
         models: [
           claude,
-          openai('gpt-5.4'),
-          openai('gpt-5.4-mini'),
-          twin('gpt-5.4'),
-          openai('gpt-5.5'),
-          twin('gpt-5.5'),
+          openai('gpt-5.6-luna'),
+          openai('gpt-5.6-luna-mini'),
+          twin('gpt-5.6-luna'),
+          openai('gpt-5.6-terra'),
+          twin('gpt-5.6-terra'),
           openai('gpt-6.2-sol'),
           twin('gpt-6.2-sol'),
         ],
@@ -184,21 +184,21 @@ describe('Fast entries next to their standard model', () => {
         .filter(line => line.startsWith('openai/'));
 
     const expected = [
-      'openai/gpt-5.4',
-      'openai/gpt-5.4:fast',
-      'openai/gpt-5.4-mini',
-      'openai/gpt-5.5',
-      'openai/gpt-5.5:fast',
+      'openai/gpt-5.6-luna',
+      'openai/gpt-5.6-luna:fast',
+      'openai/gpt-5.6-luna-mini',
+      'openai/gpt-5.6-terra',
+      'openai/gpt-5.6-terra:fast',
       'openai/gpt-6.2-sol',
       'openai/gpt-6.2-sol:fast',
     ];
     expect(openaiRows(claude.id)).toEqual(expected);
-    expect(openaiRows('openai/gpt-5.5:fast')).toEqual([
-      'openai/gpt-5.5:fast',
-      'openai/gpt-5.5',
-      'openai/gpt-5.4',
-      'openai/gpt-5.4:fast',
-      'openai/gpt-5.4-mini',
+    expect(openaiRows('openai/gpt-5.6-terra:fast')).toEqual([
+      'openai/gpt-5.6-terra:fast',
+      'openai/gpt-5.6-terra',
+      'openai/gpt-5.6-luna',
+      'openai/gpt-5.6-luna:fast',
+      'openai/gpt-5.6-luna-mini',
       'openai/gpt-6.2-sol',
       'openai/gpt-6.2-sol:fast',
     ]);
