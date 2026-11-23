@@ -1,6 +1,6 @@
 import { useReactFlow, useStore } from '@xyflow/react';
 import type { ReactNode } from 'react';
-import { Button } from '@/ds/components/Button/Button';
+import { Button } from '@/ds/components/Button';
 import { IconFullscreen1 } from '@/ds/icons/central/IconFullscreen1';
 import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
