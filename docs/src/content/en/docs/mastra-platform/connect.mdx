@@ -215,26 +215,25 @@ Each call times out after 15 seconds by default. Pass `timeoutMs` to the constru
 
 ## Receive integration events
 
-When a connected provider sends a webhook, such as a new Linear issue or a GitHub pull request, the platform publishes it to the `connect` topic of every project linked to that connection. Read the topic with [`EventsClient`](/reference/connect/events) to react to changes as they happen instead of polling:
+When a connected provider sends a webhook, such as a new Linear issue or a GitHub pull request, the platform publishes it to the `connect` topic of every project linked to that connection. Read it with [`ConnectEvents`](/reference/connect/events) to react to changes as they happen instead of polling:
 
 ```typescript title="src/events.ts"
-import { ConnectClient } from '@mastra/connect'
+import { ConnectEvents } from '@mastra/connect'
 
-const connect = new ConnectClient()
-
-const subscription = connect.events.connectEvents({
+const events = new ConnectEvents({
   cursorStore: {
     load: () => db.get('events-cursor'),
     save: cursor => db.set('events-cursor', cursor),
   },
+  onGap: () => resyncFromProviders(),
 })
 
-for await (const event of subscription) {
+for await (const event of events) {
   console.log(event.integrationId, event.eventType)
 }
 ```
 
-The cursor store saves each event once you've handled it. After a restart, the client resumes after the last one. Events can arrive more than once, so make handlers safe to repeat. Don't act on events marked `unverified`.
+The cursor store saves each event once you've handled it. After a restart, it resumes after the last one. `onGap` runs when events after the stored cursor can no longer be delivered, so you can resync from the provider. Events can arrive more than once, so make handlers safe to repeat. Don't act on events marked `unverified`.
 
 ## Security model
 

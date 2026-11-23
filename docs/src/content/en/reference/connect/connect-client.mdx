@@ -1,13 +1,13 @@
 ---
 title: 'Reference: ConnectClient | Connect'
-description: 'API reference for ConnectClient in @mastra/connect: list project connections, read credentials, call providers through the proxy, start connect sessions, and reach the events service.'
+description: 'API reference for ConnectClient in @mastra/connect: list project connections, read credentials, call providers through the proxy, and start connect sessions.'
 packages:
   - '@mastra/connect'
 ---
 
 # ConnectClient
 
-`ConnectClient` is a typed client for the Mastra platform integrations API. Use it when your code manages connections itself: it lists a project's connections, reads credentials and connection context, calls providers through the platform proxy, and starts connect sessions. Its [`events`](/reference/connect/events) property reads provider events as they arrive.
+`ConnectClient` is a typed client for the Mastra platform integrations API. Use it when your code manages connections itself: it lists a project's connections, reads credentials and connection context, calls providers through the platform proxy, and starts connect sessions. To receive provider events as they arrive, use [`ConnectEvents`](/reference/connect/events).
 
 To give an agent tools, use [`tools()`](/reference/connect/tools) instead.
 
@@ -80,16 +80,9 @@ The client reads `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from the
     name: 'timeoutMs',
     type: 'number',
     description:
-      "Timeout in milliseconds for every call this client makes, including proxy calls and reading the response body. Must be a positive whole number no larger than `2147483647`, otherwise the constructor throws `invalid_options`. A call that takes longer throws `MastraConnectError` with code `timeout`. Raise it for large proxy downloads. Event streams are long-lived and ignore it. `tools()` and `channels()` aren't affected.",
+      "Timeout in milliseconds for every call this client makes, including proxy calls and reading the response body. Must be a positive whole number no larger than `2147483647`, otherwise the constructor throws `invalid_options`. A call that takes longer throws `MastraConnectError` with code `timeout`. Raise it for large proxy downloads. `tools()` and `channels()` aren't affected.",
     isOptional: true,
     defaultValue: '15000 (15 seconds)',
-  },
-  {
-    name: 'eventsUrl',
-    type: 'string',
-    description:
-      'Events service base URL for the `events` client. Falls back to `MASTRA_EVENTS_API_URL`, then the regional default from `MASTRA_PLATFORM_REGION`, then `https://events.mastra.ai`.',
-    isOptional: true,
   },
 ]}
 />
@@ -110,12 +103,6 @@ The default timeout is exported as `DEFAULT_CONNECT_CLIENT_TIMEOUT_MS`.
     name: 'resourceId',
     type: 'string | undefined',
     description: 'The end-user resource key the client sends, when scoped.',
-  },
-  {
-    name: 'events',
-    type: 'EventsClient',
-    description:
-      "An events service client that shares this client's credentials and project. See [Events client](/reference/connect/events).",
   },
 ]}
 />
@@ -341,7 +328,7 @@ try {
 | `proxy_error` | A proxied call failed. Check `source` to see whether the platform or the provider answered |
 | `unsupported_credential_type` | `getCredential()` received a credential type this package doesn't support |
 | `platform_error` | Any other platform failure, including a response with an unexpected shape |
-| `invalid_cursor` | The events service rejected a resume cursor. See [Events client](/reference/connect/events) |
+| `invalid_cursor` | The events service rejected a resume cursor. See [`ConnectEvents`](/reference/connect/events) |
 | `invalid_response` | The events service sent a frame that doesn't match its contract |
 | `missing_connection_id` | A provider toolset was created without a connection ID |
 | `no_active_connection` | [`channels()`](/reference/connect/channels) found no active connection for a channel provider |
@@ -350,6 +337,6 @@ try {
 ## Related
 
 - [Connect](/docs/mastra-platform/connect)
-- [Events client](/reference/connect/events)
+- [`ConnectEvents`](/reference/connect/events)
 - [`credential()`](/reference/connect/credential)
 - [`tools()`](/reference/connect/tools)
