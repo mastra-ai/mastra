@@ -621,6 +621,7 @@ describe('MastraTUI startup stopped part-way', () => {
     const sol = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
     const offeredWith = async (credential: { type: string } | undefined) => {
       mocks.ModelSelectorComponent.mockClear();
+      mocks.OnboardingInlineComponent.mockClear();
       const { tui } = createStartupTui('');
       const component = await openRealOnboarding(tui);
       tui.state.authStorage = { get: () => credential };
