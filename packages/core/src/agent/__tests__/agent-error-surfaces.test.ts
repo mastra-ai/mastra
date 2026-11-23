@@ -1010,4 +1010,129 @@ describe('agent error surfaces', () => {
       expect(result.error).toBeUndefined();
     });
   });
+
+  describe('processAPIError fallback veto', () => {
+    function createRateLimitedPrimary() {
+      const error = new APICallError({
+        message: 'Rate limited',
+        url: 'https://api.anthropic.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 429,
+        isRetryable: true,
+        responseBody: '{"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}',
+        cause: new Error('upstream 429'),
+      });
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          throw error;
+        },
+      });
+      return { error, model };
+    }
+
+    function createSecondary() {
+      const doStream = vi.fn(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: 'resp-1', modelId: 'secondary', timestamp: new Date(0) },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: 'Answered by the fallback' },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          },
+        ]),
+      }));
+      return { doStream, model: new MockLanguageModelV2({ doStream }) };
+    }
+
+    it('stops the fallback models and reports the original error when a processor returns fallback: false', async () => {
+      const primary = createRateLimitedPrimary();
+      const secondary = createSecondary();
+      const processAPIError = vi.fn(() => ({ retry: false, fallback: false }));
+      let onErrorError: unknown;
+      let fullStreamError: unknown;
+
+      const agent = new Agent({
+        id: 'fallback-veto',
+        name: 'Fallback Veto',
+        instructions: 'You are a helpful assistant.',
+        model: [
+          { model: primary.model, maxRetries: 0 },
+          { model: secondary.model, maxRetries: 0 },
+        ],
+        errorProcessors: [{ id: 'veto-fallback', processAPIError }],
+      });
+
+      const result = await agent.stream('Hello', {
+        onError: ({ error }) => {
+          onErrorError = error;
+        },
+      });
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'error') fullStreamError = chunk.payload.error;
+      }
+
+      expect(secondary.doStream).not.toHaveBeenCalled();
+      expect(fullStreamError).toBe(primary.error);
+      expect(onErrorError).toBe(primary.error);
+      expect(result.error).toBe(primary.error);
+      expect(result.error).toMatchObject({ statusCode: 429, responseBody: primary.error.responseBody });
+      expect(result.error).toHaveProperty('cause', primary.error.cause);
+    });
+
+    it('ends on the original error when a veto meets a retry the budget no longer allows', async () => {
+      const primary = createRateLimitedPrimary();
+      const primaryStream = vi.spyOn(primary.model, 'doStream');
+      const secondary = createSecondary();
+
+      const agent = new Agent({
+        id: 'fallback-veto-spent-budget',
+        name: 'Fallback Veto Spent Budget',
+        instructions: 'You are a helpful assistant.',
+        model: [
+          { model: primary.model, maxRetries: 0 },
+          { model: secondary.model, maxRetries: 0 },
+        ],
+        errorProcessors: [
+          { id: 'veto-fallback', processAPIError: () => ({ retry: false, fallback: false }) },
+          { id: 'keep-retrying', processAPIError: () => ({ retry: primaryStream.mock.calls.length < 3 }) },
+        ],
+      });
+
+      const result = await agent.stream('Hello', { maxProcessorRetries: 0 });
+      await result.consumeStream();
+
+      expect(primaryStream).toHaveBeenCalledTimes(1);
+      expect(secondary.doStream).not.toHaveBeenCalled();
+      expect(result.error).toBe(primary.error);
+    });
+
+    it('still advances to the next model when a processor leaves fallback unset', async () => {
+      const primary = createRateLimitedPrimary();
+      const secondary = createSecondary();
+      const processAPIError = vi.fn(() => ({ retry: false }));
+
+      const agent = new Agent({
+        id: 'fallback-allowed',
+        name: 'Fallback Allowed',
+        instructions: 'You are a helpful assistant.',
+        model: [
+          { model: primary.model, maxRetries: 0 },
+          { model: secondary.model, maxRetries: 0 },
+        ],
+        errorProcessors: [{ id: 'observe', processAPIError }],
+      });
+
+      const result = await agent.stream('Hello');
+
+      expect(await result.text).toBe('Answered by the fallback');
+      expect(secondary.doStream).toHaveBeenCalledTimes(1);
+      expect(result.error).toBeUndefined();
+    });
+  });
 });

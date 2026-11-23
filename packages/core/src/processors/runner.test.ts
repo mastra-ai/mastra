@@ -2610,6 +2610,40 @@ describe('ProcessorRunner', () => {
       expect(result).toEqual({ retry: true });
     });
 
+    it('carries a fallback veto past processors that decline to retry', async () => {
+      const vetoProcessor: Processor = {
+        id: 'veto',
+        name: 'Veto',
+        processAPIError: vi.fn().mockReturnValue({ retry: false, fallback: false }),
+      };
+      const observer: Processor = {
+        id: 'observer',
+        name: 'Observer',
+        processAPIError: vi.fn().mockReturnValue({ retry: false }),
+      };
+
+      runner = new ProcessorRunner({
+        inputProcessors: [vetoProcessor, observer],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add(createMessage('hello', 'user'), 'user');
+
+      const result = await runner.runProcessAPIError({
+        error: new Error('API error'),
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        retryCount: 0,
+      });
+
+      expect(observer.processAPIError).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ retry: false, fallback: false });
+    });
+
     it('should return { retry: false } when no processors handle the error', async () => {
       const processAPIError = vi.fn().mockReturnValue(undefined);
       const processor: Processor = {

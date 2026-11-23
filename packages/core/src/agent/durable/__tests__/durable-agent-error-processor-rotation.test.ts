@@ -74,6 +74,99 @@ describe('durable agent API-error retry', () => {
     }
   });
 
+  it('reports the failing model error instead of falling back when a processor vetoes fallbacks', async () => {
+    const primary = new MockLanguageModelV2({
+      doStream: async () => {
+        throw new APICallError({
+          message: 'prompt is too long',
+          url: 'https://model.example.com/v1/messages',
+          requestBodyValues: {},
+          statusCode: 400,
+          isRetryable: false,
+        });
+      },
+    });
+    let fallbackCalls = 0;
+    const fallback = makeFailThenAnswerModel(0, () => {
+      fallbackCalls++;
+    });
+    const agent = new Agent({
+      id: 'durable-fallback-veto',
+      name: 'durable-fallback-veto',
+      instructions: 'You are helpful.',
+      model: [
+        { model: primary as LanguageModelV2, maxRetries: 0 },
+        { model: fallback as LanguageModelV2, maxRetries: 0 },
+      ],
+      errorProcessors: [{ id: 'veto-fallback', processAPIError: () => ({ retry: false, fallback: false }) }],
+    });
+    const pubsub = new EventEmitterPubSub();
+    try {
+      const durableAgent = createDurableAgent({ agent, pubsub });
+      const { fullStream, cleanup } = await durableAgent.stream('hello');
+      const errors: unknown[] = [];
+      for await (const chunk of fullStream) {
+        if (chunk.type === 'error') errors.push(chunk.payload);
+      }
+      await cleanup?.();
+      expect(fallbackCalls).toBe(0);
+      expect(errors).toContainEqual(
+        expect.objectContaining({
+          error: expect.objectContaining({ statusCode: 400, message: 'prompt is too long' }),
+        }),
+      );
+    } finally {
+      await pubsub.close();
+    }
+  });
+
+  it('falls back when the retry after a vetoed attempt fails with an error the processor lets through', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const primary = makeFailThenAnswerModel(2);
+    let fallbackCalls = 0;
+    const fallback = makeFailThenAnswerModel(0, () => {
+      fallbackCalls++;
+    });
+    const processAPIError = vi
+      .fn<NonNullable<Processor['processAPIError']>>()
+      .mockReturnValueOnce({ retry: false, fallback: false })
+      .mockReturnValue({ retry: false });
+    const agent = new Agent({
+      id: 'durable-fallback-veto-retried',
+      name: 'durable-fallback-veto-retried',
+      instructions: 'You are helpful.',
+      model: [
+        { model: primary as LanguageModelV2, maxRetries: 1 },
+        { model: fallback as LanguageModelV2, maxRetries: 0 },
+      ],
+      errorProcessors: [{ id: 'veto-first-failure', processAPIError }],
+    });
+    const pubsub = new EventEmitterPubSub();
+    try {
+      const durableAgent = createDurableAgent({ agent, pubsub });
+      const { fullStream, cleanup } = await durableAgent.stream('hello');
+      let text = '';
+      let drained = false;
+      const drain = (async () => {
+        for await (const chunk of fullStream) {
+          if (chunk.type === 'text-delta') text += chunk.payload.text;
+        }
+        drained = true;
+      })();
+      while (!drained) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      await drain;
+      await cleanup?.();
+      expect(processAPIError).toHaveBeenCalledTimes(2);
+      expect(fallbackCalls).toBe(1);
+      expect(text).toBe('the retried answer');
+    } finally {
+      vi.useRealTimers();
+      await pubsub.close();
+    }
+  });
+
   it('does not retry a structured model failure', async () => {
     let calls = 0;
     const model = new MockLanguageModelV2({

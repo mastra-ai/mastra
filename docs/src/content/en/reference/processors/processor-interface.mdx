@@ -1034,6 +1034,13 @@ processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | voi
     description: 'Whether to retry the LLM call after applying modifications.',
     isOptional: false,
   },
+  {
+    name: 'fallback',
+    type: 'boolean',
+    description:
+      'Set to `false` to skip the remaining fallback models for this call. The run then reports the original error, as if the failing model were the last one in the list. Leave it unset to keep trying fallback models.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -1042,6 +1049,7 @@ processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | voi
 - Handling API-specific rejections by modifying the request and retrying
 - Converting non-retryable errors into retryable ones with request modifications
 - Implementing model-specific error recovery strategies
+- Stopping fallback models for errors another model can't fix
 
 #### Example: Custom error recovery
 

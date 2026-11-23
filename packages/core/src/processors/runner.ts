@@ -51,6 +51,7 @@ import type {
   ComputeStateSignalResult,
   ErrorProcessorOrWorkflow,
   OutputResult,
+  ProcessAPIErrorResult,
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
@@ -2821,7 +2822,7 @@ export class ProcessorRunner {
    * Called when an LLM API call fails with a non-retryable error.
    * Iterates through both input and output processors.
    *
-   * @returns { retry: boolean } indicating whether to retry the LLM call
+   * @returns whether to retry the LLM call, and `fallback: false` when a processor vetoed fallback models
    */
   async runProcessAPIError(
     args: {
@@ -2837,9 +2838,10 @@ export class ProcessorRunner {
       abortSignal?: AbortSignal;
       rotateResponseMessageId?: () => string;
     } & Partial<ObservabilityContext>,
-  ): Promise<{ retry: boolean }> {
+  ): Promise<ProcessAPIErrorResult> {
     const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
     const observabilityContext = resolveObservabilityContext(args);
+    let fallbackVetoed = false;
 
     const allProcessors: ProcessorOrWorkflow[] = [
       ...this.inputProcessors,
@@ -2939,7 +2941,11 @@ export class ProcessorRunner {
         const systemMessagesAfter = messageList.getAllSystemMessages();
         const output: Record<string, unknown> = {
           retry: result?.retry ?? false,
+          ...(result?.fallback === false ? { fallback: false } : {}),
         };
+        if (result?.fallback === false) {
+          fallbackVetoed = true;
+        }
 
         if (!areProcessorMessageArraysEqual(processableMessages, messagesAfter)) {
           output.messages = messagesAfter;
@@ -2959,7 +2965,7 @@ export class ProcessorRunner {
         });
 
         if (result?.retry) {
-          return { retry: true };
+          return fallbackVetoed ? { retry: true, fallback: false } : { retry: true };
         }
       } catch (processorError) {
         // Stop recording on error
@@ -2990,7 +2996,7 @@ export class ProcessorRunner {
       }
     }
 
-    return { retry: false };
+    return fallbackVetoed ? { retry: false, fallback: false } : { retry: false };
   }
 
   static applyMessagesToMessageList(
