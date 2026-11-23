@@ -7,9 +7,8 @@ import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { onEmbedderPackageMissing } from '@mastra/code-sdk/agents/fastembed-subprocess';
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
+import { MODEL_FALLBACK_STATE_KEY, parsePendingModelFallback } from '@mastra/code-sdk/model-fallback';
 import {
   getAvailableModePacks,
   ONBOARDING_VERSION,
@@ -151,17 +150,7 @@ export async function syncInitialThreadState(state: TUIState, isCurrent: () => b
   const initThread = initThreads.find(t => t.id === initThreadId);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
   const persistedFallbackStatus = fallbackStatusFromMetadata(metadata);
-  const pendingFallback = metadata?.[MODEL_FALLBACK_STATE_KEY] as Partial<PendingModelFallback> | null | undefined;
-  const validPendingFallback =
-    pendingFallback &&
-    typeof pendingFallback === 'object' &&
-    typeof pendingFallback.fromEntryId === 'string' &&
-    typeof pendingFallback.toEntryId === 'string' &&
-    typeof pendingFallback.toModelId === 'string' &&
-    (pendingFallback.reason === 'pool-exhausted' || pendingFallback.reason === 'persistent-outage') &&
-    typeof pendingFallback.at === 'string'
-      ? (pendingFallback as PendingModelFallback)
-      : null;
+  const validPendingFallback = parsePendingModelFallback(metadata?.[MODEL_FALLBACK_STATE_KEY]);
   const currentState = state.session.state?.get?.() as Record<string, unknown> | undefined;
   const currentPending = currentState?.[MODEL_FALLBACK_STATE_KEY];
   if (validPendingFallback || currentPending) {

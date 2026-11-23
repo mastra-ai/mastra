@@ -355,7 +355,7 @@ export async function dispatchEvent(
     }
 
     case 'info':
-      ectx.showInfo(event.message.replace(/^Switched model route:/, 'Switched model pack:'));
+      ectx.showInfo(event.message);
       break;
 
     case 'error':

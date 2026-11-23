@@ -1,6 +1,8 @@
 import type { OMModel } from '@mastra/core/agent-controller';
 import { z } from 'zod';
 import { DEFAULT_CONFIG_DIR, MODEL_ROUTE_MAX_ENTRIES, MODEL_ROUTE_MAX_FIELD_LENGTH } from './constants.js';
+import { pendingModelFallbackSchema } from './model-fallback.js';
+import type { PendingModelFallback } from './model-fallback.js';
 import { THINKING_LEVEL_VALUES } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
 
@@ -23,15 +25,6 @@ export interface ModelRouteEntry {
 
 export interface ModelRoute {
   entries: ModelRouteEntry[];
-}
-
-export interface PendingModelFallback {
-  fromEntryId: string;
-  toEntryId: string;
-  toModelId: string;
-  threadId?: string;
-  reason: 'pool-exhausted' | 'persistent-outage';
-  at: string;
 }
 
 export interface MastraCodeState {
@@ -256,18 +249,8 @@ export const stateSchema = z
       .default([]),
     // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
     sandboxAllowedPaths: z.array(z.string()).default([]),
-    // Pending route hop written by account rotation. The host consumes it on
-    // `state_changed` to apply thread stickiness, then clears it back to null.
-    mastracodePendingModelFallback: z
-      .object({
-        fromEntryId: z.string(),
-        toEntryId: z.string(),
-        toModelId: z.string(),
-        threadId: z.string().optional(),
-        reason: z.enum(['pool-exhausted', 'persistent-outage']),
-        at: z.string(),
-      })
-      .nullish(),
+    // Pending route hop; a host route from `resolveModelFallbacks` ignores it.
+    mastracodePendingModelFallback: pendingModelFallbackSchema.nullish(),
     // Asset directories contributed by active plugins.
     pluginSkillPaths: z.array(z.string()).default([]),
     pluginCommandPaths: z.array(z.string()).default([]),

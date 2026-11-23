@@ -10,7 +10,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { TripWire } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,10 +21,9 @@ vi.hoisted(() => {
 
 import { setCredentialStoreProvider } from '../agents/credential-resolver.js';
 import { createRequestScopedCredentialStore } from '../agents/model.js';
+import { MODEL_FALLBACK_PART_TYPE, MODEL_FALLBACK_STATE_KEY } from '../model-fallback.js';
 import {
   ACCOUNT_SWITCH_PART_TYPE,
-  MODEL_FALLBACK_PART_TYPE,
-  MODEL_FALLBACK_STATE_KEY,
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
   accountSwitchNoticeText,
@@ -1117,7 +1115,33 @@ describe('model-route fallback parts', () => {
     expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: ACCOUNT_SWITCH_PART_TYPE }));
   });
 
-  it('throws TripWire for a never-rotate error while a route fallback remains', async () => {
+  it('records a hop caused by a missing credential as an auth failure', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-5.6-sol',
+      entries: [
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    const args = makeArgs({
+      error: new ProviderAuthRequiredError('No usable OpenAI credential for this organization.'),
+      requestContext: route.requestContext,
+    });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({ to: { entryId: 'anthropic', label: 'Anthropic' }, failure: { kind: 'auth' } }),
+    });
+    expect(route.emitEvent).toHaveBeenCalledWith({
+      type: 'info',
+      message: 'OpenAI has missing or invalid credentials, switched to Anthropic',
+    });
+  });
+
+  it('vetoes the route fallback for a never-rotate error while a route fallback remains', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({
       modelId: 'anthropic/claude-fable-5',
@@ -1129,7 +1153,7 @@ describe('model-route fallback parts', () => {
     const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
-    await expect(processor.processAPIError(args as never)).rejects.toBeInstanceOf(TripWire);
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false, fallback: false });
     expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
   });
 
@@ -1145,7 +1169,7 @@ describe('model-route fallback parts', () => {
     const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
-    await expect(processor.processAPIError(args as never)).rejects.toBeInstanceOf(TripWire);
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false, fallback: false });
     expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
   });
 
