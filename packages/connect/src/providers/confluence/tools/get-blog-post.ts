@@ -40,9 +40,46 @@ const ProviderBlogPostSchema = z
           .optional(),
       })
       .optional(),
-    labels: z.array(z.unknown()).optional(),
-    properties: z.record(z.string(), z.unknown()).optional(),
-    likes: z.object({ count: z.number().optional() }).optional(),
+    labels: z
+      .object({
+        results: z.array(z.unknown()).optional(),
+        meta: z.record(z.string(), z.unknown()).optional(),
+        _links: z.record(z.string(), z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    properties: z
+      .object({
+        results: z.array(z.unknown()).optional(),
+        meta: z.record(z.string(), z.unknown()).optional(),
+        _links: z.record(z.string(), z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    likes: z
+      .object({
+        results: z.array(z.unknown()).optional(),
+        meta: z.record(z.string(), z.unknown()).optional(),
+        _links: z.record(z.string(), z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    operations: z
+      .object({
+        results: z.array(z.unknown()).optional(),
+        meta: z.record(z.string(), z.unknown()).optional(),
+        _links: z.record(z.string(), z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    versions: z
+      .object({
+        results: z.array(z.unknown()).optional(),
+        meta: z.record(z.string(), z.unknown()).optional(),
+        _links: z.record(z.string(), z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
     _expandable: z.record(z.string(), z.unknown()).optional(),
     _links: z.record(z.string(), z.unknown()).optional(),
   })
@@ -74,9 +111,46 @@ export const getBlogPostOutputSchema = z.object({
         .optional(),
     })
     .optional(),
-  labels: z.array(z.unknown()).optional(),
-  properties: z.record(z.string(), z.unknown()).optional(),
-  likes: z.object({ count: z.number().optional() }).optional(),
+  labels: z
+    .object({
+      results: z.array(z.unknown()).optional(),
+      meta: z.record(z.string(), z.unknown()).optional(),
+      _links: z.record(z.string(), z.unknown()).optional(),
+    })
+    .passthrough()
+    .optional(),
+  properties: z
+    .object({
+      results: z.array(z.unknown()).optional(),
+      meta: z.record(z.string(), z.unknown()).optional(),
+      _links: z.record(z.string(), z.unknown()).optional(),
+    })
+    .passthrough()
+    .optional(),
+  likes: z
+    .object({
+      results: z.array(z.unknown()).optional(),
+      meta: z.record(z.string(), z.unknown()).optional(),
+      _links: z.record(z.string(), z.unknown()).optional(),
+    })
+    .passthrough()
+    .optional(),
+  operations: z
+    .object({
+      results: z.array(z.unknown()).optional(),
+      meta: z.record(z.string(), z.unknown()).optional(),
+      _links: z.record(z.string(), z.unknown()).optional(),
+    })
+    .passthrough()
+    .optional(),
+  versions: z
+    .object({
+      results: z.array(z.unknown()).optional(),
+      meta: z.record(z.string(), z.unknown()).optional(),
+      _links: z.record(z.string(), z.unknown()).optional(),
+    })
+    .passthrough()
+    .optional(),
 });
 
 const MetadataSchema = z.object({
@@ -185,7 +259,9 @@ export function getBlogPostTool(proxy: PlatformProxy) {
         'body-format': 'storage',
       };
       if (include) {
-        params['include'] = include;
+        for (const part of include.split(',')) {
+          params[`include-${part}`] = 'true';
+        }
       }
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/#api-blogposts-id-get
@@ -218,6 +294,8 @@ export function getBlogPostTool(proxy: PlatformProxy) {
         ...(blogPost.labels !== undefined && { labels: blogPost.labels }),
         ...(blogPost.properties !== undefined && { properties: blogPost.properties }),
         ...(blogPost.likes !== undefined && { likes: blogPost.likes }),
+        ...(blogPost.operations !== undefined && { operations: blogPost.operations }),
+        ...(blogPost.versions !== undefined && { versions: blogPost.versions }),
       };
     },
   });

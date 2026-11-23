@@ -4,35 +4,47 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const createInlineCommentInputSchema = z.object({
-  pageId: z
-    .string()
-    .optional()
-    .describe('ID of the containing page, if creating a top-level inline comment on a page. Example: "98401"'),
-  blogPostId: z
-    .string()
-    .optional()
-    .describe(
-      'ID of the containing blog post, if creating a top-level inline comment on a blog post. Example: "12345"',
-    ),
-  parentCommentId: z.string().optional().describe('ID of the parent comment, if creating a reply. Example: "14221315"'),
-  body: z.object({
-    representation: z
-      .enum(['storage', 'atlas_doc_format', 'wiki'])
-      .describe('Content representation type. Example: "storage"'),
-    value: z.string().describe('Comment body in the chosen representation. Example: "<p>Nice work!</p>"'),
-  }),
-  inlineCommentProperties: z
-    .object({
-      textSelection: z.string().describe('The text to highlight. Example: "Spaces are where teams organize ideas"'),
-      textSelectionMatchCount: z
-        .number()
-        .int()
-        .describe('The number of matches for the selected text on the page. Example: 1'),
-      textSelectionMatchIndex: z.number().int().describe('The zero-based match index to highlight. Example: 0'),
-    })
-    .optional(),
-});
+export const createInlineCommentInputSchema = z
+  .object({
+    pageId: z
+      .string()
+      .optional()
+      .describe('ID of the containing page, if creating a top-level inline comment on a page. Example: "98401"'),
+    blogPostId: z
+      .string()
+      .optional()
+      .describe(
+        'ID of the containing blog post, if creating a top-level inline comment on a blog post. Example: "12345"',
+      ),
+    parentCommentId: z
+      .string()
+      .optional()
+      .describe('ID of the parent comment, if creating a reply. Example: "14221315"'),
+    body: z.object({
+      representation: z
+        .enum(['storage', 'atlas_doc_format', 'wiki'])
+        .describe('Content representation type. Example: "storage"'),
+      value: z.string().describe('Comment body in the chosen representation. Example: "<p>Nice work!</p>"'),
+    }),
+    inlineCommentProperties: z
+      .object({
+        textSelection: z.string().describe('The text to highlight. Example: "Spaces are where teams organize ideas"'),
+        textSelectionMatchCount: z
+          .number()
+          .int()
+          .describe('The number of matches for the selected text on the page. Example: 1'),
+        textSelectionMatchIndex: z.number().int().describe('The zero-based match index to highlight. Example: 0'),
+      })
+      .optional(),
+  })
+  .refine(
+    input => Boolean(input.pageId || input.blogPostId || input.parentCommentId),
+    'At least one of pageId, blogPostId, or parentCommentId is required.',
+  )
+  .refine(input => Boolean(input.parentCommentId || input.inlineCommentProperties), {
+    message: 'inlineCommentProperties is required for top-level inline comments.',
+    path: ['inlineCommentProperties'],
+  });
 
 const ProviderVersionSchema = z.object({
   createdAt: z.string().optional(),
@@ -75,8 +87,8 @@ const ProviderInlineCommentSchema = z.object({
   parentCommentId: z.string().optional(),
   version: ProviderVersionSchema.optional(),
   body: ProviderBodySingleSchema.optional(),
-  resolutionLastModifierId: z.string().optional(),
-  resolutionLastModifiedAt: z.string().optional(),
+  resolutionLastModifierId: z.string().nullish(),
+  resolutionLastModifiedAt: z.string().nullish(),
   resolutionStatus: z.string().optional(),
   properties: ProviderPropertiesSchema.optional(),
   operations: z.unknown().optional(),

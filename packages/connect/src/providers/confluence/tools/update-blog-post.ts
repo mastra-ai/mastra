@@ -131,7 +131,7 @@ export function updateBlogPostTool(proxy: PlatformProxy) {
           value: input.body ?? currentPost.body?.storage?.value ?? '',
         },
         version: {
-          number: currentVersion + 1,
+          number: (input.status ?? currentPost.status ?? 'current') === 'draft' ? 1 : currentVersion + 1,
         },
       };
 

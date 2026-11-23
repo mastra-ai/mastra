@@ -9,6 +9,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { isValidationError } from '@mastra/core/tools';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { dropConfluenceBaseUrlOverrides } from '../../scripts/generate-provider.js';
 import { tools } from '../tools.js';
 
 // The generated Confluence tools run through the public `tools()` resolver
@@ -51,6 +52,7 @@ interface RecordedRequest {
   method: string | undefined;
   target: string;
   baseUrlOverride: string | undefined;
+  body?: unknown;
 }
 
 const space = {
@@ -77,8 +79,10 @@ describe('generated Confluence tools', () => {
   let resolutions = 0;
 
   beforeAll(async () => {
-    server = createServer((request, response) => {
+    server = createServer(async (request, response) => {
       const target = request.url ?? '/';
+      let raw = '';
+      for await (const chunk of request) raw += chunk;
       const send = (status: number, body: unknown) => {
         response.writeHead(status, { 'content-type': 'application/json' });
         response.end(body === undefined ? '' : JSON.stringify(body));
@@ -95,6 +99,7 @@ describe('generated Confluence tools', () => {
         method: request.method,
         target: proxied,
         baseUrlOverride: Array.isArray(override) ? override.join(',') : override,
+        ...(raw && { body: JSON.parse(raw) }),
       });
       const { status, body } = answer(proxied);
       send(status, body);
@@ -313,6 +318,145 @@ describe('generated Confluence tools', () => {
         '/oauth/token/accessible-resources',
       ]);
     });
+  });
+
+  describe('reading what Confluence actually returns', () => {
+    const page = {
+      id: '7',
+      spaceId: '42',
+      status: 'current',
+      title: 'Runbook',
+      authorId: 'user-1',
+      createdAt: '2026-01-01T00:00:00Z',
+      parentId: null,
+      parentType: null,
+      lastOwnerId: null,
+      version: { number: 3, message: '', minorEdit: false, authorId: 'user-1', createdAt: '2026-01-02T00:00:00Z' },
+    };
+
+    it('returns the id of a page it created even when Confluence sends null owner and position', async () => {
+      answer = () => ({ status: 200, body: { ...page, ownerId: null, position: null } });
+
+      const result = (await run('confluence_create_page', { spaceId: '42', title: 'Runbook' })) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.id).toBe('7');
+      expect(result).not.toHaveProperty('ownerId');
+      expect(result).not.toHaveProperty('position');
+    });
+
+    it('lists space pages whose owner and position are null', async () => {
+      answer = () => ({ status: 200, body: { results: [{ ...page, ownerId: null, position: null }], _links: {} } });
+
+      const result = (await run('confluence_list_space_pages', { space_id: '42' })) as { pages?: unknown[] };
+
+      expect(JSON.stringify(result)).toContain('"id":"7"');
+    });
+
+    it('lists root pages for a label whose parent, owner, position, and subtype are null', async () => {
+      answer = () => ({
+        status: 200,
+        body: { results: [{ ...page, ownerId: null, position: null, subtype: null }], _links: {} },
+      });
+
+      const result = await run('confluence_list_pages_for_label', { label_id: '5' });
+
+      expect(JSON.stringify(result)).toContain('"id":"7"');
+      expect(JSON.stringify(result)).not.toContain('null');
+    });
+
+    it('asks for each included collection with its own v2 parameter', async () => {
+      answer = () => ({
+        status: 200,
+        body: {
+          id: '8',
+          status: 'current',
+          title: 'News',
+          spaceId: '42',
+          labels: { results: [{ id: '1', name: 'release' }], meta: { hasMore: false }, _links: {} },
+          likes: { results: [], meta: { hasMore: false }, _links: {} },
+        },
+      });
+
+      const result = (await run('confluence_get_blog_post', {
+        id: '8',
+        include_labels: true,
+        include_likes: true,
+      })) as Record<string, unknown>;
+
+      const query = new URL(requests[0]!.target, 'http://x').searchParams;
+      expect(query.get('include-labels')).toBe('true');
+      expect(query.get('include-likes')).toBe('true');
+      expect(query.has('include')).toBe(false);
+      expect(result.labels).toMatchObject({ results: [{ name: 'release' }] });
+    });
+  });
+
+  describe('updating drafts', () => {
+    it.each([
+      ['confluence_update_page', { id: '7', title: 'Runbook', status: 'draft', body: '<p>x</p>' }, '/pages/7'],
+      ['confluence_update_blog_post', { id: '8', status: 'draft' }, '/blogposts/8'],
+    ])('%s sends version 1 for a draft', async (toolId, input, path) => {
+      answer = () => ({
+        status: 200,
+        body: { id: path.split('/')[2], status: 'draft', title: 'T', version: { number: 4 } },
+      });
+
+      await run(toolId, input);
+
+      const put = requests.find(request => request.method === 'PUT');
+      expect(put?.target).toContain(path);
+      expect(put?.body).toMatchObject({ version: { number: 1 } });
+    });
+
+    it('still increments the version of a published page', async () => {
+      answer = () => ({ status: 200, body: { id: '7', status: 'current', title: 'T', version: { number: 4 } } });
+
+      await run('confluence_update_page', { id: '7', title: 'T', status: 'current', body: '<p>x</p>' });
+
+      expect(requests.find(request => request.method === 'PUT')?.body).toMatchObject({ version: { number: 5 } });
+    });
+  });
+
+  describe('refusing inputs Confluence would reject', () => {
+    it.each([
+      ['confluence_create_footer_comment', { bodyValue: '<p>hi</p>' }],
+      ['confluence_create_footer_comment', { pageId: '7', blogPostId: '8', bodyValue: '<p>hi</p>' }],
+      ['confluence_create_inline_comment', { body: '<p>hi</p>' }],
+      ['confluence_update_inline_comment', { commentId: '9' }],
+      ['confluence_list_pages', { subType: 'blogpost' }],
+      ['confluence_list_pages', { sort: 'title asc' }],
+      ['confluence_list_pages', { bodyFormat: 'view' }],
+      ['confluence_list_blog_posts', { sort: 'created-date desc' }],
+      ['confluence_list_page_footer_comments', { pageId: '7?x=1' }],
+    ])('%s refuses %j before calling Confluence', async (toolId, input) => {
+      await expect(run(toolId, input)).rejects.toThrow(/failed validation/);
+      expect(requests.filter(request => request.target.includes('/wiki/'))).toEqual([]);
+    });
+
+    it('lists footer comments of a page id given as a numeric string', async () => {
+      answer = () => ({ status: 200, body: { results: [], _links: {} } });
+
+      await run('confluence_list_page_footer_comments', { pageId: '123456' });
+
+      expect(requests[0]?.target).toContain('/pages/123456/footer-comments');
+    });
+  });
+
+  it('keeps a sibling declaration when it drops an unused site base', () => {
+    const rewritten = dropConfluenceBaseUrlOverrides(
+      `async function exec() {
+  const limit = 25, baseUrl = \`https://api.atlassian.com/ex/confluence/\${cloudId}\`;
+  return nango.get({ baseUrlOverride: baseUrl, endpoint: '/wiki/api/v2/pages', params: { limit } });
+}`,
+      'list-pages',
+    );
+
+    expect(rewritten).toContain('const limit = 25;');
+    expect(rewritten).not.toContain('baseUrl');
+    expect(rewritten).toContain('`/ex/confluence/${cloudId}/wiki/api/v2/pages`');
   });
 
   it('never sets a base URL override in any generated tool', () => {

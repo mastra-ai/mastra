@@ -98,7 +98,7 @@ export function updatePageTool(proxy: PlatformProxy) {
       });
 
       const currentPage = ProviderPageSchema.parse(getResponse.data);
-      const nextVersionNumber = currentPage.version.number + 1;
+      const nextVersionNumber = input.status === 'draft' ? 1 : currentPage.version.number + 1;
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-put
       const updateResponse = await platformProxy.put({

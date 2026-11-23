@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 
-import type { Scenario, ScenarioContext, ScenarioStep } from '../scenario.js';
+import type { Scenario, ScenarioContext, ScenarioLogger, ScenarioStep } from '../scenario.js';
 import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '../scenario.js';
 
 /**
@@ -18,9 +18,8 @@ import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '.
  *   id so the run never deletes someone's file.
  * - the label listings probe a made-up label id.
  *
- * Confluence ids are numeric strings, but a few tools (`get_space`,
- * `list_page_footer_comments`, `delete_page_property`) type them as numbers,
- * so those calls convert.
+ * Confluence ids are numeric strings, but `get_space` and
+ * `delete_page_property` type them as numbers, so those calls convert.
  */
 
 const CONFLUENCE_TOOLS = [
@@ -86,6 +85,25 @@ async function step(steps: ScenarioStep[], name: string, toolId: string, run: ()
   } catch (error) {
     steps.push(makeStep(name, toolId, 'fail', errorMessage(error)));
     return false;
+  }
+}
+
+/**
+ * Deletes a child record (property or comment). The page purge afterwards
+ * removes it anyway, but a failed delete is still logged with its id so the
+ * cleanup failure is visible.
+ */
+async function cleanupChild(
+  steps: ScenarioStep[],
+  log: ScenarioLogger,
+  runId: string,
+  kind: string,
+  toolId: string,
+  recordId: string,
+  run: () => Promise<void>,
+) {
+  if (!(await step(steps, `delete ${kind}`, toolId, run))) {
+    log.error(`Failed to delete smoke ${kind} ${recordId} (run ${runId}); the page purge should remove it.`);
   }
 }
 
@@ -155,9 +173,9 @@ async function runPageLifecycle(
       return `version ${updated.versionNumber ?? '?'}`;
     });
 
-    await runPropertyLifecycle(call, steps, page, runId);
-    await runFooterCommentLifecycle(call, steps, page, runId);
-    await runInlineCommentLifecycle(call, steps, page, runId);
+    await runPropertyLifecycle(call, steps, log, page, runId);
+    await runFooterCommentLifecycle(call, steps, log, page, runId);
+    await runInlineCommentLifecycle(call, steps, log, page, runId);
 
     steps.push(
       ...(await runReadBatch(
@@ -174,7 +192,13 @@ async function runPageLifecycle(
   }
 }
 
-async function runPropertyLifecycle(call: Call, steps: ScenarioStep[], pageId: string, runId: string) {
+async function runPropertyLifecycle(
+  call: Call,
+  steps: ScenarioStep[],
+  log: ScenarioLogger,
+  pageId: string,
+  runId: string,
+) {
   const key = `${runId}-smoke`;
   let propertyId: string | undefined;
   let version = 1;
@@ -191,6 +215,23 @@ async function runPropertyLifecycle(call: Call, steps: ScenarioStep[], pageId: s
   });
   if (!propertyId) return;
   const property = propertyId;
+  try {
+    await runPropertyReads(call, steps, pageId, property, key, version);
+  } finally {
+    await cleanupChild(steps, log, runId, 'page property', 'confluence_delete_page_property', property, async () => {
+      await call('confluence_delete_page_property', { pageId: Number(pageId), propertyId: Number(property) });
+    });
+  }
+}
+
+async function runPropertyReads(
+  call: Call,
+  steps: ScenarioStep[],
+  pageId: string,
+  property: string,
+  key: string,
+  version: number,
+) {
   await step(steps, 'read page property', 'confluence_get_page_property', async () => {
     const got = await call<{ key: string }>('confluence_get_page_property', { pageId, propertyId: property });
     if (got.key !== key) throw new Error(`read back key ${got.key}`);
@@ -208,12 +249,15 @@ async function runPropertyLifecycle(call: Call, steps: ScenarioStep[], pageId: s
       version_number: version + 1,
     });
   });
-  await step(steps, 'delete page property', 'confluence_delete_page_property', async () => {
-    await call('confluence_delete_page_property', { pageId: Number(pageId), propertyId: Number(property) });
-  });
 }
 
-async function runFooterCommentLifecycle(call: Call, steps: ScenarioStep[], pageId: string, runId: string) {
+async function runFooterCommentLifecycle(
+  call: Call,
+  steps: ScenarioStep[],
+  log: ScenarioLogger,
+  pageId: string,
+  runId: string,
+) {
   let commentId: string | undefined;
   let version = 1;
   await step(steps, 'create footer comment', 'confluence_create_footer_comment', async () => {
@@ -233,7 +277,7 @@ async function runFooterCommentLifecycle(call: Call, steps: ScenarioStep[], page
       if (got.id !== comment) throw new Error(`read back comment ${got.id}`);
     });
     await step(steps, 'list footer comments', 'confluence_list_page_footer_comments', async () => {
-      await call('confluence_list_page_footer_comments', { pageId: Number(pageId) });
+      await call('confluence_list_page_footer_comments', { pageId });
     });
     await step(steps, 'update footer comment', 'confluence_update_footer_comment', async () => {
       await call('confluence_update_footer_comment', {
@@ -244,13 +288,19 @@ async function runFooterCommentLifecycle(call: Call, steps: ScenarioStep[], page
     });
   } finally {
     // The page is purged afterwards, which takes its comments with it.
-    await step(steps, 'delete footer comment', 'confluence_delete_footer_comment', async () => {
+    await cleanupChild(steps, log, runId, 'footer comment', 'confluence_delete_footer_comment', comment, async () => {
       await call('confluence_delete_footer_comment', { comment_id: comment });
     });
   }
 }
 
-async function runInlineCommentLifecycle(call: Call, steps: ScenarioStep[], pageId: string, runId: string) {
+async function runInlineCommentLifecycle(
+  call: Call,
+  steps: ScenarioStep[],
+  log: ScenarioLogger,
+  pageId: string,
+  runId: string,
+) {
   let commentId: string | undefined;
   await step(steps, 'create inline comment', 'confluence_create_inline_comment', async () => {
     const created = await call<{ id: string }>('confluence_create_inline_comment', {
@@ -282,7 +332,7 @@ async function runInlineCommentLifecycle(call: Call, steps: ScenarioStep[], page
       });
     });
   } finally {
-    await step(steps, 'delete inline comment', 'confluence_delete_inline_comment', async () => {
+    await cleanupChild(steps, log, runId, 'inline comment', 'confluence_delete_inline_comment', comment, async () => {
       await call('confluence_delete_inline_comment', { commentId: comment });
     });
   }
@@ -327,7 +377,7 @@ export const confluenceScenario: Scenario = {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, [...CONFLUENCE_TOOLS]);
     if (missing) {
-      steps.push({ name: 'preflight', status: 'fail', detail: missing });
+      steps.push({ name: 'preflight', status: 'skip', detail: missing });
       return steps;
     }
 

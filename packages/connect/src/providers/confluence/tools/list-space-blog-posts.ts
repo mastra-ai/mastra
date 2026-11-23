@@ -10,7 +10,10 @@ export const listSpaceBlogPostsInputSchema = z.object({
   status: z.string().optional().describe('Filter by status such as current, archived, draft, or trashed.'),
   title: z.string().optional().describe('Filter by blog post title.'),
   sort: z.string().optional().describe('Sort order such as created-date or -created-date.'),
-  bodyFormat: z.string().optional().describe('Body format to include such as storage, atlas_doc_format, or view.'),
+  bodyFormat: z
+    .enum(['storage', 'atlas_doc_format'])
+    .optional()
+    .describe('Body format to include: storage or atlas_doc_format.'),
   limit: z.number().optional().describe('Maximum number of results to return per page.'),
 });
 

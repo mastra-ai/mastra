@@ -7,7 +7,12 @@ import type { PlatformProxy, PlatformProxyRequest } from '../../../runtime/platf
 export const deletePageInputSchema = z.object({
   id: z.string().describe('Page ID. Example: "123456"'),
   draft: z.boolean().optional().describe('Delete the draft if present.'),
-  purge: z.boolean().optional().describe('Permanently delete the page without moving it to trash.'),
+  purge: z
+    .boolean()
+    .optional()
+    .describe(
+      'Permanently delete a page that is already in the trash. Delete it without purge first to move it to the trash.',
+    ),
 });
 
 export const deletePageOutputSchema = z.object({

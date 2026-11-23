@@ -4,17 +4,22 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const updateInlineCommentInputSchema = z.object({
-  commentId: z.string().describe('The ID of the inline comment to update. Example: "123456"'),
-  body: z
-    .object({
-      representation: z.string().describe('Body representation. Example: "storage"'),
-      value: z.string().describe('Body value in the given representation.'),
-    })
-    .optional(),
-  resolved: z.boolean().optional().describe('Set to true to resolve the comment, false to reopen it.'),
-  versionMessage: z.string().optional().describe('Message describing the update.'),
-});
+export const updateInlineCommentInputSchema = z
+  .object({
+    commentId: z.string().describe('The ID of the inline comment to update. Example: "123456"'),
+    body: z
+      .object({
+        representation: z.string().describe('Body representation. Example: "storage"'),
+        value: z.string().describe('Body value in the given representation.'),
+      })
+      .optional(),
+    resolved: z.boolean().optional().describe('Set to true to resolve the comment, false to reopen it.'),
+    versionMessage: z.string().optional().describe('Message describing the update.'),
+  })
+  .refine(
+    input => input.body !== undefined || input.resolved !== undefined,
+    'At least one of body or resolved must be provided to update the inline comment.',
+  );
 
 const MetadataSchema = z.object({
   cloudId: z.string().optional(),

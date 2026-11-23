@@ -16,7 +16,7 @@ export const searchContentInputSchema = z.object({
 
 const SpaceSchema = z
   .object({
-    id: z.string(),
+    id: z.union([z.number().int(), z.string()]).optional(),
     key: z.string(),
     name: z.string().optional(),
     type: z.string().optional(),

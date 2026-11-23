@@ -4,14 +4,22 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const createFooterCommentInputSchema = z.object({
-  pageId: z.string().optional().describe('Page ID to comment on. Example: "12345678"'),
-  blogPostId: z.string().optional().describe('Blog post ID to comment on. Example: "12345678"'),
-  attachmentId: z.string().optional().describe('Attachment ID to comment on. Example: "12345678"'),
-  parentCommentId: z.string().optional().describe('Parent comment ID to reply to. Example: "12345678"'),
-  customContentId: z.string().optional().describe('Custom content ID to comment on. Example: "12345678"'),
-  bodyValue: z.string().describe('Comment body in Confluence storage format. Example: "<p>Hello world</p>"'),
-});
+export const createFooterCommentInputSchema = z
+  .object({
+    pageId: z.string().optional().describe('Page ID to comment on. Example: "12345678"'),
+    blogPostId: z.string().optional().describe('Blog post ID to comment on. Example: "12345678"'),
+    attachmentId: z.string().optional().describe('Attachment ID to comment on. Example: "12345678"'),
+    parentCommentId: z.string().optional().describe('Parent comment ID to reply to. Example: "12345678"'),
+    customContentId: z.string().optional().describe('Custom content ID to comment on. Example: "12345678"'),
+    bodyValue: z.string().describe('Comment body in Confluence storage format. Example: "<p>Hello world</p>"'),
+  })
+  .refine(
+    input =>
+      [input.pageId, input.blogPostId, input.attachmentId, input.parentCommentId, input.customContentId].filter(
+        id => id !== undefined,
+      ).length === 1,
+    'Exactly one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId is required.',
+  );
 
 const MetadataSchema = z.object({
   cloudId: z.string().optional(),

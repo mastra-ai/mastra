@@ -13,8 +13,14 @@ export const listBlogPostsInputSchema = z.object({
   spaceId: z.string().optional().describe('Space ID filter.'),
   status: z.string().optional().describe('Status filter, e.g. current.'),
   title: z.string().optional().describe('Title filter.'),
-  sort: z.string().optional().describe('Sort order, e.g. created-date desc.'),
-  bodyFormat: z.string().optional().describe('Body format representation. Defaults to storage.'),
+  sort: z
+    .enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date'])
+    .optional()
+    .describe('Sort order; a leading - sorts descending. Example: "-created-date"'),
+  bodyFormat: z
+    .enum(['storage', 'atlas_doc_format'])
+    .optional()
+    .describe('Body format representation. Defaults to storage.'),
   limit: z.number().int().min(1).max(250).optional().describe('Maximum number of results per page.'),
 });
 

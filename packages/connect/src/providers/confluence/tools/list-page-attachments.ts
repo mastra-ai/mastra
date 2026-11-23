@@ -41,6 +41,12 @@ const AttachmentSchema = z.object({
     })
     .optional(),
   parentVersionId: z.string().optional(),
+  _links: z
+    .object({ download: z.string().optional(), webui: z.string().optional(), thumbnail: z.string().optional() })
+    .passthrough()
+    .optional(),
+  downloadLink: z.string().optional(),
+  webuiLink: z.string().optional(),
   links: z
     .object({
       download: z.string().optional(),
@@ -178,7 +184,20 @@ export function listPageAttachmentsTool(proxy: PlatformProxy) {
           ...(parsed.createdAt !== undefined && { createdAt: parsed.createdAt }),
           ...(parsed.version !== undefined && { version: parsed.version }),
           ...(parsed.parentVersionId !== undefined && { parentVersionId: parsed.parentVersionId }),
-          ...(parsed.links !== undefined && { links: parsed.links }),
+          ...(() => {
+            const download = parsed.links?.download ?? parsed.downloadLink ?? parsed._links?.download;
+            const webui = parsed.links?.webui ?? parsed.webuiLink ?? parsed._links?.webui;
+            const thumbnail = parsed.links?.thumbnail ?? parsed._links?.thumbnail;
+            return download !== undefined || webui !== undefined || thumbnail !== undefined
+              ? {
+                  links: {
+                    ...(download !== undefined && { download }),
+                    ...(webui !== undefined && { webui }),
+                    ...(thumbnail !== undefined && { thumbnail }),
+                  },
+                }
+              : {};
+          })(),
         };
       });
 

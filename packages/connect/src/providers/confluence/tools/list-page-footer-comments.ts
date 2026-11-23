@@ -9,7 +9,10 @@ const MetadataSchema = z.object({
 });
 
 export const listPageFooterCommentsInputSchema = z.object({
-  pageId: z.number().describe('The ID of the page whose footer comments should be listed. Example: 123456'),
+  pageId: z
+    .string()
+    .regex(/^\d+$/, 'must be a numeric page id')
+    .describe('The ID of the page whose footer comments should be listed. Example: "123456"'),
   cursor: z.string().optional().describe('Pagination cursor from the previous response. Omit for the first page.'),
   limit: z.number().optional().describe('Maximum number of results to return per page.'),
   sort: z.string().optional().describe('Sort order for comments. Example: "created-date" or "-created-date".'),

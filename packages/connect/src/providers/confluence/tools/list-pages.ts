@@ -8,10 +8,13 @@ export const listPagesInputSchema = z.object({
   spaceId: z.string().optional().describe('Space ID to filter pages. Example: "123456"'),
   status: z.enum(['current', 'archived', 'trashed', 'draft']).optional().describe('Page status filter'),
   title: z.string().optional().describe('Title filter (case-insensitive prefix match)'),
-  subType: z.enum(['page', 'blogpost']).optional().describe('Content subtype filter'),
-  sort: z.string().optional().describe('Sort order. Example: "title asc"'),
+  subType: z.enum(['page', 'live']).optional().describe('Content subtype filter'),
+  sort: z
+    .enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-title'])
+    .optional()
+    .describe('Sort order; a leading - sorts descending. Example: "-modified-date"'),
   bodyFormat: z
-    .enum(['storage', 'atlas_doc_format', 'view', 'export_view', 'styled_view', 'anonymous_export_view'])
+    .enum(['storage', 'atlas_doc_format'])
     .optional()
     .describe('Body representation format. Prefer "storage" for reliable parsing.'),
   cursor: z.string().optional().describe('Pagination cursor from previous response'),
@@ -19,6 +22,7 @@ export const listPagesInputSchema = z.object({
 });
 
 const ProviderVersionSchema = z.object({
+  authorId: z.string().optional(),
   number: z.number().optional(),
   message: z.string().optional(),
   createdAt: z.string().optional(),
@@ -45,7 +49,7 @@ const ProviderPageSchema = z.object({
   title: z.string().optional(),
   spaceId: z.string().optional(),
   parentId: z.string().nullable().optional(),
-  position: z.number().optional(),
+  position: z.number().nullish(),
   version: ProviderVersionSchema.optional(),
   body: ProviderBodySchema.optional(),
   authorId: z.string().optional(),
@@ -240,12 +244,13 @@ export function listPagesTool(proxy: PlatformProxy) {
           ...(page.title !== undefined && { title: page.title }),
           ...(page.spaceId !== undefined && { spaceId: page.spaceId }),
           ...(page.parentId != null && { parentId: page.parentId }),
-          ...(page.position !== undefined && { position: page.position }),
+          ...(page.position != null && { position: page.position }),
           ...(page.version !== undefined && {
             version: {
               ...(page.version.number !== undefined && { number: page.version.number }),
               ...(page.version.message !== undefined && { message: page.version.message }),
               ...(page.version.createdAt !== undefined && { createdAt: page.version.createdAt }),
+              ...(page.version.authorId !== undefined && { author: { accountId: page.version.authorId } }),
               ...(page.version.by !== undefined && {
                 author: {
                   ...(page.version.by.accountId !== undefined && { accountId: page.version.by.accountId }),
