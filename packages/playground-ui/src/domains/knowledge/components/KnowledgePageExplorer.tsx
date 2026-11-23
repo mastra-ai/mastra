@@ -1400,7 +1400,9 @@ export function KnowledgePageExplorer({
                 defaultTab={tabValue}
                 onValueChange={next => onViewChange(next)}
                 aria-label="View"
-                className={floatingToolbar ? 'max-w-full min-w-0 overflow-visible' : undefined}
+                className={
+                  floatingToolbar ? 'max-w-full min-w-0 overflow-visible rounded-full bg-background' : undefined
+                }
               >
                 <TabList
                   variant={floatingToolbar ? 'pill' : 'pill-ghost'}
