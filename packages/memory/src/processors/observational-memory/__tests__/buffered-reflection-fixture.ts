@@ -743,3 +743,79 @@ export const expectedCrossProcessClearAllowsRecreatedGen0Buffering = {
   recreatedIsDifferentRecord: true,
   recreatedBuffersNext: true,
 };
+
+/**
+ * A turn on generation 1 stalls before `clear()`. After `clear()` recreates a fresh generation-0
+ * record and generation 0 buffers its reflection, the stale generation-1 turn resumes. Even though
+ * its `generationCount` (1) is higher than the live record's (0), it must confirm against storage
+ * and leave the recreated generation-0 buffer and cycle untouched.
+ */
+export async function runStaleHigherGenBeforeClearPreservesRecreatedGen0(env: BufferedReflectionEnv) {
+  const staleMetaRead = gate();
+  let reflectorCalls = 0;
+  const f = await setup(env, () => reflection('recreated'), 800, {
+    activateAfterIdle: IDLE_TTL_MS,
+    onReflectionEnd: async () => {},
+    onReflectorCall: () => {
+      reflectorCalls++;
+    },
+  });
+  const gen0 = await f.om.getRecord(f.threadId, f.resourceId);
+  if (!gen0) throw new Error('Missing gen0');
+  await f.store.createReflectionGeneration({
+    currentRecord: gen0,
+    reflection: factLines(100, 40),
+    tokenCount: 800,
+  });
+
+  // Hold a turn's `getThreadById` inside `maybeReflect` after it captured generation 1.
+  const origGetThread = f.store.getThreadById.bind(f.store);
+  let holdNext = true;
+  f.store.getThreadById = async args => {
+    const res = await origGetThread(args);
+    if (holdNext) {
+      holdNext = false;
+      staleMetaRead.entered();
+      await staleMetaRead.released;
+    }
+    return res;
+  };
+  const staleGen1Turn = f.turn(undefined, { settle: false });
+  await staleMetaRead.reached;
+
+  // Clear and recreate a fresh generation-0 record at 800 tokens, then buffer on it.
+  await f.om.clear(f.threadId, f.resourceId);
+  const recreated = await f.om.getOrCreateRecord(f.threadId, f.resourceId);
+  await f.store.updateActiveObservations({
+    id: recreated.id,
+    observations: factLines(100, 40),
+    tokenCount: 800,
+    lastObservedAt: new Date(),
+  });
+  const { writer, reflectionActivations, reflectionBufferingStarts } = recordingWriter();
+  await f.turn(writer);
+  const newerCycleId = reflectionBufferingStarts()[0]?.cycleId;
+
+  // Release the stale generation-1 turn; it must leave the live generation-0 buffer intact.
+  staleMetaRead.release();
+  await staleGen1Turn;
+  await f.om.settled();
+  f.store.getThreadById = origGetThread;
+
+  await reachActivation(f, undefined, { writer, tail: '' });
+  return {
+    reflectorCalls,
+    newerCycleId,
+    activationCycleIds: reflectionActivations().map(marker => marker.cycleId),
+    values: (await values(f.memory, f.threadId))?.extracted,
+  };
+}
+
+export function expectedStaleHigherGenBeforeClearPreservesRecreatedGen0(outcome: { newerCycleId?: string }) {
+  return {
+    reflectorCalls: 1,
+    newerCycleId: outcome.newerCycleId,
+    activationCycleIds: [outcome.newerCycleId],
+    values: { priority: 'recreated' },
+  };
+}

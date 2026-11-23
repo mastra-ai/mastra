@@ -12,6 +12,7 @@ import {
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
+  expectedStaleHigherGenBeforeClearPreservesRecreatedGen0,
   expectedStaleTurnPreservesNewerGenerationBuffer,
   prepare,
   reachActivation as reachFixtureActivation,
@@ -22,6 +23,7 @@ import {
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
+  runStaleHigherGenBeforeClearPreservesRecreatedGen0,
   runStaleTurnPreservesNewerGenerationBuffer,
   setup as setupFixture,
   values,
@@ -481,6 +483,12 @@ describe('buffered reflection extracted thread values (#27262)', () => {
       expect(await runCrossProcessClearAllowsRecreatedGen0Buffering(env)).toEqual(
         expectedCrossProcessClearAllowsRecreatedGen0Buffering,
       );
+    });
+
+    it('keeps a recreated generation-0 buffer when a pre-clear generation-1 snapshot resumes', async () => {
+      const outcome = await runStaleHigherGenBeforeClearPreservesRecreatedGen0(env);
+      expect(outcome).toEqual(expectedStaleHigherGenBeforeClearPreservesRecreatedGen0(outcome));
+      expect(outcome.newerCycleId).toEqual(expect.any(String));
     });
 
     it('publishes values and shows the activation on an adapter without newRecordId support', async () => {

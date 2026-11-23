@@ -10,8 +10,6 @@ import { waitWithAbort } from './wait-with-abort';
 export interface ReflectionBufferOwner {
   /** The generation the op buffers for. */
   recordId: string;
-  /** The generation count of `recordId`, used to ignore stale snapshots from older generations. */
-  generationCount: number;
   /** Another writer retired `recordId` while the op was still running. */
   retired: boolean;
 }
@@ -89,17 +87,9 @@ export class BufferingCoordinator {
    */
   static reflectionBufferOwners = new Map<string, ReflectionBufferOwner>();
 
-  /** Set the reflection boundary for a new buffered-reflection op on generation `record`. */
-  static startReflectionBuffer(
-    bufferKey: string,
-    tokens: number,
-    record: Pick<ObservationalMemoryRecord, 'id' | 'generationCount'>,
-  ): ReflectionBufferOwner {
-    const owner: ReflectionBufferOwner = {
-      recordId: record.id,
-      generationCount: record.generationCount ?? 0,
-      retired: false,
-    };
+  /** Set the reflection boundary for a new buffered-reflection op on generation `recordId`. */
+  static startReflectionBuffer(bufferKey: string, tokens: number, recordId: string): ReflectionBufferOwner {
+    const owner: ReflectionBufferOwner = { recordId, retired: false };
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, tokens);
     BufferingCoordinator.reflectionBufferOwners.set(bufferKey, owner);
     return owner;
@@ -130,33 +120,17 @@ export class BufferingCoordinator {
 
   /**
    * Reconcile this process's reflection buffer state against an observed head record.
-   *
-   * - If `head` has a strictly higher `generationCount` than `owner`, `owner` is definitely retired.
-   * - If `head` has a different id with `generationCount <= owner.generationCount`, it is either a
-   *   stale snapshot from before `owner` started OR a fresh generation-0 record after another
-   *   process cleared memory. Confirm against a fresh storage read started after `owner` existed:
-   *   only retire/clear when storage's live head is no longer `owner.recordId`.
+   * Whenever `head.id` differs from `owner.recordId`, confirm against a fresh storage read started
+   * after `owner` existed (never trusting `generationCount`, which resets to 0 after `clear()`):
+   * only retire/clear when storage's live head is no longer `owner.recordId`.
    */
   static async reconcileReflectionBufferHead(
     bufferKey: string,
-    head: Pick<ObservationalMemoryRecord, 'id' | 'generationCount' | 'threadId' | 'resourceId'>,
+    headId: string,
     readLiveHead: () => Promise<ObservationalMemoryRecord | null>,
   ): Promise<void> {
     const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
-    if (!owner || owner.recordId === head.id) return;
-
-    const retireOrClear = () => {
-      if (BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
-        owner.retired = true;
-        return;
-      }
-      BufferingCoordinator.clearReflectionBuffer(bufferKey);
-    };
-
-    if ((head.generationCount ?? 0) > owner.generationCount) {
-      retireOrClear();
-      return;
-    }
+    if (!owner || owner.recordId === headId) return;
 
     const ownerRecordId = owner.recordId;
     const live = await readLiveHead();
@@ -165,7 +139,11 @@ export class BufferingCoordinator {
       return;
     }
     if (live?.id === ownerRecordId) return;
-    retireOrClear();
+    if (BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+      owner.retired = true;
+      return;
+    }
+    BufferingCoordinator.clearReflectionBuffer(bufferKey);
   }
 
   /** Called when the op that started as `owner` finishes; completes a deferred retirement. */

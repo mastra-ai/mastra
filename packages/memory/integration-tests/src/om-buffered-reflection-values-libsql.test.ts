@@ -19,12 +19,14 @@ import {
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
+  expectedStaleHigherGenBeforeClearPreservesRecreatedGen0,
   expectedStaleTurnPreservesNewerGenerationBuffer,
   runBufferExtendedWithUnreflectedTail,
   runCrossProcessClearAllowsRecreatedGen0Buffering,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
+  runStaleHigherGenBeforeClearPreservesRecreatedGen0,
   runStaleTurnPreservesNewerGenerationBuffer,
 } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
 import type { BufferedReflectionEnv } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
@@ -88,5 +90,11 @@ describe('buffered reflection extracted values (LibSQL file database)', () => {
     expect(await runCrossProcessClearAllowsRecreatedGen0Buffering(env)).toEqual(
       expectedCrossProcessClearAllowsRecreatedGen0Buffering,
     );
+  });
+
+  it('keeps a recreated generation-0 buffer when a pre-clear generation-1 snapshot resumes', async () => {
+    const outcome = await runStaleHigherGenBeforeClearPreservesRecreatedGen0(env);
+    expect(outcome).toEqual(expectedStaleHigherGenBeforeClearPreservesRecreatedGen0(outcome));
+    expect(outcome.newerCycleId).toEqual(expect.any(String));
   });
 });
