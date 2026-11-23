@@ -136,6 +136,9 @@ class FactoryDecisionSuperseded extends Error {}
 /** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
 class FactoryDecisionPostponed extends Error {}
 
+/** A seat vanished after consent was checked; park the decision before starting a replacement. */
+class FactoryDecisionApprovalRequired extends Error {}
+
 // How often a decision that cannot act yet (a route move waiting on the card's run) is tried again.
 const POSTPONE_MS = 10_000;
 
@@ -1097,6 +1100,11 @@ export class FactoryDecisionDispatcher {
         });
       }
     } catch (error) {
+      if (error instanceof FactoryDecisionApprovalRequired) {
+        const proposed = await this.#storage.proposeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
+        if (!proposed) throw new Error('Factory decision lease was lost before approval could be requested.');
+        return;
+      }
       if (error instanceof FactoryDecisionSuperseded) {
         await this.#storage.supersedeLeasedDecision(leaseIdentity(record, this.#ownerId), new Date());
         await this.#reviewStatus(record, record.decision, { phase: 'cancelled', endedAt: new Date() });
@@ -2560,7 +2568,7 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'sendMessage' }>,
   ): Promise<FactoryRunBindingRecord | undefined> {
     if (decision.prepareBinding && decision.role !== undefined) {
-      return this.#requireOrPrepareBinding(record, decision.role);
+      return this.#requireOrPrepareBinding(record, decision.role, undefined, decision);
     }
     return this.#findBinding(record, decision.role);
   }
@@ -2619,6 +2627,7 @@ export class FactoryDecisionDispatcher {
     record: FactoryDeferredDecisionRecord,
     role: string,
     expectedBindingId?: string,
+    consentDecision?: Extract<FactoryCommitDecision, { type: 'sendMessage' }>,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (expectedBindingId && binding?.id !== expectedBindingId) {
@@ -2627,6 +2636,11 @@ export class FactoryDecisionDispatcher {
     if (binding) {
       const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
+    }
+    // The seat may vanish after the first approval check. Before preparing its replacement,
+    // recheck whether this external message still needs a person's consent.
+    if (consentDecision && (await this.#needsApproval(record, consentDecision))) {
+      throw new FactoryDecisionApprovalRequired();
     }
     if (!this.#prepareBinding) {
       throw new FactoryDispatchError(

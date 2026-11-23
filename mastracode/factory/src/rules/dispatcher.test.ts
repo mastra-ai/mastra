@@ -1048,6 +1048,52 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
+  it('asks for approval when a live Work seat disappears after the initial consent check', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    await bindWorkRun(storage, item.id);
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const current = await storage.get({ orgId: 'org-1', id: item.id });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'review-seat-disappears', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: current!.revision,
+      actor: { type: 'github', login: 'reviewer', trusted: true, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Address requested PR changes.',
+          prepareBinding: true,
+          idempotencyKey: 'review-seat-disappears',
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller, session, sendNotificationSignal } = createSession();
+    controller.getSession.mockResolvedValue(undefined).mockResolvedValueOnce(session);
+    const prepareBinding = vi.fn(async () => {});
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect(controller.getSession).toHaveBeenCalled();
+    expect(prepareBinding).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'proposed' });
+  });
+
   it('holds review feedback from GitHub for approval when it would start a run on an unarmed card', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
