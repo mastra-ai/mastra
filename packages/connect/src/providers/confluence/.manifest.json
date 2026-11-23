@@ -3,7 +3,7 @@
   "localId": "confluence",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-11-23T20:30:48.552Z",
+  "generatedAt": "2026-11-23T21:29:21.477Z",
   "toolCount": 36,
   "skippedActions": [],
   "files": {
@@ -41,7 +41,7 @@
     "tools/list-spaces.ts": "124e33d3711b5db8a863db64de40f8a5bd44201d6c1c6a52f7123b19f78bf99b",
     "tools/search-content.ts": "79b4ef33422d47612de6a64e0444077b2d0e353ba3d93e4e6a18d6fcafa7f795",
     "tools/update-blog-post.ts": "d91e1f522267d04d53582c229150fec77ea0ebc1324b5c9fed22b2b8c6abe3de",
-    "tools/update-footer-comment.ts": "8218e040287a8a5ea0d6537d86043123f71ddb0232908dff7be21cae6b9837b0",
+    "tools/update-footer-comment.ts": "21e6d5e1c8af03a1c86b1aef1171f56acd351cc1da8e068d206ad5da87e1333c",
     "tools/update-inline-comment.ts": "b021fc8dc77f6e5a2487b54238f8ca6d6aea7fee390b25fef678fb0a5ba0c383",
     "tools/update-page-property.ts": "28327de9a35603a8948e539a5e447b821a39d2a972b2763e13009846480b00ac",
     "tools/update-page.ts": "008826328cb09d82881d5c53d4ddf9fc95e77a9e38de5de363063ff6b26f7d32"

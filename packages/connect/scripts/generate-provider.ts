@@ -1714,6 +1714,20 @@ function routeConfluenceThroughProviderBase(action: ExtractedAction): ExtractedA
       'metadata cloudId',
     );
   }
+  if (slug === 'update-footer-comment') {
+    // Every other Confluence template lets the site in the connection config
+    // win over the one cached in metadata; this one checks metadata first, so
+    // when they disagree it writes to a different site than the reads use.
+    execBody = replaceOnce(
+      execBody,
+      /(const metadata = await (?:nango|platformProxy)\.getMetadata\(\);\s*const rawMetadataCloudId[\s\S]*?cloudId = rawMetadataCloudId;\s*\})(\s*)if \(!cloudId\) \{\s*(const connection = await (?:nango|platformProxy)\.getConnection\(\);[\s\S]*?cloudId = rawCloudId;\s*\}\s*\})\s*\}/,
+      `$3$2if (!cloudId) {
+            $1
+        }`,
+      action,
+      'connection cloudId first',
+    );
+  }
   // Most Confluence templates refuse to pick a site when the token can see
   // several and none has been chosen; these three take the first one and cache
   // it, which silently moves every later call onto that site.

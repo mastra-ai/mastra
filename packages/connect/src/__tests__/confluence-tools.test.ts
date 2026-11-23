@@ -243,6 +243,35 @@ describe('generated Confluence tools', () => {
       ]);
     });
 
+    it('reads and updates a footer comment on the site the connection config names, even when metadata disagrees', async () => {
+      connectionConfig = { cloudId: 'site-a' };
+      connectionMetadata = { cloudId: 'site-b' };
+      const call = await toolset(['confluence_get_footer_comment', 'confluence_update_footer_comment']);
+
+      await call('confluence_get_footer_comment', { commentId: '9' }).catch(() => undefined);
+      await call('confluence_update_footer_comment', { comment_id: '9', version_number: 2, body: '<p>hi</p>' }).catch(
+        () => undefined,
+      );
+
+      expect(requests.map(request => `${request.method} ${request.target.split('?')[0]}`)).toEqual([
+        'GET /ex/confluence/site-a/wiki/api/v2/footer-comments/9',
+        'PUT /ex/confluence/site-a/wiki/api/v2/footer-comments/9',
+      ]);
+    });
+
+    it('updates a footer comment on the site the metadata names when the connection config has none', async () => {
+      connectionMetadata = { cloudId: 'site-b' };
+      const call = await toolset(['confluence_update_footer_comment']);
+
+      await call('confluence_update_footer_comment', { comment_id: '9', version_number: 2, body: '<p>hi</p>' }).catch(
+        () => undefined,
+      );
+
+      expect(requests.map(request => `${request.method} ${request.target}`)).toEqual([
+        'PUT /ex/confluence/site-b/wiki/api/v2/footer-comments/9',
+      ]);
+    });
+
     it.each([
       ['confluence_delete_page_property', { pageId: 7, propertyId: 9 }],
       ['confluence_create_page', { spaceId: '42', title: 'Page' }],

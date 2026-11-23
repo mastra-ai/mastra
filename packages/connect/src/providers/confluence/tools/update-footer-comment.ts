@@ -82,21 +82,21 @@ export function updateFooterCommentTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       let cloudId: string | undefined;
 
-      const metadata = await platformProxy.getMetadata();
-      const rawMetadataCloudId: unknown = metadata?.cloudId;
-      if (typeof rawMetadataCloudId === 'string' && rawMetadataCloudId.length > 0) {
-        cloudId = rawMetadataCloudId;
+      const connection = await platformProxy.getConnection();
+      const rawConnectionConfig: unknown = connection.connection_config;
+      const connectionConfigResult = z.record(z.string(), z.unknown()).safeParse(rawConnectionConfig);
+      if (connectionConfigResult.success) {
+        const rawCloudId: unknown = connectionConfigResult.data['cloudId'];
+        if (typeof rawCloudId === 'string' && rawCloudId.length > 0) {
+          cloudId = rawCloudId;
+        }
       }
 
       if (!cloudId) {
-        const connection = await platformProxy.getConnection();
-        const rawConnectionConfig: unknown = connection.connection_config;
-        const connectionConfigResult = z.record(z.string(), z.unknown()).safeParse(rawConnectionConfig);
-        if (connectionConfigResult.success) {
-          const rawCloudId: unknown = connectionConfigResult.data['cloudId'];
-          if (typeof rawCloudId === 'string' && rawCloudId.length > 0) {
-            cloudId = rawCloudId;
-          }
+        const metadata = await platformProxy.getMetadata();
+        const rawMetadataCloudId: unknown = metadata?.cloudId;
+        if (typeof rawMetadataCloudId === 'string' && rawMetadataCloudId.length > 0) {
+          cloudId = rawMetadataCloudId;
         }
       }
 
