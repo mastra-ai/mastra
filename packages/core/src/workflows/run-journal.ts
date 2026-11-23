@@ -416,6 +416,8 @@ export class RunJournal {
       // Stubs only replace successful results other than `input`, and the thread comes from a
       // suspended result or `input`, so the snapshot still holds the whole run's thread.
       const threadId = getSnapshotMemoryInfo(snapshot)?.threadId;
+      const claim = currentWorkflowRunClaim(this.runId);
+      const token = claim?.confirmationToken();
       const run = {
         workflowName: this.workflowName,
         runId: this.runId,
@@ -442,7 +444,7 @@ export class RunJournal {
       }
       lastSeq = written?.lastSeq;
       this.#startStateSeq = undefined;
-      currentWorkflowRunClaim(this.runId)?.noteWriteAccepted();
+      if (claim && token !== undefined) claim.noteConfirmed(token);
     } catch (error) {
       if (checkpoint) this.#needsCheckpoint = true;
       throw error;

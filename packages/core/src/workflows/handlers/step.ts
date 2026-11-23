@@ -399,7 +399,7 @@ export async function executeStep(
   const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
   const delay = executionContext.retryConfig.delay ?? 0;
 
-  claim?.stepBodyStarting();
+  claim?.stepBoundary();
   // Use executeStepWithRetry to handle retry logic
   // Default engine: internal retry loop
   // Inngest engine: throws RetryAfterError for external retry handling
@@ -716,6 +716,7 @@ export async function executeStep(
     { retries, delay, stepSpan, workflowId, runId },
   );
 
+  claim?.stepBoundary();
   // The run was taken over while the body ran: publish and record nothing of it.
   claim?.throwIfLost();
 

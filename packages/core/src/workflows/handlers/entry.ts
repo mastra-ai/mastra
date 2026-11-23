@@ -317,6 +317,7 @@ export async function persistStepUpdate(
         return;
       }
 
+      const token = claim?.confirmationToken();
       const written = await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflowId,
         runId,
@@ -324,7 +325,7 @@ export async function persistStepUpdate(
         snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
         ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
       });
-      if (workflowsStore) claim?.noteWriteAccepted();
+      if (workflowsStore && token !== undefined) claim?.noteConfirmed(token);
       if (atomicGuard && written === false) {
         engine.setLastPersistedStatus(runId, 'canceled');
         return;

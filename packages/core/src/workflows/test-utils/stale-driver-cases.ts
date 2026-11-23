@@ -692,6 +692,31 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       expect(callbacks.onFinish).not.toHaveBeenCalled();
     });
 
+    // A renewal that succeeded while step a ran was sent before the takeover, so it proves nothing
+    // about the claim once a ends.
+    it('does not trust a renewal made during the previous step after a forced takeover', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const ran: string[] = [];
+      const stalled = gate();
+      const { store, workflow } = await setup(stalledThenNext(ran, stalled), {
+        shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'waiting',
+      });
+      const renewals = vi.spyOn(store, 'renewRunOwnership');
+
+      const run = await workflow.createRun();
+      const done = run.start({ inputData: {} });
+      await vi.waitFor(() => expect(ran).toEqual(['a']));
+      await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS + 100);
+      await vi.waitFor(() => expect(renewals).toHaveBeenCalledTimes(1));
+      await expect(renewals.mock.results[0]!.value).resolves.toMatchObject({ renewed: true });
+      await takeOver(store, run.runId);
+      stalled.open();
+      const result = await done;
+
+      expect(result.status).toBe('waiting');
+      expect(ran).toEqual(['a']);
+    });
+
     // A nested run resumed on its own flips its suspended parent to running and holds the parent's
     // lease. When it loses that lease, the parent belongs to another process: the child must not set
     // it back to suspended.

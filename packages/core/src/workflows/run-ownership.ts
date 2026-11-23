@@ -121,20 +121,23 @@ export function repeatAfterSettled(
  * until the returned function is called, counting each interval from the end
  * of the previous renewal. Stops by itself after the first renewal that finds
  * the claim superseded, reporting it through `onLost`. `onRenewed` gets the
- * local time each successful renewal was sent at.
+ * local time each successful renewal was sent at, and what `onSending`
+ * returned when it was sent.
  */
-export function renewWorkflowLease({
+export function renewWorkflowLease<TSendToken = undefined>({
   store,
   fence,
   onLost,
   onError,
+  onSending,
   onRenewed,
 }: {
   store: WorkflowsStorage;
   fence: RunFence;
   onLost: (owner: RunOwnershipRecord | null) => void;
   onError: (error: unknown) => void;
-  onRenewed?: (sentAt: number) => void;
+  onSending?: () => TSendToken;
+  onRenewed?: (sentAt: number, token: TSendToken | undefined) => void;
 }): () => void {
   // Not setInterval: it fires on schedule while the previous renewal is still pending, so a slow
   // store would get concurrent renewals piling up, and an older one could land after a newer one.
@@ -143,9 +146,10 @@ export function renewWorkflowLease({
   const stop = repeatAfterSettled(async () => {
     try {
       const sentAt = Date.now();
+      const token = onSending?.();
       const result = await store.renewRunOwnership({ ...fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
       if (result.renewed) {
-        onRenewed?.(sentAt);
+        onRenewed?.(sentAt, token);
         return;
       }
 
@@ -228,8 +232,14 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
   #released = false;
   #leaseConfirmedAt: number;
   #warnedStoreMismatch = false;
-  /** Storage confirmed the claim (an accepted write, or a renewal) since the last step body started. */
-  #confirmedSinceStepBody = true;
+  /**
+   * Moves at every step body start and end. A confirmation of the claim (an accepted write or a
+   * renewal) counts for the next step only when it was sent after the latest move: one sent while
+   * a body ran may predate a takeover that happened during that body.
+   */
+  #stepBoundary = 0;
+  /** The latest boundary a confirmation was sent at. Claiming counts as one, before any step. */
+  #confirmedAtBoundary = 0;
   #inlineRenewal?: Promise<void>;
 
   constructor({
@@ -257,9 +267,10 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
         this.markLost(owner);
       },
       onError: error => logger?.warn('Failed to renew workflow run ownership lease', { runId: fence.runId, error }),
-      onRenewed: renewedAt => {
+      onSending: () => this.#stepBoundary,
+      onRenewed: (renewedAt, boundary) => {
         this.#leaseConfirmedAt = Math.max(this.#leaseConfirmedAt, renewedAt);
-        this.#confirmedSinceStepBody = true;
+        this.noteConfirmed(boundary ?? -1);
       },
     });
   }
@@ -329,11 +340,12 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
     while (renewNow || this.#leaseMayHaveLapsed()) {
       renewNow = false;
       const sentAt = Date.now();
+      const boundary = this.#stepBoundary;
       try {
         const result = await this.#store.renewRunOwnership({ ...this.fence, leaseMs: WORKFLOW_RUN_LEASE_TTL_MS });
         if (result.renewed) {
           this.#leaseConfirmedAt = Math.max(this.#leaseConfirmedAt, sentAt);
-          this.#confirmedSinceStepBody = true;
+          this.noteConfirmed(boundary);
           break;
         }
         if (isOwnRelease(result.record, this.fence)) break;
@@ -350,13 +362,13 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
 
   /**
    * Before a step starts. A forced takeover leaves the local lease looking fresh, so unless storage
-   * confirmed the claim since the previous step body started (its result write, or a renewal), this
-   * asks storage once. With writes at every step (the default) that confirmation is always there; a
-   * run whose `shouldPersistSnapshot` skips them, and foreach items, pay one renewal, shared by
-   * steps that start together.
+   * confirmed the claim after the previous step body ended (its result write, or a renewal sent
+   * since), this asks storage once. With writes at every step (the default) that confirmation is
+   * always there; a run whose `shouldPersistSnapshot` skips them, and foreach items, pay one
+   * renewal, shared by steps that start together.
    */
   async ensureOwnedBeforeStep(): Promise<void> {
-    if (this.#confirmedSinceStepBody) return this.ensureOwned();
+    if (this.#confirmedAtBoundary === this.#stepBoundary) return this.ensureOwned();
     this.#inlineRenewal ??= this.ensureOwned({ renew: true }).finally(() => {
       this.#inlineRenewal = undefined;
     });
@@ -364,14 +376,19 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
     this.throwIfLost();
   }
 
-  /** A step body is about to run: confirmations before this point don't cover what it does. */
-  stepBodyStarting(): void {
-    this.#confirmedSinceStepBody = false;
+  /** A step body starts or ends. */
+  stepBoundary(): void {
+    this.#stepBoundary++;
   }
 
-  /** Storage accepted a write carrying this claim. */
-  noteWriteAccepted(): void {
-    if (!this.#lost) this.#confirmedSinceStepBody = true;
+  /** The value to pass to {@link noteConfirmed} once a write sent now is accepted. */
+  confirmationToken(): number {
+    return this.#stepBoundary;
+  }
+
+  /** Storage accepted a write or renewal carrying this claim, sent at `token`. */
+  noteConfirmed(token: number): void {
+    if (!this.#lost) this.#confirmedAtBoundary = Math.max(this.#confirmedAtBoundary, token);
   }
 
   #leaseMayHaveLapsed(): boolean {
