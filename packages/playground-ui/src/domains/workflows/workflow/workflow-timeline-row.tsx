@@ -85,10 +85,7 @@ export function WorkflowTimelineRow({
       >
         <span
           aria-label={status.label}
-          className={cn(
-            'grid size-6 flex-none place-items-center rounded-md border border-border bg-background',
-            workflowStatusToneText[tone],
-          )}
+          className={cn('grid size-6 flex-none place-items-center rounded-md bg-nested', workflowStatusToneText[tone])}
         >
           <StatusIcon aria-hidden className={cn('size-3.5', row.status === 'running' && 'motion-safe:animate-spin')} />
         </span>
