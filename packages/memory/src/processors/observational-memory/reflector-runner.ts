@@ -889,7 +889,12 @@ export class ReflectorRunner {
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     // The buffer is written for the generation read here, which may be newer than `record`.
-    owner.recordId = currentRecord.id;
+    // Any retirement recorded against the superseded `record.id` does not apply to the
+    // generation this operation is now buffering for.
+    if (owner.recordId !== currentRecord.id) {
+      owner.recordId = currentRecord.id;
+      owner.retired = false;
+    }
     BufferingCoordinator.reflectionBufferCycleIds.set(bufferKey, cycleId);
 
     const fullObservations = currentRecord.activeObservations ?? '';

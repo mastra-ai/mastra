@@ -53,10 +53,12 @@ export interface BufferedReflectionEnv {
  * `Memory` does not pass `hookExecution` or `reflection.activateAfterIdle` to its engine.
  */
 export interface StandaloneOptions {
+  /** Config-level `onReflectionStart`, awaited by the pipeline (`hookExecution: 'await'`). */
+  onReflectionStart?: () => Promise<void>;
   /** Config-level `onReflectionEnd`, awaited by the pipeline (`hookExecution: 'await'`). */
-  onReflectionEnd: () => Promise<void>;
+  onReflectionEnd?: () => Promise<void>;
   /** Reflection `activateAfterIdle`; idle turns then activate a buffer below the threshold. */
-  activateAfterIdle: number;
+  activateAfterIdle?: number;
   onReflectorCall?: () => void;
 }
 
@@ -188,11 +190,14 @@ export async function setup(
         storage: store,
         scope: 'thread',
         hookExecution: 'await',
-        hooks: { onReflectionEnd: standalone.onReflectionEnd },
+        hooks: {
+          ...(standalone.onReflectionStart ? { onReflectionStart: standalone.onReflectionStart } : {}),
+          ...(standalone.onReflectionEnd ? { onReflectionEnd: standalone.onReflectionEnd } : {}),
+        },
         observation: observationOptions(),
         reflection: {
           ...reflectionOptions(env, reply, standalone.onReflectorCall),
-          activateAfterIdle: standalone.activateAfterIdle,
+          ...(standalone.activateAfterIdle !== undefined ? { activateAfterIdle: standalone.activateAfterIdle } : {}),
         },
       })
     : await engine(memory);
@@ -1017,5 +1022,66 @@ export function expectedSuccessfulActivationPreservesNextGenerationCycle(outcome
     firstActivationCycleIds: [outcome.firstCycleId],
     nextActivationCycleIds: [outcome.nextCycleId],
     values: { priority: 'next' },
+  };
+}
+
+/**
+ * An async buffered reflection pauses in `onReflectionStart` before reading the live head.
+ * Meanwhile another process clears and recreates memory and a turn reconciles and marks the
+ * old owner retired. When the paused op resumes, it rebases onto the recreated head and
+ * buffers for it; its `finally` cleanup must not drop the cycle id of the new generation's
+ * valid buffer.
+ */
+export async function runRetiredBeforeRebaseKeepsNewCycleId(env: BufferedReflectionEnv) {
+  const startHook = gate();
+  let holdStart = true;
+  const f = await setup(env, () => reflection('winner'), 800, {
+    onReflectionStart: async () => {
+      if (!holdStart) return;
+      holdStart = false;
+      startHook.entered();
+      await startHook.released;
+    },
+  });
+  const { writer, reflectionActivations, reflectionBufferingStarts } = recordingWriter();
+  await f.turn(writer, { settle: false });
+  await startHook.reached;
+
+  try {
+    // Clear storage directly (simulating another process) and recreate a fresh generation-0 head.
+    await f.store.clearObservationalMemory(f.threadId, f.resourceId);
+    const recreated = await f.om.getOrCreateRecord(f.threadId, f.resourceId);
+    await f.store.updateActiveObservations({
+      id: recreated.id,
+      observations: factLines(400, 40),
+      tokenCount: 800,
+      lastObservedAt: new Date(),
+    });
+
+    // Reconcile on another turn while the first op is still paused in `onReflectionStart`.
+    await f.turn(undefined, { settle: false });
+
+    // Release the paused op: it rebases onto `recreated`, writes the buffer, and finishes.
+    startHook.release();
+    await f.om.settled();
+    const startCycleId = reflectionBufferingStarts()[0]?.cycleId;
+
+    await reachActivation(f, undefined, { writer, tail: '' });
+    return {
+      startCycleId,
+      activationCycleIds: reflectionActivations().map(marker => marker.cycleId),
+      values: (await values(f.memory, f.threadId))?.extracted,
+    };
+  } finally {
+    startHook.release();
+    await f.om.settled();
+  }
+}
+
+export function expectedRetiredBeforeRebaseKeepsNewCycleId(outcome: { startCycleId?: string }) {
+  return {
+    startCycleId: outcome.startCycleId,
+    activationCycleIds: [outcome.startCycleId],
+    values: { priority: 'winner' },
   };
 }

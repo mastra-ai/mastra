@@ -11,6 +11,7 @@ import {
   expectedCrossProcessClearAllowsRecreatedGen0Buffering,
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
+  expectedRetiredBeforeRebaseKeepsNewCycleId,
   expectedRetiredWhileReflectionEndHookHeld,
   expectedStaleEmptyActivationPreservesRecreatedBuffer,
   expectedStaleHigherGenBeforeClearPreservesRecreatedGen0,
@@ -24,6 +25,7 @@ import {
   runCrossProcessClearAllowsRecreatedGen0Buffering,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
+  runRetiredBeforeRebaseKeepsNewCycleId,
   runRetiredWhileReflectionEndHookHeld,
   runStaleEmptyActivationPreservesRecreatedBuffer,
   runStaleHigherGenBeforeClearPreservesRecreatedGen0,
@@ -509,6 +511,12 @@ describe('buffered reflection extracted thread values (#27262)', () => {
       expect(outcome).toEqual(expectedSuccessfulActivationPreservesNextGenerationCycle(outcome));
       expect(outcome.firstCycleId).toEqual(expect.any(String));
       expect(outcome.nextCycleId).toEqual(expect.any(String));
+    });
+
+    it('keeps the cycle id when an op is retired during onReflectionStart and rebases onto a recreated head', async () => {
+      const outcome = await runRetiredBeforeRebaseKeepsNewCycleId(env);
+      expect(outcome).toEqual(expectedRetiredBeforeRebaseKeepsNewCycleId(outcome));
+      expect(outcome.startCycleId).toEqual(expect.any(String));
     });
 
     it('publishes values and shows the activation on an adapter without newRecordId support', async () => {
