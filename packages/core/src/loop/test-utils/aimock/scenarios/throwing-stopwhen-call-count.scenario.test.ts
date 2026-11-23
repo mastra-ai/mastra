@@ -162,4 +162,171 @@ describeForAllEngines('AIMock loop scenario: throwing stopWhen', engine => {
     expect(await result).toBe('stopWhen exploded');
     expect(beforeRelease).toBe('stopWhen exploded');
   });
+
+  // Technical: once maxSteps is spent the loop stops either way; post-budget stopWhen
+  // evaluation is bounded so a pending sibling (with or without a rejecting sibling) cannot
+  // block terminal finish delivery. (#29612)
+  it('delivers finish promptly on the last allowed step when one stopWhen rejects and another stays pending', async () => {
+    let resolveEntered!: () => void;
+    const enteredPromise = new Promise<void>(resolve => {
+      resolveEntered = resolve;
+    });
+    let resolvePending!: (value: boolean) => void;
+    const pendingPromise = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    const fetchItem = createTool({
+      id: 'fetchItem',
+      description: 'Fetch an item.',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ result: query }),
+    });
+    const run = runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Fetch one item',
+      tools: { fetchItem },
+      collectChunks: true,
+      maxSteps: 1,
+      stopWhen: [
+        async () => {
+          throw new Error('Completion service is temporarily unavailable');
+        },
+        () => {
+          resolveEntered();
+          return pendingPromise;
+        },
+      ],
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat' },
+          { toolCalls: [{ id: 'fetch-0', name: 'fetchItem', arguments: { query: 'item' } }] },
+        );
+      },
+    });
+    const result = run.then(({ streamError, chunks }) => {
+      const finish = chunks?.find(chunk => chunk.type === 'finish');
+      return {
+        streamError,
+        reason: finish?.payload.stepResult.reason,
+        stopCause: finish?.payload.stopCause,
+      };
+    });
+    await Promise.race([enteredPromise, result]);
+    let beforeRelease: unknown;
+    try {
+      beforeRelease = await Promise.race([result, wait(1500, 'stream still open')]);
+    } finally {
+      resolvePending(false);
+    }
+    expect(beforeRelease).toEqual({
+      streamError: undefined,
+      reason: 'tool-calls',
+      stopCause: 'max_steps',
+    });
+  });
+
+  it('delivers finish promptly on the last allowed step when a stopWhen predicate stays pending', async () => {
+    let resolveEntered!: () => void;
+    const enteredPromise = new Promise<void>(resolve => {
+      resolveEntered = resolve;
+    });
+    let resolvePending!: (value: boolean) => void;
+    const pendingPromise = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    const fetchItem = createTool({
+      id: 'fetchItem',
+      description: 'Fetch an item.',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ result: query }),
+    });
+    const run = runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Fetch one item',
+      tools: { fetchItem },
+      collectChunks: true,
+      maxSteps: 1,
+      stopWhen: [
+        () => {
+          resolveEntered();
+          return pendingPromise;
+        },
+      ],
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat' },
+          { toolCalls: [{ id: 'fetch-0', name: 'fetchItem', arguments: { query: 'item' } }] },
+        );
+      },
+    });
+    const result = run.then(({ streamError, chunks }) => {
+      const finish = chunks?.find(chunk => chunk.type === 'finish');
+      return {
+        streamError,
+        reason: finish?.payload.stepResult.reason,
+        stopCause: finish?.payload.stopCause,
+      };
+    });
+    await Promise.race([enteredPromise, result]);
+    let beforeRelease: unknown;
+    try {
+      beforeRelease = await Promise.race([result, wait(1500, 'stream still open')]);
+    } finally {
+      resolvePending(false);
+    }
+    expect(beforeRelease).toEqual({
+      streamError: undefined,
+      reason: 'tool-calls',
+      stopCause: 'max_steps',
+    });
+  });
+
+  it('attributes stop_condition immediately on the last allowed step when a sibling matches alongside a pending predicate', async () => {
+    let resolvePending!: (value: boolean) => void;
+    const pendingPromise = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    const fetchItem = createTool({
+      id: 'fetchItem',
+      description: 'Fetch an item.',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ result: query }),
+    });
+    const run = runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Fetch one item',
+      tools: { fetchItem },
+      collectChunks: true,
+      maxSteps: 1,
+      stopWhen: [() => true, () => pendingPromise],
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat' },
+          { toolCalls: [{ id: 'fetch-0', name: 'fetchItem', arguments: { query: 'item' } }] },
+        );
+      },
+    });
+    const result = run.then(({ streamError, chunks }) => {
+      const finish = chunks?.find(chunk => chunk.type === 'finish');
+      return {
+        streamError,
+        reason: finish?.payload.stepResult.reason,
+        stopCause: finish?.payload.stopCause,
+      };
+    });
+    let beforeRelease: unknown;
+    try {
+      beforeRelease = await Promise.race([result, wait(1500, 'stream still open')]);
+    } finally {
+      resolvePending(false);
+    }
+    expect(beforeRelease).toEqual({
+      streamError: undefined,
+      reason: 'tool-calls',
+      stopCause: 'stop_condition',
+    });
+  });
 });

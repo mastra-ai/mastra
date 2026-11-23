@@ -100,6 +100,128 @@ describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)'
     expect(decision.isFinal).toBe(false);
     expect(decision.stopCause).toBeUndefined();
   });
+
+  it('bounds a post-budget stopWhen that never settles and attributes the stop to max_steps', async () => {
+    vi.useFakeTimers();
+    try {
+      const warn = vi.fn();
+      let resolvePending!: (value: boolean) => void;
+      const pending = new Promise<boolean>(resolve => {
+        resolvePending = resolve;
+      });
+      const decisionPromise = decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [...stepBudget(), () => pending],
+          logger: { warn } as any,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await decisionPromise).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+      expect(warn).toHaveBeenCalledTimes(1);
+      resolvePending(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a post-budget rejecting stopWhen alongside a pending sibling and attributes max_steps', async () => {
+    vi.useFakeTimers();
+    try {
+      const warn = vi.fn();
+      let resolvePending!: (value: boolean) => void;
+      const pending = new Promise<boolean>(resolve => {
+        resolvePending = resolve;
+      });
+      const decisionPromise = decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [
+            ...stepBudget(),
+            async () => {
+              throw new Error('post-budget failure');
+            },
+            () => pending,
+          ],
+          logger: { warn } as any,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await decisionPromise).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+      expect(warn).toHaveBeenCalled();
+      resolvePending(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('attributes stop_condition immediately when a post-budget sibling matches alongside a pending predicate', async () => {
+    let resolvePending!: (value: boolean) => void;
+    const pending = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    try {
+      expect(
+        await decideContinuation(
+          deps({
+            underMaxSteps: false,
+            llmWantsToContinue: true,
+            stopWhen: [...stepBudget(), () => true, () => pending],
+          }),
+        ),
+      ).toMatchObject({ isFinal: true, stopCause: 'stop_condition' });
+    } finally {
+      resolvePending(false);
+    }
+  });
+
+  it('attributes stop_condition when a post-budget sibling matches alongside a rejecting predicate', async () => {
+    const warn = vi.fn();
+    expect(
+      await decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [
+            ...stepBudget(),
+            async () => {
+              throw new Error('sibling failed');
+            },
+            () => true,
+          ],
+          logger: { warn } as any,
+        }),
+      ),
+    ).toMatchObject({ isFinal: true, stopCause: 'stop_condition' });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps under-budget fail-fast rejection even when a sibling predicate stays pending', async () => {
+    let resolvePending!: (value: boolean) => void;
+    const pending = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    try {
+      await expect(
+        decideContinuation(
+          deps({
+            underMaxSteps: true,
+            llmWantsToContinue: true,
+            stopWhen: [
+              async () => {
+                throw new Error('under-budget boom');
+              },
+              () => pending,
+            ],
+          }),
+        ),
+      ).rejects.toThrow('under-budget boom');
+    } finally {
+      resolvePending(false);
+    }
+  });
 });
 
 /**

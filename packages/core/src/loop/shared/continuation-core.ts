@@ -33,15 +33,20 @@ interface StopWhenEvaluation {
   callerConditionMatched: boolean;
 }
 
+const POST_BUDGET_STOP_WHEN_TIMEOUT_MS = 250;
+
 /**
  * Evaluates every stop condition once and reports which kinds matched.
  *
  * Once the step budget is spent the run stops whatever the conditions say; they
  * only decide whether the caller or the budget gets the credit. A caller's
- * condition that throws there must not fail a run whose last step already
- * completed, so the failure is logged and the condition counts as unmatched. A
- * condition that throws while the run could still continue fails the run, as
- * before: its answer decides whether another model call happens.
+ * condition that throws or stalls there must not fail or hang a run whose last
+ * step already completed, so post-budget evaluation is bounded: any caller
+ * condition that matches before the bound wins `stop_condition`, while
+ * rejections and conditions still pending at the bound are logged and count as
+ * unmatched (`max_steps`). A condition that throws while the run could still
+ * continue fails the run immediately, as before: its answer decides whether
+ * another model call happens.
  */
 async function evaluateStopWhen({
   stopWhen,
@@ -75,16 +80,57 @@ async function evaluateStopWhen({
     ).some(Boolean);
     return { matched: callerConditionMatched, callerConditionMatched };
   }
-  const settled = await Promise.allSettled(
-    callerConditions.map(async condition => Boolean(await condition({ steps: stepsForConditions }))),
-  );
-  const rejection = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  if (rejection) {
-    logger?.warn('A stopWhen condition failed after the step budget ran out; the run stops on maxSteps', {
-      error: rejection.reason,
-    });
+  if (callerConditions.length === 0) {
+    return { matched: budgetMatched, callerConditionMatched: false };
   }
-  const callerConditionMatched = settled.some(result => result.status === 'fulfilled' && result.value);
+
+  let loggedRejection = false;
+  const logPostBudgetFailure = (reason: unknown) => {
+    if (loggedRejection) return;
+    loggedRejection = true;
+    logger?.warn('A stopWhen condition failed after the step budget ran out; ignoring its result', {
+      error: reason,
+    });
+  };
+
+  const callerConditionMatched = await new Promise<boolean>(resolve => {
+    let settled = false;
+    let remaining = callerConditions.length;
+    const finish = (matched: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(matched);
+    };
+
+    const timeout = setTimeout(() => {
+      logger?.warn('A stopWhen condition did not settle after the step budget ran out; attributing stop to maxSteps');
+      finish(false);
+    }, POST_BUDGET_STOP_WHEN_TIMEOUT_MS);
+    timeout.unref?.();
+
+    for (const condition of callerConditions) {
+      const evalPromise = (async () => Boolean(await condition({ steps: stepsForConditions })))();
+      void evalPromise.then(
+        matched => {
+          remaining -= 1;
+          if (matched) {
+            finish(true);
+          } else if (remaining === 0) {
+            finish(false);
+          }
+        },
+        reason => {
+          logPostBudgetFailure(reason);
+          remaining -= 1;
+          if (remaining === 0) {
+            finish(false);
+          }
+        },
+      );
+    }
+  });
+
   return {
     matched: budgetMatched || callerConditionMatched,
     callerConditionMatched,
