@@ -2294,7 +2294,8 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    | Record<string, SubAgent<string, TRequestContext>>
+    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents ? resolveDynamicArgument(this.#agents, { requestContext }) : {};
 
     return resolveMaybePromise(agentsToUse, agents => {
@@ -3020,7 +3021,8 @@ export class Agent<
    */
   #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
     const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
-      { agentId: string; memory: DynamicArgument<MastraMemory, any> } | undefined;
+      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
+      | undefined;
     return inherited?.agentId === this.id
       ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
       : undefined;
@@ -3471,7 +3473,8 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    AgentInstructions | Promise<AgentInstructions> {
+    | AgentInstructions
+    | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = resolveDynamicArgument(this.#instructions, {
         requestContext,
@@ -3608,7 +3611,9 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
+    | Record<string, unknown>
+    | undefined
+    | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -3759,7 +3764,8 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    PublicAgentExecutionOptions<TOutput> | Promise<PublicAgentExecutionOptions<TOutput>> {
+    | PublicAgentExecutionOptions<TOutput>
+    | Promise<PublicAgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3802,7 +3808,8 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    NetworkOptions | Promise<NetworkOptions> {
+    | NetworkOptions
+    | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -10334,7 +10341,8 @@ export class Agent<
     resourceId: string;
     threadId: string;
     streamOptions?:
-      AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      | AgentExecutionOptions<OUTPUT>
+      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to
