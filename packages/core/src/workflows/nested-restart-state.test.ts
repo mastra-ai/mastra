@@ -104,10 +104,9 @@ describe('nested workflow restart state', () => {
     }
   });
 
-  // A nested run stored as `pending` never ran a step, so the restart starts it with run.start().
-  // This used to go through the pending-with-input branch of createRestartExecutionParams (#16520),
-  // which the default engine no longer reaches for nested runs.
-  it('starts a nested run that only saved its pending snapshot, with the parent state', async () => {
+  // A nested run stored as `pending` is restarted from its first step through the pending-with-input
+  // branch of createRestartExecutionParams (#16520), so its onStart doesn't run again.
+  it('keeps the parent state when the nested run restarts before its first step', async () => {
     const storage1 = new MockStore();
     const store1 = (await storage1.getStore('workflows'))!;
     let pendingNested: unknown;
@@ -264,7 +263,7 @@ describe.each([1, 2] as const)('restart when the nested run was never saved (sto
     });
 
   /** `parent`: prep, then `nested` (first, second), then read-state. `first` logs the input it got. */
-  function buildSequential(nestedOptions?: Pick<WorkflowOptions, 'shouldPersistSnapshot'>): Built {
+  function buildSequential(nestedOptions?: Pick<WorkflowOptions, 'shouldPersistSnapshot' | 'onStart'>): Built {
     const calls: Record<string, number> = {};
     const logStep = (id: string) =>
       createStep({
@@ -304,8 +303,11 @@ describe.each([1, 2] as const)('restart when the nested run was never saved (sto
     return { workflows: { parent, nested }, calls };
   }
 
-  /** `parent`: prep, then `nested-a` and `nested-b` in parallel, each setting its own state key. */
-  function buildParallel(): Built {
+  /**
+   * `parent`: prep, then `nested-a` and `nested-b` in parallel, each setting its own state key.
+   * `slowArm` finishes last, so it hands back its state after the other arm did.
+   */
+  function buildParallel(slowArm?: 'a' | 'b'): Built {
     const calls: Record<string, number> = {};
     const arm = (key: 'a' | 'b') =>
       createWorkflow({ id: `nested-${key}`, inputSchema: z.any(), outputSchema: z.any(), stateSchema: armState })
@@ -317,6 +319,7 @@ describe.each([1, 2] as const)('restart when the nested run was never saved (sto
             stateSchema: armState,
             execute: async ({ inputData, getState, setState }) => {
               calls[key] = (calls[key] ?? 0) + 1;
+              if (key === slowArm) await new Promise(resolve => setTimeout(resolve, 50));
               const state = await getState();
               // Its own key, and an entry in the list both arms append to.
               const entry = `${key}:${JSON.stringify(inputData)}`;
@@ -423,6 +426,54 @@ describe.each([1, 2] as const)('restart when the nested run was never saved (sto
     },
   );
 
+  it("runs the nested workflow's onStart once when the nested run was never saved", async () => {
+    let onStartCalls = 0;
+    const options: Pick<WorkflowOptions, 'onStart'> = { onStart: () => void onStartCalls++ };
+    const { storage, runId, revived } = await crashAtNestedWrite(buildSequential(options), { n: 1 });
+    await expectNestedStepRunningWithoutNestedRun(storage, runId);
+    expect(onStartCalls).toBe(0);
+
+    const built = buildSequential(options);
+    const result = await restart(built, storage, runId, revived);
+
+    expect(result.status).toBe('success');
+    expect(result.status === 'success' && result.result).toEqual({ log: ['parent', 'first:{"n":1}', 'second'] });
+    expect(onStartCalls).toBe(1);
+    expect(built.calls).toEqual({ first: 1, second: 1 });
+  });
+
+  // The nested run saved its pending snapshot and its onStart accepted it, then the process died
+  // before the nested run's first step. onStart already ran, so the restart must not call it again:
+  // a gate such as a quota check would reject the recovery.
+  it.each([[{ n: 1 }], [null], [0], [false], [''], [undefined]])(
+    'does not call onStart again for a nested run it already accepted, with input %j',
+    async value => {
+      let accepted = 0;
+      const options: Pick<WorkflowOptions, 'onStart'> = {
+        onStart: () => {
+          if (++accepted > 1) throw new Error('quota exceeded');
+        },
+      };
+      const { storage, runId, revived } = await crashAtNestedWrite(
+        buildSequential(options),
+        value,
+        args => args.workflowName === 'parent' || (args.snapshot ?? args.header)?.status === 'pending',
+      );
+      expect((await loadStored(storage.stores.workflows!, version, 'nested', runId))?.status).toBe('pending');
+      expect(accepted).toBe(1);
+
+      const built = buildSequential(options);
+      const result = await restart(built, storage, runId, revived);
+
+      expect(result.status).toBe('success');
+      expect(result.status === 'success' && result.result).toEqual({
+        log: ['parent', `first:${JSON.stringify(value) ?? 'undefined'}`, 'second'],
+      });
+      expect(accepted).toBe(1);
+      expect(built.calls).toEqual({ first: 1, second: 1 });
+    },
+  );
+
   it('runs a nested workflow that does not save pending snapshots', async () => {
     const options: Pick<WorkflowOptions, 'shouldPersistSnapshot'> = {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'pending',
@@ -485,32 +536,36 @@ describe.each([1, 2] as const)('restart when the nested run was never saved (sto
     expect(built.calls).toEqual({ first: 1, second: 1 });
   });
 
-  it('keeps the state of both parallel arms when one nested run was saved and the other was not', async () => {
-    // As in the soak's parallel trace: nested-a saved its pending snapshot, nested-b never did.
-    const { storage, runId, revived } = await crashAtNestedWrite(
-      buildParallel(),
-      { n: 1 },
-      args =>
-        args.workflowName === 'parent' ||
-        (args.workflowName === 'nested-a' && (args.snapshot ?? args.header)?.status === 'pending'),
-    );
-    const store = storage.stores.workflows!;
-    expect((await loadStored(store, version, 'nested-a', runId))?.status).toBe('pending');
-    expect(await loadStored(store, version, 'nested-b', runId)).toBeNull();
+  it.each(['a', 'b'] as const)(
+    'keeps the state of both parallel arms when one nested run was saved and the other was not (arm %s last)',
+    async slowArm => {
+      // As in the soak's parallel trace: nested-a saved its pending snapshot, nested-b never did.
+      // nested-a is restarted and nested-b is started; each order of their hand-backs must keep both.
+      const { storage, runId, revived } = await crashAtNestedWrite(
+        buildParallel(),
+        { n: 1 },
+        args =>
+          args.workflowName === 'parent' ||
+          (args.workflowName === 'nested-a' && (args.snapshot ?? args.header)?.status === 'pending'),
+      );
+      const store = storage.stores.workflows!;
+      expect((await loadStored(store, version, 'nested-a', runId))?.status).toBe('pending');
+      expect(await loadStored(store, version, 'nested-b', runId)).toBeNull();
 
-    const built = buildParallel();
-    const result = await restart(built, storage, runId, revived);
+      const built = buildParallel(slowArm);
+      const result = await restart(built, storage, runId, revived);
 
-    expectBothArms(result);
-    expect(built.calls).toEqual({ a: 1, b: 1 });
-  });
+      expectBothArms(result);
+      expect(built.calls).toEqual({ a: 1, b: 1 });
+    },
+  );
 
   it('keeps the state of both parallel arms when neither nested run was saved', async () => {
     const { storage, runId, revived } = await crashAtNestedWrite(buildParallel(), { n: 1 });
     expect(await loadStored(storage.stores.workflows!, version, 'nested-a', runId)).toBeNull();
     expect(await loadStored(storage.stores.workflows!, version, 'nested-b', runId)).toBeNull();
 
-    const built = buildParallel();
+    const built = buildParallel('a');
     const result = await restart(built, storage, runId, revived);
 
     expectBothArms(result);

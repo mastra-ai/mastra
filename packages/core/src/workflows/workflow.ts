@@ -2051,9 +2051,11 @@ export class Workflow<
     storageVersion: 1 | 2;
     /**
      * Set when execute() may start the nested run: on a start, and on a restart, which starts it
-     * when none is stored or the stored one never ran. Unset on a resume.
+     * when it wasn't stored before. Unset on a resume.
      */
     start?: { input: TInput; state: TState; inheritedState?: StateBase };
+    /** Set by createRun() when it saved the run's first snapshot: the run wasn't stored before. */
+    inserted?: boolean;
   };
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -3466,6 +3468,7 @@ export class Workflow<
         // The nested run starts from exactly that version of the parent's state.
         { stateBase: nestedRunStart?.inheritedState?.ref },
       );
+      if (nestedRun) nestedRun.inserted = true;
     }
 
     run.inheritedState = nestedRunStart?.inheritedState;
@@ -3626,8 +3629,7 @@ export class Workflow<
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     // A started nested run works on its own copy of the parent's state and hands back its changes
     // on top of the parent's state then, so changes the parent's other steps make meanwhile are kept.
-    // A restart prepares the same, because it starts the nested run when none is stored or the
-    // stored one never ran.
+    // A restart prepares the same, because it starts the nested run when it wasn't stored before.
     let startState = state;
     let startedFrom: Record<string, unknown> | undefined;
     if (!isResume) {
@@ -3646,6 +3648,8 @@ export class Workflow<
       storageVersion: parentState ? 2 : 1,
       start: !isResume ? { input: inputData, state: startState, inheritedState } : undefined,
     };
+    // createRun() takes it off the instance, and records on it whether it saved the run.
+    const nestedRunHandoff = this.#nestedRun;
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
@@ -3689,6 +3693,7 @@ export class Workflow<
     try {
       let restartNested = !!restart;
       let resumeNested = isResume;
+      let storedPending = false;
       if ((restart || isResume) && !isTimeTravel) {
         const nestedSnapshot = await run.runStorage.loadHeader();
         let nestedStatus = nestedSnapshot?.status;
@@ -3715,11 +3720,14 @@ export class Workflow<
         } else if (restart && nestedStatus === 'suspended') {
           restartNested = false;
           resumeNested = true;
-        } else if (restart && !isResume && (!nestedSnapshot || nestedStatus === 'pending')) {
+        } else if (restart && !isResume && (!nestedSnapshot || nestedRunHandoff.inserted)) {
           // The parent saves this step as running before the nested run saves anything, so a crash
-          // or a failed write in between leaves no nested run, or one that never started. Start it.
+          // or a failed write in between leaves no nested run. createRun() just saved it, or it
+          // doesn't save pending runs, so start it. A nested run that was already stored as
+          // `pending` keeps the restart: its onStart may have accepted it already, and must not run twice.
           restartNested = false;
         }
+        storedPending = nestedStatus === 'pending' && !nestedRunHandoff.inserted;
       }
 
       if (isTimeTravel) {
@@ -3742,6 +3750,9 @@ export class Workflow<
         // The changes since the drive started are the ones the parent hasn't received: from a fresh
         // start, none of them; from a resume, those after the suspension the parent took in.
         handBackBase = await run.runStorage.loadDriveStartState();
+        // A nested run still `pending` never ran a step, so every change it makes is new to the
+        // parent, relative to the state it was saved with. v1 records no drive start state.
+        if (!handBackBase && storedPending) handBackBase = toJsonState((await run.runStorage.loadFull())?.value);
         res = await run.restart({
           requestContext,
           actor,
