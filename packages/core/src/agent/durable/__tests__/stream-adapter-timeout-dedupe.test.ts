@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { MastraTimeoutError } from '../../../loop/timeout';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 async function errorChunksFor(runId: string, chunkError: Error, runError: Error) {
   const pubsub = new EventEmitterPubSub();
@@ -11,7 +11,7 @@ async function errorChunksFor(runId: string, chunkError: Error, runError: Error)
     runId,
     messageId: `msg-${runId}`,
     model: { modelId: 'test', provider: 'test', version: 'v3' },
-  }) as DurableAgentStreamResult<any>;
+  }) as DurableStreamAdapterResult<any>;
   await ready;
 
   await emitChunkEvent(pubsub, runId, { type: 'start', runId, from: 'AGENT', payload: {} } as any);

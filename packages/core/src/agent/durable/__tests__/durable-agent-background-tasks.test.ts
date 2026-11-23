@@ -18,8 +18,8 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { DurableAgent } from '../durable-agent';
-import type { DurableAgentStreamOptions } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import type { DurableAgentStreamOptions } from '../types';
 
 // ============================================================================
 // Helpers

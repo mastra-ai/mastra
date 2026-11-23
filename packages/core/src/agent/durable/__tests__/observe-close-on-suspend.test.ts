@@ -33,7 +33,7 @@ import type { AgentStreamEvent } from '../../streams/types';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
 import { createDurableAgentStream } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -266,7 +266,7 @@ describe('createDurableAgentStream attachedAtLogIndex', () => {
       closeOnSuspend: true,
       attachedAtLogIndex: () => attachedAt,
       onSuspended,
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
     let closed = false;
     const done = (async () => {
       for await (const _chunk of stream.output.fullStream) {
