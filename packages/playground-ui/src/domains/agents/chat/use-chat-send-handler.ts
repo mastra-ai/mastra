@@ -172,19 +172,7 @@ export const useChatSendHandler = ({
       modelContextRef.current.delete(sourceId);
     }
   }, []);
-  const sendDepsRef = useRef<SendDeps>({
-    requestContext,
-    agentVersionId,
-    threadId,
-    modelSettingsArgs,
-    model,
-    chatWithNetwork,
-    chatWithGenerate,
-    maxSteps,
-    isOMEnabled,
-    tracingOptions,
-  });
-  sendDepsRef.current = {
+  const deps: SendDeps = {
     requestContext,
     agentVersionId,
     threadId,
@@ -196,6 +184,7 @@ export const useChatSendHandler = ({
     isOMEnabled,
     tracingOptions,
   };
+  const sendDepsRef = useRef(deps);
 
   // Force an immediate refetch of the memory timeline panel (playground-ui
   // ['memory', ...] keys), scoped to the given thread, so the panel shows live
@@ -276,7 +265,6 @@ export const useChatSendHandler = ({
     attachments = [],
     requestContext: turnContext,
   }: ChatSendArgs): Promise<boolean> => {
-    const deps = sendDepsRef.current;
     if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return false;
 
     setStreamErrors([]);
@@ -398,6 +386,7 @@ export const useChatSendHandler = ({
 
   const latestSendTurn = useRef(sendTurn);
   useLayoutEffect(() => {
+    sendDepsRef.current = deps;
     latestSendTurn.current = sendTurn;
   });
   const send = useCallback((args: ChatSendArgs) => latestSendTurn.current(args), []);
