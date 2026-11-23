@@ -96,7 +96,11 @@ export default defineConfig({
         test: {
           name: 'unit:packages/core:durable-other-storage-version',
           environment: 'node',
-          include: ['src/agent/durable/**/*.test.ts'],
+          // The background lifecycle scenarios drive DurableAgent through the durable and evented engines.
+          include: [
+            'src/agent/durable/**/*.test.ts',
+            'src/loop/test-utils/aimock/scenarios/background-task-lifecycle.scenario.test.ts',
+          ],
           exclude: ['src/**/*.e2e.test.ts'],
           setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,

@@ -891,6 +891,9 @@ export function createDurableToolCallStep() {
       let transcript = messageList ? undefined : await readTranscript();
       const contextMessageList = messageList ?? transcript;
       let persistMessageList = messageList ?? resumeMessageList;
+      // An unsaved response is this turn's message. Recorded now: a later save drains the response
+      // view, and a background task can suspend after the run's stored transcript is gone.
+      const responseInvocationId = [...(persistMessageList?.get.response.db() ?? [])].reverse().find(hasInvocation)?.id;
 
       const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) => {
         const authorizationRequestContext =
@@ -986,13 +989,18 @@ export function createDurableToolCallStep() {
         ) {
           return;
         }
-        // The LLM step's transcript identifies this turn's message; a tool call id alone may recur in older turns.
-        if (!transcript) {
-          const read = await readForRecovery(readTranscript);
-          if (!read) return;
-          transcript = read.value;
+        // This turn's message: the response recorded at step start, else the one in the LLM step's
+        // transcript. A tool call id alone may recur in older turns.
+        let current =
+          responseInvocationId && persistMessageList?.get.all.db().find(message => message.id === responseInvocationId);
+        if (!current) {
+          if (!transcript) {
+            const read = await readForRecovery(readTranscript);
+            if (!read) return;
+            transcript = read.value;
+          }
+          current = [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
         }
-        const current = [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
         if (!current) return;
         const recalled = await recallSaved(memory, state.threadId, state.resourceId, current.id);
         if (!recalled) return;
