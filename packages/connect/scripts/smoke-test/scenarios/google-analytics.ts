@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, refusedByPlatform, runReadBatch } from '../scenario.js';
 
 /**
  * Deep Google Analytics scenario. GA4's write APIs (create_property,
@@ -36,7 +36,7 @@ export const googleAnalyticsScenario: Scenario = {
         steps.push(makeStep(name, toolId, 'pass'));
       } catch (error) {
         const msg = errorMessage(error);
-        const expected = acceptable.test(msg);
+        const expected = acceptable.test(msg) && !refusedByPlatform(msg);
         steps.push(makeStep(name, toolId, expected ? 'pass' : 'fail', expected ? `expected error: ${msg}` : msg));
       }
     };
@@ -46,8 +46,10 @@ export const googleAnalyticsScenario: Scenario = {
     // properties/0 and the 4xx is accepted as routing proof.
     const realProperty = process.env.MASTRA_SMOKE_GA_PROPERTY_ID;
     const property = realProperty ?? 'properties/0';
+    // get_metadata takes the bare numeric id; "0" returns the universal metadata every property shares.
+    const propertyId = realProperty?.replace(/^properties\//, '') ?? '0';
     const reads: Array<[string, string, Record<string, unknown>]> = [
-      ['get metadata', 'google_analytics_get_metadata', { property }],
+      ['get metadata', 'google_analytics_get_metadata', { propertyId }],
       [
         'run report',
         'google_analytics_run_report',
@@ -90,10 +92,10 @@ export const googleAnalyticsScenario: Scenario = {
       displayName: `smoke ${runId} (renamed)`,
     });
     await probe('create data stream', 'google_analytics_create_data_stream', {
-      propertyId: '0',
-      displayName: `smoke ${runId}`,
+      property_id: '0',
+      display_name: `smoke ${runId}`,
       type: 'WEB_DATA_STREAM',
-      webStreamData: { default_uri: 'https://example.com' },
+      web_stream_data: { default_uri: 'https://example.com' },
     });
     await probe('update data stream', 'google_analytics_update_data_stream', {
       propertyId: '0',
