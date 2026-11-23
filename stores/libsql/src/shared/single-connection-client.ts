@@ -18,18 +18,36 @@ export function isSingleConnectionDatabase({ url, syncUrl }: { url: string; sync
  * transactions rather than failing with `TRANSACTION_ACTIVE`.
  *
  * `transaction()` takes the gate and releases it when the transaction commits,
- * rolls back, or closes. `execute`, `batch`, `executeMultiple`, `migrate`, and `sync`
- * wait for the gate to be free before running but do not hold it — the driver
- * executes them synchronously on the connection, so they cannot interleave
- * with each other. Every other member passes through untouched.
+ * rolls back, or closes. Closing the client settles the transaction under it without
+ * any of those calls reaching the proxy, so a call that waits also frees a gate
+ * whose transaction the driver settled itself. `execute`, `batch`, `executeMultiple`,
+ * `migrate`, and `sync` wait for the gate to be free before running but do not
+ * hold it — the driver executes them synchronously on the connection, so they
+ * cannot interleave with each other. Every other member passes through untouched.
  *
  * Callers must not issue client calls from inside their own open transaction
  * (use `tx.execute`); such a call would wait for the transaction it is part of.
  */
 export function gateSingleConnectionClient(client: Client): Client {
   let gate: Promise<void> = Promise.resolve();
+  /**
+   * The transaction holding the gate, from the moment it opens. A transaction the driver
+   * settled holds no connection, so it must not keep the gate.
+   */
+  let holder: { tx: Transaction; release: () => void } | null = null;
 
-  const waitForGate = <T>(run: () => Promise<T>): Promise<T> => gate.then(run, run);
+  const releaseHolder = (): void => {
+    const held = holder;
+    holder = null;
+    held?.release();
+  };
+
+  const waitForGate = <T>(run: () => Promise<T>): Promise<T> => {
+    // Closing the client settles the transaction under it. `commit`, `rollback` and `close`
+    // then never reach the proxy, and waiting on that transaction would never return.
+    if (holder?.tx.closed) releaseHolder();
+    return gate.then(run, run);
+  };
 
   const transaction = async (mode?: TransactionMode): Promise<Transaction> => {
     let release!: () => void;
@@ -53,6 +71,7 @@ export function gateSingleConnectionClient(client: Client): Client {
       release();
       throw error;
     }
+    holder = { tx, release };
 
     return new Proxy(tx, {
       get(target, prop) {
@@ -61,7 +80,7 @@ export function gateSingleConnectionClient(client: Client): Client {
             try {
               await (target[prop] as () => Promise<void>).call(target);
             } finally {
-              release();
+              if (holder?.tx === target) releaseHolder();
             }
           };
         }
@@ -70,7 +89,7 @@ export function gateSingleConnectionClient(client: Client): Client {
             try {
               target.close();
             } finally {
-              release();
+              if (holder?.tx === target) releaseHolder();
             }
           };
         }

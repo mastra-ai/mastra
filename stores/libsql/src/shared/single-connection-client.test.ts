@@ -95,6 +95,20 @@ describe('gateSingleConnectionClient', () => {
     client.close();
   });
 
+  it('releases the gate when the driver settles the transaction on its own', async () => {
+    const client = await setup();
+
+    const tx = await client.transaction('write');
+    await tx.execute({ sql: 'INSERT INTO t (v) VALUES (?)', args: ['never-committed'] });
+    // Closing the client settles the transaction under it, so neither `commit`, `rollback`
+    // nor `close` reaches the proxy and only the driver knows the transaction has ended.
+    client.close();
+    expect(tx.closed).toBe(true);
+
+    // A gate the settled transaction still held would hang here instead of reaching the driver.
+    await expect(client.execute('SELECT COUNT(*) AS n FROM t')).rejects.toThrow('The client is closed');
+  });
+
   it('queues batch and executeMultiple behind an open transaction too', async () => {
     const raw = createClient({ url: ':memory:' });
     const client = gateSingleConnectionClient(raw);
