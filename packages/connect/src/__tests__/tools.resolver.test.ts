@@ -646,6 +646,12 @@ describe('top-level filter and approval defaults', () => {
     expect(result['linear_get_issue']!.requireApproval).toBeFalsy();
   });
 
+  it('drops tools the top-level allowTools leaves out of a listed provider', async () => {
+    const { options } = installTwoProviders();
+    const tools = connect({ ...options, providers: ['linear'], allowTools: ['linear_get_issue'] });
+    expect(Object.keys(await tools())).toEqual(['linear_get_issue']);
+  });
+
   it('still loads unlisted providers when providers is a record', async () => {
     const { options } = installTwoProviders();
     const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_delete_issue'] } } });
