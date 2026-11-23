@@ -158,6 +158,7 @@ import { MaterializeError, SetupCommandError } from './integrations/github/sandb
 import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.js';
 import { requireGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
+import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -3009,6 +3010,33 @@ describe('GitHub session workspace preparation', () => {
           workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
         ).resolves.toBe(opened);
         expect(await toolCall(opened, member)).toBeUndefined();
+      });
+
+      it("gives the new owner a sandbox of their own once a takeover releases the old owner's", async () => {
+        mocks.vault = true;
+        const registry = new FactoryWorkspaceRegistry();
+        const { workspace, github } = await createLocalFactory('mastracode-web-local-vault-takeover-', registry);
+        addProject();
+        const row = addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+        await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) });
+        expect(mocks.createSandbox).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 'owner-1' }));
+        expect(row.sandboxId).toBe('vm-session-a');
+
+        // What the owner-transfer route does on a vault host: move the row, then release the sandbox.
+        row.userId = 'member-2';
+        await new SessionRetirementCoordinator({
+          invalidateSession: sessionId => registry.invalidateSession(sessionId),
+        }).recreateSessionSandbox({
+          sourceControl: github.sourceControlStorage as never,
+          orgId: 'org-1',
+          sessionId: 'session-a',
+        });
+
+        await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
+        const created = mocks.createSandbox.mock.calls[1]![0] as { userId?: string; sandboxId?: string };
+        expect(created.userId).toBe('member-2');
+        expect(created.sandboxId).toBeUndefined();
       });
     });
   });
