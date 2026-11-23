@@ -310,10 +310,13 @@ describe('Connect provider docs metadata matches the published catalog', () => {
       'attio-mcp',
       'canva-mcp',
       'clay-mcp',
+      'cloudflare-mcp',
+      'digits-mcp',
       'neon-mcp',
       'render-mcp',
       'robinhood-mcp',
       'sanity-mcp',
+      'sentry-mcp',
     ]);
     for (const id of Object.keys(MCP_PROVIDERS)) {
       expect(id.endsWith('-mcp')).toBe(true);

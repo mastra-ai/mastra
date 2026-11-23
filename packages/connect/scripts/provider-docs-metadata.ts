@@ -44,12 +44,11 @@ export interface ProviderDocs {
   emit?: boolean;
   /** Security concern or destructive consequence shown as a warning in the provider's page or partial. */
   warning?: string;
-}
-
-export interface ToolProviderDocs extends ProviderDocs {
-  /** Account or capability limit shown in the reference and in the provider's page or partial. */
+  /** Account or capability limit shown in the provider's page or partial, and for toolsets in the reference. */
   note?: string;
 }
+
+export type ToolProviderDocs = ProviderDocs;
 
 export interface McpProviderDocs extends ProviderDocs {
   /** The provider's own documentation for its hosted MCP server. */
@@ -368,6 +367,31 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     mcpDocsUrl: 'https://university.clay.com/docs/mcp-settings',
     mcpDocsLabel: 'MCP in Clay',
   },
+  'cloudflare-mcp': {
+    name: 'Cloudflare Workers',
+    logo: { slug: 'cloudflare' },
+    canonicalPage: 'other/cloudflare-workers.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary: 'call the tools your MCP server exposes',
+    emit: true,
+    note: 'This provider connects to an MCP server you deploy on Cloudflare Workers, not to the Cloudflare API. When you connect, enter the full URL of your Worker, such as `https://my-mcp.my-account.workers.dev/mcp`. The Worker must use OAuth, as the Cloudflare guide for remote MCP servers sets up.',
+    mcpDocsUrl: 'https://developers.cloudflare.com/agents/guides/remote-mcp-server/',
+    mcpDocsLabel: 'Build a remote MCP server',
+  },
+  'digits-mcp': {
+    name: 'Digits',
+    logo: { src: 'https://app.nango.dev/images/template-logos/digits.svg' },
+    canonicalPage: 'other/digits.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary: 'query transactions, financial statements, and ledger data, and update accounting records',
+    emit: true,
+    warning:
+      'Digits tools can create, update, and delete records in your general ledger. Require approval for write tools with `requireApproval` so a person confirms each change before it runs. See [MCP providers](/reference/connect/tools#mcp-providers).',
+    mcpDocsUrl: 'https://help.digits.com/business-connections/digits-mcp',
+    mcpDocsLabel: 'Digits MCP',
+  },
   'neon-mcp': {
     name: 'Neon',
     logo: { slug: 'neon' },
@@ -412,6 +436,16 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     emit: true,
     mcpDocsUrl: 'https://www.sanity.io/docs/ai/mcp-server',
     mcpDocsLabel: 'Sanity MCP server',
+  },
+  'sentry-mcp': {
+    name: 'Sentry',
+    logo: { slug: 'sentry' },
+    canonicalPage: 'observability/sentry.mdx',
+    ownership: 'handwritten-with-partial',
+    summary: 'search issues and events, read stack traces and traces, and manage issues, projects, and teams',
+    emit: true,
+    mcpDocsUrl: 'https://docs.sentry.io/product/sentry-mcp/',
+    mcpDocsLabel: 'Sentry MCP server',
   },
 };
 
