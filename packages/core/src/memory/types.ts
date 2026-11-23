@@ -982,13 +982,17 @@ export interface ObservationalMemoryOptions {
    * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
    * - `{ instructions: '...' }` — appends application-specific recall guidance after
    *   Mastra's built-in retrieval instructions (never replaces them)
+   * - `{ searchTimeoutMs: 60_000 }` — how long one recall search may take, in milliseconds, before recall
+   *   stops waiting and tells the agent to browse messages instead (default `30000`)
    *
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+  retrieval?:
+    | boolean
+    | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string; searchTimeoutMs?: number };
 }
 
 /**
@@ -1516,7 +1520,9 @@ export type SerializedObservationalMemoryConfig = {
   /**
    * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
+  retrieval?:
+    | boolean
+    | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string; searchTimeoutMs?: number };
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;
