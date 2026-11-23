@@ -22,6 +22,24 @@ describe('trackSetup', () => {
   });
 });
 
+describe('trackSetup deadline', () => {
+  it('outlasts the command limit counted from dispatch, even after a slow mark write', async () => {
+    let mark: { deadline: Date } | undefined;
+    const storage = {
+      setSetupInProgress: vi.fn(async ({ setup }: { setup: { deadline: Date } }) => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        mark = setup;
+      }),
+      clearSetupInProgress: vi.fn(async () => {}),
+    };
+    let dispatchedAt = 0;
+    await trackSetup(storage, 'session-1', 'acme/web', 60_000, async () => {
+      dispatchedAt = Date.now();
+    });
+    expect(mark!.deadline.getTime()).toBeGreaterThanOrEqual(dispatchedAt + 60_000);
+  });
+});
+
 describe('describeSetupInProgress', () => {
   it("names the environment's own command without calling it a repository", () => {
     const startedAt = new Date('2026-11-23T17:00:00Z');

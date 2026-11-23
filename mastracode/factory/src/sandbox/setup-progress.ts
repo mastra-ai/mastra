@@ -17,6 +17,13 @@ export const WORKSPACE_SETUP_TARGET = 'workspace';
 
 type SetupStorage = Pick<SourceControlStorageHandle['sessions'], 'setSetupInProgress' | 'clearSetupInProgress'>;
 
+/**
+ * Added to the command's own limit: writing the mark happens before the
+ * command starts, so without it the mark could lapse while the command can
+ * still run, and recreating would throw a live setup away.
+ */
+export const SETUP_MARK_GRACE_MS = 60_000;
+
 function warnMarkFailed(action: string, sessionId: string, error: unknown): void {
   console.warn(`[Mastra Factory] Could not ${action} the setup-in-progress mark`, {
     sessionId,
@@ -26,7 +33,8 @@ function warnMarkFailed(action: string, sessionId: string, error: unknown): void
 
 /**
  * Run a setup command, recording it on the session as in progress until it
- * settles. The mark only informs the agent, so failing to write it never
+ * settles. `limitMs` is the command's own timeout; call this right before
+ * dispatching it. The mark only informs the agent, so failing to write it never
  * stops setup, and clearing it leaves a later setup's mark alone.
  */
 export async function trackSetup<T>(
@@ -38,7 +46,10 @@ export async function trackSetup<T>(
 ): Promise<T> {
   const startedAt = new Date();
   await storage
-    .setSetupInProgress({ sessionId, setup: { target, startedAt, deadline: new Date(startedAt.getTime() + limitMs) } })
+    .setSetupInProgress({
+      sessionId,
+      setup: { target, startedAt, deadline: new Date(startedAt.getTime() + limitMs + SETUP_MARK_GRACE_MS) },
+    })
     .catch((error: unknown) => warnMarkFailed('write', sessionId, error));
   try {
     return await run();

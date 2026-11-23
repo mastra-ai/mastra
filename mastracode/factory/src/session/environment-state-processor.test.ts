@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SetupInProgress } from '../sandbox/setup-progress.js';
 import {
@@ -117,6 +117,23 @@ describe('FactoryEnvironmentStateProcessor', () => {
     const ended = await processor.computeStateSignal(inWindow(running));
     expect(ended?.contents).toBe('No setup command is running in the sandbox now.');
     await expect(processor.computeStateSignal(inWindow(ended))).resolves.toBeUndefined();
+  });
+
+  it('keeps the snapshot in the window when the session read fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const processor = new FactoryEnvironmentStateProcessor({
+      getSession: async () => {
+        throw new Error('database unavailable');
+      },
+    });
+    await expect(
+      processor.computeStateSignal(
+        stateArgs(requestContext(), {
+          lastSnapshot: { metadata: { state: { cacheKey: 'environment:none:setup:acme/mastra:1' } } },
+          contextWindow: { hasSnapshot: true },
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it('tells a session with no booted environment yet that setup is running', async () => {

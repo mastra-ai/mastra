@@ -149,7 +149,19 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     const sessionId = sessionIdFromContext(args.requestContext);
     if (!sessionId) return;
     const state = environments.get(sessionId)?.state;
-    const setup = runningSetup(await this.options.getSession?.(sessionId));
+    let session: Pick<SourceControlSession, 'setupInProgress'> | null | undefined;
+    try {
+      session = await this.options.getSession?.(sessionId);
+    } catch (error) {
+      // The signal is optional: a failed read keeps the snapshot already in
+      // the window rather than failing the step or declaring setup ended.
+      console.warn('[Mastra Factory] Could not read the session for its environment signal', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    const setup = runningSetup(session);
     const untrusted = isUntrustedCheckout(args.requestContext);
     const cacheKey =
       (state ? environmentCacheKey(state) : 'environment:none') +
