@@ -222,6 +222,34 @@ describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)'
       resolvePending(false);
     }
   });
+
+  it('still settles cleanly if logger.warn throws on post-budget timeout or late rejection', async () => {
+    vi.useFakeTimers();
+    try {
+      let rejectPending!: (error: Error) => void;
+      const pending = new Promise<boolean>((_, reject) => {
+        rejectPending = reject;
+      });
+      const decisionPromise = decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [...stepBudget(), () => pending],
+          logger: {
+            warn: () => {
+              throw new Error('logger broken');
+            },
+          } as any,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await decisionPromise).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+      rejectPending(new Error('late rejection'));
+      await Promise.resolve();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 /**

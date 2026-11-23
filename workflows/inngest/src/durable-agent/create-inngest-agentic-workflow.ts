@@ -586,38 +586,94 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // Hand stopWhen the full step content stream.steps reports, not the
           // compacted snapshot records, with AI SDK tool-result parts as toolResults.
           const steps = durableStopConditionSteps(state.accumulatedSteps) as any;
-          const conditions = await Promise.all(
-            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
-              try {
-                return await condition({ steps });
-              } catch (error) {
-                const originalError = getErrorFromUnknown(error);
-                // On the last allowed step the run stops either way; the condition only decides
-                // whether the caller or the budget gets the credit. Its failure must not throw away
-                // the step that already completed, so the budget takes the credit.
-                if (!underMaxSteps) {
-                  mastra
-                    ?.getLogger?.()
-                    ?.warn('A stopWhen condition failed after the step budget ran out; the run stops on maxSteps', {
-                      runId: state.runId,
-                      error: originalError,
-                    });
-                  return false;
+          const conditionList = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
+          if (underMaxSteps) {
+            const conditions = await Promise.all(
+              conditionList.map(async condition => {
+                try {
+                  return await condition({ steps });
+                } catch (error) {
+                  const originalError = getErrorFromUnknown(error);
+                  throw new MastraError(
+                    {
+                      id: DURABLE_STOP_WHEN_ERROR_ID,
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.USER,
+                      text: originalError.message,
+                      details: { name: originalError.name, message: originalError.message },
+                    },
+                    originalError,
+                  );
                 }
-                throw new MastraError(
-                  {
-                    id: DURABLE_STOP_WHEN_ERROR_ID,
-                    domain: ErrorDomain.AGENT,
-                    category: ErrorCategory.USER,
-                    text: originalError.message,
-                    details: { name: originalError.name, message: originalError.message },
-                  },
-                  originalError,
-                );
-              }
-            }),
-          );
-          return conditions.some(Boolean);
+              }),
+            );
+            return conditions.some(Boolean);
+          }
+
+          if (conditionList.length === 0) {
+            return false;
+          }
+
+          // On the last allowed step the run stops either way; conditions only decide
+          // whether the caller or the budget gets the credit. Bound evaluation so a
+          // throwing or pending predicate cannot block terminal finish delivery.
+          const POST_BUDGET_STOP_WHEN_TIMEOUT_MS = 250;
+          const safeWarn = (message: string, details?: Record<string, unknown>) => {
+            try {
+              mastra?.getLogger?.()?.warn(message, details);
+            } catch {
+              // A failing logger must never block terminal delivery or leak an unhandled rejection.
+            }
+          };
+          let loggedRejection = false;
+          const logPostBudgetFailure = (reason: unknown) => {
+            if (loggedRejection) return;
+            loggedRejection = true;
+            safeWarn('A stopWhen condition failed after the step budget ran out; ignoring its result', {
+              runId: state.runId,
+              error: getErrorFromUnknown(reason),
+            });
+          };
+
+          return await new Promise<boolean>(resolve => {
+            let settled = false;
+            let remaining = conditionList.length;
+            const finish = (matched: boolean) => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeout);
+              resolve(matched);
+            };
+
+            const timeout = setTimeout(() => {
+              safeWarn(
+                'A stopWhen condition did not settle after the step budget ran out; attributing stop to maxSteps',
+                { runId: state.runId },
+              );
+              finish(false);
+            }, POST_BUDGET_STOP_WHEN_TIMEOUT_MS);
+
+            for (const condition of conditionList) {
+              const evalPromise = (async () => Boolean(await condition({ steps })))();
+              void evalPromise.then(
+                matched => {
+                  remaining -= 1;
+                  if (matched) {
+                    finish(true);
+                  } else if (remaining === 0) {
+                    finish(false);
+                  }
+                },
+                reason => {
+                  logPostBudgetFailure(reason);
+                  remaining -= 1;
+                  if (remaining === 0) {
+                    finish(false);
+                  }
+                },
+              );
+            }
+          });
         });
 
         // stopWhen also runs on the last allowed step: the run stops there either way, but a

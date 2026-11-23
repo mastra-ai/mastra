@@ -84,11 +84,19 @@ async function evaluateStopWhen({
     return { matched: budgetMatched, callerConditionMatched: false };
   }
 
+  const safeWarn = (message: string, details?: Record<string, unknown>) => {
+    try {
+      logger?.warn(message, details);
+    } catch {
+      // A failing logger must never block terminal delivery or leak an unhandled rejection.
+    }
+  };
+
   let loggedRejection = false;
   const logPostBudgetFailure = (reason: unknown) => {
     if (loggedRejection) return;
     loggedRejection = true;
-    logger?.warn('A stopWhen condition failed after the step budget ran out; ignoring its result', {
+    safeWarn('A stopWhen condition failed after the step budget ran out; ignoring its result', {
       error: reason,
     });
   };
@@ -104,10 +112,9 @@ async function evaluateStopWhen({
     };
 
     const timeout = setTimeout(() => {
-      logger?.warn('A stopWhen condition did not settle after the step budget ran out; attributing stop to maxSteps');
+      safeWarn('A stopWhen condition did not settle after the step budget ran out; attributing stop to maxSteps');
       finish(false);
     }, POST_BUDGET_STOP_WHEN_TIMEOUT_MS);
-    timeout.unref?.();
 
     for (const condition of callerConditions) {
       const evalPromise = (async () => Boolean(await condition({ steps: stepsForConditions })))();
