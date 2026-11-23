@@ -37,18 +37,6 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "alibaba/qwen3.7-plus": [
       {
         "type": "toggle"
@@ -65,7 +53,7 @@
         "type": "budget_tokens"
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "moonshotai/kimi-k3": [
       {
         "type": "toggle"
       },
@@ -83,10 +71,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshotai/kimi-k3": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

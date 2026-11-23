@@ -141,7 +141,6 @@ export default defineConfig({
   define: {
     __MASTRA_VERSION__: JSON.stringify(pkg.version),
   },
-  sourcemap: true,
   deps: {
     neverBundle: ['vite', 'vitest'],
     alwaysBundle: [

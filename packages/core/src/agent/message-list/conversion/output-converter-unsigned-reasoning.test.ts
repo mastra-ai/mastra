@@ -150,4 +150,29 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
       }),
     ]);
   });
+
+  it('keeps signed reasoning stored without text details (GRWTH-1919)', () => {
+    // Rows written by the current writer carry `details: [{ text: '' }]` and already survive
+    // the signed check on their own. This covers the stored shape that has no details at all
+    // (rows written before details were recorded): its text is empty too, so without the
+    // signature check the block is dropped and the signature is lost on the way to the provider.
+    const prompt = buildList({
+      type: 'reasoning' as const,
+      reasoning: '',
+      createdAt: 1_700_000_000_000,
+      providerMetadata: { anthropic: { signature: 'sig-empty' } },
+    }).get.all.aiV5.prompt();
+
+    const signed = prompt.flatMap(m =>
+      Array.isArray(m.content)
+        ? m.content.filter(p => p.type === 'reasoning' && (p as { providerOptions?: unknown }).providerOptions)
+        : [],
+    );
+    expect(signed).toContainEqual(
+      expect.objectContaining({
+        type: 'reasoning',
+        providerOptions: expect.objectContaining({ anthropic: expect.objectContaining({ signature: 'sig-empty' }) }),
+      }),
+    );
+  });
 });

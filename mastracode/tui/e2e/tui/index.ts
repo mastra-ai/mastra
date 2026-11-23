@@ -121,6 +121,7 @@ import { mcpReloadConfigScenario } from './mcp-reload-config.js';
 import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { mcpSkippedValidationScenario } from './mcp-skipped-validation.js';
+import { missingEmbedderHeadlessScenario, missingEmbedderTuiScenario } from './missing-embedder.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { modeSwitchAppliesPackModelScenario } from './mode-switch-applies-pack-model.js';
 import { modelSearchScenario } from './model-search.js';
@@ -397,6 +398,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
   'knowledge-settings': knowledgeSettingsScenario,
+  'missing-embedder-headless': missingEmbedderHeadlessScenario,
+  'missing-embedder-tui': missingEmbedderTuiScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
   'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,

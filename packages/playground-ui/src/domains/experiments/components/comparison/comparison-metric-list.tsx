@@ -1,3 +1,5 @@
+'use client';
+
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import { ScoreDelta } from './score-delta';

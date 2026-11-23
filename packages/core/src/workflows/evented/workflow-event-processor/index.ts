@@ -33,6 +33,7 @@ import {
   resolveRunFence,
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
+import type { RunFence } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -728,12 +729,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * The workflow's `pruneSnapshot` option, except on storage v2 runs, which skip it as on the
-   * default engine: their later steps load earlier results from storage, so pruning a stored
-   * result would change what those steps read.
+   * The workflow's `pruneSnapshot` option. Storage v2 runs prune only once they `finished`, and only
+   * for a workflow that sets `storageVersion: 2` itself, as on the default engine: until then their
+   * later steps load earlier results from storage, so pruning a stored result would change what
+   * those steps read.
    */
-  #pruneSnapshotOf(workflow: Workflow | undefined) {
-    return currentStorageVersion() === 2 ? undefined : workflow?.options?.pruneSnapshot;
+  #pruneSnapshotOf(workflow: Workflow | undefined, finished = false) {
+    if (currentStorageVersion() !== 2) return workflow?.options?.pruneSnapshot;
+    return finished && workflow?.options?.storageVersion === 2 ? workflow.options.pruneSnapshot : undefined;
   }
 
   /** Whether this run's step writes carry start/completion guards. */
@@ -755,14 +758,23 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflowId,
     runId,
     terminalHandoff = false,
+    finished = false,
+    fence,
   }: {
     workflow: Workflow | undefined;
     workflowId: string;
     runId: string;
     terminalHandoff?: boolean;
+    /** Set when the run finished (see `#pruneSnapshotOf`). */
+    finished?: boolean;
+    /** The ownership claim the write must still hold, so a stale delivery can't rewrite the run. */
+    fence?: RunFence;
   }): Promise<void> {
-    const pruneSnapshot = this.#pruneSnapshotOf(workflow);
+    const pruneSnapshot = this.#pruneSnapshotOf(workflow, finished);
     if (!pruneSnapshot && !terminalHandoff) return;
+    // A finished storage v2 run prunes exactly once: the hook's write replaces the results it read,
+    // so running it again (a redelivered `workflow.end`) would hand it its own output.
+    const pruneOnce = finished && !!pruneSnapshot && currentStorageVersion() === 2;
     let guarded = false;
     try {
       const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
@@ -771,6 +783,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       const runStorage = this.#runStorage(workflowId, runId);
       const snapshot = await runStorage.loadFull();
       if (!snapshot) return;
+      if (pruneOnce && snapshot.prunedAtSeq !== undefined) return;
       let pruned: WorkflowRunState;
       try {
         pruned = pruneSnapshot ? pruneSnapshot({ snapshot, workflowStatus: snapshot.status }) : snapshot;
@@ -778,6 +791,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
         return;
       }
+      // In the same write as the pruned results; a drive that re-runs the run writes fresh headers,
+      // clearing it, so its own finish prunes again.
+      if (pruneOnce) pruned = { ...pruned, prunedAtSeq: runStorage.storedState(snapshot)?.seq ?? snapshot.timestamp };
       if (terminalHandoff && guarded) {
         for (const result of Object.values(pruned.context)) {
           if (result?.metadata?.startedBy) {
@@ -785,7 +801,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           }
         }
       }
-      await runStorage.writeSnapshot(pruned, guarded ? undefined : await runStorage.loadResourceId());
+      await runStorage.writeSnapshot(pruned, guarded ? undefined : await runStorage.loadResourceId(), { fence });
     } catch (error) {
       // Guarded terminal writes retire occurrences before notifying the finish topic.
       if (terminalHandoff && guarded) throw error;
@@ -1511,13 +1527,20 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
-  private async assertCurrentRunFence(runId: string): Promise<void> {
+  /** Throws unless this execution still owns `runId`; returns the fence the run's writes should carry. */
+  private async assertCurrentRunFence(runId: string): Promise<RunFence | undefined> {
+    const fence = await this.currentRunFence(runId);
     const store = await this.mastra.getStorage()?.getStore('workflows');
-    if (!store) return;
-    const fence = resolveRunFence(store, undefined, runId);
-    if (fence && !matchesRunFence(await store.getRunOwnership({ runId: fence.runId }), fence)) {
+    if (fence && store && !matchesRunFence(await store.getRunOwnership({ runId: fence.runId }), fence)) {
       throw new RunFenceConflictError(fence, 'finalize workflow');
     }
+    return fence;
+  }
+
+  /** The claim this execution holds on `runId`, if the store fences runs at all. */
+  private async currentRunFence(runId: string): Promise<RunFence | undefined> {
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    return store ? resolveRunFence(store, undefined, runId) : undefined;
   }
 
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
@@ -1542,6 +1565,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       workflowId,
     } = args;
     const paused = endedPaused(args);
+    // Check ownership before pruning: a redelivered `workflow.end` that lost the run to a newer
+    // execution must not rewrite that execution's checkpoint.
+    const fence = await this.assertCurrentRunFence(runId);
 
     // workflow.end durably carries the full result, so the snapshot no longer
     // needs to retain the terminal step's unpruned continuation input.
@@ -1560,13 +1586,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         // Nested completion still has to transfer ownership to its parent loop.
         terminalHandoff: !parentWorkflow,
+        finished: true,
+        fence,
       });
     }
 
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
-    await this.assertCurrentRunFence(runId);
     this.endRunSpans(args, paused ? 'paused' : (args.prevResult?.status ?? 'pending'));
 
     // Clean up abort controller and parent-child tracking
@@ -1581,6 +1608,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     let loopFailure: RunFailure | undefined;
     if (parentWorkflow) {
+      // The prune above awaited storage and the user hook; an execution that lost the run during
+      // it had its checkpoint rejected by the store's fence, but nothing fences this publish.
+      // Re-check, so a superseded execution can't continue the parent with its stale result: the
+      // new owner's own end hands off.
+      await this.assertCurrentRunFence(runId);
       await this.#handNestedSuccessToParent({
         parentWorkflow,
         nestedRunId: runId,
@@ -1908,6 +1940,16 @@ export class WorkflowEventProcessor extends EventProcessor {
         activePaths: executionPath,
         activeStepsPath: activeStepsPath,
       });
+      // Storage v1 runs pruned each step result as it was written.
+      if (currentStorageVersion() === 2) {
+        await this.pruneAndRepersistSnapshot({
+          workflow,
+          workflowId,
+          runId,
+          finished: true,
+          fence: await this.currentRunFence(runId),
+        });
+      }
     }
 
     // handle nested workflow
@@ -3775,6 +3817,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResult.status = 'success';
       const updatedState = (stepResult as any).__state ?? currentState;
 
+      // A bail skips workflow.step.end (publishing it would advance the graph), so nothing else
+      // persists this leaf: write its completed result and state, or the stored run keeps the
+      // leaf 'running' and the finish prune, which reloads from storage, never sees its output.
+      await this.#runStorage(workflowId, runId).writeStepResult({
+        stepId: leafId,
+        result: stepResult,
+        requestContext: withoutAuthToken(requestContext),
+        state: updatedState,
+      });
+
       // A bail ends this run, so it doesn't pause it.
       await this.endWorkflow(
         {
@@ -4779,13 +4831,25 @@ export class WorkflowEventProcessor extends EventProcessor {
         if (currentStorageVersion() === 2 && newStepResults && Object.keys(newStepResults).length > 0) {
           // v2 returns only this step's result. A branch reads its siblings as of its own write, as
           // v1's write returns them: of two branches finishing together, exactly one sees both.
-          const siblings =
-            isParallelBranch && (rawStep?.type === 'parallel' || rawStep?.type === 'conditional')
-              ? await runStorage.loadSteps(rawStep.steps.filter(isSingleStepEntry).map(getSingleStepEntryId), {
-                  upToSeq: written!.seq,
-                })
-              : {};
+          let siblings: Record<string, StepResult<any, any, any, any>> = {};
+          let laterSiblings: string[] = [];
+          if (isParallelBranch && (rawStep?.type === 'parallel' || rawStep?.type === 'conditional')) {
+            const siblingIds = rawStep.steps
+              .filter(isSingleStepEntry)
+              .map(getSingleStepEntryId)
+              .filter(id => id !== stepId);
+            siblings = await runStorage.loadSteps(siblingIds, { upToSeq: written!.seq });
+            // A sibling missing as of this write but stored now wrote after it: that write replaced
+            // its older entries, and the sibling reads this branch's result as of its own write. It
+            // is unfinished here, not whatever stale copy this event carries. Only a carried copy
+            // past `running` could be mistaken for its result, so only those need the extra read.
+            const missing = siblingIds.filter(
+              id => !siblings[id] && stepResults[id] && stepResults[id].status !== 'running',
+            );
+            if (missing.length) laterSiblings = Object.keys(await runStorage.loadSteps(missing));
+          }
           newStepResults = { ...stepResults, ...siblings, ...newStepResults };
+          for (const id of laterSiblings) delete newStepResults[id];
         }
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;

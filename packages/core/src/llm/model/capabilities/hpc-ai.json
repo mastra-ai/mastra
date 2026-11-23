@@ -39,13 +39,18 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "moonshotai/kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -55,11 +60,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "moonshotai/kimi-k2.5": [
-      {
-        "type": "toggle"
       }
     ]
   }
