@@ -91,25 +91,16 @@
         "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
-    "moonshotai/kimi-k2.6": [
+    "minimaxai/minimax-m3.1-flash": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "toggle"
-      },
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3.5-super-vl-120b-a12b": [
@@ -117,7 +108,27 @@
         "type": "toggle"
       }
     ],
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": -1,
+        "max": 32768
+      }
+    ],
     "nvidia/nemotron-3.5-lightning-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/llama-3.1-nemotron-ultra-253b-v1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -133,24 +144,10 @@
         "max": 32768
       }
     ],
-    "nvidia/nemotron-3.5-content-safety": [
+    "deepseek-ai/deepseek-v4.1-flash": [
       {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": -1,
-        "max": 32768
-      }
-    ],
-    "nvidia/llama-3.1-nemotron-ultra-253b-v1": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "z-ai/glm-5.3-flash": [
@@ -182,16 +179,19 @@
         "type": "toggle"
       }
     ],
-    "openai/gpt-oss-20b": [
+    "moonshotai/kimi-k2.6": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimaxai/minimax-m3.1-flash": [
+    "moonshotai/kimi-k3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

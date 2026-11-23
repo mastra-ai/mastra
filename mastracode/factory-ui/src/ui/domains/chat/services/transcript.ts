@@ -472,6 +472,11 @@ function applyEvent(
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error': {
+      if (event.retryable) {
+        const attempt =
+          event.retryAttempt && event.maxRetries ? ` (attempt ${event.retryAttempt} of ${event.maxRetries})` : '';
+        return pushNotice(state, 'info', `Retrying request${attempt}.`);
+      }
       const error = errorEventIdentity(event);
       return pushNotice(state, 'error', error.message, error);
     }

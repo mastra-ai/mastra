@@ -14,7 +14,7 @@ import type { MastraBase } from '../../base';
 import { Classifier } from '../../classifier';
 import type { ClassifierQuestions } from '../../classifier';
 import { RequestContext } from '../../di';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import { RegisteredLogger } from '../../logger';
@@ -2117,6 +2117,8 @@ export class EventedRun<
     };
 
     let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
+    let wroteRunning = false;
+    let dispatched = false;
     try {
       await this.runStorage.writeSnapshot(
         this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
@@ -2124,6 +2126,7 @@ export class EventedRun<
           : initialRunSnapshot,
         this.resourceId,
       );
+      wroteRunning = true;
       result = await this.executionEngine.execute<
         TState,
         TInput,
@@ -2144,8 +2147,12 @@ export class EventedRun<
         perStep,
         outputOptions,
         storageVersion: this.storageVersion,
+        onDispatched: () => {
+          dispatched = true;
+        },
       });
     } catch (error) {
+      if (wroteRunning && !dispatched) await this.#failUndispatchedRun(error);
       this.completeWorkflowTracing(workflowSpan, {
         error: {
           ...executionFailureTermination(error),
@@ -2239,16 +2246,16 @@ export class EventedRun<
       waitingPaths: {},
       timestamp: Date.now(),
     };
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
     await this.runStorage.writeSnapshot(
       this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
         ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
         : initialRunSnapshot,
       this.resourceId,
     );
-
-    if (!this.mastra?.pubsub) {
-      throw new Error('Mastra instance with pubsub is required for workflow execution');
-    }
 
     // Dispatch-only callers do not own execution spans; the worker may run in
     // another process, so no local span or tracing registry entry is created here.
@@ -2262,27 +2269,28 @@ export class EventedRun<
         resolve();
       };
     });
-    const execution = this.executionEngine.execute<
-      TState,
-      TInput,
-      WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
-    >({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      graph: this.executionGraph,
-      serializedStepGraph: this.serializedStepGraph,
-      input: inputDataToUse,
-      initialState: initialStateToUse,
-      pubsub: this.mastra.pubsub,
-      retryConfig: this.retryConfig,
-      requestContext,
-      actor,
-      abortController: this.abortController,
-      perStep,
-      storageVersion: this.storageVersion,
-      onDispatched: markDispatched,
-    });
+    const execution = this.executionEngine
+      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        input: inputDataToUse,
+        initialState: initialStateToUse,
+        pubsub: this.mastra.pubsub,
+        retryConfig: this.retryConfig,
+        requestContext,
+        actor,
+        abortController: this.abortController,
+        perStep,
+        storageVersion: this.storageVersion,
+        onDispatched: markDispatched,
+      })
+      .catch(async error => {
+        if (!isDispatched) await this.#failUndispatchedRun(error);
+        throw error;
+      });
 
     // execute() only tracks the wait for the finish event. Nobody awaits this run's
     // callbacks, so track the whole execution now, before the dispatch wait, so
@@ -2492,6 +2500,24 @@ export class EventedRun<
     return this.streamOutput;
   }
 
+  /**
+   * The run was written as `running`, but its start event never reached a worker, so nothing
+   * will ever finish it. Record the failure instead of leaving it `running` forever.
+   */
+  async #failUndispatchedRun(error: unknown): Promise<void> {
+    try {
+      await this.runStorage.updateHeader({
+        status: 'failed',
+        expectedStatus: 'running',
+        error: getErrorFromUnknown(error).toJSON(),
+      });
+    } catch (persistError) {
+      this.mastra
+        ?.getLogger()
+        ?.error(`[Workflow ${this.workflowId}] Failed to mark undispatched run ${this.runId} as failed:`, persistError);
+    }
+  }
+
   async #claimResume(): Promise<void> {
     const claimed = await this.runStorage.updateHeader({ status: 'running', expectedStatus: 'suspended' });
 
@@ -2540,6 +2566,7 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const fgaProvider = this.mastra?.getServer()?.fga;
     if (fgaProvider && !this.isInternalWorkflow) {
@@ -2715,6 +2742,7 @@ export class EventedRun<
         resumedFromSpanId: snapshot.tracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
+      tracingContext: params.tracingContext,
       resumeFrom: snapshot.tracingContext,
       requestContext,
       mastra: this.mastra,

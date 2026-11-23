@@ -3,6 +3,7 @@ import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
 import type { KnowledgeScopeDeclarations } from '../declarations';
 import { KnowledgeDeclarationError } from '../declarations';
+import { Knowledge } from '../index';
 import { KnowledgeScopeRuntime } from '../scope-runtime';
 
 const host = { author: 'host' };
@@ -121,5 +122,26 @@ describe('Knowledge scope rows stored under a different declaration than their a
 
     const other = await runtime.readScopeFor(['agent:other']);
     expect((await store.listPages({ read: other })).pages.map(page => page.name)).not.toContain('Legacy secret');
+  });
+
+  it('refuses a conditional host write to a page under one, like an ordinary write', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('knowledge'))!;
+    await store.init();
+    const { scope } = await store.materializeScope({
+      address: 'org:acme:viewer',
+      declaration: 'org:$orgId',
+      name: 'org:acme:viewer',
+      provenance: host,
+    });
+    const page = await store.createPage({ parentId: scope.id, name: 'Legacy secret', key: 'secret', provenance: host });
+    const knowledge = new Knowledge({ storage, scopes: SIDE_TYPE });
+    const input = { scope: 'org:acme:viewer', path: 'secret', name: 'Legacy secret', body: 'overwritten' };
+
+    await expect(knowledge.upsertPage(input)).rejects.toBeInstanceOf(KnowledgeDeclarationError);
+    await expect(
+      knowledge.upsertPage({ ...input, expected: { id: page.id, version: page.version } }),
+    ).rejects.toBeInstanceOf(KnowledgeDeclarationError);
+    expect((await store.getPage({ id: page.id, read: 'all' }))?.body ?? '').not.toBe('overwritten');
   });
 });

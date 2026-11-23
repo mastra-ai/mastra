@@ -103,7 +103,7 @@ export function toStreamStepFinish(
 
 /** The `finish` data to publish: the run's result, with each step stripped of its prompt and messages. */
 export function toStreamFinish(payload: Extract<ChunkType<any>, { type: 'finish' }>['payload']): AgentFinishEventData {
-  const { output = {} as typeof payload.output, stepResult, messages, textRewritten } = payload ?? {};
+  const { output = {} as typeof payload.output, stepResult, messages, textRewritten, stopCause } = payload ?? {};
   const { text, object } = output as { text?: string; object?: unknown };
   return {
     output: {
@@ -115,6 +115,7 @@ export function toStreamFinish(payload: Extract<ChunkType<any>, { type: 'finish'
     stepResult,
     ...(messages ? { messages } : {}),
     ...(textRewritten ? { textRewritten: true } : {}),
+    ...(stopCause ? { stopCause } : {}),
   } as AgentFinishEventData;
 }
 

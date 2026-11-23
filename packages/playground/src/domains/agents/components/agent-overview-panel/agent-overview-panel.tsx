@@ -1,9 +1,14 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { AgentConfigSurface } from '@mastra/playground-ui/domains/agents/config/agent-config-surface';
+import { AgentMemoryConfig } from '@mastra/playground-ui/domains/agents/config/agent-memory-config';
+import { AgentMetadataSection } from '@mastra/playground-ui/domains/agents/config/agent-metadata-section';
+import { AgentSystemPrompt } from '@mastra/playground-ui/domains/agents/config/agent-system-prompt';
+import { AgentMetadataWorkspaceToolsList } from '@mastra/playground-ui/domains/agents/config/agent-workspace-tools-list';
+import { extractPrompt } from '@mastra/playground-ui/domains/agents/extract-prompt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconBox2 } from '@mastra/playground-ui/icons/central/IconBox2';
@@ -16,8 +21,6 @@ import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMainten
 import { IconSignalTower } from '@mastra/playground-ui/icons/central/IconSignalTower';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import {
   useAgent,
@@ -27,7 +30,6 @@ import {
 } from '@mastra/react/hooks/agents';
 import type { ComponentProps } from 'react';
 import { useWatch } from 'react-hook-form';
-import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentChannels } from '../agent-channels/agent-channels';
 import {
   AgentMetadataBrowserToolsList,
@@ -37,12 +39,8 @@ import {
   AgentMetadataSkillList,
   AgentMetadataToolList,
   AgentMetadataWorkflowList,
-  AgentMetadataWorkspaceToolsList,
 } from '../agent-metadata/agent-metadata-lists';
 import { AgentMetadataModelList } from '../agent-metadata/agent-metadata-model-list';
-import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
-import { AgentMemoryConfig } from '../agent-settings/agent-memory-config';
-import { AgentSystemPrompt } from './agent-system-prompt';
 import type { AgentEditFormContextValue } from '@/domains/agents/context/agent-edit-form-context';
 import { useOptionalAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
@@ -56,26 +54,7 @@ export interface AgentOverviewPanelProps {
 export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   const { isCollapsed } = useRouteSidePanel();
 
-  return (
-    <div
-      data-testid="agent-overview-panel"
-      className={cn('grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame', frameSurfaceStyle)}
-    >
-      {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
-      <div className="flex h-10 min-h-10 items-center border-b border-border px-4">
-        <Txt as="h2" variant="subheading" tone="ink">
-          Config
-        </Txt>
-      </div>
-
-      <ScrollArea className="min-h-0" mask={{ top: false }}>
-        <ScrollAreaViewport className="h-full">
-          {/* Skip the sections (and their data fetching) while the panel is collapsed. */}
-          {!isCollapsed && <AgentOverviewSections agentId={agentId} />}
-        </ScrollAreaViewport>
-      </ScrollArea>
-    </div>
-  );
+  return <AgentConfigSurface>{!isCollapsed && <AgentOverviewSections agentId={agentId} />}</AgentConfigSurface>;
 }
 
 type ModelListProps = ComponentProps<typeof AgentMetadataModelList>;

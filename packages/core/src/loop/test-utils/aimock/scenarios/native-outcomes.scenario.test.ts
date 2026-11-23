@@ -865,6 +865,129 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     ]);
   });
 
+  // The spans of the resumed part must carry the same context as the run's first part, so a
+  // filter by thread or resource finds the whole run and the approved tool shows under a span
+  // that is still open.
+  const approvedLookup = {
+    tools: {
+      lookup: createTool({
+        id: 'lookup',
+        description: 'Look up an order',
+        inputSchema: z.object({}),
+        execute: async () => ({ shipped: true }),
+      }),
+    },
+    fixtures: (llm: ReturnType<typeof getMock>) => {
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'shipped' });
+    },
+  };
+
+  it('keeps the thread and resource on the spans of the resumed part', async () => {
+    const { observability, ended } = capture();
+    const { output } = await runApprovalScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      memory: new MockMemory(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      prompt: 'Look up the order',
+      decision: () => true,
+      ...approvedLookup,
+    });
+    expect(await output.text).toBe('shipped');
+    await expect.poll(() => ended().length).toBe(2);
+    const [, resumedRun] = ended();
+    expect(resumedRun!.name).toContain('(resumed)');
+    expect(resumedRun!.metadata).toMatchObject({ threadId: 'thread-1', resourceId: 'resource-1' });
+    expect(resumedRun!.attributes).toMatchObject({ conversationId: 'thread-1' });
+    const resumedGeneration = ended(SpanType.MODEL_GENERATION).find(span => span.parentSpanId === resumedRun!.id);
+    expect(resumedGeneration?.metadata).toMatchObject({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const [toolCall] = ended(SpanType.TOOL_CALL);
+    expect(toolCall?.metadata).toMatchObject({ threadId: 'thread-1', resourceId: 'resource-1' });
+    expect(toolCall?.parentSpanId).toBe(resumedGeneration!.id);
+  });
+
+  // Inngest resume options carry no tracingOptions.
+  it.skipIf(engine === 'inngest')("records the resume input and applies the resume call's tracingOptions", async () => {
+    const { observability, ended } = capture();
+    const { output } = await runApprovalScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      decision: () => true,
+      resumeOptions: { tracingOptions: { metadata: { userId: 'user-1' }, tags: ['resume-tag'] } },
+      ...approvedLookup,
+    });
+    expect(await output.text).toBe('shipped');
+    await expect.poll(() => ended().length).toBe(2);
+    const [, resumedRun] = ended();
+    expect(resumedRun!.input).toMatchObject({ approved: true, toolCallId: 'lookup-1', toolName: 'lookup' });
+    expect(resumedRun!.tags).toEqual(['resume-tag']);
+    expect(resumedRun!.metadata).toMatchObject({ userId: 'user-1' });
+    expect(ended(SpanType.TOOL_CALL)[0]?.metadata).toMatchObject({ userId: 'user-1' });
+  });
+
+  // The regular Agent does not keep the first call's hide flags on a resume.
+  it.skipIf(engine === 'normal' || engine === 'fs').each([{}, { untilIdle: true }])(
+    "keeps the first call's hideInput on the resumed part over the agent's default (resume options: %o)",
+    async resumeOptions => {
+      const { observability, ended } = capture();
+      const { output } = await runApprovalScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        prompt: 'Look up the order',
+        decision: () => true,
+        defaultOptions: { tracingOptions: { hideInput: false } },
+        tracingOptions: { hideInput: true },
+        resumeOptions,
+        ...approvedLookup,
+      });
+      expect(await output.text).toBe('shipped');
+      await expect.poll(() => ended().length).toBe(2);
+      expect(ended()[1]!.input).toBeUndefined();
+      expect(ended(SpanType.TOOL_CALL)[0]?.input).toBeUndefined();
+    },
+  );
+
+  it('parents the thread title generated after a resume under the resumed run', async () => {
+    const { observability, ended } = capture();
+    const llm = getMock();
+    const titleModel = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` }).chat('title-model');
+    const { output } = await runApprovalScenario({
+      engine,
+      llm,
+      observability,
+      memory: new MockMemory({ options: { generateTitle: { model: titleModel } } }),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      prompt: 'Look up the order',
+      decision: () => true,
+      tools: approvedLookup.tools,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', predicate: (request: any) => request?.model === 'title-model' },
+          { content: 'Order lookup' },
+        );
+        approvedLookup.fixtures(llm);
+      },
+    });
+    expect(await output.text).toBe('shipped');
+    await expect.poll(() => ended().length).toBe(2);
+    const [, resumedRun] = ended();
+    await expect
+      .poll(() => ended(SpanType.MODEL_GENERATION).find(span => span.attributes?.model === 'title-model'))
+      .toBeDefined();
+    const titleGeneration = ended(SpanType.MODEL_GENERATION).find(span => span.attributes?.model === 'title-model');
+    expect(titleGeneration!.parentSpanId).toBe(resumedRun!.id);
+  });
+
   it('keeps a generation ongoing while a provider attempt is retried', async () => {
     const { observability, ended } = capture();
     const { output, requests } = await runLoopScenario({

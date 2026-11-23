@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { execa, execaNode } from 'execa';
 import { timeout, findInDir, getDirectoryDigests, removeOutputDir } from './helpers';
@@ -34,6 +34,46 @@ describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgMan
           expect(output).toContain('pnpm blocked build scripts for: bcrypt');
           expect(output).toContain('Add these packages to allowBuilds in pnpm-workspace.yaml and retry the build.');
           expect(output).not.toContain('DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe('published package contents', { concurrent: false }, () => {
+    it(
+      'installs declaration and JavaScript files without source maps',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-dts-map-test-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          for (const pkg of ['@mastra/deployer', '@mastra/core', '@mastra/server']) {
+            const distDir = join(appDir, 'node_modules', pkg, 'dist');
+            const files = await readdir(distDir, { recursive: true });
+            expect(files.filter(file => file.endsWith('.d.ts')).length, pkg).toBeGreaterThan(0);
+            expect(
+              files.filter(file => /\.d\.[cm]?ts\.map$/.test(file)),
+              pkg,
+            ).toEqual([]);
+
+            const jsFiles = files.filter(file => /\.[cm]?js$/.test(file));
+            expect(jsFiles.length, pkg).toBeGreaterThan(0);
+            expect(
+              files.filter(file => /\.[cm]?js\.map$/.test(file)),
+              pkg,
+            ).toEqual([]);
+            const withSourceMapComment: string[] = [];
+            for (const file of jsFiles) {
+              if ((await readFile(join(distDir, file), 'utf8')).includes('//# sourceMappingURL=')) {
+                withSourceMapComment.push(file);
+              }
+            }
+            expect(withSourceMapComment, pkg).toEqual([]);
+          }
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }

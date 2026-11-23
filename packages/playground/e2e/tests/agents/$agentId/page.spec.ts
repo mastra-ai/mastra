@@ -24,7 +24,7 @@ test.describe('Agent detail page', () => {
       await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
 
       // The overview lives in a side panel toggled from the route header (starts collapsed)
-      await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('link', { name: 'Chat' })).toHaveAttribute('aria-current', 'page');
       await page.getByTestId('agent-overview-panel-toggle').click();
       await expect(page.getByTestId('agent-overview-panel')).toBeVisible();
       await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });

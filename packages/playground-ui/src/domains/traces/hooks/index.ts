@@ -40,3 +40,16 @@ export { useTraceListNavigation } from './use-trace-list-navigation';
 export type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 export { useExpandedSpanIds } from './use-expanded-span-ids';
 export { useVisibleTraceRows } from './use-visible-trace-rows';
+
+// Studio's data source for the traces explorer: each hook loads, through the Mastra client, one record of
+// the explorer's data contract (`TracesExplorer*` types). Hosts with their own transport build them instead.
+export { useTraceColumnPreferences } from './use-trace-column-preferences';
+export { useTracesListQuery, type UseTracesListQueryArgs } from './use-traces-list-query';
+export { useTracesDiscoveryQuery, type UseTracesDiscoveryQueryArgs } from './use-traces-discovery-query';
+export {
+  useTracesFilterSuggestionsQuery,
+  type UseTracesFilterSuggestionsQueryArgs,
+} from './use-traces-filter-suggestions-query';
+export { useTracesHistogramQuery, type UseTracesHistogramQueryArgs } from './use-traces-histogram-query';
+export { useTracesUsageQuery, type UseTracesUsageQueryArgs } from './use-traces-usage-query';
+export { useOpenTraceQuery, type UseOpenTraceQueryArgs } from './use-open-trace-query';

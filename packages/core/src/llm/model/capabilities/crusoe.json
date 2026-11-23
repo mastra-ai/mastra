@@ -26,14 +26,10 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K2.6": [
+    "openai/gpt-oss-120b": [
       {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
@@ -46,15 +42,19 @@
         "type": "toggle"
       }
     ],
+    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
     "google/gemma-4-31b-it": [
       {
         "type": "toggle"
       }
     ],
-    "openai/gpt-oss-120b": [
+    "moonshotai/Kimi-K2.6": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ]
   }

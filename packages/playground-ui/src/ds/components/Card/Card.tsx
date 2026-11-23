@@ -2,10 +2,20 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 import { surfaceRimFocus } from '@/ds/primitives/form-element';
+import { illustrationPlateStyle } from '@/ds/primitives/illustration-plate';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
+
+const emphasisOnHover = cn(
+  'motion-safe:not-disabled:not-aria-disabled:hover:[&_[data-emphasis=grow-y]]:scale-y-125',
+  'motion-safe:not-disabled:not-aria-disabled:hover:[&_[data-emphasis=grow-x]]:scale-x-125',
+  'motion-safe:not-disabled:not-aria-disabled:hover:[&_[data-emphasis=pop]]:scale-110',
+  'motion-safe:not-disabled:not-aria-disabled:focus-visible:[&_[data-emphasis=grow-y]]:scale-y-125',
+  'motion-safe:not-disabled:not-aria-disabled:focus-visible:[&_[data-emphasis=grow-x]]:scale-x-125',
+  'motion-safe:not-disabled:not-aria-disabled:focus-visible:[&_[data-emphasis=pop]]:scale-110',
+);
 
 const cardVariants = cva(
   cn(raisedSurfaceStyle, 'rounded-xl transition-all duration-normal ease-out-custom motion-reduce:transition-none'),
@@ -16,11 +26,25 @@ const cardVariants = cva(
         raised: '',
       },
       interactive: {
-        true: cn(surfaceStateLayerStyle, surfaceRimFocus, 'cursor-pointer active:scale-99'),
+        true: cn(
+          surfaceStateLayerStyle,
+          surfaceRimFocus,
+          emphasisOnHover,
+          'cursor-pointer active:scale-99 aria-[current=true]:[--surface-rim:var(--border-focus)]',
+        ),
         false: '',
       },
     },
-    compoundVariants: [{ elevation: 'flat', interactive: true, class: focusRingInset }],
+    compoundVariants: [
+      {
+        elevation: 'flat',
+        interactive: true,
+        class: cn(
+          focusRingInset,
+          'aria-[current=true]:outline-1 aria-[current=true]:-outline-offset-1 aria-[current=true]:outline-border-focus aria-[current=true]:outline-solid',
+        ),
+      },
+    ],
     defaultVariants: {
       elevation: 'raised',
       interactive: false,
@@ -114,6 +138,34 @@ export const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(({ c
   <div ref={ref} className={cn('flex items-center p-3 pt-0', className)} {...props} />
 ));
 CardFooter.displayName = 'CardFooter';
+
+export type CardIllustrationTone = 'destructive' | 'warning' | 'info' | 'success';
+
+const illustrationToneClasses = {
+  destructive: '[--illustration-accent:var(--destructive-indicator)]',
+  warning: '[--illustration-accent:var(--warning-indicator)]',
+  info: '[--illustration-accent:var(--info-indicator)]',
+  success: '[--illustration-accent:var(--success-indicator)]',
+} satisfies Record<CardIllustrationTone, string>;
+
+export type CardIllustrationProps = React.ComponentProps<'div'> & {
+  tone?: CardIllustrationTone;
+};
+
+export function CardIllustration({ className, tone = 'destructive', ...props }: CardIllustrationProps) {
+  return (
+    <div
+      {...props}
+      aria-hidden
+      className={cn(
+        illustrationPlateStyle,
+        illustrationToneClasses[tone],
+        'h-20 overflow-hidden [&_[data-emphasis=grow-x]]:origin-left [&_[data-emphasis=grow-y]]:origin-bottom [&_[data-emphasis]]:transition-transform [&_[data-emphasis]]:duration-normal [&_[data-emphasis]]:ease-out-custom',
+        className,
+      )}
+    />
+  );
+}
 
 export type CardInsetProps = React.HTMLAttributes<HTMLElement> & {
   as?: React.ElementType;

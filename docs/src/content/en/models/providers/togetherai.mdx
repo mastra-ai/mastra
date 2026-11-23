@@ -7,7 +7,7 @@ description: "Browse Together AI model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/togetherai.svg" alt="Together AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Together AI
 
-Access 33 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
+Access 39 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
 
 Learn more in the [Together AI documentation](https://docs.together.ai/docs/serverless-models).
 
@@ -64,6 +64,30 @@ for await (const chunk of stream) {
     "outputCost": 1.2
   },
   {
+    "model": "togetherai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "togetherai/meta-models/Muse-Glimmer-30B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.35,
+    "outputCost": 1.5
+  },
+  {
     "model": "togetherai/meta-models/Muse-Spark-Open-816B-A42B",
     "imageInput": true,
     "audioInput": false,
@@ -86,6 +110,18 @@ for await (const chunk of stream) {
     "maxOutput": 524288,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "togetherai/MiniMaxAI/MiniMax-M3.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 512000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "togetherai/moonshotai/Kimi-K3",
@@ -172,6 +208,18 @@ for await (const chunk of stream) {
     "outputCost": 7.5
   },
   {
+    "model": "togetherai/Qwen/Qwen4-Max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 1.05,
+    "outputCost": 3.15
+  },
+  {
     "model": "togetherai/reflection/Beam-1.0-501B-A23B",
     "imageInput": false,
     "audioInput": false,
@@ -184,6 +232,18 @@ for await (const chunk of stream) {
     "outputCost": 1.2
   },
   {
+    "model": "togetherai/tencent/Hy4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.834,
+    "outputCost": 2.501
+  },
+  {
     "model": "togetherai/thinkingmachines/Inkling",
     "imageInput": true,
     "audioInput": true,
@@ -194,6 +254,18 @@ for await (const chunk of stream) {
     "maxOutput": 131072,
     "inputCost": 1,
     "outputCost": 4.05
+  },
+  {
+    "model": "togetherai/thinkingmachines/Inkling-2-Small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1
   },
   {
     "model": "togetherai/zai-org/GLM-5.2",

@@ -136,13 +136,13 @@ A provider can reject a request for exceeding its context window before OM's est
 
 ### Gateway models
 
-A [Mastra Gateway](/models/gateways/mastra) model can keep a thread's observations on the gateway instead of your storage adapter. The gateway only does that for a Gateway project key (`msk_...`) that it serves with its own provider keys and with memory enabled for the project. An organization key (`msk-gateway-...` or `mskv2_...`) is served by a gateway without the memory API, so OM keeps running locally against the `Memory` you configured.
+[Mastra Gateway](/docs/mastra-platform/gateway/overview) handles model access only. With a Gateway key (`msk-gateway-...` or `mskv2_...`), it doesn't store threads or observations, so OM runs locally against the storage adapter of the `Memory` you configured, the same as with any other model.
 
-Keep `Memory` configured with `observationalMemory: true` in both cases. With a project key the gateway owns the thread, which means your storage adapter stays empty and `memory.recall()` doesn't return those messages.
+Keys that start with `msk_` belong to the previous Memory Gateway, which shuts down on December 31, 2026. With an `msk_` key, Mastra skips local OM for `mastra/` models. Memory Gateway runs OM server-side only when it serves the request with its own provider keys and memory is enabled for the project. Your storage adapter still gets the thread record, but not its messages or observations, so `memory.recall()` doesn't return those messages. See [Migrate from Mastra Memory Gateway](/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway).
 
 :::warning
 
-A project key alone doesn't mean the gateway stores the thread. When the request is routed with your own provider key, or memory is disabled for the project, the gateway proxies it without storing observations, while Mastra still skips local OM for a `mastra/` model on a project key. Neither the gateway nor your storage adapter keeps the conversation in that case. Use gateway-managed provider keys with project memory enabled, or a directly configured provider model, when the thread has to be stored.
+If an `msk_` request uses your own provider key, or memory is disabled for the project, Memory Gateway proxies it without storing observations, while Mastra still skips local OM. Neither the gateway nor your storage adapter keeps the conversation. Move to a Gateway key or a directly configured provider model when the thread has to be stored.
 
 :::
 
