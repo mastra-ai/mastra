@@ -1062,7 +1062,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             sandbox.executeCommand = async (command, args, options) => {
               const waitStarted = Date.now();
               await refreshBeforeCommand();
-              if (options?.timeout === undefined) return executeCommand(command, args, options);
+              // No timeout (unset or 0, which providers read as unbounded) has nothing to spend.
+              if (!options?.timeout || options.timeout < 0) return executeCommand(command, args, options);
               const timeout = options.timeout - (Date.now() - waitStarted);
               if (timeout <= 0) {
                 throw new Error(

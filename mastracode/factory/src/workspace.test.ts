@@ -3000,6 +3000,14 @@ describe('GitHub session workspace preparation', () => {
       slowMint(2 * 60_000);
       await sandbox.executeCommand('pnpm', ['build'], { timeout: 15 * 60_000 });
       expect(inner).toHaveBeenCalledWith('pnpm', ['build'], { timeout: 13 * 60_000 });
+
+      // timeout: 0 is unbounded: a slow re-mint never stops it, and it reaches the provider unchanged.
+      vi.advanceTimersByTime(46 * 60_000);
+      slowMint(2 * 60_000);
+      await sandbox.executeCommand('pnpm', ['dev'], { timeout: 0 });
+      expect(inner).toHaveBeenLastCalledWith('pnpm', ['dev'], { timeout: 0 });
+      await sandbox.executeCommand('pnpm', ['dev'], { timeout: 0 });
+      expect(inner).toHaveBeenLastCalledWith('pnpm', ['dev'], { timeout: 0 });
     });
 
     it('does not overwrite a PAT installed while a command re-mint is in flight', async () => {
