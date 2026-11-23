@@ -1231,12 +1231,18 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               state: state.state,
             };
 
+            // The state carries the facts across workers; the registry is the fallback for
+            // runs whose snapshots predate those fields.
+            const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
+            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,
                 ...(textRewritten && { textRewritten }),
+                ...(stopCause && { stopCause }),
               });
             }
 
@@ -1244,11 +1250,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             // abandon it, but wait only after FINISH has released stream/generate callers.
             await finishResult.titleGeneration;
 
-            // The state carries the facts across workers; the registry is the fallback for
-            // runs whose snapshots predate those fields.
-            const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
             const finishReason = finalOutput.stepResult?.reason;
-            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
             const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
             if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
               logger?.warn?.(
@@ -1319,8 +1321,9 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
             }
 
-            // A recovery that finds this step saved ends its own spans with the same outcome.
-            return { ...finalOutput, tracingTermination: termination };
+            // A recovery that finds this step saved ends its own spans with the same outcome and
+            // republishes FINISH with the same stop cause.
+            return { ...finalOutput, tracingTermination: termination, ...(stopCause && { stopCause }) };
           },
           { id: MAP_FINAL_OUTPUT_STEP_ID },
         )

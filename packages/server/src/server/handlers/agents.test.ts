@@ -5981,4 +5981,33 @@ describe('toAgentStreamChunks', () => {
     expect(frame).not.toHaveProperty('index');
     expect(frame).toMatchObject({ type: 'text-delta', payload: { text: 'hi' } });
   });
+
+  it('forwards stopCause on finish frames when present and omits it when absent', () => {
+    const [withCause] = toAgentStreamChunks({
+      type: 'finish',
+      runId: 'run-1',
+      index: 4,
+      data: {
+        output: { text: 'Done.', steps: [] },
+        stepResult: { reason: 'tool-calls' },
+        stopCause: 'max_steps',
+      },
+    } as any);
+    expect(withCause).toMatchObject({
+      type: 'finish',
+      runId: 'run-1',
+      index: 4,
+      payload: { stopCause: 'max_steps' },
+    });
+
+    const [withoutCause] = toAgentStreamChunks({
+      type: 'finish',
+      runId: 'run-2',
+      data: {
+        output: { text: 'Done.', steps: [] },
+        stepResult: { reason: 'stop' },
+      },
+    } as any);
+    expect((withoutCause as { payload: Record<string, unknown> }).payload).not.toHaveProperty('stopCause');
+  });
 });

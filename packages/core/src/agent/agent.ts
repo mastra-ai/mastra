@@ -517,8 +517,6 @@ function rebindRecoveredModelList(
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
 
-const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
-
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
@@ -13244,6 +13242,7 @@ export class Agent<
         // not on the SUSPENDED event, which can precede a resumable snapshot.
         closeOnSuspend: false,
         messageList,
+        messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
         tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -14211,12 +14210,16 @@ export class Agent<
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.
-            const { output: finalOutput, stepResult, tracingTermination } = result.result;
+            const { output: finalOutput, stepResult, tracingTermination, stopCause } = result.result;
             // map-final-output, which ends the recovered spans, did not re-run. It saved the outcome
             // it ended the run's spans with, so the recovered pair ends the same way.
             recoverModelSpan?.end({ ...tracingTermination });
             recoverAgentSpan?.end({ ...tracingTermination, output: { text: finalOutput?.text } });
-            await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
+            await emitFinishEvent(recoveryPubsub, runId, {
+              output: finalOutput,
+              stepResult,
+              ...(stopCause && { stopCause }),
+            });
           }
           if (result?.status === 'suspended' && options?.closeOnSuspend) {
             // Same contract as resume(): close on the persisted suspension,
@@ -14981,6 +14984,7 @@ export class Agent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
+      messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
 
@@ -15856,6 +15860,7 @@ export class Agent<
       returnScorerData: options?.returnScorerData ?? entry.returnScorerData ?? resolvedOptions.returnScorerData,
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.executionRunRegistry.getMessageList(runId),
+      messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
 
@@ -16764,67 +16769,6 @@ export class Agent<
       returnScorerData = workflowInput.options?.returnScorerData;
     }
 
-    const refreshObservedMessageList = async (isExpired: () => boolean) => {
-      const targetMessageList = messageList;
-      const snapshot = workflowInputSnapshot ?? loopSnapshot;
-      if (!workflowsStore || !snapshot || !targetMessageList) return;
-
-      try {
-        const inputMessages = targetMessageList.get.input.db();
-        const latestState = await this.loadLatestMessageListState(workflowsStore, runId, snapshot);
-        if (latestState && !isExpired()) {
-          targetMessageList.deserialize(latestState);
-          if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
-            targetMessageList.add(inputMessages, 'input');
-          }
-        }
-      } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh failed: ${error}`);
-      }
-    };
-
-    const refreshObservedMessageListWithTimeout = async () => {
-      const refreshTimeoutMs = Math.min(
-        options?.idleTimeoutMs && options.idleTimeoutMs > 0
-          ? options.idleTimeoutMs
-          : OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-        OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-      );
-      let expired = false;
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = new Promise<boolean>(resolve => {
-        timeout = setTimeout(() => {
-          expired = true;
-          resolve(true);
-        }, refreshTimeoutMs);
-      });
-
-      try {
-        const didTimeOut = await Promise.race([refreshObservedMessageList(() => expired).then(() => false), timedOut]);
-        if (didTimeOut) {
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh timed out after ${refreshTimeoutMs}ms`);
-        }
-      } finally {
-        if (timeout) clearTimeout(timeout);
-      }
-    };
-
-    let observedResponseText = '';
-    const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
-      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
-        observedResponseText += chunk.payload.text;
-      }
-      if (chunk.type === 'step-finish') {
-        await refreshObservedMessageListWithTimeout();
-        if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
-          messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
-        }
-      }
-      await options?.onChunk?.(chunk);
-    };
-
     const replayFloor = await this.#readReplayFloor(runId, options?.offset, options?.closeOnSuspend);
 
     const stream = createDurableAgentStream<TOutput>({
@@ -16844,7 +16788,7 @@ export class Agent<
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
       closeOnSuspend: options?.closeOnSuspend,
-      onChunk: handleObservedChunk,
+      onChunk: options?.onChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -16875,6 +16819,9 @@ export class Agent<
       requestContext,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList,
+      // A list loaded from storage has the conversation up to attach; the stream brings each
+      // step's response messages from there.
+      messageListFollowsStream: () => !liveEntry || !this.executionEngine.executesStepsLocally,
     });
     const { output, ready, detach } = stream;
     streamCleanup = stream.cleanup;

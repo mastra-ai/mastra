@@ -97,6 +97,14 @@ export class DefaultAgentExecutionEngine {
     return true;
   }
 
+  /**
+   * Whether this process runs the run's steps, which keep its registered MessageList in sync.
+   * Otherwise its readers take each step's response messages from the stream.
+   */
+  get executesStepsLocally(): boolean {
+    return true;
+  }
+
   async readReplayFloor(
     pubsub: PubSub,
     runId: string,
