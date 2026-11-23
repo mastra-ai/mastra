@@ -1043,7 +1043,7 @@ export class ReflectorRunner {
 
     let snapshotBufferActivated = false;
     try {
-      const history = await this.storage.getObservationalMemoryHistory(snapshot.threadId, snapshot.resourceId, 1, {
+      const history = await this.storage.getObservationalMemoryHistory(snapshot.threadId, snapshot.resourceId, 5, {
         recordId: snapshot.id,
       });
       const retired = history.find(candidate => candidate.id === snapshot.id);

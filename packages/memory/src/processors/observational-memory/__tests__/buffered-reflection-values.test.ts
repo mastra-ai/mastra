@@ -543,5 +543,24 @@ describe('buffered reflection extracted thread values (#27262)', () => {
       expect(reflectionActivations()).toHaveLength(1);
       expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'prepared' } });
     });
+
+    it('publishes activated values when a history adapter ignores the fourth options argument', async () => {
+      const f = await setup(() => reflection('prepared'));
+      await prepare(f.memory, f.threadId, f.resourceId);
+      const getHistory = f.store.getObservationalMemoryHistory.bind(f.store);
+      f.store.getObservationalMemoryHistory = (threadId, resourceId, limit) => getHistory(threadId, resourceId, limit);
+
+      try {
+        await reachActivation(f);
+      } finally {
+        f.store.getObservationalMemoryHistory = getHistory;
+      }
+
+      expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+        generationCount: 1,
+        activeObservations: expect.stringContaining('condensed prepared'),
+      });
+      expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'prepared' } });
+    });
   });
 });
