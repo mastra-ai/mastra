@@ -230,8 +230,8 @@ export const PageWithSectionsAndEmptyState: Story = {
 
 async function expectLoaderInPageCenter({ canvasElement }: { canvasElement: HTMLElement }) {
   const card = canvasElement.querySelector('[data-slot=main-card]')?.getBoundingClientRect();
-  const loader = canvasElement.querySelector('[data-slot=loader-fill]')?.getBoundingClientRect();
-  if (!card || !loader) throw new Error('Missing the page parts');
+  const loader = within(canvasElement).getByRole('status').getBoundingClientRect();
+  if (!card) throw new Error('Missing the page parts');
   await expect(loader.top + loader.height / 2).toBeCloseTo(card.top + card.height / 2, 0);
   await expect(loader.left + loader.width / 2).toBeCloseTo(card.left + card.width / 2, 0);
 }

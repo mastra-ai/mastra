@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
 
 import { LogoWithoutText } from '../Logo/MastraLogo';
 
@@ -115,4 +116,9 @@ export const FullHeightPage: Story = {
       <BrandLoader fill="screen" aria-label="Loading app" />
     </div>
   ),
+  play: async ({ canvasElement }) => {
+    const loader = within(canvasElement).getByRole('status', { name: 'Loading app' }).getBoundingClientRect();
+    await expect(loader.top + loader.height / 2).toBeCloseTo(window.innerHeight / 2, 0);
+    await expect(loader.left + loader.width / 2).toBeCloseTo(document.documentElement.clientWidth / 2, 0);
+  },
 };
