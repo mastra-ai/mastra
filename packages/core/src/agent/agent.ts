@@ -118,6 +118,7 @@ import {
   getResumeTracingContext,
   getWorkflowResumeTracingContext,
 } from '../observability';
+import { unwrapMastraTracingProxy } from '../observability/context';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -222,6 +223,7 @@ import type { DelegationRefInput, DelegationRefRegistry } from './delegation-ref
 import { createDelegationRefRegistry, resolveDelegationRefs } from './delegation-refs';
 import { releaseRemoteAbortListener } from './durable/abort-transport';
 import { ColdResumeAttempt, undecidedColdResume, waitUnlessAborted } from './durable/cold-resume-gate';
+import type { ColdResumeRuntime } from './durable/cold-resume-gate';
 import {
   AgentStreamEventTypes,
   DurableStepIds,
@@ -8902,6 +8904,13 @@ export class Agent<
     });
   }
 
+  /** The suspended call a resume addresses. Without a toolCallId it is only certain when exactly one is suspended. */
+  #findResumeTarget(snapshot: WorkflowRunState, toolCallId: string | undefined) {
+    const suspended = this.#getSuspendedToolCalls(snapshot);
+    if (toolCallId !== undefined) return suspended.find(call => call.toolCallId === toolCallId);
+    return suspended.length === 1 ? suspended[0] : undefined;
+  }
+
   /**
    * Durable counterpart of {@link Agent.#validateToolResumeData}. Checks the data against the tool
    * the resumed run executes, looked up in `tools` (the run's registry entry as this resume will
@@ -8917,26 +8926,40 @@ export class Agent<
     toolCallId,
     resumeData,
     tools,
+    withdrawnTools,
     runId,
   }: {
     snapshot: WorkflowRunState;
     toolCallId: string | undefined;
     resumeData: unknown;
     tools: Record<string, CoreTool>;
+    /** Tools the starting request built that this resume's caller cannot use. */
+    withdrawnTools: Record<string, CoreTool>;
     runId: string;
   }): ResumeSuspension | undefined {
-    // Without a toolCallId the target is only certain when exactly one call is suspended.
-    const suspended = this.#getSuspendedToolCalls(snapshot);
-    const target =
-      toolCallId !== undefined
-        ? suspended.find(call => call.toolCallId === toolCallId)
-        : suspended.length === 1
-          ? suspended[0]
-          : undefined;
+    const target = this.#findResumeTarget(snapshot, toolCallId);
     const suspension = target?.toolCallId ? { toolCallId: target.toolCallId } : undefined;
-    if (!target?.toolName || target.requiresApproval) return suspension;
+    if (!target?.toolName) return suspension;
 
     const tool = findExecutionTool(tools, target.toolName);
+    // The suspended tool was built for the caller that started the run, and this caller's tools leave
+    // it out. Running it would act with the starting caller's identity, so the run stays suspended.
+    if (!tool && findExecutionTool(withdrawnTools, target.toolName)) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_TOOL_UNAVAILABLE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" resume() cannot resume tool call "${target.toolCallId ?? ''}" because tool "${target.toolName}" is not available to this caller. The run is still suspended.`,
+        details: {
+          agentName: this.name,
+          method: 'resume',
+          runId,
+          toolName: target.toolName,
+          toolCallId: target.toolCallId ?? '',
+        },
+      });
+    }
+    if (target.requiresApproval) return suspension;
     const schema = tool ? resolveToolResumeValidationSchema(tool) : undefined;
     // A tool missing here is resolved by the tool-call step itself (cross-process rebuilds), which validates then.
     if (!schema) return suspension;
@@ -14623,6 +14646,15 @@ export class Agent<
     return fence;
   }
 
+  /**
+   * The runtime a cold resume of this agent's runs is gated on: the Mastra instance that owns
+   * their shared registry slot, unwrapped from any tracing proxy, so wrappers and pinned-version
+   * forks registered on one host share it and separate hosts do not.
+   */
+  #coldResumeRuntime(): ColdResumeRuntime {
+    return this.#mastra ? unwrapMastraTracingProxy(this.#mastra) : undefined;
+  }
+
   async #isRunCanceledInStorage(runId: string): Promise<boolean> {
     return this.executionEngine.isRunCanceledInStorage(runId);
   }
@@ -15120,7 +15152,8 @@ export class Agent<
       }
       releaseResumeMarker = release;
     }
-    const coldAttempt = new ColdResumeAttempt(runId);
+    // Resumes of this run on the same runtime (wrappers, pinned-version forks) share one gate.
+    const coldAttempt = new ColdResumeAttempt({ runtime: this.#coldResumeRuntime(), runId });
     // Until the resume accepts, it can wait on another resume of the run or on rebuilding the run
     // itself. Both stop once this caller gives up: its abort signal fires or its total budget, counted
     // from this call, ends. Built only when the resume does wait, so other resumes leave the caller's
@@ -15196,8 +15229,9 @@ export class Agent<
     // a cold run in the same tick, so two resumes can never both rebuild it. An untilIdle inner
     // re-entry owns its outer call's undecided coldAttempt, so it must not wait on itself.
     if (!accepted) {
-      for (let pending = undecidedColdResume(runId); pending; pending = undecidedColdResume(runId)) {
-        await waitUnlessAborted(pending, giveUp());
+      const runtime = this.#coldResumeRuntime();
+      for (let gate = undecidedColdResume(runtime, runId); gate; gate = undecidedColdResume(runtime, runId)) {
+        await gate.wait(giveUp());
       }
     }
     let entry = this.executionRunRegistry.get(runId);
@@ -15205,6 +15239,8 @@ export class Agent<
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
+    // The suspension an unlabeled cold resume answers, read before it rebuilds the run.
+    let coldAddressed: ResumeSuspension | undefined;
     if (!entry) {
       // Same tick as the loop above: other resumes of this run wait until this one decides.
       coldAttempt.begin();
@@ -15309,6 +15345,13 @@ export class Agent<
         workflowInput = readWorkflowInput(snapshot);
       }
       coldSnapshot = snapshot;
+      // Without a toolCallId the caller answers the suspension the run waits on now. Bind the resume
+      // to it before rebuilding the run: another process may resume the run and move it on to a
+      // later suspension meanwhile, and this caller's data must not answer that one.
+      if (options?.toolCallId === undefined) {
+        const addressed = this.#findResumeTarget(snapshot, undefined)?.toolCallId;
+        coldAddressed = addressed ? { toolCallId: addressed } : undefined;
+      }
 
       const messageListMemoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
@@ -15450,13 +15493,23 @@ export class Agent<
       resumeRequestContext;
 
     if (!accepted) {
-      await this.requireAgentExecutionFGA({
+      const authorizing = this.requireAgentExecutionFGA({
         requestContext: resolvedOptions.requestContext,
         memory: resolvedOptions.memory,
         runId,
         snapshotMemoryInfo: memoryInfo,
         actor: resolvedOptions.actor,
       });
+      if (coldSnapshot) {
+        // A cold resume holds back every other resume of the run until it decides, so a stalled
+        // authorization provider must not hold it once this caller gives up. Giving up rejects here
+        // and abandons the attempt before it claims the run; a late answer is ignored. A caller
+        // still waiting gets no further without authorization.
+        authorizing.catch(() => {});
+        await waitUnlessAborted(authorizing, giveUp());
+      } else {
+        await authorizing;
+      }
     }
 
     // Settle the prior segment before claiming the run and reading its snapshot
@@ -15476,8 +15529,14 @@ export class Agent<
 
     // The tools the resumed run executes: what preparation rebuilt for a cold resume, or the run's
     // registry entry with this call's request-built tools swapped in (below) for a warm one.
-    let executionTools: Record<string, CoreTool> =
-      (coldSnapshot ? entry : (sharedEntryBeforeAccept ?? entry)).tools ?? {};
+    // The registry entry the resumed run executes from, and the tools it executes: what preparation
+    // rebuilt for a cold resume, or that entry with this call's request-built tools swapped in (below)
+    // for a warm one.
+    const executingEntry = coldSnapshot ? entry : (sharedEntryBeforeAccept ?? entry);
+    let executionTools: Record<string, CoreTool> = executingEntry.tools ?? {};
+    // Tools the starting request built that this caller's build leaves out. They are removed from the
+    // run, so a resume whose suspended call needs one is refused.
+    const withdrawnTools: Record<string, CoreTool> = {};
     let applyRequestTools: (() => void) | undefined;
     // A warm resume reuses the tools built for the first request, which close
     // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
@@ -15493,9 +15552,14 @@ export class Agent<
       !accepted &&
       (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)
     ) {
+      // Per-call tools the starting request passed are rebuilt for this caller too, unless this call
+      // passes its own under the same name.
+      const startingInputs = executingEntry.requestToolInputs ?? entry.requestToolInputs;
+      const toolsets = { ...startingInputs?.toolsets, ...resolvedOptions.toolsets };
+      const clientTools = { ...startingInputs?.clientTools, ...resolvedOptions.clientTools };
       const requestTools = await this.agentForExecution.getToolsForExecution({
-        toolsets: resolvedOptions.toolsets,
-        clientTools: resolvedOptions.clientTools,
+        toolsets,
+        clientTools,
         threadId: memoryInfo?.threadId,
         resourceId: memoryInfo?.resourceId,
         runId,
@@ -15513,36 +15577,57 @@ export class Agent<
         backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
         model: entry.model,
       });
+      /**
+       * `current` with every entry that still holds the starting request's build (`previous`)
+       * replaced by this caller's build. An entry this caller's build leaves out is removed instead:
+       * it would run with the starting caller's identity. Entries a processor added, replaced or
+       * withheld stay as the processor left them.
+       */
       const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
         const next = { ...current };
+        const removed: string[] = [];
+        for (const [name, built] of Object.entries(previous ?? {})) {
+          if (name in requestTools || current[name] !== built) continue;
+          delete next[name];
+          removed.push(name);
+        }
         for (const [name, tool] of Object.entries(requestTools)) {
           // A name missing from current but present in previous was withheld by a processor.
           const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
           if (configured) next[name] = tool;
         }
-        return next;
+        return { tools: next, removed };
       };
-      const refreshed = [...new Set([entry, sharedEntryBeforeAccept])].flatMap(reg =>
-        reg
-          ? [
-              {
-                reg,
-                tools: rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext),
-                baseTools: reg.baseTools
-                  ? rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext)
-                  : undefined,
-              },
-            ]
-          : [],
-      );
-      executionTools = refreshed.find(({ reg }) => reg === sharedEntryBeforeAccept)?.tools ?? executionTools;
+      const refreshed = [...new Set([entry, sharedEntryBeforeAccept])].flatMap(reg => {
+        if (!reg) return [];
+        const tools = refresh(reg.tools ?? {}, reg.requestTools);
+        const baseTools = reg.baseTools ? refresh(reg.baseTools, reg.requestTools) : undefined;
+        return [
+          {
+            reg,
+            tools: rebindProcessorTools(tools.tools, resumeRequestContext),
+            baseTools: baseTools ? rebindProcessorTools(baseTools.tools, resumeRequestContext) : undefined,
+            removed: new Set([...tools.removed, ...(baseTools?.removed ?? [])]),
+          },
+        ];
+      });
+      const executing = refreshed.find(({ reg }) => reg === executingEntry);
+      if (executing) {
+        executionTools = executing.tools;
+        for (const name of executing.removed) {
+          const tool = executingEntry.tools?.[name] ?? executingEntry.baseTools?.[name];
+          if (tool) withdrawnTools[name] = tool;
+        }
+      }
       applyRequestTools = () => {
-        for (const { reg, tools, baseTools } of refreshed) {
+        for (const { reg, tools, baseTools, removed } of refreshed) {
           reg.tools = tools;
           if (baseTools) reg.baseTools = baseTools;
-          // Tools this rebuild did not produce still hold their earlier build, so
-          // keep that as their baseline; otherwise a later resume can never refresh them.
-          reg.requestTools = { ...reg.requestTools, ...requestTools };
+          // A tool this rebuild did not produce keeps its earlier build as its baseline (a processor
+          // replaced or withheld it), so a later resume still recognizes it. Removed tools drop out.
+          const retained = Object.entries(reg.requestTools ?? {}).filter(([name]) => !removed.has(name));
+          reg.requestTools = { ...Object.fromEntries(retained), ...requestTools };
+          reg.requestToolInputs = { toolsets, clientTools };
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       };
@@ -15561,12 +15646,15 @@ export class Agent<
       if (resumeSnapshot) {
         suspension = this.#validateDurableResumeData({
           snapshot: resumeSnapshot,
-          toolCallId: resolvedOptions.toolCallId,
+          toolCallId: resolvedOptions.toolCallId ?? coldAddressed?.toolCallId,
           resumeData,
           tools: executionTools,
+          withdrawnTools,
           runId,
         });
       }
+      // A bound suspension that is no longer waiting is caught once this resume holds the run.
+      suspension ??= coldAddressed;
     }
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()

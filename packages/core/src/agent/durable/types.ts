@@ -54,7 +54,7 @@ import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
-import type { AgentMethodType, GoalConfig, StructuredOutputOptions } from '../types';
+import type { AgentMethodType, GoalConfig, StructuredOutputOptions, ToolsetsInput, ToolsInput } from '../types';
 import type { ExecutionFence } from './execution-fence';
 import type { ResponseRecord } from './workflows/shared/schemas';
 
@@ -806,6 +806,12 @@ export interface RunRegistryEntry {
    * replaced tools are kept (#25960).
    */
   requestTools?: Record<string, CoreTool>;
+  /**
+   * The per-call `toolsets` and `clientTools` behind `requestTools`. A warm resume rebuilds them for
+   * the resuming caller along with the agent's own tools, so a toolset passed only to the call that
+   * started the run keeps working without running with that call's identity.
+   */
+  requestToolInputs?: { toolsets?: ToolsetsInput; clientTools?: ToolsInput };
   /**
    * The method that started the run (`stream` or `generate`). A warm resume
    * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
