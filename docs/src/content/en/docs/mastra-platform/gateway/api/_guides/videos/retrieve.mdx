@@ -1,0 +1,8 @@
+```bash
+curl https://gateway-api.mastra.ai/v1/videos/$VIDEO_ID \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY"
+```
+
+`status` is one of `pending`, `in_progress`, `completed`, `failed`, or `expired`. A failed job includes an `error` code. A completed job includes `expires_at`, the Unix time after which the video can no longer be downloaded.
+
+Status and download requests count against the key's [rate limits](/docs/mastra-platform/gateway/usage-and-limits).
