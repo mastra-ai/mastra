@@ -617,7 +617,7 @@ export interface GoalConfig {
   scorer?: MastraScorer | string;
 }
 
-/** Resumable streams and provisional engine policy naming/API. Durable execution still requires createDurableAgent(). */
+/** Resumable streams and execution-engine selection. See {@link AgentStreamsConfig}. */
 export type AgentDurableOption = boolean | AgentStreamsConfig;
 
 interface AgentConfigBase<
@@ -751,16 +751,16 @@ interface AgentConfigBase<
    */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
   /**
-   * Resumable streams: publish run events so observe() and reconnecting clients
-   * can follow a run. This does not enable durable execution or checkpoints.
-   * Use createDurableAgent() for durable execution.
+   * Resumable streams and execution-engine selection. Publish run events so
+   * observe() and reconnecting clients can follow a run. Set executionEngine
+   * to 'default' or 'evented' to enable checkpointed execution.
    *
    * - Omitted: on when registered on Mastra, off standalone.
    * - true: on, using the Mastra pubsub and server cache when registered.
    * - false: off; HTTP disconnects abort the run. Also opts out of inherited engine policy.
    * - An object: on, with custom pubsub, cache, shouldCache or cleanupTimeoutMs.
    *   cache: false keeps publishing but disables replay.
-   *   executionEngine and shouldPersistSnapshot are staged policy only; native execution is unchanged.
+   *   executionEngine selects the backend; shouldPersistSnapshot controls its snapshots.
    */
   durable?: AgentDurableOption;
   /**

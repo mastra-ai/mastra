@@ -1,10 +1,10 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { getShortId } from '@mastra/playground-ui/components/Text';
+import { getExperimentDisplayName } from '@mastra/playground-ui/domains/experiments/utils/experiment-display-name';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { useExperimentsForDatasetFilter } from '@mastra/react/hooks/experiments';
 import type { ExperimentTargetFilter } from '@mastra/react/hooks/experiments';
-import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
 /** Sentinel value emitted when the "All experiments" option is picked. */
 export const ALL_EXPERIMENTS = 'all';

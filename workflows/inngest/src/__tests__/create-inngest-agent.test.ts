@@ -105,7 +105,7 @@ describe('createInngestAgent factory function', () => {
   });
 
   it.each(
-    (['durable', 'evented'] as const).flatMap(executionEngine =>
+    (['default', 'evented'] as const).flatMap(executionEngine =>
       [false, true].map(registerFirst => ({ executionEngine, registerFirst })),
     ),
   )(

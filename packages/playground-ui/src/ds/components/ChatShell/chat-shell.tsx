@@ -168,9 +168,10 @@ export function ChatShellTurn({ opensTurn, holdsRoom, restored, className, ...pr
  * transcript scrolls behind, so nothing measures it and a composer growing under
  * the cursor resizes no box the scroller watches.
  *
- * Behind it, one sheet of the page masked in over `--chat-fade` of air, reaching
- * `--chat-veil` at the dock's top edge. The transcript fades out above the
- * composer and nothing shows through around or under the card.
+ * Behind it, one sheet of the page masked in from the dock's top edge, reaching
+ * `--chat-veil` `--chat-fade` down. The transcript stays fully legible until it
+ * meets the composer, then nothing shows through around its corners or under it.
+ * `--chat-fade` is also the air between a resting transcript and the composer.
  *
  * Its `ComposerInput` is the conversation's composer, the one
  * `TranscriptAnnotations` focuses.
@@ -184,7 +185,7 @@ export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<
         data-slot="chat-shell-dock"
         className={cn(
           'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
-          'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
+          'before:pointer-events-none before:absolute before:inset-0 before:-z-10',
           'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
           className,
         )}

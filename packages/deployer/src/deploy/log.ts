@@ -1,6 +1,4 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { Writable } from 'node:stream';
 import type { IMastraLogger } from '@internal/core/logger';
 
@@ -22,90 +20,81 @@ export const createPinoStream = (logger: IMastraLogger) => {
 };
 
 /**
- * Package-manager shims on Windows are `.cmd` files. Node cannot spawn those
- * without a shell, so read the shim and run the Node script it points at.
- * `%~dp0` / `%dp0%` are the shim's directory.
+ * Windows needs a shell to run package manager `.cmd` shims, and cmd.exe joins
+ * every token into one command line. Plain tokens pass through as-is; anything
+ * else (spaces, apostrophes, emoji, `&`, `^`…) is wrapped in double quotes, where
+ * cmd.exe treats it literally. Characters cmd.exe still interprets inside quotes
+ * (`"`, `!`, line breaks) are refused; `"` can never appear in a Windows path.
+ * A quoted argument that ends in a backslash would make the C runtime treat that
+ * backslash as escaping the closing quote, so trailing backslashes are doubled.
+ * `%` only expands as a `%name%` pair, so one `%` per command line is allowed
+ * (Yarn Berry's `--out …%v.tgz` needs it) and a second one is refused.
  */
-function normalizeWinPath(value: string): string {
-  const drive = value.match(/[A-Za-z]:\\.*/);
-  if (!drive?.[0]) return value.trim();
-  return drive[0].replace(/\\{2,}/g, '\\');
-}
+const PLAIN_WINDOWS_ARG = /^[\p{L}\p{M}\p{N}_@+=:,./\\~-]+$/u;
+const UNQUOTABLE_WINDOWS_ARG = /["!\r\n\0]/;
 
-export function windowsShimTarget(
-  cmdText: string,
-  cmdDir: string,
-): { nodePath: string | undefined; scriptPath: string } | undefined {
-  const prefix = cmdDir.replace(/[\\/]+$/, '') + '\\';
-  const expanded = cmdText.replace(/%~dp0|%dp0%/gi, () => prefix);
-  const quoted = [...expanded.matchAll(/"([^"\r\n]+)"/g)].map(match => normalizeWinPath(match[1] ?? ''));
-  const scriptPath = quoted.filter(value => /\.(?:js|cjs|mjs)$/i.test(value)).at(-1);
-  if (!scriptPath) return undefined;
-  const nodePath = quoted.filter(value => /\\node\.exe$/i.test(value)).at(-1);
-  return { nodePath, scriptPath };
-}
-
-/** Executable plus any leading arguments, with no shell involved. */
-export function resolveSpawnTarget(
-  command: string,
-  env: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform = process.platform,
-): { file: string; args: string[] } {
-  if (platform !== 'win32') return { file: command, args: [] };
-
-  const resolved = resolveWindowsCommand(command, env);
-  if (!resolved) return { file: command, args: [] };
-  const extension = path.win32.extname(resolved).toLowerCase();
-  if (extension !== '.cmd' && extension !== '.bat') return { file: resolved, args: [] };
-
-  let cmdText: string;
-  try {
-    cmdText = readFileSync(resolved, 'utf8');
-  } catch (error) {
-    throw new Error(
-      `Could not read package manager shim ${resolved}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+export function toWindowsShellArg(arg: string) {
+  if (UNQUOTABLE_WINDOWS_ARG.test(arg)) {
+    throw new Error(`Refusing to pass unsafe argument to shell command: ${JSON.stringify(arg)}`);
   }
-  const target = windowsShimTarget(cmdText, path.win32.dirname(resolved));
-  if (!target || !existsSync(target.scriptPath)) {
-    throw new Error(`Could not find a Node entry point in package manager shim ${resolved}`);
-  }
-  const nodePath = target.nodePath && existsSync(target.nodePath) ? target.nodePath : process.execPath;
-  return { file: nodePath, args: [target.scriptPath] };
+  if (PLAIN_WINDOWS_ARG.test(arg)) return arg;
+  // Double trailing backslashes so they do not escape the closing quote.
+  // A loop, not /\\+$/: that pattern retries across a long non-trailing run.
+  let end = arg.length;
+  while (end > 0 && arg[end - 1] === '\\') end--;
+  return `"${arg}${arg.slice(end)}"`;
 }
 
-function resolveWindowsCommand(command: string, env: NodeJS.ProcessEnv): string | undefined {
-  if (path.win32.isAbsolute(command) || command.includes('\\') || command.includes('/')) return command;
-  const pathValue = env.PATH ?? env.Path ?? '';
-  const extensions = (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
-    .split(';')
-    .map(extension => extension.trim())
-    .filter(extension => extension.length > 0);
-  const suffixes = path.win32.extname(command) ? [''] : ['', ...extensions];
-  for (const directory of pathValue.split(';')) {
-    if (!directory) continue;
-    for (const suffix of suffixes) {
-      const candidate = path.win32.join(directory, suffix ? command + suffix : command);
-      if (existsSync(candidate)) return candidate;
-    }
+export function toWindowsShellArgs(bin: string, args: string[]) {
+  if (!PLAIN_WINDOWS_ARG.test(bin)) {
+    throw new Error(`Refusing to spawn unsafe command: ${JSON.stringify(bin)}`);
   }
-  return undefined;
+  const quoted = args.map(toWindowsShellArg);
+  if ([bin, ...quoted].join(' ').split('%').length > 2) {
+    throw new Error('Refusing to pass more than one "%" to a shell command');
+  }
+  return quoted;
 }
 
-export function createChildProcessLogger({ logger, root }: { logger: IMastraLogger; root: string }) {
+export function createChildProcessLogger({
+  logger,
+  root,
+  platform = process.platform,
+  windowsShell,
+}: {
+  logger: IMastraLogger;
+  root: string;
+  /** Override for tests that replay the Windows `.cmd` path on another OS. */
+  platform?: NodeJS.Platform;
+  /** cmd.exe stand-in. Production uses `ComSpec` or `cmd.exe`. */
+  windowsShell?: string;
+}) {
   const pinoStream = createPinoStream(logger);
   return async ({ cmd, args, env }: { cmd: string; args: string[]; env: Record<string, string> }) => {
     try {
-      const target = resolveSpawnTarget(cmd, env);
-      // Argument vector, never a shell string. Windows `.cmd` shims are rewritten
-      // to their Node entry point above so package managers still launch there.
-      const subprocess = spawn(target.file, [...target.args, ...args], {
-        cwd: root,
-        shell: false,
-        env,
-        // No stdin for the child process — it doesn't need interactive input
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+      const [bin, ...cmdArgs] = cmd.split(' ').filter(Boolean);
+      if (!bin) throw new Error('Refusing to spawn an empty command');
+      const allArgs = [...cmdArgs, ...args.filter(Boolean)];
+      // Same shape Node uses for `shell: true` on win32: cmd.exe /d /s /c "<line>".
+      // Explicit so a test can supply a cmd stand-in and still run this path.
+      const subprocess =
+        platform === 'win32'
+          ? spawn(
+              windowsShell ?? process.env.ComSpec ?? 'cmd.exe',
+              ['/d', '/s', '/c', `"${[bin, ...toWindowsShellArgs(bin, allArgs)].join(' ')}"`],
+              {
+                cwd: root,
+                env,
+                windowsVerbatimArguments: true,
+                stdio: ['ignore', 'pipe', 'pipe'],
+              },
+            )
+          : spawn(bin, allArgs, {
+              cwd: root,
+              shell: false,
+              env,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
 
       let stdout = '';
       let stderr = '';

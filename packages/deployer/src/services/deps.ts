@@ -440,7 +440,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
   return ["packages:\n  - '.'", ...blocks, ...customBlocks].join('\n\n') + '\n';
 }
 
-// Semver characters only; versions are written into the packed tarball filename.
+// Semver characters only; versions are interpolated into a shell command.
 const SAFE_PACKAGE_VERSION = /^[0-9A-Za-z.+-]+$/;
 
 /**
@@ -728,8 +728,8 @@ export class Deps extends MastraBase {
       root: dir,
     });
 
-    // Each flag value is its own argv element so a destination path is one argument.
-    let packArgs = ['pack', '--pack-destination', destination];
+    let packCmd = 'pack';
+    let destinationArgs = ['--pack-destination', destination];
     if (this.packageManager === 'yarn') {
       if (this.lockFile && (await isYarnClassicLockfile(this.lockFile.path))) {
         if (!SAFE_PACKAGE_VERSION.test(version)) {
@@ -742,21 +742,24 @@ export class Deps extends MastraBase {
           });
         }
         // Yarn classic has no --out/%v; --filename takes the full output path.
-        packArgs = ['pack', '--filename', `${destination}/${sanitizedName}-${version}.tgz`];
+        destinationArgs = ['--filename', `${destination}/${sanitizedName}-${version}.tgz`];
       } else {
         // %s includes an '@' at the start of packages names with an '@'
         // so we need to use our sanitizedName instead.
-        packArgs = ['pack', '--out', `${destination}/${sanitizedName}-%v.tgz`];
+        destinationArgs = ['--out', `${destination}/${sanitizedName}-%v.tgz`];
       }
     }
     if (this.packageManager === 'bun') {
-      // bun uses `pm pack` instead of `pack`, and --destination instead of --pack-destination.
-      packArgs = ['pm', 'pack', '--destination', destination];
+      // bun uses `pm pack` instead of `pack`
+      packCmd = 'pm pack';
+      // bun uses --destination instead of --pack-destination
+      destinationArgs = ['--destination', destination];
     }
 
     return cpLogger({
-      cmd: this.packageManager,
-      args: packArgs,
+      // The destination goes in args so it is never parsed as part of the command.
+      cmd: `${this.packageManager} ${packCmd}`,
+      args: destinationArgs,
       env: {
         PATH: process.env.PATH!,
       },
@@ -1031,29 +1034,22 @@ export class Deps extends MastraBase {
    * Depending on whether we want to install or add a package, this function returns the appropriate commands.
    * All package managers support both commands (e.g. npm install has an alias on "add")
    */
-  private getPackageManagerArgs(
+  private getPackageManagerCommand(
     pm: PackageManager,
     type: 'install' | 'add',
     { yarnClassic = false }: { yarnClassic?: boolean } = {},
-  ): string[] {
+  ): string {
     const cmd = type === 'install' ? 'install' : 'add';
 
     switch (pm) {
       case 'npm':
-        return [
-          cmd,
-          '--audit=false',
-          '--fund=false',
-          '--loglevel=error',
-          '--progress=false',
-          '--update-notifier=false',
-        ];
+        return `${cmd} --audit=false --fund=false --loglevel=error --progress=false --update-notifier=false`;
       case 'yarn':
-        return type === 'install' && !yarnClassic ? [cmd, '--no-immutable'] : [cmd];
+        return type === 'install' && !yarnClassic ? `${cmd} --no-immutable` : cmd;
       case 'pnpm':
-        return type === 'install' ? [cmd, '--no-frozen-lockfile', '--loglevel=error'] : [cmd, '--loglevel=error'];
+        return type === 'install' ? `${cmd} --no-frozen-lockfile --loglevel=error` : `${cmd} --loglevel=error`;
       default:
-        return [cmd];
+        return cmd;
     }
   }
 
@@ -1100,7 +1096,7 @@ export class Deps extends MastraBase {
       }
     }
 
-    const installArgs = this.getPackageManagerArgs(pm, 'install', { yarnClassic });
+    const installCommand = this.getPackageManagerCommand(pm, 'install', { yarnClassic });
     let args: string[] = [];
 
     switch (pm) {
@@ -1134,8 +1130,8 @@ export class Deps extends MastraBase {
 
     try {
       return await cpLogger({
-        cmd: pm,
-        args: [...installArgs, ...args],
+        cmd: `${pm} ${installCommand}`,
+        args,
         env: process.env as Record<string, string>,
       });
     } catch (error) {
@@ -1163,7 +1159,7 @@ export class Deps extends MastraBase {
 
   public async installPackages(packages: string[]) {
     const pm = this.packageManager;
-    const installArgs = this.getPackageManagerArgs(pm, 'add');
+    const installCommand = this.getPackageManagerCommand(pm, 'add');
 
     const env: Record<string, string> = {
       PATH: process.env.PATH!,
@@ -1179,8 +1175,8 @@ export class Deps extends MastraBase {
     });
 
     return cpLogger({
-      cmd: pm,
-      args: [...installArgs, ...packages],
+      cmd: `${pm} ${installCommand}`,
+      args: packages,
       env,
     });
   }

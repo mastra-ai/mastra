@@ -436,6 +436,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/concentrate',
+          label: 'Concentrate',
+        },
+        {
+          type: 'doc',
           id: 'providers/confidential-ai',
           label: 'Confidential AI',
         },
@@ -1168,6 +1173,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/powerspring',
           label: 'Powerspring',
+        },
+        {
+          type: 'doc',
+          id: 'providers/primalabs',
+          label: 'PrimaLabs',
         },
         {
           type: 'doc',
