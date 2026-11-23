@@ -1,7 +1,7 @@
-import { SidebarButtonHint } from '../header/sidebar-button-hint';
 import { useSidebar } from './sidebar-context';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { ShortcutHint } from '@/ds/components/Kbd/shortcut-hint';
 import { IconSidebarSimpleLeftWide } from '@/ds/icons/central/IconSidebarSimpleLeftWide';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +20,7 @@ export function SidebarTrigger({ className, onClick, ...props }: SidebarTriggerP
       size="icon-sm"
       aria-label="Toggle sidebar"
       aria-expanded={!isCollapsed}
-      tooltip={<SidebarButtonHint label="Toggle sidebar" shortcut="[" />}
+      tooltip={<ShortcutHint label="Toggle sidebar" shortcut="[" />}
       tooltipPosition="bottom"
       {...props}
       onClick={event => {

@@ -1,7 +1,7 @@
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { WorkspaceSetupSettings } from '@mastra/playground-ui/components/SandboxSettings';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 
-import { CommittedInput } from './CommittedInput';
 import type { SaveEnvironment } from './CommittedInput';
 
 /**
@@ -24,24 +24,13 @@ export function WorkspaceSetupBlock({
 }) {
   return (
     <SettingsContainer>
-      <SettingsRow label="Working directory" description="Absolute path where repositories are cloned.">
-        <CommittedInput
-          label="Working directory"
-          placeholder="/workspace"
-          value={workdir ?? ''}
-          disabled={disabled}
-          onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
-        />
-      </SettingsRow>
-      <SettingsRow label="Setup command" description="Runs from the working directory once every repository is cloned.">
-        <CommittedInput
-          label="Setup command"
-          value={command ?? ''}
-          placeholder="e.g. ./scripts/bootstrap.sh"
-          disabled={disabled}
-          onCommit={next => onSave({ workspaceSetupCommand: next || null })}
-        />
-      </SettingsRow>
+      <WorkspaceSetupSettings
+        workingDirectory={workdir}
+        setupCommand={command}
+        disabled={disabled}
+        onWorkingDirectoryCommit={value => onSave({ sandboxWorkingDirectory: value })}
+        onSetupCommandCommit={value => onSave({ workspaceSetupCommand: value })}
+      />
       {children}
     </SettingsContainer>
   );

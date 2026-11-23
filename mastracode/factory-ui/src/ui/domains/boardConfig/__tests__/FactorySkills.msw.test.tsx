@@ -366,7 +366,7 @@ describe("a skill's page", () => {
     await user.type(description, ' locally');
     serveChangelogLint({ description: 'Lint every changelog', content: '# Lint all' });
     await client.refetchQueries();
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Instructions' })).toHaveTextContent('# Lint all'));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Instructions' })).toHaveTextContent('Lint all'));
     expect(description).toHaveValue('Lint every changelog locally');
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
@@ -396,19 +396,6 @@ describe("a skill's page", () => {
     expect(unloadBlocked()).toBe(true);
     await user.click(screen.getByRole('button', { name: 'Discard' }));
     expect(unloadBlocked()).toBe(false);
-  });
-
-  it('goes Back to where the skill was first opened from after browser back returns to it', async () => {
-    const boardConfigPage = `/factories/${FACTORY_ID}/work/config`;
-    const { router } = openAt(boardConfigPage);
-    const user = userEvent.setup();
-
-    await router.navigate(`${SKILLS_PAGE}/changelog-lint`);
-    await router.navigate(SKILLS_PAGE);
-    await router.navigate(-1);
-    await user.click(await screen.findByRole('button', { name: 'Back' }));
-
-    await waitFor(() => expect(router.state.location.pathname).toBe(boardConfigPage));
   });
 
   it('reverts an edited skill to the original in place', async () => {
@@ -516,7 +503,7 @@ describe("a skill's page", () => {
     const user = userEvent.setup();
 
     await screen.findByRole('heading', { name: 'changelog-lint' });
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('link', { name: 'Back to Skills' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(SKILLS_PAGE));
   });
 

@@ -1,5 +1,117 @@
 # @mastra/connect
 
+## 1.5.0-alpha.1
+
+### Minor Changes
+
+- Added a SendGrid toolset with 53 tools. Agents can send email, and manage marketing contacts, lists, segments, custom fields, dynamic templates and template versions, sender identities, and global and group suppressions, and read and clear blocks, bounces, invalid emails, and spam reports. ([#30844](https://github.com/mastra-ai/mastra/pull/30844))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const sendgridAgent = new Agent({
+    id: 'sendgrid-agent',
+    name: 'SendGrid agent',
+    instructions: 'Use the connected SendGrid tools to manage contacts, lists, and templates.',
+    model: 'openai/gpt-5.6',
+    tools: tools({ providers: ['sendgrid'] }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `anthropic_cancel_message_batch` failing after a successful cancel. Anthropic returns `null` for a batch's end time, archive time, and results URL until they exist, and the tool rejected those nulls even though the batch was cancelled. It now leaves those fields out of the result, as the other batch tools already do. ([#31180](https://github.com/mastra-ai/mastra/pull/31180))
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`8bbaab6`](https://github.com/mastra-ai/mastra/commit/8bbaab64784fac9426f5b2bd0e35f1bd6ae4640a), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`d5546d6`](https://github.com/mastra-ai/mastra/commit/d5546d686498ddb3981f4e1e05c322eba9777e07), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`7388601`](https://github.com/mastra-ai/mastra/commit/73886018497772a47154f67ce512081d8f3e9818), [`45320c3`](https://github.com/mastra-ai/mastra/commit/45320c334035c969dcef98a91de6ad2a6610c8c0), [`182a01f`](https://github.com/mastra-ai/mastra/commit/182a01f0d684de865c42cb9a1c0cdd61d9009d12), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`8fab5e2`](https://github.com/mastra-ai/mastra/commit/8fab5e2fda43beca4be00e43d4f231cdd87fd7fd), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`89fb271`](https://github.com/mastra-ai/mastra/commit/89fb27175fd7036b8600241da8a6d288a7f2bae4), [`4aeb6ce`](https://github.com/mastra-ai/mastra/commit/4aeb6ce414105e45b1c36d174258f9165738ecef), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4), [`55a2249`](https://github.com/mastra-ai/mastra/commit/55a2249be2f5505e3022856d477628e6ca2fd9a9)]:
+  - @mastra/core@1.86.0-alpha.6
+  - @mastra/discord@1.3.5-alpha.0
+  - @mastra/mcp@2.11.0-alpha.1
+  - @mastra/slack@1.9.1-alpha.0
+  - @mastra/teams@0.1.6-alpha.0
+  - @mastra/telegram@0.2.6-alpha.0
+
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Added an ElevenLabs toolset with 35 tools. Agents can turn text into speech, transcribe audio or video (from base64 audio or a URL), clone voices, compose music from a prompt or an editable composition plan, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents. ([#30843](https://github.com/mastra-ai/mastra/pull/30843))
+
+  `elevenlabs_text_to_speech` and `elevenlabs_compose_music` return the audio base64-encoded to your code, while the model only sees a short summary, so audio bytes never fill its context. `elevenlabs_get_user` never returns the account's API key, even though ElevenLabs includes it in the response.
+
+  Voice cloning copies a real person's voice, so require approval for it:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const elevenlabsAgent = new Agent({
+    id: 'elevenlabs-agent',
+    name: 'ElevenLabs agent',
+    instructions: 'Use the connected ElevenLabs tools to narrate messages, transcribe recordings, and score videos.',
+    model: 'openai/gpt-5.6',
+    tools: tools({ providers: { elevenlabs: { requireApproval: ['elevenlabs_clone_voice'] } } }),
+  });
+  ```
+
+- Added a GitLab toolset with 44 tools. Agents can manage projects, groups, issues, merge requests, branches, files, commits, and releases, create and cancel pipelines, and retry jobs. ([#30842](https://github.com/mastra-ai/mastra/pull/30842))
+
+  Connect a GitLab account to your project first (`mastra connect add gitlab`). When running locally, set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` in the app's environment so `tools()` can find the connection. Then add the tools to an agent:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const gitlabAgent = new Agent({
+    id: 'gitlab-agent',
+    name: 'GitLab agent',
+    instructions: 'Use the connected GitLab tools to triage issues and review merge requests.',
+    model: 'openai/gpt-5.6',
+    tools: tools({ providers: ['gitlab'] }),
+  });
+  ```
+
+  Project and group paths work raw (`team/app`) or URL-encoded (`team%2Fapp`). Branch names, file paths, and tag names are sent as given, so `release%2Fnext` and `release/next` stay distinct. Project results never include the project's runner registration token.
+
+  Tools refuse ambiguous or no-op input before calling GitLab: an update with nothing to change, a commit action missing the field it needs, a release with duplicate asset links, or a merge request update naming the milestone both by id and by title.
+
+- Added `ConnectClient` and `EventsClient` so your code can manage Mastra platform connections and react to provider events without polling. ([#30320](https://github.com/mastra-ai/mastra/pull/30320))
+
+  **ConnectClient** lists the connections linked to your project, reads credentials, calls providers through the platform proxy, and starts connect and reconnect sessions. Every call has a 15-second timeout by default. Errors now say whether the platform or the provider answered (`source`), carry the platform's problem type (`problemCode`), and include `retryAfterMs` for 429 and 503 responses.
+
+  ```typescript
+  import { ConnectClient } from '@mastra/connect';
+
+  const connect = new ConnectClient();
+  const [jira] = await connect.listConnections({ providerKeys: ['jira'] });
+  const issue = await connect.proxy(jira.id, { method: 'GET', path: '/rest/api/3/issue/ENG-1' });
+  ```
+
+  **EventsClient** streams a project's topics from the platform events service. `connectEvents()` delivers the webhooks your connections receive and reconnects on its own. Pass a `cursorStore` and it saves each event you finish handling, so a restart picks up where it stopped; `onGap` tells you when events were trimmed and you should resync.
+
+  ```typescript
+  const events = connect.events.connectEvents({
+    cursorStore: { load: () => db.get('cursor'), save: cursor => db.set('cursor', cursor) },
+    onGap: () => resync(),
+  });
+
+  for await (const event of events) {
+    await handle(event.integrationId, event.eventType, event.payload);
+  }
+  ```
+
+  Error messages from the platform and from the connection proxy no longer include your platform access token when the server echoes it back.
+
+### Patch Changes
+
+- Updated dependencies [[`d250e06`](https://github.com/mastra-ai/mastra/commit/d250e06d7c63b02aa0e5b7c61e1e54e07dcad13b), [`9315b28`](https://github.com/mastra-ai/mastra/commit/9315b2895a617947513be1f96d8964037b505f38), [`7c0c1cd`](https://github.com/mastra-ai/mastra/commit/7c0c1cdc9ed1211b3705554bf205a30ef05b0796), [`21a82af`](https://github.com/mastra-ai/mastra/commit/21a82af6e1c08daaa3c2700c98ac95a96e66399e), [`9c4da82`](https://github.com/mastra-ai/mastra/commit/9c4da8282cf9f163691df5c15eed2c89d48534f9), [`0458fdc`](https://github.com/mastra-ai/mastra/commit/0458fdc0c19abc0359746247cb55b71dd4afaf6e), [`4b5c347`](https://github.com/mastra-ai/mastra/commit/4b5c347734329ff434d7cdcb6408c23dfe046540), [`b8af9e3`](https://github.com/mastra-ai/mastra/commit/b8af9e313eb446fadb24454dc18fa19aa08a8cea), [`0280c14`](https://github.com/mastra-ai/mastra/commit/0280c141dae50809cfc7f6bd7e27d1f65432121c), [`ad5059e`](https://github.com/mastra-ai/mastra/commit/ad5059e90c201279628a799f1434a8fe35140b55), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`0f098fe`](https://github.com/mastra-ai/mastra/commit/0f098fe2425bc467ff9a800c41433efe90c44e58), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72), [`389851e`](https://github.com/mastra-ai/mastra/commit/389851ef0380c222b6223148b8c070a6919b7a8e), [`9c4810b`](https://github.com/mastra-ai/mastra/commit/9c4810b48652bee44663452f136df5e9d9247d40), [`2f04296`](https://github.com/mastra-ai/mastra/commit/2f04296f9b815fde8395a32ddbabd214fdf2f914), [`4e0b782`](https://github.com/mastra-ai/mastra/commit/4e0b7820880774ed87c151d6575ba13820035773), [`a6a5b78`](https://github.com/mastra-ai/mastra/commit/a6a5b7808581c6e7dc086a165580b23138d5e441), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72)]:
+  - @mastra/core@1.85.1-alpha.0
+  - @mastra/mcp@2.10.1-alpha.0
+
 ## 1.4.1
 
 ### Patch Changes

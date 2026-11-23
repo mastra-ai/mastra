@@ -46,25 +46,37 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "google/gemma-4-31B-it": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "meta/muse-spark-open": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "Qwen/Qwen3.8-27B-FP8": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B-FP8": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -82,28 +94,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
-        "values": ["none", "medium", "high"]
-      }
-    ],
-    "Qwen/Qwen3.8-27B-FP8": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "Qwen/Qwen3.6-35B-A3B-FP8": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "Qwen/Qwen3.5-35B-A3B-FP8-dottxt": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -128,6 +122,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "google/gemma-4-31B-it": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "moonshotai/Kimi-K3.1-Pro": [

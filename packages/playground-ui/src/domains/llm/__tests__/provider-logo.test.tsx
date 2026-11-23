@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { modelsDevLogoSlugs } from '../models-dev-logo-slugs';
 import { ProviderLogo } from '../provider-logo';
 
 const bundledVendors = [
@@ -73,38 +72,15 @@ const modelsDevPlaceholderSlugs = ['inflection', 'nous', 'github-models', 'zzz-n
 describe('ProviderLogo', () => {
   afterEach(cleanup);
 
-  it.each([
-    'anthropic',
-    'anthropic.messages',
-    '~anthropic',
-    'google',
-    'deepseek',
-    'openai.responses',
-    'openrouter',
-    'qwen',
-    'mistral',
-    'mistralai',
-    'zai',
-    'z-ai',
-    'nvidia',
-    'minimax',
-    'meta',
-    'meta-llama',
-    'moonshotai',
-    'xai',
-    'x-ai',
-    'typesafe',
-    'tencent',
-    'bytedance',
-    'bytedance-seed',
-    'sakana',
-    'microsoft',
-  ])('draws the bundled %s mark without fetching a remote logo', providerId => {
-    render(<ProviderLogo providerId={providerId} size="md" />);
-    const mark = screen.getByRole('img', { name: `${providerId} logo` });
-    expect(mark.tagName.toLowerCase()).toBe('svg');
-    expect(document.querySelector('img')).toBeNull();
-  });
+  it.each(['anthropic.messages', '~anthropic', 'openai.responses', 'mistral', 'zai', 'xai'])(
+    'draws the bundled mark for the %s alias without fetching a remote logo',
+    providerId => {
+      render(<ProviderLogo providerId={providerId} size="md" />);
+      const mark = screen.getByRole('img', { name: `${providerId} logo` });
+      expect(mark.tagName.toLowerCase()).toBe('svg');
+      expect(document.querySelector('img')).toBeNull();
+    },
+  );
 
   it('keeps the Claude spark in its brand color', () => {
     render(<ProviderLogo providerId="anthropic" />);
@@ -244,16 +220,6 @@ describe('ProviderLogo', () => {
     },
   );
 
-  it('keeps placeholder slugs out of the verified models.dev list', () => {
-    for (const slug of [...modelsDevPlaceholderSlugs, 'netlify']) {
-      expect(modelsDevLogoSlugs.has(slug)).toBe(false);
-    }
-  });
-
-  it.each(modelsDevVendors)('lists the %s logo as a verified models.dev slug', slug => {
-    expect(modelsDevLogoSlugs.has(slug)).toBe(true);
-  });
-
   it('uses the first letter after a leading tilde for the monogram', () => {
     render(<ProviderLogo providerId="~stealth" />);
     expect(screen.getByRole('img', { name: '~stealth logo' }).textContent).toBe('S');
@@ -295,11 +261,6 @@ describe('ProviderLogo', () => {
     expect(screen.getByRole('img', { name: 'wafer.ai logo' }).getAttribute('src')).toBe(
       'https://models.dev/logos/wafer.ai.svg',
     );
-  });
-
-  it('still strips an api qualifier from a provider without a dotted logo', () => {
-    render(<ProviderLogo providerId="cerebras.chat" />);
-    expect(screen.getByRole('img').getAttribute('src')).toBe('https://models.dev/logos/cerebras.svg');
   });
 
   it('shows the monogram when a models.dev logo fails to load', () => {

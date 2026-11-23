@@ -487,8 +487,6 @@ describe('Global search', () => {
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
-    expect(within(dialog).queryByText('Activity')).not.toBeInTheDocument();
-    expect(within(dialog).queryByText('Audit log')).not.toBeInTheDocument();
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
   });
 

@@ -11,7 +11,7 @@ import {
   emitSuspendedEvent,
   emitAbortEvent,
 } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 /**
  * Idle / liveness timeout for `createDurableAgentStream` (and therefore
@@ -90,7 +90,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       ...extra,
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
   it.each(['finish', 'abort', 'error'] as const)(
     'still times out after rejecting a superseded %s terminal',
@@ -409,6 +409,36 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
 
     cleanup();
+  });
+
+  it('releases the subscription when onSuspended rejects after a close-on-suspend', async () => {
+    // Teardown must run even when the consumer's onSuspended rejects. The stream is
+    // closed on the suspension boundary either way, so a skipped teardown would leave
+    // this reader subscribed to the run's topic for the life of the process.
+    const runId = 'idle-suspend-reject';
+    const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
+    const { output, cleanup, ready } = makeStream(runId, {
+      closeOnSuspend: true,
+      onSuspended: () => {
+        throw new Error('onSuspended failed');
+      },
+    });
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitSuspendedEvent(pubsub, runId, { type: 'suspension' });
+
+    expect(await settleWithin(reader.done, IDLE * 20)).toBe('done');
+    // `done` settles on a rejection too, so assert clean EOF separately.
+    expect(reader.getThrown()).toBeUndefined();
+    expect(reader.isClosed()).toBe(true);
+    // Teardown waits for the frames already published before unsubscribing, so it
+    // lands a beat after the stream closes rather than inside the callback.
+    await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1), { timeout: 1000 });
+
+    // Already unsubscribed: cleanup() must not double-unsubscribe.
+    cleanup();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it('does not emit a spurious idle error when a slow onAbort ends the stream', async () => {

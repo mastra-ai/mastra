@@ -1,11 +1,12 @@
-import { Background, BackgroundVariant, ReactFlow, useNodesInitialized, useReactFlow, useStore } from '@xyflow/react';
+import { ReactFlow, useNodesInitialized, useReactFlow, useStore } from '@xyflow/react';
 import type { Edge, Node, ReactFlowProps } from '@xyflow/react';
-import { useContext, useEffect, useId, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { WorkflowCanvasInsetContext, workflowFitOptions } from '../workflow-canvas-inset';
 import { workflowCameraDuration } from './workflow-camera-duration';
 import { WorkflowGraphGroups } from './workflow-graph-groups';
 import type { WorkflowGraphGroup } from './workflow-graph-groups';
 import { ZoomSlider } from './zoom-slider';
+import { GraphCanvasBackground } from '@/ds/primitives/graph-canvas-background';
 import { cn } from '@/utils/cn';
 import '@xyflow/react/dist/style.css';
 
@@ -32,7 +33,6 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
   variant = 'default',
 }: WorkflowGraphCanvasProps<NodeType, EdgeType>) {
   const graphRef = useRef<HTMLDivElement>(null);
-  const backgroundId = useId();
   const panelInset = useContext(WorkflowCanvasInsetContext);
   const leftInset = variant === 'default' ? panelInset : 0;
   const isInline = variant === 'inline';
@@ -120,7 +120,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
           />
         )}
         {groups && <WorkflowGraphGroups nodes={nodes ?? []} groups={groups} />}
-        {!isInline && <Background id={backgroundId} variant={BackgroundVariant.Dots} gap={12} size={0.5} />}
+        {!isInline && <GraphCanvasBackground />}
       </ReactFlow>
     </div>
   );

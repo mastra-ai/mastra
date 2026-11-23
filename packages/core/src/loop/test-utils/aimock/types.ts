@@ -146,11 +146,7 @@ export interface RunLoopScenarioOptions {
    * Default options for the agent (e.g. `autoResumeSuspendedTools`).
    * Applied to the Agent constructor via `defaultOptions` config.
    */
-  defaultOptions?: {
-    autoResumeSuspendedTools?: boolean;
-    inputProcessors?: any;
-    hooks?: ToolHooks;
-  };
+  defaultOptions?: AgentConfig['defaultOptions'];
   /** Per-call tool hooks forwarded to agent.stream(). */
   hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
@@ -400,6 +396,8 @@ export interface RunLoopScenarioOptions {
   memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory' | 'readOnly'>;
   /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
   onTitleGenerated?: (title: string) => void | Promise<void>;
+  /** Forwarded to `agent.stream({ tracingOptions })`. */
+  tracingOptions?: TracingOptions;
   /**
    * Workspace attached to the agent. Passed into tool execution context so tools
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.
@@ -474,8 +472,14 @@ export interface RunApprovalScenarioOptions extends Pick<
   | 'observability'
   | 'afterStream'
   | 'agentOutputProcessors'
+  | 'memory'
+  | 'threadId'
+  | 'resourceId'
+  | 'defaultOptions'
 > {
   tracingOptions?: TracingOptions;
+  /** Options passed to every `approveToolCall` / `declineToolCall`, such as the resume call's `tracingOptions`. */
+  resumeOptions?: Record<string, unknown>;
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based

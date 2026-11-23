@@ -10,7 +10,7 @@ export const CardGrid = ({ children, columns = 2 }: { children: React.ReactNode;
   }[columns]
 
   return (
-    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-4`}>
+    <div data-slot="card-grid" className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} mb-6 gap-4`}>
       {children}
     </div>
   )
@@ -49,7 +49,15 @@ export const CardGridItem = ({
                 }
               />
             ) : (
-              <div className={preserveLogoColor ? 'h-8 w-8' : 'h-8 w-8 text-black dark:text-white'}>{logo}</div>
+              <div
+                className={
+                  preserveLogoColor
+                    ? 'inline-flex h-8 w-8 items-center justify-center'
+                    : 'inline-flex h-8 w-8 items-center justify-center text-black dark:text-white'
+                }
+              >
+                {logo}
+              </div>
             ))}
           <CardTitle>{title}</CardTitle>
         </CardHeader>

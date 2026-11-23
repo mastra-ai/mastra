@@ -3,6 +3,12 @@
   "temperature": ["deepseek-v4.1-flash", "glm-5.3", "glm-5.3-flash"],
   "structuredOutput": ["deepseek-v4.1-flash", "glm-5.3", "glm-5.3-flash", "kimi-k3.1-pro"],
   "reasoning": {
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "kimi-k3.1-pro": [
       {
         "type": "effort",
@@ -13,12 +19,6 @@
       {
         "type": "toggle"
       },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

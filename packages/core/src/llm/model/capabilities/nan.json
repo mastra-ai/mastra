@@ -24,27 +24,15 @@
   ],
   "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"],
   "reasoning": {
-    "gemma4": [
+    "glm5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 32768
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-flash": [
+    "mimo-v2.6-flash": [
       {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "qwen3.6": [
@@ -58,21 +46,28 @@
         "max": 32768
       }
     ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "hy4": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
       }
     ],
-    "qwen3.8-flash": [
+    "deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 32768
       }
     ],
     "glm5.3": [
@@ -87,21 +82,26 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4-pro": [
+    "qwen3.8-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 32768
       }
     ],
-    "glm5.3-flash": [
+    "gemma4": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "mimo-v2.6-flash": [
+        "values": ["none", "low", "medium", "high", "max"]
+      },
       {
-        "type": "toggle"
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 32768
       }
     ]
   }

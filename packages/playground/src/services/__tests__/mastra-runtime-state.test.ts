@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { getCanSendWhileStreaming } from '@mastra/playground-ui/domains/agents/chat/can-send-while-streaming';
 
-import { getCanSendWhileStreaming } from '../mastra-runtime-state';
+import { describe, expect, it } from 'vitest';
 
 describe('getCanSendWhileStreaming', () => {
   it('allows server-side queued sends while a subscription thread is active', () => {

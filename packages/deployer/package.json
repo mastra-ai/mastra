@@ -1,10 +1,11 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.85.0",
+  "version": "1.86.0-alpha.6",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -99,7 +100,7 @@
     "@babel/traverse": "^8.0.7",
     "@hono/node-ws": "^1.3.1",
     "@mastra/server": "workspace:*",
-    "@optimize-lodash/rollup-plugin": "^5.1.0",
+    "@optimize-lodash/rollup-plugin": "^6.0.0",
     "@pnpm/config.parse-overrides": "^1100.1.8",
     "@rollup/plugin-alias": "6.0.0",
     "@rollup/plugin-commonjs": "29.0.2",
@@ -121,7 +122,7 @@
     "rollup-plugin-esbuild": "^6.2.1",
     "semver": "^7.8.5",
     "tinyglobby": "^0.2.17",
-    "ws": "^8.22.0",
+    "ws": "^8.23.0",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
@@ -153,7 +154,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.83.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.85.1-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

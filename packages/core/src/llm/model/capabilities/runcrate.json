@@ -32,6 +32,11 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
@@ -47,11 +52,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
       }
     ],
     "zai-org/GLM-5.3": [

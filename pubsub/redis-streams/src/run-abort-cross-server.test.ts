@@ -8,8 +8,11 @@
  * route answered `{ aborted: false }`, because the agent only consulted its own process. The client
  * SDK retries a false answer every 100 ms for 10 s and then errors the stream.
  *
- * The answer must also stay honest: when the owner is gone, its stored run is still live but nothing
- * executes it, so the route must keep answering `{ aborted: false }`.
+ * The answer must also stay honest: when every server that took part in the run is gone, its stored
+ * run is still live but nothing executes it, so the route must keep answering `{ aborted: false }`.
+ *
+ * With LibSQL step guards (COR-1596), the run's orchestration events go through Redis consumer
+ * groups, so both servers take turns handling them, and the `wait` tool can run on either one.
  *
  * Requires a Redis server at REDIS_URL. The model is served by AIMock in this process; children
  * reach it over HTTP.
@@ -106,6 +109,26 @@ class Node {
   }
 }
 
+/** The first matching event from any of `nodes`. */
+async function nextFromAny(
+  nodes: Node[],
+  match: (event: NodeEvent) => boolean,
+  timeoutMs = 30_000,
+): Promise<NodeEvent> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    for (const node of nodes) {
+      const error = node.events.find(event => event.type === 'error');
+      if (error) throw new Error(`${error.node} failed: ${error.message}`);
+      const found = node.events.find(match);
+      if (found) return found;
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const events = nodes.flatMap(node => node.events);
+  throw new Error(`timed out waiting on nodes; events: ${JSON.stringify(events)}`);
+}
+
 for (const { engine, busLocation } of [
   { engine: 'durable', busLocation: 'mastra' },
   { engine: 'evented', busLocation: 'mastra' },
@@ -115,6 +138,8 @@ for (const { engine, busLocation } of [
     let llm: LLMock;
     let owner: Node;
     let other: Node;
+    let startNode: (nodeId: string) => Promise<Node>;
+    let nodes: Node[] = [];
     let cleanupStorage: () => Promise<void>;
 
     let storageUrl: string;
@@ -163,9 +188,10 @@ for (const { engine, busLocation } of [
         ENGINE: engine,
         BUS_LOCATION: busLocation,
       };
-      const start = async (nodeId: string) => {
+      nodes = [];
+      startNode = async (nodeId: string) => {
         const port = await getFreePort();
-        return new Node(
+        const node = new Node(
           spawn(TSX_BIN, [ENTRY], {
             cwd: PACKAGE_DIR,
             env: { ...process.env, ...env, NODE_ID: nodeId, PORT: String(port) },
@@ -174,15 +200,16 @@ for (const { engine, busLocation } of [
           }),
           `http://localhost:${port}`,
         );
+        nodes.push(node);
+        await node.next(e => e.type === 'ready');
+        await waitForServerHttp(node.url);
+        return node;
       };
-      owner = await start('owner');
-      other = await start('other');
-      await Promise.all([owner.next(e => e.type === 'ready'), other.next(e => e.type === 'ready')]);
-      await Promise.all([waitForServerHttp(owner.url), waitForServerHttp(other.url)]);
+      [owner, other] = await Promise.all([startNode('owner'), startNode('other')]);
     });
 
     afterEach(async () => {
-      await Promise.allSettled([owner?.stop(), other?.stop()]);
+      await Promise.allSettled(nodes.map(node => node.stop()));
       await cleanupStorage?.();
     });
 
@@ -193,7 +220,7 @@ for (const { engine, busLocation } of [
       await other.next(e => e.type === 'subscribed');
       owner.send({ cmd: 'stream', threadId, resourceId });
       const { runId } = await owner.next(e => e.type === 'run');
-      await owner.next(e => e.type === 'tool-started');
+      await nextFromAny([owner, other], e => e.type === 'tool-started');
       await other.next(e => e.type === 'thread-chunk' && e.chunkType === 'tool-call');
       other.send({ cmd: 'observe', runId });
       await other.next(e => e.type === 'observed-chunk' && e.chunkType === 'tool-call');
@@ -204,25 +231,29 @@ for (const { engine, busLocation } of [
       const done = await owner.next(e => e.type === 'stream-done', 15_000);
       await other.next(e => e.type === 'observe-done', 15_000);
       expect(other.events.filter(e => e.type === 'observed-chunk').at(-1)?.chunkType).toBe('finish');
-      const finished = owner.events.find(e => e.type === 'tool-finished');
-      expect(finished?.aborted).toBe(true);
+      const finished = await nextFromAny([owner, other], e => e.type === 'tool-finished', 5_000);
+      expect(finished.aborted).toBe(true);
       expect(done.finishReason).not.toBe('stop');
       // The run never reached its second model call.
       expect(modelCalls()).toBe(1);
     });
 
-    it('answers aborted: false when the run is still stored as live but its owner is gone', async () => {
+    it('answers aborted: false when the run is still stored as live but every server running it is gone', async () => {
       owner.send({ cmd: 'stream' });
       const { runId } = await owner.next(e => e.type === 'run');
-      await owner.next(e => e.type === 'tool-started');
+      await nextFromAny([owner, other], e => e.type === 'tool-started');
 
-      // The owner dies without unwinding: nothing executes the run any more, but its row stays live.
-      await owner.kill('SIGKILL');
+      // Both servers may have handled the run's events, and a server that did is a live participant
+      // that can still stop it (it answers aborted: true, as in the case above). Kill both without
+      // unwinding, so nothing executes the run any more while its row stays live, and ask a server
+      // that never took part.
+      await Promise.all([owner.kill('SIGKILL'), other.kill('SIGKILL')]);
       const statuses = await storedStatuses(runId);
       expect(statuses.length).toBeGreaterThan(0);
       for (const status of statuses) expect(['running', 'pending', 'waiting']).toContain(status);
 
-      const answer = await other.abort(runId);
+      const bystander = await startNode('bystander');
+      const answer = await bystander.abort(runId);
       expect(answer).toEqual({ status: 200, body: { aborted: false } });
     });
   });

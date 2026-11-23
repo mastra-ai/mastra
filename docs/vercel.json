@@ -2313,6 +2313,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/gateway",
+      "destination": "/docs/mastra-platform/gateway/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/observability",
       "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
@@ -4325,6 +4330,11 @@
     {
       "source": "/docs/mastra-platform/deploy/llms.txt",
       "destination": "/docs/mastra-platform/deploy/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/gateway/llms.txt",
+      "destination": "/docs/mastra-platform/gateway/overview/llms.txt",
       "permanent": true
     },
     {

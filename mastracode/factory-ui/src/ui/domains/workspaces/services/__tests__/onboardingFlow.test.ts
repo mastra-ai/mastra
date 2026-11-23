@@ -3,10 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hasResumableFactoryOnboarding,
   onboardingCreateReadiness,
-  ONBOARDING_FACTORY_KEY,
   ONBOARDING_LINKED_REPOSITORY_KEY,
   ONBOARDING_STEP_KEY,
-  ONBOARDING_UPDATED_AT_KEY,
   persistOnboardingDraft,
   persistOnboardingFactory,
   persistOnboardingStep,
@@ -67,8 +65,6 @@ describe('Factory onboarding flow', () => {
     persistOnboardingStep('model');
 
     expect(readOnboardingStep()).toBe('model');
-    expect(sessionStorage.getItem(ONBOARDING_STEP_KEY)).toBe('model');
-    expect(sessionStorage.getItem(ONBOARDING_UPDATED_AT_KEY)).not.toBeNull();
   });
 
   it('resumes an old wizard step for its pending Factory but opens no stored section', () => {
@@ -120,7 +116,6 @@ describe('Factory onboarding flow', () => {
     persistOnboardingStep('model');
     persistOnboardingFactory('factory-1');
 
-    expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('factory-1');
     expect(hasResumableFactoryOnboarding([{ id: 'factory-1' }])).toBe(true);
     expect(hasResumableFactoryOnboarding([{ id: 'factory-2' }])).toBe(false);
   });

@@ -122,8 +122,8 @@
    * The rim is inset, so it cannot be clipped: the app frame and every
    * ScrollArea viewport are `overflow-hidden`, and an outer ring on a surface
    * sitting flush inside one is shaved off entirely. The cost is the mirror
-   * case — a child flush against the edge paints over it. MainCard reserves
-   * the rim with `p-px`; other panels may keep a larger content gutter.
+   * case — a child flush against the edge paints over it. MainCard uses a
+   * border for its rim so full-bleed pages can fill the rounded frame.
    *
    * In-flow surfaces keep the bleed short for the same reason. The drops fall
    * outside the box and a scroller does clip those, so a tile reaching further

@@ -1,0 +1,24 @@
+Compatible with the OpenAI Images API. The example uses `black-forest-labs/flux-3-image-klein`. Find other image models in [`/v1/models`](/docs/mastra-platform/gateway/api/models). To change an existing image, see [Edit an image](/docs/mastra-platform/gateway/api/images/edits). The Images API has these limits:
+
+- Requests and responses are JSON. Multipart uploads aren't supported.
+- Each request returns one image as base64 (`b64_json`). `n` must be `1` if set.
+- Responses don't stream.
+- `prompt` is 1 to 32,000 characters. The request body can be up to 16 MiB.
+
+```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
+const result = await client.images.generate({
+  model: 'black-forest-labs/flux-3-image-klein',
+  prompt: 'A lighthouse at dusk, watercolor',
+})
+
+const png = Buffer.from(result.data?.[0]?.b64_json ?? '', 'base64')
+```
+
+You're billed only for images that are delivered. If a provider fails before returning an image, Gateway retries another eligible route.
