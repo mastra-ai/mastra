@@ -42,6 +42,7 @@ export function toFeedbackOptions(feedback: ExportedFeedback, mlApp: string) {
   const submitterId =
     feedback.feedbackUserId !== undefined ? feedback.feedbackUserId : (feedback.userId ?? feedback.metadata?.userId);
   const source = feedback.feedbackSource ?? feedback.source;
+  const { assessment } = (feedback.metadata?.datadog ?? {}) as { assessment?: unknown };
   return {
     // dd-trace rejects a feedback label that contains a dot.
     label: feedback.feedbackType.replaceAll('.', '_'),
@@ -52,6 +53,8 @@ export function toFeedbackOptions(feedback: ExportedFeedback, mlApp: string) {
     timestampMs: new Date(feedback.timestamp).getTime() || Date.now(),
     ...(feedback.comment ? { reasoning: feedback.comment } : {}),
     ...(source ? { tags: { feedback_source: source } } : {}),
+    // dd-trace rejects any other assessment.
+    ...(assessment === 'pass' || assessment === 'fail' ? ({ assessment } as const) : {}),
   };
 }
 

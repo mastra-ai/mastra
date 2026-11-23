@@ -474,6 +474,35 @@ describe('Datadog compliance — feedback reaches the trace of the run it rates'
     });
   });
 
+  it('sends the pass or fail assessment that the app sets on feedback', async () => {
+    const { DatadogExporter } = await import('./tracing');
+    const { DatadogBridge } = await import('./bridge');
+    const config = { mlApp: 'compliance', apiKey: 'fake-key', agentless: true };
+
+    for (const destination of [new DatadogExporter(config), new DatadogBridge(config)]) {
+      capturedFeedback = [];
+      for (const metadata of [
+        { datadog: { assessment: 'pass' } },
+        { datadog: { assessment: 'fail' } },
+        // dd-trace rejects this value. The rating itself must still reach Datadog.
+        { datadog: { assessment: 'bad' } },
+        // Feedback can inherit this from the run, so it is not the app's verdict.
+        { assessment: 'pass' },
+      ]) {
+        await destination.onFeedbackEvent({
+          type: 'feedback',
+          feedback: { ...thumbsDown(hexId(16)).feedback, metadata },
+        });
+      }
+      expect(capturedFeedback.map(feedback => [feedback.categorical_value, feedback.assessment])).toEqual([
+        ['down', 'pass'],
+        ['down', 'fail'],
+        ['down', undefined],
+        ['down', undefined],
+      ]);
+    }
+  });
+
   it('sends bridge feedback to the Datadog trace with the Mastra trace ID', async () => {
     const { DatadogBridge } = await import('./bridge');
     const bridge: DatadogBridge = new DatadogBridge({ mlApp: 'compliance', apiKey: 'fake-key', agentless: true });
