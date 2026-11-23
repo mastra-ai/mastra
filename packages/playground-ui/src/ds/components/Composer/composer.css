@@ -39,9 +39,9 @@ html.light [data-composer-tone='orange'] {
 
 /* Shadows only, never a border: a second edge shows as a double line. Layer counts match so states transition. */
 .composer-box {
-  --composer-rim: color-mix(in oklab, var(--placeholder) 32%, transparent);
-  --composer-rim-hover: color-mix(in oklab, var(--placeholder) 42%, transparent);
-  --composer-rim-focus: color-mix(in oklab, var(--placeholder) 52%, transparent);
+  --composer-rim: var(--overlay-rim);
+  --composer-rim-hover: var(--border-strong);
+  --composer-rim-focus: var(--border-strong);
   --composer-drop:
     0 1px 1px oklch(0% 0 0deg / 24%), 0 2px 4px -1px oklch(0% 0 0deg / 20%), 0 8px 16px -4px oklch(0% 0 0deg / 24%),
     0 20px 40px -12px oklch(0% 0 0deg / 32%);
@@ -72,15 +72,11 @@ html.light [data-composer-tone='orange'] {
 }
 
 html.light .composer-box {
-  --composer-rim: color-mix(in oklab, var(--border-strong) 32%, transparent);
-  --composer-rim-hover: color-mix(in oklab, var(--border-strong) 46%, transparent);
-  --composer-rim-focus: color-mix(in oklab, var(--border-strong) 58%, transparent);
-  --composer-drop:
-    0 1px 1px oklch(0% 0 0deg / 3%), 0 2px 4px -1px oklch(0% 0 0deg / 4%), 0 8px 16px -4px oklch(0% 0 0deg / 5%),
-    0 20px 40px -12px oklch(0% 0 0deg / 8%);
-  --composer-drop-lifted:
-    0 1px 1px oklch(0% 0 0deg / 4%), 0 3px 6px -1px oklch(0% 0 0deg / 5%), 0 12px 24px -6px oklch(0% 0 0deg / 7%),
-    0 28px 56px -16px oklch(0% 0 0deg / 12%);
+  --composer-rim: var(--surface-rim);
+  --composer-rim-hover: var(--overlay-rim);
+  --composer-rim-focus: var(--overlay-rim);
+  --composer-drop: var(--elevation-overlay);
+  --composer-drop-lifted: var(--elevation-overlay);
 
   background-color: var(--card);
 }

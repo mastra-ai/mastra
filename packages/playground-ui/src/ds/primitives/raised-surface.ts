@@ -12,8 +12,8 @@
  * never clipped, has to separate from arbitrary content beneath it, and so
  * carries the long falloff.
  *
- * Both recipes carry a `--surface-rim` inset edge, a top highlight in dark,
- * and elevation drops. Adding a CSS border on that same edge doubles it.
+ * Both recipes carry an inset edge (`--surface-rim`, or the stronger
+ * `--overlay-rim`) and elevation drops. Adding a CSS border on that same edge doubles it.
  * Content dividers use `--border`; frame headers use `border-surface-rim`
  * and stay inside the inset pixel reserved by MainCard.
  *
@@ -29,17 +29,15 @@
  */
 /** The field colors a raised surface gives the inputs on it. A surface that drops the rim and shadow but keeps
  * the card fill (a settings card) uses it alone, so its fields look the same as on a raised card. */
-export const fieldsOnSurface =
-  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)]';
-const fieldsOnDialog =
-  '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)]';
-const fieldsOnPage = '[--field:var(--card)] [--field-disabled:var(--fill-subtle)] [--field-rim:var(--surface-rim)]';
+export const fieldsOnSurface = '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)]';
+const fieldsOnPage = '[--field:var(--field-on-page)] [--field-disabled:var(--fill-subtle)]';
 
 export const raisedSurfaceStyle = 'bg-card hover:bg-card active:bg-card shadow-raised ' + fieldsOnSurface;
 
 export const overlaySurfaceStyle = 'bg-card shadow-overlay ' + fieldsOnSurface;
 
-export const dialogSurfaceStyle = 'bg-dialog shadow-overlay ' + fieldsOnDialog;
+export const dialogSurfaceStyle =
+  'bg-dialog shadow-overlay [--elevation-overlay:var(--elevation-dialog)] ' + fieldsOnSurface;
 
 /**
  * The app frame and the panels docked beside it. Same elevation as a card, one

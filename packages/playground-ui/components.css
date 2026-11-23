@@ -35,7 +35,6 @@
   --surface-tint: transparent;
 
   box-shadow:
-    var(--elevation-lip),
     inset 0 0 0 1px var(--surface-rim),
     inset 0 0 0 9999px var(--surface-tint),
     var(--elevation-raised);
@@ -46,16 +45,12 @@
   --surface-rim: var(--field-rim);
 
   box-shadow:
-    var(--elevation-lip),
     inset 0 0 0 1px var(--surface-rim),
-    inset 0 0 0 9999px var(--surface-tint),
-    var(--elevation-raised);
+    inset 0 0 0 9999px var(--surface-tint);
 }
 
 @utility shadow-inset {
-  box-shadow:
-    inset 0 1px 0 var(--inset-highlight),
-    inset 0 0 0 1px var(--inset-rim);
+  box-shadow: inset 0 0 0 1px var(--inset-rim);
 }
 
 @utility shadow-rim {
@@ -66,8 +61,7 @@
   --surface-tint: transparent;
 
   box-shadow:
-    var(--elevation-lip),
-    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 1px var(--overlay-rim),
     inset 0 0 0 9999px var(--surface-tint),
     var(--elevation-overlay);
 }

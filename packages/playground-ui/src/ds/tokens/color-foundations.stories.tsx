@@ -333,6 +333,8 @@ const textRows: TokenRow[] = [
   { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, descriptions</span> },
   { token: 'subtle-foreground', use: <span className="text-subtle-foreground">Counts, timestamps, hints</span> },
   { token: 'placeholder', use: <span className="text-placeholder">Input placeholders, disabled labels</span> },
+  { token: 'icon', use: <span className="text-icon">Icon beside foreground text</span> },
+  { token: 'muted-icon', use: <span className="text-muted-icon">Icon beside muted text</span> },
   {
     token: 'control-icon-rest',
     use: <span className="text-(color:--control-icon-rest)">Icons inside a control, at rest</span>,

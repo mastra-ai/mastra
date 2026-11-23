@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils';
 const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start gap-2 rounded-lg px-2 text-left text-menu text-foreground select-none',
   // Leading icons and trailing chevrons take the shared control icon rule (ghost Button's
-  // `controlIconState`), one step quieter than in a toolbar, and also follow the keyboard
+  // `controlIconState`), and also follow the keyboard
   // highlight and a held-open submenu, which a menu row has and a Button does not.
-  '[--control-icon-hover:var(--muted-foreground)] [--control-icon-rest:var(--placeholder)]',
+  '[--control-icon-rest:var(--icon)]',
   // An item may carry a second line (a name over its description). The Button
   // height becomes the floor so single-line rows keep the control rhythm and a
   // taller item grows instead of overflowing into its neighbour.

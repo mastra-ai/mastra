@@ -6,7 +6,7 @@
   --notice-fill: color-mix(in oklab, var(--notice-subtle) var(--notice-tint), var(--card));
   --notice-semantic-rim: inset 0 0 0 0 transparent;
   --notice-shadow:
-    var(--notice-semantic-rim), var(--elevation-lip), inset 0 0 0 1px var(--surface-rim), var(--elevation-raised);
+    var(--notice-semantic-rim), inset 0 0 0 1px var(--surface-rim), var(--elevation-raised);
 }
 
 :where([data-slot='notice'][data-tone='info'], .mastra-toaster [data-sonner-toast][data-type='info']) {

@@ -143,9 +143,7 @@ export function MemorySidebarView({
             data-testid="memory-sidebar-overlay"
             className={cn(
               'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden',
-              showMemory
-                ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl')
-                : 'm-1 rounded-xl border border-surface-rim bg-muted state-layer',
+              showMemory ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl') : 'm-1 rounded-xl bg-nested state-layer',
             )}
             style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >

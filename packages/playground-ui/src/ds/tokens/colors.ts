@@ -288,6 +288,8 @@ export const Colors = {
   'muted-foreground': 'var(--muted-foreground)',
   'subtle-foreground': 'var(--subtle-foreground)',
   placeholder: 'var(--placeholder)',
+  icon: 'var(--icon)',
+  'muted-icon': 'var(--muted-icon)',
 
   scrim: 'var(--scrim)',
 

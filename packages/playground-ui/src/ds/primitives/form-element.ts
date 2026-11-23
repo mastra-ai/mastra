@@ -45,13 +45,13 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 // selector and would otherwise lose to this compound one while the pointer is
 // still on the trigger that opened the popup.
 const surfaceTintHover =
-  '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
+  '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--field-hover)]';
 export const surfaceRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--border-focus)]';
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
 const surfaceTintHoverWithin =
-  '[&:hover:not(:has(:focus-visible)):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
+  '[&:hover:not(:has(:focus-visible)):not(:has(:disabled))]:[--surface-tint:var(--field-hover)]';
 const fieldRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--field-rim-focus)]';
 // `:has(:focus-visible)`, not `:focus-within`: focus moved in code after a click (a filter chip's
 // neighbour once it is removed) must not light the rim. Text fields always match `:focus-visible`.
@@ -68,7 +68,7 @@ export const fieldTriggerErrorBorder =
 // A field shows a value, so its text is the 400-weight `text-body-sm` (13px), like Input and Textarea;
 // the 500-weight `text-label` it would get from Button's size recipe is for labels and button text.
 export const fieldTriggerStyle =
-  'bg-field shadow-input text-body-sm ' +
+  'bg-field shadow-input text-body-sm [--control-icon-rest:var(--muted-icon)] ' +
   fieldRimFocus +
   ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 
@@ -101,7 +101,7 @@ export const inputSurfaceAndFocusWithinStyle =
 // other's specificity: they are both arbitrary property setters, so whichever matched last
 // would otherwise decide the press.
 const controlTintHover =
-  '[&:hover:not(:active):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
+  '[&:hover:not(:active):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--field-hover)]';
 const controlTintActive = '[&:active:not(:disabled)]:[--surface-tint:var(--fill)]';
 
 export const raisedControlSurfaceStyle =
