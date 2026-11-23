@@ -26,6 +26,12 @@ export interface ProviderManifest {
   toolCount: number;
   skippedActions: { action: string; reason: string }[];
   files: Record<string, string>;
+  /**
+   * Files in the provider directory the generator did not write, such as
+   * hand-written tools for endpoints no template covers. Regeneration keeps
+   * them and registers every `tools/*.ts` among them.
+   */
+  handwrittenFiles?: string[];
 }
 
 export function validateProviderId(id: string, label: string): void {
@@ -95,6 +101,15 @@ export function updateProviderIndex(): void {
   writeFileSync(providerIndexPath, body);
 }
 
+/**
+ * The files in an installed provider that its manifest says the generator did
+ * not write: the ones it recorded as hand-written, plus any added since.
+ */
+export function listHandwrittenFiles(localId: string, manifest: ProviderManifest | undefined): string[] {
+  if (!manifest) return [];
+  return Object.keys(calculateFileChecksums(providerDir(localId))).filter(file => !(file in manifest.files));
+}
+
 export function readManifest(localId: string): ProviderManifest | undefined {
   const path = resolve(providerDir(localId), '.manifest.json');
   if (!existsSync(path)) return undefined;
@@ -130,7 +145,11 @@ export function calculateFileChecksums(root: string): Record<string, string> {
 
 export function findModifiedFiles(localId: string, manifest: ProviderManifest): string[] {
   const current = calculateFileChecksums(providerDir(localId));
-  const paths = new Set([...Object.keys(manifest.files), ...Object.keys(current)]);
+  const handwritten = new Set(manifest.handwrittenFiles);
+  const paths = new Set([
+    ...Object.keys(manifest.files),
+    ...Object.keys(current).filter(path => !handwritten.has(path)),
+  ]);
   return [...paths].filter(path => manifest.files[path] !== current[path]).sort();
 }
 

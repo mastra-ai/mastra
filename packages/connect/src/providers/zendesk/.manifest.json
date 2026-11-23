@@ -3,12 +3,12 @@
   "localId": "zendesk",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-11-23T19:09:00.602Z",
-  "toolCount": 27,
+  "generatedAt": "2026-11-23T21:12:16.513Z",
+  "toolCount": 36,
   "skippedActions": [],
   "files": {
     "index.ts": "b8f95efab4f3e6f79a22099bb0931b4381d5832da0bec1e0a1953c9402229c2c",
-    "tools.ts": "0035fc44178f345c4efb9f54b2ed7cf8a93e40c1d2cd7bf5712c1d1d342604aa",
+    "tools.ts": "eff7452310143a78909fc8bce02017b90481d4629baf7a43e3dd4acbf167f280",
     "tools/create-category.ts": "e2240cd310a9a2d3df9b651cc76e0663cd8f5ea4185b67dee846366449068001",
     "tools/create-organization.ts": "e3b8ee408b21ec783d4b5c895029fb3495b9d374d583d7d54877b471312ff6c6",
     "tools/create-section.ts": "9dfb34225f3753186da33bbcc1cc34399feb6f03144424b4724ecd2ba9107f53",
@@ -36,5 +36,17 @@
     "tools/update-organization.ts": "35406917e7f08a649bc55b425cf785fa28e24606a58e554c8e2788c3d9dc3894",
     "tools/update-ticket.ts": "5fb06e54da28ead73fe96d3d6f6ea48b78779eb99859b43a7776a2586bd4405e",
     "tools/update-user.ts": "70d7b470486315dd1112a0d729f3f4e1374d25a8e829ba02d2b85eca96eacb26"
-  }
+  },
+  "handwrittenFiles": [
+    "article.ts",
+    "tools/archive-article.ts",
+    "tools/create-article.ts",
+    "tools/delete-category.ts",
+    "tools/delete-organization.ts",
+    "tools/delete-section.ts",
+    "tools/delete-ticket.ts",
+    "tools/list-permission-groups.ts",
+    "tools/update-article-translation.ts",
+    "tools/update-article.ts"
+  ]
 }

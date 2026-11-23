@@ -16,8 +16,8 @@
  * local to the action module. File isolation prevents collisions without
  * producing names such as `getModelModelSchema`.
  */
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Node, Project, SyntaxKind } from 'ts-morph';
@@ -28,10 +28,12 @@ import {
   assertProviderEnvVarAvailable,
   calculateFileChecksums,
   currentTemplateSha,
+  listHandwrittenFiles,
   providerConnectionEnvVar,
   providerDir,
   providerRegistrationName,
   providersDir,
+  readManifest,
   templatePath,
   validateProviderId,
 } from './provider-utils.js';
@@ -1641,15 +1643,54 @@ ${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
 `;
 }
 
-function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: TemplatePin): string {
-  const imports = actions
-    .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
+/**
+ * Hand-written files (tools for endpoints no template covers, and their
+ * helpers) survive regeneration; every hand-written `tools/<slug>.ts` is
+ * registered alongside the generated tools, except `_`-prefixed helpers.
+ */
+export function planHandwrittenTools(
+  localId: string,
+  generatedSlugs: readonly string[],
+): { handwrittenFiles: string[]; handwrittenTools: ToolRegistration[] } {
+  const outputDir = providerDir(localId);
+  const generated = new Set(generatedSlugs);
+  const handwrittenFiles = listHandwrittenFiles(localId, readManifest(localId));
+  const handwrittenTools = handwrittenFiles.flatMap(file => {
+    // `tools/_helper.ts` files are shared helpers, not tools.
+    const slug = /^tools\/([^/_][^/]*)\.ts$/.exec(file)?.[1];
+    if (!slug) return [];
+    if (generated.has(slug)) {
+      throw new Error(`Hand-written ${localId}/${file} collides with a generated tool; rename or remove it.`);
+    }
+    const factoryName = `${toCamel(slug)}Tool`;
+    if (!readFileSync(resolve(outputDir, file), 'utf8').includes(`export function ${factoryName}(`)) {
+      throw new Error(`Hand-written ${localId}/${file} must export ${factoryName}.`);
+    }
+    return [{ slug, key: `${localId.replace(/-/g, '_')}_${toSnake(slug)}`, factoryName }];
+  });
+  return { handwrittenFiles, handwrittenTools };
+}
+
+export interface ToolRegistration {
+  slug: string;
+  key: string;
+  factoryName: string;
+}
+
+function emitToolsFile(integrationId: string, registrations: ToolRegistration[], pin: TemplatePin): string {
+  // Ordered by module path, as the import-order lint rule expects.
+  const modulePath = (registration: ToolRegistration) => `./tools/${registration.slug}.js`;
+  const sorted = [...registrations].sort((left, right) =>
+    modulePath(left) < modulePath(right) ? -1 : modulePath(left) > modulePath(right) ? 1 : 0,
+  );
+  const imports = sorted
+    .map(registration => `import { ${registration.factoryName} } from '${modulePath(registration)}';`)
     .join('\n');
   // Keys are quoted because a leading-digit local ID (e.g. '1password')
   // produces tool keys that are not valid bare identifiers; prettier strips
   // the quotes again wherever they are unnecessary.
-  const toolEntries = actions
-    .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
+  const toolEntries = sorted
+    .map(registration => `    '${registration.key}': ${registration.factoryName}(platformProxy),`)
     .join('\n');
 
   return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
@@ -1765,6 +1806,10 @@ export async function generateProvider({
   }
 
   const outputDir = providerDir(localId);
+  const { handwrittenFiles, handwrittenTools } = planHandwrittenTools(
+    localId,
+    extracted.map(action => action.candidate.actionSlug),
+  );
   const temporaryDir = resolve(providersDir, `.${localId}.generate-${process.pid}`);
   rmSync(temporaryDir, { recursive: true, force: true });
   mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
@@ -1773,9 +1818,22 @@ export async function generateProvider({
     for (const action of extracted) {
       writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action, pin));
     }
-    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted, pin));
+    const registrations = [
+      ...extracted.map(action => ({
+        slug: action.candidate.actionSlug,
+        key: action.candidate.toolKey,
+        factoryName: action.toolFactoryName,
+      })),
+      ...handwrittenTools,
+    ];
+    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, registrations, pin));
     writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
     await formatGeneratedFiles(temporaryDir);
+    const generatedFiles = calculateFileChecksums(temporaryDir);
+    for (const file of handwrittenFiles) {
+      mkdirSync(dirname(resolve(temporaryDir, file)), { recursive: true });
+      copyFileSync(resolve(outputDir, file), resolve(temporaryDir, file));
+    }
 
     const manifest: ProviderManifest = {
       providerId,
@@ -1783,9 +1841,10 @@ export async function generateProvider({
       templateSha,
       templateRepo: pin.repo,
       generatedAt: new Date().toISOString(),
-      toolCount: extracted.length,
+      toolCount: extracted.length + handwrittenTools.length,
       skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
-      files: calculateFileChecksums(temporaryDir),
+      files: generatedFiles,
+      ...(handwrittenFiles.length > 0 ? { handwrittenFiles } : {}),
     };
     writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -1799,7 +1858,7 @@ export async function generateProvider({
   return {
     providerId,
     localId,
-    toolCount: extracted.length,
+    toolCount: extracted.length + handwrittenTools.length,
     skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
   };
 }

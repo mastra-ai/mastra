@@ -57,6 +57,10 @@ The command writes:
 
 Actions that need runtime helpers the platform proxy context doesn't implement, or contain unsupported top-level statements, are skipped with a per-action reason printed and recorded in the manifest.
 
+### Hand-written tools
+
+To add a tool no template covers, put it in `src/providers/<localId>/tools/<slug>.ts` and export `<camelSlug>Tool(proxy)`. Any file the generator did not write survives regeneration and is listed under `handwrittenFiles` in the manifest; each hand-written `tools/<slug>.ts` is registered as `<localId>_<snake_slug>`. Files in `tools/` that start with `_` are helpers and are not registered. A hand-written tool with the same slug as a generated one is an error.
+
 Treat generated source as untrusted vendored code. Every template SHA update and generated diff requires security review before commit; passing automated checks is not sufficient.
 
 Provider responses that carry credentials an agent never needs, such as webhook signing secrets, are listed per action in `OUTPUT_SECRET_FIELDS` in `generate-provider.ts`. The generated tool removes those fields from its result and, when its output schema declares them, omits them from the schema too, and `src/__tests__/provider-actions.test.ts` covers the redaction.
