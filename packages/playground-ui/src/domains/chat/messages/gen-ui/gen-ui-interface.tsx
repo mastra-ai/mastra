@@ -3,7 +3,7 @@ import type { Spec } from '@json-render/core';
 import { JSONUIProvider, Renderer, buildSpecFromParts, defineRegistry } from '@json-render/react';
 import type { DataPart } from '@json-render/react';
 import { studioCatalog } from '@mastra/json-render/studio';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GenUiInteractiveContext } from './interactive-context';
 import { studioComponents } from './studio-components';
 
@@ -39,13 +39,21 @@ const readOnlyRegistry = studioRegistry().registry;
  * interface keeps its own state (form values) and its `sendMessage` action passes it back to the agent.
  */
 export function GenUiInterface({ parts, onSend, disabled = false }: GenUiInterfaceProps) {
+  // Once live, stays live: disabling it while the chat replies must not reset what the user entered.
+  const [wentLive, setWentLive] = useState(false);
+  if (onSend && !disabled && !wentLive) setWentLive(true);
+
   // buildSpecFromParts mutates nested objects of the parts it reads.
   const spec = buildSpecFromParts(structuredClone(parts));
   if (!spec) return null;
 
   return (
     <div data-slot="gen-ui-interface" className="@container min-w-0">
-      {onSend && !disabled ? <LiveInterface spec={spec} onSend={onSend} /> : <ReadOnlyInterface spec={spec} />}
+      {onSend && (wentLive || !disabled) ? (
+        <LiveInterface spec={spec} onSend={onSend} disabled={disabled} />
+      ) : (
+        <ReadOnlyInterface spec={spec} />
+      )}
     </div>
   );
 }
@@ -60,19 +68,24 @@ function ReadOnlyInterface({ spec }: { spec: Spec }) {
 }
 
 /**
- * Mounts once the interface can act, so its state starts from the complete spec. json-render keeps
- * the action handlers it mounts with; the parent switches back to read-only whenever the chat
- * replies, so the `onSend` captured here is never older than the current idle chat.
+ * Mounts once the interface can act, so its state starts from the complete spec, and keeps that state
+ * from then on. json-render keeps the action handlers it mounts with, so they send through a ref to
+ * the latest `onSend`.
  */
-function LiveInterface({ spec, onSend }: { spec: Spec; onSend: GenUiSend }) {
+function LiveInterface({ spec, onSend, disabled }: { spec: Spec; onSend: GenUiSend; disabled: boolean }) {
+  const onSendRef = useRef(onSend);
+  useEffect(() => {
+    onSendRef.current = onSend;
+  }, [onSend]);
+
   const [live] = useState(() => {
     const store = createStateStore(spec.state ?? {});
-    const { registry, handlers } = studioRegistry(onSend);
+    const { registry, handlers } = studioRegistry((message, state) => onSendRef.current(message, state));
     return { store, registry, handlers: handlers(() => undefined, store.getSnapshot) };
   });
 
   return (
-    <GenUiInteractiveContext.Provider value>
+    <GenUiInteractiveContext.Provider value={!disabled}>
       <JSONUIProvider registry={live.registry} store={live.store} handlers={live.handlers}>
         <Renderer spec={spec} registry={live.registry} />
       </JSONUIProvider>

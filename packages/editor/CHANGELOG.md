@@ -1,5 +1,15 @@
 # @mastra/editor
 
+## 0.17.3-alpha.1
+
+### Patch Changes
+
+- Include prompt block names and IDs in stored agents’ resolved instructions so agents can identify the instructions they follow. Prompt previews and stored references are unchanged. ([#31149](https://github.com/mastra-ai/mastra/pull/31149))
+
+- Updated dependencies [[`8bc3a19`](https://github.com/mastra-ai/mastra/commit/8bc3a19a73e6e683a29d8c8cf8ab1f0bf4343a26), [`3b6d29c`](https://github.com/mastra-ai/mastra/commit/3b6d29c8ae20172a0d2be883686f3e9aec86ce25)]:
+  - @mastra/core@1.86.0-alpha.5
+  - @mastra/memory@1.41.3-alpha.1
+
 ## 0.17.3-alpha.0
 
 ### Patch Changes

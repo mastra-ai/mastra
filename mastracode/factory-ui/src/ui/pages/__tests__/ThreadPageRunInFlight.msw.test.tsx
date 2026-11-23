@@ -229,6 +229,8 @@ function setTabVisibility(state: 'visible' | 'hidden') {
 async function openThread(run: Run) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [THREAD_PATH] });
   const { client } = renderWithProviders(<RouterProvider router={router} />);
+  // The thread page loads lazily; the first test in the file waits for its first import.
+  await screen.findByRole('textbox', { name: 'Message' }, { timeout: 10_000 });
   await waitForMutationsIdle(client);
   await waitFor(() => expect(run.streaming).toBe(true));
   return { client, router };

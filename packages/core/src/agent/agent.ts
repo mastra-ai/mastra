@@ -244,6 +244,7 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import type { DurableExecutionEngine } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
 import {
+  assertExecutionOwned,
   EXECUTION_ABANDONED_ERROR_ID,
   DurableExecutionFenceError,
   EXECUTION_UNVERIFIED_ERROR_ID,
@@ -515,8 +516,6 @@ function rebindRecoveredModelList(
 
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
-
-const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
@@ -7604,6 +7603,7 @@ export class Agent<
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
+            const abortSignal = context?.abortSignal;
             const savedMastraMemory = requestContext.get('MastraMemory');
             let runIdToUse: string | undefined;
             try {
@@ -7624,66 +7624,86 @@ export class Agent<
                 resourceId,
               });
 
+              abortSignal?.throwIfAborted();
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
 
-              let result: WorkflowResult<any, any, any, any, 1 | 2> | undefined = undefined;
-
-              if (methodType === 'generate' || methodType === 'generateLegacy') {
-                if (shouldResumeWorkflow) {
-                  result = await run.resume({
-                    resumeData,
-                    requestContext,
-                    actor: invocationActor,
-                    ...resolveObservabilityContext(context ?? {}),
-                  });
-                } else {
-                  result = await run.start({
-                    inputData: workflowInputData,
-                    requestContext,
-                    actor: invocationActor,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(initialState && { initialState }),
-                  });
-                }
-              } else if (methodType === 'streamLegacy') {
-                const streamResult = run.streamLegacy({
-                  inputData: workflowInputData,
-                  requestContext,
-                  actor: invocationActor,
-                  ...resolveObservabilityContext(context ?? {}),
+              // Aborting the tool (parent abort, background cancel or timeout) must stop the run it started.
+              if (abortSignal?.aborted) {
+                // createRun stored a pending run; cancel it rather than leave it orphaned.
+                await run.cancel();
+                abortSignal.throwIfAborted();
+              }
+              const cancelRun = () => {
+                // An event listener has no caller to surface a cancel failure to.
+                run.cancel().catch(error => {
+                  this.logger.error(`Failed to cancel workflow "${workflowName}" run ${run.runId}`, error);
                 });
+              };
+              abortSignal?.addEventListener('abort', cancelRun, { once: true });
 
-                if (context?.writer) {
-                  await streamResult.stream.pipeTo(context.writer);
-                } else {
-                  for await (const _chunk of streamResult.stream) {
-                    // complete the stream
-                  }
-                }
-
-                result = await streamResult.getWorkflowState();
-              } else if (methodType === 'stream') {
-                const streamResult = shouldResumeWorkflow
-                  ? run.resumeStream({
+              let result: WorkflowResult<any, any, any, any, 1 | 2> | undefined = undefined;
+              try {
+                if (methodType === 'generate' || methodType === 'generateLegacy') {
+                  if (shouldResumeWorkflow) {
+                    result = await run.resume({
                       resumeData,
                       requestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
-                    })
-                  : run.stream({
+                    });
+                  } else {
+                    result = await run.start({
                       inputData: workflowInputData,
                       requestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
+                  }
+                } else if (methodType === 'streamLegacy') {
+                  const streamResult = run.streamLegacy({
+                    inputData: workflowInputData,
+                    requestContext,
+                    actor: invocationActor,
+                    ...resolveObservabilityContext(context ?? {}),
+                  });
 
-                if (context?.writer) {
-                  await streamResult.fullStream.pipeTo(context.writer);
+                  if (context?.writer) {
+                    await streamResult.stream.pipeTo(context.writer);
+                  } else {
+                    for await (const _chunk of streamResult.stream) {
+                      // complete the stream
+                    }
+                  }
+
+                  result = await streamResult.getWorkflowState();
+                } else if (methodType === 'stream') {
+                  const streamResult = shouldResumeWorkflow
+                    ? run.resumeStream({
+                        resumeData,
+                        requestContext,
+                        actor: invocationActor,
+                        ...resolveObservabilityContext(context ?? {}),
+                      })
+                    : run.stream({
+                        inputData: workflowInputData,
+                        requestContext,
+                        actor: invocationActor,
+                        ...resolveObservabilityContext(context ?? {}),
+                        ...(initialState && { initialState }),
+                      });
+
+                  if (context?.writer) {
+                    await streamResult.fullStream.pipeTo(context.writer);
+                  }
+
+                  result = await streamResult.result;
                 }
-
-                result = await streamResult.result;
+              } finally {
+                abortSignal?.removeEventListener('abort', cancelRun);
               }
+              // A run cancelled by the abort has no result for the model; report the abort itself.
+              abortSignal?.throwIfAborted();
 
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
@@ -7743,6 +7763,9 @@ export class Agent<
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
+
+              // An aborted call is a cancellation, not a workflow failure.
+              if (abortSignal?.aborted) throw err;
 
               const mastraError = new MastraError(
                 {
@@ -13389,6 +13412,7 @@ export class Agent<
         // not on the SUSPENDED event, which can precede a resumable snapshot.
         closeOnSuspend: false,
         messageList,
+        messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
         tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -14602,8 +14626,58 @@ export class Agent<
     return applyResolvedAgentScopes(options, resolved, requestContext);
   }
 
+  /** Runs whose restartable start row this process wrote and may still discard. */
+  #restartableStarts = new Set<string>();
+
   async #persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    await persistDurableRunInput(runId, workflowInput, this.#mastra);
+    // A crash after the input is saved but before the workflow's first checkpoint would strand a
+    // stored user message that no run answers, so make the run recoverable first (#30791).
+    try {
+      await persistDurableRunInput(runId, workflowInput, this.#mastra, async () => {
+        await this.getWorkflow().__persistRestartableStart({
+          runId,
+          resourceId: workflowInput.state?.resourceId,
+          input: workflowInput,
+          requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+          // A write that rejects may still have committed, so the row counts as ours from here.
+          onWrite: () => this.#restartableStarts.add(runId),
+        });
+      });
+    } catch (error) {
+      await this.#discardRestartableStart(runId, workflowInput.agentId);
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes the run's restartable start row if the workflow never wrote over it. A start that
+   * failed before its first checkpoint was reported to the caller, so recovery must not redo it.
+   */
+  async #discardRestartableStart(runId: string, agentId: string): Promise<void> {
+    // Only the execution that wrote the row, and only while it still owns the run: a recoverer
+    // that took over restarts from this same row until its first checkpoint.
+    if (!this.#restartableStarts.delete(runId)) return;
+    try {
+      await assertExecutionOwned({
+        runId,
+        agentId,
+        mastra: this.#mastra,
+        requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+      });
+      const snapshot = await this.executionEngine.loadRunSnapshot(runId);
+      const context = snapshot?.context as Record<string, unknown> | undefined;
+      if (
+        snapshot?.status === 'running' &&
+        snapshot.activePaths?.length === 0 &&
+        context &&
+        Object.keys(context).length === 1 &&
+        Object.hasOwn(context, 'input')
+      ) {
+        await this.deleteRunSnapshots(runId);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to delete the start snapshot of failed run ${runId}`, { runId, error });
+    }
   }
 
   /**
@@ -14715,7 +14789,10 @@ export class Agent<
         )
         .then(
           result => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { result }),
-          error => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error }),
+          async error => {
+            await this.#discardRestartableStart(runId, workflowInput.agentId);
+            return this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error });
+          },
         )
         .then(outcome => {
           if (outcome.owner === 'agent') return this.settleExecution(runId, executionFence, outcome);
@@ -14726,6 +14803,7 @@ export class Agent<
           }
         });
     } catch (error) {
+      await this.#discardRestartableStart(runId, workflowInput.agentId);
       await this.settleExecution(runId, executionFence, {
         error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
       });
@@ -15080,6 +15158,7 @@ export class Agent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
+      messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
     this.#holdParkedOutput(runId, runCleanup, output);
@@ -15115,7 +15194,12 @@ export class Agent<
           try {
             await this.#persistInitialInput(runId, workflowInput);
             result = await this.executeWorkflow(runId, workflowInput);
+          } catch (error) {
+            await this.#discardRestartableStart(runId, workflowInput.agentId);
+            throw error;
           } finally {
+            // Past this point the workflow owns the row; a later failure must not delete it.
+            this.#restartableStarts.delete(runId);
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
           }
           if (closeOnPersistedSuspend && result?.status === 'suspended') {
@@ -15954,6 +16038,7 @@ export class Agent<
       returnScorerData: options?.returnScorerData ?? entry.returnScorerData ?? resolvedOptions.returnScorerData,
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.executionRunRegistry.getMessageList(runId),
+      messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
     this.#holdParkedOutput(runId, runCleanup, output);
@@ -16885,67 +16970,6 @@ export class Agent<
       returnScorerData = workflowInput.options?.returnScorerData;
     }
 
-    const refreshObservedMessageList = async (isExpired: () => boolean) => {
-      const targetMessageList = messageList;
-      const snapshot = workflowInputSnapshot ?? loopSnapshot;
-      if (!workflowsStore || !snapshot || !targetMessageList) return;
-
-      try {
-        const inputMessages = targetMessageList.get.input.db();
-        const latestState = await this.loadLatestMessageListState(workflowsStore, runId, snapshot);
-        if (latestState && !isExpired()) {
-          targetMessageList.deserialize(latestState);
-          if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
-            targetMessageList.add(inputMessages, 'input');
-          }
-        }
-      } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh failed: ${error}`);
-      }
-    };
-
-    const refreshObservedMessageListWithTimeout = async () => {
-      const refreshTimeoutMs = Math.min(
-        options?.idleTimeoutMs && options.idleTimeoutMs > 0
-          ? options.idleTimeoutMs
-          : OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-        OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-      );
-      let expired = false;
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = new Promise<boolean>(resolve => {
-        timeout = setTimeout(() => {
-          expired = true;
-          resolve(true);
-        }, refreshTimeoutMs);
-      });
-
-      try {
-        const didTimeOut = await Promise.race([refreshObservedMessageList(() => expired).then(() => false), timedOut]);
-        if (didTimeOut) {
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh timed out after ${refreshTimeoutMs}ms`);
-        }
-      } finally {
-        if (timeout) clearTimeout(timeout);
-      }
-    };
-
-    let observedResponseText = '';
-    const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
-      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
-        observedResponseText += chunk.payload.text;
-      }
-      if (chunk.type === 'step-finish') {
-        await refreshObservedMessageListWithTimeout();
-        if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
-          messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
-        }
-      }
-      await options?.onChunk?.(chunk);
-    };
-
     const replayFloor = await this.#readReplayFloor(runId, options?.offset, options?.closeOnSuspend);
 
     const stream = createDurableAgentStream<TOutput>({
@@ -16965,7 +16989,7 @@ export class Agent<
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
       closeOnSuspend: options?.closeOnSuspend,
-      onChunk: handleObservedChunk,
+      onChunk: options?.onChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -17000,6 +17024,9 @@ export class Agent<
       requestContext,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList,
+      // A list loaded from storage has the conversation up to attach; the stream brings each
+      // step's response messages from there.
+      messageListFollowsStream: () => !liveEntry || !this.executionEngine.executesStepsLocally,
     });
     const { output, ready } = stream;
     streamCleanup = stream.cleanup;

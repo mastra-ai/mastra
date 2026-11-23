@@ -29,6 +29,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "./**/*.d.ts"
   ],
   "peerDependencies": {

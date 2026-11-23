@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.41.3-alpha.1
+
+### Patch Changes
+
+- Fixed saved messages losing their leading and trailing newlines. Memory now trims a message's text only when it removed working-memory tags from it, so a reloaded message reads exactly as the model saw it and the next run can reuse the provider's prompt cache instead of sending the rest of the conversation again. ([#31139](https://github.com/mastra-ai/mastra/pull/31139))
+
+- Updated dependencies [[`8bc3a19`](https://github.com/mastra-ai/mastra/commit/8bc3a19a73e6e683a29d8c8cf8ab1f0bf4343a26)]:
+  - @mastra/core@1.86.0-alpha.5
+
 ## 1.41.3-alpha.0
 
 ### Patch Changes

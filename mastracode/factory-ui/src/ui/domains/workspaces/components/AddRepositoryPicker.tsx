@@ -1,22 +1,9 @@
-import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { AddRepositoryDrawerContent } from '@mastra/playground-ui/components/RepositoryList';
 import { Button } from '@mastra/playground-ui/components/Button';
-import {
-  DrawerBody,
-  DrawerClose,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from '@mastra/playground-ui/components/Drawer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
-import { SettingsItem, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
-import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import {
@@ -26,10 +13,8 @@ import {
 } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { IntegrationItemIcon } from '../../settings/components/IntegrationItem';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import { isGitLabRepository } from '../services/github';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function AddRepositoryPicker({
   factory,
@@ -45,7 +30,6 @@ export function AddRepositoryPicker({
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 750);
   const searchQuery = (query && debouncedQuery) || undefined;
-  const searchInput = useRef<HTMLInputElement>(null);
   const githubStatus = useGithubStatusQuery();
   const gitlabStatus = useGitLabStatusQuery();
   const githubConnected = githubStatus.data?.connected === true;
@@ -89,108 +73,62 @@ export function AddRepositoryPicker({
     githubConnected && (query !== (searchQuery ?? '') || reposQuery.isPlaceholderData || reposQuery.isFetching);
   const loadingResults = pending || (available.length === 0 && waitingForSearch && !error && !statusUnavailable);
 
+  const repositoryKey = (repo: SourceControlRepository) =>
+    `${isGitLabRepository(repo) ? 'gitlab' : 'github'}:${repo.id}`;
+  const byKey = new Map(available.map(repo => [repositoryKey(repo), repo]));
+
   return (
-    <DrawerContent
-      initialFocus={searchInput}
-      showCloseButton={!addingRepository}
-      aria-busy={Boolean(addingRepository) || undefined}
-      className="overflow-hidden"
-    >
-      <DrawerHeader className="shrink-0">
-        <DrawerTitle>Add repository</DrawerTitle>
-        <div className="mt-3 flex items-center gap-2">
-          <SearchInput
-            label="Search repositories"
-            placeholder="Search repositories"
-            value={query}
-            onValueChange={setQuery}
-            ref={searchInput}
-            disabled={Boolean(addingRepository)}
-            className="min-w-0 flex-1"
-          />
-          {githubConnected && (
-            <Button
-              variant="ghost"
-              size="icon-md"
-              aria-label="Refresh GitHub repositories"
-              disabled={refreshRepos.isPending}
-              onClick={() => refreshRepos.mutate()}
-            >
-              <IconArrowRotateClockwise className={refreshRepos.isPending ? 'motion-safe:animate-spin' : undefined} />
-            </Button>
+    <AddRepositoryDrawerContent
+      repositories={available.map(repo => ({
+        key: repositoryKey(repo),
+        fullName: repo.fullName,
+        provider: isGitLabRepository(repo) ? 'gitlab' : 'github',
+        private: isGitLabRepository(repo) ? undefined : repo.private,
+        defaultBranch: repo.defaultBranch,
+      }))}
+      query={query}
+      onQueryChange={setQuery}
+      loading={loadingResults}
+      error={error?.message}
+      notices={
+        <>
+          {githubUnavailable && (
+            <StatusUnavailableNotice
+              provider="GitHub"
+              retrying={githubStatus.isFetching}
+              onRetry={() => void githubStatus.refetch()}
+            />
           )}
-        </div>
-      </DrawerHeader>
-      <DrawerBody className="min-h-0 overflow-x-hidden overflow-y-auto">
-        {error && <Notice variant="destructive">{error.message}</Notice>}
-        {githubUnavailable && (
-          <StatusUnavailableNotice
-            provider="GitHub"
-            retrying={githubStatus.isFetching}
-            onRetry={() => void githubStatus.refetch()}
-          />
-        )}
-        {gitlabUnavailable && (
-          <StatusUnavailableNotice
-            provider="GitLab"
-            retrying={gitlabStatus.isFetching}
-            onRetry={() => void gitlabStatus.refetch()}
-          />
-        )}
-        {loadingResults ? (
-          <SettingsSkeleton label="Loading available repositories" variant="item" rows={3} />
-        ) : canSearch ? (
-          <div className="divide-border flex flex-col divide-y *:py-3">
-            {available.map(repo => (
-              <SettingsItem
-                key={`${isGitLabRepository(repo) ? 'gitlab' : 'github'}:${repo.id}`}
-                media={<IntegrationItemIcon provider={isGitLabRepository(repo) ? 'gitlab' : 'github'} />}
-                title={<span title={repo.fullName}>{repo.fullName}</span>}
-                description={
-                  <Metadata>
-                    {!isGitLabRepository(repo) && <Metadata.Item>{repo.private ? 'Private' : 'Public'}</Metadata.Item>}
-                    <Metadata.Item>Default branch: {repo.defaultBranch}</Metadata.Item>
-                  </Metadata>
-                }
-              >
-                <Button
-                  size="sm"
-                  icon={<IconPlusMedium />}
-                  aria-label={`Add ${repo.fullName}`}
-                  disabled={Boolean(addingRepository)}
-                  onClick={() => onAddRepository(repo)}
-                >
-                  {addingRepository?.id === repo.id ? 'Adding…' : 'Add'}
-                </Button>
-              </SettingsItem>
-            ))}
-            {available.length === 0 && !error && !statusUnavailable && (
-              <Txt as="p" variant="caption" tone="muted">
-                {query
-                  ? 'No repositories match your search.'
-                  : recentListCapped
-                    ? 'Your most recent repositories are already added. Search to find others.'
-                    : 'No more repositories available. Check repository access with Manage under Source control.'}
-              </Txt>
-            )}
-          </div>
-        ) : !error && !statusUnavailable ? (
-          <Txt as="p" variant="caption" tone="muted">
-            {githubUnavailableMessage(githubStatus.data)}
-          </Txt>
-        ) : null}
-      </DrawerBody>
-      <DrawerFooter className="shrink-0">
-        <DrawerClose
-          disabled={Boolean(addingRepository)}
-          render={
-            <Button size="sm" icon={<IconCrossMedium />}>
-              Cancel
-            </Button>
-          }
-        />
-      </DrawerFooter>
-    </DrawerContent>
+          {gitlabUnavailable && (
+            <StatusUnavailableNotice
+              provider="GitLab"
+              retrying={gitlabStatus.isFetching}
+              onRetry={() => void gitlabStatus.refetch()}
+            />
+          )}
+        </>
+      }
+      unavailableMessage={
+        canSearch || error || statusUnavailable ? undefined : githubUnavailableMessage(githubStatus.data)
+      }
+      emptyMessage={
+        error || statusUnavailable
+          ? null
+          : query
+            ? 'No repositories match your search.'
+            : recentListCapped
+              ? 'Your most recent repositories are already added. Search to find others.'
+              : 'No more repositories available. Check repository access with Manage under Source control.'
+      }
+      onRefresh={githubConnected ? () => refreshRepos.mutate() : undefined}
+      refreshLabel="Refresh GitHub repositories"
+      refreshing={refreshRepos.isPending}
+      addingKey={addingRepository && repositoryKey(addingRepository)}
+      onAdd={option => {
+        const repo = byKey.get(option.key);
+        if (repo) onAddRepository(repo);
+      }}
+    />
   );
 }
 

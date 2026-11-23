@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PromptBlockPickerDialog } from '../agent-cms-blocks/prompt-block-picker-dialog';
+import { PromptBlockPickerDialog } from '../agent-cms-blocks';
 import { promptBlock, storedPromptBlockList } from './fixtures/prompt-blocks';
 import { server } from '@/test/msw-server';
 

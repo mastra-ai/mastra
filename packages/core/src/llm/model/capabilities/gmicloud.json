@@ -42,9 +42,10 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "zai-org/GLM-5.2-FP8": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "Qwen/Qwen3.8-Max": [
@@ -52,10 +53,9 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
+    "Qwen/Qwen3.8-Flash": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "MiniMaxAI/MiniMax-M3": [
@@ -69,18 +69,18 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "anthropic/claude-opus-4.6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 127999
-      }
-    ],
     "anthropic/claude-sonnet-4.6": [
       {
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
+      }
+    ],
+    "anthropic/claude-opus-4.6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 127999
       }
     ],
     "anthropic/claude-opus-4.7": [
