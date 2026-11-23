@@ -1801,16 +1801,18 @@ export class AgentController<TState = {}> {
   /**
    * Deletes a released run's registration and snapshot rows while it is still parked. Resolves `false`,
    * deleting nothing, while a resume in one of `agents` holds the run; `true` once the run is deleted or a
-   * resume has moved it on (the run is that resume's from there).
+   * settled resume has moved it on (the run is that resume's from there). A run a resume still in flight
+   * stores as running is not decided yet: that resume may park it again.
    */
   async #deleteParkedRun(runId: string, agents: Agent<any, any, any, any>[]): Promise<boolean> {
     const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
     const run = await workflowsStore?.getWorkflowRunById({ runId });
     const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
-    if (snapshot && snapshot.status !== 'suspended') return true;
+    const isResuming = (id: string) => agents.some(agent => agent.__isResumingRun(id));
+    if (snapshot && snapshot.status !== 'suspended') return !isResuming(runId);
     // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
     return agents[0]!.__deleteSuspendedRun(runId, {
-      isResuming: id => agents.some(agent => agent.__isResumingRun(id)),
+      isResuming,
       workflowNames: new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()])),
     });
   }

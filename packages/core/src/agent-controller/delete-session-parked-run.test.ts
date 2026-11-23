@@ -14,28 +14,39 @@ import { createMockWorkspace } from './test-utils';
 vi.setConfig({ testTimeout: 30_000 });
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
-async function setup({ storageVersion }: { storageVersion?: 1 | 2 } = {}) {
+// When set, a resumed tool call waits on it before answering, so the run is stored as running meanwhile.
+let resumedToolGate: (() => Promise<void>) | undefined;
+// When set, the model call after a resumed tool call throws, so the resume fails.
+let failModelAfterTool = false;
+
+async function setup({
+  storageVersion,
+  shouldPersistSnapshot,
+}: { storageVersion?: 1 | 2; shouldPersistSnapshot?: () => boolean } = {}) {
   const model = new MockLanguageModelV2({
-    doStream: async ({ prompt }) => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-      // Asks once; after the tool's result it answers, so a resumed run finishes.
-      stream: convertArrayToReadableStream<any>(
-        prompt.some(message => message.role === 'tool')
-          ? [
-              { type: 'stream-start', warnings: [] },
-              { type: 'text-start', id: 't' },
-              { type: 'text-delta', id: 't', delta: 'done' },
-              { type: 'text-end', id: 't' },
-              { type: 'finish', finishReason: 'stop', usage },
-            ]
-          : [
-              { type: 'stream-start', warnings: [] },
-              { type: 'tool-call', toolCallId: `call-${Math.random()}`, toolName: 'ask', input: '{}' },
-              { type: 'finish', finishReason: 'tool-calls', usage },
-            ],
-      ),
-    }),
+    doStream: async ({ prompt }) => {
+      if (failModelAfterTool && prompt.some(message => message.role === 'tool')) throw new Error('model failed');
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        // Asks once; after the tool's result it answers, so a resumed run finishes.
+        stream: convertArrayToReadableStream<any>(
+          prompt.some(message => message.role === 'tool')
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'done' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'tool-call', toolCallId: `call-${Math.random()}`, toolName: 'ask', input: '{}' },
+                { type: 'finish', finishReason: 'tool-calls', usage },
+              ],
+        ),
+      };
+    },
   });
   const ask = createTool({
     id: 'ask',
@@ -43,11 +54,13 @@ async function setup({ storageVersion }: { storageVersion?: 1 | 2 } = {}) {
     inputSchema: z.object({}),
     suspendSchema: z.object({ q: z.string() }),
     resumeSchema: z.object({ a: z.string() }),
-    // Answering 'again' parks the run once more.
-    execute: async (_input, ctx) =>
-      ctx?.agent?.resumeData && (ctx.agent.resumeData as { a: string }).a !== 'again'
-        ? 'ok'
-        : ctx?.agent?.suspend?.({ q: '?' }),
+    // Answering 'again' parks the run once more; 'fail' throws.
+    execute: async (_input, ctx) => {
+      const answer = (ctx?.agent?.resumeData as { a: string } | undefined)?.a;
+      if (answer) await resumedToolGate?.();
+      if (answer === 'fail') throw new Error('tool failed');
+      return answer && answer !== 'again' ? 'ok' : ctx?.agent?.suspend?.({ q: '?' });
+    },
   });
   const storage = new InMemoryStore();
   const agent = createDurableAgent({
@@ -55,6 +68,7 @@ async function setup({ storageVersion }: { storageVersion?: 1 | 2 } = {}) {
     // Long enough that no cleanup timer frees the run during the test.
     cleanupTimeoutMs: 60_000,
     storageVersion,
+    shouldPersistSnapshot,
   });
   const controller = new AgentController({
     workspace: createMockWorkspace(),
@@ -273,6 +287,99 @@ describe('deleteSession with a parked suspension (#30743)', () => {
       await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
       expect(releaseParkedRun).toHaveBeenCalledWith(runId);
       expect(errors).toContain('release failed');
+    },
+  );
+
+  // The resume has already stored the run as running when the session is deleted.
+  async function deleteWhileResumedRunIsRunning(storageVersion: 1 | 2, answer: string) {
+    const { agent, controller, storage } = await setup({ storageVersion, shouldPersistSnapshot: () => true });
+    await park(controller, 0);
+    const workflows = (await storage.getStore('workflows'))!;
+    const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
+    expect(parked?.storageVersion ?? 1).toBe(storageVersion);
+    const runId = parked!.runId;
+    let entered!: () => void;
+    const toolEntered = new Promise<void>(resolve => (entered = resolve));
+    let proceed!: () => void;
+    const gate = new Promise<void>(resolve => (proceed = resolve));
+    resumedToolGate = () => {
+      entered();
+      return gate;
+    };
+    const resumed = agent.resume(runId, { a: answer }).then(
+      async ({ output }) => (answer === 'again' ? 'resumed' : output.text),
+      (error: Error) => error.message,
+    );
+    await toolEntered;
+    const stored = await workflows.getWorkflowRunById({ runId });
+    expect((typeof stored?.snapshot === 'string' ? JSON.parse(stored.snapshot) : stored?.snapshot)?.status).toBe(
+      'running',
+    );
+    expect(agent.__isResumingRun(runId)).toBe(true);
+
+    expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
+    const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
+    proceed();
+    const settled = (async () => {
+      const result = await resumed;
+      await agent.__resumesSettled(runId);
+      return result;
+    })();
+    return { agent, workflows, runId, settled, releaseParkedRun };
+  }
+
+  it.each([1, 2] as const)(
+    'releases a run stored as running by a resume in flight at deletion that then parks it again (storage v%i)',
+    async storageVersion => {
+      try {
+        const { agent, workflows, runId, settled } = await deleteWhileResumedRunIsRunning(storageVersion, 'again');
+        expect(await settled).toBe('resumed');
+        await expectReleased(agent, workflows, runId);
+      } finally {
+        resumedToolGate = undefined;
+      }
+    },
+  );
+
+  it.each([1, 2] as const)(
+    'deletes a run stored as running by a resume in flight at deletion that then fails (storage v%i)',
+    async storageVersion => {
+      failModelAfterTool = true;
+      try {
+        const { agent, workflows, runId, settled, releaseParkedRun } = await deleteWhileResumedRunIsRunning(
+          storageVersion,
+          'yes',
+        );
+        expect(await settled.catch((error: Error) => error.message)).toBe('model failed');
+        // The deferred delete, decided once the resume settles, runs for the run the failed resume left behind.
+        await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
+        await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
+        expect(agent.getWorkflow().runs.size).toBe(0);
+      } finally {
+        resumedToolGate = undefined;
+        failModelAfterTool = false;
+      }
+    },
+  );
+
+  // A tool that throws hands the error to the model, which answers: the run finishes either way.
+  it.each([
+    [1, 'yes'],
+    [2, 'yes'],
+    [1, 'fail'],
+    [2, 'fail'],
+  ] as const)(
+    'leaves a run stored as running by a resume in flight at deletion to that resume when it finishes (storage v%i, answer %s)',
+    async (storageVersion, answer) => {
+      try {
+        const { runId, settled, releaseParkedRun } = await deleteWhileResumedRunIsRunning(storageVersion, answer);
+        expect(await settled).toBe('done');
+        // The deferred release runs once the resume settles and finds nothing of the finished run to release.
+        await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
+        for (const result of releaseParkedRun.mock.results) expect(await result.value).toBe(false);
+      } finally {
+        resumedToolGate = undefined;
+      }
     },
   );
 
