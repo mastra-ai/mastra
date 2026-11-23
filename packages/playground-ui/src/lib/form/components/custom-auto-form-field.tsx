@@ -61,7 +61,6 @@ export const CustomAutoFormField: React.FC<{
         key={fullPath}
         path={path}
         inputProps={{
-          'aria-required': field.required || undefined,
           key: `${fullPath}-input`,
           ...field.fieldConfig?.inputProps,
           ...register(fullPath),

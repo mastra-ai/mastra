@@ -6,7 +6,7 @@ import * as React from 'react';
 import { Button } from '@/ds/components/Button';
 import { isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { keepOwnAccessibleName, useFieldRequired } from '@/ds/components/Field/field-control-aria';
 import { controlIconState } from '@/ds/primitives/control-icon';
 import { ControlSizeContext, controlHeight, controlSpacing } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
@@ -212,6 +212,7 @@ export type InputGroupInputProps = Omit<React.ComponentProps<'input'>, 'size'> &
 };
 
 function InputGroupInput({ className, testId, error, type = 'text', autoComplete, ...props }: InputGroupInputProps) {
+  const fieldRequired = useFieldRequired();
   return (
     <InputPrimitive
       type={type}
@@ -229,6 +230,7 @@ function InputGroupInput({ className, testId, error, type = 'text', autoComplete
         className,
       )}
       {...deprecatedErrorAria(error)}
+      {...fieldRequired}
       {...props}
       {...textFieldAutofillProps(autoComplete)}
       {...keepOwnAccessibleName(props)}

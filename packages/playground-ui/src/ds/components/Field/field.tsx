@@ -23,6 +23,7 @@ const orientationClassName = {
 function Field({ className, orientation = 'vertical', invalid = false, ...props }: FieldProps) {
   const id = React.useId();
   const [hasDescription, setHasDescription] = React.useState(false);
+  const [required, setRequired] = React.useState(false);
   const ariaIds = React.useMemo(
     () => ({
       labelId: `${id}-label`,
@@ -30,10 +31,12 @@ function Field({ className, orientation = 'vertical', invalid = false, ...props 
       errorId: `${id}-error`,
       controlId: `${id}-control`,
       invalid,
+      required,
+      setRequired,
       hasDescription,
       setHasDescription,
     }),
-    [id, invalid, hasDescription],
+    [id, invalid, required, hasDescription],
   );
 
   return (
@@ -70,20 +73,50 @@ function FieldItem({ className, ...props }: FieldItemProps) {
   );
 }
 
+/** The asterisk is generated content, so it stays out of the label's text and the control's name. */
 function RequiredMark() {
   return (
+    <span
+      aria-hidden
+      data-slot="field-required-mark"
+      className="ml-0.5 text-destructive-foreground after:content-['*'] in-data-disabled:text-muted-foreground"
+    />
+  );
+}
+
+/** For a mark no control can announce through `aria-required`. */
+function RequiredText() {
+  return (
     <>
-      <span aria-hidden className="ml-0.5 text-destructive-foreground in-data-disabled:text-muted-foreground">
-        *
-      </span>{' '}
+      {' '}
       <span className="sr-only">(required)</span>
+    </>
+  );
+}
+
+function OptionalMark() {
+  return (
+    <>
+      {' '}
+      <span data-slot="field-optional-mark" className="ml-1 text-muted-foreground">
+        (optional)
+      </span>
     </>
   );
 }
 
 type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   className?: string;
+  /**
+   * The form can't be submitted while this field is empty, as it stands now: pass a condition for a field that
+   * is required only in some states. Adds the red asterisk and `aria-required` on the field's control.
+   */
   required?: boolean;
+  /**
+   * The field may stay empty, in a form where no label has an asterisk. Adds a muted "(optional)". Next to
+   * required fields leave it off: no asterisk already means optional.
+   */
+  optional?: boolean;
   size?: 'smaller' | 'default' | 'bigger';
   /** What the field is for, shown in a tooltip on a muted info icon after the label. */
   info?: React.ReactNode;
@@ -133,6 +166,7 @@ function FieldLabelInfo({
 function FieldLabel({
   className,
   required = false,
+  optional = false,
   size = 'default',
   info,
   children,
@@ -140,6 +174,13 @@ function FieldLabel({
   ...props
 }: FieldLabelProps) {
   const field = useFieldAriaIds();
+  const setRequired = field?.setRequired;
+
+  React.useEffect(() => {
+    if (!required || !setRequired) return;
+    setRequired(true);
+    return () => setRequired(false);
+  }, [required, setRequired]);
 
   const focusManualControl: FieldLabelProps['onClick'] = event => {
     onClick?.(event);
@@ -169,6 +210,8 @@ function FieldLabel({
     >
       {children}
       {required ? <RequiredMark /> : null}
+      {required && !field ? <RequiredText /> : null}
+      {optional && !required ? <OptionalMark /> : null}
     </FieldPrimitive.Label>
   );
 
@@ -286,7 +329,12 @@ function FieldsetLegend({ className, required = false, children, ...props }: Fie
       {...props}
     >
       {children}
-      {required ? <RequiredMark /> : null}
+      {required ? (
+        <>
+          <RequiredMark />
+          <RequiredText />
+        </>
+      ) : null}
     </FieldsetPrimitive.Legend>
   );
 }

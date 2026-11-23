@@ -8,6 +8,25 @@ import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, Fieldset
 const meta: Meta<typeof Field> = {
   title: 'Elements/Field',
   component: Field,
+  parameters: {
+    docs: {
+      description: {
+        component: `
+A label, its control, help text and error, wired together.
+
+**Required and optional fields**
+
+- **Required:** a field the form can't be submitted without gets \`<FieldLabel required>\`: a red asterisk, and \`aria-required\` on the control. Always, also when every field is required or there is only one.
+- **Optional:** no mark next to required fields, since no asterisk already means optional. In a form where no label has an asterisk, a field that may stay empty gets \`<FieldLabel optional>\`: a muted "(optional)".
+- **Required in some states:** pass the condition (\`required={provider === 'custom'}\`), and the mark follows it. When one of several fields is enough, mark none and say so in a \`FieldDescription\`.
+- **Never empty, never marked:** switches, sliders, segmented controls, and selects that start with a value and can't be cleared.
+- **Not forms, not marked:** search, filters, toolbar controls, and settings rows that change one existing value.
+
+The mark follows what submitting enforces. Don't write "(optional)" or "(required)" in a label, placeholder or help text, don't set \`aria-required\` yourself, and don't restyle the label.
+`,
+      },
+    },
+  },
   decorators: [
     Story => (
       <div className="w-100">
@@ -36,6 +55,44 @@ export const WithError: Story = {
       <FieldLabel required>Email</FieldLabel>
       <Input type="email" defaultValue="ada@" />
       <FieldError>Enter a complete email address.</FieldError>
+    </Field>
+  ),
+};
+
+/** A form with required fields: the asterisk marks them, and the field without one is optional. */
+export const RequiredFields: Story = {
+  render: () => (
+    <div className="grid gap-4">
+      <Field>
+        <FieldLabel required>Name</FieldLabel>
+        <Input placeholder="Support agent" />
+      </Field>
+      <Field>
+        <FieldLabel required>Model</FieldLabel>
+        <Select>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Pick a model" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="openai/gpt-5.6-sol">openai/gpt-5.6-sol</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field>
+        <FieldLabel>Description</FieldLabel>
+        <Textarea placeholder="Answers billing questions" />
+      </Field>
+    </div>
+  ),
+};
+
+/** No field in this form is required, so the one that may stay empty says it's optional. */
+export const OptionalField: Story = {
+  render: () => (
+    <Field>
+      <FieldLabel optional>Monthly limit</FieldLabel>
+      <Input inputMode="decimal" placeholder="100" />
+      <FieldDescription>Top-ups pause for the rest of the month once they reach it.</FieldDescription>
     </Field>
   ),
 };

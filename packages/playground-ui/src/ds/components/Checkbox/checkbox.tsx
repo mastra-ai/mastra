@@ -1,7 +1,7 @@
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import * as React from 'react';
 
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { keepOwnAccessibleName, useFieldRequired } from '@/ds/components/Field/field-control-aria';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { selectionControlStyle } from '@/ds/primitives/selection-control';
@@ -29,6 +29,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
     // Translate the Radix `'indeterminate'` sentinel into Base UI's dedicated
     // `indeterminate` prop while leaving `checked` as a boolean.
     const isCheckedIndeterminate = checked === 'indeterminate';
+    const fieldRequired = useFieldRequired();
 
     return (
       <CheckboxPrimitive.Root
@@ -47,6 +48,7 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
           'data-[disabled]:data-[indeterminate]:border-muted-foreground data-[disabled]:data-[indeterminate]:bg-muted-foreground data-[disabled]:data-[indeterminate]:text-background',
           className,
         )}
+        {...fieldRequired}
         {...props}
       >
         <CheckboxPrimitive.Indicator

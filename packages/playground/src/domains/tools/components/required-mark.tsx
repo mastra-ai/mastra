@@ -2,7 +2,7 @@
 export function RequiredMark() {
   return (
     <>
-      <span aria-hidden className="ml-0.5 text-destructive-indicator">
+      <span aria-hidden className="ml-0.5 text-destructive-foreground">
         *
       </span>
       <span className="sr-only"> (required)</span>

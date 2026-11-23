@@ -2,6 +2,7 @@ import { NumberField as NumberFieldPrimitive } from '@base-ui/react/number-field
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { useFieldRequired } from '@/ds/components/Field/field-control-aria';
 import { inputGroupClassName, inputGroupControlClassName } from '@/ds/components/InputGroup/input-group';
 import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
@@ -48,10 +49,12 @@ type InputNumberInputProps = Omit<NumberFieldPrimitive.Input.Props, 'className'>
 };
 
 function InputNumberInput({ className, autoComplete, ...props }: InputNumberInputProps) {
+  const fieldRequired = useFieldRequired();
   return (
     <NumberFieldPrimitive.Input
       data-slot="input-number-input"
       className={cn(inputGroupControlClassName, className)}
+      {...fieldRequired}
       {...props}
       {...textFieldAutofillProps(autoComplete)}
     />

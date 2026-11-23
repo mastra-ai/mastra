@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { ButtonChevron, buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { keepOwnAccessibleName, useFieldRequired } from '@/ds/components/Field/field-control-aria';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -134,6 +134,7 @@ function normalizeSelectTriggerVariant(
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
   ({ className, children, size = 'md', variant = 'default', ...props }, ref) => {
     const visualVariant = normalizeSelectTriggerVariant(variant);
+    const fieldRequired = useFieldRequired();
 
     return (
       <SelectPrimitive.Trigger
@@ -156,6 +157,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           '[&>span]:truncate',
           className,
         )}
+        {...fieldRequired}
         {...props}
         {...keepOwnAccessibleName(props)}
       >

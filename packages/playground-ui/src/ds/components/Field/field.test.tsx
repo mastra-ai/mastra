@@ -7,7 +7,10 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { Checkbox } from '../Checkbox';
 import { CodeEditor } from '../CodeEditor';
+import { Combobox } from '../Combobox';
 import { Input } from '../Input';
+import { InputGroupInput, InputGroupTextarea } from '../InputGroup';
+import { InputNumber, InputNumberInput } from '../InputNumber';
 import { RadioGroup, RadioGroupItem } from '../RadioGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Switch } from '../Switch';
@@ -80,6 +83,38 @@ describe.each(controls)('$kind in a Field', ({ role, control }) => {
     const element = screen.getByRole(role, { name: 'Kind' });
     expect(element.getAttribute('aria-invalid')).toBe('true');
     expect(element.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
+  });
+});
+
+describe.each([
+  ...controls,
+  { kind: 'InputGroup', role: 'textbox', control: <InputGroupInput /> },
+  { kind: 'InputGroup textarea', role: 'textbox', control: <InputGroupTextarea /> },
+  {
+    kind: 'InputNumber',
+    role: 'textbox',
+    control: (
+      <InputNumber>
+        <InputNumberInput />
+      </InputNumber>
+    ),
+  },
+  { kind: 'Checkbox', role: 'checkbox', control: <Checkbox /> },
+  { kind: 'RadioGroup', role: 'radiogroup', control: <RadioGroup /> },
+  { kind: 'Combobox', role: 'combobox', control: <Combobox options={[]} /> },
+  { kind: 'Multiple Combobox', role: 'combobox', control: <Combobox multiple options={[]} /> },
+  { kind: 'Ghost Combobox', role: 'combobox', control: <Combobox variant="ghost" options={[]} /> },
+  { kind: 'CodeEditor', role: 'textbox', control: <CodeEditor value="{}" /> },
+])('$kind in a required Field', ({ role, control }) => {
+  it('is announced as required, with the label as its name', () => {
+    render(
+      <Field>
+        <FieldLabel required>Kind</FieldLabel>
+        {control}
+      </Field>,
+    );
+
+    expect(screen.getByRole(role, { name: 'Kind' }).getAttribute('aria-required')).toBe('true');
   });
 });
 
@@ -189,7 +224,59 @@ describe('Field', () => {
       </Field>,
     );
 
+    const input = screen.getByRole('textbox', { name: 'Email' });
+    expect(input.getAttribute('aria-required')).toBe('true');
+    expect(document.querySelector('[data-slot=field-required-mark]')).not.toBeNull();
+  });
+
+  it('drops the required state when the label stops being required', () => {
+    const renderField = (required: boolean) => (
+      <Field>
+        <FieldLabel required={required}>Email</FieldLabel>
+        <Input />
+      </Field>
+    );
+    const { rerender } = render(renderField(true));
+
+    rerender(renderField(false));
+
+    expect(screen.getByRole('textbox', { name: 'Email' }).getAttribute('aria-required')).toBeNull();
+  });
+
+  it('says a standalone label is required when there is no Field to tell its control', () => {
+    render(
+      <FieldItem>
+        <FieldLabel required>Email</FieldLabel>
+        <Input />
+      </FieldItem>,
+    );
+
     expect(screen.getByRole('textbox', { name: 'Email (required)' })).toBeTruthy();
+  });
+
+  it('marks the label optional', () => {
+    render(
+      <Field>
+        <FieldLabel optional>Monthly limit</FieldLabel>
+        <Input />
+      </Field>,
+    );
+
+    const input = screen.getByRole('textbox', { name: 'Monthly limit (optional)' });
+    expect(input.getAttribute('aria-required')).toBeNull();
+  });
+
+  it('does not call a required field optional', () => {
+    render(
+      <Field>
+        <FieldLabel required optional>
+          Monthly limit
+        </FieldLabel>
+        <Input />
+      </Field>,
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Monthly limit' })).toBeTruthy();
   });
 
   it('describes the control by an error inside the horizontal content column', () => {
@@ -222,6 +309,16 @@ describe('Fieldset', () => {
 
     expect(screen.getByRole('group', { name: 'Billing' })).toBeTruthy();
     expect(screen.getByRole('textbox', { name: 'Company' })).toBeTruthy();
+  });
+
+  it('says in the legend that the group is required', () => {
+    render(
+      <Fieldset>
+        <FieldsetLegend required>Plan</FieldsetLegend>
+      </Fieldset>,
+    );
+
+    expect(screen.getByRole('group', { name: 'Plan (required)' })).toBeTruthy();
   });
 
   it('names a radio group by its legend and each radio by its own label', () => {

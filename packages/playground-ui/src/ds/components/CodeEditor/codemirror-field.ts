@@ -112,6 +112,7 @@ type CodemirrorFieldAriaProps = {
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
   'aria-invalid'?: AriaAttributes['aria-invalid'];
+  'aria-required'?: AriaAttributes['aria-required'];
 };
 
 type ContentAttributes = {
@@ -121,6 +122,7 @@ type ContentAttributes = {
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
   'aria-invalid'?: string;
+  'aria-required'?: string;
 };
 
 export function useCodemirrorFieldAttributes(props: CodemirrorFieldAriaProps, fallbackLabel: string) {
@@ -130,6 +132,7 @@ export function useCodemirrorFieldAttributes(props: CodemirrorFieldAriaProps, fa
   const ariaLabelledBy = props['aria-labelledby'] ?? fieldAria['aria-labelledby'];
   const ariaDescribedBy = props['aria-describedby'] ?? fieldAria['aria-describedby'];
   const ariaInvalid = props['aria-invalid'] ?? fieldAria['aria-invalid'];
+  const ariaRequired = props['aria-required'] ?? fieldAria['aria-required'];
 
   const contentAttributes = useMemo(() => {
     const attributes: ContentAttributes = { 'aria-label': ariaLabel, class: 'zoom-safe-text' };
@@ -137,8 +140,9 @@ export function useCodemirrorFieldAttributes(props: CodemirrorFieldAriaProps, fa
     if (ariaLabelledBy) attributes['aria-labelledby'] = ariaLabelledBy;
     if (ariaDescribedBy) attributes['aria-describedby'] = ariaDescribedBy;
     if (ariaInvalid !== undefined) attributes['aria-invalid'] = String(ariaInvalid);
+    if (ariaRequired !== undefined) attributes['aria-required'] = String(ariaRequired);
     return EditorView.contentAttributes.of(attributes);
-  }, [ariaLabel, controlId, ariaLabelledBy, ariaDescribedBy, ariaInvalid]);
+  }, [ariaLabel, controlId, ariaLabelledBy, ariaDescribedBy, ariaInvalid, ariaRequired]);
 
   return { ariaLabel, contentAttributes };
 }

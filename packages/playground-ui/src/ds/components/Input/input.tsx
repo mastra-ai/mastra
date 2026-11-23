@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { keepOwnAccessibleName, useFieldRequired } from '@/ds/components/Field/field-control-aria';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   deprecatedErrorAria,
@@ -79,11 +79,13 @@ export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
  * names a real autofill token; see `textFieldAutofillProps`.
  */
 function Input({ className, size, testId, variant, error, autoComplete, ...props }: InputProps) {
+  const fieldRequired = useFieldRequired();
   return (
     <InputPrimitive
       className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
       data-testid={testId}
       {...deprecatedErrorAria(error)}
+      {...fieldRequired}
       {...props}
       {...textFieldAutofillProps(autoComplete)}
       {...keepOwnAccessibleName(props)}

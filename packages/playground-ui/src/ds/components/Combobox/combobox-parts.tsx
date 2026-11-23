@@ -7,6 +7,7 @@ import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combo
 import type { ComboboxVariant } from './combobox-styles';
 import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
+import { useFieldRequired } from '@/ds/components/Field/field-control-aria';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
@@ -133,12 +134,14 @@ function ComboboxTrigger({
   showChevron = !(icon && isIconButtonSize(size)),
   ...props
 }: ComboboxTriggerProps) {
+  const fieldRequired = useFieldRequired();
   const iconOnly = isIconButtonSize(size);
   return (
     <BaseCombobox.Trigger
       data-slot="combobox-trigger"
       data-shape={iconOnly ? 'icon' : undefined}
       className={comboboxTriggerClass({ variant, size, className })}
+      {...fieldRequired}
       {...props}
     >
       {isIconButtonSize(size) ? (
@@ -200,6 +203,7 @@ function ComboboxInput({
   onFocus,
   ...props
 }: ComboboxInputProps) {
+  const fieldRequired = useFieldRequired();
   return (
     <BaseCombobox.InputGroup data-slot="combobox-input" className={cn(fieldClass(size), className)} style={fieldStyle}>
       {start ? <span className="flex shrink-0 items-center">{start}</span> : null}
@@ -210,6 +214,7 @@ function ComboboxInput({
         }}
         className={inputClass}
         {...passwordManagerOptOutProps}
+        {...fieldRequired}
         {...props}
       />
       {children ? <span className="flex shrink-0 items-center gap-2 text-muted-foreground">{children}</span> : null}
@@ -458,6 +463,7 @@ function ComboboxChip({
 
 /** The text input after the chips in ComboboxChips. */
 function ComboboxChipsInput({ className, onFocus, ...props }: BaseCombobox.Input.Props) {
+  const fieldRequired = useFieldRequired();
   return (
     <BaseCombobox.Input
       data-slot="combobox-chip-input"
@@ -473,6 +479,7 @@ function ComboboxChipsInput({ className, onFocus, ...props }: BaseCombobox.Input
         className,
       )}
       {...passwordManagerOptOutProps}
+      {...fieldRequired}
       {...props}
     />
   );

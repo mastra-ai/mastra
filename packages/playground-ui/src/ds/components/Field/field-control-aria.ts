@@ -6,6 +6,8 @@ export type FieldAriaIds = {
   errorId: string;
   controlId: string;
   invalid: boolean;
+  required: boolean;
+  setRequired: (required: boolean) => void;
   hasDescription: boolean;
   setHasDescription: (hasDescription: boolean) => void;
 };
@@ -29,6 +31,11 @@ export function keepOwnAccessibleName(nameProps: ControlNameProps): { 'aria-labe
   return hasOwnAccessibleName(nameProps) ? { 'aria-labelledby': undefined } : {};
 }
 
+// Base UI wires everything else from its own Field, which has no required state.
+export function useFieldRequired(): { 'aria-required'?: true } {
+  return useFieldAriaIds()?.required ? { 'aria-required': true } : {};
+}
+
 // Base UI controls are wired by the Field; only non-Base-UI controls (CodeMirror) need this.
 export function useFieldControlAria(nameProps: ControlNameProps = {}) {
   const field = useFieldAriaIds();
@@ -39,5 +46,6 @@ export function useFieldControlAria(nameProps: ControlNameProps = {}) {
     'aria-labelledby': hasOwnAccessibleName(nameProps) ? undefined : field.labelId,
     'aria-describedby': describedByIds.length > 0 ? describedByIds.join(' ') : undefined,
     'aria-invalid': field.invalid || undefined,
+    'aria-required': field.required || undefined,
   };
 }

@@ -2,12 +2,13 @@ import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { mergeProps } from '@base-ui/react/merge-props';
 import type * as React from 'react';
 
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { keepOwnAccessibleName, useFieldRequired } from '@/ds/components/Field/field-control-aria';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 
 export type TextareaControlProps = React.ComponentProps<'textarea'>;
 
 export function TextareaControl({ id, name, disabled, ref, autoComplete, ...props }: TextareaControlProps) {
+  const fieldRequired = useFieldRequired();
   return (
     <FieldPrimitive.Control
       ref={ref}
@@ -17,6 +18,7 @@ export function TextareaControl({ id, name, disabled, ref, autoComplete, ...prop
       render={controlProps => (
         <textarea
           {...mergeProps<'textarea'>(controlProps, {
+            ...fieldRequired,
             ...props,
             ...textFieldAutofillProps(autoComplete),
             ...keepOwnAccessibleName(props),
