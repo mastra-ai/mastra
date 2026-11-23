@@ -64,7 +64,7 @@ describe('pgKnowledgeTransactionClient from @mastra/pg', () => {
             throw refusal;
           },
         }),
-      ).rejects.toThrow();
+      ).rejects.toBe(refusal);
       expect(await t.claimed()).toEqual([]);
     } finally {
       await t.drop();
