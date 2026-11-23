@@ -14,7 +14,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   define: {
     // Sent as Speechify-Caller-Version so Speechify can see this package's traffic.
     __SPEECHIFY_VOICE_VERSION__: JSON.stringify(pkg.version),

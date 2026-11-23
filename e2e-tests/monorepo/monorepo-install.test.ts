@@ -44,7 +44,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgMan
 
   describe('published package contents', { concurrent: false }, () => {
     it(
-      'installs declaration files without declaration maps',
+      'installs declaration and JavaScript files without source maps',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-dts-map-test-${pkgManager}-`));
         try {
@@ -52,12 +52,27 @@ describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgMan
 
           const appDir = join(isolatedFixturePath, 'apps', 'custom');
           for (const pkg of ['@mastra/deployer', '@mastra/core', '@mastra/server']) {
-            const files = await readdir(join(appDir, 'node_modules', pkg, 'dist'), { recursive: true });
+            const distDir = join(appDir, 'node_modules', pkg, 'dist');
+            const files = await readdir(distDir, { recursive: true });
             expect(files.filter(file => file.endsWith('.d.ts')).length, pkg).toBeGreaterThan(0);
             expect(
               files.filter(file => /\.d\.[cm]?ts\.map$/.test(file)),
               pkg,
             ).toEqual([]);
+
+            const jsFiles = files.filter(file => /\.[cm]?js$/.test(file));
+            expect(jsFiles.length, pkg).toBeGreaterThan(0);
+            expect(
+              files.filter(file => /\.[cm]?js\.map$/.test(file)),
+              pkg,
+            ).toEqual([]);
+            const withSourceMapComment: string[] = [];
+            for (const file of jsFiles) {
+              if ((await readFile(join(distDir, file), 'utf8')).includes('//# sourceMappingURL=')) {
+                withSourceMapComment.push(file);
+              }
+            }
+            expect(withSourceMapComment, pkg).toEqual([]);
           }
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
