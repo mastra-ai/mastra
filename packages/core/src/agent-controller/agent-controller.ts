@@ -1,5 +1,4 @@
 import { Agent } from '../agent';
-import { DurableStepIds } from '../agent/durable/constants';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import { isUserAuthoredMessage } from '../agent/signals';
@@ -14,7 +13,6 @@ import { GatewayManager } from '../llm/model/gateways';
 import type { GatewayModel, MastraModelGatewayInterface } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
-import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
@@ -454,17 +452,16 @@ export class AgentController<TState = {}> {
       getAgents: () => this.backingAgents(),
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
       releaseSuspendedRun: async runId => {
-        const mastra = this.getMastra();
-        if (!mastra) return;
-        mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
-        const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-        await Promise.all(
-          [
-            AGENTIC_LOOP_WORKFLOW_ID,
-            AGENTIC_EXECUTION_WORKFLOW_ID,
-            DurableStepIds.AGENTIC_LOOP,
-            DurableStepIds.AGENTIC_EXECUTION,
-          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+        const agents = [...new Set([this.getCurrentAgent(session), ...this.backingAgents()])];
+        // A resume in any of the session's agents owns the run, so its snapshot stays while it runs.
+        const isResuming = (id: string) => agents.some(agent => agent.__isResumingRun(id));
+        const deleted = await Promise.all(agents.map(agent => agent.__deleteSuspendedRun(runId, isResuming)));
+        if (deleted.every(Boolean)) return;
+        // Decided once the resume settles: a run it left parked is still the session's to drop.
+        void this.#deleteSuspendedRunOnceResumed(runId, agents, isResuming).catch(error =>
+          this.getMastra()
+            ?.getLogger()
+            ?.warn(`[AgentController:${this.id}] Failed to delete snapshot of released run ${runId}`, { runId, error }),
         );
       },
       // History lets the runtime skip retained run parts that storage already
@@ -1798,6 +1795,22 @@ export class AgentController<TState = {}> {
   }
 
   /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */
+  async #deleteSuspendedRunOnceResumed(
+    runId: string,
+    agents: Agent<any, any, any, any>[],
+    isResuming: (runId: string) => boolean,
+  ): Promise<void> {
+    const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
+    for (;;) {
+      await Promise.all(agents.map(agent => agent.__resumesSettled(runId)));
+      const run = await workflowsStore?.getWorkflowRunById({ runId });
+      // A resume that moved the run on owns it from here; only a run still parked is the session's to drop.
+      if (typeof run?.snapshot !== 'object' || run.snapshot.status !== 'suspended') return;
+      const deleted = await Promise.all(agents.map(agent => agent.__deleteSuspendedRun(runId, isResuming)));
+      if (deleted.every(Boolean)) return;
+    }
+  }
+
   private backingAgents(): Set<Agent<any, any, any, any>> {
     const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {

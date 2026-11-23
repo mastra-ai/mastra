@@ -11113,6 +11113,28 @@ export class Agent<
    * registration and snapshot rows; otherwise it stays listed as suspended.
    */
   async #deleteAbortedSuspendedRun(runId: string): Promise<boolean> {
+    try {
+      await this.__deleteSuspendedRun(runId);
+      return true;
+    } catch (error) {
+      this.logger.warn(`Failed to delete snapshot of aborted suspended run ${runId}`, { runId, error });
+      return false;
+    }
+  }
+
+  /**
+   * @internal Whether a resume() of the run is setting up or executing in this agent.
+   */
+  __isResumingRun(runId: string): boolean {
+    return this.#resumesInProgress.has(runId);
+  }
+
+  /**
+   * @internal Drops a suspended run's workflow registration and every snapshot row it may be stored under.
+   * When `isResuming` is given it is checked once storage is ready, right before anything is deleted, and a
+   * run it reports as resuming is left untouched (resolves `false`). Rejects if a delete fails.
+   */
+  async __deleteSuspendedRun(runId: string, isResuming?: (runId: string) => boolean): Promise<boolean> {
     const mastra = this.#mastra ?? this.#ephemeralMastra;
     if (!mastra) return true;
     const runtimeLoopWorkflowName = (
@@ -11125,17 +11147,14 @@ export class Agent<
       DurableStepIds.AGENTIC_EXECUTION,
     ]);
     if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
-    try {
-      mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      await Promise.all(
-        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
-      );
-      return true;
-    } catch (error) {
-      this.logger.warn(`Failed to delete snapshot of aborted suspended run ${runId}`, { runId, error });
-      return false;
-    }
+    const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+    // Checked after the last await before the deletes start, so a resume that began meanwhile keeps its snapshot.
+    if (isResuming?.(runId)) return false;
+    mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
+    await Promise.all(
+      [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+    );
+    return true;
   }
 
   sendMessage<OUTPUT = TOutput>(
@@ -13025,9 +13044,30 @@ export class Agent<
       if (released) return;
       released = true;
       const pending = (this.#resumesInProgress.get(runId) ?? 1) - 1;
-      if (pending > 0) this.#resumesInProgress.set(runId, pending);
-      else this.#resumesInProgress.delete(runId);
+      if (pending > 0) {
+        this.#resumesInProgress.set(runId, pending);
+        return;
+      }
+      this.#resumesInProgress.delete(runId);
+      const waiters = this.#resumesSettledWaiters.get(runId);
+      this.#resumesSettledWaiters.delete(runId);
+      for (const resolve of waiters ?? []) resolve();
     };
+  }
+
+  /** Resolvers of {@link __resumesSettled} calls, keyed by run. */
+  readonly #resumesSettledWaiters = new Map<string, Array<() => void>>();
+
+  /**
+   * @internal Resolves once no resume() of the run is in progress in this agent.
+   */
+  __resumesSettled(runId: string): Promise<void> {
+    if (!this.#resumesInProgress.has(runId)) return Promise.resolve();
+    return new Promise(resolve => {
+      const waiters = this.#resumesSettledWaiters.get(runId) ?? [];
+      waiters.push(resolve);
+      this.#resumesSettledWaiters.set(runId, waiters);
+    });
   }
 
   /**

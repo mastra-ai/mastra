@@ -14,16 +14,27 @@ import { createMockWorkspace } from './test-utils';
 vi.setConfig({ testTimeout: 30_000 });
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
-async function setup() {
+async function setup({ storageVersion }: { storageVersion?: 1 | 2 } = {}) {
   const model = new MockLanguageModelV2({
-    doStream: async () => ({
+    doStream: async ({ prompt }) => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
-      stream: convertArrayToReadableStream<any>([
-        { type: 'stream-start', warnings: [] },
-        { type: 'tool-call', toolCallId: `call-${Math.random()}`, toolName: 'ask', input: '{}' },
-        { type: 'finish', finishReason: 'tool-calls', usage },
-      ]),
+      // Asks once; after the tool's result it answers, so a resumed run finishes.
+      stream: convertArrayToReadableStream<any>(
+        prompt.some(message => message.role === 'tool')
+          ? [
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: 'done' },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage },
+            ]
+          : [
+              { type: 'stream-start', warnings: [] },
+              { type: 'tool-call', toolCallId: `call-${Math.random()}`, toolName: 'ask', input: '{}' },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ],
+      ),
     }),
   });
   const ask = createTool({
@@ -39,6 +50,7 @@ async function setup() {
     agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: model as any, tools: { ask } }),
     // Long enough that no cleanup timer frees the run during the test.
     cleanupTimeoutMs: 60_000,
+    storageVersion,
   });
   const controller = new AgentController({
     workspace: createMockWorkspace(),
@@ -139,6 +151,60 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     expect(agent.runRegistry.size).toBe(0);
     const { runs } = await (await storage.getStore('workflows'))!.listWorkflowRuns({});
     expect(runs).toHaveLength(0);
+  });
+
+  it.each([1, 2] as const)(
+    'keeps the snapshot of a run a resume took over before the session was deleted (storage v%i)',
+    async storageVersion => {
+      const { agent, controller, storage } = await setup({ storageVersion });
+      const session = await park(controller, 0);
+      const workflows = (await storage.getStore('workflows'))!;
+      const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
+      expect(parked?.storageVersion ?? 1).toBe(storageVersion);
+      const runId = parked!.runId;
+      // Hold the resume inside its first storage read, so it is in flight while the session is deleted.
+      const engine = (agent as any).executionEngine;
+      const isCanceled = engine.isRunCanceledInStorage.bind(engine);
+      let entered!: () => void;
+      const resumeEntered = new Promise<void>(resolve => (entered = resolve));
+      let proceed!: () => void;
+      const gate = new Promise<void>(resolve => (proceed = resolve));
+      vi.spyOn(engine, 'isRunCanceledInStorage').mockImplementation(async (id: any) => {
+        entered();
+        await gate;
+        return isCanceled(id);
+      });
+      // The resumed run answers and finishes, which needs its snapshot to survive the session's deletion.
+      const resumed = agent.resume(runId, { a: 'yes' }).then(
+        ({ output }) => output.text,
+        (error: Error) => error.message,
+      );
+      await resumeEntered;
+
+      expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
+
+      expect((await workflows.getWorkflowRunById({ runId }))?.snapshot).toBeDefined();
+      proceed();
+      expect(await resumed).toBe('done');
+    },
+  );
+
+  it('also deletes the snapshot stored under the loop workflow name the runtime agent advertises', async () => {
+    const { agent, controller, storage } = await setup();
+    await park(controller, 0);
+    // Durable wrappers from other engines (e.g. Inngest) store their loop under a name they advertise.
+    agent.__setThreadRuntimeAgent({ durableLoopWorkflowName: 'engine-agentic-loop' } as any);
+    const workflows = (await storage.getStore('workflows'))!;
+    const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
+    await workflows.persistWorkflowSnapshot({
+      workflowName: 'engine-agentic-loop',
+      runId: parked!.runId,
+      snapshot: { ...(parked!.snapshot as any), runId: parked!.runId },
+    });
+
+    await controller.deleteSession({ sessionId: 's-0' });
+
+    expect((await workflows.listWorkflowRuns({})).runs).toEqual([]);
   });
 
   it('keeps the parked run in memory when the session moves to a new thread', async () => {
