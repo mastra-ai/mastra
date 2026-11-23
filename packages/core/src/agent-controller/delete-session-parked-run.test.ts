@@ -341,8 +341,9 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     },
   );
 
+  // A failed model call ends the run, which drops its own snapshot as a finished run does.
   it.each([1, 2] as const)(
-    'deletes a run stored as running by a resume in flight at deletion that then fails (storage v%i)',
+    'leaves nothing parked when a resume in flight at deletion then fails (storage v%i)',
     async storageVersion => {
       failModelAfterTool = true;
       try {
@@ -351,8 +352,9 @@ describe('deleteSession with a parked suspension (#30743)', () => {
           'yes',
         );
         expect(await settled.catch((error: Error) => error.message)).toBe('model failed');
-        // The deferred delete, decided once the resume settles, runs for the run the failed resume left behind.
+        // Decided once the resume settles: nothing of the failed run is left to release.
         await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
+        for (const result of releaseParkedRun.mock.results) expect(await result.value).toBe(false);
         await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
         expect(agent.getWorkflow().runs.size).toBe(0);
       } finally {
@@ -372,11 +374,16 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     'leaves a run stored as running by a resume in flight at deletion to that resume when it finishes (storage v%i, answer %s)',
     async (storageVersion, answer) => {
       try {
-        const { runId, settled, releaseParkedRun } = await deleteWhileResumedRunIsRunning(storageVersion, answer);
+        const { workflows, runId, settled, releaseParkedRun } = await deleteWhileResumedRunIsRunning(
+          storageVersion,
+          answer,
+        );
         expect(await settled).toBe('done');
         // The deferred release runs once the resume settles and finds nothing of the finished run to release.
         await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
         for (const result of releaseParkedRun.mock.results) expect(await result.value).toBe(false);
+        // The finished run drops its own snapshot and workflow run, session deleted or not.
+        await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
       } finally {
         resumedToolGate = undefined;
       }
