@@ -1176,6 +1176,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/primalabs',
+          label: 'PrimaLabs',
+        },
+        {
+          type: 'doc',
           id: 'providers/prime',
           label: 'Prime Inference',
         },

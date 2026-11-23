@@ -42,7 +42,7 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "MiniMaxAI/MiniMax-M3": [
+    "Qwen/Qwen3.8-Flash": [
       {
         "type": "toggle"
       }
@@ -52,7 +52,7 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
       }
@@ -63,20 +63,7 @@
         "values": ["high", "max"]
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      }
-    ],
     "anthropic/claude-opus-4.8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -87,6 +74,19 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 127999
+      }
+    ],
+    "anthropic/claude-sonnet-4.6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "anthropic/claude-opus-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

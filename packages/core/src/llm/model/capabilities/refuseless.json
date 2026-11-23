@@ -9,10 +9,10 @@
     "minimax-m3.1-flash"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash-abliterated-free": [
+    "glm-5.3-abliterated": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash-abliterated": [
@@ -27,16 +27,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-abliterated": [
+    "minimax-m3.1-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax-m3.1-flash": [
+    "deepseek-v4.1-flash-abliterated-free": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash-fast": [

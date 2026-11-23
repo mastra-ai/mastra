@@ -69,33 +69,16 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "toggle"
-      },
+    "meta-models/Muse-Spark-Open-816B-A42B": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "reflection/Beam-1.0-501B-A23B": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3-1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/gpt-oss-120b": [
@@ -104,20 +87,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "thinkingmachines/Inkling": [
+    "moonshotai/Kimi-K3.1-Pro": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nvidia/nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
-      {
-        "type": "toggle"
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "moonshotai/Kimi-K3": [
@@ -126,23 +99,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "moonshotai/Kimi-K3.1-Pro": [
+    "thinkingmachines/Inkling": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "Qwen/Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-9B": [
       {
         "type": "toggle"
       }
@@ -152,9 +115,25 @@
         "type": "toggle"
       }
     ],
+    "Qwen/Qwen3.5-9B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "zai-org/GLM-5": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.2": [
@@ -171,28 +150,49 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "meta-models/Muse-Spark-Open-816B-A42B": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "reflection/Beam-1.0-501B-A23B": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3-1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
+      {
+        "type": "toggle"
       }
     ]
   }
