@@ -34,7 +34,7 @@ function ActivityFixture({ status, busy }: { status: ChatConnectionApi['status']
     busy,
     phase: busy ? 'working' : 'awaiting',
     initializing: false,
-    historyInitializing: false,
+    loadingHistory: false,
     initialHistoryReady: true,
     localUser: vi.fn(),
     failLocalUser: vi.fn(),

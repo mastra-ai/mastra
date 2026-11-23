@@ -24,7 +24,7 @@ Cloudflare storage **doesn't support the observability domain**. Traces from the
 npm install @mastra/cloudflare@latest
 ```
 
-## Cloudflare KV Storage
+## Cloudflare KV storage
 
 The KV storage implementation provides a globally distributed, serverless key-value store solution using Cloudflare Workers KV.
 
@@ -98,7 +98,7 @@ const storageRest = new CloudflareKVStorage({
 
 ### Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -106,19 +106,19 @@ The storage implementation handles schema creation and updates automatically. It
 - `messages`: Stores individual messages
 - `metadata`: Stores additional metadata for threads and messages
 
-### Consistency & Propagation
+### Consistency & propagation
 
 Cloudflare KV is an eventually consistent store, meaning that data may not be immediately available across all regions after a write.
 
 :::warning[Resuming runs across Workers]
 
-A write to KV can take up to about 60 seconds to reach other locations. If one Worker suspends a workflow or [durable agent](/docs/harness/durable-agents) run and a different Worker resumes it soon after, for example when a user approves a tool call quickly, the resume can read an older snapshot. It then fails with `AGENT_RESUME_NO_SNAPSHOT_FOUND` or `WORKFLOW_RUN_NOT_SUSPENDED`, or resumes from an earlier step.
+A write to KV can take up to about 60 seconds to reach other locations. If one Worker suspends a workflow or [durable agent](/docs/harness/durable-agents) run and a different Worker resumes it soon after, for example when a user approves a tool call right away, the resume can read an older snapshot. It then fails with `AGENT_RESUME_NO_SNAPSHOT_FOUND` or `WORKFLOW_RUN_NOT_SUSPENDED`, or resumes from an earlier step.
 
 If runs can be resumed by a different Worker or process than the one that suspended them, use [Cloudflare Durable Objects storage](#cloudflare-durable-objects-storage) instead.
 
 :::
 
-### Key Structure & Namespacing
+### Key structure & namespacing
 
 Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (e.g., `threads:threadId`).
 For Workers deployments, `keyPrefix` is used to isolate data within a namespace; for REST API deployments, `namespacePrefix` is used to isolate entire namespaces between environments or applications.
@@ -179,15 +179,15 @@ class AgentDurableObject extends DurableObject<Env> {
 ]}
 />
 
-### Strong Consistency
+### Strong consistency
 
-Unlike KV, Durable Objects provide strong consistency guarantees. All reads and writes within a Durable Object are serialized, making it very suitable for fast, long-running agents.
+Unlike KV, Durable Objects provide strong consistency guarantees. All reads and writes within a Durable Object are serialized, making it well suited to fast, long-running agents.
 
-### SQL Capabilities
+### SQL capabilities
 
 Durable Objects storage uses SQLite under the hood, enabling efficient queries, filtering, and pagination that aren't possible with key-value storage.
 
-## Schema Management
+## Schema management
 
 Both storage implementations handle schema creation and updates automatically. They create the following tables:
 
@@ -195,7 +195,7 @@ Both storage implementations handle schema creation and updates automatically. T
 - `messages`: Stores individual messages
 - `workflow_snapshot`: Stores workflow run state
 
-## Deprecated Aliases
+## Deprecated aliases
 
 For backwards compatibility, the following aliases are available:
 

@@ -26,6 +26,12 @@ vi.mock('@mastra/core/llm', () => ({
     })),
   },
   PROVIDER_REGISTRY: {},
+  // The real router throws like this when the provider's key isn't in the environment.
+  ModelRouterEmbeddingModel: class {
+    constructor(id: string) {
+      throw new Error(`API key not found for provider ${id.split('/')[0]}`);
+    }
+  },
 }));
 
 vi.mock('@mastra/core/agent', () => ({
@@ -293,6 +299,24 @@ describe('createMastraCode startup performance', () => {
     // A tight budget here fails on that import cost rather than on the
     // ordering contract, so give it room for a contended runner.
   }, 60_000);
+});
+
+describe('recall embedder', () => {
+  it('fails on a missing provider key before registering the session or opening storage', async () => {
+    const [{ registerSessionAndWaitForMaintenance }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    vi.mocked(registerSessionAndWaitForMaintenance).mockClear();
+    vi.mocked(createStorage).mockClear();
+    const { createMastraCode } = await import('./index.js');
+
+    await expect(createMastraCode({ embedder: 'openai/text-embedding-3-small' })).rejects.toThrow(
+      'API key not found for provider openai',
+    );
+    expect(registerSessionAndWaitForMaintenance).not.toHaveBeenCalled();
+    expect(createStorage).not.toHaveBeenCalled();
+  });
 });
 
 describe('storage maintenance exclusion', () => {

@@ -1,12 +1,13 @@
 {
   "name": "@mastra/arthur",
-  "version": "0.5.0",
+  "version": "0.5.2-alpha.0",
   "description": "Arthur AI observability provider for Mastra - exports traces using OpenInference semantic conventions",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

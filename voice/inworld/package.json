@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-inworld",
-  "version": "0.4.6",
+  "version": "0.4.7-alpha.0",
   "description": "Mastra Inworld AI voice integration — streaming TTS, batch STT, and realtime full-duplex voice",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "ws": "^8.22.0",
+    "ws": "^8.23.0",
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {

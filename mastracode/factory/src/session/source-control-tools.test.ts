@@ -517,17 +517,60 @@ describe('createSourceControlTools', () => {
     expect(setup.createPullRequest).not.toHaveBeenCalled();
   });
 
-  it('rejects checkout refresh outside a bound GitLab MR review session', async () => {
-    const setup = await fixture();
+  it('offers checkout refresh only in a bound GitLab merge-request review session', async () => {
+    const build = async (integrationId: string, branch?: string) => {
+      const setup = await fixture(integrationId);
+      if (branch) setup.storage.sessionsRows[0]!.branch = branch;
+      return createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: integrationId, storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+    };
+    const mrBranch = 'factory/gitlab-mr-17-abc123';
+
+    expect(await build('gitlab')).not.toHaveProperty('source_control_refresh_change_request_checkout');
+    expect(await build('github', mrBranch)).not.toHaveProperty('source_control_refresh_change_request_checkout');
+    const review = await build('gitlab', mrBranch);
+    expect(review).toHaveProperty('source_control_refresh_change_request_checkout');
+    expect(review).toHaveProperty('source_control_push_branch');
+  });
+
+  it('refreshes a bound GitLab merge-request checkout to the provider-reported head', async () => {
+    const branch = 'factory/gitlab-mr-17-abc123';
+    const newHead = 'b'.repeat(40);
+    const setup = await fixture('gitlab');
+    setup.storage.sessionsRows[0]!.branch = branch;
+    setup.getPullRequest.mockResolvedValue({ id: '17', state: 'open', merged: false, headSha: newHead } as never);
+    const executions: string[][] = [];
+    const sandbox = {
+      id: 'sandbox-1',
+      provider: 'custom',
+      workingDirectory: '/workspace',
+      executeCommand: vi.fn(async (_command: string, args: string[]) => {
+        executions.push(args);
+        if (args.includes('--show-current')) return { exitCode: 0, stdout: `${branch}\n`, stderr: '' };
+        if (args.includes('FETCH_HEAD') && args.includes('rev-parse')) {
+          return { exitCode: 0, stdout: `${newHead}\n`, stderr: '' };
+        }
+        if (args.includes('rev-parse')) return { exitCode: 0, stdout: `${'a'.repeat(40)}\n`, stderr: '' };
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+    };
     const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
-    await expect((tools.source_control_refresh_change_request_checkout!.execute as any)({})).rejects.toThrow(
-      'only available in a bound GitLab merge-request review session',
+
+    const result = await (tools.source_control_refresh_change_request_checkout!.execute as any)(
+      {},
+      { workspace: { sandbox } },
     );
-    expect(setup.getRepositoryTarget).not.toHaveBeenCalled();
+
+    expect(result).toEqual({ headSha: newHead, changed: true });
+    expect(setup.getPullRequest).toHaveBeenCalledWith(expect.objectContaining({ pullRequestId: '17' }));
+    expect(executions).toContainEqual(expect.arrayContaining(['fetch', 'origin', 'refs/merge-requests/17/head']));
   });
 
   it('fails closed when a session exists in more than one provider partition', async () => {

@@ -25,21 +25,25 @@ import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import type { MemoryEmbedder } from '@mastra/code-sdk/agents/memory';
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
-import type { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
+import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
-import type { MastraVector } from '@mastra/core/vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
+import type { MastraWorker } from '@mastra/core/worker';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
@@ -93,11 +97,11 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import {
   buildConnectToolListRoute,
   buildConnectToolsRoute,
   buildPlatformConnectRoutes,
+  isPlatformConnectProviderSource,
 } from './integrations/platform/connect/routes.js';
 import type { ConnectToolsSetupMissing, ConnectToolsSource } from './integrations/platform/connect/routes.js';
 import {
@@ -105,12 +109,20 @@ import {
   projectConnectTools,
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
+import {
+  PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID,
+  PlatformConnectEventPoller,
+} from './integrations/platform/foundation/connect-event-poller.js';
+import { isPlatformConnectEventSource } from './integrations/platform/foundation/connect-events.js';
+import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
+import { observeSessionMemoryFailurePosts } from './integrations/slack/memory-failure-post.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { resolveFactoryEmbedder } from './memory-embedder.js';
 import {
   FactoryMetrics,
   installFactoryMetrics,
@@ -119,6 +131,7 @@ import {
   startFactoryMetrics,
 } from './metrics/index.js';
 import type { FactoryMetricsOptions } from './metrics/index.js';
+import { instrumentSessionFirstOutput } from './metrics/session.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
   createCustomProvidersPrimer,
@@ -128,6 +141,7 @@ import {
 import { buildFeedEventsRoutes } from './routes/feed-events.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
+import { createRunStopMarker } from './routes/run-stop-marker.js';
 import { SandboxEnvRoutes } from './routes/sandbox-envs.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -300,10 +314,29 @@ export interface MastraFactoryConfig {
    */
   vector?: MastraVector;
   /**
-   * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
-   * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
+   * Embedder for recall vectors, shared by every agent's memory in this deployment: a
+   * `provider/model` string (e.g. `'openai/text-embedding-3-small'`), a Mastra gateway id or an AI
+   * SDK embedding model. Requires `vector`. Built once at construction on the operator's key,
+   * so a missing provider key throws here. Omitted → local `fastembed.small` (bge-small, 384
+   * dimensions) on this host. See "Recall embedder" in the README.
    */
-  knowledge?: { key: string; instance: Knowledge };
+  embedder?: MemoryEmbedder;
+  /** Options passed to every embedding call, e.g. provider options or headers. */
+  embedderOptions?: MastraEmbeddingOptions;
+  /**
+   * Host-owned Knowledge runtime. Factory registers this exact instance under its `id` and uses that
+   * key for its read surfaces; pass `{ key, instance }` to register it under another key. Omitted,
+   * Knowledge stays off.
+   */
+  knowledge?: Knowledge | { key: string; instance: Knowledge };
+  /**
+   * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `['org:acme']`. With an
+   * `org:` here, every project's sessions and Knowledge page act with these alone instead of their own
+   * `org:` and `project:` scopes, for a Knowledge instance that declares only that org; every org and
+   * project on this Factory then shares it. A `resource:` or `thread:` scope throws, since those are
+   * each run's own identity, and so does a `project:` beside an `org:`.
+   */
+  scopes?: string[];
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -649,6 +682,8 @@ export class MastraFactory {
     | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
+  /** Recall embedder, built once from `config.embedder`. Undefined → the SDK's local fastembed. */
+  readonly #embedder: MastraEmbeddingModel<string> | undefined;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
@@ -683,6 +718,9 @@ export class MastraFactory {
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
       );
     }
+    // A `resource:` or `thread:` scope, or a `project:` beside an `org:`, is refused by every session; fail here.
+    const hostScopes = resolveKnowledgeSessionScopes({ factoryOrgId: 'factory' }, config.scopes);
+    if (!hostScopes.resolved) throw new Error(`MastraFactory: 'scopes': ${hostScopes.reason}`);
     if (config.includeDefaultBoards !== undefined) warnIncludeDefaultBoards();
     this.#boards = createBoardRegistry({ boards: config.boards });
     warnDefinedBoards(this.#boards);
@@ -704,7 +742,9 @@ export class MastraFactory {
       console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
-    this.#config = config;
+    this.#embedder = resolveFactoryEmbedder(config);
+    // Knowledge pages and sessions both read `scopes`, checked above; a copy keeps a caller's later edits out.
+    this.#config = { ...config, ...(config.scopes && { scopes: [...config.scopes] }) };
     this.#metrics = new FactoryMetrics(resolveMetricsConfig(config.metrics), metricsService());
     installFactoryMetrics(this.#metrics);
   }
@@ -854,6 +894,9 @@ export class MastraFactory {
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
     const storage = instrumentAsyncMethods(this.#config.storage, 'storage');
     const vector = this.#config.vector;
+    // Every Memory over these vectors must embed with the same model, or recall would compare
+    // vectors from different models.
+    const embedding = { embedder: this.#embedder, embedderOptions: this.#config.embedderOptions };
     const pubsub = this.#config.pubsub;
     // One bus for board events: a second fallback instance would leave SSE
     // subscribers and producers on different emitters in single-process runs.
@@ -1313,7 +1356,7 @@ export class MastraFactory {
           const memory = await mastraStorage.getStore('memory');
           if (!memory) return false;
           // The sessions' own Memory, so a moved thread takes its observation vectors along.
-          const sessionMemory = getDynamicMemory(mastraStorage, vector);
+          const sessionMemory = getDynamicMemory(mastraStorage, vector, undefined, embedding);
           const report = await migrateSessionResources({
             sessions: sourceControlStorage,
             workItems: workItemsStorage,
@@ -1534,7 +1577,7 @@ export class MastraFactory {
                   : undefined;
               },
             });
-            return async (args: Parameters<typeof notifyStageChange>[0]) => {
+            return async (args: Parameters<typeof notifyStageChange>[0] & Parameters<typeof endPhaseGoal>[0]) => {
               await Promise.all([notifyStageChange(args), endPhaseGoal(args)]);
             };
           })(),
@@ -1770,6 +1813,8 @@ export class MastraFactory {
           loadMemorySettings,
           defaultThinkingLevel: resolveDefaultThinkingLevel,
           onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
+          isThreadRunning: threadId =>
+            this.#prepared?.base.controller.listActiveThreadRuns().some(run => run.threadId === threadId) ?? false,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1865,7 +1910,7 @@ export class MastraFactory {
     const connectToolsList: ConnectToolsSource | { missing: ConnectToolsSetupMissing } =
       'projectId' in connectSetup
         ? {
-            client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+            client: createPlatformConnectClient(),
             projectId: connectSetup.projectId,
             toolsSource: connectToolsSource,
             resolveTools:
@@ -2024,6 +2069,7 @@ export class MastraFactory {
         // Factory owns Knowledge: without its own config, Knowledge stays off
         // rather than following the host's Mastra Code settings toggle.
         knowledge: this.#config.knowledge ?? false,
+        scopes: this.#config.scopes,
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase and work-item signals, when work
         // items are on, come after it.
@@ -2073,7 +2119,7 @@ export class MastraFactory {
           ...integrations.flatMap(integration => integration.processors?.output ?? []),
           new FactoryReplyCredentialProcessor(),
         ],
-        ...(vector ? { vector } : {}),
+        ...(vector ? { vector, ...embedding } : {}),
         extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
           const tools: IntegrationTools = {};
           const toolOwners = new Map<string, string>();
@@ -2204,7 +2250,13 @@ export class MastraFactory {
               }
             }
             if (integration.agentTools) {
-              mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              try {
+                mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              } catch (error) {
+                console.warn(
+                  `[factory] ${integration.id} tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
             }
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
@@ -2296,12 +2348,20 @@ export class MastraFactory {
             sessionRetirement,
             moveThread: async ({ threadId, resourceId }) => {
               // The sessions' own Memory, so a moved thread takes its observation vectors along.
-              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector, undefined, embedding);
               await sessionMemory({ requestContext: new RequestContext() }).updateThreadResourceId({
                 threadId,
                 resourceId,
               });
               await sessionMemory.settled();
+            },
+            renameThread: async ({ threadId, title }) => {
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector, undefined, embedding);
+              await sessionMemory({ requestContext: new RequestContext() }).updateThread({
+                id: threadId,
+                title,
+                metadata: { [TITLE_PINNED_THREAD_METADATA_KEY]: true },
+              });
             },
             factoryStorage: storage,
             integrationStorage,
@@ -2340,7 +2400,11 @@ export class MastraFactory {
             mcpEnabled,
             deploymentModelProviders,
             skills: this.#skills,
-            knowledgeKey: this.#config.knowledge?.key,
+            knowledgeKey:
+              this.#config.knowledge instanceof Knowledge
+                ? this.#config.knowledge.id
+                : this.#config.knowledge?.key.trim(),
+            knowledgeScopes: this.#config.scopes,
             configVersion,
             boardRegistry: boards,
             intakeEvaluator: this.#forcedIntake,
@@ -2374,7 +2438,7 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
-                reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                reconcileToolResults: () => factoryProcessor?.reconcileBoundThreads() ?? Promise.resolve(),
                 reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
                 ...(githubIntegration
@@ -2440,7 +2504,9 @@ export class MastraFactory {
           ...(hasPlatformCredentials()
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
-                client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+                providers: integrations.flatMap(integration =>
+                  isPlatformConnectProviderSource(integration) ? integration.platformConnectProviders() : [],
+                ),
               })
             : []),
           buildConnectToolsRoute(routeAuth, connectToolsList),
@@ -2468,6 +2534,10 @@ export class MastraFactory {
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           const timing = factoryTimingEnabled ? [createRequestTimingMiddleware()] : [];
           const sessionActivity = createSessionActivityMiddleware(() => this.#sessionUnloader);
+          const runStopMarker = createRunStopMarker({
+            auth: routeAuth,
+            workItems: () => (storage.isDomainReady('work-items') ? workItemsStorage : undefined),
+          });
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
@@ -2475,6 +2545,7 @@ export class MastraFactory {
               middleware: [
                 ...timing,
                 sessionActivity,
+                runStopMarker,
                 createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
@@ -2513,6 +2584,7 @@ export class MastraFactory {
                 },
                 controller: () => this.#prepared?.base.controller,
               }),
+              runStopMarker,
               sessionActivity,
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
@@ -2563,7 +2635,9 @@ export class MastraFactory {
           answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },
       );
+      observeSessionMemoryFailurePosts(session, () => prepared.base.controller.getChannels());
       observeSessionThreadStamp(session);
+      instrumentSessionFirstOutput(session);
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation
@@ -2665,36 +2739,54 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.workers)
-      .flatMap(({ integration }) =>
-        integration.workers!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              sandbox: sandboxConfig,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              integrations: integrationRegistrations,
-              configVersion,
-              boardRegistry: this.#projectBoards ?? this.#boards,
-              ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
-              // Only with the boards domain ready, as intake routes are.
-              ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
-              factoryReady,
-              domains,
-              // The Platform GitHub lane only receives pushes through its polling worker.
-              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
-              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-            },
-            integration.id,
-          ),
+    const readyContexts = integrationRegistrations
+      .filter(({ ready }) => ready)
+      .map(({ integration }) => ({
+        integration,
+        context: buildIntegrationContext(
+          {
+            controller: prepared.base.controller,
+            publicOrigin,
+            auth: routeAuth,
+            stateSigner,
+            sandbox: sandboxConfig,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            integrations: integrationRegistrations,
+            configVersion,
+            boardRegistry: this.#projectBoards ?? this.#boards,
+            ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
+            // Only with the boards domain ready, as intake routes are.
+            ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
+            factoryReady,
+            domains,
+            // The Platform GitHub lane only receives pushes through its polling worker.
+            ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
+            ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+          },
+          integration.id,
         ),
+      }));
+    const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
+      integration.workers ? integration.workers(context) : [],
+    );
+    // One event poller per deployment reads the platform event log of every
+    // Platform integration's connections and routes each event to its
+    // integration. Integrations without an event route add nothing.
+    const eventRoutes = readyContexts.flatMap(({ integration, context }) => {
+      if (!isPlatformConnectEventSource(integration)) return [];
+      const route = integration.connectEventRoute(context);
+      return route ? [route] : [];
+    });
+    if (eventRoutes.length > 0) {
+      integrationWorkers.push(
+        new PlatformConnectEventPoller({
+          storage: integrationStorage.forIntegration(PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID),
+          routes: eventRoutes,
+        }),
       );
+    }
 
     return {
       ...prepared.mastraArgs,

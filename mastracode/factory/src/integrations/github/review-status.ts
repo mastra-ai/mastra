@@ -82,8 +82,8 @@ export async function publishReviewStatus(
   if (canonical && !supersedesReviewStatus(existing, step.state)) {
     return { action: 'stale', commentId: canonical.id };
   }
-  // Later steps of an attempt carry only what changed; the start time and head
-  // come from the step that recorded them. A new attempt (queued or waiting to
+  // Later steps of an attempt carry only what changed; the start time, head and
+  // session link come from the step that recorded them. A new attempt (queued or waiting to
   // retry) starts clean, so it never reports an earlier attempt's timing, unless
   // it is only ending the run that earlier attempt started.
   const state =
@@ -96,6 +96,7 @@ export async function publishReviewStatus(
             ? { startedAt: step.state.startedAt ?? existing.startedAt }
             : {}),
           ...((step.state.head ?? existing.head) ? { head: step.state.head ?? existing.head } : {}),
+          ...((step.state.session ?? existing.session) ? { session: step.state.session ?? existing.session } : {}),
         }
       : step.state;
   // A run only ends a comment it opened: a run cancelled or finished before it

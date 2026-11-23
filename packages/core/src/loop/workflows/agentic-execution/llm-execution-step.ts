@@ -131,6 +131,7 @@ import type { EagerToolBailout, EagerToolExecutionCoordinator } from './eager-to
 import { getToolResultInvocationState } from './provider-tool-result-state';
 import type { PendingProviderToolCall } from './provider-tool-spans';
 import { endPendingProviderToolSpan } from './provider-tool-spans';
+import { resolveRunToolApprovalPolicy } from './tool-approval-verdict';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -2438,7 +2439,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         activeTools: readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') as
                           | string[]
                           | undefined,
-                        requireToolApproval: requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
+                        requireToolApproval: resolveRunToolApprovalPolicy(requireToolApproval, requestContext),
                         autoResumeSuspendedTools,
                         // Output processors reach the loop wrapped in a workflow, so the
                         // plain `processOutputStep` / `processLLMResponse` methods are not
@@ -3050,6 +3051,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // 1. Non-last model: processAPIError was already run in the catch block, result passed via processAPIErrorRetry
       // 2. Last model: error came as a stream chunk, run processAPIError now
       let apiErrorRetryResult: { retry: boolean } | undefined = processAPIErrorRetry;
+      const attemptError = runState.state.apiError;
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         // Settled first so the suspension gate below sees calls still running.
@@ -3167,6 +3169,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
+        // The retry opens its own inference span within this step, so close the failed one with its error.
+        if (attemptError) {
+          const failure = attemptError instanceof Error ? attemptError : new Error(String(attemptError));
+          modelSpanTracker?.failInference?.(failure);
+        }
         cleanupProviderToolSpans(true);
         // The failed attempt already streamed its partial output into the messageList.
         // Roll it back to this iteration's boundary, as a retrying tripwire does, so the
@@ -3208,6 +3215,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             reason: 'retry',
             warnings,
             isContinued: true,
+            // The failed request is re-attempted within the same logical step, as durable does:
+            // no step, no step-finish, and nothing counted against maxSteps (COR-1554).
+            signalPreempted: true,
           },
           metadata: {
             providerMetadata: runState.state.providerOptions,

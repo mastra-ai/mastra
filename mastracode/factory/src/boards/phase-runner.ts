@@ -8,6 +8,8 @@ export interface PhaseEntry {
   readonly initialEntry?: boolean;
   /** The card was moved into the phase it is already in, to run it again. */
   readonly reenter?: boolean;
+  /** The card came from another board: a phase of the same name there is a different phase. */
+  readonly boardEntry?: boolean;
 }
 
 /**
@@ -26,8 +28,8 @@ function workItemReference(item: FactoryStageRuleContext['item']): string {
  *
  * Card detail reaches the agent through the `factory-work-item` state signal, so the run only
  * names the work item and adds the runner's instructions. Entering from another phase starts
- * the skill even when that phase's agent shares the context and made the move: the skill is
- * queued onto its run. Re-entering the same phase supersedes the run in flight and resumes the
+ * the skill even when that phase's agent shares the context and made the move: the skill starts
+ * once that agent's run ends. Re-entering the same phase supersedes the run in flight and resumes the
  * skill with the fresh arguments.
  */
 export function phaseRunDecision(
@@ -36,7 +38,7 @@ export function phaseRunDecision(
   rule: Pick<FactoryStageRuleContext, 'ingress' | 'item' | 'fromStage'>,
   entry: PhaseEntry = {},
 ): FactoryInvokeSkillDecision | undefined {
-  const sameStage = rule.fromStage === phaseKey;
+  const sameStage = rule.fromStage === phaseKey && entry.boardEntry !== true;
   if (sameStage && !entry.initialEntry && !entry.reenter) return undefined;
   const phase = Object.hasOwn(board.phases, phaseKey) ? board.phases[phaseKey] : undefined;
   if (phase?.kind !== 'working' || !phase.runner.skill) return undefined;

@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   createPlatformConnectSession,
   createPlatformReconnectSession,
+  isPlatformConnectUnavailableError,
   listPlatformConnections,
   runHeadlessAuth,
   waitForActiveConnection,
@@ -22,6 +23,27 @@ export function usePlatformConnectionsQuery(provider: PlatformConnectProviderId,
     queryKey: queryKeys.platformConnections(provider),
     queryFn: () => listPlatformConnections(baseUrl, provider),
     enabled,
+    retry: false,
+  });
+}
+
+/**
+ * Whether the org has an active Platform connection to one provider. A deployment without Platform
+ * (403/404) has none: that answer is data, not an error, so a page that reads it again doesn't ask
+ * again. Keyed under the provider's connections, so connecting or disconnecting refreshes it.
+ */
+export function activePlatformConnectionQueryOptions(baseUrl: string, provider: PlatformConnectProviderId) {
+  return queryOptions({
+    queryKey: [...queryKeys.platformConnections(provider), 'active'],
+    queryFn: async () => {
+      try {
+        const connections = await listPlatformConnections(baseUrl, provider);
+        return connections.some(connection => connection.status === 'active');
+      } catch (error) {
+        if (isPlatformConnectUnavailableError(error)) return false;
+        throw error;
+      }
+    },
     retry: false,
   });
 }

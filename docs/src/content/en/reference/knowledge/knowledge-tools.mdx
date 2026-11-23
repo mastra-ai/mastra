@@ -343,7 +343,8 @@ Adds, restamps and removes notes. A note is one durable fact on a page. Link oth
   {
     name: 'scope',
     type: 'string[]',
-    description: 'Add and restamp: the stamp scope addresses. Required for both.',
+    description:
+      "Add: the stamp scope addresses; defaults to the page's own scope. Pass narrower scopes to keep a note private. Restamp: the new stamp scope addresses (required).",
     isOptional: true,
   },
   {
@@ -372,7 +373,7 @@ Removing a note and adding it again creates a new note ID. Errors:
 
 ```text
 Adding a note needs page and text.
-Adding a note needs scope: the stamp scopes.
+Restamping a note needs scope: the stamp scopes.
 Adding a note needs contributor on "team:acme:support"; this run has viewer there.
 Removing a note needs editor on "team:acme:support"; this run has viewer there.
 Knowledge note text exceeds the 250 token limit; split it into separate notes or put long-form text in the page body

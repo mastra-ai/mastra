@@ -185,6 +185,7 @@ interface MaybeConnectError {
   code?: unknown;
   status?: unknown;
   detail?: unknown;
+  source?: unknown;
 }
 
 /**
@@ -203,6 +204,8 @@ export function enrichToolError(toolId: string, error: unknown): Error {
   if (typeof data.status === 'number') extras.push(`status=${data.status}`);
   if (typeof data.code === 'string' && data.code) extras.push(`code=${data.code}`);
   if (typeof data.detail === 'string' && data.detail) extras.push(`detail=${data.detail}`);
+  // The platform itself refused the request (proxy rules, auth, missing connection), so it never reached the provider.
+  if (data.source === 'platform') extras.push('source=platform');
   if (extras.length === 0) return error;
   const enriched = new Error(`${error.message} [${extras.join(', ')}]`);
   enriched.stack = error.stack;
@@ -234,6 +237,14 @@ function stripPrefix(toolId: string): string {
  * can't bootstrap (e.g. a Stripe refund requires a captured charge, a Google
  * Analytics property requires an account the smoke user can't create).
  */
+/**
+ * True when the platform refused a call before it reached the provider. A
+ * probe's 4xx only proves the tool works when the provider sent it.
+ */
+export function refusedByPlatform(message: string): boolean {
+  return message.includes('source=platform');
+}
+
 export async function probeTool(
   call: <T>(toolId: string, input: unknown) => Promise<T>,
   availableTools: ResolvedToolset,
@@ -250,7 +261,7 @@ export async function probeTool(
     return makeStep(name, toolId, 'pass');
   } catch (error) {
     const msg = errorMessage(error);
-    return acceptable.test(msg)
+    return acceptable.test(msg) && !refusedByPlatform(msg)
       ? makeStep(name, toolId, 'pass', `expected error (endpoint exercised): ${msg.slice(0, 120)}`)
       : makeStep(name, toolId, 'fail', msg);
   }

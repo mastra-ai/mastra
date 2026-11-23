@@ -12,7 +12,13 @@ import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
-import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
+import type {
+  AIModelGenerationSpan,
+  ExportedSpan,
+  ObservabilityInstance,
+  Span,
+  SpanType,
+} from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
 import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
@@ -35,6 +41,7 @@ import {
 } from '../execution-fence';
 import { withExecutionStreamProducer } from '../execution-stream-publisher';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
+import { liveSegmentSpan, segmentSpanData } from '../segment-spans';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -42,6 +49,7 @@ import type {
   DurableAgenticExecutionOutput,
   DurableLLMStepOutput,
   DurableToolCallOutput,
+  RunRegistryEntry,
 } from '../types';
 import { createRunMessageList } from '../utils/run-message-list';
 import { runDurableFinishSideEffects } from './finalize-run';
@@ -234,6 +242,17 @@ function runTopicReplays(rt: DurableLoopRuntime): boolean {
   // An agent not registered here leaves the engine's bus to go by.
   const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub;
   return agentBus?.__replaysTopic?.(topic) ?? true;
+}
+
+function liveOrRebuiltAgentSpan(
+  agentSpanData: ExportedSpan<SpanType.AGENT_RUN> | undefined,
+  reg: RunRegistryEntry | undefined,
+  observability: ObservabilityInstance | undefined,
+): Span<SpanType.AGENT_RUN> | undefined {
+  if (!agentSpanData) return undefined;
+  return (
+    liveSegmentSpan(agentSpanData, reg?.resumeAgentSpan, reg?.agentSpan) ?? observability?.rebuildSpan(agentSpanData)
+  );
 }
 
 /**
@@ -1215,12 +1234,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: state.state,
             };
 
+            // The state carries the facts across workers; the registry is the fallback for
+            // runs whose snapshots predate those fields.
+            const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
+            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,
                 ...(textRewritten && { textRewritten }),
+                ...(stopCause && { stopCause }),
               });
             }
 
@@ -1228,46 +1253,44 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             // abandon it, but wait only after FINISH has released stream/generate callers.
             await finishResult.titleGeneration;
 
+            const finishReason = finalOutput.stepResult?.reason;
+            const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
+            if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
+              logger?.warn?.(
+                `[DurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
+              );
+            }
+            const termination =
+              ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+                ? recordedTermination
+                : agentLoopTermination({
+                    stopCause,
+                    delegationFailure: state.tracingDelegationFailure ?? reg?.tracingDelegationFailure,
+                    finishReason,
+                    tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                    maxSteps: initData.options?.maxSteps,
+                  });
+
             // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
-            // originals were ended as `suspended`, so end the *resume* spans (registry override).
+            // originals were ended as `suspended`, so end the pair the resume carried.
             try {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
-              const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
-              const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
-              const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+              const { agentSpanData, modelSpanData, carried } = segmentSpanData(
+                requestContext,
+                initData.runId,
+                initData,
+                reg,
+              );
               // Rebuilt spans end from snapshots taken at run start, so the clocks the
               // steps carried are applied here.
-              const clocks = carriedSpanClocks(reg, state);
-              // The state carries the facts across workers; the registry is the fallback for
-              // runs whose snapshots predate those fields.
-              const finishReason = finalOutput.stepResult?.reason;
-              const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
-              const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
-              if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
-                logger?.warn?.(
-                  `[DurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
-                );
-              }
-              const termination =
-                ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
-                  ? recordedTermination
-                  : agentLoopTermination({
-                      stopCause,
-                      delegationFailure: state.tracingDelegationFailure ?? reg?.tracingDelegationFailure,
-                      finishReason,
-                      tripwire: tripwire ?? state.lastStepResult?.tripwire,
-                      maxSteps: initData.options?.maxSteps,
-                    });
+              const clocks = carriedSpanClocks(reg, state, carried);
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan =
-                    reg?.resumeModelSpan ??
-                    reg?.modelSpan ??
-                    (observability.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-                      | AIModelGenerationSpan
-                      | undefined);
+                    liveSegmentSpan(modelSpanData, reg?.resumeModelSpan, reg?.modelSpan) ??
+                    (observability.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
                   const toolCalls = steps.flatMap(step =>
@@ -1291,23 +1314,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
                   });
                 }
-                if (agentSpanData) {
-                  const agentSpan =
-                    reg?.resumeAgentSpan ??
-                    reg?.agentSpan ??
-                    observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
-                  agentSpan?.end({
-                    ...termination,
-                    output: { text: finalText },
-                    ...(clocks ? { attributes: clocks } : {}),
-                  });
-                }
+                liveOrRebuiltAgentSpan(agentSpanData, reg, observability)?.end({
+                  ...termination,
+                  output: { text: finalText },
+                  ...(clocks ? { attributes: clocks } : {}),
+                });
               }
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
             }
 
-            return finalOutput;
+            // A recovery that finds this step saved ends its own spans with the same outcome and
+            // republishes FINISH with the same stop cause.
+            return { ...finalOutput, tracingTermination: termination, ...(stopCause && { stopCause }) };
           },
           { id: MAP_FINAL_OUTPUT_STEP_ID },
         )
@@ -1323,12 +1342,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   hydrateMessageListState(params, initData.messageListState),
                   hydrateMessageListState(params, inputData.messageListState),
                 ]);
+                const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
+                const { agentSpanData } = segmentSpanData(requestContext, initData.runId, initData, reg);
+                const agentSpan = liveOrRebuiltAgentSpan(
+                  agentSpanData,
+                  reg,
+                  (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext }),
+                );
                 void executeDurableAgentScorers({
                   initData: { ...initData, messageListState: initial },
                   finalOutput: { ...inputData, messageListState: final },
                   mastra: mastra as Mastra | undefined,
                   requestContext,
-                  tracingContext,
+                  tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
                   loadStoredMessages: loadRunStoredMessages(params),
                   scorerInstances: takeRunScorerInstances(initData.runId, mastra as Mastra | undefined),
                 }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));

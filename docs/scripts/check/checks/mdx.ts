@@ -143,7 +143,7 @@ function ruleIdForMessage(message: LintMessage): string {
   return `mastra/remark-${slugifyRuleName(message.ruleId ?? 'unknown')}`
 }
 
-const PAGE_RULES = new Set(['mastra/description-required', 'mastra/description-length'])
+const PAGE_RULES = new Set(['mastra/remark-mdx-parse', 'mastra/description-required', 'mastra/description-length'])
 
 /**
  * Runs every rule that needs the parsed MDX tree: remark-lint, structure, links, and bare URLs.
@@ -161,7 +161,7 @@ export const mdxCheck: Check = {
 
     for (const file of ctx.files) {
       const { tree, lintMessages } = await parseMdx(file)
-      // Generated model pages only get link and description checks; the other remark rules cover authored sections.
+      // Generated model and API pages only get link and description checks; the other remark rules cover authored sections.
       // The runner drops findings outside the selected categories.
       const remark = remarkFindings(file, lintMessages)
       findings.push(...(isFormattedFile(file) ? remark : remark.filter(item => PAGE_RULES.has(item.ruleId))))

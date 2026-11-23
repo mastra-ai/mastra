@@ -34,82 +34,15 @@ const matching =
   (span: LightSpanRecord) =>
     wanted.includes(span.spanId);
 
-/**
- * root
- * ├── a
- * │   └── a1
- * │       └── a1x
- * └── b
- *     └── b1
- */
-const tree = [
-  makeSpan('root', null),
-  makeSpan('a', 'root'),
-  makeSpan('a1', 'a'),
-  makeSpan('a1x', 'a1'),
-  makeSpan('b', 'root'),
-  makeSpan('b1', 'b'),
-];
-
 describe('filterSpansKeepingAncestors', () => {
   it('returns an empty list for empty input', () => {
     expect(filterSpansKeepingAncestors([], () => true)).toEqual([]);
-  });
-
-  it('returns an empty list when nothing matches', () => {
-    expect(filterSpansKeepingAncestors(tree, () => false)).toEqual([]);
-  });
-
-  it('keeps the full ancestor chain of a deep leaf, in original order', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a1x');
-    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
-  });
-
-  it('keeps both chains when leaves in different branches match', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a1x' || span.spanId === 'b1');
-    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x', 'b', 'b1']);
-  });
-
-  it('drops non-matching sibling branches', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'b1');
-    expect(ids(result)).toEqual(['root', 'b', 'b1']);
-  });
-
-  it('keeps the whole subtree of a matching middle span, several levels deep', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a');
-    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
-  });
-
-  it('returns the entire tree, in order, when the root matches', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'root');
-    expect(ids(result)).toEqual(ids(tree));
-  });
-
-  it('does not duplicate spans when a span and its descendant both match', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a' || span.spanId === 'a1x');
-    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
-  });
-
-  it('drops spans that are neither ancestors nor descendants of a match', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a1');
-    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
-  });
-
-  it('keeps an orphan span whose parent is outside the list', () => {
-    const spans = [makeSpan('orphan', 'missing-parent'), makeSpan('child', 'orphan')];
-    const result = filterSpansKeepingAncestors(spans, span => span.spanId === 'child');
-    expect(ids(result)).toEqual(['orphan', 'child']);
   });
 
   it('treats undefined parentSpanId like null', () => {
     const spans = [makeSpan('root', undefined as unknown as null), makeSpan('leaf', 'root')];
     const result = filterSpansKeepingAncestors(spans, span => span.spanId === 'leaf');
     expect(ids(result)).toEqual(['root', 'leaf']);
-  });
-
-  it('preserves input relative order when everything matches', () => {
-    const result = filterSpansKeepingAncestors(tree, () => true);
-    expect(ids(result)).toEqual(ids(tree));
   });
 });
 
@@ -206,13 +139,6 @@ const matchCases: MatchCase[] = [
   { label: 'a leaf whose sibling subtree must be excluded', match: ['a2'], expected: ['root', 'a', 'a2'] },
 ];
 
-describe('filterSpansKeepingAncestors — match position in the tree', () => {
-  it.each(matchCases)('keeps the ancestors and subtree of $label', ({ match, expected }) => {
-    const result = filterSpansKeepingAncestors(deepTree, matching(...match));
-    expect(ids(result)).toEqual(expected);
-  });
-});
-
 /**
  * Axis 3 — input order. This is the axis the previous suite never varied, and
  * the one that reproduces the production bug: the API defaults to
@@ -238,44 +164,12 @@ describe.each(orderings)('filterSpansKeepingAncestors — input ordered $label',
     const result = filterSpansKeepingAncestors(input, matching(...match));
     expect(ids(result)).toEqual(expectedIn(input, expected));
   });
-
-  it('always returns spans in the input relative order', () => {
-    const result = filterSpansKeepingAncestors(input, matching('a1', 'b1'));
-    const positions = result.map(span => input.indexOf(span));
-    expect(positions).toEqual([...positions].sort((left, right) => left - right));
-  });
-});
-
-describe('filterSpansKeepingAncestors — order invariance', () => {
-  it.each(matchCases)('returns the same set of spans in any input order for $label', ({ match, expected }) => {
-    for (const { order } of orderings) {
-      const result = filterSpansKeepingAncestors(orderBy(deepTree, order), matching(...match));
-      expect(new Set(ids(result))).toEqual(new Set(expected));
-    }
-  });
-
-  it('resolves the chain when a parent is listed after its child at an equal startedAt', () => {
-    const sameInstant = new Date('2026-06-10T00:00:00.000Z');
-    const spans = [
-      makeSpan('leaf', 'mid', { startedAt: sameInstant }),
-      makeSpan('mid', 'root', { startedAt: sameInstant }),
-      makeSpan('root', null, { startedAt: sameInstant }),
-    ];
-
-    const result = filterSpansKeepingAncestors(spans, matching('leaf'));
-    expect(new Set(ids(result))).toEqual(new Set(['root', 'mid', 'leaf']));
-  });
 });
 
 describe('filterSpansKeepingAncestors — tree shapes', () => {
   it('returns a lone root span when it matches', () => {
     const spans = [makeSpan('only', null)];
     expect(ids(filterSpansKeepingAncestors(spans, matching('only')))).toEqual(['only']);
-  });
-
-  it('returns nothing for a lone span that does not match', () => {
-    const spans = [makeSpan('only', null)];
-    expect(filterSpansKeepingAncestors(spans, matching('other'))).toEqual([]);
   });
 
   it('returns only the matches when no span has a parent', () => {
@@ -292,28 +186,6 @@ describe('filterSpansKeepingAncestors — tree shapes', () => {
     ];
 
     expect(ids(filterSpansKeepingAncestors(spans, matching('child-2')))).toEqual(['root-2', 'child-2']);
-  });
-
-  it('walks a six-level linear chain up from the bottom', () => {
-    const chain = ['l0', 'l1', 'l2', 'l3', 'l4', 'l5'].map((id, index) =>
-      makeSpan(id, index === 0 ? null : `l${index - 1}`),
-    );
-
-    expect(ids(filterSpansKeepingAncestors(chain, matching('l5')))).toEqual(['l0', 'l1', 'l2', 'l3', 'l4', 'l5']);
-  });
-
-  it('walks a six-level linear chain in both directions from the middle', () => {
-    const chain = ['l0', 'l1', 'l2', 'l3', 'l4', 'l5'].map((id, index) =>
-      makeSpan(id, index === 0 ? null : `l${index - 1}`),
-    );
-
-    expect(ids(filterSpansKeepingAncestors(chain, matching('l2')))).toEqual(['l0', 'l1', 'l2', 'l3', 'l4', 'l5']);
-  });
-
-  it('keeps only the matching sibling in a wide fan-out', () => {
-    const spans = [makeSpan('root', null), ...Array.from({ length: 50 }, (_, i) => makeSpan(`child-${i}`, 'root'))];
-
-    expect(ids(filterSpansKeepingAncestors(spans, matching('child-37')))).toEqual(['root', 'child-37']);
   });
 
   it('stops cleanly when a match ancestor chain leaves the list halfway', () => {

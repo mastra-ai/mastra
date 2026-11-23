@@ -14,15 +14,19 @@
  *
  * Each case covers a specific span-mapping behavior: span-kind mapping, model
  * parameters in metadata, tool calls in input/output messages, blank-message
- * filtering, input-wrapper unwrapping, and MCP tool kind mapping.
+ * filtering, input-wrapper unwrapping, and MCP tool kind mapping. The feedback
+ * cases intercept dd-trace's evaluation writer (`LLMObsEvalMetricsWriter.append`)
+ * the same way.
  */
 
 /// <reference types="node" />
 
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
-import type { AnyExportedSpan, TracingEvent } from '@mastra/core/observability';
+import type { AnyExportedSpan, ExportedFeedback, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import type { DatadogBridge } from './bridge';
 import { __setObservabilityFeaturesForTest } from './features';
 import type { DatadogExporter } from './tracing';
 
@@ -33,9 +37,12 @@ const require = createRequire(import.meta.url);
 // formatted, spec-compliant event. If a dd-trace upgrade moves this module, this
 // require throws — update the path to match the new internals.
 const SPAN_WRITER_PATH = 'dd-trace/packages/dd-trace/src/llmobs/writers/spans.js';
+const EVAL_WRITER_PATH = 'dd-trace/packages/dd-trace/src/llmobs/writers/evaluations.js';
 let SpanWriter: any;
+let EvalWriter: any;
 try {
   SpanWriter = require(SPAN_WRITER_PATH);
+  EvalWriter = require(EVAL_WRITER_PATH);
 } catch (e) {
   throw new Error(
     `Could not load dd-trace's LLMObs span writer at "${SPAN_WRITER_PATH}". ` +
@@ -46,8 +53,11 @@ try {
 
 /** Compliant LLM-Obs span events captured straight out of dd-trace's formatter. */
 let captured: any[] = [];
+let capturedFeedback: any[] = [];
 let origAppend: any;
 let origFlush: any;
+let origEvalAppend: any;
+let origEvalFlush: any;
 
 // A single shared exporter for the whole file. The exporter enables dd-trace's
 // global LLMObs span processor lazily and `shutdown()` would `disable()` it —
@@ -64,6 +74,13 @@ beforeAll(async () => {
     return true;
   };
   SpanWriter.prototype.flush = function () {};
+  origEvalAppend = EvalWriter.prototype.append;
+  origEvalFlush = EvalWriter.prototype.flush;
+  EvalWriter.prototype.append = function (event: any) {
+    capturedFeedback.push(event);
+    return true;
+  };
+  EvalWriter.prototype.flush = function () {};
 
   __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
   const { DatadogExporter } = await import('./tracing');
@@ -83,11 +100,14 @@ afterAll(async () => {
   } finally {
     SpanWriter.prototype.append = origAppend;
     SpanWriter.prototype.flush = origFlush;
+    EvalWriter.prototype.append = origEvalAppend;
+    EvalWriter.prototype.flush = origEvalFlush;
   }
 });
 
 beforeEach(() => {
   captured = [];
+  capturedFeedback = [];
   __setObservabilityFeaturesForTest(new Set(['model-inference-span']));
 });
 
@@ -289,5 +309,222 @@ describe('Datadog compliance — payloads validated by the real dd-trace formatt
       }),
     );
     expect(e.meta['span.kind']).toBe('tool');
+  });
+});
+
+describe('Datadog compliance — feedback reaches the trace of the run it rates', () => {
+  const hexId = (bytes: number) => randomBytes(bytes).toString('hex');
+
+  function thumbsDown(traceId: string, spanId?: string): { type: 'feedback'; feedback: ExportedFeedback } {
+    return {
+      type: 'feedback',
+      feedback: {
+        feedbackId: 'feedback-1',
+        timestamp: new Date(),
+        traceId,
+        spanId,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 'down',
+        comment: 'Wrong answer',
+        feedbackUserId: 'user-1',
+      },
+    };
+  }
+
+  it('sends late feedback to the Datadog span or trace with the Mastra IDs', async () => {
+    const traceId = hexId(16);
+    const spanId = hexId(8);
+    const run = await emit(makeSpan({ id: spanId, traceId, type: SpanType.AGENT_RUN, name: 'agent run' }));
+    expect(run.trace_id).toBe(traceId);
+
+    const { DatadogExporter } = await import('./tracing');
+    const restartedExporter = new DatadogExporter({ mlApp: 'compliance', apiKey: 'fake-key', agentless: true });
+    await restartedExporter.onFeedbackEvent(thumbsDown(traceId, spanId));
+
+    expect(capturedFeedback).toHaveLength(1);
+    expect(capturedFeedback[0]).toMatchObject({
+      event_kind: 'feedback',
+      span_id: run.span_id,
+      label: 'thumbs',
+      metric_type: 'categorical',
+      categorical_value: 'down',
+      reasoning: 'Wrong answer',
+      submitter: { id: 'user-1', type: 'user' },
+      ml_app: 'compliance',
+    });
+    expect(capturedFeedback[0].tags).toContain('feedback_source:user');
+
+    // Studio sends comments as `feedbackType: 'comment'` with the text as the value.
+    // A caller that is not signed in sends `feedbackUserId: null`, and the
+    // metadata copied from the rated span names the user of the run.
+    await restartedExporter.onFeedbackEvent({
+      type: 'feedback',
+      feedback: {
+        ...thumbsDown(traceId).feedback,
+        feedbackType: 'comment',
+        value: 'Cite a source',
+        comment: undefined,
+        feedbackUserId: null,
+        metadata: { userId: 'run-user' },
+      },
+    });
+    expect(capturedFeedback[1]).toMatchObject({
+      metric_type: 'text',
+      text_value: 'Cite a source',
+      trace_id: traceId,
+      submitter: { id: 'anonymous' },
+    });
+
+    // dd-trace rejects a feedback label that contains a dot.
+    await restartedExporter.onFeedbackEvent({
+      type: 'feedback',
+      feedback: { ...thumbsDown(traceId).feedback, feedbackType: 'quality.rating', value: 4 },
+    });
+    expect(capturedFeedback[2]).toMatchObject({ label: 'quality_rating', score_value: 4, trace_id: traceId });
+  });
+
+  it('keeps Mastra trace IDs that dd-trace could read differently', async () => {
+    // dd-trace reads an ID of only digits as a decimal number, and the Datadog
+    // agent drops a span whose 64-bit APM trace ID is 0.
+    for (const traceId of ['12345678901234567890123456789012', 'abcdefabcdefabcd0000000000000000']) {
+      const run = await emit(makeSpan({ traceId, type: SpanType.AGENT_RUN }));
+      expect(run.trace_id).toBe(traceId);
+      expect(run._dd.apm_trace_id).not.toMatch(/0{16}$/);
+    }
+
+    const tracer = (await import('dd-trace')).default;
+    const traceId = '98765432109876543210987654321098';
+    const run = await tracer.trace('web.request', () => emit(makeSpan({ traceId, type: SpanType.AGENT_RUN })));
+    expect(run.trace_id).toBe(traceId);
+  });
+
+  it('keeps the Mastra trace ID when the app extracts only W3C trace headers', async () => {
+    const tracer = (await import('dd-trace')).default;
+    const styles = (tracer as any)._tracer._config.tracePropagationStyle;
+    const extract = styles.extract;
+    styles.extract = ['tracecontext'];
+    try {
+      const traceId = hexId(16);
+      expect((await emit(makeSpan({ traceId, type: SpanType.AGENT_RUN }))).trace_id).toBe(traceId);
+    } finally {
+      styles.extract = extract;
+    }
+  });
+
+  it('keeps the Mastra trace ID when the app restarts or ignores extracted traces', async () => {
+    const config = ((await import('dd-trace')).default as any)._tracer._config;
+    const behavior = config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT;
+    try {
+      for (const value of ['restart', 'ignore']) {
+        config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = value;
+        const traceId = hexId(16);
+        expect((await emit(makeSpan({ traceId, type: SpanType.AGENT_RUN }))).trace_id).toBe(traceId);
+      }
+    } finally {
+      config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = behavior;
+    }
+  });
+
+  it("keeps each run inside the app's APM trace with its own trace ID", async () => {
+    const tracer = (await import('dd-trace')).default;
+    const traceId = hexId(16);
+    const secondTraceId = hexId(16);
+    let appApmTraceId: string | undefined;
+    let requestChunkSpanIds: string[] = [];
+    let requestTraceTags: Record<string, string> = {};
+
+    await tracer.trace('web.request', async request => {
+      appApmTraceId = request.context().toTraceId(true);
+      await emit(makeSpan({ id: hexId(8), traceId, type: SpanType.AGENT_RUN, name: 'agent run' }));
+      await emit(makeSpan({ traceId: secondTraceId, type: SpanType.AGENT_RUN, name: 'second agent run' }));
+      // Spans sent to Datadog APM in the same chunk as the request. A run sent in a
+      // chunk of its own shows up in APM as a new service entry span.
+      requestChunkSpanIds = (request.context() as any)._trace.started.map((span: any) => span.context().toSpanId());
+      requestTraceTags = (request.context() as any)._trace.tags;
+    });
+
+    const [run, secondRun] = captured;
+    expect(run.trace_id).toBe(traceId);
+    expect(secondRun.trace_id).toBe(secondTraceId);
+    expect(run._dd.apm_trace_id).toBe(appApmTraceId);
+    expect(requestChunkSpanIds).toContain(run.span_id);
+    // Datadog joins OpenTelemetry `gen_ai` spans of the request under this span.
+    expect(requestTraceTags.llmobs_parent_id).toBe(run.span_id);
+  });
+
+  it('sends a late score to the span with the Mastra span ID', async () => {
+    const traceId = hexId(16);
+    const spanId = hexId(8);
+    const run = await emit(makeSpan({ id: spanId, traceId, type: SpanType.AGENT_RUN, name: 'agent run' }));
+    expect(run.span_id).toBe(BigInt(`0x${spanId}`).toString(10));
+
+    const { DatadogExporter } = await import('./tracing');
+    const restartedExporter = new DatadogExporter({ mlApp: 'compliance', apiKey: 'fake-key', agentless: true });
+    await restartedExporter.onScoreEvent({
+      type: 'score',
+      score: { scoreId: 'score-1', timestamp: new Date(), traceId, spanId, scorerId: 'accuracy', score: 0.4 },
+    } as any);
+
+    expect(capturedFeedback).toHaveLength(1);
+    expect(capturedFeedback[0]).toMatchObject({
+      join_on: { span: { span_id: run.span_id, trace_id: traceId } },
+      label: 'accuracy',
+      score_value: 0.4,
+    });
+  });
+
+  it('sends the pass or fail assessment that the app sets on feedback', async () => {
+    const { DatadogExporter } = await import('./tracing');
+    const { DatadogBridge } = await import('./bridge');
+    const config = { mlApp: 'compliance', apiKey: 'fake-key', agentless: true };
+
+    for (const destination of [new DatadogExporter(config), new DatadogBridge(config)]) {
+      capturedFeedback = [];
+      for (const metadata of [
+        { datadog: { assessment: 'pass' } },
+        { datadog: { assessment: 'fail' } },
+        // dd-trace rejects this value. The rating itself must still reach Datadog.
+        { datadog: { assessment: 'bad' } },
+        // Feedback can inherit this from the run, so it is not the app's verdict.
+        { assessment: 'pass' },
+      ]) {
+        await destination.onFeedbackEvent({
+          type: 'feedback',
+          feedback: { ...thumbsDown(hexId(16)).feedback, metadata },
+        });
+      }
+      expect(capturedFeedback.map(feedback => [feedback.categorical_value, feedback.assessment])).toEqual([
+        ['down', 'pass'],
+        ['down', 'fail'],
+        ['down', undefined],
+        ['down', undefined],
+      ]);
+    }
+  });
+
+  it('sends bridge feedback to the Datadog trace with the Mastra trace ID', async () => {
+    const { DatadogBridge } = await import('./bridge');
+    const bridge: DatadogBridge = new DatadogBridge({ mlApp: 'compliance', apiKey: 'fake-key', agentless: true });
+    const ids = bridge.createSpan({ name: 'agent run', type: SpanType.AGENT_RUN } as any)!;
+
+    // A tool's HTTP call to another service carries the run's LLM Observability trace ID.
+    const tracer = (await import('dd-trace')).default;
+    const headers = await bridge.executeInContext(ids.spanId, async () => {
+      const carrier: Record<string, string> = {};
+      tracer.inject(tracer.scope().active()!, 'text_map', carrier);
+      return carrier;
+    });
+    expect(headers['x-datadog-tags']).toContain(`_dd.p.llmobs_trace_id=${ids.traceId}`);
+
+    await bridge.exportTracingEvent(
+      ended(makeSpan({ id: ids.spanId, traceId: ids.traceId, type: SpanType.AGENT_RUN, name: 'agent run' })),
+    );
+    expect(captured[captured.length - 1].trace_id).toBe(ids.traceId);
+
+    await bridge.onFeedbackEvent(thumbsDown(ids.traceId));
+
+    expect(capturedFeedback).toHaveLength(1);
+    expect(capturedFeedback[0]).toMatchObject({ event_kind: 'feedback', trace_id: ids.traceId, label: 'thumbs' });
   });
 });

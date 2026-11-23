@@ -1,5 +1,89 @@
 # create-factory
 
+## 0.5.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.40.2-alpha.5
+
+## 0.5.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b6265ab`](https://github.com/mastra-ai/mastra/commit/b6265ab10fd0dbd3c21a414ff5a7833a110f58a8)]:
+  - mastra@1.40.2-alpha.4
+
+## 0.5.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d), [`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d), [`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d), [`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d)]:
+  - mastra@1.40.2-alpha.3
+
+## 0.5.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`a4c8a94`](https://github.com/mastra-ai/mastra/commit/a4c8a94f3b94fe21d016190fb7981bfad6997c3c), [`2f85a55`](https://github.com/mastra-ai/mastra/commit/2f85a551a9fe308179bd96da49032259275cd850)]:
+  - mastra@1.40.2-alpha.2
+
+## 0.5.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.40.2-alpha.1
+
+## 0.5.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`855c40b`](https://github.com/mastra-ai/mastra/commit/855c40b55e00228ab0f556d060a1dd2490151dc2), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485)]:
+  - mastra@1.40.2-alpha.0
+
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`5a9d006`](https://github.com/mastra-ai/mastra/commit/5a9d006d2b84d0726ead851d3275ba386ab2f4b0), [`81cdee1`](https://github.com/mastra-ai/mastra/commit/81cdee13dd7792896cc27e8b485d2a824b7e7243), [`64d19ea`](https://github.com/mastra-ai/mastra/commit/64d19eaf35b326c047d7dedb25ea586507128373), [`8e3dec7`](https://github.com/mastra-ai/mastra/commit/8e3dec7f76bef9e54e07020063cd9ad68bd87ff0), [`81cdee1`](https://github.com/mastra-ai/mastra/commit/81cdee13dd7792896cc27e8b485d2a824b7e7243), [`6366e5d`](https://github.com/mastra-ai/mastra/commit/6366e5d6c585dac90c57cb0aae8e5c08edd48a85), [`81cdee1`](https://github.com/mastra-ai/mastra/commit/81cdee13dd7792896cc27e8b485d2a824b7e7243), [`d175af1`](https://github.com/mastra-ai/mastra/commit/d175af10aa50433e0e79b35e38ad110023ed30ad), [`d11556f`](https://github.com/mastra-ai/mastra/commit/d11556f4fd1b6ebc7e73f087027d9a3bbc529857), [`7863d9b`](https://github.com/mastra-ai/mastra/commit/7863d9bf445e0ac96f4a53a239bd89dc9c8b2ad2)]:
+  - mastra@1.40.1
+
+## 0.5.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`8e3dec7`](https://github.com/mastra-ai/mastra/commit/8e3dec7f76bef9e54e07020063cd9ad68bd87ff0), [`7863d9b`](https://github.com/mastra-ai/mastra/commit/7863d9bf445e0ac96f4a53a239bd89dc9c8b2ad2)]:
+  - mastra@1.40.1-alpha.4
+
+## 0.5.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`5a9d006`](https://github.com/mastra-ai/mastra/commit/5a9d006d2b84d0726ead851d3275ba386ab2f4b0), [`6366e5d`](https://github.com/mastra-ai/mastra/commit/6366e5d6c585dac90c57cb0aae8e5c08edd48a85)]:
+  - mastra@1.40.1-alpha.3
+
+## 0.5.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`d175af1`](https://github.com/mastra-ai/mastra/commit/d175af10aa50433e0e79b35e38ad110023ed30ad), [`d11556f`](https://github.com/mastra-ai/mastra/commit/d11556f4fd1b6ebc7e73f087027d9a3bbc529857)]:
+  - mastra@1.40.1-alpha.2
+
+## 0.5.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`64d19ea`](https://github.com/mastra-ai/mastra/commit/64d19eaf35b326c047d7dedb25ea586507128373)]:
+  - mastra@1.40.1-alpha.1
+
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`81cdee1`](https://github.com/mastra-ai/mastra/commit/81cdee13dd7792896cc27e8b485d2a824b7e7243), [`81cdee1`](https://github.com/mastra-ai/mastra/commit/81cdee13dd7792896cc27e8b485d2a824b7e7243), [`81cdee1`](https://github.com/mastra-ai/mastra/commit/81cdee13dd7792896cc27e8b485d2a824b7e7243)]:
+  - mastra@1.40.1-alpha.0
+
 ## 0.5.0
 
 ### Minor Changes

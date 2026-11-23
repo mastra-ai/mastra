@@ -19,6 +19,7 @@ import type {
   ModelInferenceAttributes,
   ModelStepAttributes,
   ScoreEvent,
+  FeedbackEvent,
 } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
@@ -27,7 +28,19 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
 import { isModelInferenceEnabled } from './features';
 import { formatUsageMetrics } from './metrics';
-import { ensureTracer, kindFor, toDate, formatInput, formatOutput, toDatadogLinks } from './utils';
+import {
+  ensureTracer,
+  kindFor,
+  toDate,
+  formatInput,
+  formatOutput,
+  toDatadogLinks,
+  toLlmObsTraceId,
+  toLlmObsTraceIdTag,
+  toFeedbackOptions,
+  toDatadogSpanId,
+  LLMOBS_TRACE_ID_TAG,
+} from './utils';
 import type { DatadogSpanKind } from './utils';
 
 /**
@@ -46,6 +59,8 @@ interface LLMObsSpanOptions {
   startTime?: Date;
   /** Links to spans in other traces, forwarded by llmobs.trace() to the APM span. */
   links?: { context: any }[];
+  /** APM parent context, forwarded by llmobs.trace() to the APM span. */
+  childOf?: unknown;
 }
 
 /**
@@ -85,6 +100,63 @@ const MAX_TRACE_LIFETIME_MS = 30 * 60 * 1000;
  * Regular cleanup interval for trace state entries (1 minute).
  */
 const REGULAR_CLEANUP_INTERVAL_MS = 1 * 60 * 1000;
+
+/**
+ * Runs `emit` so dd-trace gives new spans the Mastra trace ID as their LLM
+ * Observability trace ID. dd-trace reads it from the `_dd.p.llmobs_trace_id` tag
+ * of the APM trace a span joins. Under a parent span the tag is set on the
+ * parent's trace for the synchronous emit only, and an upstream value is kept.
+ * Without a parent, `emit` gets a context that starts a trace with the tag.
+ */
+function emitWithLlmObsTraceId(traceId: string, parent: any, emit: (childOf?: unknown) => void): void {
+  const llmObsTraceId = toLlmObsTraceId(traceId);
+  if (!llmObsTraceId) return emit();
+
+  if (!parent) {
+    // The `log` format does not depend on the propagation styles that the app
+    // extracts. The Datadog agent drops a span whose 64-bit trace ID is 0.
+    const apmTraceId = llmObsTraceId.replace(/0{16}$/, '0000000000000001');
+    const childOf: any = tracer.extract('log', { dd: { trace_id: apmTraceId, span_id: '0' } });
+    if (childOf) {
+      // dd-trace discards a remote parent when DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+      // is `restart` or `ignore`. This context is not from a remote service.
+      childOf._isRemote = false;
+      childOf._trace.tags[LLMOBS_TRACE_ID_TAG] = toLlmObsTraceIdTag(llmObsTraceId);
+    }
+    return emit(childOf ?? undefined);
+  }
+
+  const traceTags = parent.context?.()?._trace?.tags;
+  if (!traceTags || traceTags[LLMOBS_TRACE_ID_TAG]) return emit();
+  traceTags[LLMOBS_TRACE_ID_TAG] = toLlmObsTraceIdTag(llmObsTraceId);
+  try {
+    emit();
+  } finally {
+    delete traceTags[LLMOBS_TRACE_ID_TAG];
+  }
+}
+
+/** Mastra span IDs that can be Datadog span IDs: 16 hex characters, not 0. */
+const MASTRA_SPAN_ID = /^(?!0{16})[0-9a-f]{16}$/i;
+
+/**
+ * Gives a new dd-trace span the Mastra span ID, so a score that arrives after
+ * the run can target the span by its Mastra IDs. dd-trace has no option to
+ * choose a span ID, so the ID is written to the span context. The `log` format
+ * builds the ID object.
+ */
+function useMastraSpanId(ddSpan: any, spanId: string): void {
+  if (!MASTRA_SPAN_ID.test(spanId)) return;
+  const context = ddSpan.context?.();
+  const ddSpanId = (tracer.extract('log', { dd: { trace_id: '1', span_id: toDatadogSpanId(spanId) } }) as any)?._spanId;
+  if (!context || !ddSpanId) return;
+  const generatedSpanId = context.toSpanId();
+  context._spanId = ddSpanId;
+  // dd-trace saves the first LLM span ID of a trace in this tag. Datadog uses it
+  // to join OpenTelemetry `gen_ai` spans to the LLM Observability trace.
+  const traceTags = context._trace?.tags;
+  if (traceTags?.llmobs_parent_id === generatedSpanId) traceTags.llmobs_parent_id = context.toSpanId();
+}
 
 /**
  * Configuration options for the Datadog LLM Observability exporter.
@@ -441,10 +513,11 @@ export class DatadogExporter extends BaseExporter {
    * On Mastra's normal scoring path this is always true — scorer hooks fire after the
    * scored entity completes, so the root span has ended by the time `onScoreEvent` runs.
    *
-   * If a score arrives for an unexported span (either before `SPAN_ENDED` or after the
-   * `traceState` entry has been cleaned up), the event is dropped and a warning is logged
-   * so the misuse is observable. Scores must therefore only be submitted for spans whose
-   * lifecycle has completed.
+   * If a score arrives for a span of a trace that is still in `traceState` but not yet
+   * emitted, the event is dropped and a warning is logged so the misuse is observable.
+   * A score for a trace that is no longer in `traceState` (cleaned up, or emitted by
+   * another process) targets the Datadog IDs made from its Mastra IDs, because emitted
+   * spans use the Mastra trace and span IDs.
    */
   async onScoreEvent(event: ScoreEvent): Promise<void> {
     if (this.isDisabled || !(tracer as any).llmobs?.submitEvaluation) return;
@@ -457,8 +530,13 @@ export class DatadogExporter extends BaseExporter {
       return;
     }
 
-    const ctx = this.traceState.get(score.traceId)?.contexts.get(score.spanId);
-    const exported = ctx?.exported;
+    const state = this.traceState.get(score.traceId);
+    const lateTraceId = state ? undefined : toLlmObsTraceId(score.traceId);
+    const exported =
+      state?.contexts.get(score.spanId)?.exported ??
+      (lateTraceId && MASTRA_SPAN_ID.test(score.spanId)
+        ? { traceId: lateTraceId, spanId: toDatadogSpanId(score.spanId) }
+        : undefined);
     if (!exported) {
       this.logger.warn(
         'Datadog exporter: dropping score for span that has not been emitted to dd-trace yet ' +
@@ -492,6 +570,41 @@ export class DatadogExporter extends BaseExporter {
         traceId: score.traceId,
         spanId: score.spanId,
         scorerId: score.scorerId,
+      });
+    }
+  }
+
+  /** Submit feedback recorded with `addFeedback()` to Datadog LLM Observability. */
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    if (this.isDisabled || !(tracer as any).llmobs?.submitFeedback) return;
+
+    const { feedback } = event;
+    const traceId = feedback.traceId ? toLlmObsTraceId(feedback.traceId) : undefined;
+    if (!traceId) {
+      this.logger.debug('Datadog exporter: dropping feedback with no traceId', { feedbackId: feedback.feedbackId });
+      return;
+    }
+
+    const span = feedback.spanId
+      ? this.traceState.get(feedback.traceId!)?.contexts.get(feedback.spanId)?.exported
+      : undefined;
+    // Late feedback targets the span by its Mastra span ID, which is also its Datadog span ID.
+    const target = span
+      ? { span }
+      : feedback.spanId && MASTRA_SPAN_ID.test(feedback.spanId)
+        ? { spanId: toDatadogSpanId(feedback.spanId) }
+        : { traceId };
+    try {
+      this.pendingSend = true;
+      tracer.llmobs.submitFeedback({
+        ...target,
+        ...toFeedbackOptions(feedback, this.config.mlApp),
+      });
+    } catch (err) {
+      this.logger.error('Datadog exporter: Failed to submit feedback', {
+        error: err,
+        traceId: feedback.traceId,
+        feedbackId: feedback.feedbackId,
       });
     }
   }
@@ -649,7 +762,9 @@ export class DatadogExporter extends BaseExporter {
       // Build tree and emit recursively
       const tree = this.buildSpanTree(state.buffer);
       if (tree) {
-        this.emitSpanTree(tree, state);
+        emitWithLlmObsTraceId(traceId, tracer.scope().active(), childOf =>
+          this.emitSpanTree(tree, state, undefined, childOf),
+        );
       }
 
       // Clear the buffer and mark tree as emitted
@@ -681,9 +796,15 @@ export class DatadogExporter extends BaseExporter {
           if (parentCtx) {
             // Activating the parent keeps APM trace continuity even though
             // LLMObs cannot re-parent onto an already-emitted span
-            tracer.scope().activate(parentCtx.ddSpan, () => this.emitSpanTree(subTree, state));
+            tracer
+              .scope()
+              .activate(parentCtx.ddSpan, () =>
+                emitWithLlmObsTraceId(traceId, parentCtx.ddSpan, () => this.emitSpanTree(subTree, state)),
+              );
           } else {
-            this.emitSpanTree(subTree, state);
+            emitWithLlmObsTraceId(traceId, tracer.scope().active(), childOf =>
+              this.emitSpanTree(subTree, state, undefined, childOf),
+            );
           }
           emitted = true;
           break;
@@ -844,9 +965,11 @@ export class DatadogExporter extends BaseExporter {
     node: SpanNode,
     state: TraceState,
     inheritedModelAttrs?: { model?: string; provider?: string },
+    childOf?: unknown,
   ): void {
     const span = node.span;
     const { traceOptions, endTimeMs } = this.buildSpanOptions(span, inheritedModelAttrs);
+    if (childOf) traceOptions.childOf = childOf;
 
     // If this is a MODEL_GENERATION, propagate its model/provider to MODEL_STEP descendants
     // so the LLM-kind step spans in Datadog have a model name attached.
@@ -862,6 +985,8 @@ export class DatadogExporter extends BaseExporter {
     // This ensures the Datadog SDK automatically establishes parent-child relationships
     this.pendingSend = true;
     tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
+      useMastraSpanId(ddSpan, span.id);
+
       // Annotate this span (must happen before finish — annotate throws on finished spans)
       const annotations = this.buildAnnotations(span);
       if (Object.keys(annotations).length > 0) {

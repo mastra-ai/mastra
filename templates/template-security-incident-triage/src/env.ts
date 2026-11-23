@@ -79,7 +79,7 @@ export function readServerConfig(environment: NodeJS.ProcessEnv = process.env): 
 export { hasEnabledIntegration, readIntegrationConfig, type IntegrationConfig } from './config/integrations.js';
 
 const agentEnvironmentSchema = z.object({
-  MASTRA_MODEL: z.string().trim().min(1).default('openai/gpt-4o-mini'),
+  MASTRA_MODEL: z.string().trim().min(1).default('openai/gpt-6-luna'),
   // WorkOS and IPinfo run concurrently inside the integrated identity branch.
   // Leave headroom beyond either provider's 1.5 s deadline for parsing and
   // persistence instead of racing equal-duration timers.

@@ -516,13 +516,19 @@ jobs:
           # already passed, so a green run would be skipped and each later green push would
           # alert "green again" against the last red one.
           # Prints failure, success, or nothing when the run was cancelled or unreadable.
+          # Cancellation is checked first: when a newer push cancels a run, Merge Test Reports
+          # fails because its shards were cancelled, and that superseded run must not count as
+          # red. A cancelled run also never judged its own state (see above), so the comparison
+          # skips it like this run would have.
           job_state() {
             local conclusions
             conclusions=$(gh api --paginate "$1?per_page=100" \
               --jq '.jobs[] | select(.name | startswith("Notify Slack") | not) | .conclusion' 2>/dev/null) || return 0
-            if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
+            if grep -qx cancelled <<< "$conclusions"; then
+              return 0
+            elif grep -qxE 'failure|timed_out' <<< "$conclusions"; then
               echo failure
-            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
+            elif [ -n "$conclusions" ]; then
               echo success
             fi
           }

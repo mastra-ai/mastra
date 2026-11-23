@@ -219,7 +219,7 @@ The `MastraAuthProviderOptions` interface supports these options:
 | `protected` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that require authentication |
 | `public` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that bypass authentication, unless the route sets `requiresAuth: true` |
 
-### Path Patterns
+### Path patterns
 
 Configure which paths require authentication using pattern matching:
 
@@ -263,7 +263,7 @@ export const mastra = new Mastra({
 
 The `@mastra/auth` package provides utilities for common token verification patterns:
 
-### JWT Verification
+### JWT verification
 
 ```typescript
 import { verifyHmac, verifyJwks, decodeToken, getTokenIssuer } from '@mastra/auth'
@@ -281,7 +281,7 @@ const decoded = await decodeToken(token)
 const issuer = getTokenIssuer(decoded)
 ```
 
-### Example: JWKS-based Provider
+### Example: JWKS-based provider
 
 ```typescript
 import { MastraAuthProvider } from '@mastra/core/server'
@@ -357,7 +357,7 @@ const auth = new MyAuthProvider({
 })
 ```
 
-### Role-based Authorization
+### Role-based authorization
 
 ```typescript
 import { getWebRequest } from '@mastra/core/server'
@@ -574,7 +574,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 
 Mastra includes these auth providers as reference implementations:
 
-- **MastraJwtAuth**: Simple JWT verification with HMAC secrets (`@mastra/auth`)
+- **MastraJwtAuth**: JWT verification with HMAC secrets (`@mastra/auth`)
 - **MastraAuthClerk**: Clerk authentication (`@mastra/auth-clerk`)
 - **MastraAuthAuth0**: Auth0 authentication (`@mastra/auth-auth0`)
 - **MastraAuthSupabase**: Supabase authentication (`@mastra/auth-supabase`)

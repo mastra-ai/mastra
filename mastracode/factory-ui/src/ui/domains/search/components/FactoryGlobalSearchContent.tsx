@@ -6,6 +6,7 @@ import {
   CommandPaletteResults,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -14,7 +15,7 @@ import { cardPath } from '../../workspaces/services/factoryPaths';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
 import { useGlobalSearchWorkItems } from '../hooks/useGlobalSearchWorkItems';
-import { createSessionSearchGroups, createWorkItemSearchResults } from '../services/searchResults';
+import { createSessionSearchGroups, createWorkItemSearchResults, matchingResults } from '../services/searchResults';
 import {
   createGlobalSearchScopeCounts,
   isSessionScope,
@@ -53,6 +54,8 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     workItems: workItems.unstarted,
     boards: catalog.data,
   });
+  // The board's own search decides which session and card rows show; the rail keeps counting them all.
+  const terms = searchTerms(query);
   const counts = createGlobalSearchScopeCounts({
     work: sessionGroups.work.length,
     review: sessionGroups.review.length,
@@ -80,19 +83,31 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchNavigationResults factoryId={factoryId} onSelect={selectPath} />
           )}
           {scopeIncludes(activeScope, 'work') && (
-            <GlobalSearchSessionResults title="Work Sessions" results={sessionGroups.work} onSelect={selectPath} />
+            <GlobalSearchSessionResults
+              title="Work Sessions"
+              results={matchingResults(sessionGroups.work, terms)}
+              onSelect={selectPath}
+            />
           )}
           {scopeIncludes(activeScope, 'review') && (
-            <GlobalSearchSessionResults title="Review Sessions" results={sessionGroups.review} onSelect={selectPath} />
+            <GlobalSearchSessionResults
+              title="Review Sessions"
+              results={matchingResults(sessionGroups.review, terms)}
+              onSelect={selectPath}
+            />
           )}
           {scopeIncludes(activeScope, 'items') && (
             <GlobalSearchWorkItemResults
-              results={unstartedItems}
+              results={matchingResults(unstartedItems, terms)}
               onSelect={result => selectPath(cardPath(factoryId, result.item.id, undefined), false)}
             />
           )}
           {scopeIncludes(activeScope, 'user') && (
-            <GlobalSearchSessionResults title="User Sessions" results={sessionGroups.user} onSelect={selectPath} />
+            <GlobalSearchSessionResults
+              title="User Sessions"
+              results={matchingResults(sessionGroups.user, terms)}
+              onSelect={selectPath}
+            />
           )}
           {isSessionScope(activeScope) && hasRepositories && (
             <GlobalSearchSessionsStatus pending={sessionsPending} failed={sessions.failed} onRetry={sessions.retry} />

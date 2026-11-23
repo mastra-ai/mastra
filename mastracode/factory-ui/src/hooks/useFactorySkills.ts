@@ -19,13 +19,13 @@ export function useFactorySkillsQuery(factoryProjectId?: string) {
   });
 }
 
-/** Sends one write to a project's skills and returns the skill it leaves, or null when it deleted the skill. */
+/** Sends one write to a project's skills and returns the skill it leaves, or undefined when it deleted the skill. */
 async function sendSkillWrite(
   baseUrl: string,
   path: string,
   method: 'POST' | 'PUT' | 'DELETE',
   body?: Record<string, string>,
-): Promise<FactorySkillInfo | null> {
+): Promise<FactorySkillInfo | undefined> {
   const res = await fetch(`${baseUrl}${path}`, {
     method,
     credentials: 'include',
@@ -38,47 +38,58 @@ async function sendSkillWrite(
   if (!res.ok || !json || json.skill === undefined) {
     throw new Error(json?.message ?? json?.error ?? `Request failed (${res.status})`);
   }
-  return json.skill;
+  return json.skill ?? undefined;
 }
 
 const skillsPath = (factoryProjectId: string) => `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/skills`;
 
-/** Refreshes the skills, and the boards, whose phases flag a skill that is missing. */
-function useInvalidateSkills(factoryProjectId: string | undefined) {
+function upsertSkill(skills: FactorySkillInfo[], skill: FactorySkillInfo): FactorySkillInfo[] {
+  return skills.some(other => other.name === skill.name)
+    ? skills.map(other => (other.name === skill.name ? skill : other))
+    : [...skills, skill];
+}
+
+// A deleted skill stays cached until the refetch: dropping it first flashes its still-open page as not found.
+function useApplySkillWrite(factoryProjectId: string) {
   const queryClient = useQueryClient();
-  return () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.factorySkills(factoryProjectId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.boardCatalog(factoryProjectId) }),
-    ]);
+  return (skill: FactorySkillInfo | undefined) => {
+    if (skill) {
+      queryClient.setQueryData<FactorySkillsResponse>(
+        queryKeys.factorySkills(factoryProjectId),
+        catalog => catalog && { ...catalog, skills: upsertSkill(catalog.skills, skill) },
+      );
+    }
+    void queryClient.invalidateQueries({ queryKey: queryKeys.factorySkills(factoryProjectId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.boardCatalog(factoryProjectId) });
+  };
 }
 
 /**
  * Save (`content`) or revert (`content: null`) a project's edit of one skill. For a skill the project created,
  * saving updates it and `content: null` deletes it.
  */
-export function useFactorySkillEditMutation(factoryProjectId: string | undefined) {
+export function useFactorySkillEditMutation(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
-  const invalidate = useInvalidateSkills(factoryProjectId);
+  const applyWrite = useApplySkillWrite(factoryProjectId);
   return useMutation({
     mutationFn: ({ name, content }: { name: string; content: string | null }) =>
       sendSkillWrite(
         baseUrl,
-        `${skillsPath(factoryProjectId!)}/${encodeURIComponent(name)}`,
+        `${skillsPath(factoryProjectId)}/${encodeURIComponent(name)}`,
         content === null ? 'DELETE' : 'PUT',
         content === null ? undefined : { content },
       ),
-    onSuccess: invalidate,
+    onSuccess: applyWrite,
   });
 }
 
 /** Creates a skill for one Factory project. Mirrors `POST /web/factory/projects/:id/skills`. */
-export function useFactorySkillCreateMutation(factoryProjectId: string | undefined) {
+export function useFactorySkillCreateMutation(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
-  const invalidate = useInvalidateSkills(factoryProjectId);
+  const applyWrite = useApplySkillWrite(factoryProjectId);
   return useMutation({
     mutationFn: ({ name, content }: { name: string; content: string }) =>
-      sendSkillWrite(baseUrl, skillsPath(factoryProjectId!), 'POST', { name, content }),
-    onSuccess: invalidate,
+      sendSkillWrite(baseUrl, skillsPath(factoryProjectId), 'POST', { name, content }),
+    onSuccess: applyWrite,
   });
 }

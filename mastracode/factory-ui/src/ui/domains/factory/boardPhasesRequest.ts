@@ -1,3 +1,5 @@
+import { searchQuery } from '@mastra/factory/work-items/search-words';
+
 import type { BoardPhasesRequest } from '../../../api/types';
 import { BOARD_FILTER_FIELDS } from './boardFilters';
 import type { BoardFilterState } from './boardFilters';
@@ -45,7 +47,7 @@ export function boardPhasesRequest({
   return {
     board,
     sort,
-    q: search.trim().slice(0, LONGEST_SEARCH),
+    q: searchQuery(search).slice(0, LONGEST_SEARCH),
     filters: picked,
     windows,
     ...(item !== undefined && isCardId(item) ? { item } : {}),

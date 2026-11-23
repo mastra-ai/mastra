@@ -150,7 +150,7 @@ describe('IntakeTesterPanel', () => {
 
     expect(
       await screen.findByText(
-        'This project still files new items with the old route list, so filing may differ from this answer until it switches to intake order.',
+        'This project still files new issues and pull requests with the old route list, so filing may differ from this answer until it switches to intake order.',
       ),
     ).toBeTruthy();
     expect(screen.getByText(/joins that card instead; this test doesn't check for that\./)).toBeTruthy();
