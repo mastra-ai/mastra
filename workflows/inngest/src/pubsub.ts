@@ -123,13 +123,15 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
     if (TERMINAL_AGENT_EVENTS.has(event.type)) return { type: event.type, runId: event.runId, data: {} };
     return oversizedPlaceholder(event.runId, event.type, (event.data as { type?: string } | undefined)?.type, bytes);
   }
-  const data = (event.data ?? {}) as { output?: Record<string, unknown>; stepResult?: unknown };
+  const data = (event.data ?? {}) as { output?: Record<string, unknown>; stepResult?: unknown; stopCause?: unknown };
   const output = data.output ?? {};
+  const stopCause = typeof data.stopCause === 'string' ? data.stopCause : undefined;
   const reduced = {
     ...event,
     data: {
       stepResult: data.stepResult,
       output: { text: output.text, usage: output.usage, steps: [] },
+      ...(stopCause ? { stopCause } : {}),
     },
   };
   if (byteSize(reduced) <= REALTIME_MAX_BYTES) return reduced;
@@ -140,6 +142,7 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
     data: {
       stepResult: typeof reason === 'string' ? { reason } : undefined,
       output: { steps: [] } as Record<string, unknown>,
+      ...(stopCause ? { stopCause } : {}),
     },
   };
   for (const key of ['text', 'usage'] as const) {
@@ -168,12 +171,17 @@ function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string;
     return oversizedPlaceholder(runId, type ?? 'unknown', chunkType, undefined);
   }
   const reason = raw.match(/"stepResult"\s*:\s*\{[^{}]*"reason"\s*:\s*"([^"]+)"/)?.[1];
+  const stopCause = raw.match(/"stopCause"\s*:\s*"([^"]+)"/)?.[1];
   return {
     type,
     runId,
     data:
       type === 'finish'
-        ? { output: { steps: [] }, stepResult: reason ? { reason } : undefined }
+        ? {
+            output: { steps: [] },
+            stepResult: reason ? { reason } : undefined,
+            ...(stopCause ? { stopCause } : {}),
+          }
         : type === 'error'
           ? { error: { name: 'Error', message: OVERSIZED_ERROR_MESSAGE } }
           : {},
