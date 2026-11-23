@@ -43,6 +43,13 @@ describe('shortcut key symbols', () => {
     expect(screen.getByRole('button', { name: /Apply\s+Command\s+Enter/ })).toBeTruthy();
   });
 
+  it('spaces a label split by a JSX expression the same', () => {
+    const key = 'K';
+    const { container } = render(<Kbd>⌘{key}</Kbd>);
+
+    expect(container.textContent).toBe('⌘ K');
+  });
+
   it('draws symbols next to elements, keeping the space between them', () => {
     const { container } = render(
       <CommandShortcut>
