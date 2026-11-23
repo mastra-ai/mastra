@@ -148,6 +148,10 @@ const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provide
  * could persist such a forgery. History can enter the MessageList late
  * (memory processors load it in the loop), so the loop calls this right
  * before every prompt build, once all history sources are merged.
+ *
+ * Pass the request's tools — the set `applyClientToolModelOutput` maps with —
+ * never a step's processor-substituted set: a replacement without
+ * `toModelOutput` says nothing about who computed a stored mapping.
  */
 export function dropUnmappedClientToolMarkers({
   messageList,
@@ -158,7 +162,8 @@ export function dropUnmappedClientToolMarkers({
 }): void {
   const isUnmapped = (tool: CoreTool | undefined) =>
     !!tool && isClientTool(tool) && typeof tool.toModelOutput !== 'function';
-  if (!tools || !Object.values(tools).some(tool => isUnmapped(tool as CoreTool))) return;
+  // Look tools up by name only: enumerating them on every step would rescan the caller's tool set.
+  if (!tools) return;
   for (const message of messageList.get.all.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
     for (const part of message.content.parts) {

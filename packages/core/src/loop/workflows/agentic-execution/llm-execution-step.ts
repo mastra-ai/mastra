@@ -2019,7 +2019,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
 
         // Memory processors may have loaded history this step; scrub it before the prompt is built.
-        dropUnmappedClientToolMarkers({ messageList, tools: currentStep.tools });
+        // Judge against the request's tools, which computed the mappings, not this step's substitutes.
+        dropUnmappedClientToolMarkers({ messageList, tools });
         const messageListPromptArgs = await buildLlmPromptArgs({
           model: currentStep.model,
           downloadRetries,

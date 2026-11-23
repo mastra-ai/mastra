@@ -1200,7 +1200,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // so durable also relies on the MessageList defaults here. If those
             // ever become user-facing they should be plumbed in identically.
             // Memory processors may have loaded history this step; scrub it before the prompt is built.
-            dropUnmappedClientToolMarkers({ messageList, tools: currentTools });
+            // Judge against the request's tools, which computed the mappings, not this step's substitutes.
+            dropUnmappedClientToolMarkers({ messageList, tools });
             const messageListPromptArgs = await buildLlmPromptArgs({
               model: currentModel,
               skipUnavailableAttachments,
