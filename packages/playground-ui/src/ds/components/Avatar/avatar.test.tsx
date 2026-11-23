@@ -74,7 +74,7 @@ describe('Avatar', () => {
       expect(screen.getByText('+3').getAttribute('data-size')).toBe('lg');
     });
 
-    it('overlaps compact avatars by the compact size', () => {
+    it('sizes every avatar and the count at the compact size', () => {
       render(
         <Avatar.Group size="compact" aria-label="Reviewers">
           <Avatar>
@@ -84,12 +84,11 @@ describe('Avatar', () => {
           <Avatar.GroupCount>+3</Avatar.GroupCount>
         </Avatar.Group>,
       );
-      const group = screen.getByLabelText('Reviewers');
-      const avatars = Array.from(group.querySelectorAll('[data-slot=avatar]'));
-      expect(avatars.map(avatar => avatar.getAttribute('data-size'))).toEqual(['compact', 'compact']);
-      expect(avatars.every(avatar => avatar.classList.contains('size-avatar-compact'))).toBe(true);
-      expect(screen.getByText('+3').classList.contains('size-avatar-compact')).toBe(true);
-      expect(group.classList.contains('[--avatar-group-size:var(--spacing-avatar-compact)]')).toBe(true);
+      const sizes = Array.from(screen.getByLabelText('Reviewers').querySelectorAll('[data-slot=avatar]'), avatar =>
+        avatar.getAttribute('data-size'),
+      );
+      expect(sizes).toEqual(['compact', 'compact']);
+      expect(screen.getByText('+3').getAttribute('data-size')).toBe('compact');
     });
 
     it('stacks the first avatar on top and scales the overlap with the size', () => {
