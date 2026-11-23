@@ -43,13 +43,14 @@ export const googleAnalyticsScenario: Scenario = {
 
     // Reports run for real against MASTRA_SMOKE_GA_PROPERTY_ID (e.g.
     // "properties/123456789") when set; otherwise they are probed against
-    // properties/0 and the 4xx is accepted as routing proof.
+    // properties/0 and the 4xx is accepted as routing proof. Metadata is always
+    // a real read: property "0" is the universal metadata any account can read.
     const realProperty = process.env.MASTRA_SMOKE_GA_PROPERTY_ID?.trim() || undefined;
     const property = realProperty ?? 'properties/0';
     // get_metadata takes the bare numeric id; "0" returns the universal metadata every property shares.
     const propertyId = realProperty?.replace(/^properties\//, '') ?? '0';
-    const reads: Array<[string, string, Record<string, unknown>]> = [
-      ['get metadata', 'google_analytics_get_metadata', { propertyId }],
+    steps.push(...(await runReadBatch(call, [['google_analytics_get_metadata', { propertyId }]], tools)));
+    const reports: Array<[string, string, Record<string, unknown>]> = [
       [
         'run report',
         'google_analytics_run_report',
@@ -71,12 +72,12 @@ export const googleAnalyticsScenario: Scenario = {
       steps.push(
         ...(await runReadBatch(
           call,
-          reads.map(([, toolId, input]): [string, Record<string, unknown>] => [toolId, input]),
+          reports.map(([, toolId, input]): [string, Record<string, unknown>] => [toolId, input]),
           tools,
         )),
       );
     } else {
-      for (const [name, toolId, input] of reads) {
+      for (const [name, toolId, input] of reports) {
         await probe(`${name} (probe)`, toolId, input);
       }
     }

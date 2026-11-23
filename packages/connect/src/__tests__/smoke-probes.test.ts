@@ -58,6 +58,26 @@ const platformRefusal: Answer = {
   },
 };
 
+const universalMetadata: Answer = {
+  status: 200,
+  contentType: 'application/json',
+  body: {
+    name: 'properties/0/metadata',
+    dimensions: [{ apiName: 'date', uiName: 'Date', description: 'The date of the event.', category: 'Time' }],
+    metrics: [
+      {
+        apiName: 'activeUsers',
+        uiName: 'Active users',
+        description: 'Distinct users.',
+        type: 'TYPE_INTEGER',
+        category: 'User',
+      },
+    ],
+  },
+};
+
+const METADATA_TARGET = '/v1beta/properties/0/metadata';
+
 const providerRejection: Answer = {
   status: 404,
   contentType: 'application/json',
@@ -68,6 +88,8 @@ describe('smoke probes', () => {
   let server: Server;
   let baseUrl: string;
   let answer: Answer;
+  // Answers for specific proxied targets; everything else gets `answer`.
+  let answers: Map<string, Answer>;
   let requests: Array<{ method: string | undefined; target: string; body: string }>;
   let projects = 0;
 
@@ -85,7 +107,8 @@ describe('smoke probes', () => {
         if (target.endsWith('/integrations')) return send(200, { integrations: [integration] });
         if (!target.startsWith(PROXY_PREFIX)) return send(404, { error: `unexpected request ${target}` });
         requests.push({ method: request.method, target: target.slice(PROXY_PREFIX.length), body });
-        send(answer.status, answer.body, answer.contentType);
+        const reply = answers.get(target.slice(PROXY_PREFIX.length)) ?? answer;
+        send(reply.status, reply.body, reply.contentType);
       });
     });
     server.listen(0, '127.0.0.1');
@@ -101,6 +124,7 @@ describe('smoke probes', () => {
 
   beforeEach(() => {
     requests = [];
+    answers = new Map();
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', baseUrl);
     vi.stubEnv('MASTRA_SMOKE_GA_PROPERTY_ID', undefined);
     vi.stubEnv('MASTRA_GOOGLE_ANALYTICS_CONNECTION_ID', undefined);
@@ -119,8 +143,9 @@ describe('smoke probes', () => {
   }
 
   describe('Google Analytics scenario', () => {
-    it('passes each tool when Google rejects the synthetic ids', async () => {
+    it('passes each tool when metadata reads and Google rejects the synthetic ids', async () => {
       answer = providerRejection;
+      answers.set(METADATA_TARGET, universalMetadata);
 
       const outcome = await runGoogleAnalyticsScenario();
 
@@ -135,9 +160,7 @@ describe('smoke probes', () => {
 
       await runGoogleAnalyticsScenario();
 
-      expect(requests).toContainEqual(
-        expect.objectContaining({ method: 'GET', target: '/v1beta/properties/0/metadata' }),
-      );
+      expect(requests).toContainEqual(expect.objectContaining({ method: 'GET', target: METADATA_TARGET }));
       const dataStream = requests.find(request => request.target === '/v1beta/properties/0/dataStreams');
       expect(dataStream?.method).toBe('POST');
       expect(JSON.parse(dataStream!.body)).toMatchObject({
@@ -145,6 +168,17 @@ describe('smoke probes', () => {
         type: 'WEB_DATA_STREAM',
         webStreamData: { defaultUri: 'https://example.com' },
       });
+    });
+
+    it('fails the universal metadata read when Google rejects it', async () => {
+      answer = providerRejection;
+
+      const outcome = await runGoogleAnalyticsScenario();
+
+      expect(outcome.status).toBe('fail');
+      expect(outcome.steps.filter(step => step.status === 'fail').map(step => step.toolId)).toEqual([
+        'google_analytics_get_metadata',
+      ]);
     });
 
     it('fails each tool when the platform refuses the call', async () => {
