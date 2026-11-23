@@ -156,7 +156,7 @@ export interface KnowledgePageExplorerProps {
   onViewChange: (view: KnowledgeExplorerView) => void;
   toolbarEnd?: ReactNode;
   flush?: boolean;
-  /** Let the graph fill the explorer behind the toolbar and pan with two-finger scrolling. */
+  /** Let the graph fill the explorer behind the toolbar. */
   fullBleedGraph?: boolean;
 }
 
@@ -1561,7 +1561,6 @@ export function KnowledgePageExplorer({
                   nearIds={focusLinkIds}
                   settled={graphSettled}
                   insets={graphInsets}
-                  panOnScroll={fullBleedGraph}
                   collapsibleLegend={overlay}
                   showCounts={dotCounts}
                   onPreview={page => {
