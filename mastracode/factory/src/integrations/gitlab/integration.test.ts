@@ -652,7 +652,7 @@ describe('PlatformGitLabIntegration', () => {
       accountLabel: 'ops',
     };
 
-    function stubPlatform(context: (connectionId: string) => Response) {
+    function stubPlatform(context: (connectionId: string) => Response, credential?: (connectionId: string) => Response) {
       const fetchMock = vi.fn<typeof fetch>(async input => {
         const url = String(input);
         if (url.includes('/v2/projects/proj_factory/connections')) {
@@ -660,6 +660,8 @@ describe('PlatformGitLabIntegration', () => {
         }
         const contextMatch = url.match(/\/v2\/connections\/([^/]+)\/context$/);
         if (contextMatch) return context(decodeURIComponent(contextMatch[1]!));
+        const credentialMatch = url.match(/\/v2\/connections\/([^/]+)\/credentials$/);
+        if (credentialMatch && credential) return credential(decodeURIComponent(credentialMatch[1]!));
         if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
         if (url.includes('a1b_selfhosted/proxy')) {
           return json([{ ...project(7, 'ops/infra'), web_url: 'https://gitlab.example.com/ops/infra' }]);
@@ -705,10 +707,85 @@ describe('PlatformGitLabIntegration', () => {
       ],
     ])('refuses a self-hosted connection with %s instead of assuming gitlab.com', async (_, body) => {
       stubPlatform(() => json(body));
+      const gitlab = discovering();
 
-      await expect(discovering().intake.listSources({ orgId: 'org-1', userId: 'user-1' })).rejects.toThrow(
-        'Self-hosted GitLab connection a1b_selfhosted has no valid instance hostname.',
+      await expect(
+        gitlab.intake.resolveIntakeDispatch?.({
+          orgId: 'org-1',
+          externalSource: {
+            type: 'issue',
+            externalId: encodeIssueReference({
+              connectionId: 'a1b_selfhosted',
+              projectId: '7',
+              projectPath: 'ops/infra',
+              issueIid: 3,
+            }),
+          },
+        }),
+      ).rejects.toThrow('Self-hosted GitLab connection a1b_selfhosted has no valid instance hostname.');
+    });
+
+    it('keeps gitlab.com intake working when a self-hosted connection cannot be read', async () => {
+      stubPlatform(() => json({ message: 'Platform unavailable' }, 503));
+      const gitlab = discovering();
+
+      const sources = await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      const dispatch = await gitlab.intake.resolveIntakeDispatch?.({
+        orgId: 'org-1',
+        externalSource: {
+          type: 'issue',
+          externalId: encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 }),
+        },
+      });
+
+      expect(sources.map(source => source.name)).toEqual(['mastra/platform']);
+      expect(dispatch).toEqual({
+        connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_mastra' },
+        sourceId: encodeSourceId({ host: 'gitlab.com', projectId: '10' }),
+        issueId: '42',
+      });
+    });
+
+    it('never sends a reconnected credential to the instance the connection used to point at', async () => {
+      let hostname = 'gitlab.example.com';
+      let token = 'old-instance-token';
+      stubPlatform(
+        () => json({ connection_config: { hostname }, metadata: null }),
+        () => json({ type: 'api_key', apiKey: token }),
       );
+      const gitlab = discovering();
+      gitlab.versionControl.initialize({ storage: new SourceControlStorageInMemory('gitlab') });
+      const installation = await gitlab.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: {
+          externalId: 'a1b_selfhosted',
+          accountName: 'ops',
+          accountType: 'GitLab',
+          metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+        },
+      });
+      const [repository] = await gitlab.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '7', slug: 'ops/infra', defaultBranch: 'main' }],
+      });
+      const input = { orgId: 'org-1', repositoryId: repository!.id };
+
+      await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toEqual({
+        cloneUrl: 'https://gitlab.example.com/ops/infra.git',
+        authorization: { scheme: 'bearer', token: 'old-instance-token', username: 'oauth2' },
+      });
+
+      // The user reconnects the same connection to another instance.
+      hostname = 'gitlab.other.com';
+      token = 'new-instance-token';
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject({ status: 409 });
+      }
+      const sources = await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      expect(sources.map(source => decodeSourceId(source.id).host)).toEqual(['gitlab.com', 'gitlab.other.com']);
     });
 
     it('registers self-hosted connect sessions separately and lists both kinds under gitlab', () => {

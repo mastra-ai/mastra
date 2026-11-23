@@ -125,7 +125,15 @@ export class PlatformGitLabIntegration
   }
 
   protected async activeContexts(): Promise<PlatformGitLabContext[]> {
-    return Promise.all((await this.#activeConnections()).map(connection => this.#context(connection)));
+    const results = await Promise.allSettled(
+      (await this.#activeConnections()).map(connection => this.#context(connection)),
+    );
+    // A self-hosted connection whose instance can't be read must not hide the
+    // others; contextById still reports its error for anything that names it.
+    const contexts = results.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
+    const failure = results.find(result => result.status === 'rejected');
+    if (contexts.length === 0 && failure) throw failure.reason;
+    return contexts;
   }
 
   protected async contextById(connectionId: string): Promise<PlatformGitLabContext> {
@@ -187,12 +195,13 @@ export class PlatformGitLabIntegration
   }
 
   async #context(connection: PlatformConnection): Promise<PlatformGitLabContext> {
+    const host = await this.#host(connection);
     return {
       id: connection.id,
       label: connection.accountLabel,
       api: new GitLabApiClient({ client: this.binding, connectionId: connection.id }),
       connection: gitlabConnection(connection.id),
-      host: await this.#host(connection),
+      host,
       repositoryAccessToken: async () => {
         // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
         // Never persist or log the returned credential.
@@ -209,12 +218,25 @@ export class PlatformGitLabIntegration
         if (typeof token !== 'string' || !token.trim()) {
           throw new GitLabApiError('GitLab connection did not provide a repository credential.', 502);
         }
+        if (connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID) {
+          // Reconnecting can move a self-hosted connection to another instance.
+          // Re-read the instance after fetching the credential, so a new token
+          // is never paired with the host this context was built for.
+          this.#hosts.delete(connection.id);
+          const current = await this.#host(connection);
+          if (current !== host) {
+            throw new GitLabApiError(
+              `Self-hosted GitLab connection ${connection.id} now points at ${current} instead of ${host}. Retry the operation.`,
+              409,
+            );
+          }
+        }
         return token;
       },
     };
   }
 
-  /** gitlab.com for OAuth connections; a self-hosted connection's instance comes from its context, read once. */
+  /** gitlab.com for OAuth connections; a self-hosted connection's instance comes from its context, re-read whenever a credential is fetched. */
   #host(connection: PlatformConnection): Promise<string> {
     if (connection.integrationId !== GITLAB_SELF_HOSTED_INTEGRATION_ID) return Promise.resolve('gitlab.com');
     let host = this.#hosts.get(connection.id);
