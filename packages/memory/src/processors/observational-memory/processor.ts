@@ -253,7 +253,21 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       rotateResponseMessageId,
     } = args;
     const state = _state ?? ({} as Record<string, unknown>);
-    if (state.__omInputFailed) return messageList;
+    if (state.__omInputFailed) {
+      const gatewayMemoryManaged = await isGatewayMemoryManaged(model);
+      state[GATEWAY_STATE_KEY] = gatewayMemoryManaged;
+      if (gatewayMemoryManaged) {
+        const context = this.engine.getThreadContext(requestContext, messageList);
+        if (context) {
+          const messagesToSave = [...messageList.get.input.db(), ...messageList.get.response.db()];
+          if (messagesToSave.length > 0) {
+            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+          }
+        }
+        state.__omInputFailed = false;
+      }
+      return messageList;
+    }
 
     omDebug(
       `[OM:processInputStep:ENTER] step=${stepNumber}, hasMastraMemory=${!!requestContext?.get('MastraMemory')}, hasMemoryInfo=${!!messageList?.serialize()?.memoryInfo?.threadId}`,
@@ -310,35 +324,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
         : null;
 
-      // ── Read-only path: load existing context, skip observation lifecycle ──
-      if (readOnly) {
-        const ctx = await loadMemoryContextMessages({
-          memory: this.memory,
-          messageList,
-          threadId,
-          resourceId,
-          runState,
-        });
-        // Recall guidance is useful even with no record; null preserves read-only behavior.
-        const systemMessages = await this.engine.buildContextSystemMessages({
-          threadId,
-          resourceId,
-          record: ctx.omRecord,
-          unobservedContextBlocks: ctx.otherThreadsContext,
-        });
-
-        injectObservationContextMessages({
-          messageList,
-          systemMessages,
-          continuationMessage: ctx.continuationMessage,
-          hasObservations: Boolean(ctx.omRecord?.activeObservations),
-          threadId,
-          resourceId,
-        });
-
-        return messageList;
-      }
-
       // A failed observation may have pruned messages or sealed a response before throwing.
       // Restore pre-step message-list state when continuing without OM.
       const preStepMessages =
@@ -350,9 +335,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       }
       let previousRecord: ObservationalMemoryRecord | undefined;
       let loadedContextMessages: MastraDBMessage[] | undefined;
+      let unobservedContextBlocks: string | undefined;
+      let sealWriteFailed = false;
       const continueWithoutObservation = async (error: unknown) => {
         const err = error instanceof Error ? error : new Error(String(error));
-        if (this.engine.config.observation.failurePolicy !== 'continue' || abortSignal?.aborted) {
+        if (sealWriteFailed || this.engine.config.observation.failurePolicy !== 'continue' || abortSignal?.aborted) {
           const failedTurn = this.turn;
           await failedTurn?.end().catch(() => {});
           if (this.turn === failedTurn) this.turn = undefined;
@@ -390,6 +377,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             threadId,
             resourceId,
             record: previousRecord,
+            unobservedContextBlocks,
           });
           injectObservationContextMessages({
             messageList,
@@ -406,6 +394,38 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         }
         return messageList;
       };
+
+      // Read-only memory still supplies prompt context, but must never start a turn or write output.
+      if (readOnly) {
+        try {
+          const ctx = await loadMemoryContextMessages({
+            memory: this.memory,
+            messageList,
+            threadId,
+            resourceId,
+            runState,
+          });
+          previousRecord = ctx.omRecord ?? undefined;
+          unobservedContextBlocks = ctx.otherThreadsContext;
+          const systemMessages = await this.engine.buildContextSystemMessages({
+            threadId,
+            resourceId,
+            record: ctx.omRecord,
+            unobservedContextBlocks: ctx.otherThreadsContext,
+          });
+          injectObservationContextMessages({
+            messageList,
+            systemMessages,
+            continuationMessage: ctx.continuationMessage,
+            hasObservations: Boolean(ctx.omRecord?.activeObservations),
+            threadId,
+            resourceId,
+          });
+          return messageList;
+        } catch (error) {
+          return continueWithoutObservation(error);
+        }
+      }
 
       // ── Create turn on first step (or when state is reset) ──
       // The turn is stashed in customState so that the output processor instance
@@ -460,6 +480,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           this.turn.agent = args.agent;
           this.turn.requestContext = requestContext;
           await this.turn.start(this.memory, runState);
+          if (this.engine.config.scope === 'resource') {
+            unobservedContextBlocks = this.turn.context.otherThreadsContext;
+          }
           // Only the continue policy restores loaded history after a failure; abort-policy turns throw
           // before using it, so skip the copy for them.
           if (this.engine.config.observation.failurePolicy === 'continue') {
@@ -497,6 +520,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
                 if (storedHasNewResult) {
                   this.turn.drainedPartKeys.set(stored.id, new Set(getPartKeys(snapshot)));
                   messageList.add(stored, 'memory');
+                  // The completed result is now authoritative. Keep it in the rollback snapshot
+                  // so a later OM failure cannot discard work persisted by another worker.
+                  if (preStepMessages) {
+                    const reconciled = messageList.serialize().messages.find(message => message.id === stored.id);
+                    if (reconciled) {
+                      preStepMessages.messages = preStepMessages.messages.map(message =>
+                        message.id === stored.id ? detachSealMetadata(reconciled) : message,
+                      );
+                    }
+                  }
                 }
               }
             }
@@ -521,8 +554,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           if (messageId && responseObserved) {
             if (response && !responseSealed) {
               // Persist the seal before rotation so a later reflection cannot erase the only
-              // evidence of the observed boundary. On failure, the input fallback stops OM for this turn.
-              await this.engine.persistMessageSeal(response);
+              // evidence of the observed boundary. If that write fails, generation under the
+              // still-active observed response ID is unsafe, so fail rather than continue.
+              try {
+                await this.engine.persistMessageSeal(response);
+              } catch (error) {
+                sealWriteFailed = true;
+                throw error;
+              }
               this.engine.sealMessagesForBuffering([response]);
             }
             responseMessageId = rotateResponseMessageId?.() ?? messageId;

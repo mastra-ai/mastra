@@ -161,6 +161,52 @@ describe('ObservationalMemoryProcessor — gateway memory ownership', () => {
       expect(state.__omTurn).toBeUndefined();
     });
 
+    it('hands a failed local turn to gateway memory without running local OM again', async () => {
+      const messageList = buildConversation();
+      const state: Record<string, unknown> = { __omInputFailed: true };
+      const persistSpy = vi.spyOn(om, 'persistMessages');
+      const observeSpy = vi.spyOn(om, 'observe');
+
+      await processor.processInputStep(buildInputStepArgs(messageList, state, 1, createManagedGatewayModel()));
+      expect(state.__isGatewayMemoryManaged).toBe(true);
+      expect(persistSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ id: 'msg-1' }), expect.objectContaining({ id: 'msg-2' })]),
+        threadId,
+        resourceId,
+      );
+      expect(observeSpy).not.toHaveBeenCalled();
+      persistSpy.mockClear();
+      await processor.processOutputResult(buildOutputResultArgs(messageList, state));
+      expect(persistSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not continue an observed response if its seal cannot be saved', async () => {
+      om = new ObservationalMemory({
+        storage: new InMemoryMemory({ db: new InMemoryDB() }),
+        observation: { messageTokens: 100_000, model: 'test-model', failurePolicy: 'continue' },
+        reflection: { observationTokens: 100_000, model: 'test-model' },
+        scope: 'thread',
+      });
+      processor = new ObservationalMemoryProcessor(om, createStubMemoryProvider());
+      const messageList = buildConversation();
+      messageList.get.response.db()[0]!.content.parts.push({
+        type: 'data-om-observation-end',
+        data: { operationType: 'observation' },
+      });
+      const state: Record<string, unknown> = {};
+      vi.spyOn(om, 'persistMessageSeal').mockRejectedValue(new Error('seal write unavailable'));
+      const rotateResponseMessageId = vi.fn(() => 'new-response-id');
+      await expect(
+        processor.processInputStep({
+          ...buildInputStepArgs(messageList, state, 1, createLocalMemoryGatewayModel()),
+          messageId: 'msg-2',
+          rotateResponseMessageId,
+        }),
+      ).rejects.toThrow('seal write unavailable');
+      expect(rotateResponseMessageId).not.toHaveBeenCalled();
+      expect(state.__omInputFailed).toBeUndefined();
+    });
+
     it('skips local output processing', async () => {
       const messageList = buildConversation();
       const persistSpy = vi.spyOn(om, 'persistMessages');

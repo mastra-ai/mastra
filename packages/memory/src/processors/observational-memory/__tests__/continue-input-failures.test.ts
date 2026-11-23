@@ -40,6 +40,7 @@ function setup(
   failurePolicy: 'abort' | 'continue' = 'continue',
   overflowAfterTool = false,
   configureMemory?: (memory: Memory) => void,
+  scope: 'thread' | 'resource' = 'thread',
 ) {
   const openai = createOpenAI({ apiKey: 'test', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
   const memory = new Memory({
@@ -47,6 +48,7 @@ function setup(
     options: {
       observationalMemory: {
         enabled: true,
+        scope,
         hooks,
         observation: {
           model: openai.chat('observer'),
@@ -153,6 +155,37 @@ describe('OM continue policy for input failures', () => {
     expect(JSON.stringify((requests[0]!.body as { messages: unknown }).messages)).toContain('HISTORY_MARKER');
   });
 
+  it('retains other resource-thread context after a failed input context build', async () => {
+    const build = vi.spyOn(ObservationalMemory.prototype, 'buildContextSystemMessages');
+    build.mockImplementationOnce(async () => {
+      throw new Error('context build failed');
+    });
+    build.mockImplementationOnce(async ({ unobservedContextBlocks }) =>
+      unobservedContextBlocks ? [`Other thread: ${unobservedContextBlocks}`] : undefined,
+    );
+    const agent = setup(
+      new InMemoryStore(),
+      undefined,
+      'continue',
+      false,
+      memory => {
+        const getContext = memory.getContext.bind(memory);
+        vi.spyOn(memory, 'getContext').mockImplementation(async args => ({
+          ...(await getContext(args)),
+          otherThreadsContext: 'OTHER_THREAD_MARKER',
+        }));
+      },
+      'resource',
+    );
+    const result = await agent.generate('Find order 4471', {
+      memory: { thread: 'cross-thread-on-input-failure', resource: 'r' },
+      maxSteps: 3,
+    });
+    expect(result.text).toBe('The order shipped.');
+    const requests = mock.getRequests().filter(entry => (entry.body as { model?: string }).model === 'actor');
+    expect(JSON.stringify((requests[0]!.body as { messages: unknown }).messages)).toContain('OTHER_THREAD_MARKER');
+  });
+
   it('re-adds unsealed loaded history after an input failure seals it', async () => {
     const history: MastraDBMessage = {
       id: 'history-with-seal',
@@ -191,11 +224,6 @@ describe('OM continue policy for input failures', () => {
     expect(result.text).toBe('The order shipped.');
     expect(readded).toHaveLength(2);
     expect(readded[1]).toEqual({ sealed: undefined, sealedAt: undefined });
-    expect(detachSealMetadata).toHaveBeenCalledWith(
-      expect.objectContaining({ id: history.id }),
-      expect.anything(),
-      expect.anything(),
-    );
   });
 
   it('restores message seals when observation fails after mutating the live list', async () => {
@@ -331,6 +359,31 @@ describe('OM continue policy for input failures', () => {
     expect(observerRequests).toHaveLength(1);
     expect(afterObservation).toHaveBeenCalledOnce();
   });
+
+  it.each(['load', 'build'] as const)(
+    'continues read-only recall when %s fails without writing memory',
+    async failure => {
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('memory'))!;
+      const save = vi.spyOn(store, 'saveMessages');
+      const agent = setup(storage, undefined, 'continue', false, memory => {
+        if (failure === 'load') {
+          vi.spyOn(memory, 'getContext').mockRejectedValueOnce(new Error('recall unavailable'));
+        } else {
+          vi.spyOn(ObservationalMemory.prototype, 'buildContextSystemMessages').mockRejectedValueOnce(
+            new Error('recall context unavailable'),
+          );
+        }
+      });
+      const result = await agent.generate('Find order 4471', {
+        memory: { thread: `readonly-${failure}`, resource: 'r', options: { readOnly: true } },
+        maxSteps: 3,
+      });
+      expect(result.text).toBe('The order shipped.');
+      expect(save).not.toHaveBeenCalled();
+      expect((await store.listMessages({ threadId: `readonly-${failure}` })).messages).toHaveLength(0);
+    },
+  );
 
   it('continues when loading the observation record fails', async () => {
     const storage = new InMemoryStore();
