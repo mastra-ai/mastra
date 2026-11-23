@@ -99,6 +99,8 @@ function decision(overrides: Partial<FactoryDeferredDecisionRecord> & { id: stri
     attempts: 1,
     deliveryGeneration: 0,
     failureOccurrence: 0,
+    rateLimitedSince: null,
+    deliveredThreadId: null,
     availableAt: new Date(),
     leaseOwner: null,
     leaseExpiresAt: null,

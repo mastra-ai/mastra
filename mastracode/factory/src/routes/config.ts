@@ -45,7 +45,7 @@ import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/do
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { THINKING_LEVELS } from './contracts.js';
+import { modelFallbackIdsSchema, modelIdSchema, THINKING_LEVELS } from './contracts.js';
 import { customEndpointUrlProblem } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
 import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
@@ -1065,15 +1065,24 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         modelScope,
       });
       let defaultModelId = policy.factoryDefaultModelId ?? null;
+      let fallbackModelIds = policy.factoryFallbackModelIds ?? [];
       let personalThinkingLevel: ThinkingLevelSetting | null = null;
       if (modelScope === 'user' && includeDefaultModel) {
         if (!options.modelDefaults) return { response: c.json({ error: 'model_defaults_unavailable' }, 503) };
         const ownerDefaults = await routedPersonalDefaults(policy.tenant, options.modelDefaults);
         defaultModelId = ownerDefaults?.modelId ?? null;
+        fallbackModelIds = ownerDefaults?.fallbackModelIds ?? [];
         personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
       }
       const credentialTenant: CredentialTenant = { orgId, userId: policy.tenant.userId, credentialScope: modelScope };
-      return { tenantCredentials, modelScope, defaultModelId, personalThinkingLevel, credentialTenant };
+      return {
+        tenantCredentials,
+        modelScope,
+        defaultModelId,
+        fallbackModelIds,
+        personalThinkingLevel,
+        credentialTenant,
+      };
     };
 
     const resolveOMResponseContext = async (
@@ -1490,6 +1499,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               | {
                   modelScope: 'factory' | 'user';
                   defaultModelId: string | null;
+                  fallbackModelIds: readonly string[];
                   personalThinkingLevel: ThinkingLevelSetting | null;
                 }
               | undefined;
@@ -1518,6 +1528,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 sessionPolicy = {
                   modelScope: context.modelScope,
                   defaultModelId: context.defaultModelId,
+                  fallbackModelIds: context.fallbackModelIds,
                   personalThinkingLevel: context.personalThinkingLevel,
                 };
               }
@@ -1592,7 +1603,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            return c.json({ modelId: record?.modelId ?? null, thinkingLevel: record?.thinkingLevel ?? null });
+            return c.json({
+              modelId: record?.modelId ?? null,
+              thinkingLevel: record?.thinkingLevel ?? null,
+              fallbackModelIds: record?.fallbackModelIds ?? [],
+            });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1696,7 +1711,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const parsed = z.object({ modelId: z.string().trim().min(1).max(256) }).safeParse(body);
+          const parsed = z.object({ modelId: modelIdSchema }).safeParse(body);
           if (!parsed.success) return c.json({ error: 'Missing required field: modelId' }, 400);
           const { modelId } = parsed.data;
           try {
@@ -1735,6 +1750,38 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             if (!record) return c.json({ error: 'default_model_not_set' }, 400);
             return c.json({ ok: true, thinkingLevel });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute('/web/config/default-model/fallbacks', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const parsed = z.object({ fallbackModelIds: modelFallbackIdsSchema }).safeParse(body);
+          if (!parsed.success) return c.json({ error: 'Invalid fallbackModelIds' }, 400);
+          try {
+            const record = await context.storage.setFallbackModelIds({
+              orgId: context.orgId,
+              userId: context.userId,
+              fallbackModelIds: parsed.data.fallbackModelIds,
+            });
+            if (!record) return c.json({ error: 'default_model_not_set' }, 400);
+            return c.json({ ok: true, fallbackModelIds: record.fallbackModelIds });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

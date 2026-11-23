@@ -246,6 +246,8 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'run_user_unauthenticated',
   'factory_org_key_missing',
   'run_failed',
+  'run_rate_limited',
+  'run_quota_exhausted',
   'unknown',
 ] as const;
 
@@ -309,6 +311,8 @@ export interface FactoryDeferredDecisionRecord {
   /** Who released this run — the run is attributed to them, not the repo connector. */
   approvedBy: string | null;
   completedAt: Date | null;
+  rateLimitedSince: Date | null;
+  deliveredThreadId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -439,6 +443,7 @@ export interface FactoryPendingStartRecord {
   availableAt: Date;
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
+  rateLimitedSince: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -475,6 +480,9 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   failureCode: FactoryDispatchFailureCode;
   terminal: boolean;
   advanceDeliveryGeneration?: boolean;
+  rateLimitedSince?: Date;
+  refundAttempt?: boolean;
+  deliveredThreadId?: string;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -1062,6 +1070,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       delivery_generation: { type: 'integer', default: 0 },
       failure_occurrence: { type: 'integer', default: 0 },
       available_at: { type: 'timestamp' },
+      rate_limited_since: { type: 'timestamp', nullable: true },
+      delivered_thread_id: { type: 'text', nullable: true },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
@@ -1189,6 +1199,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       status: { type: 'text' },
       attempts: { type: 'integer' },
       available_at: { type: 'timestamp' },
+      rate_limited_since: { type: 'timestamp', nullable: true },
       lease_owner: { type: 'text', nullable: true },
       lease_expires_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
@@ -1251,6 +1262,8 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     approvedAt: (row.approved_at as Date | null) ?? null,
     approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
+    rateLimitedSince: (row.rate_limited_since as Date | null) ?? null,
+    deliveredThreadId: (row.delivered_thread_id as string | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
   };
@@ -1310,6 +1323,7 @@ function toPendingStart(row: GovernanceDbRow): FactoryPendingStartRecord {
     availableAt: row.available_at as Date,
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
+    rateLimitedSince: (row.rate_limited_since as Date | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at as Date,
   };
@@ -2054,6 +2068,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             ? { delivery_generation: Number(current.delivery_generation ?? 0) + 1 }
             : {}),
           available_at: input.availableAt,
+          rate_limited_since: input.rateLimitedSince ?? null,
+          ...(input.refundAttempt ? { attempts: Number(current.attempts) - 1 } : {}),
           lease_owner: null,
           lease_expires_at: null,
           ...(table === 'factory_deferred_decisions'
@@ -2062,6 +2078,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 failure_code: input.failureCode,
                 completed_at: input.terminal ? input.now : null,
                 ...(input.terminal ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 } : {}),
+                ...(input.deliveredThreadId ? { delivered_thread_id: input.deliveredThreadId } : {}),
               }
             : {}),
           updated_at: input.now,
@@ -2537,6 +2554,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 decision,
                 status: 'pending',
                 attempts: 0,
+                rate_limited_since: null,
                 delivery_generation: 0,
                 available_at: now,
                 lease_owner: null,
@@ -2649,6 +2667,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                   ? {
                       status: 'retry',
                       attempts: 0,
+                      rate_limited_since: null,
                       available_at: input.now,
                       lease_owner: null,
                       lease_expires_at: null,
@@ -2719,6 +2738,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             decision,
             status: 'pending',
             attempts: 0,
+            rate_limited_since: null,
             delivery_generation: 0,
             available_at: input.now,
             lease_owner: null,
@@ -3217,6 +3237,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           status: 'proposed',
           // The claim that parked it spent no effect, so it costs no attempt.
           attempts: 0,
+          rate_limited_since: null,
           lease_owner: null,
           lease_expires_at: null,
           updated_at: now,
@@ -3250,6 +3271,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           return {
             status: 'pending',
             attempts: 0,
+            rate_limited_since: null,
             available_at: now,
             approved_at: now,
             approved_by: approvedBy ?? null,
@@ -3472,6 +3494,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           return {
             status: 'retry',
             attempts: 0,
+            rate_limited_since: null,
             delivery_generation: Number(current.delivery_generation ?? 0) + 1,
             available_at: now,
             lease_owner: null,
@@ -4001,6 +4024,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           message: input.kickoffMessage,
           status: 'pending',
           attempts: 0,
+          rate_limited_since: null,
           available_at: now,
           lease_owner: null,
           lease_expires_at: null,

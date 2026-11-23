@@ -1285,6 +1285,38 @@ describe('ProjectRoutes', () => {
     expect(await invalidScope.json()).toEqual({ error: 'invalid_project' });
   });
 
+  it('saves an ordered list of up to three distinct fallback models on a project', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Valid' } });
+    const patchFallbacks = (fallbackModelIds: string[]) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fallbackModelIds }),
+      });
+    const fallbackModelIds = ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'];
+
+    const saved = await patchFallbacks(fallbackModelIds);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ project: { fallbackModelIds } });
+    const read = await app.request(`/web/factory/projects/${project.id}`);
+    expect(await read.json()).toMatchObject({ project: { fallbackModelIds } });
+
+    const tooMany = await patchFallbacks(['a/1', 'a/2', 'a/3', 'a/4']);
+    expect(tooMany.status).toBe(400);
+    expect(await tooMany.json()).toEqual({ error: 'invalid_project' });
+    const duplicated = await patchFallbacks(['openai/gpt-5.6-sol', 'openai/gpt-5.6-sol']);
+    expect(duplicated.status).toBe(400);
+    expect(await duplicated.json()).toEqual({ error: 'invalid_project' });
+    expect((await seed.projects.getById({ id: project.id }))?.fallbackModelIds).toEqual(fallbackModelIds);
+  });
+
   describe('environment', () => {
     /** A provider with two integer settings, strict about unknown keys. */
     class StubFactorySandbox extends FactorySandbox<{ cpuCount?: number; memoryMb?: number }> {

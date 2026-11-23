@@ -8,6 +8,7 @@ export interface ModelDefaultRecord {
   userId: string;
   modelId: string;
   thinkingLevel: ThinkingLevelSetting | null;
+  fallbackModelIds: string[];
   updatedAt: Date;
 }
 
@@ -19,6 +20,7 @@ export const USER_DEFAULT_MODELS_SCHEMA: CollectionSchema = {
     user_id: { type: 'text' },
     model_id: { type: 'text' },
     thinking_level: { type: 'text', nullable: true },
+    fallback_model_ids: { type: 'json', nullable: true },
     updated_at: { type: 'timestamp' },
   },
   uniqueIndexes: [{ name: 'user_default_models_org_user_key', columns: ['org_id', 'user_id'] }],
@@ -30,6 +32,7 @@ interface ModelDefaultDbRow extends Record<string, unknown> {
   user_id: string;
   model_id: string;
   thinking_level: string | null;
+  fallback_model_ids: string[] | null;
   updated_at: Date;
 }
 
@@ -39,6 +42,7 @@ function toRecord(row: ModelDefaultDbRow): ModelDefaultRecord {
     userId: row.user_id,
     modelId: row.model_id,
     thinkingLevel: isThinkingLevelSetting(row.thinking_level) ? row.thinking_level : null,
+    fallbackModelIds: row.fallback_model_ids ?? [],
     updatedAt: row.updated_at,
   };
 }
@@ -116,6 +120,23 @@ export class ModelDefaultsStorage extends FactoryStorageDomain {
       'user_default_models',
       { org_id: orgId, user_id: userId },
       () => ({ thinking_level: thinkingLevel, updated_at: new Date() }),
+    );
+    return updated ? toRecord(updated) : null;
+  }
+
+  async setFallbackModelIds({
+    orgId,
+    userId,
+    fallbackModelIds,
+  }: {
+    orgId: string;
+    userId: string;
+    fallbackModelIds: string[];
+  }): Promise<ModelDefaultRecord | null> {
+    const updated = await this.#db.updateAtomic<ModelDefaultDbRow>(
+      'user_default_models',
+      { org_id: orgId, user_id: userId },
+      () => ({ fallback_model_ids: fallbackModelIds, updated_at: new Date() }),
     );
     return updated ? toRecord(updated) : null;
   }

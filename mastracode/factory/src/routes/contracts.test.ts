@@ -109,6 +109,26 @@ describe('Factory route contracts', () => {
       defaultModelId: null,
       reviewTestChecksEnabled: true,
     });
+    expect(updateProjectBodySchema.parse({ defaultModelId: ' anthropic/claude-opus-5.5 ' })).toEqual({
+      defaultModelId: 'anthropic/claude-opus-5.5',
+    });
+    expect(updateProjectBodySchema.parse({ fallbackModelIds: [' openai/gpt-5.6-sol '] })).toEqual({
+      fallbackModelIds: ['openai/gpt-5.6-sol'],
+    });
+    expect(updateProjectBodySchema.safeParse({ fallbackModelIds: ['  '] }).success).toBe(false);
+    const tooLong = `openai/${'x'.repeat(250)}`;
+    expect(updateProjectBodySchema.safeParse({ fallbackModelIds: [tooLong] }).success).toBe(false);
+    expect(updateProjectBodySchema.safeParse({ defaultModelId: tooLong }).success).toBe(false);
+    for (const notAnId of ['sonnet 5.5', 'claude-opus-5.5', '/claude-opus-5.5', 'anthropic/']) {
+      expect(updateProjectBodySchema.safeParse({ fallbackModelIds: [notAnId] }).success, notAnId).toBe(false);
+      expect(updateProjectBodySchema.safeParse({ defaultModelId: notAnId }).success, notAnId).toBe(false);
+    }
+    expect(updateProjectBodySchema.parse({ fallbackModelIds: ['openrouter/anthropic/claude-opus-5.5'] })).toEqual({
+      fallbackModelIds: ['openrouter/anthropic/claude-opus-5.5'],
+    });
+    expect(
+      updateProjectBodySchema.safeParse({ fallbackModelIds: ['openai/gpt-5.6-sol', ' openai/gpt-5.6-sol'] }).success,
+    ).toBe(false);
     expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
     expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);
     expect(createWorkItemBodySchema.parse({ title: ' Card ', stages: ['intake'], ignored: true })).toEqual({
@@ -273,8 +293,9 @@ describe('Factory route contracts', () => {
   it('accepts representative successful response envelopes', () => {
     const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'agent-waiting'];
     expect(
-      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId, repositories: [] }] })
-        .success,
+      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({
+        projects: [{ id: projectId, fallbackModelIds: [], repositories: [] }],
+      }).success,
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({

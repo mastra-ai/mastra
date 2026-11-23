@@ -1,3 +1,5 @@
+import { MODEL_FALLBACK_STATE_KEY, parsePendingModelFallback } from '@mastra/code-sdk/model-fallback';
+import type { ModelRouteFailure } from '@mastra/code-sdk/model-fallback';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { classifyProviderError } from '@mastra/core/error';
@@ -87,7 +89,8 @@ import {
 } from './dispatch-errors.js';
 import { isStatusEventDecision } from './event-rules.js';
 import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } from './phase-goal.js';
-import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
+import { causeOf, isProviderCallError, providerLimit, rateLimitRetryAt } from './provider-limit.js';
+import { publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -188,7 +191,20 @@ export const UPDATE_BURST_MS = 5_000;
 const POSTPONE_MS = 10_000;
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
-class RunEndedInError extends FactoryDispatchError {}
+class RunEndedInError extends FactoryDispatchError {
+  readonly resumeAt?: Date;
+  readonly madeProgress: boolean;
+
+  constructor(
+    code: FactoryDispatchFailureCode,
+    message: string,
+    { resumeAt, madeProgress, ...options }: ErrorOptions & { resumeAt?: Date; madeProgress: boolean },
+  ) {
+    super(code, message, options);
+    this.resumeAt = resumeAt;
+    this.madeProgress = madeProgress;
+  }
+}
 
 // The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
 const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
@@ -212,10 +228,16 @@ function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCo
   return providerCall && classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
 }
 
-function runErrorFailure(label: string, error: unknown): RunEndedInError {
+function runErrorFailure(
+  label: string,
+  error: unknown,
+  { hopFailures, madeProgress }: { hopFailures: readonly ModelRouteFailure[]; madeProgress: boolean },
+): RunEndedInError {
   const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
-  if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`, { cause: error });
-  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`, { cause: error });
+  const message = cause ? `${label} ended in error: ${cause}` : `${label} ended in error.`;
+  const limit = providerLimit(error, hopFailures, new Date());
+  const code = limit?.code ?? (cause ? runErrorCode(error, cause) : 'run_failed');
+  return new RunEndedInError(code, message, { cause: error, resumeAt: limit?.resumeAt, madeProgress });
 }
 
 /** A run in the review seat: a pull request review, unless it is the card's board's self-review. */
@@ -233,6 +255,26 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
     !failure.canRetry ||
     failure.autoRetry === false
   );
+}
+
+function failureSchedule(
+  record: Pick<FactoryDeferredDecisionRecord, 'attempts' | 'rateLimitedSince'>,
+  error: unknown,
+  failureCode: FactoryDispatchFailureCode,
+  { claimedAt, failedAt }: { claimedAt: Date; failedAt: Date },
+): { terminal: boolean; availableAt: Date; rateLimitedSince?: Date; refundAttempt?: boolean } {
+  if (error instanceof RunEndedInError && error.code === 'run_rate_limited') {
+    const since = error.madeProgress ? failedAt : (record.rateLimitedSince ?? failedAt);
+    const availableAt = rateLimitRetryAt({ since, failedAt, resumeAt: error.resumeAt });
+    if (!availableAt || (error.madeProgress && isTerminalFailure(record.attempts, failureCode))) {
+      return { terminal: true, availableAt: failedAt };
+    }
+    return { terminal: false, availableAt, rateLimitedSince: since, refundAttempt: !error.madeProgress };
+  }
+  return {
+    terminal: isTerminalFailure(record.attempts, failureCode),
+    availableAt: retryAt(claimedAt, record.attempts),
+  };
 }
 
 /**
@@ -298,16 +340,23 @@ function watchRun(
   let omFailure: string | undefined;
   // The run's own error event precedes its `agent_end: 'error'` and is the only place the cause appears.
   let runError: unknown;
-  // Re-armed before a redelivery so the second send waits on its own run's
-  // ending rather than seeing the one that already resolved.
-  const arm = () => {
+  let hopFailures: ModelRouteFailure[] = [];
+  let madeProgress = false;
+  const armRunEnd = () => {
     endReason = undefined;
     supersededAtEnd = undefined;
     omFailure = undefined;
     runError = undefined;
+    hopFailures = [];
     agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
     });
+  };
+  // Re-armed before a redelivery so the second send waits on its own run's
+  // ending rather than seeing the one that already resolved.
+  const arm = () => {
+    madeProgress = false;
+    armRunEnd();
   };
   arm();
   const unsubscribe = session.subscribe(event => {
@@ -319,6 +368,18 @@ function watchRun(
     }
     if (event.type === 'error') {
       runError = event.error;
+      return;
+    }
+    if (event.type === 'usage_update') {
+      madeProgress = true;
+      hopFailures = [];
+      return;
+    }
+    if (event.type === 'state_changed') {
+      const failure = event.changedKeys.includes(MODEL_FALLBACK_STATE_KEY)
+        ? parsePendingModelFallback(event.state[MODEL_FALLBACK_STATE_KEY])?.failure
+        : undefined;
+      if (failure) hopFailures.push(failure);
       return;
     }
     if (event.type === 'om_observation_failed' || event.type === 'om_buffering_failed') {
@@ -373,7 +434,7 @@ function watchRun(
         parked = undefined;
         // Counted before the resumed run can pause again, so its next pause is judged against the cap.
         approvals += 1;
-        arm();
+        armRunEnd();
         try {
           await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
         } finally {
@@ -391,7 +452,7 @@ function watchRun(
           `${label} terminal event was not observed before timeout.`,
         );
       }
-      if (endReason === 'error') throw runErrorFailure(label, runError);
+      if (endReason === 'error') throw runErrorFailure(label, runError, { hopFailures, madeProgress });
       if (endReason === 'aborted') {
         if (await stopRequested?.()) throw new FactoryRunStopped();
         // An abort that follows an observational-memory failure is not the
@@ -629,6 +690,10 @@ function sanitizeDispatchError(error: unknown): string {
   );
 }
 
+function deliveryIdFor(record: Pick<FactoryDeferredDecisionRecord, 'id'>, generation: number): string {
+  return generation === 0 ? record.id : `${record.id}:retry:${generation}`;
+}
+
 function retryAt(now: Date, attempts: number): Date {
   return new Date(now.getTime() + Math.min(1_000 * 2 ** Math.max(0, attempts - 1), MAX_BACKOFF_MS));
 }
@@ -809,6 +874,7 @@ export class FactoryDecisionDispatcher {
   readonly #reviewReplayed = new WeakSet<FactoryDeferredDecisionRecord>();
   /** The session a review run was delivered to, so every later status step can link it. */
   readonly #reviewSessions = new WeakMap<FactoryDeferredDecisionRecord, { sessionId: string; threadId: string }>();
+  readonly #deliveredThreads = new WeakMap<FactoryDeferredDecisionRecord, string>();
   /** Last pending status-comment write per run, so writes stay ordered. */
   /**
    * Per review run: the write chain, the newest step issued, and how many
@@ -1234,10 +1300,9 @@ export class FactoryDecisionDispatcher {
         return;
       }
       await this.#supersedeProposals(record, decision);
-      // A first claim cannot have delivered its kickoff yet, so it may say `queued` right
-      // away. A re-claim may find the run already going; it says `queued` only once the
-      // replay guard proves the kickoff never landed.
-      if (record.attempts <= 1) await this.#reviewQueuedOnce(record, decision);
+      const firstCountedAttempt = record.attempts <= 1;
+      // A later attempt may find an earlier one's run going; it says `queued` once the replay guard rules that out.
+      if (firstCountedAttempt) await this.#reviewQueuedOnce(record, decision);
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
@@ -1270,16 +1335,20 @@ export class FactoryDecisionDispatcher {
         return;
       }
       const failureCode = factoryDispatchFailureCode(error);
-      const terminal =
-        isTerminalFailure(record.attempts, failureCode) || (error instanceof FactoryRuleRejectedError && error.settled);
+      const failedAt = new Date();
+      const schedule = failureSchedule(record, error, failureCode, { claimedAt: now, failedAt });
+      const terminal = schedule.terminal || (error instanceof FactoryRuleRejectedError && error.settled);
       const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
-        now: new Date(),
-        availableAt: retryAt(now, record.attempts),
+        now: failedAt,
+        availableAt: schedule.availableAt,
         lastError: sanitizeDispatchError(error),
         failureCode,
         terminal,
         advanceDeliveryGeneration: !executionCompleted,
+        rateLimitedSince: schedule.rateLimitedSince,
+        refundAttempt: schedule.refundAttempt,
+        deliveredThreadId: this.#deliveredThreads.get(record),
       });
       if (terminal && failed) await this.#supersedeFailureOnSettledCard(failed);
       // A re-claim that failed before proving its kickoff never landed may be racing
@@ -1662,13 +1731,23 @@ export class FactoryDecisionDispatcher {
             userId: startedBy,
             orgId: record.orgId,
           });
+          await this.#switchThread(session, binding, { userId: startedBy, orgId: record.orgId });
+          this.#reviewSessions.set(record, { sessionId: binding.sessionId, threadId: binding.threadId });
+          const skillAlreadyDelivered = async () => {
+            if (record.deliveredThreadId === binding.threadId) return true;
+            if (record.deliveryGeneration === 0) return false;
+            const earlier = new Set(
+              Array.from({ length: record.deliveryGeneration }, (_, generation) => deliveryIdFor(record, generation)),
+            );
+            return (await session.thread.listActiveMessages()).some(message => earlier.has(message.id));
+          };
           const resolved =
             decision.skillName === undefined
               ? await resolvePromptInvocation(this.#controller, {
                   sessionId: binding.sessionId,
                   prompt: decision.prompt,
                 })
-              : decision.resume === true
+              : decision.resume === true || (await skillAlreadyDelivered())
                 ? await resolveSkillResumeInvocation(this.#controller, {
                     sessionId: binding.sessionId,
                     name: decision.skillName,
@@ -1679,10 +1758,7 @@ export class FactoryDecisionDispatcher {
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
-          await this.#switchThread(session, binding, { userId: startedBy, orgId: record.orgId });
-          this.#reviewSessions.set(record, { sessionId: binding.sessionId, threadId: binding.threadId });
-          const deliveryId =
-            record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
+          const deliveryId = deliveryIdFor(record, record.deliveryGeneration);
           const kickoffLanded = async () =>
             (await session.thread.listActiveMessages()).some(message => message.id === deliveryId);
           const kickoffStale = async () =>
@@ -1859,6 +1935,7 @@ export class FactoryDecisionDispatcher {
               run.arm();
               settled = await sendKickoff();
             }
+            this.#deliveredThreads.set(record, binding.threadId);
             if (goal) await this.#remindPhaseGoal(record, goal, session, binding, requestContext);
             await this.#recordRunStart(
               session,
@@ -3437,6 +3514,9 @@ export class FactoryDecisionDispatcher {
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),
             stopRequested,
           });
+          const attemptNumberReused = record.rateLimitedSince !== null;
+          const claimedAt = record.updatedAt.getTime();
+          const attempt = attemptNumberReused ? `${record.attempts}:${claimedAt}` : String(record.attempts);
           const sendKickoff = async (dedupeKey: string) => {
             await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
             return awaitNotification(
@@ -3474,13 +3554,13 @@ export class FactoryDecisionDispatcher {
               run.arm();
               deliveryGeneration += 1;
               settled = await sendKickoff(
-                `factory-kickoff:${record.kickoffKey}:retry:${record.attempts}:${deliveryGeneration}`,
+                `factory-kickoff:${record.kickoffKey}:retry:${attempt}:${deliveryGeneration}`,
               );
             }
             await this.#recordRunStart(
               session,
               binding,
-              `factory-kickoff:${record.kickoffKey}:${record.attempts}`,
+              `factory-kickoff:${record.kickoffKey}:${attempt}`,
               startedBy,
               run.endReason,
               item?.title,
@@ -3500,13 +3580,17 @@ export class FactoryDecisionDispatcher {
         return;
       }
       const failureCode = factoryDispatchFailureCode(error);
+      const failedAt = new Date();
+      const schedule = failureSchedule(record, error, failureCode, { claimedAt: now, failedAt });
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),
-        now: new Date(),
-        availableAt: retryAt(now, record.attempts),
+        now: failedAt,
+        availableAt: schedule.availableAt,
         lastError: sanitizeDispatchError(error),
         failureCode,
-        terminal: isTerminalFailure(record.attempts, failureCode),
+        terminal: schedule.terminal,
+        rateLimitedSince: schedule.rateLimitedSince,
+        refundAttempt: schedule.refundAttempt,
       });
     }
   }

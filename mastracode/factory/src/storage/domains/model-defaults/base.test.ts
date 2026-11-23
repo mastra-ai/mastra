@@ -89,4 +89,25 @@ describe('ModelDefaultsStorage', () => {
     await seed.modelDefaults.clear(user);
     expect(await seed.modelDefaults.get(user)).toBeNull();
   });
+
+  it('personal fallback models need a personal model and survive a model change', async () => {
+    const seed = await createFactoryStorageForTests();
+    const user = { orgId: 'org-1', userId: 'user-1' };
+    const fallbackModelIds = ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'];
+
+    expect(await seed.modelDefaults.setFallbackModelIds({ ...user, fallbackModelIds })).toBeNull();
+    expect(await seed.modelDefaults.get(user)).toBeNull();
+
+    await seed.modelDefaults.set({ ...user, modelId: 'anthropic/claude-opus-5.5' });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({ fallbackModelIds: [] });
+    expect(await seed.modelDefaults.setFallbackModelIds({ ...user, fallbackModelIds })).toMatchObject({
+      fallbackModelIds,
+    });
+
+    await seed.modelDefaults.set({ ...user, modelId: 'anthropic/claude-sonnet-5' });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({
+      modelId: 'anthropic/claude-sonnet-5',
+      fallbackModelIds,
+    });
+  });
 });

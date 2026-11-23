@@ -122,6 +122,19 @@ describe('FactoryProjectsStorage', () => {
     };
     expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: cleared })).toMatchObject(cleared);
   });
+
+  it('keeps an ordered fallback model list, empty until set', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    expect(project.fallbackModelIds).toEqual([]);
+
+    const fallbackModelIds = ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'];
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { fallbackModelIds } });
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.fallbackModelIds).toEqual(fallbackModelIds);
+
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { name: 'Renamed' } });
+    expect((await seed.projects.getById({ id: project.id }))?.fallbackModelIds).toEqual(fallbackModelIds);
+  });
 });
 
 describe('FactoryProjectsStorage builds', () => {

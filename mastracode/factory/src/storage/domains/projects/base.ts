@@ -58,6 +58,7 @@ export interface FactoryProject {
   modelScope: FactoryModelScope;
   /** Thinking level for this Factory's sessions and runs that have not picked their own. */
   defaultThinkingLevel: ThinkingLevelSetting;
+  fallbackModelIds: string[];
   /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
   sandboxWorkingDirectory: string | null;
   /** Provider settings document validated by the configured FactorySandbox. Only keys the user set. */
@@ -115,6 +116,7 @@ export interface UpdateFactoryProjectInput {
   defaultModelId?: string | null;
   modelScope?: FactoryModelScope;
   defaultThinkingLevel?: ThinkingLevelSetting;
+  fallbackModelIds?: string[];
   sandboxWorkingDirectory?: string | null;
   sandboxSettings?: Record<string, unknown> | null;
   workspaceSetupCommand?: string | null;
@@ -139,6 +141,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     default_model_id: { type: 'text', nullable: true },
     model_scope: { type: 'text', default: 'hybrid' },
     default_thinking_level: { type: 'text', default: DEFAULT_THINKING_LEVEL },
+    fallback_model_ids: { type: 'json', nullable: true },
     // Retired project switch: no longer written. A phase starts on its own with `autoStart`; the
     // `auto-run-switch-v1` board migration reads it once to carry it into the project's boards.
     auto_run_enabled: { type: 'boolean', default: false },
@@ -178,6 +181,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   default_model_id: string | null;
   model_scope: string;
   default_thinking_level: string | null;
+  fallback_model_ids: string[] | null;
   auto_run_enabled: boolean;
   sandbox_working_directory: string | null;
   sandbox_settings: Record<string, unknown> | null;
@@ -213,6 +217,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     defaultThinkingLevel: isThinkingLevelSetting(row.default_thinking_level)
       ? row.default_thinking_level
       : DEFAULT_THINKING_LEVEL,
+    fallbackModelIds: row.fallback_model_ids ?? [],
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
     sandboxSettings: row.sandbox_settings ?? null,
     workspaceSetupCommand: row.workspace_setup_command ?? null,
@@ -352,6 +357,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.defaultThinkingLevel !== undefined
             ? { default_thinking_level: changes.defaultThinkingLevel }
             : {}),
+          ...(changes.fallbackModelIds !== undefined ? { fallback_model_ids: changes.fallbackModelIds } : {}),
           ...(changes.sandboxWorkingDirectory !== undefined
             ? { sandbox_working_directory: changes.sandboxWorkingDirectory }
             : {}),

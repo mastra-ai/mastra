@@ -296,6 +296,7 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
     failureCode: decision.failureCode,
     canRetry: decisionRetryable(decision, overtaken),
     lastError: decision.lastError?.slice(0, 512) ?? null,
+    availableAt: decision.status === 'retry' ? decision.availableAt.toISOString() : null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
     completedAt: decision.completedAt?.toISOString() ?? null,

@@ -11,6 +11,8 @@ import {
   STATUS_EVENTS,
 } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
+import { FACTORY_MODEL_FALLBACKS_MAX } from '../model-fallbacks.js';
+import { MODEL_ID_PATTERN } from '../model-id.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import {
@@ -583,7 +585,17 @@ const intakeTestResponseSchema = z.object({
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
-const projectSchema = entitySchema;
+export const modelIdSchema = z
+  .string()
+  .trim()
+  .max(256)
+  .regex(MODEL_ID_PATTERN, 'Use a provider/model ID, e.g. "anthropic/claude-opus-5.5"');
+export const modelFallbackIdsSchema = z
+  .array(modelIdSchema)
+  .max(FACTORY_MODEL_FALLBACKS_MAX)
+  .refine(ids => new Set(ids).size === ids.length, { message: 'Fallback models must be unique' });
+
+const projectSchema = entitySchema.and(z.object({ fallbackModelIds: z.array(z.string()) }));
 const projectResponseSchema = z.object({ project: projectSchema });
 
 /**
@@ -688,9 +700,10 @@ export const updateProjectBodySchema = z
   .object({
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
-    defaultModelId: nullableTrimmed(200).optional(),
+    defaultModelId: z.union([modelIdSchema, nullableTrimmed(0)]).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
+    fallbackModelIds: modelFallbackIdsSchema.optional(),
     /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */

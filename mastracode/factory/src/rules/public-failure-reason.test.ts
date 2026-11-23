@@ -77,6 +77,14 @@ describe('publicFailureReason', () => {
     ).toBe('Agent run ended in error (the model provider quota is exhausted, HTTP 400)');
   });
 
+  it('shows only the provider-limit label, since the terminal error may describe another model the run fell back to', () => {
+    const quotaAfterRateLimit = providerError('Your credit balance is too low', { statusCode: 400 });
+    expect(publicFailureReason('run_rate_limited', quotaAfterRateLimit)).toBe('Model provider rate limit reached');
+    expect(publicFailureReason('run_quota_exhausted', quotaAfterRateLimit)).toBe(
+      'Model provider out of credits or quota',
+    );
+  });
+
   it('does not attribute a non-provider error to the model provider from its wording alone', () => {
     expect(publicFailureReason('unknown', new Error('query timed out after 30s'))).toBe('Factory automation failed');
   });

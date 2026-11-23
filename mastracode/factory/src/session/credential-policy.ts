@@ -32,7 +32,15 @@ export async function resolveFactoryCredentialTenant(
 export async function resolveFactoryModelPolicy(
   requestContext: RequestContext,
   deps: FactoryModelPolicyDependencies,
-): Promise<{ tenant: CredentialTenant; factoryProjectId?: string; factoryDefaultModelId?: string | null } | undefined> {
+): Promise<
+  | {
+      tenant: CredentialTenant;
+      factoryProjectId?: string;
+      factoryDefaultModelId?: string | null;
+      factoryFallbackModelIds?: readonly string[];
+    }
+  | undefined
+> {
   const principal = resolveAuthenticatedCredentialTenant(requestContext);
   if (!principal) return undefined;
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
@@ -61,6 +69,7 @@ export async function resolveFactoryModelPolicy(
       return {
         factoryProjectId: factoryProject.id,
         factoryDefaultModelId: factoryProject.defaultModelId,
+        factoryFallbackModelIds: factoryProject.fallbackModelIds,
         tenant: { ...principal, credentialScope: effectiveModelScope(factoryProject.modelScope, 'session') },
       };
     }
@@ -80,6 +89,7 @@ export async function resolveFactoryModelPolicy(
   return {
     factoryProjectId: project.id,
     factoryDefaultModelId: project.defaultModelId,
+    factoryFallbackModelIds: project.fallbackModelIds,
     tenant: {
       orgId: project.orgId,
       userId: sourceSession.userId,

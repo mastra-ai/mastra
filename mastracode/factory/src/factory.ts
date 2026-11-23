@@ -194,6 +194,7 @@ import { hydrateSessionMemorySettings } from './session/memory-settings-hydratio
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
+import { resolveRoutedModelDefaults } from './session/routed-model-defaults.js';
 import { observeSessionRunEnd, waitForSessionRunAudit } from './session/run-audit.js';
 import { recordRunRepositoryChoice, selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
@@ -201,7 +202,6 @@ import { createSessionActivityMiddleware, SessionUnloader } from './session/sess
 import type { IdleSessionUnloadOptions } from './session/session-unloader.js';
 import type { ReviewedChangeRequest } from './session/source-control-tools.js';
 import { createSourceControlTools, resolveReviewedChangeRequest } from './session/source-control-tools.js';
-import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { FactoryWorkItemStateProcessor } from './session/work-item-state-processor.js';
@@ -1799,9 +1799,9 @@ export class MastraFactory {
       const record = await memorySettingsStorage.get(await memorySettingsRowKey(requestContext, binding));
       requestContext.set('mastra__factoryMemorySettings', record);
     };
-    // Thinking defaults come from the session's defaults set, never the host's settings.json.
-    const resolveDefaultThinkingLevel = (requestContext: RequestContext | undefined) =>
-      resolveFactoryThinkingLevel(requestContext, {
+    // Thinking and fallback defaults come from the session's defaults set, never the host's settings.json.
+    const resolveRoutedDefaults = (requestContext: RequestContext | undefined) =>
+      resolveRoutedModelDefaults(requestContext, {
         projects: factoryProjectsStorage,
         sourceControl: sourceControlSessions,
         workItems: workItemsStorage,
@@ -1813,7 +1813,7 @@ export class MastraFactory {
           storage: workItemsStorage,
           boards: boards,
           loadMemorySettings,
-          defaultThinkingLevel: resolveDefaultThinkingLevel,
+          defaultThinkingLevel: async requestContext => (await resolveRoutedDefaults(requestContext)).thinkingLevel,
           onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
           isThreadRunning: threadId =>
             this.#prepared?.base.controller.listActiveThreadRuns().some(run => run.threadId === threadId) ?? false,
@@ -1943,7 +1943,10 @@ export class MastraFactory {
         plansDir: FACTORY_PLANS_DIR,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
-        resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
+        resolveDefaultThinkingLevel: async ({ requestContext }) =>
+          (await resolveRoutedDefaults(requestContext)).thinkingLevel,
+        resolveModelFallbacks: async ({ requestContext }) =>
+          (await resolveRoutedDefaults(requestContext)).fallbackModelIds,
         workspace: createWorkspaceFactory({
           skills: this.#skills,
           ...(storage.isDomainReady('skill-overrides') ? { skillOverrides: skillOverridesStorage } : {}),

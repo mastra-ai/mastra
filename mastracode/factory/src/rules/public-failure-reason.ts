@@ -1,19 +1,10 @@
-import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
+import { classifyProviderError } from '@mastra/core/error';
 import type { ProviderFailureKind } from '@mastra/core/error';
 
 import type { FactoryDispatchFailureCode } from '../storage/domains/work-items/base.js';
 import { factoryDispatchFailureMetadata, FactoryRuleRejectedError } from './dispatch-errors.js';
+import { causeOf, isProviderCallError, PROVIDER_LIMIT_FAILURE_CODES } from './provider-limit.js';
 import type { FactoryRuleRejectionCode } from './types.js';
-
-export function causeOf(error: unknown): unknown {
-  return error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
-}
-
-export function isProviderCallError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  if ('name' in error && typeof error.name === 'string' && PROVIDER_CALL_ERROR_NAME.test(error.name)) return true;
-  return 'statusCode' in error || 'responseBody' in error;
-}
 
 // Everything below is fixed wording or a name from Factory's public source:
 // a public pull request must never see provider or internal error text.
@@ -157,6 +148,7 @@ function publicDetail(error: unknown): string | undefined {
  */
 export function publicFailureReason(code: FactoryDispatchFailureCode, error: unknown): string {
   const label = factoryDispatchFailureMetadata(code).label;
+  if (PROVIDER_LIMIT_FAILURE_CODES.some(limit => limit === code)) return label;
   const detail = publicDetail(error);
   return detail ? `${label} (${detail})` : label;
 }
