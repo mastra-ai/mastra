@@ -3,7 +3,7 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 import { surfaceRimFocus } from '@/ds/primitives/form-element';
 import { illustrationPlateStyle } from '@/ds/primitives/illustration-plate';
-import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
+import { fieldsOnNested, raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -176,6 +176,7 @@ export const CardInset = React.forwardRef<HTMLElement, CardInsetProps>(
     <Component
       ref={ref}
       className={cn(
+        fieldsOnNested,
         'overflow-hidden rounded-lg bg-nested px-3 *:py-3 [&>*+*]:border-t [&>*+*]:border-separator',
         className,
       )}

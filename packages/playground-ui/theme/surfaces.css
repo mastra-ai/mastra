@@ -132,6 +132,7 @@
   /* Fields are a light tint of what they sit on. */
   --field-on-page: var(--card);
   --field-on-surface: color-mix(in srgb, oklch(var(--fill-tint) 0 0) 3%, var(--card));
+  --field-on-nested: oklch(var(--fill-tint) 0 0 / 3%);
   --field-rim: oklch(var(--fill-tint) 0 0 / 8%);
   /* Edge of a control made of segments. */
   --control-rim: var(--border);

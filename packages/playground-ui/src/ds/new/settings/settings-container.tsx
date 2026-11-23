@@ -15,7 +15,8 @@ const settingsCardStyle = cn(
   'shadow-raised',
   fieldsOnSurface,
   // A dialog is a card already, so here it is a box inside one.
-  'in-[[role=alertdialog]]:bg-nested in-[[role=alertdialog]]:shadow-none in-[[role=dialog]]:bg-nested in-[[role=dialog]]:shadow-none',
+  'in-[[role=alertdialog]]:bg-nested in-[[role=alertdialog]]:shadow-none in-[[role=alertdialog]]:[--field:var(--field-on-nested)]',
+  'in-[[role=dialog]]:bg-nested in-[[role=dialog]]:shadow-none in-[[role=dialog]]:[--field:var(--field-on-nested)]',
 );
 
 export type SettingsContainerProps = ComponentProps<'div'>;

@@ -48,6 +48,7 @@ const filledDestructiveLadder: { token: FillToken; use: string }[] = [
 const fieldSurfaceTokens = [
   { token: 'field-on-page', use: 'Field fill on the page' },
   { token: 'field-on-surface', use: 'Field fill inside a raised surface' },
+  { token: 'field-on-nested', use: 'Field fill on a box inside a card' },
   { token: 'field-hover', use: 'Tint of a hovered field' },
   { token: 'field-open', use: 'Tint of a field with its menu open' },
   { token: 'field-rim', use: 'Field edge' },
