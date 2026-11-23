@@ -402,7 +402,11 @@ describe('Zendesk tools', () => {
     it.each(pages)('%s reads the last page, where Zendesk sends null cursors', async (toolId, input, key, record) => {
       answer = () => ({
         status: 200,
-        body: { [key]: [record], meta: { has_more: false, after_cursor: null, before_cursor: null } },
+        body: {
+          [key]: [record],
+          meta: { has_more: false, after_cursor: null, before_cursor: null },
+          links: { next: null, prev: null },
+        },
       });
 
       const result = (await run(toolId, input)) as Record<string, unknown>;

@@ -3,7 +3,7 @@
   "localId": "zendesk",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-11-23T21:19:26.479Z",
+  "generatedAt": "2026-11-23T21:24:05.439Z",
   "toolCount": 36,
   "skippedActions": [],
   "files": {
@@ -30,7 +30,7 @@
     "tools/list-ticket-fields.ts": "034ee724b75c27f2ad4013b1af8c5d89ae0c0984f17ac438948370f7df599518",
     "tools/list-ticket-forms.ts": "71726c35c4d205fe874a7d190eb8d2c63b570d7e3ae765dacdbf310d83f4b084",
     "tools/list-tickets.ts": "859ffbe64529fffc2834582080fe495158050664648658205576ae2bf6e58d9c",
-    "tools/list-users.ts": "6f86796fbaa3257bfc3e02a6d613b5fa3491e390fdec8fe6a78c79dabe2fa678",
+    "tools/list-users.ts": "adb64cf0eb144c7ef679adf37489e4aaa3fb462e1e055ca43441272b02543d81",
     "tools/list-views.ts": "d295c528f90e253437b506ecdb1e54afda49f1b1ad7c2cbf94fd4a034851a2aa",
     "tools/search-tickets.ts": "04d40b22dce3267c0e037ad56c5e29df495f43c25e6a962301b37f2d41889ce5",
     "tools/update-organization.ts": "35406917e7f08a649bc55b425cf785fa28e24606a58e554c8e2788c3d9dc3894",

@@ -1406,7 +1406,17 @@ const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
       ),
     ],
   },
-  'list-users': { statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }] },
+  'list-users': {
+    statements: [
+      { ...ZENDESK_NULL_CURSORS, count: 2 },
+      {
+        pattern: /(next|prev): z\.string\(\)\.optional\(\)/,
+        replacement: '$1: z.string().nullish()',
+        count: 2,
+        what: 'nullable page links',
+      },
+    ],
+  },
   'list-views': {
     statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }],
     exec: [

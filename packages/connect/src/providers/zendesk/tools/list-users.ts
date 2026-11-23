@@ -29,8 +29,8 @@ const ProviderMetaSchema = z.object({
 });
 
 const ProviderLinksSchema = z.object({
-  next: z.string().optional(),
-  prev: z.string().optional(),
+  next: z.string().nullish(),
+  prev: z.string().nullish(),
 });
 
 const ProviderResponseSchema = z.object({
