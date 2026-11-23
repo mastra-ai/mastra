@@ -1,8 +1,18 @@
 diff --git a/lib/theme/ApiItem/index.js b/lib/theme/ApiItem/index.js
-index 5d6e1b5cc90e9f5e1c99005ab19dec0baa60f2bd..5c87f7f71f5cc695f436f54f49b785da96eba1db 100644
+index 5d6e1b5cc90e9f5e1c99005ab19dec0baa60f2bd..65fbad554b8dc9fe235add6ae741e75b41697af2 100644
 --- a/lib/theme/ApiItem/index.js
 +++ b/lib/theme/ApiItem/index.js
-@@ -26,7 +26,7 @@ const useIsBrowser_1 = __importDefault(require("@docusaurus/useIsBrowser"));
+@@ -14,9 +14,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.default = ApiItem;
+ const react_1 = __importDefault(require("react"));
+ const BrowserOnly_1 = __importDefault(require("@docusaurus/BrowserOnly"));
+-const ExecutionEnvironment_1 = __importDefault(
+-  require("@docusaurus/ExecutionEnvironment")
+-);
+ const client_1 = require("@docusaurus/plugin-content-docs/client");
+ const theme_common_1 = require("@docusaurus/theme-common");
+ const useDocusaurusContext_1 = __importDefault(
+@@ -26,7 +23,7 @@ const useIsBrowser_1 = __importDefault(require("@docusaurus/useIsBrowser"));
  const slice_1 = require("@theme/ApiExplorer/Authorization/slice");
  const persistenceMiddleware_1 = require("@theme/ApiExplorer/persistenceMiddleware");
  const storage_utils_1 = require("@theme/ApiExplorer/storage-utils");
@@ -11,7 +21,18 @@ index 5d6e1b5cc90e9f5e1c99005ab19dec0baa60f2bd..5c87f7f71f5cc695f436f54f49b785da
  const CodeBlock_1 = __importDefault(require("@theme/CodeBlock"));
  const Metadata_1 = __importDefault(require("@theme/DocItem/Metadata"));
  const SchemaExpansion_1 = require("@theme/SchemaExpansion");
-@@ -172,33 +172,11 @@ function ApiItem(props) {
+@@ -35,10 +32,6 @@ const clsx_1 = __importDefault(require("clsx"));
+ const pako_1 = require("pako");
+ const react_redux_1 = require("react-redux");
+ const store_1 = require("./store");
+-let ApiExplorer = (_) => react_1.default.createElement("div", null);
+-if (ExecutionEnvironment_1.default.canUseDOM) {
+-  ApiExplorer = require("@theme/ApiExplorer").default;
+-}
+ function base64ToUint8Array(base64) {
+   const binary = atob(base64);
+   const len = binary.length;
+@@ -172,33 +165,11 @@ function ApiItem(props) {
              react_1.default.createElement(
                SchemaExpansion_1.SchemaExpansionProvider,
                null,

@@ -120,15 +120,6 @@ const config: Config = {
         },
       } satisfies OpenApiPlugin.Options,
     ],
-    // The API Explorer's code snippet generators import Node built-ins that the theme doesn't polyfill.
-    () => ({
-      name: 'openapi-node-polyfills',
-      configureWebpack: () => ({
-        resolve: {
-          fallback: { url: require.resolve('url/'), string_decoder: require.resolve('string_decoder/') },
-        },
-      }),
-    }),
     [
       '@docusaurus/plugin-content-docs',
       {
