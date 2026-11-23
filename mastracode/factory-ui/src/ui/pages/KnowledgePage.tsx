@@ -33,9 +33,7 @@ export function KnowledgePage() {
   const slots = useSidebarHeaderSlots();
   return (
     <PageLayout variant="page" body="fixed" {...slots}>
-      <div className="flex min-h-0 flex-col p-4">
-        <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
-      </div>
+      <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
     </PageLayout>
   );
 }
@@ -82,11 +80,17 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) return <KnowledgeGraphLoader className="border-border rounded-lg border" />;
-  if (graph.isError) return <Notice variant="destructive">{graph.error.message}</Notice>;
+  if (graph.isPending) return <KnowledgeGraphLoader />;
+  if (graph.isError) {
+    return (
+      <div className="p-4">
+        <Notice variant="destructive">{graph.error.message}</Notice>
+      </div>
+    );
+  }
   if (graph.data.pages.length === 0) {
     return (
-      <Txt tone="muted" as="p" variant="body">
+      <Txt tone="muted" as="p" variant="body" className="p-4">
         No knowledge in this project yet. Pages appear here as factory sessions write them.
       </Txt>
     );
@@ -100,6 +104,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
         onSelect={pageId => update({ page: pageId })}
         view={view}
         onViewChange={next => update({ view: next })}
+        fullBleedGraph
       />
     </div>
   );

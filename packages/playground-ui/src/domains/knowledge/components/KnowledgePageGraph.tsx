@@ -24,6 +24,7 @@ import {
   INITIAL_SETTLE_MS,
   nudgeAxis,
   uncoveredInsets,
+  uncoveredTopInset,
 } from '../lib/fitViewport';
 import type { PaneInsets } from '../lib/fitViewport';
 import {
@@ -647,7 +648,7 @@ function GraphLegend({
   const open = pinned || peeking;
   return (
     <div
-      className="absolute top-3 left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none"
+      className="absolute top-[calc(var(--knowledge-toolbar-inset,0px)+0.75rem)] left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none"
       onPointerEnter={collapsible ? () => setPeeking(true) : undefined}
       onPointerLeave={collapsible ? () => setPeeking(false) : undefined}
     >
@@ -929,6 +930,7 @@ export interface KnowledgePageGraphProps {
   /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
   settled?: boolean;
   insets?: PaneInsets;
+  panOnScroll?: boolean;
   collapsibleLegend?: boolean;
   /** Exact links into and out of pages, from the store; they replace the counts taken from `knownLinks`. */
   exactLinkCounts?: ReadonlyMap<string, { in: number; out: number }>;
@@ -1034,6 +1036,7 @@ function KnowledgePageGraphInner({
   onClearSelection,
   onMentionSelect,
   insets = NO_PANE_INSETS,
+  panOnScroll = false,
   collapsibleLegend,
 }: KnowledgePageGraphProps) {
   // Grants add placeholder circles for declared principals with no scope page yet, and their own lines.
@@ -1424,13 +1427,14 @@ function KnowledgePageGraphInner({
     const anchor = current.find(node => node.id === (selected ?? centre));
     if (!anchor || width === 0 || height === 0) return;
     const covered = uncoveredInsets(width, insets);
+    const top = uncoveredTopInset(height, insets.top);
     const view = flow.getViewport();
     const dx = nudgeAxis(
       anchor.position.x * view.zoom + view.x - covered.left,
       (anchor.width ?? 0) * view.zoom,
       width - covered.left - covered.right,
     );
-    const dy = nudgeAxis(anchor.position.y * view.zoom + view.y, (anchor.height ?? 0) * view.zoom, height);
+    const dy = nudgeAxis(anchor.position.y * view.zoom + view.y - top, (anchor.height ?? 0) * view.zoom, height - top);
     if (dx === 0 && dy === 0) return;
     void flow.setViewport({ zoom: view.zoom, x: view.x + dx, y: view.y + dy }, duration ? { duration } : undefined);
   }, []);
@@ -1477,7 +1481,7 @@ function KnowledgePageGraphInner({
   const initialized = useRef(false);
   useEffect(() => {
     if (initialized.current) nudgeToSelection(fitDuration(prefersMotion()));
-  }, [insets.left, insets.right, nudgeToSelection]);
+  }, [insets.left, insets.right, insets.top, nudgeToSelection]);
 
   // The first view is refitted while the graph is still filling in (ring pages, children, links arrive over the
   // first moments), until the user does anything or the window closes. After that the view is theirs.
@@ -1613,6 +1617,8 @@ function KnowledgePageGraphInner({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
         nodesDraggable={false}
+        panOnScroll={panOnScroll}
+        zoomOnScroll={!panOnScroll}
         onPaneClick={onPaneClick}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={onNodeMouseLeave}
