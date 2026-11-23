@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { describeSetupInProgress, trackSetup, WORKSPACE_SETUP_TARGET } from './setup-progress.js';
 
@@ -23,20 +23,31 @@ describe('trackSetup', () => {
 });
 
 describe('trackSetup deadline', () => {
-  it('outlasts the command limit counted from dispatch, even after a slow mark write', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('stops the command before its mark lapses, even after a mark write slower than a minute', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-23T17:00:00Z') });
     let mark: { deadline: Date } | undefined;
     const storage = {
       setSetupInProgress: vi.fn(async ({ setup }: { setup: { deadline: Date } }) => {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 5 * 60_000));
         mark = setup;
       }),
       clearSetupInProgress: vi.fn(async () => {}),
     };
-    let dispatchedAt = 0;
-    await trackSetup(storage, 'session-1', 'acme/web', 60_000, async () => {
-      dispatchedAt = Date.now();
+    let stopsAt = 0;
+    const tracked = trackSetup(storage, 'session-1', 'acme/web', 15 * 60_000, async timeoutMs => {
+      stopsAt = Date.now() + timeoutMs;
     });
-    expect(mark!.deadline.getTime()).toBeGreaterThanOrEqual(dispatchedAt + 60_000);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    await tracked;
+
+    // Still marked running for as long as the command can run.
+    expect(stopsAt).toBeLessThanOrEqual(mark!.deadline.getTime());
+    expect(mark!.deadline.toISOString()).toBe('2026-11-23T17:15:00.000Z');
+    expect(stopsAt - Date.now()).toBe(10 * 60_000);
   });
 });
 

@@ -1354,6 +1354,17 @@ describe('GitHub session workspace preparation', () => {
     await vi.waitFor(() => expect(mocks.runSetupCommand).toHaveBeenCalledTimes(1));
 
     expect((await signal())?.contents).toContain('running the setup command for octocat/hello');
+    // The command is bounded by the mark, so it never outlives what the agent was told.
+    const [, , , , , options] = mocks.runSetupCommand.mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      unknown,
+      unknown,
+      unknown,
+      { timeoutMs: number },
+    ];
+    expect(options.timeoutMs).toBeGreaterThan(14 * 60_000);
+    expect(options.timeoutMs).toBeLessThanOrEqual(15 * 60_000);
     finishSetup();
     await created;
     expect(mocks.sessions.find(row => row.sessionId === 'session-a')?.setupInProgress).toBeNull();

@@ -1285,9 +1285,11 @@ export async function runSetupCommand(
   command: string,
   buildEnv?: Record<string, string>,
   runtimeEnv?: Record<string, string>,
+  options: { timeoutMs?: number } = {},
 ): Promise<void> {
   return runLifecycleCommand(sandbox, workdir, command, {
     phase: 'setup',
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
     ...(buildEnv ? { env: buildEnv } : {}),
     ...(runtimeEnv ? { mask: runtimeEnv } : {}),
   });

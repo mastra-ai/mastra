@@ -1581,10 +1581,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         try {
           await timedPhase('workspace.setup', async () => {
-            // Resolve the environment first, so the mark's deadline counts from when the command can start.
+            // Resolve the environment first, so the command gets the whole time the mark allows.
             const env = await setupEnv();
-            return trackSetup(storage.sessions, session.sessionId, repoFullName, DEFAULT_COMMAND_TIMEOUT_MS, () =>
-              runSetupCommand(target, workdir, projectRepository.setupCommand!, ...env),
+            return trackSetup(
+              storage.sessions,
+              session.sessionId,
+              repoFullName,
+              DEFAULT_COMMAND_TIMEOUT_MS,
+              timeoutMs =>
+                runSetupCommand(target, workdir, projectRepository.setupCommand!, env[0], env[1], { timeoutMs }),
             );
           });
           await gate.markSetupDone();
@@ -1751,8 +1756,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           try {
             await timedPhase(`workspace.setup(${repo.slug})`, async () => {
               const env = await setupEnv();
-              return trackSetup(storage.sessions, session.sessionId, repo.slug, DEFAULT_COMMAND_TIMEOUT_MS, () =>
-                runSetupCommand(target, entry.dir, repo.setupCommand!, ...env),
+              return trackSetup(storage.sessions, session.sessionId, repo.slug, DEFAULT_COMMAND_TIMEOUT_MS, timeoutMs =>
+                runSetupCommand(target, entry.dir, repo.setupCommand!, env[0], env[1], { timeoutMs }),
               );
             });
             await entry.gate.markSetupDone();
@@ -1790,7 +1795,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                   session.sessionId,
                   WORKSPACE_SETUP_TARGET,
                   DEFAULT_COMMAND_TIMEOUT_MS,
-                  () => runSetupCommand(target, gate.root, workspaceCommand, ...env),
+                  timeoutMs => runSetupCommand(target, gate.root, workspaceCommand, env[0], env[1], { timeoutMs }),
                 );
               });
               await gate.workspace.markSetupDone();
