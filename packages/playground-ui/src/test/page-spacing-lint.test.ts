@@ -55,6 +55,14 @@ tester.run('no-page-spacing', plugin.rules['no-page-spacing'], {
       code: "<PageLayout variant=\"page\"><div className={vertical ? 'flex flex-col gap-6' : 'flex items-center gap-2'} /></PageLayout>;",
     },
     {
+      name: 'keeps conditionals on the same test in step across cn() arguments',
+      code: "<PageLayout variant=\"page\"><div className={cn('flex', vertical ? 'flex-col' : 'flex-row', vertical ? 'gap-6' : 'gap-2')} /></PageLayout>;",
+    },
+    {
+      name: 'keeps an && class in step with a conditional on the same test',
+      code: "<PageLayout variant=\"page\"><div className={cn('flex', vertical && 'flex-col', vertical ? 'gap-6' : 'gap-2')} /></PageLayout>;",
+    },
+    {
       name: 'allows a horizontal gap on a multi-column grid',
       code: '<PageLayout variant="page"><div className="grid grid-cols-3 gap-4">{cards}</div></PageLayout>;',
     },
@@ -102,6 +110,11 @@ tester.run('no-page-spacing', plugin.rules['no-page-spacing'], {
     {
       name: 'flags an off-rhythm gap that a shared column class makes vertical',
       code: "<PageLayout variant=\"page\"><div className={cn('flex flex-col', dense ? 'gap-4' : 'gap-6')} /></PageLayout>;",
+      errors: 1,
+    },
+    {
+      name: 'flags an off-rhythm gap whose condition is independent of the direction',
+      code: "<PageLayout variant=\"page\"><div className={cn('flex', vertical ? 'flex-col' : 'flex-row', dense ? 'gap-4' : 'gap-6')} /></PageLayout>;",
       errors: 1,
     },
     {

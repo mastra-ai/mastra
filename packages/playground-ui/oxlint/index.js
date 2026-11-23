@@ -337,28 +337,48 @@ const PAGE_SPACING_MESSAGE = cls =>
 const SPACING_UTILITY = /^-?(m|p)[xytrblse]?-/;
 const COLUMN_GAP_UTILITY = /^(space-y|gap-y|gap)-(.+)$/;
 
-const product = parts =>
-  parts.reduce((combos, options) => combos.flatMap(combo => options.map(option => [...combo, ...option])), [[]]);
+const alternative = (literals = [], assumes = new Map()) => ({ literals, assumes });
 
-function classAlternatives(node) {
-  if (!node) return [[]];
-  if (node.type === 'Literal' && /^['"]/.test(node.raw)) return [[{ node, text: node.value }]];
+function merge(a, b) {
+  const assumes = new Map(a.assumes);
+  for (const [test, value] of b.assumes) {
+    if (assumes.has(test) && assumes.get(test) !== value) return null;
+    assumes.set(test, value);
+  }
+  return alternative([...a.literals, ...b.literals], assumes);
+}
+
+const product = parts =>
+  parts.reduce(
+    (combos, options) => combos.flatMap(combo => options.map(option => merge(combo, option)).filter(Boolean)),
+    [alternative()],
+  );
+
+const assuming = (options, test, value) =>
+  options.map(option => merge(option, alternative([], new Map([[test, value]])))).filter(Boolean);
+
+function classAlternatives(node, source) {
+  if (!node) return [alternative()];
+  const next = child => classAlternatives(child, source);
+  if (node.type === 'Literal' && /^['"]/.test(node.raw)) return [alternative([{ node, text: node.value }])];
   if (node.type === 'TemplateLiteral')
     return product([
-      [node.quasis.map(quasi => ({ node: quasi, text: quasi.value.raw }))],
-      ...node.expressions.map(classAlternatives),
+      [alternative(node.quasis.map(quasi => ({ node: quasi, text: quasi.value.raw })))],
+      ...node.expressions.map(next),
     ]);
-  if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression')
-    return classAlternatives(node.expression);
-  if (node.type === 'LogicalExpression')
-    return node.operator === '&&'
-      ? [[], ...classAlternatives(node.right)]
-      : [...classAlternatives(node.left), ...classAlternatives(node.right)];
-  if (node.type === 'ConditionalExpression')
-    return [...classAlternatives(node.consequent), ...classAlternatives(node.alternate)];
-  if (node.type === 'CallExpression') return product(node.arguments.map(classAlternatives));
-  if (node.type === 'ArrayExpression') return product(node.elements.map(classAlternatives));
-  return [[]];
+  if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') return next(node.expression);
+  if (node.type === 'LogicalExpression') {
+    if (node.operator !== '&&') return [...next(node.left), ...next(node.right)];
+    const test = source.getText(node.left);
+    return [...assuming([alternative()], test, false), ...assuming(next(node.right), test, true)];
+  }
+  if (node.type === 'ConditionalExpression') {
+    const test = source.getText(node.test);
+    return [...assuming(next(node.consequent), test, true), ...assuming(next(node.alternate), test, false)];
+  }
+  if (node.type === 'CallExpression') return product(node.arguments.map(next));
+  if (node.type === 'ArrayExpression') return product(node.elements.map(next));
+  return [alternative()];
 }
 
 function pageRoots(node, { throughFragments = true } = {}, roots = []) {
@@ -388,7 +408,7 @@ function noPageSpacing(context) {
     );
     if (!attribute) return;
     const reported = new Map();
-    for (const literals of classAlternatives(attribute.value)) {
+    for (const { literals } of classAlternatives(attribute.value, context.sourceCode)) {
       const classes = literals.flatMap(({ text }) => text.split(/\s+/)).map(cls => cls.split(':').pop());
       const column = stacksColumn(classes);
       for (const { node, text } of literals) {
