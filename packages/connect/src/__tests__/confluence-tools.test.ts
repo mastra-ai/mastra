@@ -261,12 +261,30 @@ describe('generated Confluence tools', () => {
       connectionMetadata = { cloudId: 'site-b' };
       const call = await toolset(['confluence_delete_page_property', 'confluence_get_page']);
 
-      await call('confluence_delete_page_property', { pageId: 7, propertyId: 9 });
+      await call('confluence_delete_page_property', { pageId: '7', propertyId: '9' });
       await call('confluence_get_page', { id: '7' }).catch(() => undefined);
 
       expect(requests.map(request => `${request.method} ${request.target.split('?')[0]}`)).toEqual([
         'DELETE /ex/confluence/site-b/wiki/api/v2/pages/7/properties/9',
         'GET /ex/confluence/site-b/wiki/api/v2/pages/7',
+      ]);
+    });
+
+    it('deletes a page property on a site chosen in metadata after an earlier call looked one up', async () => {
+      answer = target =>
+        target === '/oauth/token/accessible-resources'
+          ? { status: 200, body: [sites[0]] }
+          : { status: 200, body: { id: '7', title: 'Page', status: 'current', version: { number: 1 } } };
+      const call = await toolset(['confluence_get_page', 'confluence_delete_page_property']);
+
+      await call('confluence_get_page', { id: '7' }).catch(() => undefined);
+      connectionMetadata = { cloudId: 'site-b' };
+      await call('confluence_delete_page_property', { pageId: '7', propertyId: '9' });
+
+      expect(requests.map(request => `${request.method} ${request.target.split('?')[0]}`)).toEqual([
+        'GET /oauth/token/accessible-resources',
+        'GET /ex/confluence/site-a/wiki/api/v2/pages/7',
+        'DELETE /ex/confluence/site-b/wiki/api/v2/pages/7/properties/9',
       ]);
     });
 
@@ -300,7 +318,7 @@ describe('generated Confluence tools', () => {
     });
 
     it.each([
-      ['confluence_delete_page_property', { pageId: 7, propertyId: 9 }],
+      ['confluence_delete_page_property', { pageId: '7', propertyId: '9' }],
       ['confluence_create_page', { spaceId: '42', title: 'Page' }],
       ['confluence_update_footer_comment', { comment_id: '9', version_number: 2, body: '<p>hi</p>' }],
       ['confluence_get_space', { id: 42 }],
@@ -394,6 +412,60 @@ describe('generated Confluence tools', () => {
     });
   });
 
+  describe('reading included content', () => {
+    const unresolved = {
+      id: '31',
+      status: 'current',
+      pageId: '7',
+      resolutionStatus: 'open',
+      resolutionLastModifierId: null,
+      resolutionLastModifiedAt: null,
+    };
+
+    it.each([
+      ['unresolved', unresolved],
+      [
+        'resolved',
+        {
+          ...unresolved,
+          resolutionStatus: 'resolved',
+          resolutionLastModifierId: 'acct-1',
+          resolutionLastModifiedAt: '2026-11-23T00:00:00Z',
+        },
+      ],
+    ])('reads back an %s inline comment it just created', async (_state, comment) => {
+      answer = () => ({ status: 200, body: comment });
+      const call = await toolset(['confluence_create_inline_comment', 'confluence_get_inline_comment']);
+
+      const created = (await call('confluence_create_inline_comment', {
+        pageId: '7',
+        body: { representation: 'storage', value: '<p>hi</p>' },
+        inlineCommentProperties: { textSelection: 'hi', textSelectionMatchCount: 1, textSelectionMatchIndex: 0 },
+      })) as { id: string };
+      const read = (await call('confluence_get_inline_comment', { commentId: created.id })) as Record<string, unknown>;
+
+      expect(read).toMatchObject({ id: '31', resolutionStatus: comment.resolutionStatus });
+    });
+
+    it('returns the values of the attachment properties it was asked to include', async () => {
+      answer = () => ({
+        status: 200,
+        body: {
+          id: 'att1',
+          title: 'file.txt',
+          properties: { results: [{ id: 'p1', key: 'reviewed', value: { by: 'ada', at: 3 } }], meta: {}, _links: {} },
+        },
+      });
+
+      const result = (await run('confluence_get_attachment', { id: 'att1', includeProperties: true })) as {
+        properties?: { results?: Array<{ key: string; value?: unknown }> };
+      };
+
+      expect(new URLSearchParams(requests[0]!.target.split('?')[1]).get('include-properties')).toBe('true');
+      expect(result.properties?.results).toEqual([{ id: 'p1', key: 'reviewed', value: { by: 'ada', at: 3 } }]);
+    });
+  });
+
   describe('updating drafts', () => {
     it.each([
       ['confluence_update_page', { id: '7', title: 'Runbook', status: 'draft', body: '<p>x</p>' }, '/pages/7'],
@@ -431,9 +503,58 @@ describe('generated Confluence tools', () => {
       ['confluence_list_pages', { bodyFormat: 'view' }],
       ['confluence_list_blog_posts', { sort: 'created-date desc' }],
       ['confluence_list_page_footer_comments', { pageId: '7?x=1' }],
+      ['confluence_list_space_pages', { space_id: '42', sort: 'createdAt' }],
+      ['confluence_list_space_pages', { space_id: '42', sort: '-position' }],
+      ['confluence_delete_page_property', { pageId: 7, propertyId: '9' }],
+      ['confluence_delete_page_property', { pageId: '7', propertyId: '9/../1' }],
     ])('%s refuses %j before calling Confluence', async (toolId, input) => {
       await expect(run(toolId, input)).rejects.toThrow(/failed validation/);
       expect(requests.filter(request => request.target.includes('/wiki/'))).toEqual([]);
+    });
+
+    it.each(['created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-id'])(
+      'lists space pages sorted by %s',
+      async sort => {
+        answer = () => ({ status: 200, body: { results: [], _links: {} } });
+
+        await run('confluence_list_space_pages', { space_id: '42', sort });
+
+        expect(new URLSearchParams(requests[0]!.target.split('?')[1]).get('sort')).toBe(sort);
+      },
+    );
+
+    it('deletes a page property by ids too large for a JavaScript number', async () => {
+      const pageId = '9007199254740993';
+      const propertyId = '18446744073709551615';
+
+      await run('confluence_delete_page_property', { pageId, propertyId });
+
+      expect(requests.map(request => `${request.method} ${request.target}`)).toEqual([
+        `DELETE /ex/confluence/${CLOUD_ID}/wiki/api/v2/pages/${pageId}/properties/${propertyId}`,
+      ]);
+    });
+
+    it.each([
+      [{ pageId: '7' }, 'pageId'],
+      [{ blogPostId: '8' }, 'blogPostId'],
+      [{ parentCommentId: '9' }, 'parentCommentId'],
+    ])('creates a footer comment on the one target %o', async (target, key) => {
+      answer = () => ({ status: 200, body: { id: '21', ...target } });
+
+      await run('confluence_create_footer_comment', { ...target, bodyValue: '<p>hi</p>' }).catch(() => undefined);
+
+      const post = requests.find(request => request.method === 'POST');
+      expect(post?.body).toMatchObject({ [key]: Object.values(target)[0] });
+    });
+
+    it('keeps the target checks in the input schemas, not in execute', () => {
+      const dir = resolve(import.meta.dirname, '../providers/confluence/tools');
+      const read = (file: string) => readFileSync(resolve(dir, file), 'utf8');
+      expect(read('create-footer-comment.ts')).not.toMatch(/multiple_targets|missing_target/);
+      expect(read('create-inline-comment.ts')).not.toMatch(/if \(!input\.pageId && !input\.blogPostId/);
+      expect(read('update-inline-comment.ts')).not.toMatch(
+        /if \(input\.body === undefined && input\.resolved === undefined\)/,
+      );
     });
 
     it('lists footer comments of a page id given as a numeric string', async () => {

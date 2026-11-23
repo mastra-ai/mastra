@@ -95,6 +95,7 @@ const LabelsSchema = z
 const PropertyResultSchema = z.object({
   id: z.string(),
   key: z.string(),
+  value: z.unknown().optional(),
   version: z.record(z.string(), z.unknown()).optional(),
 });
 

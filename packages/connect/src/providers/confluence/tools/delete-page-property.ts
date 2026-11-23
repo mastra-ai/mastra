@@ -5,8 +5,8 @@ import { z } from 'zod';
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const deletePagePropertyInputSchema = z.object({
-  pageId: z.number().describe('Page ID. Example: 123'),
-  propertyId: z.number().describe('Property ID. Example: 456'),
+  pageId: z.string().regex(/^\d+$/, 'must be a numeric page id').describe('Page ID. Example: "123"'),
+  propertyId: z.string().regex(/^\d+$/, 'must be a numeric property id').describe('Property ID. Example: "456"'),
 });
 
 export const deletePagePropertyOutputSchema = z.object({

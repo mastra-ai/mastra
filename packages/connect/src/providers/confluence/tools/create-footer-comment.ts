@@ -111,64 +111,15 @@ export function createFooterCommentTool(proxy: PlatformProxy) {
     outputSchema: createFooterCommentOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createFooterCommentOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      let targetKey: string | undefined;
-      let targetValue: string | undefined;
-
-      if (input.pageId !== undefined) {
-        targetKey = 'pageId';
-        targetValue = input.pageId;
-      }
-      if (input.blogPostId !== undefined) {
-        if (targetKey !== undefined) {
-          throw new platformProxy.ActionError({
-            type: 'multiple_targets',
-            message:
-              'Only one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId may be provided.',
-          });
-        }
-        targetKey = 'blogPostId';
-        targetValue = input.blogPostId;
-      }
-      if (input.attachmentId !== undefined) {
-        if (targetKey !== undefined) {
-          throw new platformProxy.ActionError({
-            type: 'multiple_targets',
-            message:
-              'Only one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId may be provided.',
-          });
-        }
-        targetKey = 'attachmentId';
-        targetValue = input.attachmentId;
-      }
-      if (input.parentCommentId !== undefined) {
-        if (targetKey !== undefined) {
-          throw new platformProxy.ActionError({
-            type: 'multiple_targets',
-            message:
-              'Only one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId may be provided.',
-          });
-        }
-        targetKey = 'parentCommentId';
-        targetValue = input.parentCommentId;
-      }
-      if (input.customContentId !== undefined) {
-        if (targetKey !== undefined) {
-          throw new platformProxy.ActionError({
-            type: 'multiple_targets',
-            message:
-              'Only one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId may be provided.',
-          });
-        }
-        targetKey = 'customContentId';
-        targetValue = input.customContentId;
-      }
-
-      if (targetKey === undefined || targetValue === undefined) {
-        throw new platformProxy.ActionError({
-          type: 'missing_target',
-          message: 'Exactly one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId is required.',
-        });
-      }
+      const [targetKey, targetValue] = (
+        [
+          ['pageId', input.pageId],
+          ['blogPostId', input.blogPostId],
+          ['attachmentId', input.attachmentId],
+          ['parentCommentId', input.parentCommentId],
+          ['customContentId', input.customContentId],
+        ] as const
+      ).find(([, value]) => value !== undefined)!;
 
       const connection = await platformProxy.getConnection();
 

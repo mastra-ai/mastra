@@ -164,13 +164,6 @@ export function updateInlineCommentTool(proxy: PlatformProxy) {
     outputSchema: updateInlineCommentOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof updateInlineCommentOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      if (input.body === undefined && input.resolved === undefined) {
-        throw new platformProxy.ActionError({
-          type: 'missing_fields',
-          message: 'At least one of body or resolved must be provided to update the inline comment.',
-        });
-      }
-
       const cloudId = await resolveCloudId(platformProxy);
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-inline-comments-comment-id-get
       const getResponse = await platformProxy.get({

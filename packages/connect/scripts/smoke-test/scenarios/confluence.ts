@@ -219,7 +219,7 @@ async function runPropertyLifecycle(
     await runPropertyReads(call, steps, pageId, property, key, version);
   } finally {
     await cleanupChild(steps, log, runId, 'page property', 'confluence_delete_page_property', property, async () => {
-      await call('confluence_delete_page_property', { pageId: Number(pageId), propertyId: Number(property) });
+      await call('confluence_delete_page_property', { pageId: String(pageId), propertyId: String(property) });
     });
   }
 }

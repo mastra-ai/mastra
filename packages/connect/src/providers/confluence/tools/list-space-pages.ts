@@ -12,7 +12,7 @@ export const listSpacePagesInputSchema = z.object({
   status: z.array(z.string()).optional().describe('Filter by page status. Example: ["current"]'),
   title: z.string().optional().describe('Filter by page title (partial match).'),
   sort: z
-    .enum(['id', '-id', 'createdAt', '-createdAt', 'position', '-position', 'title', '-title'])
+    .enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-title'])
     .optional()
     .describe('Sort order for results.'),
   body_format: z.string().optional().describe('Body format for page content. Defaults to "storage".'),

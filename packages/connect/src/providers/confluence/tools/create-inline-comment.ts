@@ -185,20 +185,6 @@ export function createInlineCommentTool(proxy: PlatformProxy) {
         await platformProxy.updateMetadata({ cloudId });
       }
 
-      if (!input.pageId && !input.blogPostId && !input.parentCommentId) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_input',
-          message: 'At least one of pageId, blogPostId, or parentCommentId is required.',
-        });
-      }
-
-      if (!input.parentCommentId && !input.inlineCommentProperties) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_input',
-          message: 'inlineCommentProperties is required for top-level inline comments.',
-        });
-      }
-
       const requestBody: {
         pageId?: string;
         blogPostId?: string;

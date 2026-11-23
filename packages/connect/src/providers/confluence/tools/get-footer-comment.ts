@@ -53,6 +53,7 @@ const MetaSchema = z
 const PropertySchema = z.object({
   id: z.string().optional(),
   key: z.string().optional(),
+  value: z.unknown().optional(),
   version: z.record(z.string(), z.unknown()).optional(),
 });
 

@@ -33,6 +33,7 @@ const LabelSchema = z.object({
 const PropertySchema = z.object({
   id: z.string(),
   key: z.string(),
+  value: z.unknown().optional(),
   version: z.unknown().optional(),
 });
 

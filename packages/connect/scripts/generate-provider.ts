@@ -1738,6 +1738,24 @@ function rewriteExec(action: ExtractedAction, pattern: RegExp, replacement: stri
 const CONFLUENCE_INCLUDED =
   'z.object({ results: z.array(z.unknown()).optional(), meta: z.record(z.string(), z.unknown()).optional(), _links: z.record(z.string(), z.unknown()).optional() }).passthrough()';
 
+/** Lets an included content property keep its JSON value. */
+function keepPropertyValues(action: ExtractedAction, schema: string): ExtractedAction {
+  return rewriteModuleStatements(action, [
+    {
+      pattern: new RegExp(
+        `(const ${schema} = z\\.object\\(\\{\\s*id: z\\.string\\(\\)(?:\\.optional\\(\\))?,\\s*key: z\\.string\\(\\)(?:\\.optional\\(\\))?,)`,
+      ),
+      replacement: '$1\n  value: z.unknown().optional(),',
+      count: 1,
+      what: 'content property values',
+    },
+  ]);
+}
+
+/** A Confluence id as a decimal string, which an int64 id needs to stay exact. */
+const confluenceDecimalId = (what: string, example: string) =>
+  `z.string().regex(/^\\d+$/, 'must be a numeric ${what} id').describe('${what[0]!.toUpperCase()}${what.slice(1)} ID. Example: "${example}"')`;
+
 /** The formats the bulk page and blog-post endpoints return bodies in. */
 const CONFLUENCE_BULK_BODY_FORMAT = "z.enum(['storage', 'atlas_doc_format'])";
 
@@ -1751,20 +1769,80 @@ const CONFLUENCE_FIXES: Readonly<Record<string, (action: ExtractedAction) => Ext
     nullableFields(action, 'ProviderPageSchema', ['parentId', 'parentType', 'position', 'ownerId']),
   'create-inline-comment': action =>
     refineInput(
-      nullableFields(action, 'ProviderInlineCommentSchema', ['resolutionLastModifierId', 'resolutionLastModifiedAt']),
+      rewriteExec(
+        nullableFields(action, 'ProviderInlineCommentSchema', ['resolutionLastModifierId', 'resolutionLastModifiedAt']),
+        // The input schema enforces both, so exec need not check them again.
+        /if \(!input\.pageId && !input\.blogPostId && !input\.parentCommentId\) \{[\s\S]*?\}\);\s*\}\s*if \(!input\.parentCommentId && !input\.inlineCommentProperties\) \{[\s\S]*?\}\);\s*\}/,
+        '',
+        'inline comment target checks',
+      ),
       `.refine(input => Boolean(input.pageId || input.blogPostId || input.parentCommentId), 'At least one of pageId, blogPostId, or parentCommentId is required.').refine(input => Boolean(input.parentCommentId || input.inlineCommentProperties), { message: 'inlineCommentProperties is required for top-level inline comments.', path: ['inlineCommentProperties'] })`,
     ),
   'create-footer-comment': action =>
     refineInput(
-      action,
+      rewriteExec(
+        action,
+        // The input schema allows exactly one target, so exec only picks it.
+        /let targetKey: string \| undefined;[\s\S]*?type: 'missing_target',[\s\S]*?\}\);\s*\}/,
+        `const [targetKey, targetValue] = (
+        [
+          ['pageId', input.pageId],
+          ['blogPostId', input.blogPostId],
+          ['attachmentId', input.attachmentId],
+          ['parentCommentId', input.parentCommentId],
+          ['customContentId', input.customContentId],
+        ] as const
+      ).find(([, value]) => value !== undefined)!;`,
+        'footer comment target checks',
+      ),
       `.refine(input => [input.pageId, input.blogPostId, input.attachmentId, input.parentCommentId, input.customContentId].filter(id => id !== undefined).length === 1, 'Exactly one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId is required.')`,
     ),
   'update-inline-comment': action =>
     refineInput(
-      action,
+      rewriteExec(
+        action,
+        // The input schema requires one of them, so exec need not check again.
+        /if \(input\.body === undefined && input\.resolved === undefined\) \{[\s\S]*?\}\);\s*\}/,
+        '',
+        'update field check',
+      ),
       `.refine(input => input.body !== undefined || input.resolved !== undefined, 'At least one of body or resolved must be provided to update the inline comment.')`,
     ),
-  'list-space-pages': action => nullableFields(action, 'PageSchema', ['ownerId', 'position']),
+  'list-space-pages': action =>
+    rewriteModuleStatements(nullableFields(action, 'PageSchema', ['ownerId', 'position']), [
+      {
+        // The space pages endpoint takes PageSortOrder values.
+        pattern: /\.enum\(\[\s*'id',\s*'-id',\s*'createdAt',[^\]]*'-title',?\s*\]\)/,
+        replacement:
+          ".enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-title'])",
+        count: 1,
+        what: 'space page sorts',
+      },
+    ]),
+  'get-inline-comment': action =>
+    nullableFields(action, 'InlineCommentSchema', [
+      'resolutionLastModifierId',
+      'resolutionLastModifiedAt',
+      'resolutionStatus',
+    ]),
+  'get-attachment': action => keepPropertyValues(action, 'PropertySchema'),
+  'get-footer-comment': action => keepPropertyValues(action, 'PropertySchema'),
+  'get-page': action => keepPropertyValues(action, 'PropertyResultSchema'),
+  'delete-page-property': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /pageId: z\.number\(\)\.describe\('Page ID\. Example: 123'\)/,
+        replacement: `pageId: ${confluenceDecimalId('page', '123')}`,
+        count: 1,
+        what: 'page id as a decimal string',
+      },
+      {
+        pattern: /propertyId: z\.number\(\)\.describe\('Property ID\. Example: 456'\)/,
+        replacement: `propertyId: ${confluenceDecimalId('property', '456')}`,
+        count: 1,
+        what: 'property id as a decimal string',
+      },
+    ]),
   'list-pages-for-label': action => {
     const fields = ['parentId', 'parentType', 'position', 'ownerId', 'lastOwnerId', 'subtype'];
     return skipNullFields(nullableFields(action, 'PageSchema', fields), 'page', fields);
