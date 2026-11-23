@@ -536,6 +536,22 @@ describe('ChatProvider', () => {
       expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
     });
 
+    it.each([
+      { name: 'a client tool', options: { clientTools: { askQuestion: askQuestionInBrowser } } },
+      { name: 'onIterationComplete', options: { onIterationComplete: endTurnFromHook } },
+    ])('shows no maxSteps warning when $name ended the run and stopCause is absent', async ({ options }) => {
+      const chunks = (await runAgent({ maxSteps: 1, ...options })).map(chunk => {
+        if (chunk.type !== 'finish') return chunk;
+        const { stopCause: _stopCause, ...payload } = chunk.payload;
+        return { ...chunk, payload };
+      });
+      expectToolCallFinish(chunks, 1);
+
+      await renderRun({ maxSteps: 1, chunks });
+
+      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
+    });
+
     it.each([1, 3])('warns when the run used every step of maxSteps %i', async maxSteps => {
       const chunks = await runAgent({ maxSteps });
       expectToolCallFinish(chunks, maxSteps);

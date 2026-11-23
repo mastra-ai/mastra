@@ -64,10 +64,21 @@ describe('stream error messages', () => {
   });
 
   describe('when an older core reports no stop cause', () => {
-    it('warns once the run used every step', async () => {
+    it('does not infer exhaustion from step count when stopCause is absent', async () => {
       const finish = withoutStopCause(finishOf(await streamQuestionAgent({ maxSteps: 3 })));
-      expect(isMaxStepsFinishChunk({ chunk: finish, maxSteps: 3 })).toBe(true);
+      expect(isMaxStepsFinishChunk({ chunk: finish, maxSteps: 3 })).toBe(false);
     });
+
+    it.each([
+      { name: 'a client tool', options: { clientTools: { askQuestion: askQuestionInBrowser } } },
+      { name: 'onIterationComplete', options: { onIterationComplete: endTurnFromHook } },
+    ])(
+      'does not warn when $name ended the run on its last allowed step and stopCause is absent',
+      async ({ options }) => {
+        const finish = withoutStopCause(finishOf(await streamQuestionAgent({ maxSteps: 1, ...options })));
+        expect(isMaxStepsFinishChunk({ chunk: finish, maxSteps: 1 })).toBe(false);
+      },
+    );
 
     it('does not warn when the run stopped with steps to spare', async () => {
       const finish = withoutStopCause(
@@ -76,9 +87,7 @@ describe('stream error messages', () => {
       expect(isMaxStepsFinishChunk({ chunk: finish, maxSteps: 10 })).toBe(false);
     });
 
-    // A processor retry re-runs its step, so core's limit does not count it. Core 1.83.0
-    // sends both attempts in `steps`, and counting the retry warned on a run with a step left.
-    it('does not count a processor retry as a used step', async () => {
+    it('does not warn after a processor retry', async () => {
       const finish = withoutStopCause(finishOf(await streamRetriedQuestionAgent({ maxSteps: 2 })));
       expect(finish.payload.output.steps?.map(step => step.tripwire?.retry === true)).toEqual([true, false]);
       expect(isMaxStepsFinishChunk({ chunk: finish, maxSteps: 2 })).toBe(false);

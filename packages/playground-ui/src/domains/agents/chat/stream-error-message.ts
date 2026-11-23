@@ -8,37 +8,9 @@ type StreamErrorChunk = {
   };
 };
 
-type FinishChunk = Extract<ChunkType, { type: 'finish' }>;
-
 const getMaxStepsErrorText = (maxSteps?: number) => {
   const limit = typeof maxSteps === 'number' ? ` (${maxSteps})` : '';
   return `Agent stopped because it reached maxSteps${limit} while tool calls were still pending. Increase maxSteps in advanced settings and try again.`;
-};
-
-type FinishStep = NonNullable<FinishChunk['payload']['output']['steps']>[number];
-
-/**
- * A retried step re-runs, so core's step limit does not count it. A processor
- * retry keeps its rejection as `tripwire.retry`, which the finish chunk carries
- * even where it leaves `finishReason` empty (core 1.83.0). Core also sends
- * `'retry'` as the finish reason, a value outside the AI SDK union the type
- * declares, so the reason is widened to a string to compare it.
- */
-const isRetriedStep = (step: FinishStep) => {
-  const finishReason: string | undefined = step.finishReason;
-  return step.tripwire?.retry === true || finishReason === 'retry';
-};
-
-/**
- * A server on a @mastra/core that predates `stopCause` only says how many steps
- * the run took, and only on the caller's own stream: thread subscription copies
- * drop `steps`. Using every step is the best guess there, though a client tool
- * or hook stop on the last allowed step looks the same.
- */
-const usedEveryStep = ({ chunk, maxSteps }: { chunk: FinishChunk; maxSteps: number | undefined }) => {
-  const steps = chunk.payload.output?.steps;
-  if (typeof maxSteps !== 'number' || maxSteps < 1 || !Array.isArray(steps)) return false;
-  return steps.filter(step => !isRetriedStep(step)).length >= maxSteps;
 };
 
 /**
@@ -47,13 +19,13 @@ const usedEveryStep = ({ chunk, maxSteps }: { chunk: FinishChunk; maxSteps: numb
  * last step called a tool: a `stopWhen` match, a client tool or an
  * `onIterationComplete` stop end a run the same way, even on the last allowed
  * step (#29612). Core reports why its loop stopped as `stopCause`, on both the
- * agent stream and thread subscription copies, so that decides.
+ * agent stream and thread subscription copies. When `stopCause` is absent (for
+ * example from an older `@mastra/core` server), do not infer exhaustion from
+ * step count, because intentional boundary stops look identical.
  */
-export const isMaxStepsFinishChunk = ({ chunk, maxSteps }: { chunk: ChunkType; maxSteps: number | undefined }) => {
+export const isMaxStepsFinishChunk = ({ chunk }: { chunk: ChunkType; maxSteps?: number | undefined }) => {
   if (chunk.type !== 'finish' || chunk.payload.stepResult?.reason !== 'tool-calls') return false;
-  const { stopCause } = chunk.payload;
-  if (stopCause !== undefined) return stopCause === 'max_steps';
-  return usedEveryStep({ chunk, maxSteps });
+  return chunk.payload.stopCause === 'max_steps';
 };
 
 /**
