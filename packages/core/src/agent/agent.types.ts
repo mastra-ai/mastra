@@ -22,7 +22,7 @@ import type { MastraStreamTransformOptions } from '../stream/types';
 import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
-import type { DurableAgentStreamResult } from './durable/durable-agent';
+import type { DurableAgentStreamResult } from './durable/types';
 import type { MessageListInput } from './message-list';
 
 import type { AgentSignalType } from './signals';

@@ -77,12 +77,8 @@ export {
 } from './create-durable-agent';
 
 // DurableAgent class (base class for durable agents)
-export {
-  DurableAgent,
-  type DurableAgentConfig,
-  type DurableAgentStreamOptions,
-  type DurableAgentStreamResult,
-} from './durable-agent';
+export { DurableAgent } from './durable-agent';
+export type { DurableAgentConfig, DurableAgentStreamOptions, DurableAgentStreamResult } from './types';
 export { applyReservedMemoryContextKeys } from '../helpers';
 
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
