@@ -250,6 +250,17 @@ export class HeadlessAuthError extends Error {
  * validates them with the provider. Unauthenticated providers are created
  * directly.
  */
+function isSecureNangoHost(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  return url.protocol === 'https:' || (url.protocol === 'http:' && loopback);
+}
+
 export function startHeadlessAuth(input: {
   sessionToken: string;
   /** Nango API host from the connect session; omitted means Nango Cloud. */
@@ -264,6 +275,13 @@ export function startHeadlessAuth(input: {
     // instead of the token-exchange endpoint. Fail fast instead.
     return {
       result: Promise.reject(new HeadlessAuthError('Enter the provider credentials to connect.', 'failed')),
+      close: () => {},
+    };
+  }
+  if (input.apiBaseUrl && !isSecureNangoHost(input.apiBaseUrl)) {
+    // Never hand the session token or credentials to a cleartext remote host.
+    return {
+      result: Promise.reject(new HeadlessAuthError('The Nango host must use HTTPS.', 'failed')),
       close: () => {},
     };
   }

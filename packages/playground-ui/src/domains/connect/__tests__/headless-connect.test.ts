@@ -210,4 +210,30 @@ describe('startHeadlessAuth', () => {
 
     expect(nangoMocks.create).toHaveBeenCalledWith('public-api', { params: { subdomain: 'acme' } });
   });
+
+  it('refuses a remote plain-HTTP Nango host before sending credentials', async () => {
+    await expect(
+      startHeadlessAuth({
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://nango.internal.example',
+        integrationId: 'some-api',
+        authType: 'API_KEY',
+        credentials: { apiKey: 'secret' },
+      }).result,
+    ).rejects.toThrow('The Nango host must use HTTPS.');
+
+    expect(nangoMocks.auth).not.toHaveBeenCalled();
+  });
+
+  it('allows a plain-HTTP Nango host on localhost', async () => {
+    await startHeadlessAuth({
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://localhost:3003',
+      integrationId: 'some-api',
+      authType: 'API_KEY',
+      credentials: { apiKey: 'secret' },
+    }).result;
+
+    expect(nangoMocks.auth).toHaveBeenCalled();
+  });
 });
