@@ -1011,20 +1011,28 @@ try {
   const cleanup = async operation => {
     try {
       await operation();
+      return true;
     } catch (error) {
       errors.push(error);
+      return false;
     }
   };
   for (const proc of [...children].reverse()) await cleanup(() => stop(proc));
-  for (const directory of clusters) await cleanup(() => stopPostgres(directory));
+  let postgresStopped = true;
+  for (const directory of clusters) {
+    if (!(await cleanup(() => stopPostgres(directory)))) postgresStopped = false;
+  }
   await cleanup(() => model?.close());
   if (identityServer)
     await cleanup(
       () => new Promise((resolve, reject) => identityServer.close(error => (error ? reject(error) : resolve()))),
     );
-  await cleanup(() => rm(lab, { recursive: true, force: true }));
+  if (postgresStopped) await cleanup(() => rm(lab, { recursive: true, force: true }));
   if (errors.length) {
-    const failure = new AggregateError(errors, 'Hosted proof cleanup failed');
+    const failure = new AggregateError(
+      errors,
+      postgresStopped ? 'Hosted proof cleanup failed' : `Hosted proof cleanup failed. Lab retained at ${lab}`,
+    );
     if (!proofFailed) throw failure;
     console.error(failure);
   }

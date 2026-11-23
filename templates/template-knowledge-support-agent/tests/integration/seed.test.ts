@@ -400,7 +400,8 @@ test('seed reports a managed note retained on its merge destination', async () =
     const source = page(initial, 'store-case');
     const target = page(initial, 'another-case');
     const oldNoteId = initial.notes[0]!.id!;
-    await f.knowledge(async (_, storage) => {
+    const retainedIds = [oldNoteId];
+    await f.knowledge(async (knowledge, storage) => {
       await storage.mergePages({
         sourceId: source.id!,
         sourceVersion: source.version!,
@@ -408,14 +409,44 @@ test('seed reports a managed note retained on its merge destination', async () =
         provenance: { author: 'synthetic-operator' },
       });
       assert.equal((await storage.getNote({ id: oldNoteId, read: 'all' }))?.pageId, target.id);
+      const add = (text: string, author: string) =>
+        knowledge.addNote({ scope: 'customer:north:store-1', path: 'cases/another', text, author });
+      for (let index = 0; index < 101; index++) {
+        const note = await add(`Seed note: retail-pos/another-case/old-${index}\nRetained example.`, 'seed:retail-pos');
+        retainedIds.push(note.id);
+      }
+      await add('Seed note: retail-pos/another-case/unowned', 'synthetic-operator');
+      await add('Seed note: retail-pos-other/another-case/foreign', 'seed:retail-pos');
+      await add('seed note: retail-pos/another-case/wrong-case', 'seed:retail-pos');
+      const deleted = await add('Seed note: retail-pos/another-case/deleted', 'seed:retail-pos');
+      await knowledge.removeNote({ id: deleted.id });
     });
     const repeated = (await f.cli()).report;
     const newNote = repeated.notes.find(note => note.pageKey === 'store-case');
     assert.ok(newNote?.id && newNote.id !== oldNoteId);
-    assert.deepEqual(repeated.retained, [`note:${oldNoteId}`]);
+    assert.deepEqual(repeated.retained.sort(), retainedIds.map(id => `note:${id}`).sort());
     await f.knowledge(async (_, storage) => {
       assert.equal((await storage.getNote({ id: newNote.id!, read: 'all' }))?.pageId, page(repeated, 'store-case').id);
     });
+  } finally {
+    await f.close();
+  }
+});
+
+test('seed caps raw Markdown bytes and validates the normalized character count', async () => {
+  const f = await fixture();
+  try {
+    const file = join(dirname(f.manifestFile), 'connectivity.md');
+    await writeFile(file, `${'界'.repeat(1_000_000)}\r\n`);
+    await f.cli({ args: ['--dry-run'] });
+    await writeFile(file, 'x'.repeat(1_000_001));
+    assert.match((await f.cli({ args: ['--dry-run'], code: 1 })).output, /Invalid Markdown body/u);
+    await writeFile(file, `Valid Markdown followed by oversized trailing whitespace.\n${' '.repeat(4_000_000)}`);
+    assert.match(
+      (await f.cli({ args: ['--dry-run'], code: 1 })).output,
+      /Markdown file connectivity\.md exceeds the 4000000-byte read bound/u,
+    );
+    await noFile(f.database);
   } finally {
     await f.close();
   }

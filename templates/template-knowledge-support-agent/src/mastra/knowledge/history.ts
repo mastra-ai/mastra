@@ -17,6 +17,7 @@ const bounds = {
   queries: 12,
   notes: 100,
   noteConcurrency: 8,
+  verificationRetries: 16,
   records: 3,
 };
 type Evidence = SupportRecord & { ref: string };
@@ -179,11 +180,9 @@ export async function prepareHistory(
           visit(note);
         }
         cursor = batch.nextCursor;
-        if (cursor && count >= bounds.notes) {
-          partial = true;
-          break;
-        }
+        if (cursor && count >= bounds.notes) return true;
       } while (cursor);
+      return false;
     }
     const pagesToInspect = candidateBodies.entries();
     const checks: Array<{ pageId: string; ancestry: PageLocation[]; pageRecord?: Evidence; notes: NoteEvidence[] }> =
@@ -243,7 +242,7 @@ export async function prepareHistory(
       };
       if (noteCounts[pageId] !== 0) {
         try {
-          await scanNotes(store, pageId, note => includeNote(note, true));
+          if (await scanNotes(store, pageId, note => includeNote(note, true))) partial = true;
         } catch {
           partial = true;
         }
@@ -266,54 +265,69 @@ export async function prepareHistory(
         for (const [pageId, body] of pagesToInspect) await inspect(pageId, body);
       }),
     );
+    async function verifyBatch(batch: typeof checks) {
+      // Note revisions and every ancestor must agree in the same scoped read snapshot.
+      return knowledge.withReadSnapshot(async snapshot => {
+        const ancestryIds = [...new Set(batch.flatMap(check => check.ancestry.map(page => page.id)))];
+        const currentPages = new Map<string, PageLocation>();
+        for (let index = 0; index < ancestryIds.length; index += bounds.batch) {
+          const batch = await snapshot.getPages({ ids: ancestryIds.slice(index, index + bounds.batch), read });
+          for (const current of batch) currentPages.set(current.id, location(current));
+        }
+        const evidence: Evidence[] = [];
+        let incomplete = false;
+        for (const { pageId, ancestry, pageRecord, notes } of batch) {
+          if (
+            !ancestry.every(prior => {
+              const current = currentPages.get(prior.id);
+              return (
+                current?.scopeId === customer.id &&
+                current.parentId === prior.parentId &&
+                current.key === prior.key &&
+                current.version === prior.version
+              );
+            })
+          ) {
+            incomplete = true;
+            continue;
+          }
+          if (pageRecord) evidence.push(pageRecord);
+          const listedVersions = new Map<string, number>();
+          if (notes.some(note => note.listed)) {
+            const truncated = await scanNotes(snapshot, pageId, note => {
+              if (note.pageId === pageId && !note.deletedAt) listedVersions.set(note.id, note.version);
+            });
+            incomplete ||= truncated;
+          }
+          for (const observed of notes) {
+            let currentVersion = listedVersions.get(observed.id);
+            if (!observed.listed) {
+              const note = await snapshot.getNote({ id: observed.id, read });
+              if (note?.pageId === pageId && !note.deletedAt) currentVersion = note.version;
+            }
+            if (currentVersion === observed.version) evidence.push(observed.record);
+            else incomplete = true;
+          }
+        }
+        return { evidence, incomplete };
+      });
+    }
     async function verify(batch: typeof checks) {
-      try {
-        // Note revisions and every ancestor must agree in the same scoped read snapshot.
-        const verified = await knowledge.withReadSnapshot(async snapshot => {
-          const ancestryIds = [...new Set(batch.flatMap(check => check.ancestry.map(page => page.id)))];
-          const currentPages = new Map<string, PageLocation>();
-          for (let index = 0; index < ancestryIds.length; index += bounds.batch) {
-            const batch = await snapshot.getPages({ ids: ancestryIds.slice(index, index + bounds.batch), read });
-            for (const current of batch) currentPages.set(current.id, location(current));
+      const pending = [batch];
+      for (const group of pending) {
+        try {
+          const { evidence, incomplete } = await verifyBatch(group);
+          records.push(...evidence);
+          partial ||= incomplete;
+        } catch {
+          // Failed snapshots contribute no evidence. Retry halves breadth-first within the same worker.
+          if (group.length === 1 || pending.length + 2 > 1 + bounds.verificationRetries) {
+            partial = true;
+            continue;
           }
-          const evidence: Evidence[] = [];
-          for (const { pageId, ancestry, pageRecord, notes } of batch) {
-            if (
-              !ancestry.every(prior => {
-                const current = currentPages.get(prior.id);
-                return (
-                  current?.scopeId === customer.id &&
-                  current.parentId === prior.parentId &&
-                  current.key === prior.key &&
-                  current.version === prior.version
-                );
-              })
-            ) {
-              partial = true;
-              continue;
-            }
-            if (pageRecord) evidence.push(pageRecord);
-            const listedVersions = new Map<string, number>();
-            if (notes.some(note => note.listed)) {
-              await scanNotes(snapshot, pageId, note => {
-                if (note.pageId === pageId && !note.deletedAt) listedVersions.set(note.id, note.version);
-              });
-            }
-            for (const observed of notes) {
-              let currentVersion = listedVersions.get(observed.id);
-              if (!observed.listed) {
-                const note = await snapshot.getNote({ id: observed.id, read });
-                if (note?.pageId === pageId && !note.deletedAt) currentVersion = note.version;
-              }
-              if (currentVersion === observed.version) evidence.push(observed.record);
-              else partial = true;
-            }
-          }
-          return evidence;
-        });
-        records.push(...verified);
-      } catch {
-        partial = true;
+          const middle = Math.floor(group.length / 2);
+          pending.push(group.slice(0, middle), group.slice(middle));
+        }
       }
     }
     // Independent batches bound each read transaction and preserve evidence if another batch fails.

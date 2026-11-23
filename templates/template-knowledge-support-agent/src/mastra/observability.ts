@@ -152,12 +152,15 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
       if (resultCount !== undefined) metrics?.emit('support_result_count', resultCount, { operation, status });
       if (resultCount === 0)
         metrics?.emit('support_operation_count', 1, { operation: 'missing-evidence', status: 'empty' });
-      const page = output.page as { body?: unknown } | undefined;
+      const page = output.page as { body?: unknown; lines?: unknown; range?: { start?: { col?: number } } } | undefined;
       if (
         operation === 'knowledge-read' &&
         instance instanceof BaseObservabilityInstance &&
         span.endTime &&
         (hasReviewMarker(page?.body) ||
+          (typeof page?.lines === 'string' &&
+            (page.range?.start?.col ?? 0) === 0 &&
+            /^ *1│<!-- knowledge-review:/u.test(page.lines)) ||
           (Array.isArray(output.notes) && output.notes.some(note => hasReviewMarker(note?.text))))
       )
         instance.getObservabilityBus().emit({

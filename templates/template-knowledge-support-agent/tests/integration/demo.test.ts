@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { setTimeout } from 'node:timers/promises';
 import { demoCorpus } from '../fixtures/demo-corpus.ts';
 import { reviewedNote } from '../fixtures/history-corpus.ts';
+import { resourceId } from '../../src/mastra/identity.ts';
 import {
   assertCitations,
   confirm,
@@ -115,8 +117,21 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     assert.match(providerInput(f, start), /knowledge_search/u);
     assert.match(providerInput(f, start), /knowledge_read/u);
     assert.doesNotMatch(providerInput(f, start), /RETAILOPS_STORE73|FIELDRETAIL_STORE42/u);
+    await f.memory.saveMessages({
+      messages: Array.from({ length: 45 }, (_, index) => ({
+        id: randomUUID(),
+        threadId: id,
+        resourceId: resourceId(f.credentials[f.owner]!.profile),
+        role: 'user' as const,
+        createdAt: new Date(Date.now() - (45 - index) * 1000),
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: `Older technician turn ${index}` }] },
+      })),
+    });
     const beforeConfirm = await snapshot(f);
     const source = await confirm(f, id);
+    const memoryStore = await f.storage.getStore('memory');
+    const confirmation = (await memoryStore!.listMessagesById({ messageIds: [source.messageId] })).messages[0];
+    assert.match(JSON.stringify(confirmation), /Confirmed: The fictional Wi-Fi network selection/u);
     assert.deepEqual(await snapshot(f), beforeConfirm, 'Technician confirmation is not publication');
     const lifecycle = await approveLifecycle(f, source);
     const reuseThread = await thread(f, f.otherCustomer!);
@@ -388,6 +403,29 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     const sharedReadStart = Date.now();
     await turn(f, sharedThread, 'F5:reuse network', f.otherCustomer!);
     const sharedReadEnd = Date.now();
+    const [sharedScope, sharedPath] = lifecycle.sharedRef.split('#') as [string, string];
+    const { page: sharedPage } = await read(f, lifecycle.sharedRef, f.otherCustomer!);
+    const longBody = `${sharedPage.body}\n\n## Additional checks\n${'Verify the terminal connection indicator before retrying.\n'.repeat(250)}`;
+    await f.supportKnowledge.upsertPage({
+      scope: sharedScope,
+      path: sharedPath,
+      name: sharedPage.name,
+      body: longBody,
+    });
+    const numberedReadStart = Date.now();
+    await turn(f, await thread(f, f.otherCustomer!), 'F5:numbered-read network', f.otherCustomer!);
+    const numberedReadEnd = Date.now();
+    const offsetPath = 'fixtures/numbered-offset';
+    await f.supportKnowledge.upsertPage({
+      scope: sharedScope,
+      path: offsetPath,
+      name: 'Synthetic reading offset',
+      body: `Example ${longBody}`,
+    });
+    f.reuse(`${sharedScope}#${offsetPath}`);
+    const offsetReadStart = Date.now();
+    await turn(f, await thread(f, f.otherCustomer!), 'F5:numbered-read-offset network', f.otherCustomer!);
+    const offsetReadEnd = Date.now();
     await f.seed('retail-pos-history');
     const noteValue = 'REVIEWED_NOTE_PRIVATE_MARIGOLD';
     const noteScope = 'customer:retailops:store-73';
@@ -468,9 +506,11 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       const reuse = samples.filter(
         row => row.metadata.labels?.operation === 'resolution-reuse' && row.metadata.labels?.status === 'ready',
       );
-      for (const [label, start, end] of [
-        ['shared finding', sharedReadStart, sharedReadEnd],
-        ['reviewed notes', noteReadStart, noteReadEnd],
+      for (const [label, start, end, expected] of [
+        ['shared finding', sharedReadStart, sharedReadEnd, 1],
+        ['numbered shared finding', numberedReadStart, numberedReadEnd, 1],
+        ['numbered excerpt from mid-line', offsetReadStart, offsetReadEnd, 0],
+        ['reviewed notes', noteReadStart, noteReadEnd, 1],
       ] as const) {
         const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row, start, end));
         const [read] = reads;
@@ -481,8 +521,8 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
             row.traceId === read.traceId &&
             row.parentSpanId === read.spanId,
         );
-        if (reads.length !== 1 || counts.length !== 1 || counts[0]?.metadata.value !== 1)
-          missing.push(`one resolution reuse event linked to the ${label} read span`);
+        if (reads.length !== 1 || counts.length !== expected || counts.some(row => row.metadata.value !== 1))
+          missing.push(`${expected} resolution reuse events linked to the ${label} read span`);
       }
       const historyRun = rows.find(
         row => row.name === 'agent_run' && row.endedAt && inTurn(row, historyStart, historyEnd),
@@ -492,12 +532,21 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
           .filter(row => row.name === 'processor_run' && row.traceId === historyRun?.traceId && row.endedAt)
           .map(row => row.spanId),
       );
-      const preflight = reuse.filter(row => row.traceId === historyRun?.traceId && processorIds.has(row.parentSpanId));
+      const preflight = samples.filter(
+        row =>
+          row.traceId === historyRun?.traceId &&
+          processorIds.has(row.parentSpanId) &&
+          row.metadata.labels?.operation === 'resolution-reuse',
+      );
+      const operations = preflight.filter(row => row.name === 'support_operation_count');
+      const results = preflight.filter(row => row.name === 'support_result_count');
       if (
-        preflight.filter(row => row.name === 'support_operation_count' && row.metadata.value === 1).length !== 1 ||
+        operations.length !== 1 ||
+        operations[0]?.metadata.value !== 1 ||
         preflight.filter(row => row.name === 'support_operation_duration_ms').length !== 1 ||
-        preflight.filter(row => row.name === 'support_result_count' && row.metadata.value === approvedRecords.length)
-          .length !== 1
+        results.length !== 1 ||
+        results[0]?.metadata.value !== approvedRecords.length ||
+        preflight.some(row => row.metadata.labels?.status !== 'ready')
       )
         missing.push('preflight reuse events linked to the history turn processor');
       if (

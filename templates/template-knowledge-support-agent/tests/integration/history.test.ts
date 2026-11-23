@@ -359,6 +359,68 @@ test('history verifies note visibility and case ancestry at the same point in ti
   }
 });
 
+test('history revalidates healthy pages when another page cannot list notes in its snapshot', async () => {
+  const f = await runtimeFixture({ syntheticKnowledge: false });
+  try {
+    const { supportKnowledge } = f;
+    const scope = 'customer:north:store-1';
+    const stablePath = 'cases/healthy';
+    const failedPath = 'cases/failed-listing';
+    await supportKnowledge.upsertPage({
+      scope,
+      path: stablePath,
+      name: 'Healthy case',
+      body: historyRecord('HEALTHY_CASE'),
+    });
+    const { page: failed } = await supportKnowledge.upsertPage({
+      scope,
+      path: failedPath,
+      name: 'Case with a note-listing fault',
+      body: historyRecord('OTHER_CASE'),
+    });
+    await supportKnowledge.addNote({
+      scope,
+      path: failedPath,
+      text: reviewedNote(historyRecord('OTHER_NOTE')),
+      author: 'review:synthetic',
+    });
+    const run = () => prepareHistory(supportKnowledge, profile, 'network');
+    const baseline = await run();
+    assert.equal(baseline.status, 'ready');
+    assert.equal(baseline.records.length, 3);
+
+    const withReadSnapshot = supportKnowledge.withReadSnapshot;
+    let failures = 0;
+    let persistent = true;
+    supportKnowledge.withReadSnapshot = operation =>
+      withReadSnapshot(snapshot => {
+        const listNotes = snapshot.listNotes.bind(snapshot);
+        snapshot.listNotes = async input => {
+          if (input.pageId === failed.id && (persistent || failures === 0)) {
+            failures++;
+            throw new Error('Injected note-listing failure in verification snapshot');
+          }
+          return listNotes(input);
+        };
+        return operation(snapshot);
+      });
+    const result = await run();
+    assert.ok(failures > 0, 'Snapshot verification must encounter the note-listing fault');
+    assert.equal(result.status, 'partial');
+    assert.deepEqual(
+      result.records.map(record => record.ref),
+      [`${scope}#${stablePath}`],
+    );
+
+    persistent = false;
+    failures = 0;
+    assert.deepEqual(await run(), baseline, 'A fully revalidated transient failure must recover all evidence');
+    assert.equal(failures, 1);
+  } finally {
+    await f.close();
+  }
+});
+
 test(
   'history keeps current notes and drops evidence from a case moved during retrieval',
   { timeout: 30000 },

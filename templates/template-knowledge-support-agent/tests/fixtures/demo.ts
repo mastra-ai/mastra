@@ -188,6 +188,17 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
           content: `Use only when the observed conditions match. Reviewed finding [${page.ref}] cites public source [${guide}] (${publicUrl}).`,
         };
       }
+      if (question.includes('F5:numbered-read')) {
+        assert.ok(reuse);
+        const from = question.includes('F5:numbered-read-offset') ? { line: 1, col: 'Example '.length } : undefined;
+        if (!tools.length) return { tool: { name: 'knowledge_read', arguments: { page: reuse, from } } };
+        const { page } = parsedTool(tools[0]);
+        assert.equal(page.ref, reuse);
+        assert.equal(page.body, undefined);
+        assert.match(page.lines, /^ *1│<!-- knowledge-review:/u);
+        if (from) assert.deepEqual(page.range.start, from);
+        return { content: `The numbered excerpt contains the requested text [${reuse}].` };
+      }
       if (question.includes('F5:notes')) {
         const ref = question.split('READ=')[1]!.split(' ')[0]!;
         if (!tools.length) return { tool: { name: 'knowledge_read', arguments: { page: ref, notes: true } } };
@@ -352,8 +363,18 @@ export async function confirm(f: Fixture, id?: string): Promise<ReviewInput> {
     id,
     `Confirmed: The fictional ${f.example === 'retail-pos' ? 'Wi-Fi network selection was corrected and three checks succeeded. No offline payments were pending.' : 'omitted authentication method was enabled by an authorized operator and the synthetic test returned 200.'} Public reference ${f.guide}, version 1.`,
   );
-  const saved = await json(await f.request(`/memory/threads/${id}/messages?agentId=support`));
-  const message = [...saved.messages].reverse().find((item: any) => item.role === 'user');
+  const query = new URLSearchParams({
+    agentId: 'support',
+    perPage: '40',
+    orderBy: JSON.stringify({ field: 'createdAt', direction: 'DESC' }),
+  });
+  const saved: { messages: { id: string; role: string; createdAt: string }[] } = await json(
+    await f.request(`/memory/threads/${id}/messages?${query}`),
+  );
+  // Memory can return the requested page in chronological order.
+  const message = saved.messages
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .find(item => item.role === 'user');
   assert.ok(message, 'Review evidence must be a persisted technician turn');
   return { threadId: id, messageId: message.id, sourceActorId: f.credentials[0]!.profile.actorId, audience: 'private' };
 }

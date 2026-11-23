@@ -9,7 +9,7 @@ import {
 import { policyReference } from '../../examples/support.ts';
 import { createStore } from '../database/store.ts';
 import { createKnowledge, createPostgresWriterKnowledge } from './index.ts';
-import { withWriterLock } from './writer-lock.ts';
+import { withWriterLock, type WriterContext } from './writer-lock.ts';
 import { upsertPageAtRevision } from './versioned-page.ts';
 import {
   prepareDataset,
@@ -18,6 +18,7 @@ import {
   type PreparedNote,
   type PreparedPage,
 } from './seed-manifest.ts';
+import { reportRetainedSeedRecords } from './seed-retention.ts';
 
 export interface SeedOptions {
   dryRun?: boolean;
@@ -82,6 +83,7 @@ async function writeDataset(
   dataset: PreparedDataset,
   report: SeedReport,
   reportRetention: boolean,
+  context: WriterContext,
 ) {
   const storage = await knowledge.getStorage();
   const author = `seed:${dataset.id}`;
@@ -186,25 +188,7 @@ async function writeDataset(
       new Set(wanted.notes.map(note => note.marker)),
     ]),
   );
-  const pagePrefix = `<!-- knowledge-seed:page:${dataset.id}:`;
-  const notePrefix = `Seed note: ${dataset.id}/`;
-  let cursor: string | undefined;
-  do {
-    const batch = await storage.listPages({ read: 'all', cursor, limit: 100 });
-    const noteCounts = await storage.countNotes({ pageIds: batch.pages.map(page => page.id), read: 'all' });
-    for (const page of batch.pages) {
-      const markers = selectedNotes.get(page.id);
-      if (page.createdBy.author === author && page.body?.startsWith(pagePrefix) && !markers)
-        report.retained.push(`page:${page.id}`);
-      if (!noteCounts[page.id]) continue;
-      for (const note of await allNotes(storage, page.id)) {
-        const marker = note.text.split('\n')[0]!;
-        if (note.provenance.author === author && marker.startsWith(notePrefix) && !markers?.has(marker))
-          report.retained.push(`note:${note.id}`);
-      }
-    }
-    cursor = batch.nextCursor;
-  } while (cursor);
+  report.retained = await reportRetainedSeedRecords(storage, dataset.id, selectedNotes, context);
 }
 
 /** CLI and deterministic checks use this same path. Validation and dry-run never initialize storage. */
@@ -230,19 +214,21 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
     );
     return report;
   }
-  return withWriterLock(async ({ libsql, postgres }) => {
+  return withWriterLock(async context => {
+    const { libsql, postgres } = context;
     if (postgres) {
       await writeDataset(
         createPostgresWriterKnowledge(postgres, true),
         dataset,
         report,
         options.reportRetention ?? true,
+        context,
       );
       return report;
     }
     const store = createStore('knowledge-seed', libsql);
     try {
-      await writeDataset(createKnowledge(store), dataset, report, options.reportRetention ?? true);
+      await writeDataset(createKnowledge(store), dataset, report, options.reportRetention ?? true, context);
       return report;
     } finally {
       await store.close();

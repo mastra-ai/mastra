@@ -1,4 +1,4 @@
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { open, readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import {
@@ -27,6 +27,8 @@ export interface DatasetConfiguration {
 }
 
 export const MAX_SUPPORT_RECORD_BODY_LENGTH = 1_000_000;
+// UTF-8 takes at most three bytes per UTF-16 code unit. Allow additional bytes for normalized whitespace.
+const MAX_MARKDOWN_FILE_BYTES = MAX_SUPPORT_RECORD_BODY_LENGTH * 4;
 
 export interface SupportRecord {
   topicTags: string[];
@@ -146,7 +148,19 @@ async function containedFile(root: string, name: string) {
   const rel = relative(root, path);
   if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) || !(await stat(path)).isFile())
     throw new Error('Markdown file escapes the dataset');
-  return readFile(path, 'utf8');
+  const file = await open(path, 'r');
+  try {
+    const bytes = Buffer.allocUnsafe(MAX_MARKDOWN_FILE_BYTES + 1);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, null);
+      if (!bytesRead) return bytes.toString('utf8', 0, offset);
+      offset += bytesRead;
+    }
+    throw new Error(`Markdown file ${name} exceeds the ${MAX_MARKDOWN_FILE_BYTES}-byte read bound`);
+  } finally {
+    await file.close();
+  }
 }
 
 function placement(value: unknown, profiles: Map<string, Profile>) {
