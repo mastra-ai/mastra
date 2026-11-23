@@ -1227,7 +1227,6 @@ export class Mastra<
    * Kept separate from `#workersStarted`, which partial `startWorkers(name)`
    * calls also set without starting the workflow consumer.
    */
-  #durableAgentInitialization?: Promise<void>;
   #executionWorkersStarted = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
@@ -3256,7 +3255,7 @@ export class Mastra<
         (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
         (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
-        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy(this.#durable);
+        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
         return;
       }
       throw new MastraError({
@@ -3284,9 +3283,8 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
-    mastraAgent.__registerExecutionEnginePolicy(this.#durable);
+    mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
     agents[agentKey] = mastraAgent;
-    this.#durableAgentInitialization = undefined;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
       if (!registrations) {
@@ -4015,17 +4013,26 @@ export class Mastra<
   /**
    * Retrieves a registered workspace by its ID.
    *
-   * @throws {MastraError} When the workspace with the specified ID is not found
+   * Pass `{ optional: true }` to get `undefined` instead of an error when the
+   * workspace isn't registered, e.g. when checking before creating it.
+   *
+   * @throws {MastraError} When the workspace with the specified ID is not found and `optional` is not set
    *
    * @example
    * ```typescript
    * const workspace = mastra.getWorkspaceById('workspace-123');
    * const files = await workspace.filesystem.readdir('/');
+   *
+   * const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
    * ```
    */
-  public getWorkspaceById(id: string): Workspace {
+  public getWorkspaceById(id: string, options?: { optional?: false }): Workspace;
+  public getWorkspaceById(id: string, options: { optional: true }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined {
     const entry = this.#workspaces[id];
     if (!entry) {
+      if (options?.optional) return undefined;
       const error = new MastraError({
         id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
@@ -7965,18 +7972,11 @@ export class Mastra<
     await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
-  #initializeDurableAgents(): Promise<void> {
-    const initialization = (this.#durableAgentInitialization ??= Promise.all(
-      Object.values(this.#agents ?? {}).map(async agent => {
-        if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) {
-          await agent.__initializeDurableExecution();
-        }
-      }),
-    ).then(() => undefined));
-    return initialization.catch(error => {
-      if (this.#durableAgentInitialization === initialization) this.#durableAgentInitialization = undefined;
-      throw error;
-    });
+  /** Build native durable agents' engines and register their workflows, so event ownership checks can find them. */
+  #initializeDurableAgents(): void {
+    for (const agent of Object.values(this.#agents ?? {})) {
+      if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) agent.__initializeDurableExecution();
+    }
   }
 
   /**
@@ -7991,7 +7991,7 @@ export class Mastra<
    */
   public async handleWorkflowEvent(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     try {
-      await this.#initializeDurableAgents();
+      this.#initializeDurableAgents();
     } catch (error) {
       this.#logger.error('Failed to initialize durable agents for workflow event', { error });
       return { ok: false, retry: true };
@@ -8028,7 +8028,7 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    await this.#initializeDurableAgents();
+    this.#initializeDurableAgents();
 
     // Skip the boot probe when it cannot affect startup. Besides avoiding an
     // unnecessary query, this preserves request-scoped storage behavior from
@@ -8186,14 +8186,12 @@ export class Mastra<
     const modes = this.#pubsub.supportedModes ?? ['pull'];
     const pushOnly = modes.includes('push') && !modes.includes('pull');
     if (pushOnly && !this.#pushSubscription) {
-      const cb: EventCallback = async (event, ack, nack) => {
-        try {
-          await this.#initializeDurableAgents();
-        } catch (error) {
-          this.#logger.error('Failed to initialize durable agents for push delivery', { error });
-          if (nack) await nack().catch(err => this.#logger.error('Error nacking workflow event', err));
-          return;
-        }
+      // Tracked so a concurrent stopWorkers() drain waits for the acknowledgement too.
+      const track = (delivery: Promise<unknown>) => {
+        this.#inFlightPushEvents.add(delivery);
+        void delivery.finally(() => this.#inFlightPushEvents.delete(delivery));
+      };
+      const cb: EventCallback = (event, ack, nack) => {
         // In cross-process push environments (e.g. UnixSocketPubSub),
         // every subscriber receives every event — including events for
         // internal workflows registered on a different process. Skip
@@ -8205,9 +8203,16 @@ export class Mastra<
         const data = event.data as Record<string, unknown> | undefined;
         const wfId = data?.workflowId as string | undefined;
         const rId = data?.runId as string | undefined;
+        try {
+          this.#initializeDurableAgents();
+        } catch (error) {
+          this.#logger.error('Failed to initialize durable agents for push delivery', { error });
+          if (nack) track(nack().catch(err => this.#logger.error('Error nacking workflow event', err)));
+          return;
+        }
         if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
           if (ack) {
-            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+            track(ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err)));
           }
           return;
         }
@@ -8251,8 +8256,7 @@ export class Mastra<
             }
           })
           .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        this.#inFlightPushEvents.add(inFlight);
-        void inFlight.finally(() => this.#inFlightPushEvents.delete(inFlight));
+        track(inFlight);
       };
       await this.#pubsub.subscribe('workflows', cb);
       this.#pushSubscription = { topic: 'workflows', cb };
@@ -8304,7 +8308,7 @@ export class Mastra<
   }
 
   async #startExecutionWorkers(): Promise<void> {
-    await this.#initializeDurableAgents();
+    this.#initializeDurableAgents();
     // Storage init is memoized (see augmentWithInit) — cheap when already run.
     if (this.#storage) {
       await this.#storage.init();

@@ -1,5 +1,189 @@
 # @mastra/core
 
+## 1.86.0-alpha.6
+
+### Minor Changes
+
+- Added `getWorkingMemoryInstruction()` to `MastraMemory`, so a memory implementation can set the working memory instruction an agent receives. The `WorkingMemory` input processor now asks the memory instance for the instruction. Return `undefined` to keep the built-in instruction, or an empty string to send none. See [#29752](https://github.com/mastra-ai/mastra/issues/29752). ([#30316](https://github.com/mastra-ai/mastra/pull/30316))
+
+  ```ts
+  import type { WorkingMemoryInstructionArgs } from '@mastra/core/processors';
+  import { Memory } from '@mastra/memory';
+
+  class DurableFactsMemory extends Memory {
+    override getWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs) {
+      if (args.kind === 'read-only') return super.getWorkingMemoryInstruction(args);
+      return `Save only lasting facts about the user with updateWorkingMemory.\n${args.data ?? ''}`;
+    }
+  }
+  ```
+
+- Added `abortReason: 'memory-failure'` to `agent_end` events. A run stopped because the observational-memory observer or reflector failed now carries it, so you can tell it apart from a person stopping the run. The `reason` stays `'aborted'`, so existing handling is unchanged. The failure itself arrives in the `error` event just before. ([#31179](https://github.com/mastra-ai/mastra/pull/31179))
+
+  ```ts
+  let lastError: Error | undefined;
+
+  session.subscribe(event => {
+    if (event.type === 'error') lastError = event.error;
+    if (event.type === 'agent_end' && event.reason === 'aborted' && event.abortReason === 'memory-failure') {
+      console.warn(`Memory failed, run stopped: ${lastError?.message}`);
+    }
+  });
+  ```
+
+- Workflows can now set `pruneSnapshot` together with the experimental `storageVersion: 2` option. Before, creating such a workflow threw. On version 2 the hook runs once, when the run finishes (a redelivered finish event doesn't prune the stored run again; concurrent duplicate deliveries can each invoke the hook with the same unpruned input, so keep it side-effect-free), and only for a workflow that sets `storageVersion: 2` itself: a nested run that inherits version 2 from its parent keeps its step results unpruned. The hook receives every step result. The default engine writes back only the results it changes; the evented engine replaces the stored run with the pruned one. Suspended runs aren't pruned, because their later steps read the earlier results from storage. The run's result keeps the unpruned step results. Replace step results rather than removing them: on the default engine, a step result the hook leaves out stays stored. ([#30822](https://github.com/mastra-ai/mastra/pull/30822))
+
+  ```ts
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    options: {
+      storageVersion: 2,
+      // Replace the large output of the `download` step once the run finishes
+      pruneSnapshot: ({ snapshot }) => ({
+        ...snapshot,
+        context: {
+          ...snapshot.context,
+          download: { ...snapshot.context.download, output: { pruned: true } },
+        },
+      }),
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Reduced the memory a Cloudflare Worker or Durable Object uses for `@mastra/core` when the Worker is minified (for example `wrangler deploy --minify`). The published JavaScript no longer contains characters outside Latin-1 in code, so the Workers runtime can store the bundled script at one byte per character instead of two. A minimal minified agent Worker went from about 31.5 MiB to 24.8 MiB of heap in local tests. Behaviour is unchanged. ([#31182](https://github.com/mastra-ai/mastra/pull/31182))
+
+- Added `stopCause` to an agent's `finish` chunk. It says why the agent loop stopped calling the model, which `stepResult.reason` can't: every run that ends on a tool call reports `'tool-calls'`, whether it ran out of `maxSteps`, stopped on a client tool, matched `stopWhen` or was ended by `onIterationComplete`. The field is on the chunk from `stream()` and on the copies that `subscribeToThread()` subscribers receive. Fixes [#29612](https://github.com/mastra-ai/mastra/issues/29612). ([#30550](https://github.com/mastra-ai/mastra/pull/30550))
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ threadId, resourceId });
+
+  for await (const chunk of subscription.stream) {
+    if (chunk.type === 'finish' && chunk.payload.stopCause === 'max_steps') {
+      // The run used its whole step budget while the model still wanted to call tools
+    }
+  }
+  ```
+
+  Also fixed traces reporting `max_steps` for runs that were stopped on purpose on their last allowed step. When `onIterationComplete` returns `{ continue: false }` there, with or without `feedback`, `Agent` traces now report `iteration_hook`, as durable agents already did. When a `stopWhen` condition matches there, every agent now reports `stop_condition`.
+
+  The cause is also right in these cases:
+
+  - A run that hits the default five-step cap, with neither `maxSteps` nor `stopWhen` set, reports `max_steps` instead of `stop_condition`.
+  - When `onIterationComplete` returns `{ continue: false, feedback }` and the feedback turn is the last allowed step, the run reports `feedback_complete` instead of `max_steps`.
+  - A durable or evented agent recovered after a crash keeps `stopCause` on the `finish` chunk it replays.
+
+  A `stopWhen` condition that throws on the last allowed step no longer fails the run. The step already finished and the budget ends the run either way, so the agent logs a warning and reports `max_steps`. A condition that throws while the run could still continue fails the run, as before.
+
+- Fixed a durable agent run losing the user's message when the process died right after the message was saved to memory. When running checkpoints are persisted (an `EventedAgent`, a `shouldPersistSnapshot` policy that returns `true` for `'running'` when `stepResults` is empty, or `recovery: { durableAgents: 'auto' }` on `Mastra` with no custom `shouldPersistSnapshot` policy), the run is now saved as recoverable before the message is stored, so recovery picks it up and answers the message instead of leaving it unanswered in the thread. Without running checkpoints, no run is recoverable after a crash, and that is unchanged. Fixes #30791. ([#31115](https://github.com/mastra-ai/mastra/pull/31115))
+
+- Keep the provider signature of a stored reasoning block that has no text details. Rows written before reasoning details were recorded are replayed to the provider instead of being dropped, so a signed thinking block is not lost when a conversation is rebuilt. Reasoning written by the current stream writer is unaffected: it already carries text details and survived. ([#28848](https://github.com/mastra-ai/mastra/pull/28848))
+
+- Reduced the size of @mastra/core and of every bundle that includes it by more than 200 KB: the built-in provider registry no longer stores each provider's model list twice. Model lists, `PROVIDER_REGISTRY` and `GatewayRegistry.getModels()` return the same data as before. ([#31174](https://github.com/mastra-ai/mastra/pull/31174))
+
+- Fixed an evented workflow loop whose body is a single step hanging after the run was restarted, for example by recovery after a crash. This happened on storage that enforces step guards, such as Postgres and LibSQL. The loop now continues with its next iteration and the run finishes. ([#30915](https://github.com/mastra-ai/mastra/pull/30915))
+
+- Runs stored with the experimental workflow `storageVersion: 2` option now keep less in storage. When a step is written again, its earlier rows are deleted, including a running `foreach`'s progress. At the end of each run, versions of the workflow state that neither the run nor a nested run still reads are deleted. In a durable agent run paused for approval after 16 tool calls on `@mastra/pg`, the stored run shrank from 275 kB to 132 kB. ([#30822](https://github.com/mastra-ai/mastra/pull/30822))
+
+  `init()` adds a `first_seq` column to the `mastra_workflow_run_entries` table, which keeps steps in the order they were first written. Runs stored before the upgrade keep working.
+
+  These stores now require `@mastra/core` 1.86.0 or newer, the first release that exports the state cleanup helper and table definitions they use.
+
+- Fixed `agent.observe()` on durable and evented agents reporting an incomplete conversation when the observer runs in another process or on another agent instance. `output.messages`, the `onFinish` messages and scorer output could miss the final answer, or show the conversation as of an earlier step. The observer now takes each step's response messages from the run's stream. ([#30916](https://github.com/mastra-ai/mastra/pull/30916))
+
+  Also fixed `stream()` and `generate()` on an evented agent whose steps run on workers in another process, for example an API server started with `MASTRA_WORKERS=false`. Their `onFinish` messages and `output.messages` now include the response, not only the prompt.
+
+- Improved `@mastra/core` startup time. The built-in provider registry is now filtered once per set of enabled gateways instead of on every lookup, which removes about 600 redundant passes over the registry while the package loads. Provider lists still update when a custom gateway is registered or when a gateway is enabled or disabled (for example by setting `MASTRA_GATEWAY_API_KEY`). ([#31171](https://github.com/mastra-ai/mastra/pull/31171))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Fixed workflows exposed to agents as tools continuing to run after the tool call was cancelled. Aborting the agent call, cancelling the background task, or hitting its timeout now cancels the workflow run too. Fixes [#29890](https://github.com/mastra-ai/mastra/issues/29890). ([#31111](https://github.com/mastra-ai/mastra/pull/31111))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/schema-compat@1.4.1-alpha.0
+
+## 1.86.0-alpha.5
+
+### Minor Changes
+
+- Added an optional `recommended` flag to `ask_user` options. The flag reaches the host in the suspend payload, so a UI can highlight the choice the agent suggests. It is a display hint only: nothing is selected until the user answers. ([#31146](https://github.com/mastra-ai/mastra/pull/31146))
+
+  ```ts
+  // suspendPayload.options from a suspended ask_user call
+  [{ label: 'staging', recommended: true }, { label: 'production' }];
+  ```
+
+## 1.86.0-alpha.4
+
+### Minor Changes
+
+- Added `principals` and `author` options to `knowledge.createTools()`, and `knowledge.getPinnedContext({ principals })`. A host can now run the Knowledge tools and read pinned pages outside an agent run, for example from an MCP server acting for an external agent. Every call reads and writes under those fixed principals, following the same scope rules as an agent, and writes are recorded under `author`. Principals must match a declared scope type and must come from the host, never from the request. ([#30996](https://github.com/mastra-ai/mastra/pull/30996))
+
+  ```ts
+  const tools = knowledge.createTools({
+    read: true,
+    write: true,
+    principals: ['agent:claude-code'],
+   via mcp:claude-code',
+  });
+  ```
+
+- `Knowledge.upsertPage` takes an optional `expected: { id, version }`, the page as you read it. With it, the call finds the page at `scope#path`, refuses unless it is that page at that version, and then updates that page by id, only while it is still at that version. If the page was edited, moved, removed or replaced by a new page at the same path since, the call throws `KnowledgeConflictError` and writes nothing: no page, parent page or scope is created. The path is checked when the page is looked up; if a parent page is moved between that lookup and the write, the write follows the page to its new place. A sync that reads a page and writes it later no longer replaces an edit someone made in between. ([#31099](https://github.com/mastra-ai/mastra/pull/31099))
+
+  ```ts
+  const { page } = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'placeholder' });
+  // ...later, only if nobody has written the page since:
+  await knowledge.upsertPage({
+    scope: 'docs:acme',
+    path: 'faq',
+    name: 'FAQ',
+    body,
+    expected: { id: page.id, version: page.version },
+  });
+  ```
+
+- Added an `optional` flag to `mastra.getWorkspaceById()`. With `{ optional: true }` it returns `undefined` for an unknown ID instead of logging and throwing an error, so you can check whether a workspace exists before creating it. ([#31071](https://github.com/mastra-ai/mastra/pull/31071))
+
+  ```typescript
+  const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
+  ```
+
+### Patch Changes
+
+- Fixed skill search failing when two skills share a name. Searching no longer throws "multiple local skills found"; each matching skill is returned with its own path, and `skill_search` results now show that path next to the skill name so agents can load the right copy. Getting a skill by an ambiguous name still errors. ([#31069](https://github.com/mastra-ai/mastra/pull/31069))
+
+## 1.86.0-alpha.3
+
+### Minor Changes
+
+- Added execution-engine configuration with `Agent.durable.executionEngine` and `Mastra.durable` defaults. Explicit agent settings take precedence over registered defaults, the engine selection locks at registration or first execution, and editor forks preserve the selected policy without changing a wrapped agent's engine. ([#30393](https://github.com/mastra-ai/mastra/pull/30393))
+
+  ```typescript
+  const mastra = new Mastra({
+    durable: { executionEngine: 'durable' },
+    agents: { support: agent },
+  });
+  ```
+
+  This change provides configuration and policy resolution; native engine dispatch is supplied by the companion execution change. Release the two changes together.
+
+### Patch Changes
+
+- Fixed live scores from `createDurableAgent` and `createEventedAgent` agents. A score now names the agent as its entity, as on a regular `Agent`, so tools that group scores by agent find them. Evented agents that run on separate workers now export their scores too. ([#31029](https://github.com/mastra-ai/mastra/pull/31029))
+
+- Fixed DurableAgent and EventedAgent method overrides and super calls without changing execution behavior. ([#31074](https://github.com/mastra-ai/mastra/pull/31074))
+
+- Unified invocation orchestration for plain, durable, and evented agents while preserving their existing streaming and lifecycle APIs. Shared execution machinery now handles active-run discovery and recovery facts without duplicating agent orchestration. ([#30560](https://github.com/mastra-ai/mastra/pull/30560))
+
+- Fixed evented workflows running the steps after a parallel or branch block twice when a run was restarted while the block was finishing. When `restart()` found one branch already done and another still running, both the restarted run and the original worker could go on past the block, so later steps ran twice. Now only one of them continues. ([#30901](https://github.com/mastra-ai/mastra/pull/30901))
+
+- Added `traceId` and `spanId` to the result of `stream()`, `resume()`, `observe()`, and `recover()` on durable agents, so you no longer need to read them from `result.output`. A recovered run's result and stream chunks now also carry the trace ID of the run. ([#31013](https://github.com/mastra-ai/mastra/pull/31013))
+
 ## 1.86.0-alpha.2
 
 ### Patch Changes

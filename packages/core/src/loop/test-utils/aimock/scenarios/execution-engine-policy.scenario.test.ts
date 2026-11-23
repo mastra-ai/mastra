@@ -10,6 +10,8 @@ import { createDurableAgent, createEventedAgent } from '../../../../agent/durabl
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from '../../../../agent/streams/constants';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { hasDurableExecution } from '../../../../agent/streams/execution-capability';
+import { AGENT_STREAM_TOPIC } from '../../../../agent/streams/constants';
+import { InMemoryServerCache } from '../../../../cache/inmemory';
 import { createTool } from '../../../../tools';
 import { Agent } from '../../../../agent/agent';
 import { isDurableAgentLike } from '../../../../agent/types';
@@ -121,7 +123,7 @@ describe('Configured native engines preserve Agent outputs', () => {
     },
   );
 
-  for (const executionEngine of ['durable', 'evented'] as const) {
+  for (const executionEngine of ['default', 'evented'] as const) {
     for (const method of ['resumeStream', 'resumeStreamUntilIdle'] as const) {
       it(`${executionEngine}/${method}: keeps lifecycle controls when resuming a suspended tool`, async () => {
         const llm = getMock();
@@ -183,29 +185,133 @@ describe('Configured native engines preserve Agent outputs', () => {
           model: openai('gpt-4o'),
         });
         const mastra = new Mastra({ agents: { support: agent }, durable: { executionEngine } });
-        const output = await agent[method]('Where is my order?', {});
-        expect(await output.text).toBe('Your order has shipped.');
-        if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
-        else expect(output).not.toBeInstanceOf(MastraModelOutput);
-        expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
-        expect(mastra.getAgent('support')).toBe(agent);
-        expect(isDurableAgentLike(agent)).toBe(false);
-        expect(hasDurableExecution(agent)).toBe(true);
-        await expect(agent.recover('unavailable')).rejects.not.toMatchObject({
-          id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
-        });
-        expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        try {
+          const output = await agent[method]('Where is my order?', {});
+          expect(await output.text).toBe('Your order has shipped.');
+          if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
+          else expect(output).not.toBeInstanceOf(MastraModelOutput);
+          expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+          expect(mastra.getAgent('support')).toBe(agent);
+          expect(isDurableAgentLike(agent)).toBe(false);
+          expect(hasDurableExecution(agent)).toBe(true);
+          await expect(agent.recover('unavailable')).rejects.not.toMatchObject({
+            id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
+          });
+          expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        } finally {
+          await mastra.shutdown();
+        }
       });
     }
   }
 
-  for (const strategy of ['durable', 'evented'] as const) {
+  // COR-1563: observe() can initialize streams before stored registration supplies host defaults.
+  // Wrappers do not inherit these selectors.
+  for (const executionEngine of [false, 'default', 'evented'] as const) {
+    for (const registration of ['constructor', 'addAgent'] as const) {
+      const replayPolicyCase = async (explicit: boolean) => {
+        const llm = getMock();
+        llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+        const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+        const agent = new Agent({
+          id: 'observed-replay-policy',
+          name: 'Order support',
+          instructions: 'Help with orders.',
+          model: openai('gpt-4o'),
+          durable: explicit ? { shouldCache: () => true } : true,
+        });
+        const earlyObserver = await agent.observe('before-registration');
+        earlyObserver.detach();
+        const mastra = new Mastra({
+          logger: false,
+          serverCache: new InMemoryServerCache(),
+          durable: { executionEngine, shouldCache: () => false, cleanupTimeoutMs: 0 },
+          ...(registration === 'constructor' ? { agents: { agent } } : {}),
+        });
+        if (registration === 'addAgent') mastra.addAgent(agent);
+        const runId = crypto.randomUUID();
+        try {
+          const output = await agent.stream('Where is my order?', { runId });
+          await output.consumeStream();
+          expect(await output.text).toBe('Your order has shipped.');
+          const history = await agent.__getStreamBus()!.pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+          if (explicit) expect(history.length).toBeGreaterThan(0);
+          else expect(history).toEqual([]);
+          // Re-registering the same instance must not discard its retained log.
+          const bus = agent.__getStreamBus();
+          mastra.addAgent(agent);
+          expect(agent.__getStreamBus()).toBe(bus);
+          expect(await agent.__getStreamBus()!.pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toEqual(history);
+        } finally {
+          await mastra.shutdown();
+        }
+      };
+      const name = `${String(executionEngine)}/${registration}: applies inherited replay policy after observation (explicit=%s)`;
+      if (executionEngine === 'evented') {
+        it.each([true])(name, replayPolicyCase);
+        // Evented workers publish through Mastra's shared pubsub and server cache, so the agent's
+        // shouldCache never filters the run log. Legacy EventedAgent behaves the same on main (COR-1631).
+        it.fails.each([false])(name, replayPolicyCase);
+      } else {
+        it.each([false, true])(name, replayPolicyCase);
+      }
+
+      it.each([false, true])(
+        `${String(executionEngine)}/${registration}: applies inherited replay cleanup after observation (explicit=%s)`,
+        async explicit => {
+          const llm = getMock();
+          llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+          const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+          const agent = new Agent({
+            id: 'observed-cleanup-policy',
+            name: 'Order support',
+            instructions: 'Help with orders.',
+            model: openai('gpt-4o'),
+            durable: explicit ? { cleanupTimeoutMs: 0 } : true,
+          });
+          const earlyObserver = await agent.observe('before-registration');
+          earlyObserver.detach();
+          const mastra = new Mastra({
+            logger: false,
+            serverCache: new InMemoryServerCache(),
+            durable: { executionEngine, cleanupTimeoutMs: 100 },
+            ...(registration === 'constructor' ? { agents: { agent } } : {}),
+          });
+          if (registration === 'addAgent') mastra.addAgent(agent);
+          const runId = crypto.randomUUID();
+          try {
+            const output = await agent.stream('Where is my order?', { runId });
+            await output.consumeStream();
+            expect(await output.text).toBe('Your order has shipped.');
+            const pubsub = agent.__getStreamBus()!.pubsub;
+            if (explicit) {
+              await new Promise(resolve => setTimeout(resolve, 200));
+              const observer = await agent.observe(runId);
+              try {
+                expect(await observer.output.text).toBe('Your order has shipped.');
+              } finally {
+                observer.detach();
+              }
+            } else {
+              await vi.waitFor(async () => {
+                expect(await pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toEqual([]);
+              });
+            }
+          } finally {
+            await mastra.shutdown();
+          }
+        },
+      );
+    }
+  }
+
+  for (const strategy of ['default', 'evented'] as const) {
     for (const method of ['stream', 'generate'] as const) {
       it.each([
         undefined,
         false,
         { executionEngine: false },
-        { executionEngine: 'durable' },
+        { executionEngine: 'default' },
         { executionEngine: 'evented' },
       ] as const)(`${strategy}/${method}: wrapping leaves direct runs unchanged with durable=%j`, async durable => {
         const llm = getMock();
@@ -220,21 +326,27 @@ describe('Configured native engines preserve Agent outputs', () => {
         });
         const wrap = strategy === 'evented' ? createEventedAgent : createDurableAgent;
         const wrapped = wrap({ agent });
-        new Mastra({ agents: { wrapped }, durable: { executionEngine: 'evented' } });
-        const output = await agent[method]('Where is my order?', {});
-        expect(await output.text).toBe('Your order has shipped.');
-        expect(agent.durable).toEqual(durable);
-        expect(agent.__getExecutionEnginePolicy()).toBe(typeof durable === 'object' ? durable.executionEngine : false);
-        expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
-        expect(hasDurableExecution(agent)).toBe(typeof durable === 'object' && durable.executionEngine !== false);
-        if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
-        else expect(output).not.toBeInstanceOf(MastraModelOutput);
-        expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        const mastra = new Mastra({ agents: { wrapped }, durable: { executionEngine: 'evented' } });
+        try {
+          const output = await agent[method]('Where is my order?', {});
+          expect(await output.text).toBe('Your order has shipped.');
+          expect(agent.durable).toEqual(durable);
+          expect(agent.__getExecutionEnginePolicy()).toBe(
+            typeof durable === 'object' ? durable.executionEngine : false,
+          );
+          expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
+          expect(hasDurableExecution(agent)).toBe(typeof durable === 'object' && durable.executionEngine !== false);
+          if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
+          else expect(output).not.toBeInstanceOf(MastraModelOutput);
+          expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+        } finally {
+          await mastra.shutdown();
+        }
       });
     }
   }
 
-  it.each(['durable', 'evented'] as const)(
+  it.each(['default', 'evented'] as const)(
     '%s wrapping preserves an already-running native tool loop',
     async executionEngine => {
       const llm = getMock();
@@ -265,9 +377,10 @@ describe('Configured native engines preserve Agent outputs', () => {
         tools: { lookupOrder: tool },
       });
       const mastra = new Mastra({ agents: { agent }, durable: { executionEngine, cleanupTimeoutMs: 0 } });
-      const output = await agent.stream('Where is my order?', { maxSteps: 3 });
-      const text = output.text;
+      let output: Awaited<ReturnType<typeof agent.stream>> | undefined;
       try {
+        output = await agent.stream('Where is my order?', { maxSteps: 3 });
+        const text = output.text;
         await started.promise;
         const bus = agent.__getStreamBus();
         const wrap = executionEngine === 'evented' ? createEventedAgent : createDurableAgent;
@@ -285,7 +398,8 @@ describe('Configured native engines preserve Agent outputs', () => {
         expect(JSON.stringify(llm.getRequests()[1]?.body)).toContain('shipped');
       } finally {
         release.resolve();
-        await output.consumeStream();
+        await output?.consumeStream();
+        await mastra.shutdown();
       }
     },
   );
@@ -304,7 +418,7 @@ describe('Configured native engines preserve Agent outputs', () => {
         model: openai('gpt-4o'),
         defaultOptions: () => ({ eagerToolExecution: ++calls > 1 }),
       });
-      new Mastra({ agents: { dynamic: agent }, durable: { executionEngine: 'durable' } });
+      const mastra = new Mastra({ agents: { dynamic: agent }, durable: { executionEngine: 'default' } });
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
       try {
         for (let turn = 0; turn < 3; turn++) {
@@ -323,6 +437,28 @@ describe('Configured native engines preserve Agent outputs', () => {
         expect(calls).toBe(3);
       } finally {
         warn.mockRestore();
+        await mastra.shutdown();
+      }
+    },
+  );
+
+  it.each(['default', 'evented'] as const)(
+    'recoverResume() reports the %s engine as unsupported instead of a missing suspension',
+    async executionEngine => {
+      const agent = new Agent({
+        id: 'recover-native',
+        name: 'Recover native',
+        instructions: 'Help.',
+        model: 'openai/gpt-4o',
+        durable: { executionEngine },
+      });
+      const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+      try {
+        await expect(agent.recoverResume({ runId: 'claimed-run' })).rejects.toMatchObject({
+          id: 'AGENT_RECOVER_RESUME_UNSUPPORTED',
+        });
+      } finally {
+        await mastra.shutdown();
       }
     },
   );
@@ -463,11 +599,15 @@ describeForAllEngines('Existing execution survives conflicting host policy regis
     llm.on({}, { content: 'Your order has shipped.' });
     const { agent } = await createSharedAgent(llm, { engine });
     const mastra = new Mastra({ durable: { executionEngine: 'evented' } });
-    mastra.addAgent(agent);
-    const result = await agent[method]('Where is my order?', {});
-    const output = 'output' in result && result.output instanceof MastraModelOutput ? result.output : result;
-    expect(await output.text).toBe('Your order has shipped.');
-    expect(mastra.getAgentById(agent.id)).toBe(agent);
-    expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+    try {
+      mastra.addAgent(agent);
+      const result = await agent[method]('Where is my order?', {});
+      const output = 'output' in result && result.output instanceof MastraModelOutput ? result.output : result;
+      expect(await output.text).toBe('Your order has shipped.');
+      expect(mastra.getAgentById(agent.id)).toBe(agent);
+      expect(JSON.stringify(llm.getRequests()[0]?.body)).toContain('Where is my order?');
+    } finally {
+      await mastra.shutdown();
+    }
   });
 });

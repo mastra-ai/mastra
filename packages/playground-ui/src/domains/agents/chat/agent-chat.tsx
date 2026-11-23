@@ -13,6 +13,8 @@ export type AgentChatProps = Omit<ChatProps, 'initialMessages'> & {
   memory?: boolean;
   messageId?: string;
   suggestedPrompts?: string[];
+  /** Image shown on the empty-thread welcome; falls back to the agent initial. */
+  agentAvatarUrl?: string;
   isNewThread?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: ReactNode;
@@ -28,6 +30,7 @@ export function AgentChat({
   memory,
   messageId,
   suggestedPrompts,
+  agentAvatarUrl,
   isNewThread,
   hideModelSwitcher,
   runOptionsSlot,
@@ -75,6 +78,7 @@ export function AgentChat({
   };
   const thread: ThreadProps = {
     agentName: agentName ?? '',
+    agentAvatarUrl,
     agentId,
     threadId,
     suggestedPrompts,

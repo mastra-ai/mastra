@@ -19,6 +19,21 @@
     "z-ai-glm-5-3-flash"
   ],
   "reasoning": {
+    "deepseek-v4-1-flash-1017-uncensored": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "Claude Haiku 5.5": [
       {
         "type": "toggle"
@@ -26,15 +41,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-v4-flash:web": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "qwen3-235b:web": [
@@ -53,13 +59,7 @@
         "type": "toggle"
       }
     ],
-    "z-ai-glm-5-3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4-1-flash-1017-uncensored": [
+    "deepseek-v4-flash:web": [
       {
         "type": "toggle"
       },

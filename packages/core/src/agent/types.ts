@@ -617,7 +617,7 @@ export interface GoalConfig {
   scorer?: MastraScorer | string;
 }
 
-/** Resumable streams and provisional engine policy naming/API. Durable execution still requires createDurableAgent(). */
+/** Resumable streams and execution-engine selection. See {@link AgentStreamsConfig}. */
 export type AgentDurableOption = boolean | AgentStreamsConfig;
 
 interface AgentConfigBase<
@@ -753,7 +753,7 @@ interface AgentConfigBase<
   /**
    * Resumable streams and execution-engine selection. Publish run events so
    * observe() and reconnecting clients can follow a run. Set executionEngine
-   * to 'durable' or 'evented' to enable checkpointed execution.
+   * to 'default' or 'evented' to enable checkpointed execution.
    *
    * - Omitted: on when registered on Mastra, off standalone.
    * - true: on, using the Mastra pubsub and server cache when registered.

@@ -55,33 +55,16 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "glm-5.3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "toggle"
-      },
+    "doubao-seed-2.0-mini": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash-economy": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high"]
       }
     ],
     "doubao-seed-evolving": [
@@ -90,10 +73,26 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "glm-5.3-flash": [
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.8-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -105,13 +104,33 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k2.8-preview": [
+    "deepseek-v4-flash": [
       {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "kimi-k3.1-pro": [
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "doubao-seed-2.1-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -123,32 +142,13 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "doubao-seed-2.0-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "deepseek-v4-pro": [
+    "deepseek-v4.1-flash-economy": [
       {
         "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.1-lite": [
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "doubao-seed-2.0-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
+        "values": ["low", "high", "max"]
       }
     ]
   }
