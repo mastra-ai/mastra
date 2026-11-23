@@ -77,6 +77,21 @@ test('dev uses its fixture settings and never probes a different listener', { ti
   }
 });
 
+test('Studio startup can be retried after readiness rejects a fixture credential', { timeout: 60000 }, async () => {
+  const f = await runtimeFixture();
+  try {
+    const credential = f.credentials[0]!;
+    const token = credential.token;
+    credential.token = 'unrecognized-fixture-credential';
+    await assert.rejects(f.start, /Startup HTTP 401/u);
+    credential.token = token;
+    await f.start();
+    assert.equal((await f.request('/knowledge')).status, 200);
+  } finally {
+    await f.close();
+  }
+});
+
 test('the model fixture closes connections with incomplete request bodies', { timeout: 10000 }, async t => {
   const model = await startModelServer();
   const { port } = new URL(model.url);

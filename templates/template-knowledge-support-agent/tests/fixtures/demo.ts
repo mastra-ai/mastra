@@ -216,6 +216,23 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
         );
         return { content: `The attributed fictional follow-up is visible [${ref}].` };
       }
+      if (question.includes('F5:backlink')) {
+        const ref = question.split('READ=')[1]!;
+        const notes = question.includes('F5:backlink-and-notes');
+        if (!tools.length)
+          return { tool: { name: 'knowledge_read', arguments: { page: ref, mentionedIn: true, notes } } };
+        const result = parsedTool(tools[0]);
+        assert.equal(result.page.ref, ref);
+        assert.ok(
+          result.mentionedIn.some((note: { text: string }) => note.text.includes('REVIEWED_BACKLINK_MARIGOLD')),
+        );
+        if (notes)
+          assert.ok(
+            result.notes.some((note: { text: string }) => note.text.includes('REVIEWED_NOTE_PRIVATE_MARIGOLD')),
+          );
+        else assert.equal(result.notes, undefined);
+        return { content: `The attributed fictional backlink is visible [${ref}].` };
+      }
       if (!tools.length)
         return {
           tool: {
@@ -357,26 +374,24 @@ export async function turn(
   );
 }
 export async function confirm(f: Fixture, id?: string): Promise<ReviewInput> {
-  id ??= await thread(f);
-  await turn(
-    f,
-    id,
-    `Confirmed: The fictional ${f.example === 'retail-pos' ? 'Wi-Fi network selection was corrected and three checks succeeded. No offline payments were pending.' : 'omitted authentication method was enabled by an authorized operator and the synthetic test returned 200.'} Public reference ${f.guide}, version 1.`,
-  );
-  const query = new URLSearchParams({
-    agentId: 'support',
-    perPage: '40',
-    orderBy: JSON.stringify({ field: 'createdAt', direction: 'DESC' }),
-  });
-  const saved: { messages: { id: string; role: string; createdAt: string }[] } = await json(
-    await f.request(`/memory/threads/${id}/messages?${query}`),
-  );
-  // Memory can return the requested page in chronological order.
-  const message = saved.messages
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .find(item => item.role === 'user');
-  assert.ok(message, 'Review evidence must be a persisted technician turn');
-  return { threadId: id, messageId: message.id, sourceActorId: f.credentials[0]!.profile.actorId, audience: 'private' };
+  const threadId = id ?? (await thread(f));
+  const text = `Confirmed: The fictional ${f.example === 'retail-pos' ? 'Wi-Fi network selection was corrected and three checks succeeded. No offline payments were pending.' : 'omitted authentication method was enabled by an authorized operator and the synthetic test returned 200.'} Public reference ${f.guide}, version 1.`;
+  const profile = f.credentials[f.owner]!.profile;
+  const store = await f.storage.getStore('memory');
+  assert.ok(store);
+  const options = { threadId, resourceId: resourceId(profile), perPage: false as const };
+  const matchingIds = async () => {
+    const { messages } = await store.listMessages(options);
+    return messages
+      .filter(item => item.role === 'user' && messageText(item.content.parts) === text)
+      .map(item => item.id);
+  };
+  // The generate response contains model output. Compare persisted user turns before and after submission.
+  const previous = new Set(await matchingIds());
+  await turn(f, threadId, text);
+  const matches = (await matchingIds()).filter(messageId => !previous.has(messageId));
+  assert.equal(matches.length, 1, 'Expected exactly one newly persisted confirmation matching the submitted text');
+  return { threadId, messageId: matches[0]!, sourceActorId: profile.actorId, audience: 'private' };
 }
 export async function pending(f: Fixture, input: ReviewInput, selected: Candidate) {
   f.select(selected);
@@ -468,6 +483,7 @@ export async function sql(f: Fixture, query: string, parameters: unknown[] = [])
       PROOF_PARAMETERS: JSON.stringify(parameters),
     },
     timeout: 10000,
+    maxBuffer: 4 * 1024 * 1024,
   });
   return JSON.parse(result.stdout);
 }

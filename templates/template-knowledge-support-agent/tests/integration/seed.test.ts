@@ -452,6 +452,77 @@ test('seed caps raw Markdown bytes and validates the normalized character count'
   }
 });
 
+test('seed rejects oversized manifests before JSON parsing and enforces the page count separately', async () => {
+  const f = await fixture();
+  try {
+    const original = await f.readManifest();
+    await writeFile(f.manifestFile, JSON.stringify(original) + ' '.repeat(16 * 1024 * 1024));
+    assert.match(
+      (await f.cli({ args: ['--dry-run'], code: 1 })).output,
+      /Manifest manifest\.json exceeds the 16777216-byte read bound/u,
+    );
+    await f.saveManifest({ ...original, pages: Array.from({ length: 501 }, () => original.pages[0]!) });
+    assert.match((await f.cli({ args: ['--dry-run'], code: 1 })).output, /Invalid pages/u);
+    await noFile(f.database);
+  } finally {
+    await f.close();
+  }
+});
+
+test('seed keeps literal Markdown destination-like text and validates actual links and images', async () => {
+  const f = await fixture();
+  try {
+    const manifest = await f.readManifest();
+    const guideFile = join(dirname(f.manifestFile), manifest.pages[0]!.file);
+    const prose = 'The log displays ](panel). [Valid link](https://example.invalid/panel) and ![Image](#diagram).';
+    await writeFile(guideFile, prose);
+    const report = (await f.cli()).report;
+    const guide = page(report, 'connection-guide');
+    await f.knowledge(async (_, storage) => {
+      const stored = await storage.getPage({ id: guide.id!, read: 'all' });
+      assert.ok(stored?.body?.includes(prose));
+    });
+    for (const markdown of ['[Actual link](panel)', '![Actual image](panel)']) {
+      await writeFile(guideFile, markdown);
+      assert.match((await f.cli({ args: ['--dry-run'], code: 1 })).output, /Invalid source URL/u);
+    }
+  } finally {
+    await f.close();
+  }
+});
+
+test('unchanged seed pages clear stale unresolved body-link rows', async () => {
+  const f = await fixture();
+  try {
+    const manifest = await f.readManifest();
+    const guideInput = manifest.pages[0]!;
+    const seeded = (await f.cli()).report;
+    const guide = page(seeded, 'connection-guide');
+    guideInput.links = [];
+    await f.saveManifest(manifest);
+    await writeFile(join(dirname(f.manifestFile), guideInput.file), 'The guide has no outgoing links.');
+    const removed = (await f.cli()).report;
+    assert.equal(page(removed, 'connection-guide').status, 'updated');
+
+    const staleRef = 'missing-previous-page';
+    await f.knowledge(async (_, storage) => {
+      await storage.replacePageBodyLinks({
+        pageId: guide.id!,
+        links: [{ ref: staleRef, toPageId: null, count: 1 }],
+      });
+    });
+    const repaired = (await f.cli()).report;
+    assert.equal(page(repaired, 'connection-guide').status, 'unchanged');
+    assert.equal(repaired.repairedLinks, true);
+    await f.knowledge(async (_, storage) => {
+      assert.deepEqual(await storage.listPageBodyLinkSources({ refs: [staleRef] }), []);
+    });
+    assert.equal((await f.cli()).report.repairedLinks, false);
+  } finally {
+    await f.close();
+  }
+});
+
 test('seed checks the rendered body of customer references in history', { timeout: 30000 }, async () => {
   const f = await fixture();
   try {

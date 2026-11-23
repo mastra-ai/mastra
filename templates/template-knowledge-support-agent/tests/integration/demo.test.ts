@@ -128,10 +128,48 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
       })),
     });
     const beforeConfirm = await snapshot(f);
-    const source = await confirm(f, id);
+    const request = f.request;
+    const unrelatedMessageId = randomUUID();
+    const confirmWithConcurrentTurn = async (threadId: string, concurrentMessageId: string, duplicate = false) => {
+      f.request = async (...args) => {
+        const response = await request(...args);
+        if (args[0] === '/agents/support/generate' && response.ok) {
+          const text = duplicate
+            ? JSON.parse(args[2]!.body as string).messages[0].content
+            : 'Concurrent unrelated follow-up';
+          await f.memory.saveMessages({
+            messages: [
+              {
+                id: concurrentMessageId,
+                threadId,
+                resourceId: resourceId(f.credentials[f.owner]!.profile),
+                role: 'user',
+                createdAt: new Date(Date.now() + 1000),
+                content: { format: 2, parts: [{ type: 'text', text }] },
+              },
+            ],
+          });
+        }
+        return response;
+      };
+      try {
+        return await confirm(f, threadId);
+      } finally {
+        f.request = request;
+      }
+    };
+    const source = await confirmWithConcurrentTurn(id, unrelatedMessageId);
     const memoryStore = await f.storage.getStore('memory');
     const confirmation = (await memoryStore!.listMessagesById({ messageIds: [source.messageId] })).messages[0];
     assert.match(JSON.stringify(confirmation), /Confirmed: The fictional Wi-Fi network selection/u);
+    assert.equal((await memoryStore!.listMessagesById({ messageIds: [unrelatedMessageId] })).messages.length, 1);
+    await f.memory.deleteMessages([unrelatedMessageId]);
+    const ambiguityThread = await thread(f);
+    await assert.rejects(() => confirmWithConcurrentTurn(ambiguityThread, randomUUID(), true), {
+      actual: 2,
+      expected: 1,
+      message: /Expected exactly one newly persisted confirmation/u,
+    });
     assert.deepEqual(await snapshot(f), beforeConfirm, 'Technician confirmation is not publication');
     const lifecycle = await approveLifecycle(f, source);
     const reuseThread = await thread(f, f.otherCustomer!);
@@ -443,6 +481,29 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     await turn(f, notesThread, `F5:notes READ=${noteScope}#${notePath}`, f.otherCustomer!);
     const noteReadEnd = Date.now();
     assert.ok(providerInput(f, noteRequestStart).includes(noteValue));
+    const backlinkRef = `${noteScope}#${notePath}`;
+    const { page: backlinkTarget } = await read(f, backlinkRef, f.otherCustomer!);
+    const { page: backlinkSource } = await f.supportKnowledge.upsertPage({
+      scope: noteScope,
+      path: 'fixtures/backlink-source',
+      name: 'Synthetic backlink source',
+      body: 'An unrelated page with an attributed note.',
+    });
+    const knowledgeStore = await f.supportKnowledge.getStorage();
+    const backlinkValue = 'REVIEWED_BACKLINK_MARIGOLD';
+    await knowledgeStore.addNote({
+      pageId: backlinkSource.id,
+      text: reviewedNote(backlinkValue),
+      stampScopeIds: [backlinkSource.scopeId],
+      mentions: [backlinkTarget.id],
+      provenance: { author: 'review:synthetic' },
+    });
+    const backlinkStart = Date.now();
+    await turn(f, await thread(f, f.otherCustomer!), `F5:backlink READ=${backlinkRef}`, f.otherCustomer!);
+    const backlinkEnd = Date.now();
+    const combinedStart = Date.now();
+    await turn(f, await thread(f, f.otherCustomer!), `F5:backlink-and-notes READ=${backlinkRef}`, f.otherCustomer!);
+    const combinedEnd = Date.now();
     const historyThread = await thread(f);
     const historyRequestStart = f.model.requests.length;
     const historyStart = Date.now();
@@ -511,6 +572,8 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
         ['numbered shared finding', numberedReadStart, numberedReadEnd, 1],
         ['numbered excerpt from mid-line', offsetReadStart, offsetReadEnd, 0],
         ['reviewed notes', noteReadStart, noteReadEnd, 1],
+        ['reviewed backlink', backlinkStart, backlinkEnd, 1],
+        ['reviewed backlink and notes', combinedStart, combinedEnd, 1],
       ] as const) {
         const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row, start, end));
         const [read] = reads;
@@ -581,6 +644,7 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
     const exported = JSON.stringify({ tables, trace });
     const forbidden = [
       noteValue,
+      backlinkValue,
       ...Object.values(sentinels).filter(value => value !== sentinels.policy),
       ...f.credentials.map(entry => entry.token),
       'synthetic-model-key',

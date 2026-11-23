@@ -1,8 +1,11 @@
+import { createClient, type Client } from '@libsql/client';
+import type { DbClient } from '@mastra/pg';
 import {
   knowledgeLinkRefKey,
   type Knowledge,
   type KnowledgeNote,
   type KnowledgePage,
+  type KnowledgePageBodyLink,
   type KnowledgeStorage,
   type KnowledgeUpsertPageResult,
 } from '@mastra/core/knowledge';
@@ -78,12 +81,33 @@ function exactNote(note: KnowledgeNote, wanted: PreparedNote, scopeId: string, m
   );
 }
 
+type SeedLinkDatabase = { postgres: DbClient } | { libsql: Client };
+
+// Native link traversal only reports resolved, visible edges. Seed repair needs the stored rows.
+async function readBodyLinkRows(database: SeedLinkDatabase, pageId: string, limit: number) {
+  if ('postgres' in database)
+    return database.postgres.manyOrNone<KnowledgePageBodyLink>(
+      `SELECT "ref", "toPageId", "count" FROM "public"."mastra_knowledge_page_links" WHERE "fromPageId" = $1 LIMIT $2`,
+      [pageId, limit],
+    );
+  const { rows } = await database.libsql.execute({
+    sql: `SELECT "ref", "toPageId", "count" FROM "mastra_knowledge_page_links" WHERE "fromPageId" = ? LIMIT ?`,
+    args: [pageId, limit],
+  });
+  return rows.map(row => ({
+    ref: String(row.ref),
+    toPageId: row.toPageId === null ? null : String(row.toPageId),
+    count: Number(row.count),
+  }));
+}
+
 async function writeDataset(
   knowledge: Knowledge,
   dataset: PreparedDataset,
   report: SeedReport,
   reportRetention: boolean,
   context: WriterContext,
+  database: SeedLinkDatabase,
 ) {
   const storage = await knowledge.getStorage();
   const author = `seed:${dataset.id}`;
@@ -135,23 +159,18 @@ async function writeDataset(
       toPageId: written.get(ref)!.page.id,
       count,
     }));
-    const expected = new Map(
-      links.filter(link => link.toPageId !== current.id).map(link => [link.toPageId, link.count]),
-    );
+    const expected = new Map(links.map(link => [link.ref, link]));
     async function indexMatches() {
-      const indexed = await storage.listPageLinks({
-        pageIds: [current.id],
-        read: 'all',
-        direction: 'out',
-        kinds: ['body'],
-        limit: 1000,
-      });
-      return indexed.length === expected.size && indexed.every(edge => expected.get(edge.toPageId) === edge.count);
+      const indexed = await readBodyLinkRows(database, current.id, expected.size + 1);
+      return (
+        indexed.length === expected.size &&
+        indexed.every(row => {
+          const wanted = expected.get(row.ref);
+          return wanted?.toPageId === row.toPageId && wanted.count === row.count;
+        })
+      );
     }
-    const unexpectedReferences =
-      wanted.unexpectedBodyRefs.length &&
-      (await storage.listPageBodyLinkSources({ refs: wanted.unexpectedBodyRefs })).includes(current.id);
-    if (unexpectedReferences || !(await indexMatches())) {
+    if (!(await indexMatches())) {
       await storage.replacePageBodyLinks({ pageId: current.id, links });
       if (!(await indexMatches())) throw new Error('Knowledge link index repair did not converge');
       report.repairedLinks = true;
@@ -223,13 +242,21 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
         report,
         options.reportRetention ?? true,
         context,
+        { postgres },
       );
       return report;
     }
     const store = createStore('knowledge-seed', libsql);
     try {
-      await writeDataset(createKnowledge(store), dataset, report, options.reportRetention ?? true, context);
-      return report;
+      const client = createClient({ url: libsql.url, authToken: libsql.authToken });
+      try {
+        await writeDataset(createKnowledge(store), dataset, report, options.reportRetention ?? true, context, {
+          libsql: client,
+        });
+        return report;
+      } finally {
+        client.close();
+      }
     } finally {
       await store.close();
     }

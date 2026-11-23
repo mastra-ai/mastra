@@ -66,6 +66,7 @@ export function createHostedIdentity() {
         const now = Date.now();
         if (
           claims?.active !== true ||
+          claims.token_use !== 'access' ||
           !Number.isSafeInteger(claims.exp) ||
           claims.exp * 1000 <= now ||
           claims.iss !== issuer ||

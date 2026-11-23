@@ -68,6 +68,7 @@ function databaseEnv({ url, authToken }) {
 function bearerProfile(sub, tenantId, customerId, scope) {
   return {
     active: true,
+    token_use: 'access',
     exp: Math.floor(Date.now() / 1000) + 3600,
     iss: issuer,
     aud: audience,
@@ -849,6 +850,11 @@ try {
   const wrongAudience = token();
   profiles.set(wrongAudience, { ...profiles.get(technician), aud: 'different-service' });
   assert.equal((await request(first, '/api/knowledge', wrongAudience)).status, 401);
+  for (const tokenUse of [undefined, 'refresh', 'id']) {
+    const unsupported = token();
+    profiles.set(unsupported, { ...profiles.get(technician), token_use: tokenUse, token_type: 'Bearer' });
+    assert.equal((await request(first, '/api/knowledge', unsupported)).status, 401);
+  }
   const oversizedIdentity = token();
   profiles.set(oversizedIdentity, { ...profiles.get(technician), padding: '界'.repeat(22000) });
   assert.equal((await request(first, '/api/knowledge', oversizedIdentity)).status, 401);

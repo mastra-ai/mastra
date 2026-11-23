@@ -81,6 +81,7 @@ A successful response has this shape.
 ```json
 {
   "active": true,
+  "token_use": "access",
   "exp": 2000000000,
   "iss": "https://identity.example",
   "aud": "knowledge-support",
@@ -90,6 +91,8 @@ A successful response has this shape.
   "scope": "support:technician"
 }
 ```
+
+The introspection service must attest to the token class with `token_use: "access"`. If the provider uses a different claim, configure the identity gateway to map the provider's verified token class to `token_use`. The gateway must derive this value from its token records or validated claims. The request hint guides the lookup and the bearer scheme describes how the token is presented. Access is denied when the claim is missing or has any other value. See [RFC 7662 sections 2.1 and 2.2](https://www.rfc-editor.org/rfc/rfc7662.html#section-2.1).
 
 `exp` is an unexpired integer Unix timestamp. `iss` must exactly match the configured issuer. `aud` must match the configured audience or contain it in an array. A future `nbf`, if supplied, is denied. `sub`, `tenant_id` and `customer_id` must be nonempty strings issued by the identity service. `sub` supplies both the actor and profile ID. Request bodies and request context cannot override these claims. An unknown or inactive token, an unavailable identity service, malformed claims or a missing supported scope denies access.
 

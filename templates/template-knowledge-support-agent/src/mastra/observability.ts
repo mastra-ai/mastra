@@ -161,7 +161,9 @@ export class PayloadFreeStorageExporter extends MastraStorageExporter {
           (typeof page?.lines === 'string' &&
             (page.range?.start?.col ?? 0) === 0 &&
             /^ *1│<!-- knowledge-review:/u.test(page.lines)) ||
-          (Array.isArray(output.notes) && output.notes.some(note => hasReviewMarker(note?.text))))
+          [output.notes, output.mentionedIn].some(
+            entries => Array.isArray(entries) && entries.some(note => hasReviewMarker(note?.text)),
+          ))
       )
         instance.getObservabilityBus().emit({
           type: 'metric',

@@ -11,6 +11,7 @@ import { supportRecordEnvelope } from './support-record-envelope.ts';
 // this bounded fallback promises exhaustive ranking across an arbitrarily large history.
 const bounds = {
   batch: 100,
+  pageBatch: 20,
   enumeration: 100,
   hits: 100,
   candidates: 300,
@@ -22,6 +23,7 @@ const bounds = {
 };
 type Evidence = SupportRecord & { ref: string };
 type PageLocation = Pick<KnowledgePage, 'id' | 'scopeId' | 'isScope' | 'key' | 'parentId' | 'version'>;
+type PageRecord = { parsed?: SupportRecord; invalid?: true };
 type NoteEvidence = { id: string; version: number; listed: boolean; record: Evidence };
 export type HistoryKnowledge = Knowledge & { withReadSnapshot: KnowledgeReadSnapshot };
 export type History = {
@@ -129,15 +131,20 @@ export async function prepareHistory(
     if (!historyReadable) return finish('unavailable');
     // A search or list snapshot can outlive a deletion. Use only the pages still readable here.
     const ids = [...candidateIds];
-    const candidateBodies = new Map<string, string | undefined>();
+    const candidateRecords = new Map<string, PageRecord>();
     const pages = new Map<string, PageLocation>();
-    for (let index = 0; index < ids.length; index += bounds.batch) {
+    // Adapters return full bodies. Keep only bounded records and locations between requests.
+    for (let index = 0; index < ids.length; index += bounds.pageBatch) {
       try {
-        const current = await store.getPages({ ids: ids.slice(index, index + bounds.batch), read });
+        const current = await store.getPages({ ids: ids.slice(index, index + bounds.pageBatch), read });
         for (const page of current) {
           if (page.scopeId !== customer.id || page.isScope || page.deletedAt) continue;
           pages.set(page.id, location(page));
-          candidateBodies.set(page.id, page.body);
+          try {
+            candidateRecords.set(page.id, { parsed: record(page.body) });
+          } catch {
+            candidateRecords.set(page.id, { invalid: true });
+          }
         }
       } catch {
         partial = true;
@@ -150,9 +157,9 @@ export async function prepareHistory(
         (id): id is string => !!id && id !== customer.id && !pages.has(id),
       );
       if (!missing.length) break;
-      for (let index = 0; index < missing.length; index += bounds.batch) {
+      for (let index = 0; index < missing.length; index += bounds.pageBatch) {
         try {
-          const parents = await store.getPages({ ids: missing.slice(index, index + bounds.batch), read });
+          const parents = await store.getPages({ ids: missing.slice(index, index + bounds.pageBatch), read });
           for (const page of parents)
             if (page.scopeId === customer.id && !page.deletedAt) pages.set(page.id, location(page));
         } catch {
@@ -162,7 +169,7 @@ export async function prepareHistory(
     }
     let noteCounts: Record<string, number> = {};
     try {
-      noteCounts = await store.countNotes({ pageIds: [...candidateBodies.keys()], read });
+      noteCounts = await store.countNotes({ pageIds: [...candidateRecords.keys()], read });
     } catch {
       partial = true;
     }
@@ -184,10 +191,10 @@ export async function prepareHistory(
       } while (cursor);
       return false;
     }
-    const pagesToInspect = candidateBodies.entries();
+    const pagesToInspect = candidateRecords.entries();
     const checks: Array<{ pageId: string; ancestry: PageLocation[]; pageRecord?: Evidence; notes: NoteEvidence[] }> =
       [];
-    async function inspect(pageId: string, body: string | undefined) {
+    async function inspect(pageId: string, { parsed, invalid }: PageRecord) {
       const path: string[] = [];
       const ancestry = new Map<string, PageLocation>();
       let current = pages.get(pageId);
@@ -208,14 +215,9 @@ export async function prepareHistory(
       const canonical = path.join('/');
       if (!isCustomerHistoryPath(canonical)) return;
       const ref = `${scope}#${canonical}`;
-      let pageRecord: Evidence | undefined;
+      const pageRecord = parsed && { ...parsed, ref };
       inspected++;
-      try {
-        const parsed = record(body);
-        if (parsed) pageRecord = { ...parsed, ref };
-      } catch {
-        partial = true;
-      }
+      if (invalid) partial = true;
       const seenNotes = new Set<string>();
       const noteEvidence: NoteEvidence[] = [];
       const includeNote = (note: KnowledgeNote, listed: boolean) => {
@@ -261,8 +263,8 @@ export async function prepareHistory(
         checks.push({ pageId, ancestry: [...ancestry.values()], pageRecord, notes: noteEvidence });
     }
     await Promise.all(
-      Array.from({ length: Math.min(bounds.noteConcurrency, candidateBodies.size) }, async () => {
-        for (const [pageId, body] of pagesToInspect) await inspect(pageId, body);
+      Array.from({ length: Math.min(bounds.noteConcurrency, candidateRecords.size) }, async () => {
+        for (const [pageId, candidate] of pagesToInspect) await inspect(pageId, candidate);
       }),
     );
     async function verifyBatch(batch: typeof checks) {
@@ -270,8 +272,8 @@ export async function prepareHistory(
       return knowledge.withReadSnapshot(async snapshot => {
         const ancestryIds = [...new Set(batch.flatMap(check => check.ancestry.map(page => page.id)))];
         const currentPages = new Map<string, PageLocation>();
-        for (let index = 0; index < ancestryIds.length; index += bounds.batch) {
-          const batch = await snapshot.getPages({ ids: ancestryIds.slice(index, index + bounds.batch), read });
+        for (let index = 0; index < ancestryIds.length; index += bounds.pageBatch) {
+          const batch = await snapshot.getPages({ ids: ancestryIds.slice(index, index + bounds.pageBatch), read });
           for (const current of batch) currentPages.set(current.id, location(current));
         }
         const evidence: Evidence[] = [];

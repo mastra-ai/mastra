@@ -1,4 +1,4 @@
-import { open, readFile, realpath, stat } from 'node:fs/promises';
+import { open, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import {
@@ -8,7 +8,6 @@ import {
   knowledgeLinkRefKey,
   MAX_KNOWLEDGE_PAGE_DEPTH,
   MAX_KNOWLEDGE_PAGE_BODY_LINKS,
-  parseKnowledgeWikilinks,
   MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH,
   type KnowledgePage,
 } from '@mastra/core/knowledge';
@@ -29,6 +28,7 @@ export interface DatasetConfiguration {
 export const MAX_SUPPORT_RECORD_BODY_LENGTH = 1_000_000;
 // UTF-8 takes at most three bytes per UTF-16 code unit. Allow additional bytes for normalized whitespace.
 const MAX_MARKDOWN_FILE_BYTES = MAX_SUPPORT_RECORD_BODY_LENGTH * 4;
+const MAX_MANIFEST_FILE_BYTES = 16 * 1024 * 1024;
 
 export interface SupportRecord {
   topicTags: string[];
@@ -53,7 +53,6 @@ export interface PreparedPage {
   body: string;
   marker: string;
   links: Map<string, number>;
-  unexpectedBodyRefs: string[];
   notes: PreparedNote[];
 }
 export interface PreparedDataset {
@@ -148,16 +147,20 @@ async function containedFile(root: string, name: string) {
   const rel = relative(root, path);
   if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel) || !(await stat(path)).isFile())
     throw new Error('Markdown file escapes the dataset');
+  return readBoundedFile(path, MAX_MARKDOWN_FILE_BYTES, `Markdown file ${name}`);
+}
+
+async function readBoundedFile(path: string, maxBytes: number, label: string) {
   const file = await open(path, 'r');
   try {
-    const bytes = Buffer.allocUnsafe(MAX_MARKDOWN_FILE_BYTES + 1);
+    const bytes = Buffer.allocUnsafe(maxBytes + 1);
     let offset = 0;
     while (offset < bytes.length) {
       const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, null);
       if (!bytesRead) return bytes.toString('utf8', 0, offset);
       offset += bytesRead;
     }
-    throw new Error(`Markdown file ${name} exceeds the ${MAX_MARKDOWN_FILE_BYTES}-byte read bound`);
+    throw new Error(`${label} exceeds the ${maxBytes}-byte read bound`);
   } finally {
     await file.close();
   }
@@ -186,17 +189,10 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
   const links = new Map<string, number>();
   const destinations: string[] = [];
   const maskUrl = (value: string) => `\u0000url${destinations.push(value) - 1}\u0000`;
-  const inline = text.replace(/\]\(([^)]*)\)/gu, (_, target: string) => {
-    if (/[\r\n]/u.test(target)) throw new Error('Multiline Markdown destinations are unsupported');
-    if (target.includes('(') || /&(?:#(?:x[\da-f]+|\d+)|[a-z][a-z\d]*);/iu.test(target))
-      throw new Error('Ambiguous Markdown destinations are unsupported');
-    if (!/^#[a-zA-Z0-9_-]+$/u.test(target)) url(target);
-    return `](${maskUrl(target)})`;
-  });
-  if (/<\/?[a-z!]/iu.test(inline)) throw new Error('Unsupported or reserved Markdown syntax');
+  if (/<\/?[a-z!]/iu.test(text)) throw new Error('Unsupported or reserved Markdown syntax');
   // Keep URL-like text intact for GFM autolinks and generated source attribution.
-  if (/\b(?:https?:\/\/|www\.)[^\s/?#]*@/iu.test(inline)) throw new Error('Unsafe Markdown URL authority');
-  const prose = inline.replace(/\b(?:https?:\/\/|www\.)[^\s<>\u0000]+/giu, maskUrl);
+  if (/\b(?:https?:\/\/|www\.)[^\s/?#]*@/iu.test(text)) throw new Error('Unsafe Markdown URL authority');
+  const prose = text.replace(/\b(?:https?:\/\/|www\.)[^\s<>\u0000]+/giu, maskUrl);
   const rendered = prose.replace(/\[\[([\s\S]*?)\]\]/gu, (_, raw: string) => {
     if (raw !== raw.trim() || /[\[\]\r\n]/u.test(raw)) throw new Error('Ambiguous wiki link');
     const ref = resolveAlias(raw);
@@ -216,42 +212,51 @@ function renderLinks(text: string, resolveAlias: (ref: string) => string) {
 
 type MarkdownNode = {
   type: string;
+  url?: string;
   position?: { start: { offset?: number }; end: { offset?: number } };
   children?: MarkdownNode[];
 };
 
 function renderMarkdownLinks(body: string, resolveAlias: (ref: string) => string, generatedOffset = body.length) {
-  const code: string[] = [];
+  const bomLength = body.startsWith('\uFEFF') ? 1 : 0;
+  const literals: string[] = [];
   const parts: string[] = [];
   let offset = 0;
-  function maskCode(node: MarkdownNode) {
-    if (node.type !== 'code' && node.type !== 'inlineCode') {
-      node.children?.forEach(maskCode);
-      return;
-    }
-    const start = node.position?.start.offset;
-    const end = node.position?.end.offset;
-    if (start === undefined || end === undefined) return;
-    if (start < generatedOffset && end > generatedOffset)
-      throw new Error('Unclosed Markdown code block before generated page content');
-    parts.push(body.slice(offset, start), `\u0000${code.push(body.slice(start, end)) - 1}\u0000`);
+  function mask(start: number, end: number) {
+    parts.push(body.slice(offset, start), `\u0000${literals.push(body.slice(start, end)) - 1}\u0000`);
     offset = end;
   }
-  maskCode(fromMarkdown(body));
+  function protect(node: MarkdownNode) {
+    const parsedStart = node.position?.start.offset;
+    const parsedEnd = node.position?.end.offset;
+    if (parsedStart === undefined || parsedEnd === undefined) return;
+    const start = parsedStart + bomLength;
+    const end = parsedEnd + bomLength;
+    if (node.type === 'code' || node.type === 'inlineCode') {
+      if (start < generatedOffset && end > generatedOffset)
+        throw new Error('Unclosed Markdown code block before generated page content');
+      mask(start, end);
+      return;
+    }
+    node.children?.forEach(protect);
+    if ((node.type !== 'link' && node.type !== 'image') || body[start] === '<') return;
+    const target = node.url!;
+    // The parser identifies the link. Keep the existing restricted syntax for its source destination.
+    const source = body.slice(start, end);
+    const destination = source.slice(source.lastIndexOf('](') + 2, -1);
+    if (/[\r\n]/u.test(destination)) throw new Error('Multiline Markdown destinations are unsupported');
+    if (destination !== target || /[()\r\n]|&(?:#(?:x[\da-f]+|\d+)|[a-z][a-z\d]*);/iu.test(target))
+      throw new Error('Ambiguous Markdown destinations are unsupported');
+    if (!/^#[a-zA-Z0-9_-]+$/u.test(target)) url(target);
+    mask(end - target.length - 1, end - 1);
+  }
+  protect(fromMarkdown(body));
   parts.push(body.slice(offset));
   const rendered = renderLinks(parts.join(''), resolveAlias);
   return {
     ...rendered,
-    text: rendered.text.replace(/\u0000(\d+)\u0000/gu, (_, index: string) => code[Number(index)]!),
+    text: rendered.text.replace(/\u0000(\d+)\u0000/gu, (_, index: string) => literals[Number(index)]!),
   };
-}
-
-// Installed Knowledge releases may index code forms such as indented blocks as prose.
-function nativeBodyRefs(body: string) {
-  const prose = body
-    .replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^\1[ \t]*$|(?![\s\S]))/gmu, '')
-    .replace(/(`+)[\s\S]*?\1/gu, '');
-  return parseKnowledgeWikilinks(prose).slice(0, MAX_KNOWLEDGE_PAGE_BODY_LINKS);
 }
 
 export const pageMarker = (dataset: string, page: string) => `<!-- knowledge-seed:page:${dataset}:${page} -->`;
@@ -287,9 +292,10 @@ export async function prepareDataset(
   const manifestFile = config.manifestFile ?? 'manifest.json';
   if (!/^[a-z0-9-]+\.json$/u.test(manifestFile)) throw new Error('Invalid configured manifest filename');
   const manifestPath = await realpath(resolve(root, manifestFile));
-  if (relative(root, manifestPath) !== manifestFile) throw new Error('Manifest escapes the dataset');
+  if (relative(root, manifestPath) !== manifestFile || !(await stat(manifestPath)).isFile())
+    throw new Error('Manifest escapes the dataset');
   const manifest = object(
-    JSON.parse(await readFile(manifestPath, 'utf8')),
+    JSON.parse(await readBoundedFile(manifestPath, MAX_MANIFEST_FILE_BYTES, `Manifest ${manifestFile}`)),
     ['schemaVersion', 'id', 'version', 'pages'],
     'manifest',
   );
@@ -369,7 +375,7 @@ export async function prepareDataset(
       if (!canLink(page.placement, target.placement)) throw new Error(`Link crosses its audience: ${ref}`);
       return target.ref;
     };
-    const render = (text: string) => renderLinks(text, lookup).text;
+    const render = (text: string) => renderMarkdownLinks(text, lookup).text;
     const envelope = page.envelope;
     let markdown = page.body;
     const generated: string[] = [];
@@ -440,9 +446,6 @@ export async function prepareDataset(
       };
     });
     const links = new Map([...renderedBody.links].slice(0, MAX_KNOWLEDGE_PAGE_BODY_LINKS));
-    const unexpectedBodyRefs = nativeBodyRefs(body)
-      .filter(ref => !links.has(ref))
-      .map(knowledgeLinkRefKey);
     return {
       key: alias,
       scope: page.placement.scope,
@@ -452,7 +455,6 @@ export async function prepareDataset(
       body,
       marker,
       links,
-      unexpectedBodyRefs,
       notes,
     };
   });

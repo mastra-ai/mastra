@@ -219,15 +219,24 @@ async function configureRuntime(
     return fixtureFetch(`${base()}/api${path}`, { ...options, headers });
   }
   async function start() {
+    assert.equal(child, undefined, 'Stop the existing runtime before starting it again');
     for (let attempt = 0; attempt < 3; attempt++) {
-      if (await launch()) return;
+      try {
+        if (await launch()) return;
+      } catch (error) {
+        try {
+          await stop();
+        } catch (cleanupError) {
+          throw new AggregateError([error, cleanupError], 'Dev startup and cleanup failed', { cause: error });
+        }
+        throw error;
+      }
       await stop();
       port = selectPort();
     }
     throw new Error(`Dev could not bind after three port collisions: ${output}`);
   }
   async function launch() {
-    assert.equal(child, undefined, 'Stop the existing runtime before starting it again');
     output = '';
     activeCredentialFile = undefined;
     const launcher = spawn('npm', ['run', 'dev'], {
