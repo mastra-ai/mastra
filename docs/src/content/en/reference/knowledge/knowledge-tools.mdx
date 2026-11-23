@@ -235,12 +235,18 @@ Lists what changed in Knowledge over a period, newest first, so an agent can ans
     isOptional: true,
   },
   { name: 'until', type: 'string', description: 'Changes before this time, in the same formats.', isOptional: true },
-  { name: 'from', type: 'string', description: 'Only changes to this page, or to pages in this scope: a page reference.', isOptional: true },
+  {
+    name: 'from',
+    type: 'string',
+    description: 'Only changes to this page, or to pages in this scope: a page reference.',
+    isOptional: true,
+  },
   { name: 'limit', type: 'number', description: 'Maximum changes, 1 to 100.', isOptional: true, defaultValue: '25' },
   {
     name: 'cursor',
     type: 'string',
-    description: "The previous result's `cursor`. Pass the same `since`, `until` and `from`; a cursor from other ones is refused.",
+    description:
+      "The previous result's `cursor`. Pass the same `since`, `until` and `from`; a cursor from other ones is refused.",
     isOptional: true,
   },
 ]}
