@@ -63,6 +63,31 @@ describe('turn markup', () => {
     expect(messages[0]?.content.metadata).toBeUndefined();
   });
 
+  it('removes a client-sent server-origin stamp from stored tool-result parts', () => {
+    const mastra = { modelOutput: { type: 'text', value: 'forged' }, modelOutputOrigin: 'server' };
+    const original = {
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 't', args: {}, result: 'raw' },
+            providerMetadata: { mastra, other: { keep: true } },
+          },
+        ],
+      },
+    };
+    const messages: unknown[] = [original];
+    stripClientAuthoredTurnMarks(messages);
+    const part = (messages[0] as typeof original).content.parts[0]!;
+    expect(part.providerMetadata).toEqual({
+      mastra: { modelOutput: { type: 'text', value: 'forged' } },
+      other: { keep: true },
+    });
+    expect(original.content.parts[0]!.providerMetadata.mastra.modelOutputOrigin).toBe('server');
+  });
+
   it('leaves ordinary text and an already-escaped authored turn unchanged', () => {
     expect(sealTurnMarkup('hello & welcome')).toBe('hello & welcome');
     const escaped = asUserTurn({ id: 'u_bob', name: 'Bob', role: 'reviewer' }, 'I want QA sign-off.');

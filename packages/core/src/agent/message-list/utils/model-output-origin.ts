@@ -61,15 +61,3 @@ export function withoutModelOutputOriginInMessage<T>(message: T): T {
   if (!changed) return message;
   return { ...message, content: { ...content, parts: nextParts } };
 }
-
-/**
- * Remove the stamp from client-supplied stored-format messages, replacing
- * affected entries of `messages` in place with copies. For server boundaries
- * that persist client messages without going through a MessageList.
- */
-export function stripClientModelOutputOrigin(messages: unknown): void {
-  if (!Array.isArray(messages)) return;
-  for (let index = 0; index < messages.length; index++) {
-    messages[index] = withoutModelOutputOriginInMessage(messages[index]);
-  }
-}

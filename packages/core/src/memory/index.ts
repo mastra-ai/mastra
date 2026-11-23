@@ -7,4 +7,3 @@ export * from './mock';
 export * from './run-state';
 export * from './working-memory-utils';
 export * from './turn-markup';
-export { stripClientModelOutputOrigin } from '../agent/message-list/utils/model-output-origin';

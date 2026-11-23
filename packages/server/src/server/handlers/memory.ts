@@ -8,7 +8,7 @@ import type {
   ObservationalMemorySettings,
   StorageThreadType,
 } from '@mastra/core/memory';
-import { stripClientAuthoredTurnMarks, stripClientModelOutputOrigin } from '@mastra/core/memory';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MASTRA_USER_KEY } from '../constants';
@@ -1800,7 +1800,6 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
       }));
       stripClientAuthoredTurnMarks(processedMessages);
-      stripClientModelOutputOrigin(processedMessages);
 
       const result = await memory.saveMessages({ messages: processedMessages as any, memoryConfig: {} });
       return result;
