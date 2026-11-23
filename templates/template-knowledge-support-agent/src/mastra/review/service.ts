@@ -349,8 +349,10 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         requireReview(current, 'Note target is missing');
         requireReview(current.id === target.id, 'Note target changed; reevaluate');
         await validate(proposal, authenticated, activeKnowledge);
-        const duplicates = await matchingNoteIds(current.id, proposal.candidate.content, 'live-content', postgres);
-        requireReview(duplicates.length === 0, 'A duplicate note now exists; reevaluate');
+        requireReview(
+          !(await duplicate(proposal, activeKnowledge, postgres)),
+          'A duplicate note or finding now exists; reevaluate',
+        );
         reviewer(authenticated ?? proposal.reviewer);
         const note = await store.addNote({
           id: proposal.id,

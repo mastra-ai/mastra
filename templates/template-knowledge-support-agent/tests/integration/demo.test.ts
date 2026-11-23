@@ -582,11 +582,14 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
       ] as const) {
         const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row, start, end));
         const [read] = reads;
-        const counts = reuse.filter(row => read && row.traceId === read.traceId && row.parentSpanId === read.spanId);
+        const counts = reuse.filter(row => row.traceId === read?.traceId);
         if (
           reads.length !== 1 ||
           counts.length !== expected ||
-          counts.some(row => row.metadata.value !== 1 || row.metadata.labels?.status !== 'ready')
+          counts.some(
+            row =>
+              row.parentSpanId !== read?.spanId || row.metadata.value !== 1 || row.metadata.labels?.status !== 'ready',
+          )
         )
           missing.push(`${expected} resolution reuse events linked to the ${label} read span`);
       }

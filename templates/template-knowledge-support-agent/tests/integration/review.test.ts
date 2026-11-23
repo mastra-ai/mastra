@@ -408,6 +408,23 @@ test('a short thread ID blocks explicit references and permits ordinary shared w
         false,
       );
     }
+    for (const [sourceActorId, explicit] of [
+      ['tech', 'Ask TECH to repeat the test.'],
+      [safe.proposal.id, `Reference: open${safe.proposal.id}record.`],
+    ] as const) {
+      const shared = { ...safe.proposal, source: { ...safe.proposal.source, sourceActorId } };
+      assert.equal(
+        proposalSchema.safeParse({
+          ...shared,
+          candidate: { ...shared.candidate, content: 'Ask a technician to repeat the test.' },
+        }).success,
+        true,
+      );
+      assert.equal(
+        proposalSchema.safeParse({ ...shared, candidate: { ...shared.candidate, content: explicit } }).success,
+        false,
+      );
+    }
     const invalid = proposalSchema.safeParse({ ...safe.proposal, source: { ...safe.proposal.source, threadId: '(' } });
     assert.ok(!invalid.success);
     assert.ok(invalid.error.issues.some(issue => issue.path.join('.') === 'source.threadId'));
@@ -746,8 +763,25 @@ test('review detects exact duplicates and publishes new content in a large scope
     });
     const racedResult = await resume(f, raced);
     assert.equal(racedResult.status, 'failed');
-    assert.match(JSON.stringify(racedResult), /duplicate note now exists/u);
+    assert.match(JSON.stringify(racedResult), /duplicate note or finding now exists/u);
     await store.removeNote({ id: added.id, deletedBy: 'fixture', provenance: { author: 'fixture' } });
+
+    const racedFinding = await pending(f, input);
+    assert.equal(racedFinding.proposal.candidate.action, 'note');
+    const path = 'cases/new-duplicate';
+    await f.supportKnowledge.upsertPage({
+      scope: customer,
+      path,
+      name: 'Finding published after note preparation',
+      body: supplement.content,
+      author: 'fixture',
+    });
+    const racedFindingResult = await resume(f, racedFinding);
+    assert.equal(racedFindingResult.status, 'failed');
+    assert.match(JSON.stringify(racedFindingResult), /duplicate note or finding now exists/u);
+    assert.equal(await store.getNote({ id: racedFinding.proposal.id, read: 'all' }), null);
+    await f.supportKnowledge.removePage({ scope: customer, path, author: 'fixture' });
+
     const deletedRun = await pending(f, input);
     const deleted = await store.addNote({
       pageId: target.id,

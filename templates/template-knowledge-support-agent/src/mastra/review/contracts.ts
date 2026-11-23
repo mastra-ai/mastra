@@ -217,7 +217,7 @@ export const proposalSchema = proposalFields.superRefine(validateProposalDraft).
         path: ['candidate'],
         message: 'Shared text contains private links, credentials, or payment-like data',
       });
-    const privateIdentifiers = [source.sourceActorId, source.messageId, ...candidate.evidence.map(item => item.ref)];
+    const privateIdentifiers = [source.messageId, ...candidate.evidence.map(item => item.ref)];
     const normalized = sharedText.toLowerCase();
     const mentionsIdentifier = (id: string) => {
       const lower = id.toLowerCase();
@@ -229,6 +229,7 @@ export const proposalSchema = proposalFields.superRefine(validateProposalDraft).
     if (
       mentionsIdentifier(source.threadId) ||
       mentionsIdentifier(proposal.reviewer.customerId) ||
+      mentionsIdentifier(source.sourceActorId) ||
       privateIdentifiers.some(value => normalized.includes(value.toLowerCase()))
     )
       context.addIssue({

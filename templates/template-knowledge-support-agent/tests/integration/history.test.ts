@@ -203,6 +203,23 @@ test('a complete fallback finds matches beyond the search query cap', { timeout:
       name: 'Fallback match',
       body: historyRecord('MATCHING_PAGE', ['late-match']),
     });
+    const store = await f.supportKnowledge.getStorage();
+    const [home] = await store.getScopesByAddress([scope]);
+    assert.ok(home);
+    const unkeyed = await store.createPage({
+      parentId: home.id,
+      name: 'Imported parent',
+      body: historyRecord('UNKEYED_PARENT', ['late-match']),
+      provenance: { author: 'fixture' },
+    });
+    assert.ok(!unkeyed.key);
+    await store.createPage({
+      parentId: unkeyed.id,
+      key: 'imported-child',
+      name: 'Imported child',
+      body: historyRecord('UNKEYED_ANCESTOR', ['late-match']),
+      provenance: { author: 'fixture' },
+    });
     const result = await prepareHistory(
       f.supportKnowledge,
       profile,

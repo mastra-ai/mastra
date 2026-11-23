@@ -12,7 +12,6 @@ import {
   type KnowledgePage,
 } from '@mastra/core/knowledge';
 import { validateProfile, type Profile } from '../identity.ts';
-import { isCustomerHistoryPath } from '../../examples/support.ts';
 import { readApprovedPolicyRevisions, requiredPolicyContentIssue } from './required-policy.ts';
 import { supportRecordEnvelope } from './support-record-envelope.ts';
 
@@ -29,6 +28,7 @@ export const MAX_SUPPORT_RECORD_BODY_LENGTH = 1_000_000;
 // UTF-8 takes at most three bytes per UTF-16 code unit. Allow additional bytes for normalized whitespace.
 const MAX_MARKDOWN_FILE_BYTES = MAX_SUPPORT_RECORD_BODY_LENGTH * 4;
 const MAX_MANIFEST_FILE_BYTES = 16 * 1024 * 1024;
+const MAX_RENDERED_DATASET_LENGTH = 32_000_000;
 
 export interface SupportRecord {
   topicTags: string[];
@@ -184,30 +184,56 @@ function canLink(from: ReturnType<typeof placement>, to: ReturnType<typeof place
   return to.kind !== 'customer' || (from.kind === 'customer' && from.profile.customerId === to.profile.customerId);
 }
 
+type RenderLimit = { maxLength: number; message: string };
+
 /** Conservative link grammar: managed wiki aliases/canonical refs, HTTPS/HTTP URLs, and local anchors. */
-function renderLinks(text: string, resolveAlias: (ref: string) => string) {
+function renderLinks(text: string, resolveAlias: (ref: string) => string, literals: string[], limit: RenderLimit) {
   const links = new Map<string, number>();
-  const destinations: string[] = [];
-  const maskUrl = (value: string) => `\u0000url${destinations.push(value) - 1}\u0000`;
   if (/<\/?[a-z!]/iu.test(text)) throw new Error('Unsupported or reserved Markdown syntax');
   // Keep URL-like text intact for GFM autolinks and generated source attribution.
   if (/\b(?:https?:\/\/|www\.)[^\s/?#]*@/iu.test(text)) throw new Error('Unsafe Markdown URL authority');
-  const prose = text.replace(/\b(?:https?:\/\/|www\.)[^\s<>\u0000]+/giu, maskUrl);
-  const rendered = prose.replace(/\[\[([\s\S]*?)\]\]/gu, (_, raw: string) => {
-    if (raw !== raw.trim() || /[\[\]\r\n]/u.test(raw)) throw new Error('Ambiguous wiki link');
+  const prose = text.replace(
+    /\b(?:https?:\/\/|www\.)[^\s<>\u0000]+/giu,
+    value => `\u0000${literals.push(value) - 1}\u0000`,
+  );
+  const rendered: string[] = [];
+  const unlinked: string[] = [];
+  let remaining = limit.maxLength;
+  function append(value: string) {
+    if (value.length > remaining) throw new Error(limit.message);
+    remaining -= value.length;
+    if (value) rendered.push(value);
+  }
+  let offset = 0;
+  const token = /\[\[|\u0000(\d+)\u0000/gu;
+  const delimiter = /[\[\]\r\n\u0000]/gu;
+  for (let match = token.exec(prose); match; match = token.exec(prose)) {
+    const plain = prose.slice(offset, match.index);
+    append(plain);
+    unlinked.push(plain, '\u0000');
+    offset = token.lastIndex;
+    if (match[1] !== undefined) {
+      append(literals[Number(match[1])]!);
+      continue;
+    }
+    delimiter.lastIndex = offset;
+    const close = delimiter.exec(prose);
+    if (!close || (close[0] === ']' && prose[close.index + 1] !== ']')) throw new Error('Malformed wiki link');
+    if (close[0] !== ']') throw new Error('Ambiguous wiki link');
+    const raw = prose.slice(offset, close.index);
+    if (raw !== raw.trim()) throw new Error('Ambiguous wiki link');
     const ref = resolveAlias(raw);
+    append(`[[${ref}]]`);
     links.set(ref, (links.get(ref) ?? 0) + 1);
-    return `[[${ref}]]`;
-  });
-  const markdown = rendered.replace(/\[\[[^\[\]]+\]\]/gu, '\u0000');
+    offset = token.lastIndex = close.index + 2;
+  }
+  const tail = prose.slice(offset);
+  append(tail);
+  unlinked.push(tail);
+  const markdown = unlinked.join('');
   if (/<!--\s*knowledge-seed:|Seed note:|<\/?[a-z!]|\]\s*\[|\[(?:\\[\s\S]|[^\[\]\\])+\]:/iu.test(markdown))
     throw new Error('Unsupported or reserved Markdown syntax');
-  // A malformed wiki link must never turn into an unmanaged native reference.
-  if (markdown.includes('[[')) throw new Error('Malformed wiki link');
-  return {
-    text: rendered.replace(/\u0000url(\d+)\u0000/gu, (_, index: string) => destinations[Number(index)]!),
-    links,
-  };
+  return { text: rendered.join(''), links };
 }
 
 type MarkdownNode = {
@@ -217,7 +243,12 @@ type MarkdownNode = {
   children?: MarkdownNode[];
 };
 
-function renderMarkdownLinks(body: string, resolveAlias: (ref: string) => string, generatedOffset = body.length) {
+function renderMarkdownLinks(
+  body: string,
+  resolveAlias: (ref: string) => string,
+  limit: RenderLimit,
+  generatedOffset = body.length,
+) {
   const bomLength = body.startsWith('\uFEFF') ? 1 : 0;
   const literals: string[] = [];
   const parts: string[] = [];
@@ -252,11 +283,7 @@ function renderMarkdownLinks(body: string, resolveAlias: (ref: string) => string
   }
   protect(fromMarkdown(body));
   parts.push(body.slice(offset));
-  const rendered = renderLinks(parts.join(''), resolveAlias);
-  return {
-    ...rendered,
-    text: rendered.text.replace(/\u0000(\d+)\u0000/gu, (_, index: string) => literals[Number(index)]!),
-  };
+  return renderLinks(parts.join(''), resolveAlias, literals, limit);
 }
 
 export const pageMarker = (dataset: string, page: string) => `<!-- knowledge-seed:page:${dataset}:${page} -->`;
@@ -303,8 +330,8 @@ export async function prepareDataset(
     throw new Error('Incompatible dataset manifest');
   const version = line(manifest.version, 'dataset version', 80);
   const destinations = new Set<string>();
-  const aliases = new Map<string, Awaited<ReturnType<typeof readPage>>>();
-  async function readPage(value: unknown, existing: ReadonlyMap<string, unknown>) {
+  const aliases = new Map<string, ReturnType<typeof readPage>>();
+  function readPage(value: unknown, existing: ReadonlyMap<string, unknown>) {
     const obj = object(
       value,
       ['key', 'path', 'title', 'file', 'scope', 'kind', 'description', 'source', 'links', 'notes', 'record'],
@@ -329,26 +356,10 @@ export async function prepareDataset(
     const description = obj.description === undefined ? undefined : line(obj.description, 'description', 1000);
     assertKnowledgePageDescriptionWithinBound(description);
     const file = string(obj.file, 'Markdown file', 500);
-    const body = string(
-      (await containedFile(root, file))
-        .replace(/\r\n/g, '\n')
-        .replace(/^(?:[ \t]*\n)+/u, '')
-        .trimEnd(),
-      'Markdown body',
-      MAX_SUPPORT_RECORD_BODY_LENGTH,
-      true,
-    );
-    const envelope = supportRecordEnvelope(body);
-    if (envelope && obj.record !== undefined) throw new Error('Duplicate support record envelope');
-    const record = envelope
-      ? validateSupportRecord(JSON.parse(envelope.value))
-      : obj.record === undefined
-        ? undefined
-        : validateSupportRecord(obj.record);
-    return { input: obj, key: alias, path, name, description, placement: target, file, body, ref, envelope, record };
+    return { input: obj, key: alias, path, name, description, placement: target, file, ref };
   }
   for (const value of array(manifest.pages, 'pages')) {
-    const page = await readPage(value, aliases);
+    const page = readPage(value, aliases);
     aliases.set(page.key, page);
   }
   const mandatoryPolicyKeys = new Set<string>();
@@ -368,29 +379,53 @@ export async function prepareDataset(
   }
   const byRef = new Map([...aliases.values()].map(page => [page.ref, page]));
   const approved = await readApprovedPolicyRevisions(policyApprovalFile);
-  const pages = [...aliases].map(([alias, page]) => {
+  let remaining = MAX_RENDERED_DATASET_LENGTH;
+  function retain(length: number) {
+    if (length > remaining)
+      throw new Error(
+        `Rendered dataset ${config.id} exceeds the ${MAX_RENDERED_DATASET_LENGTH}-character output bound`,
+      );
+    remaining -= length;
+  }
+  const pages: PreparedPage[] = [];
+  for (const [alias, page] of aliases) {
     const lookup = (ref: string) => {
       const target = aliases.get(ref) ?? byRef.get(ref);
       if (!target) throw new Error(`Unknown link alias or unmanaged reference: ${ref}`);
       if (!canLink(page.placement, target.placement)) throw new Error(`Link crosses its audience: ${ref}`);
       return target.ref;
     };
-    const render = (text: string) => renderMarkdownLinks(text, lookup).text;
-    const envelope = page.envelope;
-    let markdown = page.body;
+    const render = (text: string, label: string) =>
+      renderMarkdownLinks(text, lookup, { maxLength: 1000, message: `Invalid ${label}` }).text;
+    let markdown = string(
+      (await containedFile(root, page.file))
+        .replace(/\r\n/g, '\n')
+        .replace(/^(?:[ \t]*\n)+/u, '')
+        .trimEnd(),
+      'Markdown body',
+      MAX_SUPPORT_RECORD_BODY_LENGTH,
+      true,
+    );
+    const envelope = supportRecordEnvelope(markdown);
+    if (envelope && page.input.record !== undefined) throw new Error('Duplicate support record envelope');
+    const sourceRecord = envelope
+      ? validateSupportRecord(JSON.parse(envelope.value))
+      : page.input.record === undefined
+        ? undefined
+        : validateSupportRecord(page.input.record);
     const generated: string[] = [];
-    if (page.record) {
-      const { summary, applicability } = page.record;
+    if (sourceRecord) {
+      const { summary, applicability } = sourceRecord;
       const record = validateSupportRecord({
-        ...page.record,
-        summary: render(summary),
-        ...(applicability === undefined ? {} : { applicability: render(applicability) }),
+        ...sourceRecord,
+        summary: render(summary, 'record summary'),
+        ...(applicability === undefined ? {} : { applicability: render(applicability, 'record applicability') }),
       });
       const fence =
         envelope && record.summary === summary && record.applicability === applicability
           ? envelope.raw
           : `\`\`\`support-record\n${JSON.stringify(record, null, 2)}\n\`\`\``;
-      if (envelope) markdown = page.body.slice(0, envelope.start) + fence + page.body.slice(envelope.end);
+      if (envelope) markdown = markdown.slice(0, envelope.start) + fence + markdown.slice(envelope.end);
       else generated.push(fence);
     }
     let hasHttpsSource = false;
@@ -407,22 +442,21 @@ export async function prepareDataset(
       if (new Set(links).size !== links.length) throw new Error('Duplicate link alias');
       generated.push(links.map(ref => `- [[${ref}]]`).join('\n'));
     }
+    const marker = pageMarker(config.id, alias);
+    const prefix = `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}`;
+    const bodyLimit = {
+      maxLength: MAX_SUPPORT_RECORD_BODY_LENGTH - prefix.length - 1,
+      message: `Rendered page body in ${page.file} exceeds the ${MAX_SUPPORT_RECORD_BODY_LENGTH}-character read bound`,
+    };
     const renderedBody = renderMarkdownLinks(
       [markdown, ...generated].filter(Boolean).join('\n\n'),
       lookup,
+      bodyLimit,
       markdown.length,
     );
-    const marker = pageMarker(config.id, alias);
-    const body = `${marker}\n${hasHttpsSource ? `${httpsSourceMarker}\n` : ''}${renderedBody.text}\n`;
-    if (
-      body.length > MAX_SUPPORT_RECORD_BODY_LENGTH &&
-      (page.record ||
-        page.input.kind === 'case' ||
-        (page.placement.kind === 'customer' && isCustomerHistoryPath(page.path)))
-    )
-      throw new Error(
-        `Rendered page body in ${page.file} exceeds the ${MAX_SUPPORT_RECORD_BODY_LENGTH}-character read bound`,
-      );
+    // Materialize the output so a short trimmed body cannot retain the raw file's backing string.
+    const body = [prefix, renderedBody.text, '\n'].join('');
+    retain(body.length);
     if (mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)) {
       const issue = requiredPolicyContentIssue(body, page.ref, approved);
       if (issue) throw new Error(`Invalid required policy ${page.ref} in ${page.file}. ${issue}.`);
@@ -433,10 +467,15 @@ export async function prepareDataset(
       const noteKey = key(obj.key, 'note key');
       if (noteKeys.has(noteKey)) throw new Error('Duplicate note key');
       noteKeys.add(noteKey);
-      const rendered = renderMarkdownLinks(string(obj.text, 'note text', 5000), lookup);
+      const rendered = renderMarkdownLinks(string(obj.text, 'note text', 5000), lookup, {
+        maxLength: MAX_SUPPORT_RECORD_BODY_LENGTH,
+        message: 'Rendered note exceeds the character read bound',
+      });
       const marker = noteMarker(config.id, alias, noteKey);
-      const text = `${marker}\n${rendered.text}${obj.author === undefined ? '' : `\nFixture author: ${line(obj.author, 'fixture author')}`}`;
+      const attribution = obj.author === undefined ? '' : `\nFixture author: ${line(obj.author, 'fixture author')}`;
+      const text = [marker, '\n', rendered.text, attribution].join('');
       assertKnowledgeNoteTextWithinBound(text);
+      retain(text.length);
       return {
         key: noteKey,
         text,
@@ -446,7 +485,7 @@ export async function prepareDataset(
       };
     });
     const links = new Map([...renderedBody.links].slice(0, MAX_KNOWLEDGE_PAGE_BODY_LINKS));
-    return {
+    pages.push({
       key: alias,
       scope: page.placement.scope,
       path: page.path,
@@ -456,7 +495,7 @@ export async function prepareDataset(
       marker,
       links,
       notes,
-    };
-  });
+    });
+  }
   return { id: config.id, version, pages };
 }

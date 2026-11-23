@@ -199,7 +199,8 @@ export async function prepareHistory(
       const ancestry = new Map<string, PageLocation>();
       let current = pages.get(pageId);
       while (current && current.id !== customer.id && path.length < MAX_KNOWLEDGE_PAGE_DEPTH) {
-        if (ancestry.has(current.id) || current.scopeId !== customer.id || current.isScope || !current.key) break;
+        if (ancestry.has(current.id) || current.scopeId !== customer.id || current.isScope) break;
+        if (!current.key) return;
         ancestry.set(current.id, current);
         path.unshift(current.key);
         if (current.parentId === customer.id) {

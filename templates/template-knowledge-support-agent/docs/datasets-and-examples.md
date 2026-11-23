@@ -10,6 +10,8 @@ The default retail support example uses Square Terminal reference summaries and 
 | `it-helpdesk`          | Portuguese Windows configuration guide, its own standing policy, and approved fictional history for two access groups. |
 | `retail-pos`           | Earlier retail example with the `north-*` and `south-store` profiles.                                                  |
 
+Each rendered page body can contain up to 1,000,000 UTF-16 code units, including expanded wiki links and generated attribution. The combined rendered page bodies and notes in one dataset can contain up to 32,000,000 code units.
+
 ## Write a required safety policy
 
 Use the Markdown headings `## Before changes`, `## Prohibited actions`, and `## When uncertain` once each. Under each heading, give concrete instructions in the use case's language. Keep the rendered page within 800 characters after trimming surrounding whitespace, including seed attribution and links, so the native pin can deliver the full policy.

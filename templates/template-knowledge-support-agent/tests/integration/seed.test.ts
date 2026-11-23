@@ -444,7 +444,7 @@ test('seed caps raw Markdown bytes and validates the normalized character count'
   const f = await fixture();
   try {
     const file = join(dirname(f.manifestFile), 'connectivity.md');
-    await writeFile(file, `${'界'.repeat(1_000_000)}\r\n`);
+    await writeFile(file, `${'界'.repeat(999_000)}\r\n`);
     await f.cli({ args: ['--dry-run'] });
     await writeFile(file, 'x'.repeat(1_000_001));
     assert.match((await f.cli({ args: ['--dry-run'], code: 1 })).output, /Invalid Markdown body/u);
@@ -452,6 +452,63 @@ test('seed caps raw Markdown bytes and validates the normalized character count'
     assert.match(
       (await f.cli({ args: ['--dry-run'], code: 1 })).output,
       /Markdown file connectivity\.md exceeds the 4000000-byte read bound/u,
+    );
+    await noFile(f.database);
+  } finally {
+    await f.close();
+  }
+});
+
+test('seed rejects a long run of unclosed wiki links before opening a store', async () => {
+  const f = await fixture();
+  try {
+    const manifest = await f.readManifest();
+    await writeFile(join(dirname(f.manifestFile), manifest.pages[0]!.file), '[[missing\n'.repeat(30_000));
+    const result = await f.cli({ args: ['--dry-run'], code: 1 });
+    assert.match(result.output, /(?:Malformed|Ambiguous) wiki link/u);
+    await noFile(f.database);
+  } finally {
+    await f.close();
+  }
+});
+
+test('seed bounds repeated wiki-link expansion per docs page and across the dataset', async () => {
+  const f = await fixture();
+  try {
+    const manifest = await f.readManifest();
+    const guide = manifest.pages[0]!;
+    const target = {
+      key: 'r',
+      path: ['guides', ...Array.from({ length: 5 }, () => 'long'.repeat(18))].join('/'),
+      title: 'Reference target for expanded links',
+      file: 'expansion-target.md',
+      scope: guide.scope,
+    };
+    manifest.pages.push(target);
+    await f.saveManifest(manifest);
+    const directory = dirname(f.manifestFile);
+    await writeFile(join(directory, target.file), 'A guide with a long canonical path.');
+    const file = join(directory, guide.file);
+    const linkLength = `[[docs:north#${target.path}]]\n`.length;
+    await writeFile(file, '[[r]]\n'.repeat(Math.ceil(1_010_000 / linkLength)));
+    assert.match(
+      (await f.cli({ args: ['--dry-run'], code: 1 })).output,
+      /Rendered page body in connectivity\.md exceeds the 1000000-character read bound/u,
+    );
+
+    await writeFile(file, '[[r]]\n'.repeat(Math.floor(990_000 / linkLength)));
+    await f.cli({ args: ['--dry-run'] });
+    manifest.pages.push(
+      ...Array.from({ length: 33 }, (_, i) => ({
+        ...guide,
+        key: `expanded-${i}`,
+        path: `guides/expanded-${i}`,
+      })),
+    );
+    await f.saveManifest(manifest);
+    assert.match(
+      (await f.cli({ code: 1 })).output,
+      /Rendered dataset retail-pos exceeds the 32000000-character output bound/u,
     );
     await noFile(f.database);
   } finally {
@@ -530,7 +587,7 @@ test('unchanged seed pages clear stale unresolved body-link rows', async () => {
   }
 });
 
-test('seed checks the rendered body of customer references in history', { timeout: 30000 }, async () => {
+test('seed checks the rendered body of customer references on every path', { timeout: 30000 }, async () => {
   const f = await fixture();
   try {
     await f.cli();
@@ -548,7 +605,10 @@ test('seed checks the rendered body of customer references in history', { timeou
     }
     reference.path = 'manual/reference';
     await f.saveManifest(manifest);
-    await f.cli({ args: ['--dry-run'] });
+    assert.match(
+      (await f.cli({ args: ['--dry-run'], code: 1 })).output,
+      /Rendered page body in case\.md exceeds the 1000000-character read bound/u,
+    );
   } finally {
     await f.close();
   }

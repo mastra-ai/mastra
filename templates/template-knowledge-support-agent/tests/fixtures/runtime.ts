@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, readFile, realpath } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,10 +32,24 @@ Do not reset while offline payments are pending.
 
 Ask the authorized lead to check the recovery plan.`;
 
+const approvalUpdates = new Map<string, Promise<void>>();
+
 export async function approvePolicyRevision(file: string, ref: string, body: string) {
-  const revisions = JSON.parse(await readFile(file, 'utf8')) as Record<string, string[]>;
-  (revisions[ref] ??= []).push(createHash('sha256').update(body.trim()).digest('hex'));
-  await writeFile(file, JSON.stringify(revisions));
+  const path = await realpath(file);
+  const previous = approvalUpdates.get(path) ?? Promise.resolve();
+  const update = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const revisions = JSON.parse(await readFile(path, 'utf8')) as Record<string, string[]>;
+      (revisions[ref] ??= []).push(createHash('sha256').update(body.trim()).digest('hex'));
+      await writeFile(path, JSON.stringify(revisions));
+    });
+  approvalUpdates.set(path, update);
+  try {
+    await update;
+  } finally {
+    if (approvalUpdates.get(path) === update) approvalUpdates.delete(path);
+  }
 }
 
 interface RuntimeOptions {

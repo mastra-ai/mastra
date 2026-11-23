@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFile, stat } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
@@ -10,7 +12,7 @@ import { knowledgeScopeAddress } from '@mastra/core/knowledge';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { GET_KNOWLEDGE_TREE_ROUTE } from '@mastra/server/handlers/knowledge';
 import { resourceId, principals } from '../../src/mastra/identity.ts';
-import { runtimeFixture } from '../fixtures/runtime.ts';
+import { approvePolicyRevision, runtimeFixture } from '../fixtures/runtime.ts';
 import { startModelServer } from '../fixtures/model-server.ts';
 
 async function json(response: Response, status = 200) {
@@ -39,6 +41,25 @@ async function generate(
     body: JSON.stringify({ messages: [{ role: 'user', content }], memory: { thread: id } }),
   });
 }
+
+test('concurrent policy approvals for one file preserve each approved revision', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'support-approvals-'));
+  try {
+    const file = join(directory, 'approved.json');
+    const approvals = Array.from(
+      { length: 12 },
+      (_, i) => [`tenant:example#policies/safety-${i}`, `Approved safety instructions ${i}.`] as const,
+    );
+    await writeFile(file, '{}');
+    await Promise.all(approvals.map(([ref, body]) => approvePolicyRevision(file, ref, body)));
+    const expected = Object.fromEntries(
+      approvals.map(([ref, body]) => [ref, [createHash('sha256').update(body).digest('hex')]]),
+    );
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), expected);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('dev uses its fixture settings and never probes a different listener', { timeout: 60000 }, async () => {
   const first = await runtimeFixture();
@@ -373,11 +394,13 @@ test('http_agent_and_memory_reject_foreign_scope_and_thread', { timeout: 120000 
         { id: 'another-synthetic-id', createdAt: '2001-01-01T00:00:00.000Z' },
       ]) {
         const base = route === 'stream' ? studioBody : { memory: { thread: draftThread } };
+        const message =
+          route === 'stream' ? studioBody.messages[0]! : { role: 'user', content: 'Synthetic schema validation input' };
         const response = await fixture.request(`/agents/support/${route}`, 0, {
           method: 'POST',
           body: JSON.stringify({
             ...base,
-            messages: [{ role: 'user', content: 'Synthetic schema validation input', ...metadata }],
+            messages: [{ ...message, ...metadata }],
           }),
         });
         assert.equal(response.status, 403);
