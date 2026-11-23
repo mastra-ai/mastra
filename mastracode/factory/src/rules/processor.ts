@@ -25,7 +25,7 @@ import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, Card } from '../storage/domains/work-items/base.js';
-import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.js';
+import { findSessionRunBinding, getFactorySessionCoordinates, getFactoryToolsRole } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { workItemSource } from './types.js';
 import type {
@@ -520,6 +520,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const boards = await this.boards.load(binding);
     const stage = ruleStage(boards, item);
     if (!item || !stage) return;
+    // A request keeps the role it was built with: see setFactoryToolsRole.
+    const runRole = getFactoryToolsRole(args.requestContext) ?? binding.role;
     const linked = await this.options.storage.listLinked({ item, limit: MAX_LINKED_ITEMS });
     const board = boardForWorkItem(item);
     const baseValue: ActivePhaseSnapshotBase = {
@@ -528,7 +530,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       itemId: item.id,
       revision: item.revision,
       stage,
-      role: binding.role,
+      role: runRole,
       configVersion: this.options.configVersion,
     };
     const flow = boardFlow(boards.get(board));
@@ -590,9 +592,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // The card moved to a phase another context works; this session's tools for it are gone.
     const handedOnText =
       phase?.kind === 'working' &&
-      phase.runner.context !== binding.role &&
+      phase.runner.context !== runRole &&
       // A Work card planned before Planning ran in `work` keeps its `plan` session there.
-      workStageCarries(definition, stage, binding.role, undefined) !== true
+      workStageCarries(definition, stage, runRole, undefined) !== true
         ? `This card is now in ${escapeText(phaseLabel)}, which runs in the ${escapeText(phase.runner.context)} context in another session. Your part is done: do not continue its work here. Answer questions, and move the card only if it must come back to you.\n`
         : '';
     const runtime =
@@ -600,7 +602,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const snapshotContents =
       `Factory ${board} phase: ${escapeText(phaseLabel)} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
-      `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nConfig: ${escapeText(this.options.configVersion)}\n` +
+      `Role: ${escapeText(runRole)}\nRevision: ${item.revision}\nConfig: ${escapeText(this.options.configVersion)}\n` +
       (runtime
         ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
@@ -625,7 +627,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         status: 'active',
         board,
         stage,
-        role: binding.role,
+        role: runRole,
         revision: item.revision,
         ...(runtime ?? {}),
       },
