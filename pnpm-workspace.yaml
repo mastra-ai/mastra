@@ -577,10 +577,13 @@ overrides:
   # @qdrant/js-client-rest builds an undici Agent and hands it to fetch as `dispatcher`.
   # Forcing the 8.x line there pairs an undici 8 dispatcher with the undici that Node
   # bundles for global fetch (7.x), and undici 8 rejects that handler with
-  # UND_ERR_INVALID_ARG ("invalid onRequestStart method"). Leave this one consumer on the
-  # 6.x line it declares (^6.24.0), which is already the patched release for that line.
-  # 6.29.1 is the 6.x fix for AIKIDO-2026-159850/393834/846025/609286 (Vanta 2026-10-20).
-  '@qdrant/js-client-rest>undici': 6.29.1
+  # UND_ERR_INVALID_ARG ("invalid onRequestStart method"). Keep this one consumer on the
+  # 7.x line, which matches the undici Node bundles and is what qdrant declares (7.29.1).
+  # SEC-287 (AIKIDO-2026-54683): 7.30.2 is the lowest 7.x release that fixes both the
+  # 7.30.1 batch (GHSA-4w7w-5xrc-9h26, -2m5v-pch6-74hx, -qrxm-fqhp-jwvm, ...) and the
+  # 7.30.2 batch (GHSA-mqg3-3v4r-cm32, -7xg3-fphp-28hg, -5rm8-gv32-r954, -9v6h-8rgp-m69f,
+  # -3g9m-rv3r-w5w2, -r4pc-4jcp-7pqc).
+  '@qdrant/js-client-rest>undici': 7.30.2
   'yargs@<18.1.0': 18.2.0
   'raw-body@<4.0.0': 4.0.0
   'protobufjs@<8.8.0': 8.8.0

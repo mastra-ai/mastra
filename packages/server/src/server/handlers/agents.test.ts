@@ -231,9 +231,8 @@ describe('getProvidersHandler', () => {
     expect(openaiProvider?.models).toBeDefined();
     expect(openaiProvider?.models.length).toBeGreaterThan(0);
 
-    // Should include common OpenAI models
-    expect(openaiProvider?.models).toContain('gpt-4');
-    expect(openaiProvider?.models).toContain('gpt-3.5-turbo');
+    // The registry is generated from upstream, so compare to it rather than pinning model names.
+    expect(openaiProvider?.models).toEqual([...PROVIDER_REGISTRY.openai.models]);
   });
 
   it('should match the structure of PROVIDER_REGISTRY', async () => {
@@ -966,7 +965,9 @@ describe('Agent Routes Authorization', () => {
     inputCheckpointed = true,
     workflowName = 'durable-agentic-loop',
     threadId,
+    agentId = 'test-durable-agent',
   }: {
+    agentId?: string;
     runId: string;
     resourceId?: string;
     status?: 'running' | 'suspended' | 'pending';
@@ -986,7 +987,7 @@ describe('Agent Routes Authorization', () => {
         context: (inputCheckpointed
           ? {
               input: {
-                agentId: 'test-durable-agent',
+                agentId,
                 __workflowKind: 'durable-agent',
                 state: { threadId },
               },
@@ -2816,6 +2817,55 @@ describe('Agent Routes Authorization', () => {
         expect(execution).toHaveBeenCalled();
       },
     );
+
+    describe('native Agent with a durable execution engine', () => {
+      beforeEach(() => {
+        mockAgent = new Agent({
+          id: 'test-agent',
+          name: 'test-agent',
+          instructions: 'test-instructions',
+          model: {} as any,
+          memory: mockMemory,
+          durable: { executionEngine: 'default' },
+        });
+        mastra = new Mastra({ agents: { 'test-agent': mockAgent }, storage, logger: false });
+      });
+
+      it.each([...approvalRoutes, ...resumeRoutes])(
+        '$name rejects a run owned by another resource',
+        async ({ route, method }) => {
+          await persistSuspendedDurableRun({ resourceId: 'user-b' });
+          const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+            fullStream: new ReadableStream(),
+          });
+
+          await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+          );
+          expect(execution).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(resumeRoutes)('$name rejects a run on another thread', async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-b' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-a' })).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        );
+        expect(execution).not.toHaveBeenCalled();
+      });
+
+      it('allows the owner to approve its own suspended tool call', async () => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await callResume(APPROVE_TOOL_CALL_ROUTE, { resourceId: 'user-a' });
+        expect(execution).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('RECOVER_ROUTE', () => {
@@ -2982,6 +3032,97 @@ describe('Agent Routes Authorization', () => {
       expect(abort).not.toHaveBeenCalled();
     });
 
+    describe('native Agent with a durable execution engine', () => {
+      let nativeAgent: Agent<any, any, any, any>;
+
+      beforeEach(() => {
+        nativeAgent = new Agent({
+          id: 'native-durable-agent',
+          name: 'native-durable-agent',
+          instructions: 'test-instructions',
+          model: { specificationVersion: 'v2' } as any,
+          memory: mockMemory,
+          durable: { executionEngine: 'default' },
+        });
+        mastra = new Mastra({ agents: { 'native-durable-agent': nativeAgent }, storage, logger: false });
+      });
+
+      it("aborts the owner's active run through the durable checkpoint", async () => {
+        const abort = vi.spyOn(nativeAgent, '__abortRunAcknowledged').mockResolvedValue(true);
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-abort',
+          resourceId: 'user-a',
+        });
+        await expect(
+          ABORT_AGENT_RUN_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-abort',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          }),
+        ).resolves.toEqual({ aborted: true });
+        expect(abort).toHaveBeenCalledWith('native-abort');
+      });
+
+      it('rejects aborting a run owned by another resource', async () => {
+        const abort = vi.spyOn(nativeAgent, '__abortRunAcknowledged');
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-abort-b',
+          resourceId: 'user-b',
+        });
+        await expect(
+          ABORT_AGENT_RUN_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-abort-b',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          }),
+        ).rejects.toMatchObject({ status: 403 });
+        expect(abort).not.toHaveBeenCalled();
+      });
+
+      it("recovers the owner's run", async () => {
+        const fullStream = new ReadableStream();
+        const recover = vi.spyOn(nativeAgent, 'recover').mockResolvedValue({ fullStream } as any);
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-recover',
+          resourceId: 'user-a',
+        });
+        await expect(
+          RECOVER_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-recover',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+          } as any),
+        ).resolves.toBe(fullStream);
+        expect(recover).toHaveBeenCalledWith('native-recover');
+      });
+
+      it('rejects recovering a run owned by another resource', async () => {
+        const recover = vi.spyOn(nativeAgent, 'recover');
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-recover-b',
+          resourceId: 'user-b',
+        });
+        await expect(
+          RECOVER_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-recover-b',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+          } as any),
+        ).rejects.toMatchObject({ status: 403 });
+        expect(recover).not.toHaveBeenCalled();
+      });
+    });
+
     it('should return 400 when runId is missing', async () => {
       const requestContext = createContextWithReservedKeys({});
 
@@ -3008,7 +3149,8 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).rejects.toThrow(
         new HTTPException(400, {
-          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          message:
+            'Agent does not support recover. Only agents on a durable or evented execution engine can recover runs.',
         }),
       );
     });
@@ -3179,6 +3321,55 @@ describe('Agent Routes Authorization', () => {
       mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
       // Stream-mechanics tests below observe runs this process tracks, with no owner.
       vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({});
+    });
+
+    describe.each(['default', 'evented'] as const)('native Agent on the %s execution engine', executionEngine => {
+      let nativeAgent: Agent<any, any, any, any>;
+
+      beforeEach(() => {
+        nativeAgent = new Agent({
+          id: 'native-durable-agent',
+          name: 'native-durable-agent',
+          instructions: 'test-instructions',
+          model: { specificationVersion: 'v2' } as any,
+          durable: { executionEngine },
+        });
+        mastra = new Mastra({ agents: { 'native-durable-agent': nativeAgent }, storage, logger: false });
+      });
+
+      /** A finished run whose workflow rows are gone but whose replay history is still retained. */
+      async function retainReplay(runId: string, resourceId: string) {
+        const cache = nativeAgent.__getStreamBus(true)!.getRunRecordCache(nativeAgent.__usesSharedRunLog());
+        await cache.set(`agent.durable.replay-owner.native-durable-agent.${runId}`, {
+          agentId: 'native-durable-agent',
+          runId,
+          resourceId,
+        });
+      }
+
+      const observeAs = (runId: string, resourceId: string) =>
+        OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'native-durable-agent',
+          runId,
+          requestContext: createContextWithReservedKeys({ resourceId }),
+        } as any);
+
+      it('lets the owner reconnect to a retained replay', async () => {
+        const runId = crypto.randomUUID();
+        await retainReplay(runId, 'user-a');
+
+        const stream = (await observeAs(runId, 'user-a')) as ReadableStream<any>;
+        expect(stream).toBeInstanceOf(ReadableStream);
+        await stream.cancel();
+      });
+
+      it('rejects another resource reconnecting to a retained replay', async () => {
+        const runId = crypto.randomUUID();
+        await retainReplay(runId, 'user-a');
+
+        await expect(observeAs(runId, 'user-b')).rejects.toMatchObject({ status: 403 });
+      });
     });
 
     describe('authorization', () => {
@@ -5788,5 +5979,34 @@ describe('toAgentStreamChunks', () => {
     const [frame] = toAgentStreamChunks({ type: 'chunk', runId: 'parent', data: nested } as any);
     expect(frame).not.toHaveProperty('index');
     expect(frame).toMatchObject({ type: 'text-delta', payload: { text: 'hi' } });
+  });
+
+  it('forwards stopCause on finish frames when present and omits it when absent', () => {
+    const [withCause] = toAgentStreamChunks({
+      type: 'finish',
+      runId: 'run-1',
+      index: 4,
+      data: {
+        output: { text: 'Done.', steps: [] },
+        stepResult: { reason: 'tool-calls' },
+        stopCause: 'max_steps',
+      },
+    } as any);
+    expect(withCause).toMatchObject({
+      type: 'finish',
+      runId: 'run-1',
+      index: 4,
+      payload: { stopCause: 'max_steps' },
+    });
+
+    const [withoutCause] = toAgentStreamChunks({
+      type: 'finish',
+      runId: 'run-2',
+      data: {
+        output: { text: 'Done.', steps: [] },
+        stepResult: { reason: 'stop' },
+      },
+    } as any);
+    expect((withoutCause as { payload: Record<string, unknown> }).payload).not.toHaveProperty('stopCause');
   });
 });
