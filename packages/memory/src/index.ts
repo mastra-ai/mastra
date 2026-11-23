@@ -43,7 +43,6 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessor,
   OutputProcessorOrWorkflow,
-  WorkingMemoryInstructionArgs,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -386,6 +385,21 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
     metadata.signal.transient === true
   );
 }
+
+// Local copy of WorkingMemoryInstructionArgs from @mastra/core/processors. Importing it would put the name in
+// the published declarations, and the peer range includes 1.86.0 prereleases that don't export it, so
+// consumers type-checking with skipLibCheck: false would get TS2305. Keep in sync with
+// packages/core/src/processors/memory/working-memory.ts; type-tests/working-memory-instruction-args.test-d.ts
+// fails if the two drift.
+type WorkingMemoryInstructionArgs =
+  | { kind: 'tool' | 'vnext'; template: WorkingMemoryTemplate; data: string | null }
+  | {
+      kind: 'read-only';
+      template: WorkingMemoryTemplate;
+      data: string | null;
+      /** True when the app updates working memory (`agentManaged: false`), false for `readOnly`. */
+      autoUpdated: boolean;
+    };
 
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,

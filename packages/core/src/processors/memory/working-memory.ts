@@ -48,6 +48,11 @@ export interface WorkingMemoryConfig {
  */
 export type WorkingMemoryInstructionKind = 'tool' | 'vnext' | 'read-only';
 
+/**
+ * Compatibility note: @mastra/memory keeps a structural copy of this type instead of importing it, because its
+ * peer range includes core versions without this export. Keep both in sync; memory's
+ * type-tests/working-memory-instruction-args.test-d.ts fails if they drift.
+ */
 export type WorkingMemoryInstructionArgs =
   | { kind: 'tool' | 'vnext'; template: WorkingMemoryTemplate; data: string | null }
   | {
