@@ -675,6 +675,12 @@ describe('recall search when the search itself fails', () => {
         throw new Error('vector store timed out');
       },
     ],
+    [
+      'throws before returning a promise',
+      () => {
+        throw new Error('searchMessages is broken');
+      },
+    ],
   ])('stops listening for the deadline once a search %s', async (_, answer) => {
     const { memory } = setup([]);
     let removeListener: ReturnType<typeof vi.spyOn> | undefined;
