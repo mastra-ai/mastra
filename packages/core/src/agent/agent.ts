@@ -1044,6 +1044,10 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
 /** Tool sources slower than this are named on the `agent:prepare-tools` span. */
 const SLOW_TOOL_SOURCE_MS = 100;
 
+/** How far back a title looks through stored messages for the user's request: 5 pages of 40. */
+const STORED_TITLE_PAGE_SIZE = 40;
+const STORED_TITLE_PAGES = 5;
+
 /**
  * Assistant messages in a delegating agent's context that keep content once tool calls
  * and tool results are removed. Reasoning still counts, so this matches the iteration
@@ -5032,6 +5036,28 @@ export class Agent<
         .map(m => m.id),
     );
     return uiMessages.filter(m => threadMessageIds.has(m.id));
+  }
+
+  /**
+   * The thread's newest stored messages, for titling a run whose message list no longer holds the
+   * user's request. A long turn stores an assistant message and a tool result per tool call after the
+   * request, so page back until a user message turns up, but stop after STORED_TITLE_PAGES pages so a
+   * huge thread cannot hold up the run.
+   */
+  private async loadStoredTitleMessages(memory: MastraMemory, threadId: string, resourceId: string) {
+    const newestFirst: MastraDBMessage[] = [];
+    for (let page = 0; page < STORED_TITLE_PAGES; page++) {
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        page,
+        perPage: STORED_TITLE_PAGE_SIZE,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      newestFirst.push(...result.messages);
+      if (!result.hasMore || result.messages.some(message => message.role === 'user')) break;
+    }
+    return new MessageList({ threadId, resourceId }).add(newestFirst.reverse(), 'memory');
   }
 
   async genTitle(
@@ -10020,7 +10046,16 @@ export class Agent<
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title) {
-          const threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages);
+          // OM's continuation reminder is a synthetic `user` message, not the user's words. Once OM
+          // observes mid-turn it also drops the request from the run's messages, so title from the
+          // thread's stored messages, which still hold it.
+          let threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages).filter(
+            message => message.id !== 'om-continuation',
+          );
+          if (!threadUiMessages.some(message => message.role === 'user')) {
+            const storedMessageList = await this.loadStoredTitleMessages(memory, thread.id, thread.resourceId);
+            threadUiMessages = storedMessageList.get.all.ui();
+          }
 
           if (threadUiMessages.length >= requiredMessages) {
             const userMessage = this.getMostRecentUserMessage(threadUiMessages);
