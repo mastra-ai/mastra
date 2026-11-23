@@ -149,8 +149,8 @@ export {
   emitErrorEvent,
   emitAbortEvent,
   emitSuspendedEvent,
-  type DurableAgentStreamOptions as StreamAdapterOptions,
-  type DurableAgentStreamResult as StreamAdapterResult,
+  type DurableStreamAdapterOptions as StreamAdapterOptions,
+  type DurableStreamAdapterResult as StreamAdapterResult,
 } from './stream-adapter';
 
 // Detach an observer's fullStream subscription when its consumer stops reading,

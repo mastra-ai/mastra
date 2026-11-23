@@ -274,10 +274,7 @@ import {
 } from './durable/run-registry';
 import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
-import type {
-  DurableAgentStreamResult as DurableStreamAdapterResult,
-  DurableAgentStreamOptions as DurableStreamAdapterOptions,
-} from './durable/stream-adapter';
+import type { DurableStreamAdapterResult, DurableStreamAdapterOptions } from './durable/stream-adapter';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
