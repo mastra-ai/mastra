@@ -167,6 +167,13 @@ export interface AgentLegacyCapabilities {
   getMostRecentUserMessage(
     messages: Array<UIMessage | UIMessageWithMetadata>,
   ): UIMessage | UIMessageWithMetadata | undefined;
+  /** Thread messages to title from, without system reminders, falling back to stored messages */
+  getTitleUiMessages(
+    memory: MastraMemory,
+    messageList: MessageList,
+    threadId: string,
+    resourceId: string,
+  ): Promise<Array<UIMessage | UIMessageWithMetadata>>;
   /** Generate title for thread */
   genTitle(
     userMessage: UIMessage | UIMessageWithMetadata,
@@ -650,11 +657,16 @@ export class AgentLegacyHandler {
               minMessages,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            const uiMessages = messageList.get.all.ui();
             const messages = messageList.get.all.core();
             const requiredMessages = minMessages ?? 1;
 
             if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+              const uiMessages = await this.capabilities.getTitleUiMessages(
+                memory,
+                messageList,
+                thread.id,
+                thread.resourceId,
+              );
               const userMessage = this.capabilities.getMostRecentUserMessage(uiMessages);
 
               if (userMessage) {

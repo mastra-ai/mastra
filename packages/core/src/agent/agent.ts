@@ -80,6 +80,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
+import { isSystemReminderMessage } from '../memory/system-reminders';
 import { checkThreadFGA } from '../memory/thread-fga';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import type { NotificationDeliveryPolicyInput } from '../notifications/delivery-policy';
@@ -3953,6 +3954,7 @@ export class Agent<
         __runInputProcessors: this.__runInputProcessors.bind(this),
         __runProcessInputStep: this.__runProcessInputStep.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
+        getTitleUiMessages: this.getTitleUiMessages.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
         convertInstructionsToString,
@@ -5039,6 +5041,34 @@ export class Agent<
   }
 
   /**
+   * The thread's messages a title is made from. System reminders, such as observational memory's
+   * continuation reminder, are `user` messages but not the user's words, so they are left out.
+   */
+  private titleUiMessages(messageList: MessageList, threadId: string) {
+    const reminderIds = new Set(
+      messageList.get.all
+        .db()
+        .filter(isSystemReminderMessage)
+        .map(m => m.id),
+    );
+    return this.filterUiMessagesByThread(messageList, threadId, messageList.get.all.ui()).filter(
+      message => !reminderIds.has(message.id),
+    );
+  }
+
+  /**
+   * The thread's messages to generate a title from. Once observational memory observes mid-turn it
+   * drops the request from the run's messages, leaving only its continuation reminder, so when no
+   * user message remains, title from the thread's stored messages, which still hold it.
+   * @internal
+   */
+  async getTitleUiMessages(memory: MastraMemory, messageList: MessageList, threadId: string, resourceId: string) {
+    const uiMessages = this.titleUiMessages(messageList, threadId);
+    if (uiMessages.some(message => message.role === 'user')) return uiMessages;
+    return this.titleUiMessages(await this.loadStoredTitleMessages(memory, threadId, resourceId), threadId);
+  }
+
+  /**
    * The thread's newest stored messages, for titling a run whose message list no longer holds the
    * user's request. A long turn stores an assistant message and a tool result per tool call after the
    * request, so page back until a user message turns up, but stop after STORED_TITLE_PAGES pages so a
@@ -5055,7 +5085,7 @@ export class Agent<
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       newestFirst.push(...result.messages);
-      if (!result.hasMore || result.messages.some(message => message.role === 'user')) break;
+      if (!result.hasMore || result.messages.some(m => m.role === 'user' && !isSystemReminderMessage(m))) break;
     }
     return new MessageList({ threadId, resourceId }).add(newestFirst.reverse(), 'memory');
   }
@@ -10042,20 +10072,10 @@ export class Agent<
             | undefined,
         );
 
-        const uiMessages = messageList.get.all.ui();
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title) {
-          // OM's continuation reminder is a synthetic `user` message, not the user's words. Once OM
-          // observes mid-turn it also drops the request from the run's messages, so title from the
-          // thread's stored messages, which still hold it.
-          let threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages).filter(
-            message => message.id !== 'om-continuation',
-          );
-          if (!threadUiMessages.some(message => message.role === 'user')) {
-            const storedMessageList = await this.loadStoredTitleMessages(memory, thread.id, thread.resourceId);
-            threadUiMessages = storedMessageList.get.all.ui();
-          }
+          const threadUiMessages = await this.getTitleUiMessages(memory, messageList, thread.id, thread.resourceId);
 
           if (threadUiMessages.length >= requiredMessages) {
             const userMessage = this.getMostRecentUserMessage(threadUiMessages);
