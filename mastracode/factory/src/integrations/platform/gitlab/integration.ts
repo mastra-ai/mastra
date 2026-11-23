@@ -66,7 +66,9 @@ export class PlatformGitLabIntegration
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
   #reconcileWorker: IssueReconcileWorker | undefined;
-  readonly #hosts = new Map<string, Promise<string>>();
+  // Keyed by the connection record, so a self-hosted instance is re-read
+  // whenever the binding re-reads the connection list, e.g. after a reconnect.
+  readonly #hosts = new WeakMap<PlatformConnection, Promise<string>>();
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
@@ -222,9 +224,12 @@ export class PlatformGitLabIntegration
           // Reconnecting can move a self-hosted connection to another instance.
           // Re-read the instance after fetching the credential, so a new token
           // is never paired with the host this context was built for.
-          this.#hosts.delete(connection.id);
+          this.#hosts.delete(connection);
           const current = await this.#host(connection);
           if (current !== host) {
+            // Drop the stale connection list so the retry builds its context
+            // from the connection's current instance.
+            this.binding.invalidateConnections();
             throw new GitLabApiError(
               `Self-hosted GitLab connection ${connection.id} now points at ${current} instead of ${host}. Retry the operation.`,
               409,
@@ -236,10 +241,10 @@ export class PlatformGitLabIntegration
     };
   }
 
-  /** gitlab.com for OAuth connections; a self-hosted connection's instance comes from its context, re-read whenever a credential is fetched. */
+  /** gitlab.com for OAuth connections; a self-hosted connection's instance comes from its context, re-read for each fresh connection listing and whenever a credential is fetched. */
   #host(connection: PlatformConnection): Promise<string> {
     if (connection.integrationId !== GITLAB_SELF_HOSTED_INTEGRATION_ID) return Promise.resolve('gitlab.com');
-    let host = this.#hosts.get(connection.id);
+    let host = this.#hosts.get(connection);
     if (!host) {
       host = this.binding.connect.getContext(connection.id).then(context => {
         const hostname = selfHostedHostname(context.connection_config?.hostname);
@@ -251,8 +256,8 @@ export class PlatformGitLabIntegration
         }
         return hostname;
       });
-      host.catch(() => this.#hosts.delete(connection.id));
-      this.#hosts.set(connection.id, host);
+      host.catch(() => this.#hosts.delete(connection));
+      this.#hosts.set(connection, host);
     }
     return host;
   }

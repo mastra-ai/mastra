@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { DEFAULT_CONNECTION_CACHE_TTL_MS } from '../platform/foundation/connect-binding.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import {
   decodeIssueReference,
@@ -786,6 +787,41 @@ describe('PlatformGitLabIntegration', () => {
       }
       const sources = await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
       expect(sources.map(source => decodeSourceId(source.id).host)).toEqual(['gitlab.com', 'gitlab.other.com']);
+    });
+
+    it('lists a reconnected self-hosted connection under its new instance once the connection list refreshes', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        let hostname = 'gitlab.example.com';
+        const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+        const gitlab = discovering();
+        const hosts = async () =>
+          (await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).map(
+            source => decodeSourceId(source.id).host,
+          );
+
+        expect(await hosts()).toEqual(['gitlab.com', 'gitlab.example.com']);
+
+        // The user reconnects the same connection to another instance; no
+        // repository credential is fetched in between.
+        hostname = 'gitlab.other.com';
+        vi.advanceTimersByTime(DEFAULT_CONNECTION_CACHE_TTL_MS);
+
+        expect(await hosts()).toEqual(['gitlab.com', 'gitlab.other.com']);
+        expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/credentials'))).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reads a self-hosted instance once per connection listing', async () => {
+      const fetchMock = stubPlatform(() => json({ connection_config: { hostname: 'gitlab.example.com' }, metadata: null }));
+      const gitlab = discovering();
+
+      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/context'))).toHaveLength(1);
     });
 
     it('registers self-hosted connect sessions separately and lists both kinds under gitlab', () => {
