@@ -1,12 +1,62 @@
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
+import { getErrorFromUnknown } from '../../../error';
 import type { PubSub } from '../../../events';
+import type { IMastraLogger } from '../../../logger';
 import type { RunStorage } from '../../run-storage';
 import { setLongTimeout } from '../../utils';
 import { withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { getStepId } from './utils';
 import type { ProcessorArgs } from '.';
+
+/**
+ * Run a sleep's finish on its timer. The timer fires outside any event
+ * delivery, so a rejection there would leave the run `waiting` with nobody
+ * to retry it. Fail the run instead, the way the processor fails an event
+ * whose handler threw: `workflow.fail` is a delivered event, retried by the
+ * transport and dropped for a run canceled meanwhile.
+ */
+function setSleepTimer(
+  pubsub: PubSub,
+  run: Pick<
+    ProcessorArgs,
+    | 'workflowId'
+    | 'runId'
+    | 'resumeSteps'
+    | 'stepResults'
+    | 'resumeData'
+    | 'parentWorkflow'
+    | 'requestContext'
+    | 'actor'
+  >,
+  logger: IMastraLogger | undefined,
+  finish: () => Promise<void>,
+  duration: number,
+) {
+  setLongTimeout(() => {
+    void finish().catch(error =>
+      pubsub
+        .publish('workflows', {
+          type: 'workflow.fail',
+          runId: run.runId,
+          data: {
+            ...run,
+            executionPath: [],
+            prevResult: { status: 'failed', error: getErrorFromUnknown(error).toJSON() },
+            activeStepsPath: {},
+          },
+        })
+        .catch(publishError =>
+          logger?.error('Sleep timer could not finish or fail its run; the run stays waiting', {
+            runId: run.runId,
+            error,
+            publishError,
+          }),
+        ),
+    );
+  }, duration);
+}
 
 export async function processWorkflowWaitForEvent(
   workflowData: ProcessorArgs,
@@ -84,10 +134,12 @@ export async function processWorkflowSleep(
     stepExecutor,
     runStorage,
     step,
+    logger,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     runStorage: RunStorage;
+    logger?: IMastraLogger;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
@@ -140,61 +192,67 @@ export async function processWorkflowSleep(
     actor,
   });
 
-  setLongTimeout(async () => {
-    // The timer outlives cancel: keep a canceled run's sleep unfinished and silent.
-    if ((await runStorage.loadHeader())?.status === 'canceled') return;
-    const output = prevResult.status === 'success' ? prevResult.output : undefined;
-    const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
-    await runStorage.writeStepResult({
-      stepId: step.id,
-      result,
-      requestContext: withoutAuthToken(requestContext ?? {}),
-    });
-
-    if (emitStepEvents) {
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-result',
-          payload: { id: step.id, ...result },
-        },
+  setSleepTimer(
+    pubsub,
+    { workflowId, runId, resumeSteps, stepResults, resumeData, parentWorkflow, requestContext, actor },
+    logger,
+    async () => {
+      // The timer outlives cancel: keep a canceled run's sleep unfinished and silent.
+      if ((await runStorage.loadHeader())?.status === 'canceled') return;
+      const output = prevResult.status === 'success' ? prevResult.output : undefined;
+      const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
+      await runStorage.writeStepResult({
+        stepId: step.id,
+        result,
+        requestContext: withoutAuthToken(requestContext ?? {}),
       });
 
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-finish',
-          payload: {
-            id: step.id,
-            metadata: {},
+      if (emitStepEvents) {
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-result',
+            payload: { id: step.id, ...result },
           },
+        });
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-finish',
+            payload: {
+              id: step.id,
+              metadata: {},
+            },
+          },
+        });
+      }
+
+      await pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+          resumeSteps,
+          timeTravel,
+          restart,
+          stepResults: { ...stepResults, [step.id]: result },
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          activeStepsPath,
+          requestContext,
+          actor,
+          perStep,
         },
       });
-    }
-
-    await pubsub.publish('workflows', {
-      type: 'workflow.step.run',
-      runId,
-      data: {
-        workflowId,
-        runId,
-        executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-        resumeSteps,
-        timeTravel,
-        restart,
-        stepResults: { ...stepResults, [step.id]: result },
-        prevResult,
-        resumeData,
-        parentWorkflow,
-        activeStepsPath,
-        requestContext,
-        actor,
-        perStep,
-      },
-    });
-  }, duration);
+    },
+    duration,
+  );
 }
 
 export async function processWorkflowSleepUntil(
@@ -220,10 +278,12 @@ export async function processWorkflowSleepUntil(
     stepExecutor,
     runStorage,
     step,
+    logger,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     runStorage: RunStorage;
+    logger?: IMastraLogger;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
@@ -277,59 +337,65 @@ export async function processWorkflowSleepUntil(
     });
   }
 
-  setLongTimeout(async () => {
-    // The timer outlives cancel: keep a canceled run's sleep unfinished and silent.
-    if ((await runStorage.loadHeader())?.status === 'canceled') return;
-    const output = prevResult.status === 'success' ? prevResult.output : undefined;
-    const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
-    await runStorage.writeStepResult({
-      stepId: step.id,
-      result,
-      requestContext: withoutAuthToken(requestContext ?? {}),
-    });
-
-    if (emitStepEvents) {
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-result',
-          payload: { id: step.id, ...result },
-        },
+  setSleepTimer(
+    pubsub,
+    { workflowId, runId, resumeSteps, stepResults, resumeData, parentWorkflow, requestContext, actor },
+    logger,
+    async () => {
+      // The timer outlives cancel: keep a canceled run's sleep unfinished and silent.
+      if ((await runStorage.loadHeader())?.status === 'canceled') return;
+      const output = prevResult.status === 'success' ? prevResult.output : undefined;
+      const result = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
+      await runStorage.writeStepResult({
+        stepId: step.id,
+        result,
+        requestContext: withoutAuthToken(requestContext ?? {}),
       });
 
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-finish',
-          payload: {
-            id: step.id,
-            metadata: {},
+      if (emitStepEvents) {
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-result',
+            payload: { id: step.id, ...result },
           },
+        });
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-finish',
+            payload: {
+              id: step.id,
+              metadata: {},
+            },
+          },
+        });
+      }
+
+      await pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+          resumeSteps,
+          timeTravel,
+          restart,
+          stepResults: { ...stepResults, [step.id]: result },
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          activeStepsPath,
+          requestContext,
+          actor,
+          perStep,
         },
       });
-    }
-
-    await pubsub.publish('workflows', {
-      type: 'workflow.step.run',
-      runId,
-      data: {
-        workflowId,
-        runId,
-        executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-        resumeSteps,
-        timeTravel,
-        restart,
-        stepResults: { ...stepResults, [step.id]: result },
-        prevResult,
-        resumeData,
-        parentWorkflow,
-        activeStepsPath,
-        requestContext,
-        actor,
-        perStep,
-      },
-    });
-  }, duration);
+    },
+    duration,
+  );
 }

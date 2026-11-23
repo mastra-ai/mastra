@@ -2203,6 +2203,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepExecutor: this.stepExecutor,
           runStorage: this.#runStorage(workflowId, runId),
           step,
+          logger: this.mastra.getLogger(),
         },
       );
     } else if (step?.type === 'sleepUntil') {
@@ -2231,6 +2232,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepExecutor: this.stepExecutor,
           runStorage: this.#runStorage(workflowId, runId),
           step,
+          logger: this.mastra.getLogger(),
         },
       );
     } else if (step?.type === 'foreach') {
