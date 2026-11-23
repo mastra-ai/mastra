@@ -129,8 +129,8 @@ export default function ConnectionsPage() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      variant="narrow"
       header={
         <PageHeader>
           <PageHeader.Title>Connections</PageHeader.Title>

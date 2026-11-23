@@ -44,6 +44,7 @@ export function ObservabilityPageLayout({
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={breadcrumbs({ current, isLoading, showSwitch })}
       actionRow={
         (viewSwitch || savedViews) && (

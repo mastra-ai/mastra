@@ -11,6 +11,7 @@ import { useServerStatus } from '../../hooks/useServerStatus';
 import { OverlaysProvider } from '../lib/overlays';
 import { PwaInstallBanner } from '../lib/pwa';
 import { AppSidebar } from '../AppSidebar';
+import { MobileHeader } from './MobileHeader';
 import { ServerProblemBanner } from './ServerProblemBanner';
 
 // The board editor needs more room than the sidebar's default minimum. Dragging still collapses it at that default.
@@ -27,7 +28,7 @@ function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
   return (
-    <AppShell sidebar={<AppSidebar />} edgeToEdge={edgeToEdge}>
+    <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
         <Outlet />
       </MainCard>

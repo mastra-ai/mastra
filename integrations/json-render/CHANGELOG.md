@@ -1,5 +1,30 @@
 # @mastra/json-render
 
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Added `studioCatalog` at `@mastra/json-render/studio`. Agents that compose with it get their interfaces drawn in Studio's chat with Studio's own components, without writing any client code. The catalog covers layout, content, and form controls, and its `sendMessage` action sends the values the user entered back to the agent. ([#31016](https://github.com/mastra-ai/mastra/pull/31016))
+
+  ```typescript
+  import { JsonRenderProcessor } from '@mastra/json-render';
+  import { studioCatalog } from '@mastra/json-render/studio';
+
+  const ui = new JsonRenderProcessor({ catalog: studioCatalog });
+
+  const agent = new Agent({
+    // ...
+    instructions: studioCatalog.prompt({ mode: 'inline', editModes: ['patch'] }),
+    inputProcessors: [ui],
+    outputProcessors: [ui],
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18)]:
+  - @mastra/core@1.86.0-alpha.3
+
 ## 0.1.0
 
 ### Minor Changes

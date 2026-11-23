@@ -156,9 +156,11 @@ const selectsRunning = (node: TraceFilterGroup | TraceFilterToken): boolean => {
 export const selectsRunningStatus = (filters: TracesFilters): boolean =>
   filters.tokens.some(selectsRunning) || filters.groups.some(selectsRunning);
 
+/** Only positive tokens select a value; an excluded status or entity type selects nothing. */
 const tokenValue = (tokens: TraceFilterToken[], fieldId: string) => {
-  const value = tokens.find(token => token.fieldId === fieldId)?.value;
-  return typeof value === 'string' ? value : undefined;
+  const token = tokens.find(token => token.fieldId === fieldId);
+  if (!token || (token.operatorId && token.operatorId !== 'is' && token.operatorId !== 'in')) return undefined;
+  return typeof token.value === 'string' ? token.value : undefined;
 };
 
 export const getSelectedEntityOption = (tokens: TraceFilterToken[]): EntityOptions | undefined => {
