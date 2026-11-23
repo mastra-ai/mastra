@@ -4812,6 +4812,29 @@ export class WorkflowEventProcessor extends EventProcessor {
       } else {
         stepResults = { ...newStepResults, [stepId]: storedResult };
       }
+    } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
+      // A sleep's timer publishes this event once the sleep is over (see sleep.ts).
+      delete activeStepsPath[stepId];
+      // A redelivery after the next step started must not roll back the state it wrote.
+      const stored = (await runStorage.loadSteps([stepId]))[stepId];
+      if (stored?.status !== 'success') {
+        await runStorage.writeStepResult({
+          stepId,
+          result: this.pruneStepResultForPersist({
+            workflow,
+            runId,
+            state: currentState,
+            stepId,
+            storedResult: prevResult,
+            stepResults,
+            executionPath,
+            activeStepsPath,
+          }),
+          requestContext: withoutAuthToken(requestContext),
+          state: currentState,
+        });
+      }
+      stepResults = { ...stepResults, [stepId]: prevResult };
     }
 
     // Update stepResults with current state
@@ -4948,7 +4971,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step && isSingleStepEntry(step) && workflow.options.emitStepEvents !== false) {
+    if (
+      step &&
+      (isSingleStepEntry(step) || step.type === 'sleep' || step.type === 'sleepUntil') &&
+      workflow.options.emitStepEvents !== false
+    ) {
       await this.#pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
