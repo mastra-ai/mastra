@@ -212,6 +212,18 @@ describe('Zendesk tools', () => {
       expect(result).toMatchObject({ id: 901, section_id: 77, user_segment_id: null, draft: true });
     });
 
+    it.each([
+      [{ user_segment_id: null, user_segment_ids: [] }, null, []],
+      [{ user_segment_id: 41 }, 41, [41]],
+      [{ user_segment_id: null, user_segment_ids: [41, 42] }, null, [41, 42]],
+    ])('reports who can see an article (%o)', async (audience, user_segment_id, user_segment_ids) => {
+      answer = () => ({ status: 200, body: { article: { ...article, ...audience } } });
+
+      const result = await run('zendesk_update_article', { article_id: 901, promoted: true });
+
+      expect(result).toMatchObject({ user_segment_id, user_segment_ids });
+    });
+
     it('sends only the article settings it was given', async () => {
       answer = () => ({ status: 200, body: { article: { ...article, label_names: ['printer'] } } });
 

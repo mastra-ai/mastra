@@ -12,6 +12,7 @@ const ProviderArticleSchema = z.object({
   author_id: z.number().nullable().optional(),
   permission_group_id: z.number().nullable().optional(),
   user_segment_id: z.number().nullable().optional(),
+  user_segment_ids: z.array(z.number()).nullable().optional(),
   draft: z.boolean().optional(),
   promoted: z.boolean().optional(),
   position: z.number().optional(),
@@ -30,7 +31,15 @@ export const articleOutputSchema = z.object({
   section_id: z.number().optional(),
   author_id: z.number().optional(),
   permission_group_id: z.number().optional(),
-  user_segment_id: z.number().nullable().describe('Who can see the article; null means everyone.'),
+  user_segment_id: z
+    .number()
+    .nullable()
+    .describe(
+      'The user segment that can see the article, or null when several can (see user_segment_ids) or everyone can.',
+    ),
+  user_segment_ids: z
+    .array(z.number())
+    .describe('Every user segment that can see the article; empty means everyone can.'),
   draft: z.boolean().optional(),
   promoted: z.boolean().optional(),
   position: z.number().optional(),
@@ -52,6 +61,8 @@ export function toArticle(data: unknown): z.infer<typeof articleOutputSchema> {
     ...(a.author_id != null && { author_id: a.author_id }),
     ...(a.permission_group_id != null && { permission_group_id: a.permission_group_id }),
     user_segment_id: a.user_segment_id ?? null,
+    // Zendesk leaves user_segment_id null when an article has several segments.
+    user_segment_ids: a.user_segment_ids ?? (a.user_segment_id != null ? [a.user_segment_id] : []),
     ...(a.draft !== undefined && { draft: a.draft }),
     ...(a.promoted !== undefined && { promoted: a.promoted }),
     ...(a.position !== undefined && { position: a.position }),
