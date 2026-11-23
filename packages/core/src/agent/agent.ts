@@ -244,6 +244,7 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import type { DurableExecutionEngine } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
 import {
+  assertExecutionOwned,
   EXECUTION_ABANDONED_ERROR_ID,
   DurableExecutionFenceError,
   EXECUTION_UNVERIFIED_ERROR_ID,
@@ -352,6 +353,8 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
+import { ExecutionEnginePolicy } from './streams/execution-policy';
+import type { ExecutionEngineDefaults } from './streams/execution-policy';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { ResponseMessagesReplay } from './streams/response-messages';
@@ -512,8 +515,6 @@ function rebindRecoveredModelList(
 
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
-
-const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
@@ -1209,7 +1210,8 @@ export class Agent<
    */
   #suspendedRunOutputProcessors = new Map<string, OutputProcessorOrWorkflow[]>();
   readonly #options?: AgentCreateOptions;
-  readonly #durable?: AgentDurableOption;
+  #executionEnginePolicy: ExecutionEnginePolicy;
+  readonly #executionPolicyWarnings = new Set<string>();
   readonly #recoveryAttempts = new Map<string, Promise<unknown>>();
 
   #hasRecoveryAttempt(runId: string): boolean {
@@ -1302,7 +1304,7 @@ export class Agent<
     this.#description = config.description;
     this.#metadata = config.metadata;
     this.#options = config.options;
-    this.#durable = config.durable;
+    this.#executionEnginePolicy = new ExecutionEnginePolicy(config.durable);
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1383,12 +1385,12 @@ export class Agent<
 
     const durable = config.durable;
     if (durable && typeof durable === 'object') {
-      const legacyKeys = ['maxSteps', 'shouldPersistSnapshot', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
+      const legacyKeys = ['maxSteps', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
       if (legacyKeys.length) {
         this.logger.warn(
           `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
             'Use createDurableAgent({ agent, ...executionOptions }) for checkpoint execution. ' +
-            'On plain Agent, streams configuration has moved from streams to durable and controls resumable streams only.',
+            'On native Agent, durable configures resumable streams and staged engine policy; native execution activation is deferred.',
         );
       }
     }
@@ -2052,12 +2054,65 @@ export class Agent<
   }
 
   /**
-   * The `durable` option this agent was constructed with, if any.
+   * Effective resumable-stream configuration and staged execution-engine policy.
    *
-   * Controls resumable streams only. See {@link AgentDurableOption}.
+   * Native execution activation is deferred. See {@link AgentDurableOption}.
    */
   get durable(): AgentDurableOption | undefined {
-    return this.#durable;
+    return this.#executionEnginePolicy.durable;
+  }
+
+  /** @internal Configured policy, not a claim of active durable execution. */
+  __getExecutionEnginePolicy() {
+    return this.#executionEnginePolicy.engine;
+  }
+
+  /** @internal Only Mastra's stored native-agent registration applies defaults. */
+  __registerExecutionEnginePolicy(defaults?: ExecutionEngineDefaults): void {
+    const previous = this.#executionEnginePolicy.durable;
+    const diagnostic = this.#executionEnginePolicy.register(defaults);
+    if (this.#streamBus) {
+      const previousConfig = agentStreamsConfig(previous);
+      const config = agentStreamsConfig(this.#executionEnginePolicy.durable);
+      if (
+        previousConfig.cleanupTimeoutMs !== config.cleanupTimeoutMs ||
+        previousConfig.shouldCache !== config.shouldCache
+      ) {
+        this.#streamBus = this.#streamBus.withConfig(config);
+      }
+    }
+    if (diagnostic) {
+      this.#warnExecutionPolicy(
+        diagnostic,
+        'Execution engine policy is fixed for this Agent instance; conflicting registration defaults were ignored.',
+      );
+    }
+    if (typeof this.#defaultOptions !== 'function') this.#warnInheritedExecutionOptions(this.#defaultOptions);
+  }
+
+  #warnExecutionPolicy(kind: string, message: string): void {
+    if (this.#executionPolicyWarnings.has(kind)) return;
+    this.#executionPolicyWarnings.add(kind);
+    this.logger.warn(
+      `Agent "${this.id}": ${message} Native execution activation is deferred; this policy does not change execution yet.`,
+    );
+  }
+
+  #warnInheritedExecutionOptions(options: PublicAgentExecutionOptions<TOutput>): void {
+    if (!this.#executionEnginePolicy.inherited) return;
+    if (options.eagerToolExecution === true) {
+      this.#warnExecutionPolicy(
+        'eager',
+        'Mastra-inherited execution engine policy does not support eagerToolExecution.',
+      );
+    }
+    if (this.#executionEnginePolicy.engine === 'evented' && options.stopWhen !== undefined) {
+      this.#warnExecutionPolicy('stopWhen', 'Mastra-inherited evented policy does not support stopWhen.');
+    }
+  }
+
+  #beginExecutionPolicy(): void {
+    this.#executionEnginePolicy.freeze();
   }
 
   /**
@@ -2067,9 +2122,9 @@ export class Agent<
    * @internal
    */
   __getStreamBus(force = false): AgentStreamBus | undefined {
-    if (!force && !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (!force && !areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
-      const config = agentStreamsConfig(this.#durable);
+      const config = agentStreamsConfig(this.#executionEnginePolicy.durable);
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
@@ -2096,7 +2151,11 @@ export class Agent<
 
   // Sharing transport does not opt durable execution into plain run records or abort checks.
   #ownStreamBus(): AgentStreamBus | undefined {
-    if (!this.__ownsPlainStreamPublisher() || !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (
+      !this.__ownsPlainStreamPublisher() ||
+      !areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)
+    )
+      return undefined;
     return this.__getStreamBus();
   }
 
@@ -2107,7 +2166,7 @@ export class Agent<
    * with streams on. See {@link AgentConfig.durable}.
    */
   hasResumableStreams(): boolean {
-    return !!this.#durable || !!this.__getStreamBus();
+    return !!this.#executionEnginePolicy.durable || !!this.__getStreamBus();
   }
 
   /**
@@ -2142,7 +2201,7 @@ export class Agent<
     resourceId: string | undefined,
     { resuming }: { resuming: boolean },
   ): Promise<AgentRunRecord | undefined> {
-    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
     const bus = this.__getStreamBus();
     if (!bus) return undefined;
 
@@ -2167,7 +2226,7 @@ export class Agent<
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
   ): AgentStreamPublisher | undefined {
-    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
     const bus = this.__getStreamBus();
     if (!bus) return undefined;
     const publisher = createAgentStreamPublisher({
@@ -4762,6 +4821,7 @@ export class Agent<
       fork.#primitives = this.#primitives;
     }
 
+    fork.#executionEnginePolicy = this.#executionEnginePolicy.clone();
     fork.#inheritedPubSub = this.#inheritedPubSub;
     fork.#defaultStreamPubsub = this.#defaultStreamPubsub ??= new EventEmitterPubSub();
     fork.source = this.source;
@@ -7542,6 +7602,7 @@ export class Agent<
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
+            const abortSignal = context?.abortSignal;
             const savedMastraMemory = requestContext.get('MastraMemory');
             let runIdToUse: string | undefined;
             try {
@@ -7562,66 +7623,86 @@ export class Agent<
                 resourceId,
               });
 
+              abortSignal?.throwIfAborted();
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
 
-              let result: WorkflowResult<any, any, any, any, 1 | 2> | undefined = undefined;
-
-              if (methodType === 'generate' || methodType === 'generateLegacy') {
-                if (shouldResumeWorkflow) {
-                  result = await run.resume({
-                    resumeData,
-                    requestContext,
-                    actor: invocationActor,
-                    ...resolveObservabilityContext(context ?? {}),
-                  });
-                } else {
-                  result = await run.start({
-                    inputData: workflowInputData,
-                    requestContext,
-                    actor: invocationActor,
-                    ...resolveObservabilityContext(context ?? {}),
-                    ...(initialState && { initialState }),
-                  });
-                }
-              } else if (methodType === 'streamLegacy') {
-                const streamResult = run.streamLegacy({
-                  inputData: workflowInputData,
-                  requestContext,
-                  actor: invocationActor,
-                  ...resolveObservabilityContext(context ?? {}),
+              // Aborting the tool (parent abort, background cancel or timeout) must stop the run it started.
+              if (abortSignal?.aborted) {
+                // createRun stored a pending run; cancel it rather than leave it orphaned.
+                await run.cancel();
+                abortSignal.throwIfAborted();
+              }
+              const cancelRun = () => {
+                // An event listener has no caller to surface a cancel failure to.
+                run.cancel().catch(error => {
+                  this.logger.error(`Failed to cancel workflow "${workflowName}" run ${run.runId}`, error);
                 });
+              };
+              abortSignal?.addEventListener('abort', cancelRun, { once: true });
 
-                if (context?.writer) {
-                  await streamResult.stream.pipeTo(context.writer);
-                } else {
-                  for await (const _chunk of streamResult.stream) {
-                    // complete the stream
-                  }
-                }
-
-                result = await streamResult.getWorkflowState();
-              } else if (methodType === 'stream') {
-                const streamResult = shouldResumeWorkflow
-                  ? run.resumeStream({
+              let result: WorkflowResult<any, any, any, any, 1 | 2> | undefined = undefined;
+              try {
+                if (methodType === 'generate' || methodType === 'generateLegacy') {
+                  if (shouldResumeWorkflow) {
+                    result = await run.resume({
                       resumeData,
                       requestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
-                    })
-                  : run.stream({
+                    });
+                  } else {
+                    result = await run.start({
                       inputData: workflowInputData,
                       requestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
+                  }
+                } else if (methodType === 'streamLegacy') {
+                  const streamResult = run.streamLegacy({
+                    inputData: workflowInputData,
+                    requestContext,
+                    actor: invocationActor,
+                    ...resolveObservabilityContext(context ?? {}),
+                  });
 
-                if (context?.writer) {
-                  await streamResult.fullStream.pipeTo(context.writer);
+                  if (context?.writer) {
+                    await streamResult.stream.pipeTo(context.writer);
+                  } else {
+                    for await (const _chunk of streamResult.stream) {
+                      // complete the stream
+                    }
+                  }
+
+                  result = await streamResult.getWorkflowState();
+                } else if (methodType === 'stream') {
+                  const streamResult = shouldResumeWorkflow
+                    ? run.resumeStream({
+                        resumeData,
+                        requestContext,
+                        actor: invocationActor,
+                        ...resolveObservabilityContext(context ?? {}),
+                      })
+                    : run.stream({
+                        inputData: workflowInputData,
+                        requestContext,
+                        actor: invocationActor,
+                        ...resolveObservabilityContext(context ?? {}),
+                        ...(initialState && { initialState }),
+                      });
+
+                  if (context?.writer) {
+                    await streamResult.fullStream.pipeTo(context.writer);
+                  }
+
+                  result = await streamResult.result;
                 }
-
-                result = await streamResult.result;
+              } finally {
+                abortSignal?.removeEventListener('abort', cancelRun);
               }
+              // A run cancelled by the abort has no result for the model; report the abort itself.
+              abortSignal?.throwIfAborted();
 
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
@@ -7681,6 +7762,9 @@ export class Agent<
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
+
+              // An aborted call is a cancellation, not a workflow failure.
+              if (abortSignal?.aborted) throw err;
 
               const mastraError = new MastraError(
                 {
@@ -10369,6 +10453,7 @@ export class Agent<
   ) {
     await this.#validateRequestContext(options?.requestContext);
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
+    this.#warnInheritedExecutionOptions(defaultOptions);
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
         withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
@@ -10573,6 +10658,7 @@ export class Agent<
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
+    this.#beginExecutionPolicy();
 
     const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
     return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
@@ -11504,6 +11590,7 @@ export class Agent<
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
+    this.#beginExecutionPolicy();
 
     const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(streamOptions);
 
@@ -13061,6 +13148,7 @@ export class Agent<
         // not on the SUSPENDED event, which can precede a resumable snapshot.
         closeOnSuspend: false,
         messageList,
+        messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
         tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
@@ -14028,12 +14116,16 @@ export class Agent<
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.
-            const { output: finalOutput, stepResult, tracingTermination } = result.result;
+            const { output: finalOutput, stepResult, tracingTermination, stopCause } = result.result;
             // map-final-output, which ends the recovered spans, did not re-run. It saved the outcome
             // it ended the run's spans with, so the recovered pair ends the same way.
             recoverModelSpan?.end({ ...tracingTermination });
             recoverAgentSpan?.end({ ...tracingTermination, output: { text: finalOutput?.text } });
-            await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
+            await emitFinishEvent(recoveryPubsub, runId, {
+              output: finalOutput,
+              stepResult,
+              ...(stopCause && { stopCause }),
+            });
           }
           if (result?.status === 'suspended' && options?.closeOnSuspend) {
             // Same contract as resume(): close on the persisted suspension,
@@ -14265,8 +14357,58 @@ export class Agent<
     return applyResolvedAgentScopes(options, resolved, requestContext);
   }
 
+  /** Runs whose restartable start row this process wrote and may still discard. */
+  #restartableStarts = new Set<string>();
+
   async #persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    await persistDurableRunInput(runId, workflowInput, this.#mastra);
+    // A crash after the input is saved but before the workflow's first checkpoint would strand a
+    // stored user message that no run answers, so make the run recoverable first (#30791).
+    try {
+      await persistDurableRunInput(runId, workflowInput, this.#mastra, async () => {
+        await this.getWorkflow().__persistRestartableStart({
+          runId,
+          resourceId: workflowInput.state?.resourceId,
+          input: workflowInput,
+          requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+          // A write that rejects may still have committed, so the row counts as ours from here.
+          onWrite: () => this.#restartableStarts.add(runId),
+        });
+      });
+    } catch (error) {
+      await this.#discardRestartableStart(runId, workflowInput.agentId);
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes the run's restartable start row if the workflow never wrote over it. A start that
+   * failed before its first checkpoint was reported to the caller, so recovery must not redo it.
+   */
+  async #discardRestartableStart(runId: string, agentId: string): Promise<void> {
+    // Only the execution that wrote the row, and only while it still owns the run: a recoverer
+    // that took over restarts from this same row until its first checkpoint.
+    if (!this.#restartableStarts.delete(runId)) return;
+    try {
+      await assertExecutionOwned({
+        runId,
+        agentId,
+        mastra: this.#mastra,
+        requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+      });
+      const snapshot = await this.executionEngine.loadRunSnapshot(runId);
+      const context = snapshot?.context as Record<string, unknown> | undefined;
+      if (
+        snapshot?.status === 'running' &&
+        snapshot.activePaths?.length === 0 &&
+        context &&
+        Object.keys(context).length === 1 &&
+        Object.hasOwn(context, 'input')
+      ) {
+        await this.deleteRunSnapshots(runId);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to delete the start snapshot of failed run ${runId}`, { runId, error });
+    }
   }
 
   /**
@@ -14378,7 +14520,10 @@ export class Agent<
         )
         .then(
           result => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { result }),
-          error => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error }),
+          async error => {
+            await this.#discardRestartableStart(runId, workflowInput.agentId);
+            return this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error });
+          },
         )
         .then(outcome => {
           if (outcome.owner === 'agent') return this.settleExecution(runId, executionFence, outcome);
@@ -14389,6 +14534,7 @@ export class Agent<
           }
         });
     } catch (error) {
+      await this.#discardRestartableStart(runId, workflowInput.agentId);
       await this.settleExecution(runId, executionFence, {
         error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
       });
@@ -14739,6 +14885,7 @@ export class Agent<
       returnScorerData: workflowInput.options.returnScorerData,
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
+      messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
 
@@ -14773,7 +14920,12 @@ export class Agent<
           try {
             await this.#persistInitialInput(runId, workflowInput);
             result = await this.executeWorkflow(runId, workflowInput);
+          } catch (error) {
+            await this.#discardRestartableStart(runId, workflowInput.agentId);
+            throw error;
           } finally {
+            // Past this point the workflow owns the row; a later failure must not delete it.
+            this.#restartableStarts.delete(runId);
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
           }
           if (closeOnPersistedSuspend && result?.status === 'suspended') {
@@ -14899,7 +15051,7 @@ export class Agent<
       id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
-      text: `Agent.${method}() requires durable execution. Use createDurableAgent({ agent }) or new DurableAgent({ agent }); Agent.durable only enables resumable streams.`,
+      text: `Agent.${method}() requires durable execution. Use createDurableAgent({ agent }) or new DurableAgent({ agent }); Agent.durable configures staged engine policy; native execution activation is deferred.`,
       details: { agentId: this.id, method },
     });
   }
@@ -15605,6 +15757,7 @@ export class Agent<
       returnScorerData: options?.returnScorerData ?? entry.returnScorerData ?? resolvedOptions.returnScorerData,
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.executionRunRegistry.getMessageList(runId),
+      messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
 
@@ -16512,67 +16665,6 @@ export class Agent<
       returnScorerData = workflowInput.options?.returnScorerData;
     }
 
-    const refreshObservedMessageList = async (isExpired: () => boolean) => {
-      const targetMessageList = messageList;
-      const snapshot = workflowInputSnapshot ?? loopSnapshot;
-      if (!workflowsStore || !snapshot || !targetMessageList) return;
-
-      try {
-        const inputMessages = targetMessageList.get.input.db();
-        const latestState = await this.loadLatestMessageListState(workflowsStore, runId, snapshot);
-        if (latestState && !isExpired()) {
-          targetMessageList.deserialize(latestState);
-          if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
-            targetMessageList.add(inputMessages, 'input');
-          }
-        }
-      } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh failed: ${error}`);
-      }
-    };
-
-    const refreshObservedMessageListWithTimeout = async () => {
-      const refreshTimeoutMs = Math.min(
-        options?.idleTimeoutMs && options.idleTimeoutMs > 0
-          ? options.idleTimeoutMs
-          : OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-        OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS,
-      );
-      let expired = false;
-      let timeout: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = new Promise<boolean>(resolve => {
-        timeout = setTimeout(() => {
-          expired = true;
-          resolve(true);
-        }, refreshTimeoutMs);
-      });
-
-      try {
-        const didTimeOut = await Promise.race([refreshObservedMessageList(() => expired).then(() => false), timedOut]);
-        if (didTimeOut) {
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh timed out after ${refreshTimeoutMs}ms`);
-        }
-      } finally {
-        if (timeout) clearTimeout(timeout);
-      }
-    };
-
-    let observedResponseText = '';
-    const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
-      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
-        observedResponseText += chunk.payload.text;
-      }
-      if (chunk.type === 'step-finish') {
-        await refreshObservedMessageListWithTimeout();
-        if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
-          messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
-        }
-      }
-      await options?.onChunk?.(chunk);
-    };
-
     const replayFloor = await this.#readReplayFloor(runId, options?.offset, options?.closeOnSuspend);
 
     const stream = createDurableAgentStream<TOutput>({
@@ -16592,7 +16684,7 @@ export class Agent<
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
       closeOnSuspend: options?.closeOnSuspend,
-      onChunk: handleObservedChunk,
+      onChunk: options?.onChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -16623,6 +16715,9 @@ export class Agent<
       requestContext,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
       messageList,
+      // A list loaded from storage has the conversation up to attach; the stream brings each
+      // step's response messages from there.
+      messageListFollowsStream: () => !liveEntry || !this.executionEngine.executesStepsLocally,
     });
     const { output, ready, detach } = stream;
     streamCleanup = stream.cleanup;

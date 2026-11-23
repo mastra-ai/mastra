@@ -12,6 +12,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/acp/*.test.ts'],
+    setupFiles: ['src/__tests__/vitest-setup.ts'],
     fileParallelism: false,
     maxWorkers: 1,
   },

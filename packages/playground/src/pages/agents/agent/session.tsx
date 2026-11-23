@@ -115,7 +115,7 @@ function AgentSession() {
             <ThreadInputProvider>
               <ObservationalMemoryProvider>
                 <ActivatedSkillsProvider>
-                  <PageLayout variant="fit">
+                  <PageLayout variant="page" body="fixed">
                     <h1 className="sr-only">{agentId}</h1>
                     <SessionHeader />
                     <div className="relative grid h-full min-h-0">
@@ -149,7 +149,7 @@ function AgentSession() {
 export default AgentSession;
 
 const AgentSessionLoadingSkeleton = () => (
-  <PageLayout variant="fit">
+  <PageLayout variant="page" body="fixed">
     <h1 className="sr-only">Agent session</h1>
     <SessionHeader />
     <div className="relative grid h-full overflow-y-auto pt-4" data-testid="agent-session-skeleton" aria-busy="true">

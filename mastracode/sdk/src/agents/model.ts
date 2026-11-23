@@ -10,6 +10,7 @@ import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
+  getCustomProviderId,
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
   resolveDefaultThinkingLevel,
@@ -18,7 +19,7 @@ import {
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import { GOOGLE_VERTEX_GATEWAY_ID, createGoogleVertexGateway } from '../providers/google-vertex-gateway.js';
-import { normalizeLegacyModelId } from '../providers/model-ids.js';
+import { findRouteModelIndex, normalizeLegacyModelId, parseCodexModelSelection } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import {
@@ -212,18 +213,32 @@ export function resolveModel(
   });
 }
 
+/** Whether a model id resolves to a custom provider. A `mastra/...` id never does. */
+function isCustomProviderModel(modelId: string, customProviders: Array<{ name: string }>): boolean {
+  const input = stripMastraCodeCustomProviderPrefix(normalizeLegacyModelId(modelId), customProviders);
+  if (input.startsWith(MASTRA_GATEWAY_PREFIX)) return false;
+  const providerId = input.split('/', 1)[0];
+  return customProviders.some(provider => getCustomProviderId(provider.name) === providerId);
+}
+
 function resolveModelForRequest(modelId: string, options?: Parameters<typeof resolveModel>[1]): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
-  // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
-  // already-saved ids (packs, OM settings, thread metadata) to current ids.
-  const legacyNormalizedInput = normalizeLegacyModelId(modelId);
   // Deployed web registers a custom providers source (DB-backed, tenant
   // scoped); when registered it is authoritative and settings.json custom
   // providers are ignored. Undefined = local settings-based behavior.
   const customProviders = resolveCustomProviders(options?.requestContext) ?? settings.customProviders;
+  // `:fast` asks for Codex Fast only on the built-in OpenAI provider. A custom
+  // provider named "OpenAI" shares its id, and there the suffix is part of the
+  // model name, so look for a custom provider before reading it.
+  const { modelId: canonicalModelId, codexServiceTier } = isCustomProviderModel(modelId, customProviders)
+    ? { modelId }
+    : parseCodexModelSelection(modelId);
+  // Older versions cataloged Bedrock, Copilot and Kimi under the MastraCode
+  // gateway namespace, and Kimi under its own `kimi-for-coding` provider. Map
+  // already-saved ids (packs, OM settings, thread metadata) to current ids.
+  const legacyNormalizedInput = normalizeLegacyModelId(canonicalModelId);
   // Ids selected from the shared /models catalog were previously persisted in
   // the gateway-qualified `mastracode/<customProviderId>/<model>` form, which
   // parses the provider as `mastracode` and breaks provider config lookup.
@@ -344,6 +359,7 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     modelId: bareModelId,
     apiKey: auth?.apiKey ?? '',
     headers,
+    codexServiceTier,
   });
 }
 
@@ -529,7 +545,7 @@ export function getDynamicModel(
     pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
   const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;
   const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
-  if (!activeRoute || activeRoute.length < 2 || activeRoute[0]?.modelId !== modelId) return primary;
+  if (!activeRoute || activeRoute.length < 2 || findRouteModelIndex(activeRoute, modelId) !== 0) return primary;
 
   const firstId =
     typeof activeRoute[0]?.id === 'string' && activeRoute[0].id.length > 0 ? activeRoute[0].id : undefined;
@@ -564,7 +580,7 @@ export function getDynamicModel(
 }
 
 function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
-  return { model, id: toMemoryModelId(modelId) };
+  return { model, id: toMemoryModelId(parseCodexModelSelection(modelId).modelId) };
 }
 
 type MemoryRouteState = {

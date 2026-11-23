@@ -3,6 +3,12 @@
   "temperature": ["MiniMaxAI/MiniMax-M3.1-Flash", "Qwen/Qwen3.8-27B", "zai-org/GLM-5.3", "zai-org/GLM-5.3-Flash"],
   "structuredOutput": ["Qwen/Qwen3.8-27B", "zai-org/GLM-5.3-Flash"],
   "reasoning": {
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
@@ -19,12 +25,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

@@ -177,6 +177,14 @@ Executes a synchronous function within the dd-trace context of a Mastra span.
 
 **Returns:** `T` - The result of the function execution.
 
+### `onFeedbackEvent`
+
+```typescript oxfmt:false
+async onFeedbackEvent(event: FeedbackEvent): Promise<void>
+```
+
+Exports a feedback event to Datadog LLM Observability. See [Feedback export](#feedback-export).
+
 ### `flush`
 
 ```typescript oxfmt:false
@@ -310,6 +318,10 @@ This produces:
   "instance_name": "career-scout-api"
 }
 ```
+
+## Feedback export
+
+Feedback recorded with [`addFeedback()`](/docs/observability/feedback) is exported to Datadog as end-user feedback. Feedback with a `spanId` targets that span, and feedback with only a `traceId` targets the trace. The Datadog LLM Observability trace ID is the Mastra trace ID, so late feedback still reaches the run. A run that continues an LLM Observability trace from an upstream service keeps that trace, so only feedback with a `spanId` reaches it. HTTP calls made from inside the run carry its LLM Observability trace ID, so spans from Datadog-instrumented services they call join the run. Fields map the same way as in the [`DatadogExporter`](/reference/observability/tracing/exporters/datadog#feedback-export).
 
 ## Environment variables
 

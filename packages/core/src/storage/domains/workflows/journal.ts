@@ -26,14 +26,16 @@ export type StateRef = StateVersion & { workflowName: string; runId: string };
  * increases within a run, also across checkpoints.
  *
  * A step's result is its latest `step` entry, with the later `step-patch` entries for the step
- * applied (see `latestStepResults`). The run's state is a `state` (full) or `state-base` (another
+ * applied (see `latestStepResults`). Appending a `step` entry deletes the step's earlier `step` and
+ * `step-patch` entries; the new entry's `firstSeq` keeps the `seq` of the step's first entry, so
+ * steps stay in the order they were first written. The run's state is a `state` (full) or `state-base` (another
  * run's state version) entry, with the later `state-patch` entries applied. A `state-draft` doesn't
  * change the run's state: it is a version of its live state that nested runs build on (see
  * `materializeState`).
  * @experimental
  */
 export type WorkflowRunEntry =
-  | { seq: number; kind: 'step'; stepId: string; result: unknown }
+  | { seq: number; kind: 'step'; stepId: string; result: unknown; firstSeq?: number }
   | { seq: number; kind: 'step-patch'; stepId: string; ops: StatePatchOp[] }
   | { seq: number; kind: 'state'; state: Record<string, any> }
   | { seq: number; kind: 'state-patch'; ops: StatePatchOp[] }
@@ -280,6 +282,49 @@ export function stateBaseOf(entries: readonly WorkflowRunEntry[], at?: StateVers
 }
 
 /**
+ * The `seq`s of a run's state entries that no version in use reads any more, for a store to delete
+ * once a drive of the run has ended. In use: the run's latest state, the version its last drive
+ * started from (`startStateSeq`; unset keeps every full state and patch), and the versions other
+ * runs build on (`refs`, from their `state-base` entries), with the drafts those reach.
+ *
+ * Full states and patches go only below the latest full state at or before the oldest version in
+ * use, so every version from there on still rebuilds the same: a nested run that took a version
+ * before its `state-base` entry was written gets it, or, for a dropped draft, an error. Drafts no
+ * ref reaches go too: a restart never reads them.
+ * @experimental
+ */
+export function unusedStateEntries(
+  entries: readonly { seq: number; kind: WorkflowRunEntry['kind']; on?: StateVersion }[],
+  startStateSeq: number | undefined,
+  refs: readonly StateVersion[],
+): number[] {
+  const drafts = new Map(entries.filter(entry => entry.kind === 'state-draft').map(entry => [entry.seq, entry]));
+  const keptDrafts = new Set<number>();
+  let oldest = startStateSeq ?? 0;
+  for (const ref of refs) {
+    let version: StateVersion | undefined = ref;
+    while (version?.draft && !keptDrafts.has(version.seq)) {
+      keptDrafts.add(version.seq);
+      version = drafts.get(version.seq)?.on;
+    }
+    if (version && !version.draft) oldest = Math.min(oldest, version.seq);
+  }
+  let floor = -Infinity;
+  for (const entry of entries) {
+    if ((entry.kind === 'state' || entry.kind === 'state-base') && entry.seq <= oldest) {
+      floor = Math.max(floor, entry.seq);
+    }
+  }
+  return entries
+    .filter(entry =>
+      entry.kind === 'state-draft'
+        ? !keptDrafts.has(entry.seq)
+        : entry.kind !== 'step' && entry.kind !== 'step-patch' && entry.seq < floor,
+    )
+    .map(entry => entry.seq);
+}
+
+/**
  * Rebuild a run's state from its entries (in `seq` order).
  *
  * The latest state (no `at`), or the state as of a `seq`, is the latest `state` or `state-base`
@@ -302,27 +347,29 @@ export function materializeState(
 
 /**
  * The latest result of each step (only of `stepIds` when given), from a run's entries (in `seq`
- * order), keyed in the order each step was first written: its latest `step` entry, with every later
- * `step-patch` entry for the step applied in order. A patch with no earlier `step` entry for its
- * step is ignored. A patched result is a JSON copy; the others are the entries' own objects.
- * Shared so every adapter rebuilds step results the same way.
+ * order), keyed in the order each step was first written (an entry's `firstSeq`, else the `seq` of
+ * the step's earliest entry): its latest `step` entry, with every later `step-patch` entry for the
+ * step applied in order. A patch with no earlier `step` entry for its step is ignored. A patched
+ * result is a JSON copy; the others are the entries' own objects. Shared so every adapter rebuilds
+ * step results the same way.
  * @experimental
  */
 export function latestStepResults(
   entries: readonly WorkflowRunEntry[],
   stepIds?: ReadonlySet<string>,
 ): Map<string, unknown> {
-  // A Map keeps each step at its first write while later entries replace the value.
-  const latest = new Map<string, { result: unknown; patches: StatePatchOp[][] }>();
+  const latest = new Map<string, { result: unknown; patches: StatePatchOp[][]; firstSeq: number }>();
   for (const entry of entries) {
     if (entry.kind === 'step') {
-      if (!stepIds || stepIds.has(entry.stepId)) latest.set(entry.stepId, { result: entry.result, patches: [] });
+      if (stepIds && !stepIds.has(entry.stepId)) continue;
+      const firstSeq = Math.min(entry.firstSeq ?? entry.seq, latest.get(entry.stepId)?.firstSeq ?? Infinity);
+      latest.set(entry.stepId, { result: entry.result, patches: [], firstSeq });
     } else if (entry.kind === 'step-patch') {
       latest.get(entry.stepId)?.patches.push(entry.ops);
     }
   }
   const results = new Map<string, unknown>();
-  for (const [stepId, { result, patches }] of latest) {
+  for (const [stepId, { result, patches }] of [...latest].sort(([, a], [, b]) => a.firstSeq - b.firstSeq)) {
     if (!patches.length) {
       results.set(stepId, result);
       continue;

@@ -19,7 +19,7 @@ Load `factory-review` with `skill_read` and apply these parts of it exactly as w
 - **Phase 1 steps that do not need a PR** — resolve the linked issue from the work item reference, classify the change, write your own design before opening the diff, and load the category guidance.
 - **Phase 3: Quality Gate** — pre-execution security inspection, the test plan, environment preparation, running the narrowest tests and typecheck, independent reproduction, and the rule that an environment failure is not a pass.
 - **Phase 4: History & Architecture**.
-- **Phase 5: Verdict** — self-scrutiny of your requests, the adversarial check before approve, and the approval gates except gate 3 (existing review signal) and gate 4 (pending bots), which do not apply before a PR exists. Its verdict test, its rule that cheap fixes are blocking, and its "no optional or follow-up tiers" rule do not apply here: use **Blocking vs. follow-up** below instead.
+- **Phase 5: Verdict** — self-scrutiny of your requests, the adversarial check before approve, and the approval gates except gate 3 (existing review signal), which does not apply before a PR exists. Its verdict test, its rule that cheap fixes are blocking, and its "no optional or follow-up tiers" rule do not apply here: use **Blocking vs. follow-up** below instead.
 
 Skip everything tied to a PR or MR while reviewing: no `gh pr`/`glab mr` commands, no waiting for review bots, no PR comments, no labels, no `source_control_*` review, comment, or check tools, and no follow-up PR. Never push or commit to the work branch. The only change request you open is the one in **Hand-off** below, after an approving verdict.
 
