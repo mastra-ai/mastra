@@ -19,10 +19,11 @@ export function isSingleConnectionDatabase({ url, syncUrl }: { url: string; sync
  *
  * `transaction()` takes the gate and releases it when the transaction commits,
  * rolls back, or closes. The driver can also settle a transaction under the caller:
- * closing the client ends the transaction it holds, and SQLite rolls one back when a
- * statement fails. Neither reaches the proxy, so the gate is freed when the client
- * closes, when a statement settles the transaction, and before anything waits on it,
- * in case some other path settled it. `execute`, `batch`, `executeMultiple`,
+ * closing the client ends every transaction on that client, including one that has not
+ * finished opening, and SQLite rolls one back when a statement fails. Neither reaches
+ * the proxy, so the gate is freed when the client closes, when a statement settles the
+ * transaction, and before anything waits on it, in case some other path settled it.
+ * `execute`, `batch`, `executeMultiple`,
  * `migrate`, and `sync` wait for the gate to be free before running but do not
  * hold it — the driver executes them synchronously on the connection, so they
  * cannot interleave with each other. Every other member passes through untouched.
@@ -37,6 +38,12 @@ export function gateSingleConnectionClient(client: Client): Client {
    * settled holds no connection, so it must not keep the gate.
    */
   let holder: { tx: Transaction; release: () => void } | null = null;
+  /**
+   * Releases taken by transactions that are queued or still opening. The gate is a promise chain, so
+   * one of these already blocks later calls even though its transaction has no holder yet to release
+   * it — which is what closing the client has to free.
+   */
+  const pendingHolds = new Set<() => void>();
 
   const releaseHolder = (): void => {
     const held = holder;
@@ -72,8 +79,12 @@ export function gateSingleConnectionClient(client: Client): Client {
     releaseSettledHolder();
     let release!: () => void;
     const held = new Promise<void>(resolve => {
-      release = resolve;
+      release = () => {
+        pendingHolds.delete(release);
+        resolve();
+      };
     });
+    pendingHolds.add(release);
     const previous = gate;
     gate = previous.then(
       () => held,
@@ -150,11 +161,12 @@ export function gateSingleConnectionClient(client: Client): Client {
             try {
               close.call(target);
             } finally {
-              // The client is closed for good, so the transaction under it is over and no call
-              // can settle it through the proxy: free the gate, or anything already queued
-              // behind that transaction waits forever.
+              // The client is closed for good, so every transaction on it is over and no call can
+              // settle one through the proxy: free the holder and every transaction that is queued
+              // or still opening, or anything already waiting behind them waits forever.
               releaseSettledHolder();
               releaseHolder();
+              for (const release of [...pendingHolds]) release();
             }
           };
         }

@@ -213,4 +213,30 @@ describe('gateSingleConnectionClient', () => {
     expect(client.closed).toBe(true);
     expect(raw.closed).toBe(true);
   });
+
+  it('settles work queued behind a transaction that is still opening when the client closes', async () => {
+    const raw = createClient({ url: ':memory:' });
+    const client = gateSingleConnectionClient(raw);
+    await client.execute('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)');
+
+    // The driver has the transaction, but the wrapper has not registered it as the holder yet. This
+    // window is in the driver's hands, so the test holds the open until the client has closed.
+    const tx = await raw.transaction('write');
+    let deliverTransaction!: () => void;
+    const opening = new Promise<typeof tx>(resolve => {
+      deliverTransaction = () => resolve(tx);
+    });
+    vi.spyOn(raw, 'transaction').mockReturnValue(opening);
+
+    const gated = client.transaction('write');
+    const queued = client.execute('SELECT COUNT(*) AS n FROM t');
+    client.close();
+
+    // The transaction that is opening has no holder to release it, so closing the client is the only
+    // thing that can free the gate. Without that, this call waits forever and the test times out.
+    await expect(queued).rejects.toThrow('The client is closed');
+
+    deliverTransaction();
+    await gated;
+  });
 });
