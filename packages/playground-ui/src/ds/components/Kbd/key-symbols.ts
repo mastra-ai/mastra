@@ -9,7 +9,7 @@ export type KeySymbol = {
 /** Height between the outermost stroke centers. Half a stroke more on each side makes one cap height. */
 export const KEY_SYMBOL_HEIGHT = 16;
 
-const enter: KeySymbol = { name: 'Enter', width: 16, path: 'M17 2V8.5A3 3 0 0 1 14 11.5H1.5M6 7L1.5 11.5L6 16' };
+const enter: KeySymbol = { name: 'Enter', width: 16, path: 'M17 2V8.5A3 3 0 0 1 14 11.5H1M5.5 7L1 11.5L5.5 16' };
 
 /**
  * The key symbols a shortcut hint can contain, drawn to a capital letter's height because fonts disagree: Commit Mono

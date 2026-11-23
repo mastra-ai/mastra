@@ -302,7 +302,7 @@ DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';
 const DropdownMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
     <span className={cn(menuShortcutClass, className)} {...props}>
-      <KeyLabel>{children}</KeyLabel>
+      <KeyLabel face="body">{children}</KeyLabel>
     </span>
   );
 };

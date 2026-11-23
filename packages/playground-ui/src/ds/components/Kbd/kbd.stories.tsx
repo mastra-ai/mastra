@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Kbd } from './kbd';
+import { KeyLabel } from './key-label';
 import { keySymbols } from './key-symbols';
 import { CommandShortcut } from '@/ds/components/Command';
 
@@ -85,47 +86,72 @@ export const CommonShortcuts: Story = {
 
 const symbols = Object.keys(keySymbols);
 const sizes = ['default', 'sm', 'xs'] as const;
+const pairs = [
+  '⌘K',
+  '⌘ K',
+  '⌘L',
+  '⌘W',
+  '⌘[',
+  '⇧⌘',
+  '⌘↵',
+  '⇧⌘P',
+  '⇧ ⌘ P',
+  'G K',
+  'W M',
+  'L I',
+  'Ctrl K',
+  'Ctrl ↵',
+  '⌘Enter',
+  'Shift Enter',
+  'Esc',
+  'K',
+  '[',
+];
 
-// Every symbol between letters, at every size and in the plain text a menu or command row uses. The magnified
-// row's red lines are the letters' cap height and baseline.
+const Shortcuts = ({ labels }: { labels: string[] }) => (
+  <div className="flex flex-col gap-4">
+    {sizes.map(size => (
+      <div key={size} className="flex flex-wrap items-center gap-2">
+        <span className="w-16 text-caption text-muted-foreground">{size}</span>
+        {labels.map(label => (
+          <Kbd key={label} size={size}>
+            {label}
+          </Kbd>
+        ))}
+      </div>
+    ))}
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="w-16 text-caption text-muted-foreground">text</span>
+      {labels.map(label => (
+        <CommandShortcut key={label} className="ml-0">
+          {label}
+        </CommandShortcut>
+      ))}
+    </div>
+    <div className="flex [zoom:4] flex-wrap gap-x-1.5 gap-y-1">
+      {labels.map(label => (
+        <span
+          key={label}
+          className="relative inline-flex bg-card px-1.5 py-2 font-mono text-caption leading-none [font-size-adjust:none]"
+        >
+          <span className="relative [text-box:trim-both_cap_alphabetic]">
+            <span aria-hidden className="absolute inset-0 border-[0.25px] border-destructive-indicator" />
+            <KeyLabel face="mono">{label}</KeyLabel>
+          </span>
+        </span>
+      ))}
+    </div>
+  </div>
+);
+
+// Every symbol beside a letter. The magnified boxes are the letters' cap height and baseline, and the label's ends.
 export const Symbols: Story = {
   parameters: { layout: 'padded' },
-  render: () => (
-    <div className="flex flex-col gap-6">
-      {sizes.map(size => (
-        <div key={size} className="flex flex-wrap items-center gap-2">
-          <span className="w-16 text-caption text-muted-foreground">{size}</span>
-          {symbols.map(symbol => (
-            <Kbd key={symbol} size={size}>
-              {`${symbol}K`}
-            </Kbd>
-          ))}
-        </div>
-      ))}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="w-16 text-caption text-muted-foreground">text</span>
-        {symbols.map(symbol => (
-          <CommandShortcut key={symbol} className="ml-0">{`${symbol}K`}</CommandShortcut>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="w-16 text-caption text-muted-foreground">gaps</span>
-        {['⌘K', '⌘ K', '⇧⌘P', '⇧ ⌘ P', '⌘↵', 'Ctrl ↵', 'Ctrl K', 'Esc', 'Enter', '['].map(keys => (
-          <Kbd key={keys}>{keys}</Kbd>
-        ))}
-      </div>
-      <div className="flex [zoom:4] flex-wrap gap-x-2 gap-y-1">
-        {symbols.map(symbol => (
-          <span key={symbol} className="relative inline-flex bg-card px-1 py-2 font-mono text-caption leading-none">
-            <span className="relative [text-box:trim-both_cap_alphabetic]">
-              <span aria-hidden className="absolute inset-0 border-y-[0.25px] border-destructive-indicator" />
-              <CommandShortcut className="font-[inherit] text-[length:inherit] tracking-normal text-foreground">
-                {`H${symbol}K`}
-              </CommandShortcut>
-            </span>
-          </span>
-        ))}
-      </div>
-    </div>
-  ),
+  render: () => <Shortcuts labels={symbols.map(symbol => `${symbol}K`)} />,
+};
+
+// Every pair of keys, with one gap between them and none around the label.
+export const Pairs: Story = {
+  parameters: { layout: 'padded' },
+  render: () => <Shortcuts labels={pairs} />,
 };

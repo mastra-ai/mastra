@@ -179,7 +179,7 @@ ContextMenuSeparator.displayName = 'ContextMenuSeparator';
 const ContextMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
     <span className={cn(menuShortcutClass, className)} {...props}>
-      <KeyLabel>{children}</KeyLabel>
+      <KeyLabel face="body">{children}</KeyLabel>
     </span>
   );
 };

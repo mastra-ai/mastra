@@ -2,6 +2,9 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Kbd } from './kbd';
+import { keyBearings } from './key-bearings';
+import { KeyLabel } from './key-label';
+import type { KeyFace } from './key-label';
 import { keySymbols } from './key-symbols';
 import { CommandShortcut } from '@/ds/components/Command';
 
@@ -26,19 +29,55 @@ describe('shortcut key symbols', () => {
     expect(container.textContent).toBe(text);
   });
 
-  it('leaves the same visible text after the symbol with and without a space', () => {
-    const { container } = render(
-      <>
-        <Kbd>⌘K</Kbd>
-        <Kbd>⌘ K</Kbd>
-      </>,
+  // jsdom has no layout: the space between two keys is the first one's trailing side bearing and the second one's margin.
+  const gaps = (label: string, face: KeyFace = 'mono') => {
+    const { container } = render(<KeyLabel face={face}>{label}</KeyLabel>);
+    const keys = Array.from(
+      container.querySelectorAll<HTMLElement | SVGElement>('svg, span[style*="margin"]'),
+      element => ({
+        text: element.textContent ?? '',
+        left: parseFloat(element.style.marginLeft) || 0,
+        right: parseFloat(element.style.marginRight) || 0,
+      }),
     );
 
-    const afterSymbol = Array.from(container.querySelectorAll('[role="img"]'), element => element.nextSibling);
-    expect(afterSymbol.map(node => node?.textContent)).toEqual(['K', 'K']);
+    return keys.slice(1).map((key, index) => {
+      const previous = keys[index];
+      const inkRight = previous?.text
+        ? keyBearings[face].right[previous.text.charCodeAt(previous.text.length - 1) - 33]
+        : 0;
+      const inkLeft = key.text ? keyBearings[face].left[key.text.charCodeAt(0) - 33] : 0;
+      return Number(((previous?.right ?? 0) + (inkRight ?? 0) + key.left + (inkLeft ?? 0)).toFixed(3));
+    });
+  };
+
+  it.each<KeyFace>(['mono', 'monoBold', 'body'])('puts the same gap between any two keys in %s', face => {
+    const labels = [
+      '⌘K',
+      '⌘ K',
+      '⌘[',
+      '⇧⌘',
+      '⌘↵',
+      '⇧ ⌘ P',
+      'G K',
+      'L I',
+      'W M',
+      'Ctrl K',
+      'Ctrl ↵',
+      '⌘Enter',
+      'Shift Enter',
+    ];
+
+    expect(new Set(labels.flatMap(label => gaps(label, face))).size).toBe(1);
+    expect(gaps('⇧⌘P', face)).toHaveLength(2);
   });
 
-  it.each(['K', 'Ctrl K', 'Ctrl+P', 'Esc', 'Enter', '[', '{', '/', '?'])('leaves %s as plain text', shortcut => {
+  it('keeps words unbroken', () => {
+    expect(gaps('Esc')).toEqual([]);
+    expect(gaps('Ctrl+P')).toEqual([]);
+  });
+
+  it.each(['K', 'Ctrl+P', 'Esc', 'Enter', '[', '{', '/', '?'])('leaves %s as plain text', shortcut => {
     const { container } = render(<Kbd>{shortcut}</Kbd>);
 
     expect(drawn(container)).toEqual([]);
