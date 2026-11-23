@@ -138,6 +138,30 @@ describe('bounded initial observation history', () => {
     expect(await om.getRecord(threadId, resourceId)).toBeNull();
   });
 
+  it('rejects an empty forward page that claims more rows exist, without completing the cursor', async () => {
+    const { store, om } = await setup('thread', false, true, 1_000_000);
+    const list = store.listObservationHistory.bind(store);
+    vi.spyOn(store, 'listObservationHistory').mockImplementation(async input =>
+      input.order === 'desc' ? list(input) : { messages: [], hasMore: true },
+    );
+    await expect(om.loadUnobservedMessages({ threadId, resourceId })).rejects.toThrow(/advance/);
+    expect((await om.getRecord(threadId, resourceId))?.metadata?.observationHistory).toBeUndefined();
+  });
+
+  it('rejects a forward page that repeats rows instead of advancing', async () => {
+    const { store, om, rows } = await setup('thread', false, true, 1_000_000);
+    const list = store.listObservationHistory.bind(store);
+    let forwardCalls = 0;
+    vi.spyOn(store, 'listObservationHistory').mockImplementation(async input => {
+      if (input.order === 'desc') return list(input);
+      // Bound the failure: without the guard the loader would request this page forever.
+      if (++forwardCalls > 20) throw new Error('loader kept requesting a repeating page');
+      return { messages: rows.slice(0, 2), hasMore: true };
+    });
+    await expect(om.loadUnobservedMessages({ threadId, resourceId })).rejects.toThrow(/advance/);
+    expect(forwardCalls).toBe(2);
+  });
+
   it.each(['thread', 'resource'] as const)(
     'allows live %s messages after initial rows are deleted, with and without a cutoff',
     async scope => {

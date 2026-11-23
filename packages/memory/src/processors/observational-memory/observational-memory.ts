@@ -3234,7 +3234,7 @@ ${formattedMessages}
     ) {
       const window = await this.loadHistoryWindow(currentThreadId, resourceId, record, true);
       const byThread = new Map<string, MastraDBMessage[]>();
-      for (const message of window!.messages) {
+      for (const message of window?.messages ?? []) {
         const tid = message.threadId ?? currentThreadId;
         const messages = byThread.get(tid) ?? [];
         messages.push(message);

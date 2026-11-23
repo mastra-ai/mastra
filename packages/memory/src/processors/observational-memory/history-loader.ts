@@ -146,9 +146,18 @@ export async function loadObservationHistory(args: {
       end,
       limit: 40,
     });
+    if (!page.messages.length && page.hasMore) throw new Error('Observation history forward page did not advance');
     for (let index = 0; index < page.messages.length; index++) {
       const message = page.messages[index]!;
-      after = { createdAt: new Date(message.createdAt).toISOString(), id: message.id };
+      const cursor = { createdAt: new Date(message.createdAt).toISOString(), id: message.id };
+      if (
+        after &&
+        (cursor.createdAt < after.createdAt ||
+          (cursor.createdAt === after.createdAt && Buffer.compare(Buffer.from(cursor.id), Buffer.from(after.id)) <= 0))
+      ) {
+        throw new Error('Observation history forward page did not advance');
+      }
+      after = cursor;
       if (observed.has(message.id) || !(await args.isObservable(message))) continue;
       // Legacy records excluded every message at lastObservedAt. Only the new tuple cursor
       // allows a partially observed timestamp cohort to remain eligible.
@@ -156,7 +165,7 @@ export async function loadObservationHistory(args: {
       messages.push(message);
       tokens += await args.tokenCounter.countMessageAsync(message);
     }
-    const hasMore = page.messages.length > 0 && page.hasMore;
+    const hasMore = page.hasMore;
     if (tokens >= args.budget || !hasMore) {
       return {
         messages,
