@@ -16,6 +16,8 @@
 //   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
 //   playground-ui/no-text-separators      metadata uses separate elements and a gap, not · — | • between fields
 //   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
+//   playground-ui/no-page-width      a page takes its width from PageLayout, not a centred max-w-* column
+//   playground-ui/page-layout-props  every PageLayout names a variant and passes only the props that variant takes
 
 import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
@@ -320,6 +322,49 @@ function placeholderText(context) {
   };
 }
 
+// How to pick a PageLayout variant, shared by every message that sends someone to one.
+const PICK_PAGE_VARIANT =
+  'variant="form" for a create or edit form (title and back link, no breadcrumbs), variant="settings" for a settings page (breadcrumbs, title, sections), variant="page" for anything else, adding body="fixed" when its panels scroll on their own (chat, board, editor, graph).';
+
+const PAGE_WIDTH_MESSAGE = `Let PageLayout set the page width instead of building a centred max-w-* column. Use ${PICK_PAGE_VARIANT}`;
+
+const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
+const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
+
+const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
+// The variants PageLayout used to take, and what each became.
+const REMOVED_PAGE_LAYOUT_VARIANTS = {
+  container: `PageLayout has no container variant. Use ${PICK_PAGE_VARIANT}`,
+  fit: 'PageLayout has no fit variant. Use variant="page" body="fixed": the page stays put and its panels scroll on their own.',
+  narrow:
+    'PageLayout has no narrow variant. Use variant="form" for a create or edit form (title and back link, no breadcrumbs) or variant="settings" for a settings page (breadcrumbs, title, sections). A list or dashboard takes variant="page".',
+};
+// Props a variant does not take. TypeScript rejects these too, but its union error does not say what to do instead.
+const PROPS_OFF_VARIANT = [
+  [
+    'form',
+    'breadcrumbs|headerActions|actionRow|header',
+    'A form has no breadcrumbs, header actions or header: its way out is the back link (backHref, backLabel) and its title is `title`. If this is not a create or edit form, use variant="settings" or variant="page".',
+  ],
+  ['form', 'body', 'Only variant="page" takes body. A form is a 640px column that scrolls with the page.'],
+  ['settings', 'body', 'Only variant="page" takes body. A settings page is a 640px column that scrolls with the page.'],
+];
+const pageLayoutProps = selectorRule(() => [
+  {
+    selector: `${PAGE_LAYOUT}:not(:has(> JSXAttribute[name.name='variant'], > JSXSpreadAttribute))`,
+    message: `PageLayout needs a variant. Use ${PICK_PAGE_VARIANT}`,
+  },
+  ...Object.entries(REMOVED_PAGE_LAYOUT_VARIANTS).map(([value, message]) => ({
+    selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='variant'][value.value='${value}']`,
+    message,
+  })),
+  ...PROPS_OFF_VARIANT.map(([variant, props, message]) => ({
+    selector: `${PAGE_LAYOUT}:has(> JSXAttribute[name.name='variant'][value.value='${variant}']) > JSXAttribute[name.name=/^(${props})$/]`,
+    message,
+  })),
+  { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
+]);
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -332,12 +377,18 @@ const plugin = {
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
     'no-text-separators': noTextSeparators,
     'no-text-layout-spacing': noTextLayoutSpacing,
+    'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
+    'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
   },
 };
 
 export const copyRules = {
   'playground-ui/no-text-separators': 'error',
   'playground-ui/no-text-layout-spacing': 'error',
+};
+
+export const pageRules = {
+  'playground-ui/no-page-width': 'error',
 };
 
 export const copyRuleExclusions = {
@@ -355,6 +406,7 @@ export const recommended = {
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  'playground-ui/page-layout-props': 'error',
   ...copyRules,
 };
 

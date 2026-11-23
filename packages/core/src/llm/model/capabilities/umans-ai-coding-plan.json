@@ -31,7 +31,7 @@
     "umans-qwen3.6-35b-a3b"
   ],
   "reasoning": {
-    "umans-deepseek-v4.1-flash-1017": [
+    "umans-kimi-k3.1-pro": [
       {
         "type": "toggle"
       },
@@ -46,13 +46,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-flash": [
+    "umans-qwen3.6-35b-a3b": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "umans-coder": [
@@ -64,22 +64,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "umans-qwen3.6-35b-a3b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "umans-kimi-k3": [
+    "umans-deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -88,7 +73,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-kimi-k3.1-pro": [
+    "umans-flash": [
       {
         "type": "toggle"
       },
@@ -106,7 +91,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-deepseek-v4.1-flash": [
+    "umans-glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "umans-deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "umans-kimi-k3": [
       {
         "type": "toggle"
       },

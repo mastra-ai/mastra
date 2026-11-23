@@ -575,7 +575,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     snapshot = { ...snapshot, ...state };
     this.db.workflows.set(key, {
       ...run,
-      snapshot: snapshot,
+      // The engine keeps changing its routing objects after the write; a persistent store keeps
+      // them as they were when written.
+      snapshot: {
+        ...snapshot,
+        ...(state.activePaths && { activePaths: [...state.activePaths] }),
+        ...(state.activeStepsPath && { activeStepsPath: cloneRunData(state.activeStepsPath) }),
+      },
       updatedAt: new Date(),
     });
 

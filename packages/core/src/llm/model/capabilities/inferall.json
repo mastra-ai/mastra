@@ -29,14 +29,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "nvidia/nemotron-3.5-lightning-30b-a3b": [
+    "openai/gpt-oss-20b": [
       {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
@@ -45,10 +41,14 @@
         "values": ["none", "medium", "high"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "nvidia/nemotron-3.5-lightning-30b-a3b": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
+      {
+        "type": "toggle"
       }
     ]
   }
