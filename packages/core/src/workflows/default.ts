@@ -41,6 +41,7 @@ import { executeStep as executeStepHandler } from './handlers/step';
 import { rebaseNestedState, withoutNestedRunStartState } from './nested-state';
 import { lazyStepResults, RunJournal } from './run-journal';
 import type { StateBase } from './run-journal';
+import { currentWorkflowRunClaim, isWorkflowRunOwnershipLostError } from './run-ownership';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type {
@@ -558,10 +559,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         };
       }
   > {
+    // A run another process took over is not retried: its retry would run the step body again.
+    const claim = currentWorkflowRunClaim(params.runId);
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
+      if (i > 0) claim?.throwIfLost();
       try {
         const result = await retryCountStorage.run(i, () =>
           withSpanErrorAttempt(`${params.stepSpan?.id ?? stepId}:attempt:${i}`, async () => {
@@ -578,6 +582,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         );
         return { ok: true, result };
       } catch (e) {
+        // A refused write (even one the step swallowed) or a lost renewal: stop, don't retry or fail the step.
+        if (claim?.lost) throw isWorkflowRunOwnershipLostError(e) ? e : claim.lostError(e);
+        if (isWorkflowRunOwnershipLostError(e)) throw e;
         const isNonRetryable = e instanceof MastraNonRetryableError;
 
         if (isNonRetryable || i === params.retries) {
@@ -999,6 +1006,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
+    const stepResults: Record<string, any> = timeTravel?.stepResults ||
+      restart?.stepResults ||
+      resume?.stepResults || { input };
+    let stepExecutionPath: string[] =
+      timeTravel?.stepExecutionPath || restart?.stepExecutionPath || resume?.stepExecutionPath || [];
+    let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
+
     try {
       let startIdx = 0;
       let entryRestart = restart;
@@ -1019,13 +1033,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume.resumePath.shift();
       }
 
-      const stepResults: Record<string, any> = timeTravel?.stepResults ||
-        restart?.stepResults ||
-        resume?.stepResults || { input };
-      let stepExecutionPath: string[] =
-        timeTravel?.stepExecutionPath || restart?.stepExecutionPath || resume?.stepExecutionPath || [];
       let lastOutput: any;
-      let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
       let lastExecutionContext: ExecutionContext | undefined;
       let currentRequestContext = params.requestContext;
 
@@ -1237,6 +1245,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             }),
           );
         } catch (error) {
+          if (isWorkflowRunOwnershipLostError(error)) throw error;
           // A thrown control-flow error bypasses settled-result finalization. End
           // this execution and any still-open children without rewriting completed
           // body spans, then preserve the caller's existing rejection behavior.
@@ -1604,6 +1613,31 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return { ...result, runId, state: lastState };
       }
       return { ...result, runId };
+    } catch (error) {
+      if (!isWorkflowRunOwnershipLostError(error)) throw error;
+      // Another process took the run over: stop like the executor-stopped handoff, with no callbacks or events.
+      workflowSpan?.end({
+        outcome: 'interrupted',
+        stopReason: null,
+        stopReasonContext: null,
+        attributes: { status: 'waiting' },
+        endTree: true,
+      });
+      journal?.close();
+      // Without the journal: its loader would read the run as this execution last wrote it, and another owner wrote since.
+      const formatted = await this.#fmtResult(
+        undefined,
+        params.pubsub,
+        stepResults,
+        { status: 'waiting', payload: undefined, startedAt: Date.now() } as StepResult<any, any, any, any>,
+        undefined,
+        stepExecutionPath,
+      );
+      return {
+        ...formatted,
+        runId,
+        ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+      };
     } finally {
       journal?.close();
     }
