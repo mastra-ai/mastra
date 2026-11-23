@@ -97,7 +97,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
                               className={cn(
-                                'text-placeholder',
+                                'text-subtle-foreground',
                                 `inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`,
                               )}
                             >

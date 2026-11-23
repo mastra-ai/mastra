@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 const settingsCardStyle = cn(
   // `!`: the card owns row spacing, so a row's own reset (`Fieldset`'s `p-0`) can't remove it.
   'flex min-w-0 flex-col rounded-xl bg-card px-3.5 py-px *:py-3.25! *:empty:hidden',
-  '[&>:not(:empty)~:not(:empty)]:border-t [&>:not(:empty)~:not(:empty)]:border-border',
+  '[&>:not(:empty)~:not(:empty)]:border-t [&>:not(:empty)~:not(:empty)]:border-separator',
   fieldsOnSurface,
 );
 

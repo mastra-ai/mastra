@@ -154,7 +154,7 @@ export function ToolsPage() {
 
   const renderToolEntity = (tool: (typeof options)[number]) => {
     return (
-      <Entity key={tool.value} className="bg-background">
+      <Entity key={tool.value} className="bg-nested">
         <EntityContent>
           <EntityName className="text-subheading">{tool.label}</EntityName>
           <EntityDescription>

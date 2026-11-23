@@ -20,7 +20,7 @@ export function ExperimentNameLabel({ experiment }: { experiment: DatasetExperim
 export function ExperimentDescriptionLabel({ experiment }: { experiment: DatasetExperiment }) {
   const description = experiment.description;
   if (!description) {
-    return <span className="text-placeholder">—</span>;
+    return <span className="text-subtle-foreground">—</span>;
   }
 
   const label = <span className="block min-w-0 truncate text-left text-muted-foreground">{description}</span>;

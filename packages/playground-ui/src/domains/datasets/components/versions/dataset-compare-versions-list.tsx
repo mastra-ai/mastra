@@ -54,7 +54,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
         className={cn('rounded', focusRing)}
       >
         <IconCircleBanSign
-          className={cn('size-icon-lg text-muted-foreground/40', {
+          className={cn('size-icon-lg text-subtle-foreground', {
             'text-destructive-foreground': red,
           })}
         />

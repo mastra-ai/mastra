@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 // inline-level items would be measured side by side on one line, stretching the popup
 // to the full available width instead of the widest item.
 const MENU_ITEM_OVERRIDES = cn(
-  'flex w-full justify-start gap-2 rounded-lg px-2 text-left text-menu text-muted-foreground select-none',
+  'flex w-full justify-start gap-2 rounded-lg px-2 text-left text-menu text-foreground select-none',
   // Leading icons and trailing chevrons take the shared control icon rule (ghost Button's
   // `controlIconState`), one step quieter than in a toolbar, and also follow the keyboard
   // highlight and a held-open submenu, which a menu row has and a Button does not.
@@ -31,7 +31,7 @@ const MENU_ITEM_OVERRIDES = cn(
   'not-disabled:hover:bg-transparent not-disabled:active:bg-transparent',
   // `not-disabled:` matches the override's specificity, so the highlight wins over it.
   'not-disabled:data-highlighted:bg-fill not-disabled:data-[popup-open]:bg-fill',
-  'not-disabled:hover:text-foreground/80 data-highlighted:text-foreground/80 data-selected:text-foreground/80 data-[popup-open]:text-foreground/80',
+  'not-disabled:hover:text-foreground data-highlighted:text-foreground data-selected:text-foreground data-[popup-open]:text-foreground',
   'data-highlighted:[--control-icon:var(--control-icon-hover)] data-selected:[--control-icon:var(--control-icon-hover)] data-[popup-open]:[--control-icon:var(--control-icon-hover)]',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
   '[&>span]:truncate',
@@ -90,7 +90,7 @@ export const menuLabelClass =
 
 export const menuLabelInsetClass = menuItemInsetClass;
 
-export const menuSeparatorClass = '-mx-1 my-1 h-px bg-border';
+export const menuSeparatorClass = 'mx-2 my-1 h-px bg-separator';
 
 export const menuShortcutClass = 'ml-auto pl-4 text-caption tracking-normal text-muted-foreground tabular-nums';
 

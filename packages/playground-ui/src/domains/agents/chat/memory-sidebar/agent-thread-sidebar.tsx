@@ -63,7 +63,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
           <span
             className={cn(
               'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-              enabled ? 'border-border bg-muted text-foreground' : 'border-border text-muted-foreground/50',
+              enabled ? 'border-border bg-muted text-foreground' : 'border-border text-subtle-foreground',
             )}
           >
             <Icon className="size-3 shrink-0" />

@@ -35,6 +35,10 @@
   --sidebar: var(--background-1);
   --card: var(--background-3);
   --popover: var(--background-3);
+  /* A box inside a card or dialog: a code block, a group of rows, a tool result. */
+  --nested: var(--background-1);
+  /* Rows of a table or list, on the card that frames them. */
+  --row: var(--background-2);
   --field: var(--card);
   --field-disabled: var(--fill-subtle);
   --field-rim: var(--surface-rim);
@@ -46,6 +50,10 @@
      had. `--gray-9` sat one rung from the ink (0.309 vs 0.129), so supporting
      text read as a second ink instead of stepping back. */
   --muted-foreground: var(--gray-8);
+  /* Text that only backs up something else: counts, timestamps, hints, an empty cell's dash. Labels are supporting
+     text and use `--muted-foreground`. */
+  --subtle-foreground: var(--gray-7);
+  /* Input placeholders and disabled labels, nothing else. */
   --placeholder: var(--gray-7);
   /* The icons inside an interactive control (see `controlIconState`). A labelled control's
      icons stay muted on hover: the label and surface answer it. Icon-only controls and lists
@@ -67,6 +75,8 @@ html.light {
   --color-background: var(--background);
   --color-sidebar: var(--sidebar);
   --color-card: var(--card);
+  --color-nested: var(--nested);
+  --color-row: var(--row);
   --color-field: var(--field);
   --color-field-disabled: var(--field-disabled);
   --color-dialog: var(--dialog);
@@ -74,5 +84,6 @@ html.light {
   --color-muted: var(--muted);
   --color-foreground: var(--foreground);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-placeholder: var(--placeholder);
 }

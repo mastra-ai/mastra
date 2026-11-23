@@ -452,7 +452,7 @@ function ChildPages({
   return (
     <KnowledgeDetailSection label="Pages">
       <div className={`rounded-xl p-1 ${raisedSurfaceStyle}`}>
-        <Tree className="rounded-lg bg-background p-1" onSelect={onOpen}>
+        <Tree className="rounded-lg bg-nested p-1" onSelect={onOpen}>
           <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
         </Tree>
       </div>

@@ -54,6 +54,7 @@ const fieldSurfaceTokens = [
 
 const boundaryLadder: { token: BoundaryToken; use: string }[] = [
   { token: 'border', use: 'Rim of a filled control, divider' },
+  { token: 'separator', use: 'Line between rows of the same kind' },
   { token: 'border-strong', use: 'Edge of a transparent control at rest' },
   { token: 'border-hover', use: 'Hover on either of those' },
   { token: 'border-focus', use: 'Focus, at 3:1 against its fill' },

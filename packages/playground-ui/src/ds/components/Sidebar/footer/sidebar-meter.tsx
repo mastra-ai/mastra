@@ -168,7 +168,7 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
       data-state={state}
       aria-busy={loading || undefined}
       className={cn(
-        'relative isolate flex flex-col overflow-hidden rounded-lg border border-border bg-background px-2.25 py-2.5',
+        'relative isolate flex flex-col overflow-hidden rounded-lg bg-nested px-2.25 py-2.5',
         href && surfaceStateLayerStyle,
         className,
       )}

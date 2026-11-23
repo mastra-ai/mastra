@@ -80,6 +80,8 @@
    *                and raising dark to 50% reads as a highlight, not a focus.
    */
   --border: oklch(var(--fill-tint) 0 0 / 9%);
+  /* The line between rows of the same kind, inset to their content. */
+  --separator: var(--border);
   --border-strong: oklch(var(--fill-tint) 0 0 / 19%);
   --border-hover: oklch(var(--fill-tint) 0 0 / 25%);
   --border-focus: oklch(var(--fill-tint) 0 0 / 40%);
@@ -204,6 +206,7 @@ html.light {
   --color-fill-destructive-disabled-foreground: var(--fill-destructive-disabled-foreground);
   --color-surface-rim: var(--surface-rim);
   --color-border: var(--border);
+  --color-separator: var(--separator);
   --color-border-strong: var(--border-strong);
   --color-border-hover: var(--border-hover);
   --color-border-focus: var(--border-focus);
