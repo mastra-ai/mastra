@@ -30,6 +30,7 @@ function waitingRun(decisionId: string, workItemId: string): FactoryDecisionSumm
     createdAt: '2026-08-05T00:00:00.000Z',
     updatedAt: '2026-08-05T00:00:00.000Z',
     completedAt: null,
+    availableAt: null,
   };
 }
 

@@ -79,6 +79,7 @@ function renderModelCredential({
   const models: ChatModelsApi = {
     activeModelId: modelId,
     defaultModelId: undefined,
+    fallbackModelIds: [],
     pendingModelId: undefined,
     isLoading: false,
     error: undefined,

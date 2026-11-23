@@ -35,6 +35,7 @@ export interface FactoryDecisionSummary {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  availableAt: string | null;
 }
 
 export interface FactoryDecisionPage {

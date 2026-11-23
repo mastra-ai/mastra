@@ -12,10 +12,10 @@ import { queryKeys } from '../api/keys';
 import {
   applyFactoryDefaultModelToSessions,
   fetchFactoryProject,
-  updateFactoryDefaultModel,
-  updateFactoryModelScope,
+  updateFactoryProject,
 } from '../ui/domains/workspaces/services/github';
-import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
+import type { FactoryModelScope, FactoryProjectPayload } from '../ui/domains/workspaces/services/github';
+import { useOptimisticFieldWrite } from './optimistic-field-write';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -39,12 +39,23 @@ export function useSetFactoryDefaultModelMutation(factoryProjectId: string | und
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (defaultModelId: string | null) =>
-      updateFactoryDefaultModel(baseUrl, factoryProjectId!, defaultModelId),
+    mutationFn: (defaultModelId: string | null) => updateFactoryProject(baseUrl, factoryProjectId!, { defaultModelId }),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
       void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
+  });
+}
+
+export function useSetFactoryFallbackModelsMutation(factoryProjectId: string) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useOptimisticFieldWrite<FactoryProjectPayload, 'fallbackModelIds', FactoryProjectPayload>({
+    queryKey: queryKeys.factoryProject(factoryProjectId),
+    field: 'fallbackModelIds',
+    write: fallbackModelIds => updateFactoryProject(baseUrl, factoryProjectId, { fallbackModelIds }),
+    savedValue: project => project.fallbackModelIds,
+    onSaved: () => queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) }),
   });
 }
 
@@ -56,7 +67,7 @@ export function useSetFactoryModelScopeMutation(factoryProjectId: string | undef
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: modelScopeMutationKey(factoryProjectId),
-    mutationFn: (modelScope: FactoryModelScope) => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
+    mutationFn: (modelScope: FactoryModelScope) => updateFactoryProject(baseUrl, factoryProjectId!, { modelScope }),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
       // The scope picks which credentials serve this Factory's models, voice input included.

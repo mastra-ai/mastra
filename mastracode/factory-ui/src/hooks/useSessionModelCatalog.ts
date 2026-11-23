@@ -18,6 +18,7 @@ export interface SessionModelCatalog {
   models: AvailableModelOption[];
   modelScope?: 'factory' | 'user';
   defaultModelId?: string | null;
+  fallbackModelIds?: string[];
   personalThinkingLevel?: ThinkingLevelSetting | null;
 }
 

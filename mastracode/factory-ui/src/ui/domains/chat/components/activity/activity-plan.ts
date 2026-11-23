@@ -1,3 +1,4 @@
+import { MODEL_FALLBACK_PART_TYPE } from '@mastra/code-sdk/model-fallback';
 import { groupConsecutive } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ReasoningPart } from '@mastra/react/ui';
 
@@ -68,6 +69,8 @@ function classifyPart(
     case 'file':
     case 'error':
       return 'ends';
+    case MODEL_FALLBACK_PART_TYPE:
+      return draws(part, entry, suspensions) ? 'ends' : 'ignored';
     case 'tool-invocation': {
       const { toolName, toolCallId } = part.toolInvocation;
       return TOOLS_DRAWN_AS_MESSAGES.has(toolName) || suspensions.has(toolCallId) ? 'ends' : 'joins';

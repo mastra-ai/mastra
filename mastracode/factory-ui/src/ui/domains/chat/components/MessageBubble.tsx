@@ -1,3 +1,4 @@
+import { MODEL_FALLBACK_PART_TYPE, parseModelFallbackPart } from '@mastra/code-sdk/model-fallback';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
@@ -14,7 +15,14 @@ import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/message
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { PinnedKnowledgeActivity } from '@mastra/playground-ui/domains/chat/knowledge';
 import { MessageFactory } from '@mastra/react/ui';
-import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
+import type {
+  DataPart,
+  FilePart,
+  MessageRoleRenderers,
+  ReasoningPart,
+  TextPart,
+  ToolInvocationPart,
+} from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
 import { replyCredentialLabel } from '../services/reply-credential';
@@ -32,6 +40,7 @@ import {
 } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
+import { ModelFallbackActivity } from './ModelFallbackActivity';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
 import {
@@ -251,6 +260,10 @@ export function MessageBubble({
       );
     },
     File: (part: FilePart) => <UserFilePartRenderer part={part} />,
+    Data: (part: DataPart) => {
+      const fallback = part.type === MODEL_FALLBACK_PART_TYPE ? parseModelFallbackPart(part.data) : null;
+      return fallback ? <ModelFallbackActivity fallback={fallback} /> : null;
+    },
   };
 
   const view = messageEntryView(entry, parts);

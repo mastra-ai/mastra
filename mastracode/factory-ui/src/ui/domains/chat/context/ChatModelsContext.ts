@@ -3,6 +3,7 @@ import { createContext } from 'react';
 export interface ChatModelsApi {
   activeModelId: string | undefined;
   defaultModelId: string | undefined;
+  fallbackModelIds: readonly string[];
   pendingModelId: string | undefined;
   isLoading: boolean;
   error: Error | undefined;

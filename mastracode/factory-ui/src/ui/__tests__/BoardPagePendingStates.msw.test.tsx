@@ -160,6 +160,7 @@ const automationStartingRun = {
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T00:01:00.000Z',
   completedAt: null,
+  availableAt: null,
 } satisfies FactoryDecisionSummary;
 
 /** Stubs the Work board's data endpoints with one triage item and a gated transition. */
@@ -358,6 +359,7 @@ describe('Board card pending states', () => {
               createdAt: '2026-07-18T00:00:00.000Z',
               updatedAt: '2026-07-18T00:01:00.000Z',
               completedAt: null,
+              availableAt: null,
             },
           ],
         }),

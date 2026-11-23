@@ -5,13 +5,17 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
+import { usePersonalAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
 import {
   useApplyDefaultModel,
   useClearDefaultModel,
+  useDefaultModelQuery,
+  useSetDefaultFallbackModels,
   useSetDefaultModel,
 } from '../../../../../../hooks/use-default-model';
 import { ModelCombobox } from '../../ModelCombobox';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
+import { FallbackModelsEditor } from './FallbackModelsEditor';
 import { PersonalThinkingControl } from './PersonalThinkingControl';
 
 export function PersonalDefaultModelPicker({
@@ -82,5 +86,22 @@ export function PersonalDefaultModelPicker({
       )}
       {applyDefaultModel.data && <AppliedSessionsSummary result={applyDefaultModel.data} />}
     </div>
+  );
+}
+
+export function PersonalFallbackModels() {
+  const defaultModelQuery = useDefaultModelQuery();
+  const modelsQuery = usePersonalAvailableModelsQuery();
+  const setFallbackModels = useSetDefaultFallbackModels();
+
+  return (
+    <FallbackModelsEditor
+      value={defaultModelQuery.data?.fallbackModelIds ?? []}
+      primaryModelId={defaultModelQuery.data?.modelId ?? null}
+      models={modelsQuery.data}
+      disabled={defaultModelQuery.isPending}
+      error={setFallbackModels.error?.message}
+      onChange={next => setFallbackModels.mutate(next)}
+    />
   );
 }

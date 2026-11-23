@@ -26,6 +26,7 @@ export const settingsProviders: ProvidersResponse = {
 export const settingsDefaultModel: DefaultModelResponse = {
   modelId: null,
   thinkingLevel: null,
+  fallbackModelIds: [],
 };
 
 export const settingsMemory: OMConfigInfo = {

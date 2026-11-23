@@ -151,6 +151,7 @@ function decision(workItemId: string, status: FactoryDecisionStatus): FactoryDec
     createdAt: '2026-07-20T00:00:00.000Z',
     updatedAt: '2026-07-20T00:00:00.000Z',
     completedAt: null,
+    availableAt: null,
   };
 }
 

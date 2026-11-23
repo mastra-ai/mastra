@@ -14,7 +14,8 @@
  */
 
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { FACTORY_ROUTE_CONTRACTS, ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { z } from 'zod';
 
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
@@ -252,6 +253,7 @@ export interface FactoryProjectPayload {
   modelScope?: FactoryModelScope;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
+  fallbackModelIds?: string[];
 }
 
 /** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
@@ -368,74 +370,35 @@ export async function fetchFactoryProject(baseUrl: string, factoryProjectId: str
   return project;
 }
 
-/** Set (or clear, with null) the Factory's default model for factory runs. */
-export async function updateFactoryDefaultModel(
+type FactoryProjectUpdateBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema>;
+
+const FACTORY_PROJECT_FIELD_LABELS = {
+  name: 'name',
+  defaultModelId: 'default model',
+  modelScope: 'model scope',
+  defaultThinkingLevel: 'thinking level',
+  fallbackModelIds: 'fallback models',
+} satisfies Partial<Record<keyof FactoryProjectUpdateBody, string>>;
+
+type FactoryProjectChanges = Pick<FactoryProjectUpdateBody, keyof typeof FACTORY_PROJECT_FIELD_LABELS>;
+
+export async function updateFactoryProject(
   baseUrl: string,
   factoryProjectId: string,
-  defaultModelId: string | null,
+  changes: FactoryProjectChanges,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ defaultModelId }),
+    body: JSON.stringify(changes),
   });
+  const changed = Object.entries(FACTORY_PROJECT_FIELD_LABELS)
+    .filter(([field]) => field in changes)
+    .map(([, label]) => label);
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
-    'Failed to update Factory default model',
-  );
-  return project;
-}
-
-export async function renameFactoryProject(
-  baseUrl: string,
-  factoryProjectId: string,
-  name: string,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Factory name');
-  return project;
-}
-
-/** Set where the Factory's sessions and runs get their model and credentials. */
-export async function updateFactoryModelScope(
-  baseUrl: string,
-  factoryProjectId: string,
-  modelScope: FactoryModelScope,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ modelScope }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Factory model scope',
-  );
-  return project;
-}
-
-/** Set the thinking level this Factory's sessions and runs use until they pick their own. Admin-only. */
-export async function updateFactoryThinkingDefault(
-  baseUrl: string,
-  factoryProjectId: string,
-  defaultThinkingLevel: ThinkingLevelSetting,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ defaultThinkingLevel }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Factory thinking level',
+    `Failed to update Factory ${changed.join(', ')}`,
   );
   return project;
 }

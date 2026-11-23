@@ -1,10 +1,10 @@
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { DefaultModelResponse } from '../api/types';
+import { useOptimisticFieldWrite } from './optimistic-field-write';
 
 export function defaultModelQueryOptions(client: ApiClient) {
   return queryOptions({
@@ -32,40 +32,35 @@ export function useSetDefaultModel() {
   });
 }
 
-export function useSetDefaultThinkingLevel() {
-  const { client } = useApiConfig();
-  const queryClient = useQueryClient();
-  const key = queryKeys.defaultModel();
+type PersonalDefaultField = Exclude<keyof DefaultModelResponse, 'modelId'>;
 
-  return useMutation({
-    // One write at a time, so a rollback restores the value before that write.
-    scope: { id: 'personal-thinking-default' },
-    mutationFn: (thinkingLevel: ThinkingLevelSetting | null) =>
-      client.put<{ ok: true; thinkingLevel: ThinkingLevelSetting | null }>('/web/config/default-model/thinking', {
-        thinkingLevel,
-      }),
-    onMutate: async thinkingLevel => {
-      await queryClient.cancelQueries({ queryKey: key, exact: true });
-      const previous = queryClient.getQueryData<DefaultModelResponse>(key);
-      if (previous) queryClient.setQueryData<DefaultModelResponse>(key, { ...previous, thinkingLevel });
-      return { previous };
-    },
-    onError: (_error, _thinkingLevel, context) => {
-      if (context?.previous) {
-        const { thinkingLevel } = context.previous;
-        queryClient.setQueryData<DefaultModelResponse>(key, current =>
-          current ? { ...current, thinkingLevel } : current,
-        );
-      }
-      return queryClient.invalidateQueries({ queryKey: key, exact: true });
-    },
-    onSuccess: ({ thinkingLevel }) => {
-      queryClient.setQueryData<DefaultModelResponse>(key, previous =>
-        previous ? { ...previous, thinkingLevel } : previous,
-      );
-      return queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() });
-    },
+function useSetPersonalDefault<F extends PersonalDefaultField>(
+  field: F,
+  path: string,
+  onSaved?: () => Promise<unknown>,
+) {
+  const { client } = useApiConfig();
+  return useOptimisticFieldWrite<DefaultModelResponse, F, Pick<DefaultModelResponse, F>>({
+    queryKey: queryKeys.defaultModel(),
+    field,
+    write: value => client.put<Pick<DefaultModelResponse, F>>(path, { [field]: value }),
+    savedValue: saved => saved[field],
+    onSaved,
   });
+}
+
+export function useSetDefaultThinkingLevel() {
+  const queryClient = useQueryClient();
+  return useSetPersonalDefault('thinkingLevel', '/web/config/default-model/thinking', () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+  );
+}
+
+export function useSetDefaultFallbackModels() {
+  const queryClient = useQueryClient();
+  return useSetPersonalDefault('fallbackModelIds', '/web/config/default-model/fallbacks', () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+  );
 }
 
 export interface ApplyDefaultModelResponse {

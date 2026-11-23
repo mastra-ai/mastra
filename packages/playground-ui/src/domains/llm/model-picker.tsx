@@ -21,6 +21,8 @@ export interface ModelPickerProps {
   onValueChange: (value: ModelPickerValue) => void;
   /** Marked "Default" in the list. */
   defaultModel?: ModelPickerValue;
+  /** Marked "Fallback", numbered in order when there are several. */
+  fallbackModels?: readonly ModelPickerValue[];
   /** Trigger content. Defaults to the selected provider's icon and the model's readable name. */
   children?: ReactNode;
   renderProviderIcon?: (providerId: string) => ReactNode;
@@ -58,6 +60,7 @@ export function ModelPicker({
   value,
   onValueChange,
   defaultModel,
+  fallbackModels,
   children,
   renderProviderIcon = defaultProviderIcon,
   header,
@@ -147,6 +150,7 @@ export function ModelPicker({
       providers={providers}
       value={value}
       defaultModel={defaultModel}
+      fallbackModels={fallbackModels}
       onSelect={select}
       initialProviderFilter={openOnSelectedProvider ? selectedProvider?.id : undefined}
       renderProviderIcon={renderProviderIcon}

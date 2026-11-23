@@ -1,15 +1,15 @@
 import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
 import type { FactoryModelScope } from '../../workspaces/services/github';
 
-interface ScopedDefaultModels {
-  factory: string | null | undefined;
-  personal: string | null | undefined;
+interface ScopedDefaults<T> {
+  factory: T | null | undefined;
+  personal: T | null | undefined;
 }
 
-export function routedDefaultModelId(
+export function routedDefault<T>(
   modelScope: FactoryModelScope | undefined,
-  defaults: ScopedDefaultModels,
-): string | undefined {
+  defaults: ScopedDefaults<T>,
+): T | undefined {
   return (modelScope === 'factory' ? defaults.factory : defaults.personal) ?? undefined;
 }
 

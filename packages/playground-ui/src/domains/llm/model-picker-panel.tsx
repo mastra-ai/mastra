@@ -62,6 +62,7 @@ export interface ModelPickerPanelProps {
   providers: ModelPickerProvider[];
   value?: ModelPickerValue;
   defaultModel?: ModelPickerValue;
+  fallbackModels?: readonly ModelPickerValue[];
   onSelect: (value: ModelPickerValue) => void;
   /** Provider the list opens filtered to; "All" when unset. */
   initialProviderFilter?: string;
@@ -89,6 +90,7 @@ export function ModelPickerPanel({
   providers,
   value,
   defaultModel,
+  fallbackModels = [],
   onSelect,
   initialProviderFilter,
   renderProviderIcon,
@@ -121,6 +123,11 @@ export function ModelPickerPanel({
   };
   // A lone group's provider is already on screen (the trigger, or the pressed filter), so it needs no heading.
   const mixedProviders = shownProviders.length > 1;
+  const fallbackLabel = (provider: ModelPickerProvider, model: ModelPickerModel) => {
+    const position = fallbackModels.findIndex(fallback => isSameModel(fallback, provider.id, model.id));
+    if (position < 0) return undefined;
+    return fallbackModels.length > 1 ? `Fallback ${position + 1}` : 'Fallback';
+  };
   const renderOption = (provider: ModelPickerProvider, model: ModelPickerModel) => (
     <ModelPickerOption
       key={`${provider.id}/${model.id}`}
@@ -128,6 +135,7 @@ export function ModelPickerPanel({
       model={model}
       selected={isSameModel(value, provider.id, model.id)}
       isDefault={isSameModel(defaultModel, provider.id, model.id)}
+      fallbackLabel={fallbackLabel(provider, model)}
       onSelect={() => onSelect({ provider: provider.id, model: model.id })}
       renderProviderIcon={renderProviderIcon}
     />

@@ -12,9 +12,8 @@ import {
   createFactoryProject,
   deleteFactoryProject,
   fetchFactoryProject,
-  renameFactoryProject,
   unlinkRepository,
-  updateFactoryDefaultModel,
+  updateFactoryProject,
 } from '../services/github';
 import { applyCodeHostIntake } from '../services/onboardingIntake';
 import {
@@ -97,7 +96,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const factory = existing ?? (await createFactoryProject(baseUrl, repo.name, undefined, modelScope));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
-      if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
+      if (existing && existing.name !== repo.name) await updateFactoryProject(baseUrl, factory.id, { name: repo.name });
       const previouslyLinked = existing ? readOnboardingLinkedRepositories() : [];
       await link.mutateAsync({
         factoryProjectId: factory.id,
@@ -115,7 +114,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
         },
       });
       await Promise.all([
-        updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
+        updateFactoryProject(baseUrl, factory.id, { defaultModelId: plan.factoryModelId }),
         plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
         codeHostSync
           ? applyCodeHostIntake(baseUrl, { factoryProjectId: factory.id, repository: repo }).catch(warnIntakeNotApplied)

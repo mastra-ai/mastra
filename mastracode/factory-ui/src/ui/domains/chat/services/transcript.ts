@@ -1,3 +1,8 @@
+import {
+  MODEL_FALLBACK_PART_TYPE,
+  modelFallbackNoticeText,
+  parseModelFallbackPart,
+} from '@mastra/code-sdk/model-fallback';
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ToolCallExit } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
@@ -183,7 +188,9 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       };
     case 'mergeWindow': {
       const merged = settleCommandExits(
-        dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages),
+        dropNoticesShownAsModelFallbacks(
+          dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages),
+        ),
         action.messages,
       );
       // `pending` is otherwise cleared only by live stream events. When the
@@ -210,8 +217,10 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':
       return { ...state, entries: state.entries.filter(e => !('id' in e) || e.id !== action.id) };
-    case 'event':
-      return applyEvent(state, action.event, action.viewerId, action.opensStream);
+    case 'event': {
+      const next = applyEvent(state, action.event, action.viewerId, action.opensStream);
+      return action.event.type === 'info' ? dropNoticesShownAsModelFallbacks(next) : next;
+    }
     default:
       return state;
   }
@@ -826,6 +835,29 @@ function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMess
     if (entry.kind === 'notice' && isSavedError(savedByTurn.get(turn), entry.error)) continue;
     entries.push(entry);
   }
+  return entries.length === state.entries.length ? state : { ...state, entries };
+}
+
+function dropNoticesShownAsModelFallbacks(state: TranscriptState): TranscriptState {
+  const savedByTurn = new Map<number, Set<string>>();
+  let turn = -1;
+  for (const [index, entry] of state.entries.entries()) {
+    if (opensTurn(entry)) turn = index;
+    for (const part of partsOfMessageEntry(entry)) {
+      if (part.type !== MODEL_FALLBACK_PART_TYPE || !('data' in part)) continue;
+      const data = parseModelFallbackPart(part.data);
+      if (!data) continue;
+      const texts = savedByTurn.get(turn) ?? new Set<string>();
+      savedByTurn.set(turn, texts.add(modelFallbackNoticeText(data)));
+    }
+  }
+  if (savedByTurn.size === 0) return state;
+
+  turn = -1;
+  const entries = state.entries.filter((entry, index) => {
+    if (opensTurn(entry)) turn = index;
+    return !(entry.kind === 'notice' && entry.level === 'info' && savedByTurn.get(turn)?.has(entry.text));
+  });
   return entries.length === state.entries.length ? state : { ...state, entries };
 }
 

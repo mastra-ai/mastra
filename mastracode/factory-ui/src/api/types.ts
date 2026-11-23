@@ -146,6 +146,7 @@ export interface CustomProvidersResponse {
 export interface DefaultModelResponse {
   modelId: string | null;
   thinkingLevel: ThinkingLevelSetting | null;
+  fallbackModelIds: string[];
 }
 
 export interface OMResponse {

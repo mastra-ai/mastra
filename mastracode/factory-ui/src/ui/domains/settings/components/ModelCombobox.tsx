@@ -1,12 +1,13 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { MODEL_ID_PATTERN } from '@mastra/factory/model-id';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 
@@ -67,6 +68,8 @@ export function ModelCombobox({
   auto,
   fallbackModelId,
   placeholder,
+  showChevron,
+  id,
   disabled,
   className,
   variant,
@@ -78,13 +81,16 @@ export function ModelCombobox({
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
   fallbackModelId?: string;
-  placeholder?: string;
+  placeholder?: ComboboxSingleProps['placeholder'];
+  showChevron?: boolean;
+  id?: string;
   disabled?: boolean;
   className?: string;
   variant?: ComboboxSingleProps['variant'];
   size?: ComboboxSingleProps['size'];
   'aria-label'?: string;
 }) {
+  const [query, setQuery] = useState('');
   const autoEffectiveModelId = auto ? (auto.effectiveModelId ?? null) : undefined;
   const options = useMemo(() => {
     const catalog = models
@@ -114,8 +120,11 @@ export function ModelCombobox({
       }
       searchPlaceholder="Search models"
       emptyText="No matching model."
-      allowCustomValue
+      allowCustomValue={MODEL_ID_PATTERN.test(query.trim())}
+      onInputValueChange={setQuery}
       disabled={disabled}
+      showChevron={showChevron}
+      id={id}
       className={className}
       variant={variant}
       size={size}

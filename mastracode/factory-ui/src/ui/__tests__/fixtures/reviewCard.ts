@@ -99,4 +99,5 @@ export const reviewDecision: FactoryDecisionSummary = {
   createdAt: reviewCandidate.createdAt,
   updatedAt: reviewCandidate.updatedAt,
   completedAt: null,
+  availableAt: null,
 };

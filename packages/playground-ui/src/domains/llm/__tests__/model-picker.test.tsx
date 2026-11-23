@@ -20,15 +20,19 @@ function openPicker(
   providers: ModelPickerProvider[],
   {
     defaultModel,
+    fallbackModels,
     openOnSelectedProvider,
     reset,
     onValueChange = () => {},
-  }: Partial<Pick<ModelPickerProps, 'defaultModel' | 'openOnSelectedProvider' | 'reset' | 'onValueChange'>> = {},
+  }: Partial<
+    Pick<ModelPickerProps, 'defaultModel' | 'fallbackModels' | 'openOnSelectedProvider' | 'reset' | 'onValueChange'>
+  > = {},
 ) {
   render(
     <ModelPicker
       providers={providers}
       defaultModel={defaultModel}
+      fallbackModels={fallbackModels}
       openOnSelectedProvider={openOnSelectedProvider}
       reset={reset}
       value={{ provider: 'anthropic', model: 'claude-sonnet-4-6' }}
@@ -156,6 +160,35 @@ describe('ModelPicker', () => {
     );
 
     expect(optionNames(list)).toEqual(['Claude Opus 4.7', 'Claude Sonnet 4.6Default', 'Claude Haiku 4.5']);
+  });
+
+  it('given fallback models, numbers each in route order next to the default', () => {
+    const list = openPicker(
+      [
+        {
+          id: 'anthropic',
+          name: 'Anthropic',
+          models: [
+            { id: 'claude-sonnet-4-6', releaseDate: '2026-02-17' },
+            { id: 'claude-haiku-4-5' },
+            { id: 'claude-opus-4-7', releaseDate: '2026-04-16' },
+          ],
+        },
+      ],
+      {
+        defaultModel: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+        fallbackModels: [
+          { provider: 'anthropic', model: 'claude-haiku-4-5' },
+          { provider: 'anthropic', model: 'claude-opus-4-7' },
+        ],
+      },
+    );
+
+    expect(optionNames(list)).toEqual([
+      'Claude Opus 4.7Fallback 2',
+      'Claude Sonnet 4.6Default',
+      'Claude Haiku 4.5Fallback 1',
+    ]);
   });
 
   it('given several providers, leads every row with its own provider logo', () => {

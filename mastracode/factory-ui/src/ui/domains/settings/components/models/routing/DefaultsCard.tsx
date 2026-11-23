@@ -5,7 +5,7 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { useLocation } from 'react-router';
 
@@ -24,17 +24,20 @@ export function DefaultsCard({
   inUse,
   anchorRef,
   model,
+  fallbacks,
   providers,
 }: {
   defaults: ModelDefaults;
   inUse: boolean;
   anchorRef?: Ref<HTMLElement>;
   model: ReactNode;
+  fallbacks: ReactNode;
   providers: ReactNode;
 }) {
   const anchor = MODEL_DEFAULTS_ANCHORS[defaults];
   const openedByLink = useLocation().hash === `#${anchor}`;
   const [expanded, setExpanded] = useState(openedByLink);
+  const fallbacksLabelId = useId();
 
   return (
     <SettingsContainer>
@@ -71,6 +74,12 @@ export function DefaultsCard({
               </FieldLabel>
               {model}
             </Field>
+            <div role="group" aria-labelledby={fallbacksLabelId} className="flex flex-col gap-2">
+              <Txt as="span" id={fallbacksLabelId} variant="caption" tone="muted">
+                Fallbacks
+              </Txt>
+              {fallbacks}
+            </div>
             <div className="flex flex-col gap-2">
               <Txt as="span" variant="caption" tone="muted">
                 Providers

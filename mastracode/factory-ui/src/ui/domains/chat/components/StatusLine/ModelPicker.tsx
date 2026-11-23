@@ -1,3 +1,4 @@
+import { fallbackModelIdsToTry } from '@mastra/code-sdk/model-fallback';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
@@ -53,9 +54,10 @@ function canSwitchModel({
 
 function useModelSwitch() {
   const chatSession = useChatSessionContext();
-  const { activeModelId, defaultModelId, pendingModelId, setModel } = useChatModels();
+  const { activeModelId, defaultModelId, fallbackModelIds, pendingModelId, setModel } = useChatModels();
   const { catalogTarget, modelScope, scopeLoading } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
+  const inCatalog = (modelId: string) => Boolean(modelsQuery.data?.some(model => model.id === modelId));
 
   const selectedModelId = pendingModelId ?? activeModelId;
   const busy = Boolean(pendingModelId);
@@ -72,6 +74,7 @@ function useModelSwitch() {
     activeModelId,
     selectedModelId,
     defaultModelId,
+    fallbackModelIds: selectedModelId ? fallbackModelIdsToTry(selectedModelId, fallbackModelIds, inCatalog) : [],
     scopeLoading,
     busy,
     switchable: canSwitchModel(chatSession),
@@ -115,7 +118,7 @@ function ModelMenu({
   unavailableReason,
   children,
 }: ModelMenuProps) {
-  const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
+  const { modelsQuery, selectedModelId, defaultModelId, fallbackModelIds, canReset, locked, pickModel } = modelSwitch;
   const location = useLocation();
   const { factoryId, modelScope } = useChatModelScope();
   const organizationScoped = useOrganizationScopedFactory();
@@ -124,7 +127,10 @@ function ModelMenu({
     name: providerDisplayName(provider),
     models: models.map(model => ({ id: withinProvider(provider, model.id), releaseDate: model.releaseDate })),
   }));
-  const defaultProvider = modelsQuery.data?.find(option => option.id === defaultModelId)?.provider;
+  const pickerValue = (modelId: string) => {
+    const option = modelsQuery.data?.find(candidate => candidate.id === modelId);
+    return option ? { provider: option.provider, model: withinProvider(option.provider, modelId) } : undefined;
+  };
   const toModelId = (provider: string, model: string) =>
     modelsQuery.data?.find(
       option => option.provider === provider && (option.id === `${provider}/${model}` || option.id === model),
@@ -142,11 +148,8 @@ function ModelMenu({
         const modelId = toModelId(provider, model);
         if (modelId) pickModel(modelId);
       }}
-      defaultModel={
-        defaultModelId && defaultProvider
-          ? { provider: defaultProvider, model: withinProvider(defaultProvider, defaultModelId) }
-          : undefined
-      }
+      defaultModel={defaultModelId ? pickerValue(defaultModelId) : undefined}
+      fallbackModels={fallbackModelIds.flatMap(modelId => pickerValue(modelId) ?? [])}
       renderProviderIcon={renderProviderIcon}
       header={<ModelCredentialSummary modelId={selectedModelId} />}
       settings={settings}

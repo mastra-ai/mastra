@@ -10,6 +10,7 @@ interface ModelPickerOptionProps {
   model: ModelPickerModel;
   selected: boolean;
   isDefault: boolean;
+  fallbackLabel?: string;
   onSelect: () => void;
   renderProviderIcon: (providerId: string) => ReactNode;
 }
@@ -19,6 +20,7 @@ export function ModelPickerOption({
   model,
   selected,
   isDefault,
+  fallbackLabel,
   onSelect,
   renderProviderIcon,
 }: ModelPickerOptionProps) {
@@ -37,6 +39,11 @@ export function ModelPickerOption({
       {isDefault ? (
         <Badge variant="blue" size="xs">
           Default
+        </Badge>
+      ) : null}
+      {fallbackLabel ? (
+        <Badge variant="neutral" size="xs">
+          {fallbackLabel}
         </Badge>
       ) : null}
       {selected ? <IconCheckmark2Medium aria-hidden className="ml-auto shrink-0" /> : null}

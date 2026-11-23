@@ -1,14 +1,20 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
+import type { QueryClient } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { PathParams } from 'msw';
+import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
+import { createQueryClient } from '../../../../../../query-client';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
@@ -17,6 +23,8 @@ import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
 import { ChangeModelAction, ModelPicker } from '../ModelPicker';
 import { datedModels } from '../../../../settings/components/__tests__/fixtures/models';
+import { FactoryFallbackModels } from '../../../../settings/components/models/defaults/FactoryDefaultModel';
+import { PersonalFallbackModels } from '../../../../settings/components/models/defaults/PersonalDefaultModelPicker';
 
 /** Opens the model picker and returns its thinking section, named by level and origin. */
 async function openThinking(
@@ -28,6 +36,34 @@ async function openThinking(
   await waitFor(() => expect(trigger).toBeEnabled(), options);
   if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger);
   return screen.findByRole('group', { name }, options);
+}
+
+async function addFallbackByTyping(user: UserEvent, modelId: string) {
+  const add = await screen.findByRole('combobox', { name: 'Add fallback' });
+  await waitFor(() => expect(add).toBeEnabled());
+  await user.click(add);
+  await user.type(await screen.findByPlaceholderText('Search models'), modelId);
+  const custom = await screen.findByRole('option', { name: `Use “${modelId}”` });
+  fireEvent.pointerDown(custom, { pointerType: 'mouse' });
+  fireEvent.click(custom, { detail: 1 });
+}
+
+async function openSessionPicker(user: UserEvent) {
+  const trigger = await screen.findByLabelText(/^Session model/);
+  await waitFor(() => expect(trigger).toBeEnabled());
+  await user.click(trigger);
+}
+
+async function closeSessionPicker(user: UserEvent) {
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryAllByRole('option')).toEqual([]));
+}
+
+function fallbackBadges(modelId: string) {
+  const option = screen.getByRole('option', { name: name => name.includes(formatModelName(modelId)) });
+  return within(option)
+    .queryAllByText(/^Fallback( \d)?$/)
+    .map(badge => badge.textContent);
 }
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -84,6 +120,8 @@ function renderPicker({
   sessionPolicy,
   catalog = models,
   withChangeModelAction = false,
+  settings,
+  client,
 }: {
   catalog?: AvailableModelOption[];
   kind?: ChatSessionContextApi['kind'];
@@ -103,12 +141,15 @@ function renderPicker({
     modelScope: 'factory' | 'user';
     defaultModelId: string | null;
     personalThinkingLevel?: ThinkingLevelSetting | null;
+    fallbackModelIds?: string[];
   };
   /** The Factory's scope has no credentials, so its catalog is empty. */
   emptyCatalog?: boolean;
   /** The session catalog request fails. */
   catalogFails?: boolean;
   withChangeModelAction?: boolean;
+  settings?: ReactNode;
+  client?: QueryClient;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
@@ -136,9 +177,10 @@ function renderPicker({
               ? (factoryDefaultModelId ?? null)
               : defaultModelId,
           personalThinkingLevel: sessionPolicy?.personalThinkingLevel ?? null,
+          fallbackModelIds: sessionPolicy?.fallbackModelIds ?? [],
           models: emptyCatalog
             ? []
-            : models.filter(model => model.provider === (effectiveScope === 'factory' ? 'openai' : 'anthropic')),
+            : catalog.filter(model => model.provider === (effectiveScope === 'factory' ? 'openai' : 'anthropic')),
         });
       }
       if (emptyCatalog) return HttpResponse.json({ models: [] });
@@ -224,6 +266,7 @@ function renderPicker({
             <ModelPicker />
             {withChangeModelAction ? <ChangeModelAction /> : null}
             <Toaster position="bottom-right" />
+            {settings}
           </ChatThinkingProvider>
         </ChatModelsProvider>
       </ChatConnectionContext.Provider>
@@ -239,6 +282,7 @@ function renderPicker({
     ) : (
       <MemoryRouter>{picker}</MemoryRouter>
     ),
+    client,
   );
   return { ...rendered, modelSwitches, stateUpdates };
 }
@@ -423,6 +467,124 @@ describe('ModelPicker', () => {
     expect(screen.getByText('OpenAI')).toBeInTheDocument();
     const defaultOption = screen.getByRole('option', { name: /Claude Sonnet 4\.6/ });
     expect(within(defaultOption).getByText('Default')).toBeInTheDocument();
+  });
+
+  it('marks only the fallbacks a request will try, numbered in route order', async () => {
+    const user = userEvent.setup();
+    renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      catalog: [
+        ...models,
+        { id: 'anthropic/claude-opus-4-7', provider: 'anthropic', modelName: 'claude-opus-4-7', hasApiKey: true },
+        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
+      ],
+      sessionPolicy: {
+        modelScope: 'user',
+        defaultModelId: 'anthropic/claude-sonnet-4-6',
+        fallbackModelIds: [
+          'anthropic/claude-without-key',
+          'anthropic/claude-sonnet-4-6',
+          'anthropic/claude-haiku-4-5',
+          'anthropic/claude-opus-4-7',
+          'anthropic/claude-haiku-4-5',
+        ],
+      },
+    });
+
+    await user.click(await screen.findByLabelText('Session model'));
+
+    expect(
+      within(await screen.findByRole('option', { name: /Claude Haiku 4\.5/ })).getByText('Fallback 1'),
+    ).toBeVisible();
+    expect(within(screen.getByRole('option', { name: /Claude Opus 4\.7/ })).getByText('Fallback 2')).toBeVisible();
+    expect(within(screen.getByRole('option', { name: /Claude Sonnet 4\.6/ })).queryByText(/Fallback/)).toBeNull();
+  });
+
+  it('marks a personal fallback saved in settings without reopening the session', async () => {
+    const haiku = 'anthropic/claude-haiku-4-5';
+    const sessionPolicy: { modelScope: 'user'; defaultModelId: string; fallbackModelIds: string[] } = {
+      modelScope: 'user',
+      defaultModelId: 'anthropic/claude-sonnet-4-6',
+      fallbackModelIds: [],
+    };
+    const user = userEvent.setup();
+    const { client } = renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      catalog: [...models, { id: haiku, provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true }],
+      sessionPolicy,
+      settings: <PersonalFallbackModels />,
+      client: createQueryClient(),
+    });
+    server.use(
+      http.put<PathParams, { fallbackModelIds: string[] }>(
+        `${TEST_BASE_URL}/web/config/default-model/fallbacks`,
+        async ({ request }) => {
+          const { fallbackModelIds } = await request.json();
+          sessionPolicy.fallbackModelIds = fallbackModelIds;
+          return HttpResponse.json({ fallbackModelIds });
+        },
+      ),
+    );
+
+    await openSessionPicker(user);
+    expect(await waitFor(() => fallbackBadges(haiku))).toEqual([]);
+    await closeSessionPicker(user);
+    await addFallbackByTyping(user, haiku);
+    await waitForMutationsIdle(client);
+
+    expect(sessionPolicy.fallbackModelIds).toEqual([haiku]);
+    await openSessionPicker(user);
+    await waitFor(() => expect(fallbackBadges(haiku)).toEqual(['Fallback']));
+  });
+
+  it('marks a Factory fallback saved in settings without reopening the session', async () => {
+    const mini = 'openai/gpt-5-mini';
+    const sessionPolicy: { modelScope: 'factory'; defaultModelId: string; fallbackModelIds: string[] } = {
+      modelScope: 'factory',
+      defaultModelId: 'openai/gpt-5',
+      fallbackModelIds: [],
+    };
+    const user = userEvent.setup();
+    const { client } = renderPicker({
+      modelScope: 'factory',
+      modelId: 'openai/gpt-5',
+      factoryDefaultModelId: 'openai/gpt-5',
+      catalog: [...models, { id: mini, provider: 'openai', modelName: 'gpt-5-mini', hasApiKey: true }],
+      sessionPolicy,
+      settings: <FactoryFallbackModels factoryId="fp-1" />,
+      client: createQueryClient(),
+    });
+    server.use(
+      http.patch<PathParams, { fallbackModelIds: string[] }>(
+        `${TEST_BASE_URL}/web/factory/projects/fp-1`,
+        async ({ request }) => {
+          const { fallbackModelIds } = await request.json();
+          sessionPolicy.fallbackModelIds = fallbackModelIds;
+          return HttpResponse.json({
+            project: {
+              id: 'fp-1',
+              name: 'Mastra',
+              modelScope: 'factory',
+              defaultModelId: 'openai/gpt-5',
+              defaultThinkingLevel: 'low',
+              fallbackModelIds,
+            },
+          });
+        },
+      ),
+    );
+
+    await openSessionPicker(user);
+    expect(await waitFor(() => fallbackBadges(mini))).toEqual([]);
+    await closeSessionPicker(user);
+    await addFallbackByTyping(user, mini);
+    await waitForMutationsIdle(client);
+
+    expect(sessionPolicy.fallbackModelIds).toEqual([mini]);
+    await openSessionPicker(user);
+    await waitFor(() => expect(fallbackBadges(mini)).toEqual(['Fallback']));
   });
 
   it("links to the Factory's model settings to connect another provider", async () => {

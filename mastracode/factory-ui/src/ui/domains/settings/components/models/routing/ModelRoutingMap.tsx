@@ -5,8 +5,9 @@ import { useState } from 'react';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { FactoryDefaultModel } from '../defaults/FactoryDefaultModel';
+import { FactoryDefaultModel, FactoryFallbackModels } from '../defaults/FactoryDefaultModel';
 import { PersonalDefaultModel } from '../defaults/PersonalDefaultModel';
+import { PersonalFallbackModels } from '../defaults/PersonalDefaultModelPicker';
 import { ProviderList } from '../providers/ProviderList';
 import { DefaultsCard } from './DefaultsCard';
 import { LaneCard, LaneSource } from './LaneCard';
@@ -58,6 +59,7 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
             inUse={defaultsInUse(modelScope, 'personal')}
             anchorRef={anchors.personal}
             model={<PersonalDefaultModel />}
+            fallbacks={<PersonalFallbackModels />}
             providers={<ProviderList credentialScope="user" />}
           />
           <DefaultsCard
@@ -65,6 +67,7 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
             inUse={defaultsInUse(modelScope, 'factory')}
             anchorRef={anchors.factory}
             model={<FactoryDefaultModel factoryId={factoryId} />}
+            fallbacks={<FactoryFallbackModels factoryId={factoryId} />}
             providers={<ProviderList credentialScope="org" />}
           />
         </>

@@ -6,7 +6,7 @@ import { queryKeys } from '../../../../api/keys';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../../../../hooks/useIntakeConfig';
 import { fetchIntakeConfig, IntakeBindingConflictError, selectIntakeSource } from '../../factory/services/intake';
-import { updateFactoryDefaultModel } from '../services/github';
+import { updateFactoryProject } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
 import type { CreateFactoryDraft } from './useCreateFactoryFlow';
 
@@ -79,7 +79,7 @@ export function useCreateFactoryFromDraft({
       }
 
       await Promise.all([
-        updateFactoryDefaultModel(baseUrl, factory.id, modelId),
+        updateFactoryProject(baseUrl, factory.id, { defaultModelId: modelId }),
         draft.linearProjectId
           ? feedProject({
               integrationId: 'linear',
