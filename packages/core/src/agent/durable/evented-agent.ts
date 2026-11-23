@@ -13,7 +13,7 @@ import type { ToolsInput } from '../types';
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
 
-import { EventedExecutionEngine } from './execution-engine';
+import { EventedAgentExecutionEngine } from './execution-engine';
 
 /**
  * Configuration for EventedAgent - wraps an existing Agent with fire-and-forget execution
@@ -102,8 +102,8 @@ export class EventedAgent<
     return 'evented';
   }
 
-  protected override createExecutionEngine(mastra?: Mastra): EventedExecutionEngine {
-    return new EventedExecutionEngine(this.id, mastra);
+  protected override createExecutionEngine(mastra?: Mastra): EventedAgentExecutionEngine {
+    return new EventedAgentExecutionEngine(this.id, mastra);
   }
 }
 

@@ -30,7 +30,7 @@ import {
   stopAbandonedDurableExecution,
   stopDurableExecutionParticipants,
 } from './evented-execution';
-import { EventedExecutionEngine as DurableEventedExecutionEngine } from './execution-engine';
+import { EventedAgentExecutionEngine } from './execution-engine';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -69,7 +69,7 @@ it.each([false, true])(
       runId: 'observer-run',
       mode: 'acquire',
     });
-    const engine = new DurableEventedExecutionEngine('agent', mastra);
+    const engine = new EventedAgentExecutionEngine('agent', mastra);
     const error = unverified
       ? new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
           agentId: 'agent',

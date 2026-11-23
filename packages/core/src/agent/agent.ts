@@ -242,7 +242,7 @@ import type {
   DurableAgentStreamResult,
 } from './durable/durable-agent';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable/durable-stream-until-idle';
-import { DurableExecutionEngine, EventedExecutionEngine } from './durable/execution-engine';
+import { DefaultAgentExecutionEngine, EventedAgentExecutionEngine } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
 import {
   assertExecutionOwned,
@@ -1245,19 +1245,19 @@ export class Agent<
     return this.#mastra?.getLogger() ?? this.logger;
   }
 
-  #executionEngine?: DurableExecutionEngine;
+  #executionEngine?: DefaultAgentExecutionEngine;
 
-  #resolveExecutionEngine(): DurableExecutionEngine | undefined {
+  #resolveExecutionEngine(): DefaultAgentExecutionEngine | undefined {
     return (this.#executionEngine ??= this.createExecutionEngine(this.#mastra));
   }
 
   /** @internal One execution owner per Agent, initialized without starting a workflow. */
-  protected get executionEngine(): DurableExecutionEngine {
+  protected get executionEngine(): DefaultAgentExecutionEngine {
     return this.#resolveExecutionEngine() ?? this.#requireDurableExecution('execution');
   }
 
   /** @internal Legacy wrappers provide synchronous engine construction. */
-  protected createExecutionEngine(_mastra?: Mastra): DurableExecutionEngine | undefined {
+  protected createExecutionEngine(_mastra?: Mastra): DefaultAgentExecutionEngine | undefined {
     return undefined;
   }
 
@@ -1266,7 +1266,7 @@ export class Agent<
    * native agents build the engine their policy selects, freezing the policy first.
    * Undefined when no engine is selected.
    */
-  #ensureExecutionEngine(): DurableExecutionEngine | undefined {
+  #ensureExecutionEngine(): DefaultAgentExecutionEngine | undefined {
     const existing = this.#resolveExecutionEngine();
     if (existing) return existing;
     const engine = this.#executionEnginePolicy.engine;
@@ -1274,8 +1274,8 @@ export class Agent<
     this.#beginExecutionPolicy();
     return (this.#executionEngine =
       engine === 'evented'
-        ? new EventedExecutionEngine(this.id, this.#mastra)
-        : new DurableExecutionEngine(this.id, this.#mastra));
+        ? new EventedAgentExecutionEngine(this.id, this.#mastra)
+        : new DefaultAgentExecutionEngine(this.id, this.#mastra));
   }
 
   /** @internal Register native durable workflows before execution workers subscribe. */
@@ -13009,7 +13009,7 @@ export class Agent<
   protected get workflowEngine(): 'default' | 'evented' {
     return this.#executionEnginePolicy.engine === 'evented' ? 'evented' : 'default';
   }
-  protected getWorkflow(): ReturnType<DurableExecutionEngine['getWorkflow']> {
+  protected getWorkflow(): ReturnType<DefaultAgentExecutionEngine['getWorkflow']> {
     return this.executionEngine.getWorkflow({
       workflowEngine: this.workflowEngine,
       storesRunsInJournal: false,
@@ -14152,7 +14152,7 @@ export class Agent<
     const performCleanup = runCleanup.run;
     const scheduleAutoCleanup = runCleanup.schedule;
 
-    let workflow: ReturnType<DurableExecutionEngine['getWorkflow']>;
+    let workflow: ReturnType<DefaultAgentExecutionEngine['getWorkflow']>;
     try {
       this.executionEngine.assertRecoveryActive();
       workflow = this.getWorkflow();

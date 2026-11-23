@@ -17,7 +17,7 @@ import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } fro
 import type { AgentStreamsConfig } from '../streams/types';
 import type { AgentDurableOption, ToolsInput } from '../types';
 
-import { DurableExecutionEngine } from './execution-engine';
+import { DefaultAgentExecutionEngine } from './execution-engine';
 import type { ExtendedRunRegistry } from './run-registry';
 import type {
   AgentAbortEventData,
@@ -650,8 +650,8 @@ export class DurableAgent<
   TOutput = undefined,
 > extends Agent<TAgentId, TTools, TOutput> {
   /** @internal Subclasses supply their default engine without changing workflow fallback policy. */
-  protected override createExecutionEngine(mastra?: Mastra): DurableExecutionEngine {
-    return new DurableExecutionEngine(this.id, mastra);
+  protected override createExecutionEngine(mastra?: Mastra): DefaultAgentExecutionEngine {
+    return new DefaultAgentExecutionEngine(this.id, mastra);
   }
 
   protected override get returnsDurableStreamResult(): boolean {

@@ -70,7 +70,7 @@ export interface DurableWorkflowOptions {
   guardrailLogger?: IMastraLogger;
 }
 
-export class DurableExecutionEngine {
+export class DefaultAgentExecutionEngine {
   #workflow: DurableWorkflow | null = null;
   #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
   #warnedPersistencePolicy = false;
@@ -986,10 +986,10 @@ export class DurableExecutionEngine {
 
 /**
  * Evented engine variant. Lives in this module, right after its parent, so the
- * `extends` never runs while `DurableExecutionEngine` is still loading:
+ * `extends` never runs while `DefaultAgentExecutionEngine` is still loading:
  * this module's imports lead back to `Agent`, which imports both engines.
  */
-export class EventedExecutionEngine extends DurableExecutionEngine {
+export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   #warnedUnfencedSharedExecution = false;
 
   override get executionMode(): 'blocking' | 'background' {
