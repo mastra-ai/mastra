@@ -1710,6 +1710,9 @@ export class MemoryLibSQL extends MemoryStorage {
       );
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
+      // The `update` callback runs inside the transaction, so an error it throws — including a
+      // MastraError — is the caller's to see unchanged, as the base implementation and pg do.
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD_METADATA', 'FAILED'),

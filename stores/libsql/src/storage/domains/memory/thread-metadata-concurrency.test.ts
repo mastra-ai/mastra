@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Client } from '@libsql/client';
 import { createClient } from '@libsql/client';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { RunFence } from '@mastra/core/storage';
 import { isRunFenceConflictError } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -13,6 +14,34 @@ import { MemoryLibSQL } from './index';
 const ROUNDS = 25;
 const THREAD_ID = 'thread-1';
 const RESOURCE_ID = 'resource-1';
+
+function expectedKeys(): Record<string, unknown> {
+  const expected: Record<string, unknown> = { seed: true };
+  for (let i = 0; i < ROUNDS; i++) {
+    expected[`a${i}`] = i;
+    expected[`b${i}`] = i;
+  }
+  return expected;
+}
+
+async function storedMetadata(store: MemoryLibSQL): Promise<Record<string, unknown>> {
+  const thread = await store.getThreadById({ threadId: THREAD_ID });
+  return thread!.metadata as Record<string, unknown>;
+}
+
+async function seedThread(store: MemoryLibSQL): Promise<void> {
+  await store.deleteThread({ threadId: THREAD_ID });
+  await store.saveThread({
+    thread: {
+      id: THREAD_ID,
+      resourceId: RESOURCE_ID,
+      title: 'Test thread',
+      metadata: { seed: true },
+      createdAt: new Date('2025-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2025-01-01T00:00:00.000Z'),
+    },
+  });
+}
 
 /**
  * Thread metadata writes are a read-modify-write: read the thread, merge the new keys, write the
@@ -51,32 +80,8 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
   });
 
   beforeEach(async () => {
-    await a.deleteThread({ threadId: THREAD_ID });
-    await a.saveThread({
-      thread: {
-        id: THREAD_ID,
-        resourceId: RESOURCE_ID,
-        title: 'Test thread',
-        metadata: { seed: true },
-        createdAt: new Date('2025-01-01T00:00:00.000Z'),
-        updatedAt: new Date('2025-01-01T00:00:00.000Z'),
-      },
-    });
+    await seedThread(a);
   });
-
-  function expectedKeys(): Record<string, unknown> {
-    const expected: Record<string, unknown> = { seed: true };
-    for (let i = 0; i < ROUNDS; i++) {
-      expected[`a${i}`] = i;
-      expected[`b${i}`] = i;
-    }
-    return expected;
-  }
-
-  async function storedMetadata(store: MemoryLibSQL = a): Promise<Record<string, unknown>> {
-    const thread = await store.getThreadById({ threadId: THREAD_ID });
-    return thread!.metadata as Record<string, unknown>;
-  }
 
   it('updateThread keeps every key when two writers update the same thread concurrently', async () => {
     for (let i = 0; i < ROUNDS; i++) {
@@ -86,7 +91,7 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
       ]);
     }
 
-    expect(await storedMetadata()).toEqual(expectedKeys());
+    expect(await storedMetadata(a)).toEqual(expectedKeys());
   });
 
   it('updateThreadMetadata keeps every key when two writers write whole objects concurrently', async () => {
@@ -105,14 +110,14 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
       ]);
     }
 
-    expect(await storedMetadata()).toEqual(expectedKeys());
+    expect(await storedMetadata(a)).toEqual(expectedKeys());
   });
 
   it('updateThread updates the title alone and leaves metadata untouched', async () => {
     const updated = await a.updateThread({ id: THREAD_ID, title: 'renamed' });
 
     expect(updated.title).toBe('renamed');
-    expect(await storedMetadata()).toEqual({ seed: true });
+    expect(await storedMetadata(a)).toEqual({ seed: true });
   });
 
   it('updateThread rejects a missing thread', async () => {
@@ -123,7 +128,7 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
     await a.updateThread({ id: THREAD_ID, metadata: { extra: 1 } });
     await a.updateThread({ id: THREAD_ID, metadata: { extra: undefined } });
 
-    expect(await storedMetadata()).toEqual({ seed: true });
+    expect(await storedMetadata(a)).toEqual({ seed: true });
   });
 
   it('updateThreadMetadata respects resourceId, missing threads, and no-op updates', async () => {
@@ -141,7 +146,27 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
     const noop = await a.updateThreadMetadata({ id: THREAD_ID, update: () => undefined });
     expect(noop).not.toBeNull();
     expect(noop!.updatedAt).toEqual(before!.updatedAt);
-    expect(await storedMetadata()).toEqual({ seed: true });
+    expect(await storedMetadata(a)).toEqual({ seed: true });
+  });
+
+  it('updateThreadMetadata passes a MastraError from the callback through unchanged', async () => {
+    const thrown = new MastraError({
+      id: 'TEST_THREAD_METADATA_CALLBACK_ERROR',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'callback failed',
+    });
+
+    await expect(
+      a.updateThreadMetadata({
+        id: THREAD_ID,
+        update: () => {
+          throw thrown;
+        },
+      }),
+    ).rejects.toBe(thrown);
+
+    expect(await storedMetadata(a)).toEqual({ seed: true });
   });
 
   it('updateThreadMetadata rejects a stale fence', async () => {
@@ -158,6 +183,67 @@ describe('MemoryLibSQL thread metadata concurrency', () => {
     );
 
     expect(isRunFenceConflictError(error)).toBe(true);
-    expect(await storedMetadata()).toEqual({ seed: true });
+    expect(await storedMetadata(a)).toEqual({ seed: true });
+  });
+});
+
+/**
+ * The stores above are given clients that are already wrapped, which is the shape `LibSQLStore`
+ * produces. Built from a `url` a domain instead makes its own client through `resolveClient`, and
+ * that is where the same wrapping has to happen: nothing stops a second url-built store, a
+ * `LibSQLStore`, or a workflow domain from opening the same local file, and the write transaction
+ * each metadata write holds across its read would otherwise stall the other until its busy timeout
+ * expires — the write lock never gets released, so the update fails rather than merging.
+ */
+describe('MemoryLibSQL url-built clients on one file', () => {
+  let tmpDir: string;
+  let a: MemoryLibSQL;
+  let b: MemoryLibSQL;
+
+  beforeAll(async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'libsql-thread-metadata-url-'));
+    const url = `file:${join(tmpDir, 'db.sqlite')}`;
+    a = new MemoryLibSQL({ url, maxRetries: 5, initialBackoffMs: 10 });
+    b = new MemoryLibSQL({ url, maxRetries: 5, initialBackoffMs: 10 });
+    await a.init();
+    await b.init();
+  });
+
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    await seedThread(a);
+  });
+
+  it('updateThread keeps every key when both stores are built from a url', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      await Promise.all([
+        a.updateThread({ id: THREAD_ID, metadata: { [`a${i}`]: i } }),
+        b.updateThread({ id: THREAD_ID, metadata: { [`b${i}`]: i } }),
+      ]);
+    }
+
+    expect(await storedMetadata(a)).toEqual(expectedKeys());
+  });
+
+  it('updateThreadMetadata keeps every key when both stores are built from a url', async () => {
+    for (let i = 0; i < ROUNDS; i++) {
+      await Promise.all([
+        a.updateThreadMetadata({
+          id: THREAD_ID,
+          resourceId: RESOURCE_ID,
+          update: thread => ({ ...thread.metadata, [`a${i}`]: i }),
+        }),
+        b.updateThreadMetadata({
+          id: THREAD_ID,
+          resourceId: RESOURCE_ID,
+          update: thread => ({ ...thread.metadata, [`b${i}`]: i }),
+        }),
+      ]);
+    }
+
+    expect(await storedMetadata(a)).toEqual(expectedKeys());
   });
 });
