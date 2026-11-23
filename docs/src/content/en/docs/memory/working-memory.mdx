@@ -433,6 +433,39 @@ const response = await agent.generate('What do you know about me?', {
 })
 ```
 
+## Customize the working memory instruction
+
+Agents receive working memory as a system instruction that tells the model when and how to call `updateWorkingMemory`. To change that text, extend `Memory` and override the method for the mode you use. The method receives the resolved template and the stored data, so the instruction can still include them:
+
+```typescript title="src/mastra/memory.ts"
+import { Memory } from '@mastra/memory'
+import type { WorkingMemoryTemplate } from '@mastra/core/memory'
+
+export class DurableFactsMemory extends Memory {
+  protected override getWorkingMemoryToolInstruction({
+    template,
+    data,
+  }: {
+    template: WorkingMemoryTemplate
+    data: string | null
+  }): string {
+    return `Call updateWorkingMemory only for lasting facts about the user, never for one-off task details.
+
+<working_memory_template>
+${typeof template.content === 'string' ? template.content : JSON.stringify(template.content)}
+</working_memory_template>
+
+<working_memory_data>
+${data ?? 'No working memory data available.'}
+</working_memory_data>`
+  }
+}
+```
+
+Pass an instance of the subclass as the agent's `memory`. The other overridable methods are `getReadOnlyWorkingMemoryInstruction()` for `readOnly: true` or `agentManaged: false`, and `__experimental_getWorkingMemoryToolInstructionVNext()` for `version: 'vnext'` templates. A custom `MastraMemory` implementation can override `getWorkingMemoryInstruction()` instead, and return `undefined` to keep the built-in text. If you add a `WorkingMemory` processor to the agent yourself, pass `instructionProvider: memory` to it, or the overrides don't apply.
+
+These overrides change the system instruction only. With `useStateSignals: true`, which Observational Memory's `manageWorkingMemory` turns on by default, working memory reaches the model as a state signal and the instruction methods aren't called.
+
 ## Opt in to state signals (experimental)
 
 By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/signals/state-signals) instead by setting `useStateSignals: true`:
