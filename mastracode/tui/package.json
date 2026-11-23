@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "CHANGELOG.md"
   ],
   "homepage": "https://mastra.ai",
