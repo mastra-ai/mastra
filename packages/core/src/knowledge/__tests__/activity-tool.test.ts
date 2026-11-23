@@ -107,6 +107,15 @@ describe('knowledge_activity: what changed over a period', () => {
     expect(JSON.stringify(changes)).not.toContain('SOC verified');
   });
 
+  it('shows a deleted page change with the page name and deleted: true', async () => {
+    const { T0, store, call, acme, page } = await setup();
+    const p = await page(T0 + 1000, acme.id, 'Retired plan');
+    await at(T0 + 2000, () => store.deletePage({ id: p.id, expectedVersion: p.version, deletedBy: 'agent:alex' }));
+    const { changes } = await call({ since: day(T0) });
+    expect(changes.map((change: any) => change.action)).toEqual(['page-deleted', 'page-created']);
+    for (const change of changes) expect(change.page).toMatchObject({ name: 'Retired plan', deleted: true });
+  });
+
   it('never shows changes the run cannot read, and treats an unreadable from as not found', async () => {
     const { T0, call, acme, secret, user, page, note } = await setup();
     const visible = await page(T0 + 1000, acme.id, 'Visible');
