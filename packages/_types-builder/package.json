@@ -21,12 +21,6 @@
         "types": "./src/compile-zod.d.ts",
         "default": "./src/compile-zod.js"
       }
-    },
-    "./strip-js-sourcemaps": {
-      "import": {
-        "types": "./src/strip-js-sourcemaps.d.ts",
-        "default": "./src/strip-js-sourcemaps.js"
-      }
     }
   },
   "scripts": {

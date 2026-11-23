@@ -1,4 +1,3 @@
-import { stripJsSourcemaps } from '@internal/types-builder/strip-js-sourcemaps';
 import { defineConfig } from 'tsdown';
 
 const ADAPTER = ['@chat-adapter/teams', '@chat-adapter/shared', 'chat'];
@@ -9,8 +8,7 @@ export default defineConfig([
     format: ['esm'],
     fixedExtension: false,
     nodeProtocol: 'strip',
-    dts: true,
-    plugins: [stripJsSourcemaps()],
+    dts: { sourcemap: false },
     clean: true,
     deps: {
       neverBundle: ['@mastra/core'],

@@ -1,4 +1,3 @@
-import { stripJsSourcemaps } from '@internal/types-builder/strip-js-sourcemaps';
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
@@ -6,8 +5,7 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
-  dts: true,
-  plugins: [stripJsSourcemaps()],
+  dts: { sourcemap: false },
   clean: true,
   deps: {
     neverBundle: ['@mastra/core'],
