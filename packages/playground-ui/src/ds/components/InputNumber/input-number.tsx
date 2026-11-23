@@ -51,7 +51,7 @@ function InputNumberGroup({ className, size, ...props }: InputNumberGroupProps) 
         stepperInset[resolved],
         '[&>[data-slot=input-number-decrement]]:mr-(--control-gap) [&>[data-slot=input-number-decrement]]:ml-(--stepper-inset)',
         '[&>[data-slot=input-number-increment]]:mr-(--stepper-inset) [&>[data-slot=input-number-increment]]:ml-(--control-gap)',
-        '[&>[data-slot=input-group-addon]:has(>[data-slot=input-number-increment])]:pr-(--stepper-inset)',
+        '[&>[data-slot=input-group-addon][data-variant=default]:has(>[data-slot=input-number-increment])]:pr-(--stepper-inset)',
         className,
       )}
       {...props}
