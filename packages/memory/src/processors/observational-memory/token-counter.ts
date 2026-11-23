@@ -255,21 +255,6 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
   return getCacheEntry(getPartMastraMetadata(part)?.tokenEstimate, key);
 }
 
-/** Parts that got a count in memory which storage doesn't have yet. */
-const countedParts = new WeakSet<object>();
-
-/**
- * True when OM counted a part of `message` that had no stored count. Each part is reported once,
- * so the caller can write the counts back to storage.
- */
-export function takeNewTokenEstimates(message: MastraDBMessage): boolean {
-  let found = false;
-  for (const part of message.content?.parts ?? []) {
-    if (part && countedParts.delete(part)) found = true;
-  }
-  return found;
-}
-
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mastraMetadata = ensurePartMastraMetadata(part);
   mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
@@ -1350,7 +1335,6 @@ export class TokenCounter {
     const tokens = this.countString(getPayload());
     const entry = { v: V9_TOKEN_ESTIMATE_VERSION, source: V9_TOKEN_ESTIMATE_SOURCE, key, tokens };
     setPartCacheEntry(part, key, entry);
-    countedParts.add(part);
     return tokens;
   }
 
@@ -1956,6 +1940,11 @@ export class TokenCounter {
     }
 
     if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+      return { tokens: 0, overheadDelta, extraMessageDelta };
+    }
+
+    // step-start is a step boundary marker; it carries no model tokens.
+    if (part.type === 'step-start') {
       return { tokens: 0, overheadDelta, extraMessageDelta };
     }
 
