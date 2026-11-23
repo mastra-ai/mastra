@@ -120,6 +120,7 @@ describe('upsertCustomPackInSettings', () => {
           'custom:Alpha': 'openai',
           anthropic: 'custom:Alpha',
         },
+        packCyberFallbacks: { 'custom:Alpha': 'anthropic', openai: 'custom:Alpha' },
         packAccountPreferences: {
           'custom:Alpha': { [alphaPack.models.plan]: 'openai-codex:account-a' },
         },
@@ -146,6 +147,10 @@ describe('upsertCustomPackInSettings', () => {
     expect(settings.models.packFallbacks).toEqual({
       'custom:Renamed': 'openai',
       anthropic: 'custom:Renamed',
+    });
+    expect(settings.models.packCyberFallbacks).toEqual({
+      'custom:Renamed': 'anthropic',
+      openai: 'custom:Renamed',
     });
     expect(settings.models.packAccountPreferences).toEqual({
       'custom:Renamed': { [alphaPack.models.plan]: 'openai-codex:account-a' },
@@ -536,6 +541,7 @@ describe('removeCustomPackFromSettings', () => {
           anthropic: 'custom:Alpha',
           openai: 'github-copilot',
         },
+        packCyberFallbacks: { 'custom:Alpha': 'openai', anthropic: 'custom:Alpha', openai: 'anthropic' },
         packAccountPreferences: {
           'custom:Alpha': { [alphaPack.models.plan]: 'openai-codex:account-a' },
           openai: { 'openai/gpt-5.6-sol': 'openai-codex:account-b' },
@@ -553,6 +559,7 @@ describe('removeCustomPackFromSettings', () => {
     expect(settings.models.activeModelPackId).toBeNull();
     expect(settings.models.modeDefaults).toEqual({});
     expect(settings.models.packFallbacks).toEqual({ openai: 'github-copilot' });
+    expect(settings.models.packCyberFallbacks).toEqual({ openai: 'anthropic' });
     expect(settings.models.packAccountPreferences).toEqual({
       openai: { 'openai/gpt-5.6-sol': 'openai-codex:account-b' },
     });

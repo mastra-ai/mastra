@@ -68,6 +68,7 @@ export interface PackSelection {
       accountId?: string;
       memoryModelId?: string;
     }>;
+    cyberFallback?: { id: string; label: string; modelId: string };
   };
 }
 
@@ -113,10 +114,20 @@ export function resolvePackSelection(
     ];
   });
 
+  const cyberFallbackId = settings.models.packCyberFallbacks?.[packId];
+  const cyberFallbackPack = cyberFallbackId ? packsById.get(cyberFallbackId) : undefined;
+  const cyberFallbackModelId = cyberFallbackPack
+    ? resolveModePackModels(settings, cyberFallbackPack)[modeId]
+    : undefined;
+  const cyberFallback =
+    cyberFallbackPack && cyberFallbackModelId
+      ? { id: cyberFallbackPack.id, label: cyberFallbackPack.name, modelId: cyberFallbackModelId }
+      : undefined;
+
   // The pack's memory model rides on the route rather than pinning the OM
   // roles, so it applies only while the pack is active and `/om` choices return
   // when it is not.
-  return { modelId, subagentModels, modelRoute: { entries } };
+  return { modelId, subagentModels, modelRoute: { entries, ...(cyberFallback ? { cyberFallback } : {}) } };
 }
 
 /**

@@ -158,6 +158,18 @@ function fallbackChainLine(leadIn: string, chain: string): string {
   return `${theme.fg('dim', leadIn)}${theme.fg('textHighlight', chain)}`;
 }
 
+/** Detail line for the "Set cyber refusal fallback…" row of a pack's action menu. */
+function cyberFallbackActionDetail(packs: ModePack[], packId: string): string {
+  const settings = loadSettings();
+  const targetId = settings.models.packCyberFallbacks?.[packId];
+  const target = targetId ? (packs.find(p => p.id === targetId)?.name ?? targetId) : undefined;
+  if (target) return fallbackChainLine('  When a model refuses on cybersecurity grounds, finish the turn on: ', target);
+  const chain = formatPackFallbackChain(settings, packs, packId);
+  return chain
+    ? fallbackChainLine('  Not set — a cyber refusal finishes the turn on the next fallback: ', chain.split(' → ')[0]!)
+    : theme.fg('dim', '  Not set, and no fallback — a cyber refusal ends the turn.');
+}
+
 /** Detail line for the "Set fallback…" row of a pack's action menu. */
 function fallbackActionDetail(packs: ModePack[], packId: string): string {
   const chain = formatPackFallbackChain(loadSettings(), packs, packId);
@@ -227,13 +239,18 @@ async function askCustomPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
   packs: ModePack[],
-): Promise<'activate' | 'routing' | 'fallback' | 'edit' | 'share' | 'delete' | null> {
+): Promise<'activate' | 'routing' | 'fallback' | 'cyberFallback' | 'edit' | 'share' | 'delete' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use this pack as-is' },
     { id: 'edit', label: 'Edit', description: 'Update this pack' },
     { id: 'share', label: 'Share', description: 'Copy to clipboard' },
     { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
+    {
+      id: 'cyberFallback',
+      label: 'Set cyber refusal fallback…',
+      description: 'Where a turn goes when a model refuses on cybersecurity grounds',
+    },
     { id: 'delete', label: 'Delete', description: 'Remove this custom pack' },
   ] as const;
 
@@ -253,6 +270,7 @@ async function askCustomPackAction(
       activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
       routing: accountRoutingActionDetail(ctx, pack),
       fallback: fallbackActionDetail(packs, pack.id),
+      cyberFallback: cyberFallbackActionDetail(packs, pack.id),
       edit: theme.fg('dim', '  Edit one setting at a time (Rename, plan, build, fast, memory).'),
       share: theme.fg('dim', '  Copy shareable config to clipboard. Paste it to import elsewhere.'),
       delete: theme.fg('error', '  Permanently removes this custom pack from settings.'),
@@ -270,7 +288,7 @@ async function askCustomPackAction(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'routing' | 'fallback' | 'edit' | 'share' | 'delete');
+      resolve(item.value as 'activate' | 'routing' | 'fallback' | 'cyberFallback' | 'edit' | 'share' | 'delete');
     };
 
     selectList.onCancel = () => {
@@ -299,11 +317,16 @@ async function askBuiltinPackAction(
   ctx: SlashCommandContext,
   pack: ModePack,
   packs: ModePack[],
-): Promise<'activate' | 'routing' | 'fallback' | null> {
+): Promise<'activate' | 'routing' | 'fallback' | 'cyberFallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Switch to this pack' },
     { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
+    {
+      id: 'cyberFallback',
+      label: 'Set cyber refusal fallback…',
+      description: 'Where a turn goes when a model refuses on cybersecurity grounds',
+    },
   ] as const;
 
   return new Promise(resolve => {
@@ -321,6 +344,7 @@ async function askBuiltinPackAction(
       activate: activateActionDetail(getPackDetail(pack), loadSettings(), packs, pack.id),
       routing: accountRoutingActionDetail(ctx, pack),
       fallback: fallbackActionDetail(packs, pack.id),
+      cyberFallback: cyberFallbackActionDetail(packs, pack.id),
     };
 
     const closeOverlay = () => {
@@ -334,7 +358,7 @@ async function askBuiltinPackAction(
     };
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'routing' | 'fallback');
+      resolve(item.value as 'activate' | 'routing' | 'fallback' | 'cyberFallback');
     };
     selectList.onCancel = () => {
       closeOverlay();
@@ -359,12 +383,17 @@ async function askModifiedBuiltinPackAction(
   pack: ModePack,
   builtinPack: ModePack,
   packs: ModePack[],
-): Promise<'activate' | 'reset' | 'routing' | 'fallback' | null> {
+): Promise<'activate' | 'reset' | 'routing' | 'fallback' | 'cyberFallback' | null> {
   const actions = [
     { id: 'activate', label: 'Activate', description: 'Use the modified models' },
     { id: 'reset', label: 'Reset to built-in models', description: 'Remove all overrides' },
     { id: 'routing', label: 'Set subscription routing…', description: 'Pin each model to one account, or rotate' },
     { id: 'fallback', label: 'Set fallback…', description: 'Hop to another pack when this one is unavailable' },
+    {
+      id: 'cyberFallback',
+      label: 'Set cyber refusal fallback…',
+      description: 'Where a turn goes when a model refuses on cybersecurity grounds',
+    },
   ] as const;
 
   return new Promise(resolve => {
@@ -388,6 +417,7 @@ async function askModifiedBuiltinPackAction(
       reset: `${theme.fg('dim', '  Restore the original built-in models:')}\n${getPackDetail(builtinPack)}`,
       routing: accountRoutingActionDetail(ctx, pack),
       fallback: fallbackActionDetail(packs, pack.id),
+      cyberFallback: cyberFallbackActionDetail(packs, pack.id),
     };
 
     const closeOverlay = () => {
@@ -401,7 +431,7 @@ async function askModifiedBuiltinPackAction(
     };
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'activate' | 'reset' | 'routing' | 'fallback');
+      resolve(item.value as 'activate' | 'reset' | 'routing' | 'fallback' | 'cyberFallback');
     };
     selectList.onCancel = () => {
       closeOverlay();
@@ -683,6 +713,16 @@ export function setPackFallback(settings: GlobalSettings, packId: string, fallba
   }
 }
 
+/** Set (or clear, with null) the pack a turn moves to when a model in this pack refuses on cybersecurity grounds. */
+export function setPackCyberFallback(settings: GlobalSettings, packId: string, fallbackId: string | null): void {
+  const fallbacks = (settings.models.packCyberFallbacks ??= {});
+  if (fallbackId === null) {
+    delete fallbacks[packId];
+  } else {
+    fallbacks[packId] = fallbackId;
+  }
+}
+
 /** Picker candidates for a pack's fallback: every pack except the pack itself (and the "New Custom" pseudo-row). */
 export function fallbackPackCandidates(packs: ModePack[], packId: string): ModePack[] {
   return packs.filter(p => p.id !== packId && p.id !== 'custom');
@@ -718,15 +758,19 @@ export function upsertCustomPackInSettings(
   if (!pack.id.startsWith('custom:')) return;
 
   if (previousPackId && previousPackId.startsWith('custom:') && previousPackId !== pack.id) {
-    const migratedFallbacks = Object.fromEntries(
-      Object.entries(settings.models.packFallbacks ?? {}).map(([sourcePackId, targetPackId]) => [
-        sourcePackId === previousPackId ? pack.id : sourcePackId,
-        targetPackId === previousPackId ? pack.id : targetPackId,
-      ]),
-    );
+    const migrate = (fallbacks: Record<string, string> | undefined) =>
+      Object.fromEntries(
+        Object.entries(fallbacks ?? {}).map(([sourcePackId, targetPackId]) => [
+          sourcePackId === previousPackId ? pack.id : sourcePackId,
+          targetPackId === previousPackId ? pack.id : targetPackId,
+        ]),
+      );
+    const migratedFallbacks = migrate(settings.models.packFallbacks);
+    const migratedCyberFallbacks = migrate(settings.models.packCyberFallbacks);
     const previousAccountPreferences = settings.models.packAccountPreferences?.[previousPackId];
     removeCustomPackFromSettings(settings, previousPackId);
     settings.models.packFallbacks = migratedFallbacks;
+    settings.models.packCyberFallbacks = migratedCyberFallbacks;
     if (previousAccountPreferences) {
       settings.models.packAccountPreferences[pack.id] = previousAccountPreferences;
     }
@@ -1116,6 +1160,77 @@ async function runSetFallbackForPack(ctx: SlashCommandContext, pack: ModePack, p
   ctx.showInfo(fallbackName ? `Fallback for ${pack.name}: ${fallbackName}` : `Cleared the fallback for ${pack.name}`);
 }
 
+async function askCyberFallbackTarget(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  packs: ModePack[],
+): Promise<string | null | undefined> {
+  const settings = loadSettings();
+  const current = settings.models.packCyberFallbacks?.[pack.id];
+  const items: SelectItem[] = fallbackPackCandidates(packs, pack.id).map(p => ({
+    value: p.id,
+    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === current ? theme.fg('accent', ' (current)') : ''}`,
+  }));
+  if (current) {
+    items.unshift({
+      value: '__clear__',
+      label: `  Clear cyber refusal fallback  ${theme.fg('dim', 'Use the pack fallback instead')}`,
+    });
+  }
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('accent', `Cyber refusal fallback for ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+    container.addChild(
+      new Text(
+        theme.fg(
+          'dim',
+          '  When a model refuses on cybersecurity grounds and a retry does not help, the rest of the turn runs on this pack. Your next message goes back to this pack.',
+        ),
+        0,
+        0,
+      ),
+    );
+    container.addChild(new Spacer(1));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value === '__clear__' ? null : item.value);
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(undefined);
+    };
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function runSetCyberFallbackForPack(ctx: SlashCommandContext, pack: ModePack, packs: ModePack[]): Promise<void> {
+  const fallbackId = await askCyberFallbackTarget(ctx, pack, packs);
+  if (fallbackId === undefined) return;
+
+  const next = loadSettings();
+  setPackCyberFallback(next, pack.id, fallbackId);
+  saveSettings(next);
+  const fallbackName = fallbackId ? (packs.find(p => p.id === fallbackId)?.name ?? fallbackId) : null;
+  ctx.showInfo(
+    fallbackName
+      ? `Cyber refusal fallback for ${pack.name}: ${fallbackName}`
+      : `Cleared the cyber refusal fallback for ${pack.name}`,
+  );
+}
+
 async function askRoutingModel(ctx: SlashCommandContext, pack: ModePack): Promise<string | undefined> {
   const settings = loadSettings();
   const preferences = settings.models.packAccountPreferences?.[pack.id] ?? {};
@@ -1450,6 +1565,10 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
             await runSetFallbackForPack(ctx, pack, packs);
             continue;
           }
+          if (action === 'cyberFallback') {
+            await runSetCyberFallbackForPack(ctx, pack, packs);
+            continue;
+          }
 
           if (action === 'delete') {
             await deleteCustomPack(ctx, pack);
@@ -1502,6 +1621,10 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           }
           if (action === 'fallback') {
             await runSetFallbackForPack(ctx, pack, packs);
+            continue;
+          }
+          if (action === 'cyberFallback') {
+            await runSetCyberFallbackForPack(ctx, pack, packs);
             continue;
           }
           if (action === 'reset') {

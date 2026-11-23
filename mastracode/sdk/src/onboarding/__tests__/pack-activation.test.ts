@@ -5,6 +5,7 @@ import {
   listResolvableModePacks,
   listValidModePackIds,
   resolveModePackArg,
+  resolvePackSelection,
 } from '../pack-activation.js';
 import { listBuiltinModePacks } from '../packs.js';
 import type { GlobalSettings } from '../settings.js';
@@ -122,5 +123,32 @@ describe('activateModePackInSettings', () => {
       memory: 'openai/gpt-5.4-nano',
     });
     expect(settings.models?.subagentModels).toEqual({});
+  });
+});
+
+describe('resolvePackSelection cyber fallback', () => {
+  const withCyber = (packCyberFallbacks: Record<string, string>) => {
+    const settings = makeSettings();
+    settings.models.packCyberFallbacks = packCyberFallbacks;
+    return settings;
+  };
+
+  it('puts the pack cyber fallback on the route for the active mode', () => {
+    const selection = resolvePackSelection(withCyber({ 'custom:Kimi': 'custom:Anthropic' }), 'custom:Kimi', 'build');
+
+    expect(selection?.modelRoute.cyberFallback).toEqual({
+      id: 'custom:Anthropic',
+      label: 'Anthropic',
+      modelId: 'custom/build',
+    });
+    expect(selection?.modelRoute.entries.map(entry => entry.id)).toEqual(['custom:Kimi', 'custom:Anthropic']);
+  });
+
+  it('leaves it off when unset or pointing at a pack that no longer exists', () => {
+    expect(resolvePackSelection(withCyber({}), 'custom:Kimi', 'build')?.modelRoute.cyberFallback).toBeUndefined();
+    expect(
+      resolvePackSelection(withCyber({ 'custom:Kimi': 'custom:Gone' }), 'custom:Kimi', 'build')?.modelRoute
+        .cyberFallback,
+    ).toBeUndefined();
   });
 });

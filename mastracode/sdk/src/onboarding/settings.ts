@@ -268,6 +268,13 @@ export interface GlobalSettings {
      * capped at one revisit per cascade, then the error surfaces.
      */
     packFallbacks: Record<string, string>;
+    /**
+     * Cyber refusal fallback per pack ID (packId → packId). When a model in
+     * the pack refuses on cybersecurity grounds and the `continue` nudge
+     * fails, the rest of that turn runs on this pack's model. Unset: the
+     * refusal goes to the pack's next fallback in `packFallbacks` instead.
+     */
+    packCyberFallbacks: Record<string, string>;
     /** Preferred OAuth account by pack ID and resolved model ID. */
     packAccountPreferences: Record<string, Record<string, string>>;
     /** Explicit per-mode defaults — used when no activeModelPackId is set. */
@@ -501,6 +508,7 @@ const DEFAULTS: GlobalSettings = {
     activeModelPackId: null,
     modePackOverrides: {},
     packFallbacks: {},
+    packCyberFallbacks: {},
     packAccountPreferences: {},
     modeDefaults: {},
     modeThinkingDefaults: {},
@@ -1079,6 +1087,7 @@ function migrateFromAuth(settingsPath: string): boolean {
           modePackOverrides,
           modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
           packFallbacks: loadPackFallbacks(raw.models?.packFallbacks, rawCustomPacks),
+          packCyberFallbacks: loadPackFallbacks(raw.models?.packCyberFallbacks, rawCustomPacks),
           packAccountPreferences: loadPackAccountPreferences(
             raw.models?.packAccountPreferences,
             rawCustomPacks,
@@ -1220,6 +1229,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         modePackOverrides,
         modeThinkingDefaults: parseModeThinkingDefaults(raw.models?.modeThinkingDefaults),
         packFallbacks: loadPackFallbacks(raw.models?.packFallbacks, rawCustomPacks),
+        packCyberFallbacks: loadPackFallbacks(raw.models?.packCyberFallbacks, rawCustomPacks),
         packAccountPreferences: loadPackAccountPreferences(
           raw.models?.packAccountPreferences,
           rawCustomPacks,
