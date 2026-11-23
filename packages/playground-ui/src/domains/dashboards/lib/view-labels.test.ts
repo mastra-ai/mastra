@@ -22,6 +22,15 @@ describe('shortViewLabels', () => {
     expect(shortViewLabels(['Agent latency', 'Agent cost'])).toEqual(['Latency', 'Cost']);
   });
 
+  it('drops the words the views end with', () => {
+    expect(shortViewLabels(['Agent latency', 'Workflow latency', 'Tool latency'])).toEqual([
+      'Agent',
+      'Workflow',
+      'Tool',
+    ]);
+    expect(shortViewLabels(['P95 agent latency', 'P95 tool latency'])).toEqual(['Agent', 'Tool']);
+  });
+
   it('keeps labels that share nothing, and a single view, as they are', () => {
     expect(shortViewLabels(['Spend', 'Tokens'])).toEqual(['Spend', 'Tokens']);
     expect(shortViewLabels(['Breakdown by agent'])).toEqual(['Breakdown by agent']);
@@ -33,5 +42,6 @@ describe('shortViewLabels', () => {
 
   it('leaves every label a word of its own', () => {
     expect(shortViewLabels(['Breakdown', 'Breakdown by tool'])).toEqual(['Breakdown', 'Breakdown by tool']);
+    expect(shortViewLabels(['Latency', 'Tool latency'])).toEqual(['Latency', 'Tool latency']);
   });
 });

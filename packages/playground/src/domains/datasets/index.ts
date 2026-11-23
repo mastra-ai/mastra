@@ -10,10 +10,4 @@ export type { DatasetVersionsProps } from '@mastra/playground-ui/domains/dataset
 export { ExperimentTriggerDialog } from './components/experiment-trigger/experiment-trigger-dialog';
 export type { TargetType } from './components/experiment-trigger/experiment-trigger-options';
 
-// Experiment components
-export {
-  ExperimentResultsSection,
-  type ExperimentResultsSectionProps,
-} from '../experiments/components/experiment-results-section';
-
 // Versions components

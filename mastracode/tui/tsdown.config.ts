@@ -33,7 +33,6 @@ export default defineConfig({
   define: {
     MASTRACODE_VERSION: JSON.stringify(pkg.version),
   },
-  sourcemap: true,
   onSuccess: async () => {
     // Copy runtime-read native voice assets into dist/native so the compiled
     // recognizer can be built on the user's machine from the shipped sources.
