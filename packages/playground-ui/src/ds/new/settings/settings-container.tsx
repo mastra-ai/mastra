@@ -14,9 +14,10 @@ const settingsCardStyle = cn(
   '[&>:not(:empty)~:not(:empty)]:border-t [&>:not(:empty)~:not(:empty)]:border-separator',
   'shadow-raised',
   fieldsOnSurface,
-  // A dialog is a card already, so here it is a box inside one.
-  'in-[[role=alertdialog]]:bg-nested in-[[role=alertdialog]]:shadow-none in-[[role=alertdialog]]:[--field:var(--field-on-nested)]',
-  'in-[[role=dialog]]:bg-nested in-[[role=dialog]]:shadow-none in-[[role=dialog]]:[--field:var(--field-on-nested)]',
+  // A dialog is a card already, so here it is a box inside one. An `in-*` variant adds no specificity, so it would tie
+  // with the `bg-card` an app compiles after these styles.
+  '[:is([role=dialog],[role=alertdialog])_&]:bg-nested [:is([role=dialog],[role=alertdialog])_&]:shadow-none',
+  '[:is([role=dialog],[role=alertdialog])_&]:[--field:var(--field-on-nested)]',
 );
 
 export type SettingsContainerProps = ComponentProps<'div'>;
