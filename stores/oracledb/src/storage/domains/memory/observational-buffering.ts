@@ -1,4 +1,10 @@
-import { isAppendOnlySince, isBufferedChunkCoveredByCursor, maxObservationCursor } from '@internal/core/memory';
+import {
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
+  maxObservationCursor,
+  withBufferedReflectionVerified,
+} from '@internal/core/memory';
 import type { UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
@@ -249,6 +255,11 @@ export async function swapBufferedReflectionToActive(
       if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
         return stored;
       }
+      // The swap must consume the buffer and reflected line count the caller read; another
+      // writer may have extended both since, which the activated text alone cannot reveal.
+      if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) {
+        return stored;
+      }
 
       const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
       // The buffered reflection replaces the lines it summarized, but any
@@ -272,7 +283,7 @@ export async function swapBufferedReflectionToActive(
         { id: stored.id },
       );
       assertRowsAffected(updateResult.rowsAffected, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', stored.id);
-      return newRecord;
+      return withBufferedReflectionVerified(newRecord, currentRecord);
     });
   } catch (error) {
     if (error instanceof MastraError) throw error;
