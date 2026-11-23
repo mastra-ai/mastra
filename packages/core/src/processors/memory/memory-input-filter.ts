@@ -144,11 +144,16 @@ function stripAssistantProviderMetadata(message: MastraDBMessage): MastraDBMessa
       parts: message.content.parts.map(part => {
         if (part.type === 'tool-invocation' && isClientToolInvocationUpdate(part.toolInvocation.state)) return part;
         const {
-          providerMetadata: _providerMetadata,
+          providerMetadata,
           providerOptions: _providerOptions,
           ...rest
-        } = part as Record<string, unknown>;
-        return rest as MastraMessagePart;
+        } = part as Record<string, unknown> & { providerMetadata?: { mastra?: { tokenEstimate?: unknown } } };
+        // Provider metadata belongs to the provider that produced it, so it is dropped. The token count
+        // stored under Mastra's own key says nothing about a provider, so it stays.
+        const tokenEstimate = providerMetadata?.mastra?.tokenEstimate;
+        return (
+          tokenEstimate === undefined ? rest : { ...rest, providerMetadata: { mastra: { tokenEstimate } } }
+        ) as MastraMessagePart;
       }),
     },
   };

@@ -185,7 +185,7 @@ describe('trusted token counts across requests', () => {
     };
     const history = [
       withCount('resent-0', 'user', 0, `First message. ${'Resent history words. '.repeat(30)}`),
-      withCount('resent-1', 'user', 1, `Second message. ${'Resent history words. '.repeat(30)}`),
+      withCount('resent-1', 'assistant', 1, `Second message. ${'Resent history words. '.repeat(30)}`),
     ];
 
     await agent.generate([...(history as any[]), { id: 'next', role: 'user', content: 'Next question' }], {
