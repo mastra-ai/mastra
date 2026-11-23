@@ -294,7 +294,7 @@ const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
 // Same as RESUME_SNAPSHOT_POLL_INTERVAL_MS in @mastra/core/workflows, which older supported core versions don't export.
 const DURABLE_SNAPSHOT_WAIT_INTERVAL_MS = 25;
 
-function getDurableLoopWorkflowName(agent: DurableAgentLike | Agent): string {
+function getDurableLoopWorkflowName(agent: Agent): string {
   return (agent as Partial<DurableAgentLike>).durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
 }
 
@@ -303,7 +303,7 @@ function getDurableLoopWorkflowName(agent: DurableAgentLike | Agent): string {
  * legacy wrappers, or a native Agent whose execution engine is durable/evented. Structural
  * so agents from another `@mastra/core` copy are still recognized.
  */
-function runsOnDurableEngine(agent: Agent): boolean {
+function hasDurableExecution(agent: Agent): boolean {
   if (isDurableAgentLike(agent)) return true;
   const native = agent as unknown as { __hasDurableExecution?: () => boolean };
   return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
@@ -326,7 +326,7 @@ async function validateDurableToolCallAccess({
   threadId?: string;
   abortSignal?: AbortSignal;
 }): Promise<void> {
-  if (!runsOnDurableEngine(agent)) return;
+  if (!hasDurableExecution(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   if (!workflowsStore) {
@@ -475,7 +475,7 @@ async function authorizeRunOwner({
 function hasResumableStreams(agent: Agent): boolean {
   // Older Inngest wrappers inherit false from the plain Agent or lack this capability method.
   // Keep durable execution detached from HTTP cancellation across package-version mismatches.
-  if (isDurableAgentLike(agent)) return true;
+  if (hasDurableExecution(agent)) return true;
 
   const resumable = agent as unknown as ResumableStreamsAgent;
   return typeof resumable.hasResumableStreams === 'function' && resumable.hasResumableStreams();
@@ -2654,7 +2654,7 @@ async function authorizeDurableRun({
   permission,
 }: {
   mastra: Mastra;
-  agent: DurableAgentLike;
+  agent: Agent<any, any, any, any>;
   runId: string;
   requestContext: RequestContext;
   permission: string;
@@ -2734,7 +2734,7 @@ async function authorizeRunAccess({
   requestContext: RequestContext;
   permission: string;
 }): Promise<{ status?: PlainRunRecord['status'] } | undefined> {
-  if (!isDurableAgentLike(agent)) {
+  if (!hasDurableExecution(agent)) {
     const record = await getPlainRunRecord(agent, runId);
     if (!record) return undefined;
     await authorizeRunOwner({ mastra, agent, owner: record, requestContext, permission });
@@ -2782,7 +2782,8 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
   handler: async ({ mastra, agentId, runId, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
-      if (!isDurableAgentLike(agent)) {
+      const durable = hasDurableExecution(agent);
+      if (!durable) {
         const resumable = agent as unknown as ResumableStreamsAgent;
         if (
           (typeof resumable.__getRunRecord !== 'function' && typeof resumable.__getPublishedRunOwner !== 'function') ||
@@ -2800,7 +2801,7 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
         requestContext,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
-      if (!isDurableAgentLike(agent)) {
+      if (!durable) {
         if (!run) throw new HTTPException(404, { message: 'Run not found' });
         if (run.status === 'finished') return { aborted: false };
         // The run may execute on another server: only report it aborted once
@@ -3809,12 +3810,10 @@ export const RECOVER_ROUTE = createRoute({
         requestContext: serverRequestContext,
       });
 
-      // Durable-agent check via duck-typing to avoid a hard runtime dep on the
-      // DurableAgent class inside @mastra/core (mirrors the pattern used by
-      // Mastra.recoverAllDurableAgents()).
-      if (!isDurableAgentLike(agent)) {
+      if (!hasDurableExecution(agent)) {
         throw new HTTPException(400, {
-          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          message:
+            'Agent does not support recover. Only agents on a durable or evented execution engine can recover runs.',
         });
       }
 
@@ -3833,7 +3832,7 @@ export const RECOVER_ROUTE = createRoute({
       // NOTE: DurableAgent.recover() reads the workflow's requestContext from
       // the persisted snapshot. serverRequestContext is only used above for
       // ownership checks and version resolution.
-      const streamResult = await (agent as any).recover(runId);
+      const streamResult = await agent.recover(runId);
 
       return streamResult.fullStream;
     } catch (error) {

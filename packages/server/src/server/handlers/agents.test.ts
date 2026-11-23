@@ -966,7 +966,9 @@ describe('Agent Routes Authorization', () => {
     inputCheckpointed = true,
     workflowName = 'durable-agentic-loop',
     threadId,
+    agentId = 'test-durable-agent',
   }: {
+    agentId?: string;
     runId: string;
     resourceId?: string;
     status?: 'running' | 'suspended' | 'pending';
@@ -986,7 +988,7 @@ describe('Agent Routes Authorization', () => {
         context: (inputCheckpointed
           ? {
               input: {
-                agentId: 'test-durable-agent',
+                agentId,
                 __workflowKind: 'durable-agent',
                 state: { threadId },
               },
@@ -3031,6 +3033,97 @@ describe('Agent Routes Authorization', () => {
       expect(abort).not.toHaveBeenCalled();
     });
 
+    describe('native Agent with a durable execution engine', () => {
+      let nativeAgent: Agent<any, any, any, any>;
+
+      beforeEach(() => {
+        nativeAgent = new Agent({
+          id: 'native-durable-agent',
+          name: 'native-durable-agent',
+          instructions: 'test-instructions',
+          model: { specificationVersion: 'v2' } as any,
+          memory: mockMemory,
+          durable: { executionEngine: 'durable' },
+        });
+        mastra = new Mastra({ agents: { 'native-durable-agent': nativeAgent }, storage, logger: false });
+      });
+
+      it("aborts the owner's active run through the durable checkpoint", async () => {
+        const abort = vi.spyOn(nativeAgent, '__abortRunAcknowledged').mockResolvedValue(true);
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-abort',
+          resourceId: 'user-a',
+        });
+        await expect(
+          ABORT_AGENT_RUN_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-abort',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          }),
+        ).resolves.toEqual({ aborted: true });
+        expect(abort).toHaveBeenCalledWith('native-abort');
+      });
+
+      it('rejects aborting a run owned by another resource', async () => {
+        const abort = vi.spyOn(nativeAgent, '__abortRunAcknowledged');
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-abort-b',
+          resourceId: 'user-b',
+        });
+        await expect(
+          ABORT_AGENT_RUN_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-abort-b',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          }),
+        ).rejects.toMatchObject({ status: 403 });
+        expect(abort).not.toHaveBeenCalled();
+      });
+
+      it("recovers the owner's run", async () => {
+        const fullStream = new ReadableStream();
+        const recover = vi.spyOn(nativeAgent, 'recover').mockResolvedValue({ fullStream } as any);
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-recover',
+          resourceId: 'user-a',
+        });
+        await expect(
+          RECOVER_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-recover',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+          } as any),
+        ).resolves.toBe(fullStream);
+        expect(recover).toHaveBeenCalledWith('native-recover');
+      });
+
+      it('rejects recovering a run owned by another resource', async () => {
+        const recover = vi.spyOn(nativeAgent, 'recover');
+        await persistDurableAgenticLoopRun({
+          agentId: 'native-durable-agent',
+          runId: 'native-recover-b',
+          resourceId: 'user-b',
+        });
+        await expect(
+          RECOVER_ROUTE.handler({
+            mastra,
+            agentId: 'native-durable-agent',
+            runId: 'native-recover-b',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+          } as any),
+        ).rejects.toMatchObject({ status: 403 });
+        expect(recover).not.toHaveBeenCalled();
+      });
+    });
+
     it('should return 400 when runId is missing', async () => {
       const requestContext = createContextWithReservedKeys({});
 
@@ -3057,7 +3150,8 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).rejects.toThrow(
         new HTTPException(400, {
-          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          message:
+            'Agent does not support recover. Only agents on a durable or evented execution engine can recover runs.',
         }),
       );
     });
