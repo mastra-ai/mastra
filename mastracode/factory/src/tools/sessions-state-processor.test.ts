@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
@@ -127,8 +128,10 @@ async function setup() {
   type Signal = Awaited<ReturnType<FactorySessionsStateProcessor['computeStateSignal']>>;
   let last: Signal;
   /** One model step; `fresh` drops the prior snapshot, like a new context window. */
-  const step = async (options: { sessionId?: string; threadId?: string; fresh?: boolean } = {}) => {
-    const base = !options.fresh && last ? last : undefined;
+  const step = async (
+    options: { sessionId?: string; threadId?: string; fresh?: boolean; previousKey?: string } = {},
+  ) => {
+    const base = options.previousKey ? { cacheKey: options.previousKey } : !options.fresh && last ? last : undefined;
     const signal = await processor.computeStateSignal({
       requestContext: context(options.sessionId, options.threadId),
       threadId: options.threadId ?? 'parent-thread',
@@ -193,6 +196,60 @@ describe('FactorySessionsStateProcessor', () => {
     expect(signal!.contents).toMatch(
       /- #7 "Item 7": execute; work session worker-7 idle; last report progress at \d{4}-/,
     );
+  });
+
+  it('tells a session with side sessions to check their claims, and a session that only follows items nothing', async () => {
+    const followsOnly = await setup();
+    await followsOnly.follow((await followsOnly.fileItem(7)).id);
+    expect((await followsOnly.step())!.contents).not.toContain("A side session's report");
+
+    const env = await setup();
+    await env.createSession('side-1', {
+      title: 'Review #7',
+      origin: { sessionId: 'parent', threadId: 'parent-thread' },
+    });
+    const contents = (await env.step())!.contents;
+    expect(contents).toContain("A side session's report is its own account and can be wrong.");
+    expect(contents).toContain('check that claim against the pull request or branch yourself');
+  });
+
+  it('keeps the side-session caution when the row cap hides every side session', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    for (let n = 1; n <= 20; n += 1) {
+      const item = await env.fileItem(n);
+      await env.follow(item.id);
+      await env.bind(item.id, `worker-${n}`);
+      env.running.add(`worker-${n}`);
+    }
+
+    const contents = (await env.step())!.contents;
+    expect(contents).not.toContain('session side-1');
+    expect(contents).toContain('+1 more');
+    expect(contents).toContain("A side session's report is its own account and can be wrong.");
+  });
+
+  it('keeps the side-session caution after every side session ages out', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    expect((await env.step())!.contents).toContain('session side-1');
+
+    env.advance(DAY + 1000);
+    const contents = (await env.step())!.contents;
+    expect(contents).not.toContain('session side-1');
+    expect(contents).toContain('reports from earlier ones stay in notification_inbox');
+    expect(contents).toContain("A side session's report is its own account and can be wrong.");
+  });
+
+  it('replaces a snapshot keyed on the state alone, so new guidance reaches an unchanged session', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    const first = (await env.step())!;
+    const stateOnlyKey = `sessions:${createHash('sha256').update(JSON.stringify(first.value.sessions)).digest('hex').slice(0, 16)}`;
+
+    const next = await env.step({ previousKey: stateOnlyKey });
+    expect(next?.contents).toBe(first.contents);
+    await expect(env.step()).resolves.toBeUndefined();
   });
 
   it("shows whether a followed item's session is running, idle or waiting", async () => {

@@ -1388,11 +1388,27 @@ describe('Scorer Utils', () => {
 
         const result = compareTrajectories(actual, expected);
 
-        // search found at index 1, then summarize searched from index 2 -> not found after
-        // summarize exists at index 0 but is before lastMatchedIndex+1=2, so out of order
+        // only one of the two can be matched in order; the earlier expected step wins the tie
         expect(result.score).toBe(0.5);
         expect(result.matchedSteps).toBe(1);
         expect(result.outOfOrderSteps).toContain('summarize');
+      });
+
+      it('should score one misplaced step the same wherever it moved', () => {
+        const names = (list: string[]) => ({ steps: list.map(name => step(name)) });
+        const expected = names(['verify', 'find', 'check', 'refund', 'notify']);
+
+        const lastStepFirst = compareTrajectories(names(['notify', 'verify', 'find', 'check', 'refund']), expected);
+        const firstStepLast = compareTrajectories(names(['find', 'check', 'refund', 'notify', 'verify']), expected);
+
+        // four of the five expected steps appear in order in both runs
+        expect(lastStepFirst.score).toBe(0.8);
+        expect(lastStepFirst.missingSteps).toEqual(['notify']);
+        expect(lastStepFirst.outOfOrderSteps).toEqual(['notify']);
+        expect(firstStepLast.score).toBe(0.8);
+        expect(firstStepLast.matchedSteps).toBe(4);
+        expect(firstStepLast.missingSteps).toEqual(['verify']);
+        expect(firstStepLast.outOfOrderSteps).toEqual(['verify']);
       });
 
       it('should return 0 when actual is empty but expected is not', () => {

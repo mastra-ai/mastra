@@ -13,7 +13,6 @@ export default defineConfig({
     propertyReadSideEffects: false,
     unknownGlobalSideEffects: false,
   },
-  sourcemap: true,
   deps: {
     alwaysBundle: ['@internal/core'],
     neverBundle: ['@mastra/core'],

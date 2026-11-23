@@ -9,7 +9,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   // Decorator transforms (experimentalDecorators, emitDecoratorMetadata) come from tsconfig.json.
   tsconfig: 'tsconfig.json',
   onSuccess: async () => {

@@ -231,9 +231,8 @@ describe('getProvidersHandler', () => {
     expect(openaiProvider?.models).toBeDefined();
     expect(openaiProvider?.models.length).toBeGreaterThan(0);
 
-    // Should include common OpenAI models
-    expect(openaiProvider?.models).toContain('gpt-4');
-    expect(openaiProvider?.models).toContain('gpt-3.5-turbo');
+    // The registry is generated from upstream, so compare to it rather than pinning model names.
+    expect(openaiProvider?.models).toEqual([...PROVIDER_REGISTRY.openai.models]);
   });
 
   it('should match the structure of PROVIDER_REGISTRY', async () => {
@@ -5788,5 +5787,34 @@ describe('toAgentStreamChunks', () => {
     const [frame] = toAgentStreamChunks({ type: 'chunk', runId: 'parent', data: nested } as any);
     expect(frame).not.toHaveProperty('index');
     expect(frame).toMatchObject({ type: 'text-delta', payload: { text: 'hi' } });
+  });
+
+  it('forwards stopCause on finish frames when present and omits it when absent', () => {
+    const [withCause] = toAgentStreamChunks({
+      type: 'finish',
+      runId: 'run-1',
+      index: 4,
+      data: {
+        output: { text: 'Done.', steps: [] },
+        stepResult: { reason: 'tool-calls' },
+        stopCause: 'max_steps',
+      },
+    } as any);
+    expect(withCause).toMatchObject({
+      type: 'finish',
+      runId: 'run-1',
+      index: 4,
+      payload: { stopCause: 'max_steps' },
+    });
+
+    const [withoutCause] = toAgentStreamChunks({
+      type: 'finish',
+      runId: 'run-2',
+      data: {
+        output: { text: 'Done.', steps: [] },
+        stepResult: { reason: 'stop' },
+      },
+    } as any);
+    expect((withoutCause as { payload: Record<string, unknown> }).payload).not.toHaveProperty('stopCause');
   });
 });

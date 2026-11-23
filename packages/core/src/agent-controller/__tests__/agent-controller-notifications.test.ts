@@ -21,6 +21,7 @@ function createAgentMock() {
       mastra = nextMastra;
     }),
     __registerPrimitives: vi.fn(),
+    __registerExecutionEnginePolicy: vi.fn(),
     getConfiguredProcessorWorkflows: vi.fn(async () => []),
     listScorers: vi.fn(async () => []),
     getChannels: vi.fn(() => null),
