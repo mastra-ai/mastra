@@ -3204,16 +3204,18 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       });
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
+      // Durable agents (native or wrapped) subscribe for us so the client never sees what an
+      // execution that lost the run still publishes.
+      const fencedAgent = hasDurableExecution(agent) ? (agent as unknown as DurableAgentLike) : undefined;
       // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 
-      // A durable agent subscribes for us so the client never sees what an
-      // execution that lost the run still publishes. Agents without it, such as
-      // those from an older @mastra/core, are observed through the topic directly.
+      // Agents without the hook, such as those from an older @mastra/core, are observed
+      // through the topic directly.
       const subscribe = (onEvent: (event: any) => void, onComplete: () => void): Promise<() => Promise<void>> => {
-        if (typeof durableAgent?.__subscribeToRunStream === 'function') {
-          return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
+        if (typeof fencedAgent?.__subscribeToRunStream === 'function') {
+          return fencedAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
         if (offset === undefined) {
           return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));

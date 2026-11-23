@@ -3370,6 +3370,40 @@ describe('Agent Routes Authorization', () => {
 
         await expect(observeAs(runId, 'user-b')).rejects.toMatchObject({ status: 403 });
       });
+
+      it('drops what a superseded execution publishes after another execution claims the run', async () => {
+        const runId = 'native-observe-takeover-run';
+        // Stream-mechanics only: the run is tracked here with no owner.
+        vi.spyOn(nativeAgent, '__getRunOwner').mockReturnValue({});
+        const pubsub = nativeAgent.__getStreamBus(true)!.pubsub;
+        const publish = (event: Record<string, unknown>) =>
+          pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+        const text = (value: string, generation: number) =>
+          publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+        await text('before takeover ', 1);
+        await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
+        await text('stale', 1);
+        await publish({ type: 'finish', data: {}, generation: 1 });
+        await text('recovered', 2);
+        await publish({ type: 'finish', data: {}, generation: 2 });
+
+        const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'native-durable-agent',
+          runId,
+          abortSignal: new AbortController().signal,
+        } as any)) as ReadableStream<any>;
+
+        const events: any[] = [];
+        for await (const event of stream as any) events.push(event);
+
+        expect(events.map(event => [event.type, event.payload?.text])).toEqual([
+          ['text-delta', 'before takeover '],
+          ['text-delta', 'recovered'],
+          ['finish', undefined],
+        ]);
+      });
     });
 
     describe('authorization', () => {
