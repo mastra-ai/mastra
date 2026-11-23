@@ -486,7 +486,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
                   );
                   if (!previous || previous.toolInvocation.state !== 'result') return true;
                   const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
-                    { status?: string } | undefined;
+                    | { status?: string }
+                    | undefined;
                   const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
                   return (
                     previousTask?.status === 'running' &&
