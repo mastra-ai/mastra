@@ -11,9 +11,19 @@ import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '.
  * article, edits and archives the article, and deletes the section and
  * category.
  *
- * Nothing it creates notifies anyone real: the user's email is on example.com,
- * the ticket update adds an internal note, the article stays a draft, and
- * subscribers are not emailed.
+ * A new ticket fires the account's triggers, which by default email every
+ * agent, so the scenario only creates a real ticket when
+ * `MASTRA_SMOKE_ZENDESK_ALLOW_TICKETS=1` says the account's ticket
+ * notifications are off (a sandbox with the notify triggers deactivated).
+ * Unset, ticket creation is refused by Zendesk on purpose (blank subject and
+ * comment) and the other ticket tools are probed with made-up ids. Nothing
+ * else notifies anyone real: the user's email is on example.com, the ticket
+ * update adds an internal note, the article stays a draft, and subscribers
+ * are not emailed.
+ *
+ * Zendesk's API archives articles rather than deleting them, so each run
+ * leaves its archived draft in the Help Center archive; the run logs its id
+ * so it can be deleted there.
  *
  * The Help Center locale is `MASTRA_SMOKE_ZENDESK_LOCALE` when set, otherwise
  * `en-us`; it must be one of the Help Center's enabled locales. When Help
@@ -213,6 +223,49 @@ async function runTicketLifecycle(
   }
 }
 
+/**
+ * Without a notification-free account, exercise the ticket tools without
+ * creating a ticket: Zendesk refuses a ticket with a blank subject and
+ * comment, and the rest address a made-up ticket.
+ */
+async function runTicketProbes(context: ScenarioContext, steps: ScenarioStep[]): Promise<void> {
+  const { call, tools, runId, log } = context;
+  if (!tools.zendesk_create_ticket) {
+    steps.push(makeStep('refused ticket', 'zendesk_create_ticket', 'skip', 'tool not in project toolset'));
+  } else {
+    try {
+      const created = await call<{ id: number }>('zendesk_create_ticket', { subject: '', comment: '' });
+      steps.push(makeStep('refused ticket', 'zendesk_create_ticket', 'fail', `Zendesk created ticket ${created.id}`));
+      const deleted = await step(steps, 'delete unexpected ticket', 'zendesk_delete_ticket', async () => {
+        await call('zendesk_delete_ticket', { ticket_id: created.id });
+      });
+      if (!deleted) log.error(`zendesk: leaked ticket ${created.id} (${runId}); delete it manually`);
+    } catch (error) {
+      const msg = errorMessage(error);
+      steps.push(
+        /status=422/.test(msg)
+          ? makeStep('refused ticket', 'zendesk_create_ticket', 'pass', `expected error: ${msg.slice(0, 120)}`)
+          : makeStep('refused ticket', 'zendesk_create_ticket', 'fail', msg),
+      );
+    }
+  }
+
+  const ticket_id = syntheticId();
+  steps.push(await probeTool(call, tools, 'read ticket', 'zendesk_get_ticket', { ticket_id }));
+  steps.push(
+    await probeTool(call, tools, 'update ticket', 'zendesk_update_ticket', {
+      ticket_id,
+      comment: { body: `Internal note from the smoke test (${runId}).`, public: false },
+    }),
+  );
+  steps.push(await probeTool(call, tools, 'read ticket comments', 'zendesk_get_ticket_comments', { ticket_id }));
+  steps.push(await probeTool(call, tools, 'delete ticket', 'zendesk_delete_ticket', { ticket_id }));
+  await step(steps, 'search tickets', 'zendesk_search_tickets', async () => {
+    const found = await call<{ count: number }>('zendesk_search_tickets', { query: 'tags:mastra_smoke' });
+    return `${found.count} found`;
+  });
+}
+
 async function runPeopleLifecycle(context: ScenarioContext, steps: ScenarioStep[]): Promise<void> {
   const { call, runId, log } = context;
   let organizationId: number | undefined;
@@ -273,7 +326,12 @@ async function runPeopleLifecycle(context: ScenarioContext, steps: ScenarioStep[
           }
         });
       }
-      await runTicketLifecycle(context, steps, userId === undefined ? undefined : email);
+      if (process.env.MASTRA_SMOKE_ZENDESK_ALLOW_TICKETS === '1') {
+        await runTicketLifecycle(context, steps, userId === undefined ? undefined : email);
+      } else {
+        log.warn('zendesk: MASTRA_SMOKE_ZENDESK_ALLOW_TICKETS is not 1, so ticket tools are probed, not run');
+        await runTicketProbes(context, steps);
+      }
     } finally {
       if (userId !== undefined) {
         const id = userId;
@@ -408,7 +466,13 @@ async function runHelpCenterLifecycle(
         const archived = await step(steps, 'archive article', 'zendesk_archive_article', async () => {
           await call('zendesk_archive_article', { article_id: article });
         });
-        if (!archived) log.error(`zendesk: article ${article} (${runId}) was not archived`);
+        if (archived) {
+          log.warn(
+            `zendesk: article ${article} (${runId}) is in the Help Center archive; the API cannot delete it, so delete it there`,
+          );
+        } else {
+          log.error(`zendesk: leaked article ${article} (${runId}); delete it manually`);
+        }
       }
     } finally {
       const deleted = await step(steps, 'delete section', 'zendesk_delete_section', async () => {

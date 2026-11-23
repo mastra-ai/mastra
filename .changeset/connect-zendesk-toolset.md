@@ -19,4 +19,13 @@ const supportAgent = new Agent({
 });
 ```
 
-`zendesk_delete_section` and `zendesk_delete_category` also delete every article inside them, so consider listing them in the agent's `requireApproval`. New articles don't email section subscribers unless `notify_subscribers` is set.
+`zendesk_delete_section` and `zendesk_delete_category` also delete every article inside them, so consider asking for approval before they run:
+
+```ts
+tools({
+  providers: ['zendesk'],
+  requireApproval: ['zendesk_delete_section', 'zendesk_delete_category'],
+});
+```
+
+New articles don't email section subscribers unless `notify_subscribers` is set.
