@@ -425,9 +425,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   let agent: any;
   let mastra: any;
   if (sharedAgent) {
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter, so discriminate against a real
-    // wrapper by checking `agent.agent !== agent`. See `Mastra.addAgent`.
+    // Only wrappers (createDurableAgent, Inngest) match `isDurableAgentLike`; a native
+    // Agent with an execution engine does not, so it still gets wrapped below.
     const sharedIsRealDurableWrapper =
       isDurableAgentLike(sharedAgent.agent) && (sharedAgent.agent as any).agent !== sharedAgent.agent;
     if (isDurableEngineVariant(engine) && !sharedIsRealDurableWrapper) {

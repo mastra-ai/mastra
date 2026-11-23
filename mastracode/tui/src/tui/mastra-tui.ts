@@ -44,6 +44,7 @@ import {
 } from './background-activity.js';
 import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
+import { withFastEntries } from './codex-fast-entries.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import { sendGoalReminder, setGoalWithDefaults } from './commands/goal.js';
 import { showThreadLockPrompt } from './commands/threads.js';
@@ -1719,7 +1720,10 @@ export class MastraTUI {
           });
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
-          const availableModels = await this.state.controller.listAvailableModels();
+          const availableModels = withFastEntries(await this.state.controller.listAvailableModels(), {
+            authStorage: this.state.authStorage,
+            factory: this.state.factory,
+          });
           if (this.stopped || availableModels.length === 0) return undefined;
 
           return new Promise<string | undefined>(resolveModel => {

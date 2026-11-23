@@ -17,7 +17,7 @@ const inputs = [
   true,
   {},
   { cleanupTimeoutMs: 0 },
-  { executionEngine: 'durable' },
+  { executionEngine: 'default' },
   { executionEngine: 'evented' },
   { executionEngine: false },
   false,
@@ -26,7 +26,7 @@ const inputs = [
 afterEach(() => vi.restoreAllMocks());
 
 describe('native Agent stored-registration policy', () => {
-  for (const executionEngine of [undefined, false, 'durable', 'evented'] satisfies (ExecutionEngine | undefined)[]) {
+  for (const executionEngine of [undefined, false, 'default', 'evented'] satisfies (ExecutionEngine | undefined)[]) {
     for (const registration of ['constructor', 'addAgent'] as const) {
       it.each(inputs)(`${registration} preserves explicit policy %j with host ${String(executionEngine)}`, durable => {
         const agent = new Agent({ ...config, durable });
@@ -65,7 +65,7 @@ describe('native Agent stored-registration policy', () => {
     expect(agent.getPubSub()).toBe(mastra.pubsub);
     new Mastra({
       agents: { policy: agent },
-      durable: { executionEngine: 'durable', cleanupTimeoutMs: 888, shouldPersistSnapshot: () => false },
+      durable: { executionEngine: 'default', cleanupTimeoutMs: 888, shouldPersistSnapshot: () => false },
     });
     expect(agent.durable).toEqual({
       executionEngine: 'evented',
@@ -77,7 +77,7 @@ describe('native Agent stored-registration policy', () => {
     });
   });
 
-  it.each(['durable', 'evented'] as const)(
+  it.each(['default', 'evented'] as const)(
     'editor forks retain inherited %s policy and stream defaults',
     executionEngine => {
       const shouldCache = () => false;
@@ -100,7 +100,7 @@ describe('native Agent stored-registration policy', () => {
       new Mastra({
         logger: false,
         agents: { fork },
-        durable: { executionEngine: executionEngine === 'evented' ? 'durable' : 'evented', cleanupTimeoutMs: 99 },
+        durable: { executionEngine: executionEngine === 'evented' ? 'default' : 'evented', cleanupTimeoutMs: 99 },
       });
       expect(fork.durable).toEqual(agent.durable);
     },
@@ -122,8 +122,8 @@ describe('native Agent stored-registration policy', () => {
     const fork = agent.__fork();
     new Mastra({ logger: false, agents: { fork }, durable: { executionEngine: 'evented', cleanupTimeoutMs: 0 } });
     expect(agent.durable).toBeUndefined();
-    new Mastra({ logger: false, agents: { agent }, durable: { executionEngine: 'durable', cleanupTimeoutMs: 99 } });
-    expect(agent.__getExecutionEnginePolicy()).toBe('durable');
+    new Mastra({ logger: false, agents: { agent }, durable: { executionEngine: 'default', cleanupTimeoutMs: 99 } });
+    expect(agent.__getExecutionEnginePolicy()).toBe('default');
     expect(fork.__getExecutionEnginePolicy()).toBe('evented');
     expect(fork.durable).toEqual({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
   });
@@ -204,7 +204,7 @@ describe('native Agent stored-registration policy', () => {
     },
   );
 
-  it.each(['durable', 'evented'] as const)(
+  it.each(['default', 'evented'] as const)(
     'warns only for explicitly incompatible static defaults inherited from %s',
     executionEngine => {
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
@@ -217,11 +217,11 @@ describe('native Agent stored-registration policy', () => {
       expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(
         executionEngine === 'evented' ? 1 : 0,
       );
-      expect(messages.every(message => message.includes('activation is deferred'))).toBe(true);
+      expect(messages.every(message => !message.includes('activation is deferred'))).toBe(true);
     },
   );
 
-  it.each([undefined, false, 'durable', 'evented'] satisfies (ExecutionEngine | undefined)[])(
+  it.each([undefined, false, 'default', 'evented'] satisfies (ExecutionEngine | undefined)[])(
     'does not warn for explicit policy %s or implicit eager defaults',
     executionEngine => {
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
@@ -229,12 +229,12 @@ describe('native Agent stored-registration policy', () => {
         agents: { policy: new Agent({ ...config, durable: { executionEngine } }) },
         durable: { executionEngine: 'evented' },
       });
-      new Mastra({ agents: { policy: new Agent(config) }, durable: { executionEngine: 'durable' } });
+      new Mastra({ agents: { policy: new Agent(config) }, durable: { executionEngine: 'default' } });
       expect(warn).not.toHaveBeenCalled();
     },
   );
 
-  it.each([false, 'durable', 'evented'] as const)(
+  it.each([false, 'default', 'evented'] as const)(
     'does not diagnose incompatible defaults for explicit policy %s',
     async executionEngine => {
       const agent = new Agent({
@@ -247,9 +247,9 @@ describe('native Agent stored-registration policy', () => {
       new Mastra({ agents: { policy: agent }, durable: { executionEngine: 'evented' } });
       const requestContext = new RequestContext();
       await expect(agent.stream('hello', { requestContext })).rejects.toThrow('Request context validation failed');
-      expect(
-        warn.mock.calls.filter(([message]) => String(message).includes('Native execution activation is deferred')),
-      ).toHaveLength(0);
+      const messages = warn.mock.calls.map(([message]) => String(message));
+      expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(0);
+      expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(0);
     },
   );
 });
@@ -289,13 +289,13 @@ describe('wrappers leave inner durable policy unchanged', () => {
   });
 
   const wrappers = [
-    { name: 'DurableAgent', engine: 'durable', wrap: (agent: Agent) => new DurableAgent({ agent }) },
+    { name: 'DurableAgent', engine: 'default', wrap: (agent: Agent) => new DurableAgent({ agent }) },
     { name: 'EventedAgent', engine: 'evented', wrap: (agent: Agent) => new EventedAgent({ agent }) },
-    { name: 'createDurableAgent', engine: 'durable', wrap: (agent: Agent) => createDurableAgent({ agent }) },
+    { name: 'createDurableAgent', engine: 'default', wrap: (agent: Agent) => createDurableAgent({ agent }) },
     { name: 'createEventedAgent', engine: 'evented', wrap: (agent: Agent) => createEventedAgent({ agent }) },
   ] as const;
   for (const wrapper of wrappers) {
-    for (const executionEngine of ['durable', 'evented'] as const) {
+    for (const executionEngine of ['default', 'evented'] as const) {
       for (const registerFirst of [false, true]) {
         for (const resolveBus of [false, true]) {
           it.each(inputs)(
@@ -322,7 +322,7 @@ describe('wrappers leave inner durable policy unchanged', () => {
               expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
               expect(hasDurableExecution(wrapped)).toBe(true);
               expect(isDurableAgentLike(wrapped)).toBe(true);
-              expect(hasDurableExecution(agent)).toBe(false);
+              expect(hasDurableExecution(agent)).toBe(selected !== false);
               if (bus) {
                 expect(agent.__getStreamBus()).toBe(bus);
                 expect(bus.pubsub).toBe(transport);
@@ -398,14 +398,14 @@ describe('wrappers leave inner durable policy unchanged', () => {
   );
 
   it('retains forced evented strategy before host/storage fallback and isolates wrapped forks', () => {
-    const agent = new Agent({ ...config, durable: { executionEngine: 'durable' } });
+    const agent = new Agent({ ...config, durable: { executionEngine: 'default' } });
     const wrapped = createEventedAgent({ agent });
     expect(wrapped.__getExecutionEngineStrategy()).toBe('evented');
     const fork = wrapped.__fork();
     expect(fork).toBeInstanceOf(EventedAgent);
     if (!(fork instanceof EventedAgent)) throw new Error('Expected an evented wrapper fork');
     expect(fork.__getExecutionEngineStrategy()).toBe('evented');
-    expect(fork.agent.durable).toEqual({ executionEngine: 'durable' });
-    expect(agent.durable).toEqual({ executionEngine: 'durable' });
+    expect(fork.agent.durable).toEqual({ executionEngine: 'default' });
+    expect(agent.durable).toEqual({ executionEngine: 'default' });
   });
 });
