@@ -11,7 +11,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 31 providers (1208 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 33 providers (1231 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -19,12 +19,14 @@ MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/can
 
 | Provider | Provider ID | Tools |
 | - | - | - |
+| <ProviderLogo slug="anthropic" mono /> [Anthropic](#anthropic) | `anthropic` | 12 |
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
 | <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 34 |
 | <ProviderLogo slug="elevenlabs" mono /> [ElevenLabs](#elevenlabs) | `elevenlabs` | 35 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
 | <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
 | <ProviderLogo slug="gitlab" /> [GitLab](#gitlab) | `gitlab` | 44 |
+| <ProviderLogo slug="googleanalytics" /> [Google Analytics](#google-analytics) | `google-analytics` | 11 |
 | <ProviderLogo slug="googlecalendar" /> [Google Calendar](#google-calendar) | `google-calendar` | 43 |
 | <ProviderLogo slug="googledocs" /> [Google Docs](#google-docs) | `google-docs` | 37 |
 | <ProviderLogo slug="googledrive" /> [Google Drive](#google-drive) | `google-drive` | 32 |
@@ -50,6 +52,25 @@ MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/can
 | <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
 | <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
 | <ProviderLogo src="https://svgl.app/library/workos.svg" /> [WorkOS](#workos) | `workos` | 40 |
+
+## Anthropic
+
+Provider ID: `anthropic` · 12 tools
+
+| Tool | Description |
+| - | - |
+| `anthropic_cancel_message_batch` | Cancel an Anthropic Message Batch. |
+| `anthropic_count_message_tokens` | Count tokens for an Anthropic message request. |
+| `anthropic_create_message` | Create an Anthropic model message. |
+| `anthropic_create_message_batch` | Create a message batch in Anthropic. |
+| `anthropic_delete_file` | Delete or archive a file in Anthropic. |
+| `anthropic_get_file` | Retrieve a single file from Anthropic. |
+| `anthropic_get_message_batch` | Retrieve a single message batch from Anthropic. |
+| `anthropic_get_model` | Retrieve a single model from Anthropic. |
+| `anthropic_list_files` | List files from Anthropic. |
+| `anthropic_list_message_batch_results` | Stream or retrieve results for an Anthropic Message Batch |
+| `anthropic_list_message_batches` | List message batches from Anthropic. |
+| `anthropic_list_models` | List models from Anthropic. |
 
 ## Clerk
 
@@ -323,6 +344,24 @@ Provider ID: `gitlab` · 44 tools
 | `gitlab_update_merge_request` | Update a merge request in GitLab. |
 | `gitlab_update_project` | Update a project in GitLab. |
 | `gitlab_update_release` | Update a release in GitLab. |
+
+## Google Analytics
+
+Provider ID: `google-analytics` · 11 tools
+
+| Tool | Description |
+| - | - |
+| `google_analytics_archive_conversion_event` | Archive a GA4 conversion event. |
+| `google_analytics_batch_run_reports` | Run multiple GA4 reports in one request. |
+| `google_analytics_create_conversion_event` | Create a conversion event for a GA4 property. |
+| `google_analytics_create_data_stream` | Create a data stream for a GA4 property. |
+| `google_analytics_create_property` | Create a GA4 property under an account. |
+| `google_analytics_get_metadata` | Retrieve GA4 dimensions and metrics metadata. |
+| `google_analytics_run_pivot_report` | Run a GA4 pivot report. |
+| `google_analytics_run_realtime_report` | Run a realtime GA4 report. |
+| `google_analytics_run_report` | Run a GA4 report for a property |
+| `google_analytics_update_data_stream` | Update a GA4 data stream. |
+| `google_analytics_update_property` | Update a GA4 property. |
 
 ## Google Calendar
 

@@ -1280,6 +1280,15 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'other/anthropic',
+          label: 'Anthropic',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/anthropic/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/anthropic/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'other/canva',
           label: 'Canva',
           customProps: {
@@ -1300,6 +1309,14 @@ const sidebars = {
           label: 'GitLab',
           customProps: {
             icon: 'https://cdn.simpleicons.org/gitlab?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/google-analytics',
+          label: 'Google Analytics',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googleanalytics?viewbox=auto&size=28',
           },
         },
         {

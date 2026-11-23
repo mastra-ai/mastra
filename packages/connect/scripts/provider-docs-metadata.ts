@@ -63,19 +63,22 @@ export interface ChannelConnectionDocs {
 }
 
 /** Providers present in src/providers but not part of the documented release. */
-export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
-  'anthropic',
-  'google-analytics',
-  'sendgrid',
-  'stripe',
-  'twitter-v2',
-]);
+export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set(['stripe', 'twitter-v2']);
 
 /** Shared Connect setup that every generated page links to as its prerequisite. */
 export const CONNECT_GUIDE_PATH = '/docs/mastra-platform/connect';
 
 /** Providers with a generated toolset in src/providers. Keys are provider IDs. */
 export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
+  anthropic: {
+    name: 'Anthropic',
+    logo: { slug: 'anthropic', mono: true },
+    canonicalPage: 'other/anthropic.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary: 'send messages, count tokens, run message batches, read models, and manage files',
+    emit: true,
+  },
   clerk: {
     name: 'Clerk',
     logo: { slug: 'clerk', mono: true },
@@ -128,6 +131,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     category: 'Other providers',
     summary:
       'manage projects, groups, issues, merge requests, branches, files, commits, and releases, and run, cancel, and retry pipelines and jobs',
+    emit: true,
+  },
+  'google-analytics': {
+    name: 'Google Analytics',
+    logo: { slug: 'googleanalytics' },
+    canonicalPage: 'other/google-analytics.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'run standard, pivot, realtime, and batch reports, read report metadata, and manage properties, data streams, and conversion events',
     emit: true,
   },
   'google-calendar': {
