@@ -1,5 +1,5 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import type { KnowledgeConfig, KnowledgeImporterClass, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
+import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
 import type { IMastraLogger } from '@mastra/core/logger';
 import {
   MastraCompositeStore,
@@ -14,6 +14,20 @@ import {
 import type { KnowledgePageStore } from '@mastra/core/storage';
 import type { PlatformAccessToken } from '@mastra/platform-workspace';
 
+/**
+ * The part of a core importer class (`class X extends KnowledgeImporter({ ... })`) that
+ * PlatformKnowledge uses. It's declared here instead of using core's `KnowledgeImporterClass` because
+ * older cores in this package's peer range don't have that type. Replace it with core's type in the
+ * next breaking release.
+ *
+ * @experimental
+ */
+export interface PlatformKnowledgeImporterClass {
+  new (...args: any[]): unknown;
+  readonly id: string;
+  toManifest(): { readonly id: string; readonly label: string };
+}
+
 export interface PlatformKnowledgeOptions extends Omit<
   KnowledgeConfig,
   'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes' | 'importers'
@@ -27,13 +41,13 @@ export interface PlatformKnowledgeOptions extends Omit<
    */
   apiUrl?: string;
   /**
-   * Importer classes this app offers Platform, e.g. `[HelpSpotImporter]`. Platform lists them in the
-   * Knowledge UI, stores each configured source and runs it here on its schedule. Pass the classes, not
-   * instances: Platform supplies each binding's target, settings and credentials.
+   * Importer classes this app offers Platform, e.g. `[HelpSpotImporter]`, so Platform can read their
+   * manifests. Pass the classes, not instances: Platform supplies each binding's target, settings and
+   * credentials. Needs a `@mastra/core` with Knowledge importers.
    *
    * @experimental
    */
-  importers?: readonly KnowledgeImporterClass[];
+  importers?: readonly PlatformKnowledgeImporterClass[];
 }
 
 // These are the schema-v4 page-store methods, not arbitrary object properties or storage lifecycle methods.
@@ -237,7 +251,7 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
 const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
 export class PlatformKnowledge extends Knowledge {
-  readonly #importerClasses: readonly KnowledgeImporterClass[];
+  readonly #importerClasses: readonly PlatformKnowledgeImporterClass[];
   #importerWarnings: string[] = [];
 
   constructor(options: PlatformKnowledgeOptions = {}) {
@@ -285,8 +299,15 @@ export class PlatformKnowledge extends Knowledge {
       scopes: {},
       storage,
     });
-    const classes: KnowledgeImporterClass[] = [];
-    const seen = new Set<KnowledgeImporterClass>();
+    // Older cores in the peer range have no importers on Knowledge: Platform could list the classes but
+    // never run them, so refuse rather than start half-working.
+    if (importers.length > 0 && !('importers' in Knowledge.prototype)) {
+      throw new TypeError(
+        'PlatformKnowledge `importers` needs a @mastra/core with Knowledge importers. Upgrade @mastra/core.',
+      );
+    }
+    const classes: PlatformKnowledgeImporterClass[] = [];
+    const seen = new Set<PlatformKnowledgeImporterClass>();
     for (const importer of importers) {
       if (typeof importer !== 'function' || typeof importer.toManifest !== 'function') {
         throw new TypeError(
@@ -316,12 +337,11 @@ export class PlatformKnowledge extends Knowledge {
   }
 
   /**
-   * The importer classes from the `importers` option, each id once, in the order given. Platform
-   * reads their manifests to list them in the Knowledge UI.
+   * The importer classes from the `importers` option, each id once, in the order given.
    *
    * @experimental
    */
-  get importerClasses(): readonly KnowledgeImporterClass[] {
+  get importerClasses(): readonly PlatformKnowledgeImporterClass[] {
     return this.#importerClasses;
   }
 }

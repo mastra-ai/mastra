@@ -1,8 +1,9 @@
-import { KnowledgeImporter } from '@mastra/core/knowledge';
+import { Knowledge, KnowledgeImporter } from '@mastra/core/knowledge';
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PlatformKnowledge } from './index';
+import type { PlatformKnowledgeOptions } from './index';
 
 class HelpSpotImporter extends KnowledgeImporter({ id: 'helpspot', label: 'HelpSpot' }) {
   async import() {}
@@ -89,4 +90,35 @@ it('does not hand the classes to core as local importers', () => {
 
   // Platform runs these from bindings it stores, so the app has no local importers to run.
   expect(knowledge.importers).toBeUndefined();
+});
+
+it('takes any class with an id and a manifest, without needing core importer types', () => {
+  // The option is typed by the shape PlatformKnowledge uses, so the published types don't depend on
+  // an importer type that older cores in the peer range lack.
+  class HandWrittenImporter {
+    static readonly id = 'hand-written';
+    static toManifest() {
+      return { id: 'hand-written', label: 'Hand written' };
+    }
+  }
+  const importers: PlatformKnowledgeOptions['importers'] = [HandWrittenImporter, HelpSpotImporter];
+  const knowledge = new PlatformKnowledge({ ...connection, importers });
+
+  expect(knowledge.importerClasses.map(importer => importer.toManifest().id)).toEqual(['hand-written', 'helpspot']);
+});
+
+it('refuses importers on a core without importer support, and starts without them', () => {
+  // Older cores in the peer range have no importers on Knowledge; Platform could list the classes
+  // but never run them, so say so at startup.
+  const descriptor = Object.getOwnPropertyDescriptor(Knowledge.prototype, 'importers')!;
+  delete (Knowledge.prototype as { importers?: unknown }).importers;
+  try {
+    expect(() => new PlatformKnowledge({ ...connection, importers: [HelpSpotImporter] })).toThrow(
+      /needs a @mastra\/core with Knowledge importers/,
+    );
+    expect(new PlatformKnowledge(connection).importerClasses).toEqual([]);
+    expect(new PlatformKnowledge({ ...connection, importers: [] }).importerClasses).toEqual([]);
+  } finally {
+    Object.defineProperty(Knowledge.prototype, 'importers', descriptor);
+  }
 });
