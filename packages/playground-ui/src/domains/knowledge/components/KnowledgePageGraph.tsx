@@ -5,12 +5,10 @@ import {
   Handle,
   MarkerType,
   Position,
-  ReactFlow,
   ReactFlowProvider,
   useReactFlow,
   useStore,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -65,7 +63,7 @@ import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
 import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPin } from '@/ds/icons/central/IconPin';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
-import { GraphCanvasBackground } from '@/ds/primitives/graph-canvas-background';
+import { GraphCanvas } from '@/ds/primitives/graph-canvas';
 import { overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -932,6 +930,7 @@ export interface KnowledgePageGraphProps {
   /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
   settled?: boolean;
   insets?: PaneInsets;
+  /** Scroll pans by default. Set to false to use scroll to zoom. */
   panOnScroll?: boolean;
   collapsibleLegend?: boolean;
   /** Exact links into and out of pages, from the store; they replace the counts taken from `knownLinks`. */
@@ -1038,7 +1037,7 @@ function KnowledgePageGraphInner({
   onClearSelection,
   onMentionSelect,
   insets = NO_PANE_INSETS,
-  panOnScroll = false,
+  panOnScroll = true,
   collapsibleLegend,
 }: KnowledgePageGraphProps) {
   // Grants add placeholder circles for declared principals with no scope page yet, and their own lines.
@@ -1601,7 +1600,7 @@ function KnowledgePageGraphInner({
           ([id, hidden]) => laidOut.shape.form.get(id) === 'full' && (hidden.in > 0 || hidden.out > 0),
         )}
       />
-      <ReactFlow
+      <GraphCanvas
         className="rounded-[inherit]"
         nodes={drawnNodes}
         edges={emphasisedEdges}
@@ -1620,16 +1619,13 @@ function KnowledgePageGraphInner({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
         nodesDraggable={false}
-        panOnScroll={panOnScroll}
         zoomOnScroll={!panOnScroll}
         onPaneClick={onPaneClick}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={onNodeMouseLeave}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
-      >
-        <GraphCanvasBackground />
-      </ReactFlow>
+      />
       <div className="absolute bottom-3 left-3 z-10 translate-x-(--knowledge-tree-drawer-inset,0px) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
         <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom>
           <Button
