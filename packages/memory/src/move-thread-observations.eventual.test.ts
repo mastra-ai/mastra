@@ -7,6 +7,12 @@ import { Memory } from './index';
 /** Real in-memory database, with only the query visibility boundary delayed (#27834). */
 class EventuallyConsistentVector extends LibSQLVector {
   staleReads = 0;
+  /** Simulated provider latency, served by the (fake) timer clock. */
+  queryDelayMs = 0;
+  updateDelayMs = 0;
+  /** Clock reading when each migration attempt issued its first read, and when each write started. */
+  migrationStartedAt: number | undefined;
+  updateStartedAt: number[] = [];
   private readonly pages = new Map<string, { results: QueryResult[]; readsLeft: number }>();
 
   constructor(public visibilityDelay: number) {
@@ -22,6 +28,8 @@ class EventuallyConsistentVector extends LibSQLVector {
     // Only migration reads lag; ordinary reads inspect the committed database state.
     if (!params.includeVector || typeof params.filter?.resource_id !== 'object') return super.query(params);
     if (params.topK && params.topK > 20) throw new Error('Vectorize permits at most 20 results with values');
+    this.migrationStartedAt ??= Date.now();
+    if (this.queryDelayMs > 0) await new Promise(resolve => setTimeout(resolve, this.queryDelayMs));
     const page = this.pages.get(params.indexName);
     if (page && page.readsLeft > 0) {
       page.readsLeft--;
@@ -31,6 +39,17 @@ class EventuallyConsistentVector extends LibSQLVector {
     const results = await super.query(params);
     this.pages.set(params.indexName, { results: structuredClone(results), readsLeft: this.visibilityDelay });
     return results;
+  }
+
+  override async updateVector(params: Parameters<LibSQLVector['updateVector']>[0]) {
+    this.updateStartedAt.push(Date.now());
+    if (this.updateDelayMs > 0) await new Promise(resolve => setTimeout(resolve, this.updateDelayMs));
+    return super.updateVector(params);
+  }
+
+  resetAttempt() {
+    this.migrationStartedAt = undefined;
+    this.updateStartedAt = [];
   }
 }
 
@@ -141,4 +160,47 @@ describe('observation transfer on eventually consistent vector stores (#27834)',
       expect.objectContaining({ metadata: expect.objectContaining({ thread_id: 'unrelated' }) }),
     ]);
   });
+
+  // Technical: the 120-second budget was only checked before each read, so a slow read or a page of
+  // slow writes kept starting updateVector calls after it expired.
+  it.each([
+    { provider: 'writes take 10 seconds each', queryDelayMs: 0, updateDelayMs: 10_000, movedBeforeDeadline: 12 },
+    {
+      provider: 'the first read returns after the deadline',
+      queryDelayMs: 130_000,
+      updateDelayMs: 0,
+      movedBeforeDeadline: 0,
+    },
+  ])(
+    'stops writing when the transfer budget runs out because $provider, keeps finished moves, and a retry finishes',
+    async ({ queryDelayMs, updateDelayMs, movedBeforeDeadline }) => {
+      const { memory, vector } = await createFixture(0);
+      vector.queryDelayMs = queryDelayMs;
+      vector.updateDelayMs = updateDelayMs;
+
+      await expect(transfer(memory)).rejects.toThrow(/observation vectors failed.*did not complete within 120 seconds/);
+
+      if (vector.migrationStartedAt === undefined) throw new Error('Transfer never read the observation index');
+      const deadline = vector.migrationStartedAt + 120_000;
+      expect(vector.updateStartedAt).toHaveLength(movedBeforeDeadline);
+      expect(vector.updateStartedAt.every(startedAt => startedAt < deadline)).toBe(true);
+      const movedFirst = await readObservations(vector, 'new');
+      expect(movedFirst).toHaveLength(movedBeforeDeadline);
+      expect((await readObservations(vector, 'old')).filter(r => r.metadata?.thread_id === 'moving')).toHaveLength(
+        45 - movedBeforeDeadline,
+      );
+
+      // The provider recovers; retrying the same transfer moves only what is left.
+      vector.queryDelayMs = 0;
+      vector.updateDelayMs = 0;
+      vector.resetAttempt();
+      await transfer(memory);
+      expect(vector.updateStartedAt).toHaveLength(45 - movedBeforeDeadline);
+      expect(await readObservations(vector, 'new')).toHaveLength(45);
+      expect(await readObservations(vector, 'new')).toEqual(expect.arrayContaining(movedFirst));
+      expect(await readObservations(vector, 'old')).toEqual([
+        expect.objectContaining({ metadata: expect.objectContaining({ thread_id: 'unrelated' }) }),
+      ]);
+    },
+  );
 });

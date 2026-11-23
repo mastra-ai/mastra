@@ -3533,7 +3533,7 @@ Notes:
       const deadline = Date.now() + 120_000;
       let retryDelayMs = 1_000;
       let complete = false;
-      while (Date.now() < deadline) {
+      migration: while (Date.now() < deadline) {
         // `queryText` is accepted only by self-embedding stores, so it is not on the shared
         // QueryVectorParams.
         const stale = await vector.query({
@@ -3556,6 +3556,9 @@ Notes:
         }
         retryDelayMs = 1_000;
         for (const result of pending) {
+          // A slow query or earlier updates can use up the budget mid-page. Start no new write after
+          // the deadline; completed updates stay in place so a same-resource retry finishes the rest.
+          if (Date.now() >= deadline) break migration;
           moved.add(result.id);
           // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
           if (!result.metadata) {
