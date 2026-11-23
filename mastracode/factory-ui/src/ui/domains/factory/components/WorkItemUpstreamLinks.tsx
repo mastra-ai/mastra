@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
-import { externalLinkLabel } from '../boardItems';
+import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../changeRequestState';
 import { changeRequestLinkLabel, changeRequestRepository } from '../sessionChangeRequests';
 import { workItemIdentifier, workItemShortReference } from '../services/relationships';
@@ -23,11 +23,12 @@ function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[], short:
   const origin = item.url;
   const own: UpstreamLink[] = [];
   if (origin !== null) {
-    const label = (short ? workItemShortReference(item) : workItemIdentifier(item)) ?? externalLinkLabel(item.source);
+    const { linkLabel } = CARD_SOURCES[item.source];
+    const label = (short ? workItemShortReference(item) : workItemIdentifier(item)) ?? linkLabel;
     own.push({
       url: origin,
       label,
-      ariaLabel: `${externalLinkLabel(item.source)}: ${label}`,
+      ariaLabel: `${linkLabel}: ${label}`,
       icon: <SourceIcon source={item.source} className="size-3" />,
     });
   }

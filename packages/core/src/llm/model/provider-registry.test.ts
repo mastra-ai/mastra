@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { MastraModelGateway } from './gateways/base.js';
 import type { ModelReasoningOption, ProviderConfig, ReasoningCapabilities } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
@@ -218,10 +219,13 @@ describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () =>
       'us.openai.gpt-6-luna',
       'global.openai.gpt-6-sol',
       'us.openai.gpt-5.6-sol',
+      'us.openai.gpt-4o',
     ]) {
-      expect(modelSupportsTemperature(`amazon-bedrock/${model}`)).toBe(false);
+      expect(modelSupportsTemperature(`amazon-bedrock/${model}`)).toBe(true);
     }
-    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-4o')).toBe(true);
+    // gpt-5-pro is not in the openai temperature list, and Bedrock inherits that.
+    expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-5-pro')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/global.openai.gpt-5-pro')).toBe(false);
     expect(modelSupportsTemperature('amazon-bedrock/us.openai.gpt-oss-120b')).toBeUndefined();
   });
 });
@@ -806,7 +810,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const firstJson = JSON.parse(fs.readFileSync(tempJsonPath, 'utf-8'));
     expect(firstJson.providers['test-provider']).toBeDefined();
     expect(firstJson.providers['new-provider']).toBeUndefined();
-    expect(firstJson.models['test-provider']).toEqual(['model-a', 'model-b']);
+    expect(firstJson.providers['test-provider'].models).toEqual(['model-a', 'model-b']);
 
     const firstTypes = fs.readFileSync(tempTypesPath, 'utf-8');
     expect(firstTypes).toContain("'test-provider': readonly ['model-a', 'model-b']");
@@ -820,8 +824,8 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const secondJson = JSON.parse(fs.readFileSync(tempJsonPath, 'utf-8'));
     expect(secondJson.providers['test-provider']).toBeDefined();
     expect(secondJson.providers['new-provider']).toBeDefined();
-    expect(secondJson.models['test-provider']).toEqual(['model-a', 'model-b', 'model-c']);
-    expect(secondJson.models['new-provider']).toEqual(['new-model-1', 'new-model-2']);
+    expect(secondJson.providers['test-provider'].models).toEqual(['model-a', 'model-b', 'model-c']);
+    expect(secondJson.providers['new-provider'].models).toEqual(['new-model-1', 'new-model-2']);
 
     const secondTypes = fs.readFileSync(tempTypesPath, 'utf-8');
     expect(secondTypes).toContain("'test-provider': readonly ['model-a', 'model-b', 'model-c']");
@@ -835,7 +839,10 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Clean up temp directory
     fs.rmSync(tempDir, { recursive: true, force: true });
 
-    // Note: Mocks are automatically restored by vi.restoreAllMocks() in afterEach
+    // These were reassigned (not spied), so vi.restoreAllMocks() does not put them back.
+    fs.writeFileSync = originalWriteFileSync;
+    fs.promises.writeFile = originalWriteFile;
+    fs.promises.rename = originalRename;
   });
 
   it('should hide disabled gateway providers at runtime when shouldEnable returns false', async () => {
@@ -1462,5 +1469,314 @@ describe('Issue #10434: Concurrent write corruption', () => {
 
     // With atomic writes, corruption should NEVER occur
     expect(corruptionDetected).toBe(false);
+  });
+});
+
+describe('Runtime provider registry filtering', () => {
+  type RegistryModule = typeof import('./provider-registry.js');
+  type RegistryJson = { providers: Record<string, ProviderConfig>; version: string };
+
+  const ENV_KEYS = ['MASTRA_DEV', 'MASTRA_AUTO_REFRESH_PROVIDERS', 'MASTRA_GATEWAY_API_KEY', 'MASTRA_OFFLINE'];
+  let savedEnv: Record<string, string | undefined>;
+
+  class ToggleGateway extends MastraModelGateway {
+    readonly name = 'Toggle';
+    constructor(
+      readonly id: string,
+      public enabled = true,
+    ) {
+      super();
+    }
+    override shouldEnable() {
+      return this.enabled;
+    }
+    async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+      return {
+        [this.id]: { name: this.id, models: [`${this.id}-model`], apiKeyEnvVar: 'TOGGLE_KEY', gateway: this.id },
+      };
+    }
+    buildUrl() {
+      return 'https://example.invalid/v1';
+    }
+    async getApiKey() {
+      return 'key';
+    }
+    async resolveLanguageModel(): Promise<never> {
+      throw new Error('not used');
+    }
+  }
+
+  // A bundled registry that also carries providers for the Mastra gateway and a custom gateway,
+  // the way one does when it was generated with those gateways enabled.
+  async function loadWithBundledRegistry(): Promise<RegistryModule> {
+    const real = (await vi.importActual<{ default: RegistryJson }>('./provider-registry.json')).default;
+    const bundled: RegistryJson = {
+      ...real,
+      providers: {
+        ...real.providers,
+        'mastra/openai': {
+          name: 'Mastra OpenAI',
+          models: ['gpt-4o'],
+          apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+          gateway: 'mastra',
+        },
+        acme: { name: 'Acme', models: ['acme-1'], apiKeyEnvVar: 'ACME_API_KEY', gateway: 'acme' },
+      },
+    };
+    vi.doMock('./provider-registry.json', () => ({ default: bundled }));
+    return import('./provider-registry.js');
+  }
+
+  beforeEach(() => {
+    savedEnv = Object.fromEntries(ENV_KEYS.map(key => [key, process.env[key]]));
+    delete process.env.MASTRA_DEV;
+    delete process.env.MASTRA_AUTO_REFRESH_PROVIDERS;
+    delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_OFFLINE;
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    vi.doUnmock('./provider-registry.json');
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  // Importing @mastra/core enumerates PROVIDER_REGISTRY (gateways/defaults.ts does it at module scope).
+  // Every proxy trap used to re-filter the whole bundled registry, ~625 times per import.
+  it('filters the bundled registry once when @mastra/core is imported and on later reads', async () => {
+    const entriesSpy = vi.spyOn(Object, 'entries');
+
+    await import('../../index.js');
+    const bundled = ((await import('./provider-registry.json')) as unknown as { default: RegistryJson }).default;
+    const filterRuns = () => entriesSpy.mock.calls.filter(([value]) => value === bundled.providers).length;
+    expect(filterRuns()).toBe(1);
+
+    const llm = await import('../index.js');
+    expect(Object.keys(llm.PROVIDER_REGISTRY).length).toBeGreaterThan(100);
+    expect(llm.PROVIDER_REGISTRY.openai?.name).toBe('OpenAI');
+    expect(llm.GatewayRegistry.getInstance().getModels().openai).toContain('gpt-4o');
+    for (const id of Object.keys(llm.PROVIDER_REGISTRY))
+      void llm.PROVIDER_REGISTRY[id as keyof typeof llm.PROVIDER_REGISTRY];
+    expect(filterRuns()).toBe(1);
+  });
+
+  it('shows a custom gateway registered after the registry was first read, and hides it once unregistered', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY, PROVIDER_MODELS } = await loadWithBundledRegistry();
+    const registry = GatewayRegistry.getInstance();
+
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+
+    registry.registerCustomGateways([new ToggleGateway('acme')]);
+    expect(PROVIDER_REGISTRY['acme' as keyof typeof PROVIDER_REGISTRY]?.name).toBe('Acme');
+    expect(PROVIDER_MODELS['acme' as keyof typeof PROVIDER_MODELS]).toEqual(['acme-1']);
+    expect(registry.isProviderRegistered('acme')).toBe(true);
+
+    registry.registerCustomGateways([]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+    expect(registry.getModels().acme).toBeUndefined();
+  });
+
+  it('hides providers of gateways replaced by one whose id contains a newline', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
+    const registry = GatewayRegistry.getInstance();
+
+    registry.registerCustomGateways([new ToggleGateway('acme'), new ToggleGateway('acmf')]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(true);
+
+    registry.registerCustomGateways([new ToggleGateway('acme\nacmf')]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+  });
+
+  it('follows a registered gateway being disabled and re-enabled after the registry was first read', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
+    const acme = new ToggleGateway('acme');
+    GatewayRegistry.getInstance().registerCustomGateways([acme]);
+
+    expect('acme' in PROVIDER_REGISTRY).toBe(true);
+    acme.enabled = false;
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+    expect(Object.keys(PROVIDER_REGISTRY)).not.toContain('acme');
+    acme.enabled = true;
+    expect(Object.keys(PROVIDER_REGISTRY)).toContain('acme');
+  });
+
+  it('shows Mastra gateway providers once MASTRA_GATEWAY_API_KEY is set after the registry was first read', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
+    const registry = GatewayRegistry.getInstance();
+
+    expect(registry.getProviderConfig('mastra/openai')).toBeUndefined();
+
+    process.env.MASTRA_GATEWAY_API_KEY = 'msk_test';
+    expect(registry.getProviderConfig('mastra/openai')?.name).toBe('Mastra OpenAI');
+    expect(registry.getModels()['mastra/openai']).toEqual(['gpt-4o']);
+
+    delete process.env.MASTRA_GATEWAY_API_KEY;
+    expect('mastra/openai' in PROVIDER_REGISTRY).toBe(false);
+    // Unrelated providers are unaffected by the gateway toggling.
+    expect(PROVIDER_REGISTRY.openai?.name).toBe('OpenAI');
+  });
+
+  // Dev mode reads the registry from disk and reloads it after a gateway refresh.
+  it('serves refreshed provider data in dev mode after a gateway sync', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-registry-home-'));
+    // Keep the global cache (~/.cache/mastra) out of it as well.
+    vi.spyOn(os, 'homedir').mockReturnValue(home);
+
+    const { GatewayRegistry } = await import('./provider-registry.js');
+    const { ModelsDevGateway: FreshModelsDev } = await import('./gateways/models-dev.js');
+    const { NetlifyGateway: FreshNetlify } = await import('./gateways/netlify.js');
+
+    // Keep dist/ untouched: route every write under it into memory and serve reads from there.
+    const distDir = path.resolve(__dirname, '../../../dist');
+    const files = new Map<string, string>();
+    const inDist = (p: unknown) => typeof p === 'string' && path.resolve(p).startsWith(distDir + path.sep);
+    const realReadFileSync = fs.readFileSync;
+    const realExistsSync = fs.existsSync;
+    vi.spyOn(fs, 'readFileSync').mockImplementation(((p: any, ...rest: any[]) =>
+      inDist(p) && files.has(path.resolve(p)) ? files.get(path.resolve(p)) : realReadFileSync(p, ...rest)) as any);
+    vi.spyOn(fs, 'existsSync').mockImplementation(
+      p => (inDist(p) && files.has(path.resolve(p as string))) || realExistsSync(p),
+    );
+    const realWriteFileSync = fs.writeFileSync;
+    const realRenameSync = fs.renameSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(((p: any, data: any, ...rest: any[]) =>
+      inDist(p) ? void files.set(path.resolve(p), String(data)) : realWriteFileSync(p, data, ...rest)) as any);
+    vi.spyOn(fs, 'renameSync').mockImplementation(((from: any, to: any) =>
+      inDist(to) ? void files.set(path.resolve(to), files.get(path.resolve(from))!) : realRenameSync(from, to)) as any);
+    const realWriteFile = fs.promises.writeFile;
+    const realRename = fs.promises.rename;
+    const realRm = fs.promises.rm;
+    vi.spyOn(fs.promises, 'writeFile').mockImplementation(((p: any, data: any, ...rest: any[]) =>
+      inDist(p)
+        ? (files.set(path.resolve(p), String(data)), Promise.resolve())
+        : realWriteFile(p, data, ...rest)) as any);
+    vi.spyOn(fs.promises, 'rename').mockImplementation(((from: any, to: any) =>
+      inDist(to)
+        ? (files.set(path.resolve(to), files.get(path.resolve(from))!), Promise.resolve())
+        : realRename(from, to)) as any);
+    vi.spyOn(fs.promises, 'rm').mockImplementation(((p: any, ...rest: any[]) =>
+      inDist(p) ? Promise.resolve() : realRm(p, ...rest)) as any);
+
+    // The registry the dev server starts with.
+    files.set(
+      path.join(distDir, 'provider-registry.json'),
+      JSON.stringify({
+        version: '1.0.0',
+        providers: {
+          openai: { name: 'OpenAI', models: ['gpt-old'], apiKeyEnvVar: 'OPENAI_API_KEY', gateway: 'models.dev' },
+          anthropic: {
+            name: 'Anthropic',
+            models: ['claude-old'],
+            apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+            gateway: 'models.dev',
+          },
+        },
+        models: { openai: ['gpt-old'], anthropic: ['claude-old'] },
+      }),
+    );
+
+    // Gateways are the network edge; everything after the fetch runs for real.
+    vi.spyOn(FreshModelsDev.prototype, 'fetchProviders').mockResolvedValue({
+      openai: { name: 'OpenAI', models: ['gpt-refreshed'], apiKeyEnvVar: 'OPENAI_API_KEY', gateway: 'models.dev' },
+    });
+    vi.spyOn(FreshNetlify.prototype, 'fetchProviders').mockResolvedValue({});
+
+    try {
+      const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+      expect(registry.getModels().openai).toEqual(['gpt-old']);
+      expect(registry.isProviderRegistered('anthropic')).toBe(true);
+
+      registry.registerCustomGateways([new ToggleGateway('acme')]);
+      await registry.syncGateways(true);
+
+      expect(registry.getModels().openai).toEqual(['gpt-refreshed']);
+      expect(registry.getProviderConfig('acme')?.models).toEqual(['acme-model']);
+      expect(registry.isProviderRegistered('anthropic')).toBe(false);
+    } finally {
+      vi.restoreAllMocks();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Provider model lists derived from the registry file', () => {
+  // The registry file no longer repeats every model list in a top-level `models` map; `getModels()`
+  // and `PROVIDER_MODELS` derive it from `providers[*].models`. The dev-mode loader can also read a
+  // registry file written by an older @mastra/core that still has the map.
+  const originalReadFileSync = fs.readFileSync;
+  let tempHome: string;
+  let originalHome: string | undefined;
+
+  beforeEach(() => {
+    // Keep the dev-mode loader away from the real ~/.cache/mastra registry
+    originalHome = process.env.HOME;
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-registry-home-'));
+    process.env.HOME = tempHome;
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.env.HOME = originalHome;
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  });
+
+  async function loadDynamicRegistryFrom(registryFile: object) {
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+      if (typeof filePath === 'string' && filePath.endsWith(path.join('dist', 'provider-registry.json'))) {
+        return JSON.stringify(registryFile);
+      }
+      return originalReadFileSync(filePath as any, ...(rest as [any]));
+    });
+    const fresh = await import('./provider-registry.js');
+    return { registry: fresh.GatewayRegistry.getInstance({ useDynamicLoading: true }), fresh };
+  }
+
+  const providers = {
+    openai: { name: 'OpenAI', models: ['gpt-4.1', 'gpt-5'], gateway: 'models.dev' },
+    'netlify/anthropic': { name: 'Anthropic', models: ['claude-haiku-4-5'], gateway: 'netlify' },
+  };
+
+  it('lists every bundled provider with exactly the models in its provider entry', async () => {
+    // A fresh module gives a fresh singleton; the shared one may have been switched to dynamic loading.
+    const fresh = await import('./provider-registry.js');
+    const registry = fresh.GatewayRegistry.getInstance({ useDynamicLoading: false });
+    const providerConfigs = registry.getProviders();
+    const models = registry.getModels();
+
+    expect(Object.keys(providerConfigs).length).toBeGreaterThan(100);
+    expect(Object.keys(models)).toEqual(Object.keys(providerConfigs));
+    for (const [providerId, config] of Object.entries(providerConfigs)) {
+      expect(models[providerId]).toEqual(config.models);
+    }
+  });
+
+  it('reads model lists from a registry file without the top-level map', async () => {
+    const { registry, fresh } = await loadDynamicRegistryFrom({ providers, version: '1.0.0' });
+
+    expect(registry.getModels()).toEqual({
+      openai: ['gpt-4.1', 'gpt-5'],
+      'netlify/anthropic': ['claude-haiku-4-5'],
+    });
+    expect(Object.keys(fresh.PROVIDER_MODELS)).toEqual(['openai', 'netlify/anthropic']);
+    expect(fresh.PROVIDER_MODELS.openai).toEqual(['gpt-4.1', 'gpt-5']);
+  });
+
+  it('reads model lists from a registry file written by an older version with the top-level map', async () => {
+    const { registry } = await loadDynamicRegistryFrom({
+      providers,
+      models: { openai: ['gpt-4.1', 'gpt-5'], 'netlify/anthropic': ['claude-haiku-4-5'] },
+      version: '1.0.0',
+    });
+
+    expect(registry.getModels()).toEqual({
+      openai: ['gpt-4.1', 'gpt-5'],
+      'netlify/anthropic': ['claude-haiku-4-5'],
+    });
   });
 });

@@ -143,7 +143,7 @@ When you use a resolver:
 
 The `agent.voice` getter has no request context, so it throws when `voice` is a resolver. Use `agent.getVoice({ requestContext })` instead.
 
-## Google Gemini Live (Realtime)
+## Google Gemini Live (realtime)
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -190,7 +190,7 @@ Note:
 - Live API requires `GOOGLE_API_KEY`. Vertex AI requires project/location and service account credentials.
 - Events: `speaker` (audio stream), `writing` (text), `turnComplete`, `usage`, and `error`.
 
-## AWS Nova Sonic (Realtime)
+## AWS Nova Sonic (realtime)
 
 ```typescript
 import { Agent } from '@mastra/core/agent'

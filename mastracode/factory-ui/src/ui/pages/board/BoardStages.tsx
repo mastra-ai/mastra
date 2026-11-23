@@ -8,21 +8,22 @@ import { BOARD_SCROLL_SURFACE_CLASS } from '../../domains/factory/boardLayout';
 import { BoardTooltipDelay } from '../../domains/factory/components/BoardCardParts';
 import { BoardColumn, BoardColumnHeader } from '../../domains/factory/components/BoardColumn';
 import { BoardList, BoardListGroup } from '../../domains/factory/components/BoardList';
-import { PhaseExitTool } from '../../domains/factory/components/PhaseExitTool';
-import type { PhaseExitToolInfo } from '../../domains/factory/components/PhaseExitTool';
+import { BoardStageCreateButton } from '../../domains/factory/components/BoardStageCreateButton';
+import type { BoardStageCreate } from '../../domains/factory/components/BoardStageCreateButton';
 import { BoardScrollContext } from '../../domains/factory/context/BoardScrollContext';
 
 export interface BoardStageView {
   stage: { id: string; label: string };
   phaseKind?: BoardPhaseKind;
-  /** The tool whose success ends this working phase. */
-  exitTool?: PhaseExitToolInfo;
+  /** Who works the phase's cards and how its work ends, when it has an agent or an exit tool. */
+  setup?: ReactNode;
   taskCount: number;
   loading: boolean;
   collapsed: boolean;
   groupOpen: boolean;
   onGroupOpenChange: (open: boolean) => void;
-  createButton?: ReactNode;
+  /** Set when the stage takes a new card by hand. */
+  create?: BoardStageCreate;
   cards: ReactNode;
 }
 
@@ -41,11 +42,27 @@ export function BoardStages({
 }) {
   // State, not a ref: groups mount before this ancestor's ref attaches, so they must re-render once it does.
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
+  const [hoveredStage, setHoveredStage] = useState<string | null>(null);
   return (
     <BoardScrollContext value={scrollElement}>
       <div ref={setScrollElement} className={BOARD_SCROLL_SURFACE_CLASS}>
-        <div className={cn('flex min-h-full min-w-full flex-col gap-3', layout === 'board' ? 'w-max' : 'w-full')}>
-          <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
+        <div
+          className={cn('flex min-h-full min-w-full flex-col gap-3', layout === 'board' ? 'w-max lg:gap-0' : 'w-full')}
+          onPointerOver={event =>
+            setHoveredStage(
+              event.target instanceof Element
+                ? (event.target.closest('[data-board-stage]')?.getAttribute('data-board-stage') ?? null)
+                : null,
+            )
+          }
+          onPointerLeave={() => setHoveredStage(null)}
+        >
+          <div
+            className={cn(
+              'from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b to-transparent max-lg:contents lg:sticky lg:top-0',
+              layout === 'board' ? 'via-[calc(100%-0.5rem)] pb-2' : 'via-[calc(100%-1rem)] pb-4',
+            )}
+          >
             <div className="sticky left-0 flex w-[100cqw] px-4 pt-4">{toolbar}</div>
             {layout === 'board' && (
               <div className="from-background via-background sticky top-0 z-20 flex items-start gap-2 via-[calc(100%-0.75rem)] to-transparent px-4 max-lg:bg-linear-to-b max-lg:pb-3 lg:gap-3">
@@ -59,12 +76,14 @@ export function BoardStages({
                     totalTaskCount={totalTaskCount}
                     loading={stageView.loading}
                     collapsed={stageView.collapsed}
-                    headerAction={stageView.createButton}
-                    headerExtras={
-                      stageView.exitTool && (
-                        <PhaseExitTool phaseLabel={stageView.stage.label} exitTool={stageView.exitTool} />
+                    hovered={hoveredStage === stageView.stage.id}
+                    headerAction={
+                      stageView.collapsed &&
+                      stageView.create && (
+                        <BoardStageCreateButton stage={stageView.stage} shape="column" {...stageView.create} />
                       )
                     }
+                    headerExtras={stageView.setup}
                   />
                 ))}
               </div>
@@ -83,6 +102,12 @@ export function BoardStages({
                     stage={stageView.stage.id}
                     label={stageView.stage.label}
                     collapsed={stageView.collapsed}
+                    hovered={hoveredStage === stageView.stage.id}
+                    action={
+                      stageView.create && (
+                        <BoardStageCreateButton stage={stageView.stage} shape="row" {...stageView.create} />
+                      )
+                    }
                     onDrop={onDrop}
                   >
                     {stageView.cards}
@@ -102,12 +127,12 @@ export function BoardStages({
                       loading={stageView.loading}
                       open={stageView.groupOpen}
                       onOpenChange={stageView.onGroupOpenChange}
-                      action={stageView.createButton}
-                      extras={
-                        stageView.exitTool && (
-                          <PhaseExitTool phaseLabel={stageView.stage.label} exitTool={stageView.exitTool} />
+                      action={
+                        stageView.create && (
+                          <BoardStageCreateButton stage={stageView.stage} shape="icon" {...stageView.create} />
                         )
                       }
+                      extras={stageView.setup}
                       onDrop={onDrop}
                     >
                       {stageView.cards}

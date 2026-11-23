@@ -644,6 +644,10 @@ export interface DurableAgenticLoopOutput {
   };
   /** Final state */
   state: SerializableDurableState;
+  /** The outcome the run's spans ended with; a recovery of the saved run ends its own spans with it. */
+  tracingTermination?: SpanTermination;
+  /** Why the loop stopped, as on the FINISH this step published; a recovery that republishes FINISH reads it. */
+  stopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
 }
 
 export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
@@ -684,6 +688,8 @@ export interface AgentFinishEventData {
    * instead of the text they buffered from the stream.
    */
   textRewritten?: boolean;
+  /** Why the loop stopped calling the model, as on the default loop's finish chunk. */
+  stopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
 }
 
 /**
@@ -880,15 +886,11 @@ export interface RunRegistryEntry {
   /** Live MODEL_GENERATION span for this run (non-serializable) */
   modelSpan?: AIModelGenerationSpan;
   /**
-   * On resume, a fresh AGENT_RUN span is opened for the resumed segment (the
-   * original was ended as `suspended`). These override the frozen span IDs so
-   * post-resume steps nest under the resumed root and end it on completion.
+   * The live spans of the segment a resume or recovery opened in this process. Steps read the
+   * segment's pair from the request context and end these in place when they match it.
    */
   resumeAgentSpan?: Span<SpanType.AGENT_RUN>;
   resumeModelSpan?: AIModelGenerationSpan;
-  /** Exported forms of the resume spans, read by the workflow steps (same process). */
-  resumeAgentSpanData?: unknown;
-  resumeModelSpanData?: unknown;
   /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
   resumeCompletionStartTime?: Date;
   /** Time to first token of the resumed segment's spans, kept the same way. */
@@ -1053,12 +1055,13 @@ export interface RunRegistryEntry {
   /** A late subscriber re-publishes the winning deadline error at most once per segment. */
   deadlineErrorRedelivered?: boolean;
   /**
-   * Whether this process has already subscribed to cross-process abort
-   * requests for the run. Set by `ensureRemoteAbortListener`, which every
-   * durable step calls on entry — the flag is what keeps a run's many steps
-   * from installing duplicate subscriptions.
+   * This process's subscription to cross-process abort requests for the run.
+   * Set by `ensureRemoteAbortListener`, which every durable step calls on
+   * entry; its presence keeps a run's many steps from installing duplicate
+   * subscriptions. `releaseRemoteAbortListener` detaches and clears it once
+   * the run reaches a final status.
    */
-  remoteAbortListenerInstalled?: boolean;
+  remoteAbortListener?: { detach(): Promise<void> };
   /**
    * Promise tracking the in-flight workflow execution (or resume) for this
    * run. Resolves once the workflow has fully settled (finished, errored,

@@ -12,7 +12,7 @@ packages:
 
 Ring signals let a Mastra agent receive doorbell presses, motion, and other events from Ring doorbells and cameras. Each event arrives in an agent thread as a [notification signal](/docs/signals/notifications), and the agent can fetch a snapshot or video clip to see who is at the door.
 
-Events and media come from the [Ring Partner API](https://developer.amazon.com/docs/ring/api-documentation.html). The API doesn't expose lights, sirens, locks, or two-way talk.
+Events and media come from the [Ring Partner API](https://developer.amazon.com/docs/ring/api-documentation.html), which doesn't expose lights, sirens, locks, or two-way talk.
 
 ## Installation
 
@@ -87,7 +87,7 @@ Linking connects a Ring account to your agent. Set it up in two places, in this 
 1. The [Ring Developer Console](https://developer.amazon.com/ring/console/apps) on Amazon's developer site, where you configure your developer app.
 1. [ring.com](https://ring.com), where you link the developer app to the Ring account that owns the device.
 
-### Ring Developer Console
+### Ring developer console
 
 The routes Ring needs are added automatically to your Mastra server under `/ring`:
 
@@ -164,7 +164,7 @@ To pick the thread per event, set `target` to a function. The function receives 
 
 - `event.data.type`: The event type, from [Events and priorities](#events-and-priorities).
 - `event.data.attributes.source`: For device events, the ID of the device that sent the event. For app integration events, the account ID. For subscription events, `subscriptions`.
-- `event.data.attributes.timestamp`: For device events, when the event happened, in epoch milliseconds. Subscription events don't have it.
+- `event.data.attributes.timestamp`: When the device event happened, in epoch milliseconds, and unset for subscription events.
 - `event.data.attributes.sub_type`: For motion events, what caused the motion: `human`, `vehicle`, `package_delivery`, `other_motion`, or `motion` when Smart Alerts are off. For subscription events, `paid` or `trial`.
 - `event.meta.account_id`: The ID of the Ring account the device belongs to.
 
@@ -186,7 +186,7 @@ Return `undefined` to drop the event. The function can be `async`. The [RingSign
 The agent gets two tools:
 
 - `ring_snapshot`: Fetches a still image for an event and passes it to the model, so the agent can describe what it sees. If Ring has no image right after the event, it uses the most recent image before it.
-- `ring_clip`: Fetches a video clip that starts at the event. Ring needs time to process a recording, so the tool retries until the clip is ready. By default, the model doesn't receive the video. See [Let the model see media](#let-the-model-see-media).
+- `ring_clip`: Fetches a video clip that starts at the event. Because Ring needs time to process a recording, the tool retries until the clip is ready. By default, the model doesn't receive the video. See [Let the model see media](#let-the-model-see-media).
 
 ### Let the model see media
 
@@ -204,7 +204,7 @@ When `visibleToModel` is `false`, the model gets only the tool's text result and
 
 :::note
 
-Check that your model supports video input before you turn on `visibleToModel` for clips. Gemini models accept video input. Anthropic and OpenAI models don't. Anthropic drops the video with a warning, and other model APIs may reject the request.
+Check that your model supports video input before you turn on `visibleToModel` for clips. Gemini models accept video input, while Anthropic and OpenAI models don't. Anthropic drops the video with a warning, and other model APIs may reject the request.
 
 Video input counts toward the model's context window for every second of footage. A clip at the default 15 seconds uses a few thousand tokens. A clip at the maximum `durationMs` of 15 minutes can use hundreds of thousands, so keep `durationMs` short when the model watches clips. The video isn't saved in memory, so it only uses context on the step that fetched it.
 
@@ -212,7 +212,7 @@ Video input counts toward the model's context window for every second of footage
 
 ### Media links
 
-Ring doesn't give out shareable links to its media. Downloading a snapshot or clip needs the Ring account's tokens, so a browser or chat app can't fetch it from Ring directly. When you set `baseUrl`, the tools return a signed link to your own server instead, under `<baseUrl>/ring/media/`. Opening the link makes your server fetch the media from Ring and pass it on. Nothing is stored; recent media is cached in memory for a few minutes.
+Ring doesn't give out shareable links to its media. Downloading a snapshot or clip needs the Ring account's tokens, so a browser or chat app can't fetch it from Ring directly. When you set `baseUrl`, the tools return a signed link to your own server instead, under `<baseUrl>/ring/media/`. Opening the link makes your server fetch the media from Ring and pass it on. Nothing is stored. Recent media is cached in memory for a few minutes.
 
 Set `RING_BASE_URL` to your Mastra server's URL. Use `http://localhost:4111` or a tunnel URL in development, and your deployed URL in production.
 

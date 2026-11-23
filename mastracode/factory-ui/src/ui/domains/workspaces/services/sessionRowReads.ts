@@ -1,4 +1,5 @@
 import {
+  SESSION_ROW_ALL_SOURCES,
   SESSION_ROW_PINS_MAX,
   SESSION_ROW_WINDOW_MAX,
   SESSION_ROW_WINDOWS_MAX,
@@ -33,6 +34,7 @@ export function sessionRowsRequest({
     owner: filters.owner,
     ...(filters.status === 'all' ? {} : { status: filters.status }),
     ...(filters.updated === 'all' ? {} : { updated: filters.updated }),
+    ...(filters.source === SESSION_ROW_ALL_SOURCES ? {} : { source: filters.source }),
     children,
     pin: [...pinned].slice(-SESSION_ROW_PINS_MAX).sort(),
     ...(open ? { open } : {}),
@@ -54,6 +56,7 @@ export function fetchSessionRows(
   const params = new URLSearchParams({ sort: request.sort, groupBy: request.groupBy, owner: request.owner });
   if (request.status) params.set('status', request.status);
   if (request.updated) params.set('updated', request.updated);
+  if (request.source) params.set('source', request.source);
   if (request.children) params.set('children', 'true');
   for (const id of request.pin) params.append('pin', id);
   if (request.open) params.set('open', request.open);

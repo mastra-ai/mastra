@@ -2148,6 +2148,7 @@ export class Workflow<
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
       persistResumeClaim: options.persistResumeClaim,
+      localCancellationOnly: options.localCancellationOnly,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
       watchExecutionLoss: options.watchExecutionLoss,
@@ -2161,15 +2162,6 @@ export class Workflow<
       sharePubsub: options.sharePubsub,
       autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
-
-    if (options.storageVersion === 2 && options.pruneSnapshot) {
-      throw new MastraError({
-        id: 'WORKFLOW_STORAGE_V2_PRUNE_SNAPSHOT',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-        text: `Workflow "${id}" sets both storageVersion: 2 and pruneSnapshot. Storage version 2 doesn't support pruneSnapshot.`,
-      });
-    }
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -3273,6 +3265,65 @@ export class Workflow<
     if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
 
     return { storageVersion, existsInStorage, stored };
+  }
+
+  /**
+   * Stores a `running` snapshot holding only the input of a run that isn't stored yet. A caller
+   * that commits a side effect before the run's first checkpoint writes it first, so a crash in
+   * between still leaves a run that recovery finds and `restart()` starts from its first step.
+   * Does nothing when the run is already stored or the snapshot policy doesn't persist `running`
+   * snapshots. `onWrite` runs right before the write, which may commit even when it rejects.
+   * @internal
+   */
+  async __persistRestartableStart({
+    runId,
+    resourceId,
+    input,
+    requestContext,
+    onWrite,
+  }: {
+    runId: string;
+    resourceId?: string;
+    input: TInput;
+    requestContext?: RequestContext;
+    onWrite: () => void;
+  }): Promise<void> {
+    if (!this.#options.shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })) return;
+    const { storageVersion, existsInStorage } = await this.resolveRunStorage({
+      runId,
+      reopen: true,
+      cachedRun: this.#runs.get(runId),
+      lookUpStoredRun: true,
+    });
+    if (existsInStorage) return;
+    // No active paths and no step results: `restart()` treats this as a run that hasn't
+    // started its first step (see createRestartExecutionParams).
+    const snapshot: WorkflowRunState = {
+      runId,
+      status: 'running',
+      value: {},
+      context: { input } as WorkflowRunState['context'],
+      requestContext: withoutAuthToken((requestContext ?? new RequestContext()).toJSON()),
+      activePaths: [],
+      activeStepsPath: {},
+      serializedStepGraph: this.serializedStepGraph,
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
+    onWrite();
+    await createRunStorage({
+      storageVersion,
+      workflowName: this.id,
+      runId,
+      getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+    }).writeSnapshot(
+      this.#options.pruneSnapshot && storageVersion === 1
+        ? this.#options.pruneSnapshot({ snapshot, workflowStatus: 'running' })
+        : snapshot,
+      resourceId,
+    );
   }
 
   /**

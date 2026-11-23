@@ -155,6 +155,26 @@ describe('session filters', () => {
     expect(sessionIds(rows, { status: 'waiting' })).toEqual(['waiting']);
   });
 
+  it('keeps the rows of one source: a board, the sessions people started, or the ones Slack started', () => {
+    const rows = [
+      userRow('web'),
+      userRow('slack', {}, { branch: 'slack/123.456' }),
+      row('work'),
+      row('release', { board: 'release' }),
+    ];
+
+    expect(sessionIds(rows, { source: 'slack' })).toEqual(['slack']);
+    expect(sessionIds(rows, { source: 'user' })).toEqual(['web']);
+    expect(sessionIds(rows, { source: 'board:release' })).toEqual(['release']);
+    expect(listed(rows, { source: 'board:work' })).toMatchObject({ total: 4, matching: 1 });
+  });
+
+  it('refuses a source that is neither a board, user nor slack', () => {
+    for (const source of ['all', 'github', 'board:', 'Slack']) {
+      expect(sessionRowsQuerySchema.safeParse({ source }).success, source).toBe(false);
+    }
+  });
+
   it('counts every row in total and only the matching ones in matching', () => {
     const answer = listed([row('a', { status: 'done' }), row('b'), row('c')], { status: 'idle' });
 

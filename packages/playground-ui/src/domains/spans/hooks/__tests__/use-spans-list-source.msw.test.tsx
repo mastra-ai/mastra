@@ -87,6 +87,25 @@ const nextTick = () =>
 
 const spanIds = (spans: QuerySpansResult['spans'] | undefined) => spans?.map(span => span.spanId);
 
+const windowLength = (body: Body) => Date.parse(body.timeRange.to) - Date.parse(body.timeRange.from);
+const spanWindowLength = Date.parse(spanTimeRange.to) - Date.parse(spanTimeRange.from);
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Like the hosted API with a word search: a head poll over 7 days plus a 75-minute margin gets a 422. */
+function setCappedHandlers() {
+  const handlers = setHandlers([spanHeadPage]);
+  server.use(
+    http.post(SPANS_QUERY_URL, async ({ request }) => {
+      const body = (await request.clone().json()) as Body;
+      if (isHeadRequest(body) && windowLength(body) > SEVEN_DAYS_MS + 75 * 60_000) {
+        handlers.headBodies.push(body);
+        return HttpResponse.json({ code: 'TRACE_QUERY_INVALID' }, { status: 422 });
+      }
+    }),
+  );
+  return handlers;
+}
+
 describe('useSpansListSource', () => {
   describe('when the window is rolling and a span ends while the list is open', () => {
     it('shows the new span at the top after one poll, without reloading the list', async () => {
@@ -101,7 +120,7 @@ describe('useSpansListSource', () => {
       expect(headBodies).toHaveLength(1);
       expect(headBodies[0].orderBy).toEqual([{ field: 'endedAt', direction: 'desc' }]);
       expect(headBodies[0].page).toEqual({ limit: OBSERVABILITY_LIST_HEAD_LIMIT });
-      expect(headBodies[0].timeRange.from).toBe(spanTimeRange.from);
+      expect(windowLength(headBodies[0])).toBe(spanWindowLength);
       expect(Date.parse(headBodies[0].timeRange.to)).toBeGreaterThanOrEqual(polledAfter);
       expect(listBodies).toHaveLength(1);
     });
@@ -117,6 +136,54 @@ describe('useSpansListSource', () => {
       await nextTick();
 
       await waitFor(() => expect(spanIds(result.current.spans)?.at(-1)).toBe('span-9'));
+    });
+  });
+
+  describe('when the list was loaded hours ago and the server caps the window', () => {
+    it('polls a window of the same length ending now, so polls keep succeeding and updating', async () => {
+      const { listBodies, headBodies } = setCappedHandlers();
+      // Last 7 days resolved two hours ago, as on a tab left open: a fixed `from` would ask for
+      // 7 days and 2 hours, past the cap and its margin.
+      const loadedAt = Date.now() - 2 * 60 * 60 * 1000;
+      const query: SpanQueryArgs = {
+        ...rollingQuery,
+        timeRange: { from: new Date(loadedAt - SEVEN_DAYS_MS).toISOString(), to: new Date(loadedAt).toISOString() },
+      };
+      const { result } = renderSource({ query, rolling: true });
+      await waitFor(() => expect(result.current.spans).toHaveLength(2));
+      const polledAfter = Date.now();
+
+      await nextTick();
+      await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['span-9', 'span-1', 'span-2']));
+      await nextTick();
+      await waitFor(() => expect(headBodies).toHaveLength(2));
+
+      for (const body of headBodies) {
+        expect(windowLength(body)).toBe(SEVEN_DAYS_MS);
+        expect(Date.parse(body.timeRange.to)).toBeGreaterThanOrEqual(polledAfter);
+      }
+      expect(Date.parse(headBodies[1].timeRange.from)).toBeGreaterThan(Date.parse(headBodies[0].timeRange.from));
+      expect(listBodies).toHaveLength(1);
+    });
+  });
+
+  describe('when the user picked a custom start with no end', () => {
+    it('keeps that start on every poll and on the reload after an overflow', async () => {
+      const { listBodies, headBodies } = setHandlers([
+        spanHeadPage,
+        fullSpanHeadPage(OBSERVABILITY_LIST_HEAD_LIMIT, spanTimeRange.to),
+      ]);
+      const { result } = renderSource({ query: rollingQuery, rolling: true, fixedStart: true });
+      await waitFor(() => expect(result.current.spans).toHaveLength(2));
+
+      await nextTick();
+      await waitFor(() => expect(spanIds(result.current.spans)).toContain(endedSpan.spanId));
+      await nextTick();
+      await waitFor(() => expect(listBodies).toHaveLength(2));
+
+      expect(headBodies.map(body => body.timeRange.from)).toEqual([spanTimeRange.from, spanTimeRange.from]);
+      expect(listBodies[1].timeRange.from).toBe(spanTimeRange.from);
+      expect(Date.parse(listBodies[1].timeRange.to)).toBeGreaterThan(Date.parse(spanTimeRange.to));
     });
   });
 
@@ -146,7 +213,7 @@ describe('useSpansListSource', () => {
   });
 
   describe('when more spans ended than one poll can bring', () => {
-    it('reloads the first page with a window ending now and drops the polled spans', async () => {
+    it('reloads the first page with a window of the same length ending now and drops the polled spans', async () => {
       const { listBodies } = setHandlers([fullSpanHeadPage(OBSERVABILITY_LIST_HEAD_LIMIT, spanTimeRange.to)]);
       const { result } = renderSource({ query: rollingQuery, rolling: true });
       await waitFor(() => expect(result.current.spans).toHaveLength(2));
@@ -155,7 +222,7 @@ describe('useSpansListSource', () => {
       await nextTick();
 
       await waitFor(() => expect(listBodies).toHaveLength(2));
-      expect(listBodies[1].timeRange.from).toBe(spanTimeRange.from);
+      expect(windowLength(listBodies[1])).toBe(spanWindowLength);
       expect(Date.parse(listBodies[1].timeRange.to)).toBeGreaterThanOrEqual(reloadedAfter);
       expect(listBodies[1].page.after).toBeUndefined();
       await waitFor(() => expect(spanIds(result.current.spans)).toEqual(['span-1', 'span-2']));

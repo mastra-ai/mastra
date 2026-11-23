@@ -137,8 +137,8 @@ function TesterBody({ factoryProjectId, itemId, draft }: IntakeTesterPanelProps)
           <Verdict result={result} />
           {result.evaluator !== 'intake-order' && (
             <Notice variant="info">
-              This project still files new items with the old route list, so filing may differ from this answer until it
-              switches to intake order.
+              This project still files new issues and pull requests with the old route list, so filing may differ from
+              this answer until it switches to intake order.
             </Notice>
           )}
           {result.note && (

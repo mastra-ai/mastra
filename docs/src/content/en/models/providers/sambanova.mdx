@@ -7,7 +7,7 @@ description: "Browse SambaNova model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/sambanova.svg" alt="SambaNova logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SambaNova
 
-Access 6 SambaNova models through Mastra's model router. Authentication is handled automatically using the `SAMBANOVA_API_KEY` environment variable.
+Access 4 SambaNova models through Mastra's model router. Authentication is handled automatically using the `SAMBANOVA_API_KEY` environment variable.
 
 Learn more in the [SambaNova documentation](https://docs.sambanova.ai/cloud/docs/get-started/supported-models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "sambanova/DeepSeek-V3.1"
+  model: "sambanova/GLM-5.3"
 });
 
 // Generate a response
@@ -46,30 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "sambanova/DeepSeek-V3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 7168,
-    "inputCost": 3,
-    "outputCost": 4.5
-  },
-  {
-    "model": "sambanova/DeepSeek-V3.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 7168,
-    "inputCost": 3,
-    "outputCost": 4.5
-  },
-  {
     "model": "sambanova/gemma-4-31B-it",
     "imageInput": true,
     "audioInput": false,
@@ -80,6 +56,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.38,
     "outputCost": 1.15
+  },
+  {
+    "model": "sambanova/GLM-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 2.8,
+    "outputCost": 8.8
   },
   {
     "model": "sambanova/gpt-oss-120b",
@@ -94,28 +82,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "sambanova/Meta-Llama-3.3-70B-Instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 3072,
-    "inputCost": 0.6,
-    "outputCost": 1.2
-  },
-  {
-    "model": "sambanova/MiniMax-M3",
-    "imageInput": false,
+    "model": "sambanova/MiniMax-M3.1-Flash",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.6,
-    "outputCost": 2.4
+    "inputCost": 0.3,
+    "outputCost": 1.2
   }
 ]}
 />
@@ -134,7 +110,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.sambanova.ai/v1",
-    id: "sambanova/DeepSeek-V3.1",
+    id: "sambanova/GLM-5.3",
     apiKey: process.env.SAMBANOVA_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -155,7 +131,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "sambanova/gpt-oss-120b"
-      : "sambanova/DeepSeek-V3.1";
+      : "sambanova/GLM-5.3";
   }
 });
 ```

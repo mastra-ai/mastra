@@ -114,6 +114,40 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(system).toContain(KNOWLEDGE_WRITE_INSTRUCTIONS);
   });
 
+  it('uses Knowledge attached to an already-loaded agent on its next run', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'late-attach' }), scopes, tools: true });
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'late-attach',
+      name: 'late-attach',
+      instructions: 'You keep notes.',
+      model: scriptedModel(
+        [
+          { text: 'Ready.' },
+          {
+            toolName: 'knowledge_page',
+            input: { op: 'write', scope: 'org:acme', name: 'Release', body: 'Ship Monday.' },
+          },
+          { toolName: 'knowledge_search', input: { query: 'Monday' } },
+          { text: 'Found it.' },
+        ],
+        prompts,
+      ),
+      scopes: ['org:acme'],
+    });
+
+    await agent.generate('Ready?', { maxSteps: 1, ...runOptions() });
+    expect(systemText(prompts[0]!)).not.toContain(KNOWLEDGE_WRITE_INSTRUCTIONS);
+
+    agent.__setKnowledge(knowledge);
+    const result = await agent.generate('Remember and find the release date.', { maxSteps: 4, ...runOptions() });
+    expect(toolErrors(result)).toEqual([]);
+    expect((toolResults(result)[0] as any).result.page.name).toBe('Release');
+    expect((toolResults(result)[1] as any).result.results[0].page.name).toBe('Release');
+    expect(systemText(prompts[1]!)).toContain(KNOWLEDGE_READ_INSTRUCTIONS);
+    expect(systemText(prompts[1]!)).toContain(KNOWLEDGE_WRITE_INSTRUCTIONS);
+  });
+
   it('attaches no tools by default, and no instruction block when instructions is false', async () => {
     const prompts: unknown[][] = [];
     const agent = new Agent({

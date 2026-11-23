@@ -2,11 +2,9 @@ import { useDeferredValue, useMemo, useState } from 'react';
 import type { LightSpanRecord } from '../types';
 import { filterSpansKeepingAncestors, toSearchableSpans } from '../utils';
 
-export interface UseTraceSearchResult<Span extends LightSpanRecord = LightSpanRecord> {
-  /** The immediate, user-facing input value. Bind this to the search field. */
-  query: string;
-  setQuery: (query: string) => void;
-  /** Rows matching the deferred query. An empty query returns the input array reference. */
+/** What a span search found: the spans to draw, and which of them matched outside their name. */
+export interface TraceSearchResult<Span extends LightSpanRecord = LightSpanRecord> {
+  /** Rows matching the query, with their ancestors. An empty query returns the input array reference. */
   results: Span[];
   /**
    * Spans that matched somewhere other than their name — in `metadata`, `attributes` or
@@ -14,7 +12,13 @@ export interface UseTraceSearchResult<Span extends LightSpanRecord = LightSpanRe
    * why it is there. Ancestors kept only to preserve the hierarchy are not in here: they did
    * not match at all. Empty while the query is empty.
    */
-  payloadOnlyMatchIds: Set<string>;
+  payloadOnlyMatchIds: ReadonlySet<string>;
+}
+
+export interface UseTraceSearchResult<Span extends LightSpanRecord = LightSpanRecord> extends TraceSearchResult<Span> {
+  /** The immediate, user-facing input value. Bind this to the search field. */
+  query: string;
+  setQuery: (query: string) => void;
   /** True while the deferred value is behind `query` (the list is still catching up). */
   isPending: boolean;
 }
@@ -40,6 +44,18 @@ export interface UseTraceSearchResult<Span extends LightSpanRecord = LightSpanRe
  */
 export function useTraceSearch<Span extends LightSpanRecord>(spans: Span[]): UseTraceSearchResult<Span> {
   const [query, setQuery] = useState('');
+  const { results, payloadOnlyMatchIds, isPending } = useTraceSearchResult(spans, query);
+  return { query, setQuery, results, payloadOnlyMatchIds, isPending };
+}
+
+/**
+ * The filtering half of {@link useTraceSearch}, for a query the caller owns (e.g. a search field
+ * controlled by a host). Same deferral: `isPending` is true while the results trail `query`.
+ */
+export function useTraceSearchResult<Span extends LightSpanRecord>(
+  spans: Span[],
+  query: string,
+): TraceSearchResult<Span> & { isPending: boolean } {
   const deferredQuery = useDeferredValue(query);
 
   const searchTextById = useMemo(
@@ -63,5 +79,5 @@ export function useTraceSearch<Span extends LightSpanRecord>(spans: Span[]): Use
     return { results: filtered, payloadOnlyMatchIds: payloadOnly };
   }, [spans, searchTextById, deferredQuery]);
 
-  return { query, setQuery, results, payloadOnlyMatchIds, isPending: query !== deferredQuery };
+  return { results, payloadOnlyMatchIds, isPending: query !== deferredQuery };
 }

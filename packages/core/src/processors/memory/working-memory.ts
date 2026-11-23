@@ -41,6 +41,37 @@ export interface WorkingMemoryConfig {
 }
 
 /**
+ * Which working memory instruction the processor is rendering.
+ * - `tool`: the agent updates working memory with the `updateWorkingMemory` tool
+ * - `vnext`: the same, using the experimental `version: 'vnext'` template instruction
+ * - `read-only`: the agent has no update tool (`readOnly`, or `agentManaged: false` with `autoUpdated: true`)
+ */
+export type WorkingMemoryInstructionKind = 'tool' | 'vnext' | 'read-only';
+
+/**
+ * Compatibility note: @mastra/memory keeps a structural copy of this type instead of importing it, because its
+ * peer range includes core versions without this export. Keep both in sync; memory's
+ * type-tests/working-memory-instruction-args.test-d.ts fails if they drift.
+ */
+export type WorkingMemoryInstructionArgs =
+  | { kind: 'tool' | 'vnext'; template: WorkingMemoryTemplate; data: string | null }
+  | {
+      kind: 'read-only';
+      template: WorkingMemoryTemplate;
+      data: string | null;
+      /** True when the app updates working memory (`agentManaged: false`), false for `readOnly`. */
+      autoUpdated: boolean;
+    };
+
+/**
+ * Supplies the working memory instruction text, so a memory implementation can customize it.
+ * Return `undefined` to use the processor's built-in instruction, or an empty string to add no instruction.
+ */
+export interface WorkingMemoryInstructionProvider {
+  getWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string | undefined;
+}
+
+/**
  * WorkingMemory processor injects working memory data as a system message.
  *
  * This is an INPUT processor that:
@@ -81,6 +112,7 @@ export class WorkingMemory implements Processor {
       templateProvider?: {
         getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null>;
       };
+      instructionProvider?: WorkingMemoryInstructionProvider;
       logger?: IMastraLogger;
     },
   ) {
@@ -116,12 +148,13 @@ export class WorkingMemory implements Processor {
     if (scope === 'thread' && threadId) {
       // The thread was already loaded and ownership-validated during run preparation.
       const thread = memoryRunState?.thread ?? (await this.options.storage.getThreadById({ threadId }));
-      workingMemoryData = (thread?.metadata?.workingMemory as string) || null;
+      const stored = thread?.metadata?.workingMemory;
+      workingMemoryData = typeof stored === 'string' && stored ? stored : null;
     } else if (scope === 'resource' && resourceId) {
       const cacheKey = `working-memory:resource:${resourceId}`;
       const loadWorkingMemory = async () => {
         const resource = await this.options.storage.getResourceById({ resourceId });
-        return resource?.workingMemory || null;
+        return typeof resource?.workingMemory === 'string' && resource.workingMemory ? resource.workingMemory : null;
       };
       workingMemoryData = memoryRunState
         ? await memoryRunState.load(cacheKey, loadWorkingMemory)
@@ -157,25 +190,35 @@ export class WorkingMemory implements Processor {
       this.options.agentManaged === false ||
       (typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false);
 
-    // Format working memory instruction
-    let instruction: string;
-    if (isConfiguredReadOnly || isAppManaged) {
-      instruction = this.getReadOnlyWorkingMemoryInstruction({
-        template,
-        data: workingMemoryData,
-        autoUpdated: !isConfiguredReadOnly,
-      });
-    } else if (this.options.useVNext) {
-      instruction = this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData });
-    } else {
-      instruction = this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
-    }
+    // Format working memory instruction. The instruction provider (the Memory instance) renders it first,
+    // so subclass overrides of its instruction methods reach the agent; the built-in text is the fallback.
+    const instructionArgs: WorkingMemoryInstructionArgs =
+      isConfiguredReadOnly || isAppManaged
+        ? { kind: 'read-only', template, data: workingMemoryData, autoUpdated: !isConfiguredReadOnly }
+        : { kind: this.options.useVNext ? 'vnext' : 'tool', template, data: workingMemoryData };
+    const instruction =
+      this.options.instructionProvider?.getWorkingMemoryInstruction(instructionArgs) ??
+      this.getBuiltInInstruction(instructionArgs);
 
     // If we have a MessageList, add working memory to it with source: 'memory'
     if (instruction) {
       messageList.addSystem(instruction, 'memory');
     }
     return messageList;
+  }
+
+  // Fallback for memory implementations without an instruction provider. `Memory` in @mastra/memory keeps
+  // the same text in its protected instruction methods; keep both in sync (its
+  // working-memory-instruction-override test checks they match).
+  private getBuiltInInstruction(args: WorkingMemoryInstructionArgs): string {
+    switch (args.kind) {
+      case 'read-only':
+        return this.getReadOnlyWorkingMemoryInstruction(args);
+      case 'vnext':
+        return this.getWorkingMemoryToolInstructionVNext(args);
+      case 'tool':
+        return this.getWorkingMemoryToolInstruction(args);
+    }
   }
 
   private generateEmptyFromSchemaInternal(schema: string | Record<string, unknown>): Record<string, any> | null {

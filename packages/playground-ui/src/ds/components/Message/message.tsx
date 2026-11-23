@@ -48,7 +48,7 @@ export function Message({ from, avatar, footer, attachments, pending, children, 
             {children}
           </div>
         )}
-        {footer && <div className="mt-1 max-w-full">{footer}</div>}
+        {footer && <div className={cn('mt-1 max-w-full', isUser && 'flex flex-col items-end text-end')}>{footer}</div>}
       </div>
     </div>
   );

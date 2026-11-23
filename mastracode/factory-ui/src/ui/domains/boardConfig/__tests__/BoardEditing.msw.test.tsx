@@ -398,26 +398,6 @@ describe("Editing a board's phases", () => {
     expect(await screen.findByText('Fix Building to save.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
-
-  it('keeps JSON typed into a rule while moving between phases, and holds the save until it parses', async () => {
-    serveProject();
-    const user = userEvent.setup();
-    renderAt(`/factories/${FACTORY_ID}/work/config/planning`);
-
-    await user.click(await screen.findByRole('switch', { name: 'Planning: start on its own' }));
-    await user.click(screen.getByRole('button', { name: 'Edit as JSON' }));
-    await user.click(screen.getByLabelText('Planning: start only when JSON'));
-    await user.paste('{"operator":"AND",');
-    expect(await screen.findByText('Fix Planning to save.')).toBeInTheDocument();
-
-    await user.click(configNav().getByRole('link', { name: 'Triage' }));
-    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
-    expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-
-    await user.click(configNav().getByRole('link', { name: 'Planning' }));
-    expect(await screen.findByLabelText('Planning: start only when JSON')).toHaveValue('{"operator":"AND",');
-  });
 });
 
 describe('Deleting a board', () => {

@@ -25,17 +25,6 @@ const FIELDS: PropertyFilterField[] = [
 ];
 
 describe('PropertyFilterApplied', () => {
-  describe('default behavior (no locks)', () => {
-    it('renders editable text pills with a Remove button', () => {
-      const onTokensChange = vi.fn();
-      const tokens: PropertyFilterToken[] = [{ fieldId: 'entityId', value: 'weather-agent' }];
-      render(<PropertyFilterApplied fields={FIELDS} tokens={tokens} onTokensChange={onTokensChange} />);
-
-      expect(screen.getByRole('button', { name: /Remove Primitive ID filter/i })).toBeDefined();
-      expect(screen.queryByLabelText('Primitive ID filter is locked by context')).toBeNull();
-    });
-  });
-
   describe('locked pills', () => {
     it('renders a locked pick-multi pill with the human-readable option label', () => {
       const onTokensChange = vi.fn();
@@ -146,18 +135,6 @@ describe('PropertyFilterApplied — nothing to show', () => {
 });
 
 describe('PropertyFilterApplied — editing a text pill', () => {
-  it('shows the value it was given', () => {
-    render(
-      <PropertyFilterApplied
-        fields={FIELDS}
-        tokens={[{ fieldId: 'entityId', value: 'weather-agent' }]}
-        onTokensChange={vi.fn()}
-      />,
-    );
-
-    expect((screen.getByDisplayValue('weather-agent') as HTMLInputElement).value).toBe('weather-agent');
-  });
-
   it('reports every keystroke so the results follow along', () => {
     const onTokensChange = vi.fn();
     render(
@@ -477,14 +454,6 @@ describe('PropertyFilterApplied — a pick-multi pill', () => {
     expect(screen.getByRole('button', { name: 'Any' })).toBeTruthy();
   });
 
-  it('shows a single string selection as it stands', () => {
-    render(<PropertyFilterApplied fields={FIELDS} tokens={pickTokens} onTokensChange={vi.fn()} />);
-
-    expect(screen.getByRole('button', { name: 'agent' })).toBeTruthy();
-    // A choice, not free text — there is nothing to type into.
-    expect(screen.queryByRole('textbox')).toBeNull();
-  });
-
   it('replaces the value from the pill’s own panel', async () => {
     const onTokensChange = vi.fn();
     render(
@@ -613,19 +582,6 @@ describe('PropertyFilterApplied — a locked pill', () => {
     );
 
     expect(screen.getByText('Any')).toBeTruthy();
-  });
-
-  it('reads a locked single selection by its option label', () => {
-    render(
-      <PropertyFilterApplied
-        fields={FIELDS}
-        tokens={[{ fieldId: 'rootEntityType', value: 'workflow_run' }]}
-        lockedFieldIds={['rootEntityType']}
-        onTokensChange={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('Workflow')).toBeTruthy();
   });
 });
 

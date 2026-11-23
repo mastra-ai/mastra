@@ -10,6 +10,7 @@
 import { expect, it, vi } from 'vitest';
 import type { AgentExecutionOptions } from '../../../../agent/agent.types';
 import { createScorer } from '../../../../evals';
+import { EntityType } from '../../../../observability';
 import {
   createSharedAgent,
   describeForAllEngines,
@@ -73,13 +74,14 @@ describeForAllEngines('AIMock loop scenario: call-time and defaultOptions scorer
   it('saves the score on the agent run span that is stored with the trace', async () => {
     const llm = getMock();
     llm.on({ endpoint: 'chat' }, { content: REPLY });
-    const { observability, ended } = captureOutcomeEvents();
+    const { observability, ended, scores: scoreEvents } = captureOutcomeEvents();
     const { scorer } = recordingScorer('span-target-scorer');
     const { agent, mastra } = await createSharedAgent(llm, {
       engine,
       observability,
       defaultOptions: scorerDefaults({ spanTarget: { scorer } }),
     });
+    mastra.addScorer(scorer);
 
     const runId = await streamToEnd(agent);
 
@@ -88,6 +90,12 @@ describeForAllEngines('AIMock loop scenario: call-time and defaultOptions scorer
       const [agentRun] = ended();
       const { scores } = await scoresStore.listScoresByRunId({ runId, pagination: { page: 0, perPage: 10 } });
       expect(scores).toMatchObject([{ traceId: agentRun!.traceId, spanId: agentRun!.id }]);
+      expect(scoreEvents.map(event => event.score)).toMatchObject([
+        {
+          spanId: agentRun!.id,
+          correlationContext: { entityType: EntityType.AGENT, entityId: agentRun!.entityId },
+        },
+      ]);
     });
   });
 });

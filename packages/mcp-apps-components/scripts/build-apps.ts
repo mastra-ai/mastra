@@ -18,9 +18,11 @@ const outDir = fileURLToPath(new URL('../apps-dist', import.meta.url));
 const shared = (file: string) => fileURLToPath(new URL(`../src/shared/${file}`, import.meta.url));
 
 /**
- * Swaps two heavy Studio dependencies for light stand-ins, which more than halves the trace viewer:
+ * Swaps heavy Studio dependencies for light stand-ins, which more than halves the trace viewer:
  * - span details draw each tool call with the chat's `MessageRow`, which brings the whole chat (forms, workflow
  *   graphs, nested MCP App hosting); apps draw tool calls as JSON.
+ * - Studio's trace panels pass the chat's live `ToolCard` through `useLiveToolCalls`, which brings the same chat;
+ *   apps keep the panels' recorded cards.
  * - the code editor pretty-prints with prettier; apps only need JSON, which `JSON.stringify` formats.
  */
 const lightStudio: Plugin = {
@@ -29,6 +31,7 @@ const lightStudio: Plugin = {
   resolveId(source, importer) {
     if (!importer?.includes('/playground-ui/')) return null;
     if (/\/chat\/messages\/message-row(\.es)?\.js$/.test(source)) return shared('tool-call-row.tsx');
+    if (/\/hooks\/use-live-tool-calls(\.es)?\.js$/.test(source)) return shared('live-tool-calls-lite.ts');
     if (source.startsWith('prettier/')) return shared('prettier-lite.ts');
     return null;
   },
