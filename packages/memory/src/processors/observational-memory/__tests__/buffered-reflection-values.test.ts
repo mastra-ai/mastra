@@ -9,6 +9,7 @@ import {
   createFixtureMemory,
   expectedBufferExtendedWithUnreflectedTail,
   expectedNewerReflectionBufferSurvivesRetiredHook,
+  expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
   prepare,
   reachActivation as reachFixtureActivation,
@@ -16,6 +17,7 @@ import {
   reflection,
   runBufferExtendedWithUnreflectedTail,
   runNewerReflectionBufferSurvivesRetiredHook,
+  runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
   setup as setupFixture,
   values,
@@ -447,6 +449,15 @@ describe('buffered reflection extracted thread values (#27262)', () => {
     it('buffers for the generation that won after a held onReflectionEnd hook resolves', async () => {
       expect(await runRetiredWhileReflectionEndHookHeld(env)).toEqual(expectedRetiredWhileReflectionEndHookHeld);
     });
+
+    it.each([false, true])(
+      'buffers for the winner when idle activation reads it first while onReflectionEnd is held (rejectHook=%s)',
+      async rejectHook => {
+        expect(await runRetiredBeforeIdleActivationReadsWinner(env, { rejectHook })).toEqual(
+          expectedRetiredBeforeIdleActivationReadsWinner,
+        );
+      },
+    );
 
     // Control: cleanup for the retired operation must not touch the buffering state of a newer
     // operation that started (after the memory was cleared) before the retired one finished.

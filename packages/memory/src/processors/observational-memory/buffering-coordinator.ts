@@ -118,6 +118,22 @@ export class BufferingCoordinator {
     BufferingCoordinator.clearReflectionBuffer(bufferKey);
   }
 
+  /**
+   * Reconcile this process's reflection buffer state against the current head `headRecordId`.
+   * If the tracked buffer belongs to a retired generation (`owner.recordId !== headRecordId`),
+   * drop it now, or mark it retired so cleanup runs when its still-running background op finishes.
+   * State owned by `headRecordId` is untouched.
+   */
+  static reconcileReflectionBufferHead(bufferKey: string, headRecordId: string): void {
+    const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
+    if (!owner || owner.recordId === headRecordId) return;
+    if (BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+      owner.retired = true;
+      return;
+    }
+    BufferingCoordinator.clearReflectionBuffer(bufferKey);
+  }
+
   /** Called when the op that started as `owner` finishes; completes a deferred retirement. */
   static finishReflectionBuffer(bufferKey: string, owner: ReflectionBufferOwner): void {
     if (BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner) return;

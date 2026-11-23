@@ -16,9 +16,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   expectedBufferExtendedWithUnreflectedTail,
   expectedNewerReflectionBufferSurvivesRetiredHook,
+  expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
   runBufferExtendedWithUnreflectedTail,
   runNewerReflectionBufferSurvivesRetiredHook,
+  runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
 } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
 import type { BufferedReflectionEnv } from '../../src/processors/observational-memory/__tests__/buffered-reflection-fixture';
@@ -56,6 +58,15 @@ describe('buffered reflection extracted values (LibSQL file database)', () => {
   it('buffers for the generation that won after a held onReflectionEnd hook resolves', async () => {
     expect(await runRetiredWhileReflectionEndHookHeld(env)).toEqual(expectedRetiredWhileReflectionEndHookHeld);
   });
+
+  it.each([false, true])(
+    'buffers for the winner when idle activation reads it first while onReflectionEnd is held (rejectHook=%s)',
+    async rejectHook => {
+      expect(await runRetiredBeforeIdleActivationReadsWinner(env, { rejectHook })).toEqual(
+        expectedRetiredBeforeIdleActivationReadsWinner,
+      );
+    },
+  );
 
   it("keeps a newer buffered reflection's state when the retired operation finishes", async () => {
     const outcome = await runNewerReflectionBufferSurvivesRetiredHook(env);

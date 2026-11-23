@@ -1135,6 +1135,10 @@ export class ReflectorRunner {
       `[OM:reflect] tryActivateBufferedReflection: freshRecord.id=${freshRecord?.id}, freshBufferedReflection=${freshRecord?.bufferedReflection ? 'present (' + freshRecord.bufferedReflection.length + ' chars)' : 'empty'}, freshObsTokens=${freshRecord?.observationTokenCount}`,
     );
 
+    if (freshRecord) {
+      BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, freshRecord.id);
+    }
+
     if (!freshRecord?.bufferedReflection) {
       omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection after re-fetch`);
       return { status: 'no-buffer' };
@@ -1376,6 +1380,7 @@ export class ReflectorRunner {
           this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
         }
         const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
+        BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, record.id);
         if (this.buffering.isAsyncBufferingInProgress(bufferKey)) return false;
         if (BufferingCoordinator.lastBufferedBoundary.has(bufferKey)) return false;
         if (record.bufferedReflection) return false;

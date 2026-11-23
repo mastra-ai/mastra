@@ -478,6 +478,72 @@ export const expectedRetiredWhileReflectionEndHookHeld = {
 };
 
 /**
+ * Another writer retires the generation while `onReflectionEnd` is held and BEFORE the idle
+ * activation's first storage read, so that read immediately sees the winning generation with no
+ * buffer (`no-buffer`) rather than hitting `not-applied`. Once the hook settles (resolving or
+ * rejecting), the winning generation below the reflection threshold must still buffer.
+ */
+export async function runRetiredBeforeIdleActivationReadsWinner(
+  env: BufferedReflectionEnv,
+  { rejectHook = false }: { rejectHook?: boolean } = {},
+) {
+  const hook = gate();
+  let hold = true;
+  let reply = 'losing';
+  const f = await setup(env, () => reflection(reply), 800, {
+    activateAfterIdle: IDLE_TTL_MS,
+    onReflectionEnd: async () => {
+      if (!hold) return;
+      hold = false;
+      hook.entered();
+      await hook.released;
+      if (rejectHook) throw new Error('hook failed');
+    },
+  });
+  await f.turn(undefined, { settle: false });
+  await hook.reached;
+
+  const retired = await f.om.getRecord(f.threadId, f.resourceId);
+  if (!retired) throw new Error('Missing record');
+  // Another writer retires `retired` BEFORE the idle turn begins, so the idle turn's first read
+  // sees the winning generation with no buffered reflection.
+  const winnerId = (
+    await f.store.createReflectionGeneration({
+      currentRecord: retired,
+      reflection: '* winning fact',
+      tokenCount: 800,
+    })
+  ).id;
+
+  const { writer, reflectionActivations } = recordingWriter();
+  await f.turn(writer, { settle: false, messages: [await idleReply(f.threadId, f.resourceId)] });
+
+  hook.release();
+  await f.om.settled();
+
+  reply = 'next';
+  await f.turn();
+  const winner = await f.om.getRecord(f.threadId, f.resourceId);
+  return {
+    retiredBufferedLosing: retired.bufferedReflection?.includes('condensed losing') ?? false,
+    idleActivations: reflectionActivations().length,
+    winnerIsHead: winner?.id === winnerId,
+    winnerObservations: winner?.activeObservations,
+    winnerBuffersNext: winner?.bufferedReflection?.includes('condensed next') ?? false,
+    values: (await values(f.memory, f.threadId))?.extracted,
+  };
+}
+
+export const expectedRetiredBeforeIdleActivationReadsWinner = {
+  retiredBufferedLosing: true,
+  idleActivations: 0,
+  winnerIsHead: true,
+  winnerObservations: '* winning fact',
+  winnerBuffersNext: true,
+  values: { priority: 'original' },
+};
+
+/**
  * Like {@link runRetiredWhileReflectionEndHookHeld}, but the memory is cleared and a newer
  * buffered reflection starts (and holds its own hook) before the retired one's hook resolves.
  * The retired operation finishing must leave the newer operation's buffering state alone: no
