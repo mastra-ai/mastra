@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { clearTrustedTokenEstimatesInPlace } from '@mastra/core/agent/message-list';
+import { clearTokenEstimatesInPlace } from '@mastra/core/agent/message-list';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -944,7 +944,7 @@ describe('TokenCounter', () => {
 
       // Trusted counts are read by presence; whoever edits a part clears them (the documented contract).
       message.content.parts[0].text = 'Mutated text payload with different size and tokens';
-      clearTrustedTokenEstimatesInPlace(message.content.parts[0]);
+      clearTokenEstimatesInPlace(message.content.parts[0]);
       const recounted = counter.countMessage(message);
       const secondEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
@@ -1369,7 +1369,7 @@ describe('TokenCounter', () => {
         type: 'text',
         value: 'expanded output '.repeat(40),
       };
-      clearTrustedTokenEstimatesInPlace(message.content.parts[0]);
+      clearTokenEstimatesInPlace(message.content.parts[0]);
 
       const second = counter.countMessage(message);
       const secondEstimate = getCachedEstimateByKind(message.content.parts[0], 'tool-result-model-output-json');

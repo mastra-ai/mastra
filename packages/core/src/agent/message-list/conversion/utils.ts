@@ -6,7 +6,7 @@ import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MastraMessagePart } from '../state/types';
 import type { MessageInput } from '../types';
-import { clearTrustedTokenEstimates } from '../utils/token-estimates';
+import { clearTokenEstimates } from '../utils/token-estimates';
 
 /**
  * Convert CoreMessage content to a plain string.
@@ -95,7 +95,7 @@ function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePa
   return removeWorkingMemoryToolInvocationParts(parts).map(part =>
     part.type === 'text'
       ? {
-          ...clearTrustedTokenEstimates(part),
+          ...clearTokenEstimates(part),
           text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim(),
         }
       : part,

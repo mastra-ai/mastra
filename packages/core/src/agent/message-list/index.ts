@@ -81,8 +81,4 @@ export { CacheKeyGenerator } from './cache';
 export { MessageMerger } from './merge';
 
 /** @internal Shared with @mastra/memory's token counter; not a supported public API. */
-export {
-  TRUSTED_TOKEN_ESTIMATE_INVALIDATION,
-  clearTrustedTokenEstimates,
-  clearTrustedTokenEstimatesInPlace,
-} from './utils/token-estimates';
+export { clearTokenEstimates, clearTokenEstimatesInPlace } from './utils/token-estimates';

@@ -34,14 +34,14 @@ function stubModel(text: string) {
 }
 
 /** A fresh store, Memory and Agent on the same database file, as a new process would open. */
-function open(dbPath: string) {
+function open(dbPath: string, scope: 'thread' | 'resource' = 'thread') {
   const storage = new LibSQLStore({ id: randomUUID(), url: `file:${dbPath}` });
   const memory = new Memory({
     storage,
     options: {
       lastMessages: false,
       observationalMemory: {
-        scope: 'thread',
+        scope,
         observation: { model: stubModel('unused'), messageTokens: 5_000_000, bufferTokens: false },
         reflection: { model: stubModel('unused'), observationTokens: 5_000_000 },
       },
@@ -214,10 +214,57 @@ describe('Observational Memory token counts for stored history', () => {
       messages: [{ id, content: { format: 2, parts: [toolPart('a much longer edited result '.repeat(20))] } } as any],
     });
 
-    await engine.persistTokenEstimates([live!]);
+    await engine.persistTokenEstimates([live!], threadId);
 
     const [stored] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
     expect((stored!.content.parts[0] as any).toolInvocation.result).toContain('edited result');
     expect(trustedEntries(stored!.content.parts[0])).toEqual([]);
+  });
+
+  it("does not touch another thread's messages or updatedAt when the resource has several threads", async () => {
+    const { storage, memory, agent } = open(join(dbDir, 'resource.db'), 'resource');
+    const current = randomUUID();
+    const other = randomUUID();
+    const seed = async (threadId: string, updatedAt: Date) => {
+      await memory.saveThread({
+        thread: { id: threadId, resourceId: RESOURCE, title: threadId, createdAt: updatedAt, updatedAt },
+      });
+      await memory.saveMessages({
+        messages: Array.from({ length: 4 }, (_, i) => ({
+          id: `${threadId}-h${i}`,
+          threadId,
+          resourceId: RESOURCE,
+          role: i % 2 === 0 ? ('user' as const) : ('assistant' as const),
+          createdAt: new Date(updatedAt.getTime() + i * 1000),
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: `${threadId} message ${i}. ${'Notes. '.repeat(40)}` }],
+          },
+        })),
+      });
+    };
+    await seed(other, new Date(Date.UTC(2026, 10, 1)));
+    await seed(current, new Date(Date.UTC(2026, 10, 2)));
+    const memoryStore = (await storage.getStore('memory'))!;
+    const otherBefore = (await memory.getThreadById({ threadId: other }))!.updatedAt.getTime();
+    const currentIds = Array.from({ length: 4 }, (_, i) => `${current}-h${i}`);
+
+    const turn = await agent.stream('Question.', { memory: { thread: current, resource: RESOURCE } });
+    await turn.consumeStream();
+    expect(await turn.text).toBe('OK.');
+
+    // The current thread's history gets its counts back (so the write-back ran)...
+    await vi.waitFor(async () => {
+      const rows = (await memory.recall({ threadId: current, resourceId: RESOURCE, perPage: false })).messages.filter(
+        m => currentIds.includes(m.id),
+      );
+      expect(rows.every(row => trustedEntries(row.content.parts[0]).length === 1)).toBe(true);
+    });
+    // ...and the other thread is left exactly as it was, so it keeps its place in the recent-thread order.
+    expect((await memory.getThreadById({ threadId: other }))!.updatedAt.getTime()).toBe(otherBefore);
+    const otherRows = (
+      await memoryStore.listMessagesById({ messageIds: Array.from({ length: 4 }, (_, i) => `${other}-h${i}`) })
+    ).messages;
+    expect(otherRows.flatMap(row => row.content.parts.flatMap(trustedEntries))).toEqual([]);
   });
 });

@@ -4,13 +4,13 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import { estimateTokenCount } from 'tokenx';
 
+import { coreClearsTokenEstimates } from './core-token-estimates';
 import { measureImageBuffer } from './measure-image-buffer';
 import {
   resolveToolResultValue,
   serializeToolResultForTokenCounting,
   toolErrorTextToString,
 } from './tool-result-helpers';
-import { coreClearsTrustedTokenEstimates } from './trusted-token-estimates';
 
 type TokenEstimateCacheEntry = {
   v: number;
@@ -60,13 +60,13 @@ const IMAGE_FILE_EXTENSIONS = new Set([
 const TOKEN_ESTIMATE_CACHE_VERSION = 8;
 
 /**
- * Trusted part estimates are read by presence, without hashing the payload. They are only valid
- * while nobody edits the part without clearing them (Core's `clearTrustedTokenEstimates`), so they
+ * Stored part estimates (v9) are read by presence, without hashing the payload. They are only valid
+ * while nobody edits the part without clearing them (Core's `clearTokenEstimates`), so they
  * use their own version, source and key namespace: a v8 entry is never read or promoted as one.
  */
-const TRUSTED_TOKEN_ESTIMATE_VERSION = 9;
-const TRUSTED_TOKEN_ESTIMATE_SOURCE = 'v9:tokenx';
-const TRUSTED_TOKEN_ESTIMATE_KEY_PREFIX = 'trusted:';
+const V9_TOKEN_ESTIMATE_VERSION = 9;
+const V9_TOKEN_ESTIMATE_SOURCE = 'v9:tokenx';
+const V9_TOKEN_ESTIMATE_KEY_PREFIX = 'trusted:';
 
 /**
  * Cache `source` marker for token estimates supplied by the caller via
@@ -240,11 +240,11 @@ function mergeCacheEntry(
   return entry;
 }
 
-function isTrustedPartEntry(entry: TokenEstimateCacheEntry | undefined, key: string): entry is TokenEstimateCacheEntry {
+function isStoredPartEntry(entry: TokenEstimateCacheEntry | undefined, key: string): entry is TokenEstimateCacheEntry {
   return Boolean(
     entry &&
-    entry.v === TRUSTED_TOKEN_ESTIMATE_VERSION &&
-    entry.source === TRUSTED_TOKEN_ESTIMATE_SOURCE &&
+    entry.v === V9_TOKEN_ESTIMATE_VERSION &&
+    entry.source === V9_TOKEN_ESTIMATE_SOURCE &&
     entry.key === key &&
     Number.isFinite(entry.tokens) &&
     entry.tokens >= 0,
@@ -253,7 +253,7 @@ function isTrustedPartEntry(entry: TokenEstimateCacheEntry | undefined, key: str
 
 /**
  * True when `value` holds only JSON data: primitives, plain objects and arrays, with no cycles.
- * Only such values get a trusted estimate, so a by-reference object (a Buffer, a class instance)
+ * Only such values get a stored estimate, so a by-reference object (a Buffer, a class instance)
  * that someone edits in place can never sit behind a count that is read without checking.
  */
 function isPlainJsonValue(value: unknown, ancestors: Set<object> = new Set()): boolean {
@@ -286,7 +286,7 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
   return getCacheEntry(getPartMastraMetadata(part)?.tokenEstimate, key);
 }
 
-/** Parts that got a trusted count in memory which storage doesn't have yet. */
+/** Parts that got a count in memory which storage doesn't have yet. */
 const countedParts = new WeakSet<object>();
 
 /**
@@ -1307,8 +1307,8 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
  */
 export class TokenCounter {
   private readonly cacheSource: string;
-  /** Trusted estimates are only for the stock estimator; a subclass overriding countString never reads or writes them. */
-  private readonly usesTrustedEstimates: boolean;
+  /** Stored estimates are only for the stock estimator; a subclass overriding countString never reads or writes them. */
+  private readonly usesStoredEstimates: boolean;
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
   private readonly multimodalToolResultCounts = new WeakMap<object, { resultKey: string; tokens: number }>();
@@ -1321,8 +1321,7 @@ export class TokenCounter {
 
   constructor(options?: TokenCounterOptions) {
     this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
-    this.usesTrustedEstimates =
-      coreClearsTrustedTokenEstimates && this.countString === TokenCounter.prototype.countString;
+    this.usesStoredEstimates = coreClearsTokenEstimates && this.countString === TokenCounter.prototype.countString;
     this.defaultModelContext = parseModelContext(options?.model);
   }
 
@@ -1365,23 +1364,23 @@ export class TokenCounter {
   /**
    * Count one content-only piece of a part (its text, a tool's args or result) and keep the count
    * on the part, read back by presence with no hashing. `getPayload` runs only on a miss, so a hit
-   * also skips serializing the value. `value` is checked for plain JSON before anything is trusted;
+   * also skips serializing the value. `value` is checked for plain JSON before anything is stored;
    * anything else keeps the payload-keyed v8 path. Everything here runs synchronously, so the
    * part cannot change between counting it and storing the count.
    */
-  private readOrPersistTrustedPartEstimate(
+  private readOrPersistStoredPartEstimate(
     part: CacheablePart,
     kind: string,
     getPayload: () => string,
     value?: unknown,
   ): number {
-    if (!this.usesTrustedEstimates) {
+    if (!this.usesStoredEstimates) {
       return this.readOrPersistPartEstimate(part, kind, getPayload());
     }
 
-    const key = `${TRUSTED_TOKEN_ESTIMATE_KEY_PREFIX}${kind}`;
+    const key = `${V9_TOKEN_ESTIMATE_KEY_PREFIX}${kind}`;
     const cached = getPartCacheEntry(part, key);
-    if (isTrustedPartEntry(cached, key)) {
+    if (isStoredPartEntry(cached, key)) {
       return cached.tokens;
     }
 
@@ -1391,7 +1390,7 @@ export class TokenCounter {
     }
 
     const tokens = this.countString(payload);
-    const entry = { v: TRUSTED_TOKEN_ESTIMATE_VERSION, source: TRUSTED_TOKEN_ESTIMATE_SOURCE, key, tokens };
+    const entry = { v: V9_TOKEN_ESTIMATE_VERSION, source: V9_TOKEN_ESTIMATE_SOURCE, key, tokens };
     setPartCacheEntry(part, key, entry);
     countedParts.add(part);
     return tokens;
@@ -1851,10 +1850,10 @@ export class TokenCounter {
     let tokens = 0;
     let overheadDelta = 0;
     // Args of a call that is still streaming grow in place, so they keep the payload-keyed count.
-    const trusted = invocation.state !== 'partial-call';
+    const storable = invocation.state !== 'partial-call';
     const count = (kind: string, getPayload: () => string, value?: unknown) =>
-      trusted
-        ? this.readOrPersistTrustedPartEstimate(part, kind, getPayload, value)
+      storable
+        ? this.readOrPersistStoredPartEstimate(part, kind, getPayload, value)
         : this.readOrPersistPartEstimate(part, kind, getPayload());
 
     if (invocation.toolName) {
@@ -1886,7 +1885,7 @@ export class TokenCounter {
     if (part.type === 'text') {
       const text = part.text;
       return {
-        tokens: this.readOrPersistTrustedPartEstimate(part, 'text', () => text),
+        tokens: this.readOrPersistStoredPartEstimate(part, 'text', () => text),
         overheadDelta,
         extraMessageDelta,
       };
@@ -1915,7 +1914,7 @@ export class TokenCounter {
         overheadDelta += signature.overheadDelta;
         const reason = invocation.approval?.reason;
         if (reason) {
-          tokens += this.readOrPersistTrustedPartEstimate(part, 'tool-approval-reason', () => reason);
+          tokens += this.readOrPersistStoredPartEstimate(part, 'tool-approval-reason', () => reason);
         }
         return { tokens, overheadDelta, extraMessageDelta };
       }
@@ -1939,7 +1938,7 @@ export class TokenCounter {
           if (contentTokens !== undefined) {
             tokens += contentTokens;
           } else {
-            tokens += this.readOrPersistTrustedPartEstimate(
+            tokens += this.readOrPersistStoredPartEstimate(
               part,
               usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
               () => serializeToolResultForTokenCounting(resultForCounting),
@@ -1957,7 +1956,7 @@ export class TokenCounter {
               ? errorText
               : 'Tool execution failed'
             : '[empty result]';
-          tokens += this.readOrPersistTrustedPartEstimate(
+          tokens += this.readOrPersistStoredPartEstimate(
             part,
             invocation.isError ? 'tool-result-error' : 'tool-result-json',
             () => fallback,
@@ -1977,7 +1976,7 @@ export class TokenCounter {
         const reason = invocation.approval?.reason?.trim()
           ? invocation.approval.reason
           : 'Tool call was not approved by the user';
-        tokens += this.readOrPersistTrustedPartEstimate(part, 'tool-result-denied', () => reason);
+        tokens += this.readOrPersistStoredPartEstimate(part, 'tool-result-denied', () => reason);
         return { tokens, overheadDelta, extraMessageDelta };
       }
 
@@ -1988,7 +1987,7 @@ export class TokenCounter {
         overheadDelta += signature.overheadDelta;
         const errorText = toolErrorTextToString(invocation.errorText);
         const errorMessage = errorText.trim() ? errorText : 'Tool execution failed';
-        tokens += this.readOrPersistTrustedPartEstimate(part, 'tool-result-error', () => errorMessage);
+        tokens += this.readOrPersistStoredPartEstimate(part, 'tool-result-error', () => errorMessage);
         return { tokens, overheadDelta, extraMessageDelta };
       }
 

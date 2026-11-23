@@ -62,7 +62,7 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
-import { clearTrustedTokenEstimates, clearTrustedTokenEstimatesInPlace } from './utils/token-estimates';
+import { clearTokenEstimates, clearTokenEstimatesInPlace } from './utils/token-estimates';
 import {
   advancesToolInvocationState,
   isClientToolInvocationUpdate,
@@ -1874,7 +1874,7 @@ export class MessageList {
         });
 
         return {
-          ...clearTrustedTokenEstimates(part),
+          ...clearTokenEstimates(part),
           toolInvocation: {
             ...part.toolInvocation,
             args: transformedArgs,
@@ -1892,7 +1892,7 @@ export class MessageList {
       if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
         changed = true;
         return {
-          ...clearTrustedTokenEstimates(part),
+          ...clearTokenEstimates(part),
           data: this.transformToolStateDataForTranscript(
             part.data,
             part.type === 'data-tool-call-suspended' ? 'suspend' : 'approval',
@@ -2241,7 +2241,7 @@ export class MessageList {
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
     // The result (and any `modelOutput`) changed, so the part's stored count no longer applies.
-    clearTrustedTokenEstimatesInPlace(mergedPart);
+    clearTokenEstimatesInPlace(mergedPart);
     if (part.updatedAt !== undefined && mergedPart.updatedAt === undefined) mergedPart.updatedAt = part.updatedAt;
     stampToolPartUpdate(mergedPart, part.toolInvocation, inputPart.updatedAt);
     msg.content.parts![i] = mergedPart;
@@ -2707,7 +2707,7 @@ export class MessageList {
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
     // Caller-supplied parts can't carry token counts Memory trusts without checking.
     if (messageSource === 'input' && Array.isArray(messageV2.content?.parts)) {
-      messageV2.content.parts = messageV2.content.parts.map(part => clearTrustedTokenEstimates(part));
+      messageV2.content.parts = messageV2.content.parts.map(part => clearTokenEstimates(part));
     }
     if (messageDeclaresAuthoredTurn(message) && messageV2.role === 'user' && !messageDeclaresAuthoredTurn(messageV2)) {
       const metadata = messageV2.content.metadata ?? {};
@@ -2795,7 +2795,7 @@ export class MessageList {
           );
           if (storedPart?.type === 'text' && storedPart.text !== incomingPart.text) {
             storedPart.text = incomingPart.text;
-            clearTrustedTokenEstimatesInPlace(storedPart);
+            clearTokenEstimatesInPlace(storedPart);
           }
         }
         MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));

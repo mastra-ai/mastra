@@ -1779,14 +1779,16 @@ export class ObservationalMemory {
 
   /**
    * @internal Write the token counts OM made for stored messages back to storage, so the next
-   * request reads them instead of counting the same parts again. Each stored part takes the count
+   * request reads them instead of counting the same parts again. Only messages of `threadId` are
+   * written: saving another thread's messages would bump that thread's `updatedAt` and reorder
+   * the recent-thread list. Each stored part takes the count
    * of the in-memory part at the same position when that part's content is unchanged.
    *
    * This re-saves each message whole, so an edit or marker written to the same message between
    * the read and the write here is overwritten. That risk is accepted for now.
    */
-  async persistTokenEstimates(messages: MastraDBMessage[]): Promise<void> {
-    const counted = messages.filter(takeNewTokenEstimates);
+  async persistTokenEstimates(messages: MastraDBMessage[], threadId: string): Promise<void> {
+    const counted = messages.filter(message => message.threadId === threadId).filter(takeNewTokenEstimates);
     if (counted.length === 0) return;
     const live = new Map(counted.map(message => [message.id, message]));
     const { messages: stored } = await this.storage.listMessagesById({ messageIds: [...live.keys()] });

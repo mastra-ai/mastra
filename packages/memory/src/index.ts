@@ -68,13 +68,13 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { clearTokenEstimates } from './processors/observational-memory/core-token-estimates';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
   SummarizeConversationResult,
 } from './processors/observational-memory/summarize';
 import { TokenCounter } from './processors/observational-memory/token-counter';
-import { clearTrustedTokenEstimates } from './processors/observational-memory/trusted-token-estimates';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { SUBCONSCIOUS_REMOVED_MESSAGE } from './removed-subconscious';
@@ -1800,7 +1800,7 @@ ${workingMemory}`;
           const text = typeof part.text === 'string' ? part.text : '';
           const stripped = hideTags(text);
           if (stripped === part.text) return part;
-          return { ...clearTrustedTokenEstimates(part), text: stripped };
+          return { ...clearTokenEstimates(part), text: stripped };
         }
         return part;
       });
@@ -2997,7 +2997,7 @@ Notes:
       const update = Array.isArray(rawUpdate.content?.parts)
         ? {
             ...rawUpdate,
-            content: { ...rawUpdate.content, parts: rawUpdate.content.parts.map(clearTrustedTokenEstimates) },
+            content: { ...rawUpdate.content, parts: rawUpdate.content.parts.map(clearTokenEstimates) },
           }
         : rawUpdate;
       const effective = {

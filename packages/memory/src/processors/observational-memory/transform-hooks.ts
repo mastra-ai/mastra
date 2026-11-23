@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { clearTokenEstimates, clearTokenEstimatesInPlace } from './core-token-estimates';
 import { omDebug } from './debug';
 import { detachMessagePayload } from './detach-message-payload';
-import { clearTrustedTokenEstimates, clearTrustedTokenEstimatesInPlace } from './trusted-token-estimates';
 import type { ObserveHookContext, ObserveTransformHooks } from './types';
 
 function messageParts(message: MastraDBMessage): unknown[] {
@@ -9,12 +9,12 @@ function messageParts(message: MastraDBMessage): unknown[] {
   return Array.isArray(parts) ? parts : [];
 }
 
-/** The hook's messages with every part's trusted token counts removed, so the observer recounts them. */
-function withoutTrustedEstimates(messages: MastraDBMessage[]): MastraDBMessage[] {
+/** The hook's messages with every part's stored token counts removed, so the observer recounts them. */
+function withoutTokenEstimates(messages: MastraDBMessage[]): MastraDBMessage[] {
   return messages.map(message => {
     const parts = (message.content as { parts?: unknown } | undefined)?.parts;
     if (!Array.isArray(parts)) return message;
-    return { ...message, content: { ...message.content, parts: parts.map(part => clearTrustedTokenEstimates(part)) } };
+    return { ...message, content: { ...message.content, parts: parts.map(part => clearTokenEstimates(part)) } };
   });
 }
 
@@ -23,9 +23,9 @@ function withoutTrustedEstimates(messages: MastraDBMessage[]): MastraDBMessage[]
  * message array; `undefined` from the hook means passthrough.
  *
  * The hook gets detached copies (Buffers stay Buffers), so editing them in place changes only what
- * the observer sees. Before it runs, the originals' trusted token counts are cleared: an object the
+ * the observer sees. Before it runs, the originals' stored token counts are cleared: an object the
  * hook receives by reference can still reach an original part, and that part must be recounted.
- * Whatever the hook leaves (returned or edited copies) is counted again, never trusted.
+ * Whatever the hook leaves (returned or edited copies) is counted again, never read from storage.
  */
 export async function applyBeforeObservation(
   hooks: ObserveTransformHooks | undefined,
@@ -34,13 +34,13 @@ export async function applyBeforeObservation(
 ): Promise<MastraDBMessage[]> {
   if (!hooks?.beforeObservation) return messages;
   for (const message of messages) {
-    for (const part of messageParts(message)) clearTrustedTokenEstimatesInPlace(part);
+    for (const part of messageParts(message)) clearTokenEstimatesInPlace(part);
   }
   const detached = detachMessagePayload(messages);
   const result = await hooks.beforeObservation({ ...context, messages: detached });
-  if (!result) return withoutTrustedEstimates(detached);
+  if (!result) return withoutTokenEstimates(detached);
   omDebug(`[OM:hooks] beforeObservation replaced messages: ${messages.length} -> ${result.messages.length}`);
-  return withoutTrustedEstimates(result.messages);
+  return withoutTokenEstimates(result.messages);
 }
 
 type TextTransformHook = 'afterObservation' | 'beforeReflection' | 'afterReflection';

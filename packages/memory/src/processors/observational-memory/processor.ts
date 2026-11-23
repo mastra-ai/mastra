@@ -521,7 +521,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
 
         // Counts prepare() made for stored history go back to storage, off the request's path.
-        void this.engine.persistTokenEstimates(messageList.get.remembered.db()).catch(error => {
+        void this.engine.persistTokenEstimates(messageList.get.remembered.db(), threadId).catch(error => {
           omDebug(`[OM:persistTokenEstimates] failed: ${error}`);
         });
 

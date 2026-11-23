@@ -6,7 +6,7 @@ import { UnicodeNormalizer } from '../../../processors/processors/unicode-normal
 import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
 import { MessageList } from '../message-list';
 import type { MastraDBMessage } from '../state/types';
-import { clearTrustedTokenEstimates, clearTrustedTokenEstimatesInPlace } from './token-estimates';
+import { clearTokenEstimates, clearTokenEstimatesInPlace } from './token-estimates';
 
 const trusted = (key: string, tokens = 1) => ({ v: 9, source: 'v9:tokenx', key, tokens });
 const v8 = { v: 8, source: 'v8:tokenx', key: 'text:abc', tokens: 3 };
@@ -36,7 +36,7 @@ const abort = (() => {
   throw new Error('aborted');
 }) as (reason?: string) => never;
 
-describe('clearTrustedTokenEstimates', () => {
+describe('clearTokenEstimates', () => {
   it('removes only trusted entries, keeping v8, client and other metadata', () => {
     const part = {
       type: 'text',
@@ -46,7 +46,7 @@ describe('clearTrustedTokenEstimates', () => {
         other: { keep: 1 },
       },
     };
-    const cleared = clearTrustedTokenEstimates(part);
+    const cleared = clearTokenEstimates(part);
     expect(cleared.providerMetadata).toEqual({
       mastra: { tokenEstimate: { 'text:abc': v8, client }, modelOutput: 1 },
       other: { keep: 1 },
@@ -56,7 +56,7 @@ describe('clearTrustedTokenEstimates', () => {
 
   it('a single trusted entry stored without a map is removed', () => {
     const part = { type: 'text', providerMetadata: { mastra: { tokenEstimate: trusted('trusted:text') } } };
-    clearTrustedTokenEstimatesInPlace(part);
+    clearTokenEstimatesInPlace(part);
     expect(part).toEqual({ type: 'text' });
   });
 });

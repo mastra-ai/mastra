@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { clearTrustedTokenEstimates } from '@mastra/core/agent/message-list';
+import { clearTokenEstimates } from '@mastra/core/agent/message-list';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hashes = vi.hoisted(() => ({ count: 0 }));
@@ -49,7 +49,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe('trusted per-part token counts', () => {
+describe('stored per-part token counts', () => {
   it('a stored count is read back with no hashing and no recount', () => {
     const msg = message([{ type: 'text', text }, toolPart()]);
     const first = new TokenCounter().countMessage(msg);
@@ -73,7 +73,7 @@ describe('trusted per-part token counts', () => {
     expect(countSpy.mock.calls.map(call => call[0])).toEqual(['assistant']);
   });
 
-  it('never trusts a v8 entry by presence, even one whose text was edited', () => {
+  it('never reads a v8 entry by presence, even one whose text was edited', () => {
     const fresh = new TokenCounter().countMessage(message([{ type: 'text', text: 'short edited text' }]));
     const msg = message([
       {
@@ -90,7 +90,7 @@ describe('trusted per-part token counts', () => {
     expect(entries['trusted:text']?.v).toBe(9);
   });
 
-  it('a custom estimator never reads or writes trusted counts', () => {
+  it('a custom estimator never reads or writes stored counts', () => {
     class Doubled extends TokenCounter {
       override countString(value: string): number {
         return super.countString(value) * 2;
@@ -128,7 +128,7 @@ describe('trusted per-part token counts', () => {
       openai: { itemId: 'x' },
     };
     const a = { type: 'text', text: 'a', providerMetadata: shared } as Part;
-    const cleared = clearTrustedTokenEstimates(a) as any;
+    const cleared = clearTokenEstimates(a) as any;
     expect(cleared.providerMetadata).not.toBe(shared);
     expect(cleared.providerMetadata.mastra).not.toBe(shared.mastra);
     expect(cleared.providerMetadata.mastra).toEqual({ modelOutput: 'kept' });
