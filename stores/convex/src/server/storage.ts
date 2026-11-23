@@ -14,9 +14,10 @@ import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 import type { GenericId } from 'convex/values';
 
-import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
+import type { EqualityFilter, RunClaimRequest, StorageRequest, StorageResponse } from '../storage/types';
 import { findBestIndex } from './index-map';
 import { handleObservationalMemoryOperation } from './observational-memory';
+import { handleRunClaimOperation, isRunClaimRequest } from './run-fencing';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
 
 // Vector-specific table names (not in @mastra/core)
@@ -214,6 +215,30 @@ function coalesceTypedRecordsForBatchInsert(records: StorageRecord[]): StorageRe
   return [...recordsById.values()];
 }
 
+/**
+ * Builds the patch for an upsert over an existing row.
+ *
+ * `id` is dropped because it is already set on the stored document.
+ *
+ * For workflow snapshots, `createdAt` is dropped as well so the stored creation
+ * time survives. A snapshot is written repeatedly over the life of a run, and
+ * callers cannot supply a trustworthy `createdAt` on a later save: a request
+ * that read the row before another writer inserted it would carry its own
+ * timestamp and overwrite the real one. patch() is a partial update, so leaving
+ * the key out preserves whatever was stored on first insert. This mirrors the
+ * SQL adapters, whose ON CONFLICT DO UPDATE omits createdAt from the SET list.
+ *
+ * Other tables keep their existing behaviour of writing the incoming createdAt.
+ */
+function buildUpsertPatch(convexTable: string, record: StorageRecord): StorageRecord {
+  const { id: _id, ...updateData } = record;
+  if (convexTable === CONVEX_TABLE_WORKFLOW_SNAPSHOTS) {
+    const { createdAt: _createdAt, ...withoutCreatedAt } = updateData;
+    return withoutCreatedAt;
+  }
+  return updateData;
+}
+
 function coalesceLastRecordById(records: StorageRecord[]): StorageRecord[] {
   const recordsById = new Map<string, StorageRecord>();
   for (const record of records) {
@@ -268,7 +293,16 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
  * Main storage mutation handler.
  * Routes operations to the appropriate typed table.
  */
-export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest): Promise<StorageResponse> => {
+export const mastraStorage = mutationGeneric(
+  async (ctx, request: StorageRequest | RunClaimRequest): Promise<StorageResponse> => {
+    if (isRunClaimRequest(request)) {
+      return handleRunClaimOperation(ctx, request, routeStorageRequest);
+    }
+    return routeStorageRequest(ctx, request);
+  },
+);
+
+async function routeStorageRequest(ctx: MutationCtx<any>, request: StorageRequest): Promise<StorageResponse> {
   try {
     const { convexTable, isTyped } = resolveTable(request.tableName);
 
@@ -299,7 +333,7 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
       error: err.message,
     };
   }
-});
+}
 
 function parseStoredSnapshot(stored: unknown, runId: string): Record<string, any> {
   if (typeof stored === 'string') return JSON.parse(stored);
@@ -342,6 +376,10 @@ export async function handleTypedOperation(
   switch (request.op) {
     case 'omGetLatest':
     case 'omGetHistory':
+    case 'omInitialize':
+    case 'omCreateReflectionGeneration':
+    case 'omSetPendingMessageTokens':
+    case 'omSetBufferingObservationFlag':
     case 'omUpdateActive':
     case 'omAppendBufferedChunk':
     case 'omSwapBuffered':
@@ -429,6 +467,7 @@ export async function handleTypedOperation(
         last_fire_at: request.lastFireAt,
         last_run_id: request.lastRunId,
         updated_at: Date.now(),
+        ...(request.newStatus ? { status: request.newStatus } : {}),
       });
 
       return { ok: true, result: true };
@@ -503,9 +542,7 @@ export async function handleTypedOperation(
         .unique();
 
       if (existing) {
-        // Update existing - don't include id in patch (it's already set)
-        const { id: _, ...updateData } = record;
-        await ctx.db.patch(existing._id, updateData);
+        await ctx.db.patch(existing._id, buildUpsertPatch(convexTable, record));
       } else {
         // Insert new - include id as a regular field
         await ctx.db.insert(convexTable, record);
@@ -523,8 +560,7 @@ export async function handleTypedOperation(
           .unique();
 
         if (existing) {
-          const { id: _, ...updateData } = record;
-          await ctx.db.patch(existing._id, updateData);
+          await ctx.db.patch(existing._id, buildUpsertPatch(convexTable, record));
         } else {
           await ctx.db.insert(convexTable, record);
         }
@@ -600,8 +636,11 @@ export async function handleTypedOperation(
 
     case 'patch': {
       const patchRecord = stripPatchKeys(request.record, ['id']);
+      // Treat a missing field as `null` before comparing: rows written before a
+      // nullable field existed have no key at all, and an expectation of `null`
+      // (e.g. `expectedOwnerId: null` for an unowned task) must still match them.
       const matchesExpected = (record: Record<string, any>) =>
-        !request.expected || Object.entries(request.expected).every(([key, value]) => record[key] === value);
+        !request.expected || Object.entries(request.expected).every(([key, value]) => (record[key] ?? null) === value);
       const existing = await ctx.db
         .query(convexTable)
         .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
@@ -820,6 +859,7 @@ export async function handleTypedOperation(
         stepId: request.stepId,
         result: JSON.parse(request.result),
         requestContext: JSON.parse(request.requestContext),
+        state: request.state === undefined ? undefined : JSON.parse(request.state),
       });
 
       await ctx.db.patch(existing._id, {

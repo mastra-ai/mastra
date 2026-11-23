@@ -1,5 +1,7 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const matcherCache = new Map();
 const BASE_REF = process.env.BASE_REF || 'origin/main';
@@ -7,9 +9,12 @@ const DOCS_DIR = 'docs/src/content';
 const VERCEL_JSON_PATH = 'docs/vercel.json';
 
 // Get list of deleted MDX files
-function getDeletedMdxFiles() {
+export function getDeletedMdxFiles(baseRef = BASE_REF, execute = execFileSync) {
   try {
-    const diff = execSync(`git diff --name-status ${BASE_REF}...HEAD -- ${DOCS_DIR}`, {
+    const baseCommit = execute('git', ['rev-parse', '--verify', '--end-of-options', `${baseRef}^{commit}`], {
+      encoding: 'utf-8',
+    }).trim();
+    const diff = execute('git', ['diff', '--name-status', `${baseCommit}...HEAD`, '--', DOCS_DIR], {
       encoding: 'utf-8',
     });
 
@@ -40,6 +45,15 @@ function filePathToUrlPath(filePath) {
   urlPath = '/' + urlPath;
 
   return urlPath;
+}
+
+// URLs still served by pages generated at build time, so their old source files may be deleted without redirects.
+// The Gateway API reference is generated from the Gateway OpenAPI spec; `slug` frontmatter keeps the old URLs.
+export async function getGeneratedUrlPaths() {
+  const { GATEWAY_API_PAGES } = await import('../../docs/scripts/gateway-api/pages.ts');
+  const { PAGES_DIR } = await import('../../docs/scripts/gateway-api/constants.ts');
+  const base = PAGES_DIR.replace(/^src\/content\/en\//, '');
+  return new Set(Object.values(GATEWAY_API_PAGES).map(({ slug }) => `/${base}/${slug}`));
 }
 
 // Load redirects from vercel.json
@@ -112,7 +126,7 @@ function hasRedirect(urlPath, redirects) {
 }
 
 // Main function
-function main() {
+async function main() {
   console.log('🔍 Checking for removed pages without redirects...\n');
 
   const deletedFiles = getDeletedMdxFiles();
@@ -129,10 +143,16 @@ function main() {
   const redirects = getExistingRedirects();
   console.log(`Found ${redirects.length} redirects in vercel.json\n`);
 
+  const generatedUrlPaths = await getGeneratedUrlPaths();
   const missingRedirects = [];
 
   for (const filePath of deletedFiles) {
     const urlPath = filePathToUrlPath(filePath);
+
+    if (generatedUrlPaths.has(urlPath)) {
+      console.log(`  ${urlPath} is still served by a generated page`);
+      continue;
+    }
 
     if (!hasRedirect(urlPath, redirects)) {
       missingRedirects.push({ filePath, urlPath });
@@ -160,4 +180,6 @@ function main() {
   process.exit(1);
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await main();
+}

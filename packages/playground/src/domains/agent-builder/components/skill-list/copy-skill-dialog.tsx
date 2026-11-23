@@ -1,4 +1,5 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useEffect, useState } from 'react';
 
@@ -35,7 +36,6 @@ export function CopySkillDialog({
 }: CopySkillDialogProps) {
   const [name, setName] = useState('');
 
-  // Re-seed the suggested name whenever the dialog opens for a different source.
   useEffect(() => {
     if (open) setName(suggestCopyName(sourceName, existingNames));
   }, [open, sourceName, existingNames]);
@@ -53,22 +53,19 @@ export function CopySkillDialog({
             Creates a private copy in your skills that you can edit. The original stays untouched.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <div className="px-6 py-2">
-          <label className="text-ui-sm text-neutral4 mb-1.5 block" htmlFor="copy-skill-name">
-            New skill name
-          </label>
-          <Input
-            id="copy-skill-name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="my-skill-copy"
-            autoFocus
-            data-testid="copy-skill-name-input"
-          />
-          {collides && (
-            <div className="text-ui-xs mt-1.5 text-red-400">You already have a skill named "{trimmed}".</div>
-          )}
-        </div>
+        <AlertDialog.Body>
+          <Field invalid={collides}>
+            <FieldLabel>New skill name</FieldLabel>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="my-skill-copy"
+              autoFocus
+              data-testid="copy-skill-name-input"
+            />
+            <FieldError>{collides ? `You already have a skill named "${trimmed}".` : undefined}</FieldError>
+          </Field>
+        </AlertDialog.Body>
         <AlertDialog.Footer>
           <AlertDialog.Cancel disabled={isPending}>Cancel</AlertDialog.Cancel>
           <AlertDialog.Action

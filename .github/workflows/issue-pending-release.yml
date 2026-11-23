@@ -13,7 +13,7 @@ jobs:
       github.repository == 'mastra-ai/mastra' &&
       github.event.pull_request.merged == true &&
       github.event.pull_request.base.ref == 'main'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts

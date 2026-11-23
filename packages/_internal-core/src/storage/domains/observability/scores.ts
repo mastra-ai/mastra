@@ -18,12 +18,14 @@ import {
   listModeSchema,
   metadataField,
   normalizeObservabilityListArgs,
+  organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
   refineObservabilityListMode,
+  resourceIdField,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -136,7 +138,17 @@ export type CreateScoreArgs = z.infer<typeof createScoreArgsSchema>;
 /** Schema for createScore operation body in client/server */
 export const createScoreBodySchema = z
   .object({
-    score: createScoreRecordSchema.omit({ timestamp: true }),
+    contextMode: z
+      .enum(['resolve', 'provided'])
+      .optional()
+      .describe('Context handling; defaults to provided on OSS and resolve on Platform'),
+    score: createScoreRecordSchema.omit({ timestamp: true }).extend({
+      timestamp: z.iso
+        .datetime({ offset: true })
+        .optional()
+        .describe('Original record timestamp; preserve across retries and replacements'),
+      traceId: traceIdField.regex(/\S/, 'traceId must not be empty or whitespace-only'),
+    }),
   })
   .describe('Arguments for creating a score');
 
@@ -144,7 +156,19 @@ export const createScoreBodySchema = z
 export type CreateScoreBody = z.infer<typeof createScoreBodySchema>;
 
 /** Schema for createScore operation response */
-export const createScoreResponseSchema = z.object({ success: z.boolean() }).describe('Response from creating a score');
+export const createScoreResponseSchema = z
+  .object({
+    success: z.boolean(),
+    data: z
+      .object({
+        scoreId: z.string(),
+        traceId: z.string(),
+        spanId: z.string().nullable(),
+        timestamp: z.iso.datetime(),
+      })
+      .optional(),
+  })
+  .describe('Response from creating a score');
 
 /** Response from creating a score */
 export type CreateScoreResponse = z.infer<typeof createScoreResponseSchema>;
@@ -158,6 +182,33 @@ export const batchCreateScoresArgsSchema = z
 
 /** Arguments for batch creating scores */
 export type BatchCreateScoresArgs = z.infer<typeof batchCreateScoresArgsSchema>;
+
+// ============================================================================
+// Delete Score Schemas
+// ============================================================================
+
+const DELETE_SCORES_MAX_IDS = 1000;
+
+/** Schema for deleteScores operation arguments */
+export const deleteScoresArgsSchema = z
+  .object({
+    scoreIds: z
+      .array(z.string())
+      .max(DELETE_SCORES_MAX_IDS)
+      .describe(`IDs of the score events to delete (maximum ${DELETE_SCORES_MAX_IDS})`),
+    organizationId: organizationIdField.optional().describe('Restrict deletion to scores in this organization'),
+    resourceId: resourceIdField.optional().describe('Restrict deletion to scores for this resource'),
+  })
+  .describe('Arguments for deleting scores by id');
+
+/** Arguments for deleting scores */
+export type DeleteScoresArgs = z.infer<typeof deleteScoresArgsSchema>;
+
+/** Schema for deleteScores operation response */
+export const deleteScoresResponseSchema = z.object({ success: z.boolean() }).describe('Response from deleting scores');
+
+/** Response from deleting scores */
+export type DeleteScoresResponse = z.infer<typeof deleteScoresResponseSchema>;
 
 // ============================================================================
 // Score Filter Schema

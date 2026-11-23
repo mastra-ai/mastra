@@ -19,7 +19,7 @@ const DateTimePickerDemo = ({ initialValue }: { initialValue?: Date }) => {
   return (
     <div className="w-70">
       <DateTimePicker value={value} onValueChange={setValue} />
-      {value && <p className="text-neutral5 mt-2 text-sm">Selected: {value.toLocaleString()}</p>}
+      {value && <p className="mt-2 text-body text-foreground">Selected: {value.toLocaleString()}</p>}
     </div>
   );
 };
@@ -37,7 +37,7 @@ export const WithPlaceholder: Story = {
     const [value, setValue] = useState<Date | undefined>();
     return (
       <div className="w-70">
-        <DateTimePicker value={value} onValueChange={setValue} placeholder="Select date and time..." />
+        <DateTimePicker value={value} onValueChange={setValue} placeholder="Select date and time" />
       </div>
     );
   },
@@ -51,12 +51,7 @@ export const WithMinValue: Story = {
 
     return (
       <div className="w-70">
-        <DateTimePicker
-          value={value}
-          onValueChange={setValue}
-          minValue={minDate}
-          placeholder="Select a date (min: 7 days ago)"
-        />
+        <DateTimePicker value={value} onValueChange={setValue} minValue={minDate} />
       </div>
     );
   },
@@ -70,12 +65,7 @@ export const WithMaxValue: Story = {
 
     return (
       <div className="w-70">
-        <DateTimePicker
-          value={value}
-          onValueChange={setValue}
-          maxValue={maxDate}
-          placeholder="Select a date (max: 7 days ahead)"
-        />
+        <DateTimePicker value={value} onValueChange={setValue} maxValue={maxDate} />
       </div>
     );
   },

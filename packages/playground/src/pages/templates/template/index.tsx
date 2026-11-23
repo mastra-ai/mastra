@@ -1,15 +1,10 @@
 import { version } from '@mastra/core/package.json';
-import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
-import { TemplateFailure } from '@/domains/templates/template-failure';
-import { TemplateForm } from '@/domains/templates/template-form';
-import { TemplateInfo } from '@/domains/templates/template-info';
-import { TemplateInstallation } from '@/domains/templates/template-installation';
-import { TemplateSuccess } from '@/domains/templates/template-success';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import {
   useTemplateRepo,
   useTemplateRepoEnvVars,
@@ -18,11 +13,23 @@ import {
   useAgentBuilderWorkflow,
   useGetTemplateInstallRun,
   useObserveStreamTemplateInstall,
-} from '@/hooks/use-templates';
-import { cn } from '@/lib/utils';
+} from '@mastra/react/hooks/templates';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { decodeRouteParam } from '@/domains/navigation/crumbs';
+import { TemplateFailure } from '@/domains/templates/template-failure';
+import { TemplateForm } from '@/domains/templates/template-form';
+import { TemplateInfo } from '@/domains/templates/template-info';
+import { TemplateInstallation } from '@/domains/templates/template-installation';
+import { TemplateSuccess } from '@/domains/templates/template-success';
 
 export default function Template() {
-  const { templateSlug } = useParams()! as { templateSlug: string };
+  const { templateSlug } = useParams() as { templateSlug: string };
+  const crumbs = [
+    { id: 'templates', label: 'Templates', to: '/templates' },
+    { id: 'template', label: decodeRouteParam(templateSlug) },
+  ];
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [selectedModelProvider, setSelectedModelProvider] = useState<string>('');
@@ -54,12 +61,12 @@ export default function Template() {
   const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
   const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
   const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
-  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall(workflowInfo);
+  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall({ workflowInfo: workflowInfo });
   const {
     observeInstall,
     streamResult: observeStreamResult,
     isStreaming: isObserving,
-  } = useObserveStreamTemplateInstall(workflowInfo);
+  } = useObserveStreamTemplateInstall({ workflowInfo: workflowInfo });
 
   // Check for completed runs after hot reload recovery
   useEffect(() => {
@@ -198,13 +205,13 @@ export default function Template() {
       key: 'providers',
       label: 'Providers',
       value: template?.supportedProviders?.length ? template.supportedProviders.join(', ') : 'n/a',
-      icon: <BrainIcon />,
+      icon: <IconBrain />,
     },
     {
       key: 'tags',
       label: 'Tags',
       value: template?.tags?.length ? template.tags.join(', ') : 'n/a',
-      icon: <TagIcon />,
+      icon: <IconTag />,
     },
   ];
 
@@ -250,12 +257,12 @@ export default function Template() {
   };
 
   const handleInstallTemplate = async () => {
-    const errors = Object.entries(variables).reduce((acc, [key, value]) => {
+    const errors = Object.entries(variables).reduce<string[]>((acc, [key, value]) => {
       if (value === '') {
         acc.push(key);
       }
       return acc;
-    }, [] as string[]);
+    }, []);
 
     if (errors.length > 0) {
       setErrors(errors);
@@ -326,66 +333,65 @@ export default function Template() {
   };
 
   return (
-    <MainContentLayout>
-      <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
-        <div className="mx-auto grid w-full max-w-[80rem] gap-y-4 p-6">
-          <TemplateInfo
-            isLoading={isLoadingTemplate}
-            title={template?.title}
-            description={template?.longDescription}
-            imageURL={template?.imageURL}
-            githubUrl={template?.githubUrl}
-            infoData={templateInfoData}
-            templateSlug={templateSlug}
-          />
-          {template && (
-            <>
-              {(isStreaming || isObserving) && (
-                <TemplateInstallation
-                  name={template.title}
-                  streamResult={isObserving ? observeStreamResult : streamResult}
-                  runId={currentRunId}
-                  workflowInfo={workflowInfo}
-                />
-              )}
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">{templateSlug}</h1>
+      <div className="grid gap-y-4">
+        <TemplateInfo
+          isLoading={isLoadingTemplate}
+          title={template?.title}
+          description={template?.longDescription}
+          imageURL={template?.imageURL}
+          githubUrl={template?.githubUrl}
+          infoData={templateInfoData}
+          templateSlug={templateSlug}
+        />
+        {template && (
+          <>
+            {(isStreaming || isObserving) && (
+              <TemplateInstallation
+                name={template.title}
+                streamResult={isObserving ? observeStreamResult : streamResult}
+                runId={currentRunId}
+                workflowInfo={workflowInfo}
+              />
+            )}
 
-              {success && (
-                <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
-              )}
+            {success && (
+              <TemplateSuccess name={template.title} installedEntities={installedEntities} linkComponent={Link} />
+            )}
 
-              {failure && (
-                <TemplateFailure
-                  errorMsg={failure}
-                  validationErrors={
-                    completedRunValidationErrors.length > 0
-                      ? completedRunValidationErrors
-                      : streamResult?.validationResults?.errors || observeStreamResult?.validationResults?.errors
-                  }
-                />
-              )}
+            {failure && (
+              <TemplateFailure
+                errorMsg={failure}
+                validationErrors={
+                  completedRunValidationErrors.length > 0
+                    ? completedRunValidationErrors
+                    : streamResult?.validationResults?.errors || observeStreamResult?.validationResults?.errors
+                }
+              />
+            )}
 
-              {!isStreaming && !isObserving && !success && !failure && (
-                <TemplateForm
-                  providerOptions={providerOptions}
-                  selectedProvider={selectedProvider}
-                  onProviderChange={handleProviderChange}
-                  variables={variables}
-                  setVariables={setVariables}
-                  errors={errors}
-                  setErrors={setErrors}
-                  handleInstallTemplate={handleInstallTemplate}
-                  handleVariableChange={handleVariableChange}
-                  isLoadingEnvVars={isLoadingEnvVars || isLoadingWorkflow}
-                  isInstalling={isCreatingRun}
-                  defaultModelProvider={selectedModelProvider}
-                  defaultModelId={selectedModelId}
-                  onModelUpdate={handleModelUpdate}
-                />
-              )}
-            </>
-          )}
-        </div>
+            {!isStreaming && !isObserving && !success && !failure && (
+              <TemplateForm
+                providerOptions={providerOptions}
+                selectedProvider={selectedProvider}
+                onProviderChange={handleProviderChange}
+                variables={variables}
+                setVariables={setVariables}
+                errors={errors}
+                setErrors={setErrors}
+                handleInstallTemplate={handleInstallTemplate}
+                handleVariableChange={handleVariableChange}
+                isLoadingEnvVars={isLoadingEnvVars || isLoadingWorkflow}
+                isInstalling={isCreatingRun}
+                defaultModelProvider={selectedModelProvider}
+                defaultModelId={selectedModelId}
+                onModelUpdate={handleModelUpdate}
+              />
+            )}
+          </>
+        )}
       </div>
-    </MainContentLayout>
+    </PageLayout>
   );
 }

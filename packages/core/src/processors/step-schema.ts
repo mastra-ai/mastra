@@ -1,8 +1,8 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';
-import type { ModelRouterModelId } from '../llm/model';
+import type { ModelRouterModelId, MastraModelSettings } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { InferSchemaOutput, OutputSchema } from '../stream/base/schema';
@@ -115,6 +115,7 @@ export type ProcessorInputStepPhaseType = {
   messages: ProcessorMessageType[];
   messageList: MessageList;
   stepNumber: number;
+  runId?: string;
   systemMessages?: CoreMessageType[];
   retryCount?: number;
   model?: ProcessorStepModelConfig;
@@ -122,7 +123,7 @@ export type ProcessorInputStepPhaseType = {
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
   messageId?: string;
@@ -148,6 +149,10 @@ export type SerializableOutputResult = {
   usage: Record<string, unknown>;
   finishReason: string;
   steps: unknown[];
+  /**
+   * @deprecated No longer set. `MessageHistory` no longer drops failed turns it receives; check `finishReason === 'error'` to detect failed runs.
+   */
+  inputAccepted?: boolean;
 };
 
 export type ProcessorOutputResultPhaseType = {
@@ -182,6 +187,8 @@ export type ProcessorToolResultPhaseType = {
   toolCallId: string;
   args?: unknown;
   result?: unknown;
+  /** The tool's `toModelOutput` mapping of the result, which the next model call reads. */
+  modelOutput?: unknown;
   providerExecuted?: boolean;
   systemMessages?: CoreMessageType[];
   steps?: Array<StepResult<ToolSet>>;
@@ -202,6 +209,7 @@ export type ProcessorStepOutputType = {
   messageList?: MessageList;
   systemMessages?: CoreMessageType[];
   stepNumber?: number;
+  runId?: string;
   part?: unknown | null;
   streamParts?: unknown[];
   state?: Record<string, unknown>;
@@ -218,13 +226,14 @@ export type ProcessorStepOutputType = {
   toolCallId?: string;
   args?: unknown;
   toolResultValue?: unknown;
+  modelOutput?: unknown;
   providerExecuted?: boolean;
   model?: MastraLanguageModel;
   tools?: ProcessorStepToolsConfig;
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
   messageId?: string;
@@ -556,6 +565,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
   messages: messagesSchema,
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
+  runId: z.string().optional().describe('The active agent run ID'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
   messageId: z.string().optional().describe('The active assistant response message ID for this step'),
@@ -569,10 +579,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Current tool choice setting'),
   activeTools: z.array(z.string()).optional().describe('Currently active tools'),
   providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
-  modelSettings: z
-    .custom<Omit<CallSettings, 'abortSignal'>>()
-    .optional()
-    .describe('Model settings (temperature, etc.)'),
+  modelSettings: z.custom<MastraModelSettings>().optional().describe('Model settings (temperature, etc.)'),
   structuredOutput: z
     .custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>()
     .optional()
@@ -602,6 +609,10 @@ const outputResultSchema = z.object({
   usage: z.record(z.string(), z.unknown()).describe('Token usage (cumulative across all steps)'),
   finishReason: z.string().describe('Why the generation finished'),
   steps: z.array(z.unknown()).describe('All LLM step results'),
+  inputAccepted: z
+    .boolean()
+    .optional()
+    .describe("Deprecated. No longer set. Check finishReason === 'error' to detect failed runs"),
 });
 
 export const ProcessorOutputResultPhaseSchema = z.object({
@@ -650,6 +661,10 @@ export const ProcessorToolResultPhaseSchema = z.object({
   toolCallId: z.string().describe('Unique identifier for this specific tool call'),
   args: z.unknown().optional().describe('Arguments the LLM passed to the tool'),
   result: z.unknown().optional().describe('Raw value returned by tool.execute() (already serialized)'),
+  modelOutput: z
+    .unknown()
+    .optional()
+    .describe("The tool's toModelOutput mapping of the result, which the next model call reads"),
   providerExecuted: z
     .boolean()
     .optional()
@@ -702,6 +717,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
 
   // Step-based fields
   stepNumber: z.number().optional(),
+  runId: z.string().optional(),
 
   // Stream-based fields
   part: z.unknown().nullable().optional(),
@@ -713,6 +729,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
 
   // Output step fields
   finishReason: z.string().optional(),
+  providerMetadata: z.record(z.string(), z.unknown()).optional(),
   toolCalls: z.array(toolCallSchema).optional(),
   text: z.string().optional(),
   usage: z.record(z.string(), z.unknown()).optional(),
@@ -722,6 +739,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   toolCallId: z.string().optional(),
   args: z.unknown().optional(),
   toolResultValue: z.unknown().optional(),
+  modelOutput: z.unknown().optional(),
   providerExecuted: z.boolean().optional(),
 
   // Retry count
@@ -733,7 +751,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
   activeTools: z.array(z.string()).optional(),
   providerOptions: z.custom<SharedProviderOptions>().optional(),
-  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
+  modelSettings: z.custom<MastraModelSettings>().optional(),
   structuredOutput: z.custom<StructuredOutputOptions<InferSchemaOutput<OutputSchema>>>().optional(),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
   messageId: z.string().optional(),

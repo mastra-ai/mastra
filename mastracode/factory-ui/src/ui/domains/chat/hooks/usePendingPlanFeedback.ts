@@ -1,7 +1,10 @@
 import type { PlanResume } from '@mastra/client-js';
 
 import { isPlanReadablePath, usePlanFile } from '../../../../hooks/use-fs';
-import { useRespondAgentControllerSuspensionMutation } from '../../../../hooks/useAgentControllerRunMutations';
+import {
+  isEndedPrompt,
+  useRespondAgentControllerSuspensionMutation,
+} from '../../../../hooks/useAgentControllerRunMutations';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from '../components/submit-plan-source';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -18,7 +21,7 @@ function pendingSubmitPlan(entries: TimelineEntry[]) {
 }
 
 export function usePendingPlanFeedback() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
   const prompt = pendingSubmitPlan(transcript.entries);
   const inline = resolveInlinePlan(prompt?.suspendPayload, undefined);
@@ -36,8 +39,7 @@ export function usePendingPlanFeedback() {
     (workspace.isPending || (Boolean(workspace.workspacePath) && file.isPending));
   const respondMutation = useRespondAgentControllerSuspensionMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -53,7 +55,14 @@ export function usePendingPlanFeedback() {
       ...(title ? { title } : {}),
       ...(plan ? { plan } : {}),
     };
-    await respondMutation.mutateAsync({ toolCallId: prompt.toolCallId, resumeData });
+    try {
+      await respondMutation.mutateAsync({ toolCallId: prompt.toolCallId, resumeData, quietWhenEnded: true });
+    } catch (error) {
+      // Nothing will ever answer a prompt whose run has ended, so drop its card.
+      // The caller decides what to do with the text instead.
+      if (isEndedPrompt(error)) resolvePrompt(prompt.id);
+      throw error;
+    }
     resolvePrompt(prompt.id);
   };
 

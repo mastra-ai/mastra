@@ -1,7 +1,10 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
 
-import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
+import {
+  anthropicStripEmptySignedReasoningContent,
+  ProviderHistoryCompat,
+} from '../../../processors/provider-history-compat';
 import { AIV5Adapter } from '../adapters/AIV5Adapter';
 import { MessageList } from '../index';
 
@@ -77,26 +80,29 @@ describe('Anthropic signed thinking round-trip', () => {
     expect(getAssistantReasoningParts(processedPrompt)).toEqual([anthropicThinkingPart]);
   });
 
-  it('does not forward legacy empty Anthropic thinking with a non-empty signature', async () => {
-    const prompt: LanguageModelV2Prompt = [
-      { role: 'user', content: [{ type: 'text', text: 'Hi' }] },
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'reasoning',
-            text: '',
-            providerOptions: { anthropic: { signature: 'sig-without-thinking-text' } },
-          },
-          { type: 'text', text: 'Hello.' },
-        ],
-      },
-      // Real replay requests always end with a user (or tool) turn; a legacy
-      // assistant message followed by a new user turn is not protected from
-      // sanitization.
-      { role: 'user', content: [{ type: 'text', text: 'Continue.' }] },
-    ];
+  it('keeps empty signed Anthropic thinking in the request and strips it only after the 400', async () => {
+    // Claude 5.x with omitted thinking display emits a valid signed block with empty text, so the
+    // block alone cannot be told apart from legacy corruption. It is stripped reactively, on the
+    // "thinking blocks cannot be modified" 400, never preemptively.
+    const legacyMessage = AIV5Adapter.fromModelMessage({
+      id: 'msg-legacy-thinking',
+      role: 'assistant',
+      content: [
+        {
+          type: 'reasoning',
+          text: '',
+          providerOptions: { anthropic: { signature: 'sig-without-thinking-text' } },
+        },
+        { type: 'text', text: 'Hello.' },
+      ],
+    });
 
+    const list = new MessageList();
+    list.add({ role: 'user', content: 'Hi' }, 'input');
+    list.add(legacyMessage, 'memory');
+    list.add({ role: 'user', content: 'Continue.' }, 'input');
+
+    const prompt = list.get.all.aiV5.prompt();
     const result = await new ProviderHistoryCompat().processLLMRequest({
       prompt,
       model: { provider: 'anthropic.messages' },
@@ -108,15 +114,82 @@ describe('Anthropic signed thinking round-trip', () => {
         throw new Error('abort');
       }) as any,
     });
+    expect(getAssistantReasoningParts(result?.prompt ?? prompt)).toEqual([
+      expect.objectContaining({
+        text: '',
+        providerOptions: { anthropic: { signature: 'sig-without-thinking-text' } },
+      }),
+    ]);
 
-    expect(result).toEqual({ prompt: expect.any(Array) });
-    const assistant = result!.prompt.find(message => message.role === 'assistant')!;
-    expect(Array.isArray(assistant.content)).toBe(true);
-    expect((assistant.content as any[]).map(part => part.type)).toEqual(['text']);
+    const mutated = anthropicStripEmptySignedReasoningContent.fix!(list.get.all.db());
+    expect(mutated).toBe(true);
+    expect(getAssistantReasoningParts(list.get.all.aiV5.prompt())).toHaveLength(0);
+  });
+
+  it('keeps the Anthropic signature and drops the Kimi one for an Anthropic target', async () => {
+    const kimiDbMessage = AIV5Adapter.fromModelMessage({
+      id: 'msg-kimi-thinking',
+      role: 'assistant',
+      content: [
+        { type: 'reasoning', text: 'Kimi thinking.', providerOptions: { anthropic: { signature: 'sig-kimi' } } },
+        { type: 'text', text: 'Kimi answer.' },
+      ],
+    });
+    kimiDbMessage.content.metadata = { provider: 'kimi-for-coding', modelId: 'k3' };
+
+    const anthropicDbMessage = AIV5Adapter.fromModelMessage({
+      id: 'msg-anthropic-thinking-later',
+      role: 'assistant',
+      content: [
+        {
+          type: 'reasoning',
+          text: 'Claude thinking.',
+          providerOptions: { anthropic: { signature: 'sig-anthropic' } },
+        },
+        { type: 'text', text: 'Claude answer.' },
+      ],
+    });
+    anthropicDbMessage.content.metadata = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-6' };
+
+    const list = new MessageList();
+    list.add({ role: 'user', content: 'Think briefly.' }, 'input');
+    list.add(kimiDbMessage, 'memory');
+    list.add({ role: 'user', content: 'Again.' }, 'input');
+    list.add(anthropicDbMessage, 'memory');
+    list.add({ role: 'user', content: 'Continue.' }, 'input');
+
+    const prompt = list.get.all.aiV5.prompt();
+    const result = await new ProviderHistoryCompat().processLLMRequest({
+      prompt,
+      model: { provider: 'anthropic.messages' },
+      messageList: list,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+    });
+
+    const signatures = (result?.prompt ?? prompt).flatMap(message =>
+      Array.isArray(message.content)
+        ? message.content
+            .filter(part => part.type === 'reasoning')
+            .map(
+              part =>
+                (part as { providerOptions?: { anthropic?: { signature?: string } } }).providerOptions?.anthropic
+                  ?.signature,
+            )
+        : [],
+    );
+
+    expect(signatures).toEqual(['sig-anthropic']);
   });
 
   it('does not change Gemini provider metadata on non-Anthropic replay', async () => {
     const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'Draw a cat' }] },
       {
         role: 'assistant',
         content: [
@@ -143,6 +216,6 @@ describe('Anthropic signed thinking round-trip', () => {
     });
 
     expect(result).toBeUndefined();
-    expect((prompt[0]!.content as any[])[0].providerOptions.google.thoughtSignature).toBe('gemini-sig');
+    expect((prompt[1]!.content as any[])[0].providerOptions.google.thoughtSignature).toBe('gemini-sig');
   });
 });

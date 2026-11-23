@@ -4,14 +4,35 @@ import { shouldSkipDotenvLoading } from '../utils.js';
 
 export function getWorkerEntry(): string {
   return `
+    import { timingSafeEqual } from 'node:crypto';
     import { createServer } from 'node:http';
     import { mastra } from '#mastra';
 
+    const workerConfigToken = process.env.MASTRA_WORKER_CONFIG_TOKEN;
     let workersReady = false;
     let shuttingDown = false;
 
+    const isWorkerConfigRequestAuthorized = request => {
+      const authorization = request.headers.authorization;
+      if (!workerConfigToken || !authorization?.startsWith('Bearer ')) return false;
+      const providedToken = Buffer.from(authorization.slice('Bearer '.length));
+      const expectedToken = Buffer.from(workerConfigToken);
+      return providedToken.length === expectedToken.length && timingSafeEqual(providedToken, expectedToken);
+    };
+
     const healthServer = createServer((request, response) => {
       response.setHeader('content-type', 'application/json');
+
+      if (request.url === '/config') {
+        if (!isWorkerConfigRequestAuthorized(request)) {
+          response.statusCode = 401;
+          response.end(JSON.stringify({ status: 'unauthorized' }));
+          return;
+        }
+        response.statusCode = 200;
+        response.end(JSON.stringify(mastra.getWorkerConfig()));
+        return;
+      }
 
       if (request.url !== '/health') {
         response.statusCode = 404;

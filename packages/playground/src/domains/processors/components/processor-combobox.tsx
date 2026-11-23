@@ -1,9 +1,9 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useProcessors } from '@mastra/react/hooks/processors';
 import { useEffect } from 'react';
-import { useProcessors } from '../hooks/use-processors';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ProcessorComboboxProps {
   value?: string;
@@ -15,18 +15,24 @@ export interface ProcessorComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function ProcessorCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a processor...',
-  searchPlaceholder = 'Search processors...',
+  placeholder = 'Select a processor',
+  searchPlaceholder = 'Search processors',
   emptyText = 'No processors found.',
   className,
   disabled = false,
   variant,
   size,
+  popupWidth,
+  'aria-label': ariaLabel,
+  align,
 }: ProcessorComboboxProps) {
   const { data: processors = {}, isLoading, isError, error } = useProcessors();
   const { navigate, paths } = useLinkComponent();
@@ -73,6 +79,9 @@ export function ProcessorCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
+      aria-label={ariaLabel}
+      align={align}
     />
   );
 }

@@ -1,269 +1,196 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { Switch } from '@mastra/playground-ui/components/Switch';
-import { toast } from '@mastra/playground-ui/components/Toaster';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-
-import { useApiConfig } from '../../../../api/config';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
-import type { LinearProject, LinearStatus } from '../../factory/services/linear';
-import type { IntakeConfig } from '../../factory/services/intake';
-import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { SourcePicker } from './IntakeSourcePicker';
-import type { SourcePickerGroup } from './IntakeSourcePicker';
-import { LinearRouting } from './LinearRouting';
-import { SettingsCard } from './SettingsCard';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { Fragment } from 'react';
+import { Link, useParams } from 'react-router';
+import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
+import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
+import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
+import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
+import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
+import { boardIntakePath } from '../../boardConfig/boardConfigPaths';
+import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
+import { GithubIntakeSection } from './GithubIntakeSection';
+import { GitLabIntakeSection } from './GitLabIntakeSection';
+import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './IncidentioIntakeSection';
+import { JiraIntakeSection } from './JiraIntakeSection';
+import { LinearIntakeSection } from './LinearIntakeSection';
 import { SettingsSubsection } from './SettingsSubsection';
+import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
 
-/**
- * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
- * syncs) — the first pick starts from an empty list, and clearing the last
- * pick returns to `null`.
- */
-function toggleId(ids: string[] | null, id: string): string[] | null {
-  const current = ids ?? [];
-  const next = current.includes(id) ? current.filter(v => v !== id) : [...current, id];
-  return next.length ? next : null;
+type SourceListing = 'connected' | 'unavailable' | 'available';
+
+function sourceListing(connected: boolean, unavailable: boolean): SourceListing {
+  if (connected) return 'connected';
+  if (unavailable) return 'unavailable';
+  return 'available';
 }
 
-interface SourceSectionProps {
-  config: IntakeConfig;
-  busy: boolean;
-  update: (next: IntakeConfig) => void;
-}
-
-function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps & { slugs: string[] }) {
+function IntakeSkeleton() {
   return (
-    <SettingsSubsection
-      scope="personal"
-      title="GitHub issues"
-      description="Open issues from the repositories you select. Teammates choose their own. Pull requests always appear in Review."
-    >
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Sync GitHub issues">
-          <Switch
-            aria-label="Sync GitHub issues"
-            checked={config.github.enabled}
-            disabled={busy}
-            onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
-          />
-        </SettingsRow>
-
-        {config.github.enabled &&
-          (slugs.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
-              No linked repositories yet — link a repository to a factory to add one.
-            </Txt>
-          ) : (
-            <SourcePicker
-              label="Repositories"
-              groups={[
-                {
-                  id: 'repositories',
-                  items: slugs.map(slug => ({ id: slug, label: slug })),
-                },
-              ]}
-              selectedIds={config.github.sourceIds}
-              disabled={busy}
-              pending={busy}
-              onToggleItem={slug =>
-                update({
-                  ...config,
-                  github: { ...config.github, sourceIds: toggleId(config.github.sourceIds, slug) },
-                })
-              }
-            />
-          ))}
-      </SettingsCard>
-    </SettingsSubsection>
-  );
-}
-
-/**
- * Linear needs an OAuth workspace before anything can sync, so the connection
- * state is the section header: the description says what is missing and the
- * action connects or reconnects.
- */
-function LinearIntakeSection({
-  config,
-  busy,
-  update,
-  status,
-  connected,
-  projects,
-  reauthRequired,
-  showPickers,
-  baseUrl,
-}: SourceSectionProps & {
-  status: LinearStatus | undefined;
-  connected: boolean;
-  projects: LinearProject[];
-  reauthRequired: boolean;
-  /** Projects can only be picked — and routed — once Linear answers with them. */
-  showPickers: boolean;
-  baseUrl: string;
-}) {
-  const serverConfigured = status?.enabled !== false;
-  const description = !serverConfigured
-    ? 'Linear is not configured on this server.'
-    : !connected
-      ? 'Connect a Linear workspace to sync its issues.'
-      : reauthRequired
-        ? 'Linear authorization expired. Reconnect to keep syncing issues.'
-        : 'Active issues from the projects you select. Teammates choose their own.';
-
-  const action = !serverConfigured ? undefined : !connected ? (
-    <Button size="sm" onClick={() => connectLinear(baseUrl)}>
-      Connect Linear
-    </Button>
-  ) : reauthRequired ? (
-    <Button size="sm" onClick={() => connectLinear(baseUrl)}>
-      Reconnect Linear
-    </Button>
-  ) : (
-    <span className="flex items-center gap-2">
-      <Txt as="span" variant="ui-sm" className="text-icon3">
-        Connected to {status?.workspace?.name ?? 'a Linear workspace'}
-      </Txt>
-      <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
-        Reconnect
-      </Button>
-    </span>
-  );
-
-  return (
-    <SettingsSubsection scope="personal" title="Linear issues" description={description} action={action}>
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Sync Linear issues">
-          <Switch
-            aria-label="Sync Linear issues"
-            checked={config.linear.enabled}
-            disabled={busy || !connected}
-            onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
-          />
-        </SettingsRow>
-
-        {showPickers && (
-          <SourcePicker
-            label="Linear projects"
-            groups={groupLinearProjectsByTeam(projects)}
-            selectedIds={config.linear.sourceIds}
-            disabled={busy}
-            pending={busy}
-            onToggleItem={projectId =>
-              update({
-                ...config,
-                linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
-              })
-            }
-          />
-        )}
-      </SettingsCard>
-    </SettingsSubsection>
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading intake sources" variant="item" rows={4} />
+    </SettingsContainer>
   );
 }
 
 export function IntakeSection() {
-  const { baseUrl } = useApiConfig();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const configQuery = useIntakeConfigQuery();
-  const saveMutation = useSaveIntakeConfigMutation();
-  const factoriesQuery = useFactoriesQuery();
-  const linearStatusQuery = useLinearStatusQuery();
+  useIntakeBindingsQuery();
+  const github = useGithubStatusQuery();
+  const gitlab = useGitLabStatusQuery();
+  const linear = useLinearStatusQuery();
+  const jira = useJiraStatusQuery();
+  const incidentio = useIncidentioStatusQuery();
+  const incidentioConnections = usePlatformConnectionsQuery('incident-io');
+  const vanta = useVantaStatusQuery();
+  const vantaConnections = usePlatformConnectionsQuery('vanta', Boolean(vanta.data));
 
-  const linearStatus = linearStatusQuery.data;
-  const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
-  const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
-
-  const config = configQuery.data;
-  // The same repository can be linked to several factories; Intake picks it once.
-  const linkedSlugs = [
-    ...new Set((factoriesQuery.data ?? []).flatMap(factory => factory.repositories.map(r => r.slug))),
-  ];
-
-  if (configQuery.isPending) {
-    return <SkeletonRows label="Loading intake sources" rows={4} />;
-  }
-  if (configQuery.isError || !config) {
+  if (configQuery.isPending) return <IntakeSkeleton />;
+  if (!configQuery.data) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub or Linear first.
-      </Txt>
+      <SettingsContainer>
+        <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void configQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </SettingsRow>
+      </SettingsContainer>
     );
   }
 
-  const update = (next: IntakeConfig) => {
-    saveMutation.mutate(next, {
-      onSuccess: () => toast.success('Intake sources updated'),
-      onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save intake sources'),
-    });
-  };
-  const busy = saveMutation.isPending;
-  const linearProjects = linearProjectsQuery.data ?? [];
-  const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
-  const routedProjectIds = config.linear.sourceIds ?? [];
-  const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
+  if (
+    github.isPending ||
+    gitlab.isPending ||
+    linear.isPending ||
+    jira.isPending ||
+    incidentio.isPending ||
+    incidentioConnections.isPending
+  ) {
+    return <IntakeSkeleton />;
+  }
+
+  const props = { config: configQuery.data };
+  const incidentioDirect = isIncidentioDirectConfigured(incidentio.data);
+  const incidentioPlatformUnavailable =
+    incidentioConnections.isError && isPlatformConnectUnavailableError(incidentioConnections.error);
+  const githubListing = sourceListing(
+    Boolean(github.data?.connected || github.data?.installations.length),
+    github.isError || github.data?.reason === 'unavailable',
+  );
+  const gitlabListing = sourceListing(
+    Boolean(gitlab.data?.configured || gitlab.data?.connections?.length),
+    gitlab.isError || gitlab.data?.reason === 'unavailable',
+  );
+  const linearListing = sourceListing(
+    Boolean(
+      linear.data?.enabled &&
+      (linear.data.connected || linear.data.workspaces?.length || props.config.linear.sourceIds?.length),
+    ),
+    linear.isError || linear.data?.reason === 'unavailable',
+  );
+  const jiraListing = sourceListing(Boolean(jira.data?.configured || jira.data?.connections?.length), jira.isError);
+  // 403/404: Platform connections aren't offered here.
+  const incidentioListing =
+    incidentioPlatformUnavailable && !incidentioDirect
+      ? undefined
+      : sourceListing(
+          incidentioDirect || Boolean(incidentioConnections.data?.length),
+          incidentio.isError || incidentioConnections.isError,
+        );
+  const vantaListing = sourceListing(
+    Boolean(vantaConnections.data?.length),
+    vantaConnections.isError && isPlatformConnectUnavailableError(vantaConnections.error),
+  );
+  // Pass gated queries down: a new observer on an errored query refetches on mount and loops the gate.
+  const sources = [
+    {
+      id: 'github',
+      listing: githubListing,
+      content: <GithubIntakeSection {...props} listed={githubListing !== 'available'} statusQuery={github} />,
+    },
+    {
+      id: 'gitlab',
+      listing: gitlabListing,
+      content: <GitLabIntakeSection {...props} listed={gitlabListing !== 'available'} statusQuery={gitlab} />,
+    },
+    {
+      id: 'linear',
+      listing: linearListing,
+      content: <LinearIntakeSection {...props} listed={linearListing !== 'available'} statusQuery={linear} />,
+    },
+    {
+      id: 'jira',
+      listing: jiraListing,
+      content: <JiraIntakeSection {...props} listed={jiraListing !== 'available'} statusQuery={jira} />,
+    },
+    {
+      id: 'incidentio',
+      listing: incidentioListing,
+      content: (
+        <IncidentioIntakeSection
+          {...props}
+          listed={incidentioListing !== 'available'}
+          statusQuery={incidentio}
+          connectionsQuery={incidentioConnections}
+        />
+      ),
+    },
+    ...(vanta.data
+      ? [
+          {
+            id: 'vanta',
+            listing: vantaListing,
+            content: (
+              <VantaIntakeSection
+                {...props}
+                listed={vantaListing !== 'available'}
+                statusQuery={vanta}
+                connectionsQuery={vantaConnections}
+              />
+            ),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <div className="flex flex-col gap-8">
-      <GithubIntakeSection config={config} busy={busy} update={update} slugs={linkedSlugs} />
-      <LinearIntakeSection
-        config={config}
-        busy={busy}
-        update={update}
-        status={linearStatus}
-        connected={linearConnected}
-        projects={linearProjects}
-        reauthRequired={reauthRequired}
-        showPickers={linearReady}
-        baseUrl={baseUrl}
-      />
-      {linearReady && routedProjectIds.length > 0 && (
-        <SettingsSubsection
-          scope="org"
-          title="Linear routing"
-          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
-        >
-          <SettingsCard>
-            <LinearRouting
-              sourceIds={routedProjectIds}
-              projects={linearProjects}
-              factories={factoriesQuery.data ?? []}
-            />
-          </SettingsCard>
-        </SettingsSubsection>
+    <SettingsSubsection
+      scope="org"
+      title="Sources"
+      description="The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing."
+    >
+      <div className="flex flex-col gap-3">
+        {sources.flatMap(source =>
+          source.listing === undefined
+            ? []
+            : [
+                source.listing === 'available' ? (
+                  <SettingsContainer key={source.id}>{source.content}</SettingsContainer>
+                ) : (
+                  <Fragment key={source.id}>{source.content}</Fragment>
+                ),
+              ],
+        )}
+      </div>
+      {factoryId && (
+        <Txt as="p" variant="caption" tone="muted">
+          Which board takes each item is set in each board's Rules, in the{' '}
+          <Link to={boardIntakePath(factoryId, 'work')} className="underline">
+            intake order
+          </Link>
+          .
+        </Txt>
       )}
-    </div>
+    </SettingsSubsection>
   );
-}
-/**
- * Group Linear projects under each team they belong to (shared projects appear
- * in every team), sorted by team name. Team-less projects land in a trailing
- * "No team" group.
- */
-function groupLinearProjectsByTeam(projects: LinearProject[]): SourcePickerGroup[] {
-  const byTeam = new Map<string, SourcePickerGroup>();
-  const orphans: LinearProject[] = [];
-  for (const project of projects) {
-    if (project.teams.length === 0) {
-      orphans.push(project);
-      continue;
-    }
-    for (const team of project.teams) {
-      const group = byTeam.get(team.id) ?? { id: team.id, label: team.name, items: [] };
-      group.items.push({ id: project.id, label: project.name });
-      byTeam.set(team.id, group);
-    }
-  }
-  const groups = [...byTeam.values()].sort((a, b) => (a.label ?? '').localeCompare(b.label ?? ''));
-  if (orphans.length) {
-    groups.push({
-      id: 'no-team',
-      label: 'No team',
-      items: orphans.map(project => ({ id: project.id, label: project.name })),
-    });
-  }
-  return groups;
 }

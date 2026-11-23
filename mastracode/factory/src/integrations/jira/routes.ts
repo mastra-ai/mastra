@@ -1,0 +1,254 @@
+/**
+ * Mastra `apiRoutes` for the Jira intake feature.
+ *
+ * Registered alongside the other `/web/*` routes, behind the host auth gate.
+ * Mirrors the Linear module minus everything OAuth: there is no
+ * connect/callback flow, no state signer, and no per-org connection storage —
+ * Jira credentials are deployment-global constructor config on the
+ * integration instance. Every route still re-resolves the authenticated user
+ * from the request and scopes intake selections by the caller's org.
+ *
+ * When the feature is disabled (no auth, or no intake storage),
+ * `buildJiraRoutes` returns only `GET /web/jira/status`, which reports
+ * `enabled:false` so the SPA can cleanly hide all Jira UI.
+ */
+
+import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
+import type { Context } from 'hono';
+
+import { loose } from '../../routes/route.js';
+import type { RouteAuth } from '../../routes/route.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { JiraApiError } from './api.js';
+import { scopeJiraSourcesToProject } from './binding-scope.js';
+import { DEPLOYMENT_CONNECTION } from './integration.js';
+import type { JiraIntegration } from './integration.js';
+
+type RouteContext = Context;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISSUE_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+
+/**
+ * Non-secret diagnostic snapshot of every Jira feature gate, mirroring the
+ * Linear diagnostics shape. Only booleans — never values.
+ */
+export interface JiraFeatureDiagnostics {
+  jiraConfigured: boolean;
+  factoryAuthEnabled: boolean;
+  appDbConfigured: boolean;
+}
+
+export interface MountJiraRoutesOptions {
+  /**
+   * The integration instance providing REST access. Required for everything
+   * beyond the disabled `status` route.
+   */
+  jira?: JiraIntegration;
+  /** Host auth seam. Intake selections are org-owned, so the feature is inert without it. */
+  auth: RouteAuth;
+  /**
+   * Cross-integration intake selection domain. Required for the issue detail
+   * route's project filter; when absent, only the disabled `status` route is served.
+   */
+  intake?: IntakeStorage;
+  /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
+  workItems?: Pick<WorkItemsStorage, 'getByProjectSource'>;
+}
+
+/**
+ * Resolve the org-scoped tenant for a Jira request. Intake selections are
+ * org-owned, so it requires both a signed-in user and an organization — same
+ * tenancy rules as the Linear routes.
+ */
+async function resolveOrgTenant(
+  c: RouteContext,
+  auth: RouteAuth,
+): Promise<{ tenant: { orgId: string; userId: string } } | { response: Response }> {
+  await auth.ensureUser(c);
+  const tenant = auth.tenant(c);
+  if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
+  if (!tenant.orgId) {
+    return {
+      response: c.json(
+        {
+          error: 'organization_required',
+          message: 'Jira intake requires an organization. Personal accounts cannot use Jira intake.',
+        },
+        403,
+      ),
+    };
+  }
+  return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
+}
+
+/** Map a Jira read failure to the API response for the SPA. */
+function jiraFetchError(c: RouteContext, err: unknown) {
+  if (err instanceof JiraApiError && err.code === 'jira_auth_failed') {
+    return c.json(
+      {
+        error: 'jira_auth_failed',
+        message: 'Jira rejected the configured credentials. Check JIRA_EMAIL and JIRA_API_TOKEN.',
+      },
+      409,
+    );
+  }
+  return c.json({ error: 'jira_fetch_failed', message: err instanceof Error ? err.message : String(err) }, 502);
+}
+
+/**
+ * Build the Jira routes as Mastra `apiRoutes`. When the feature is disabled,
+ * returns only the `status` route so the SPA can detect the disabled state.
+ */
+export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
+  const routes: ApiRoute[] = [];
+  const { jira, auth, intake, workItems } = options;
+  const enabled = Boolean(jira) && auth.enabled();
+  const diagnostics = (): JiraFeatureDiagnostics => ({
+    jiraConfigured: Boolean(jira),
+    factoryAuthEnabled: auth.enabled(),
+    appDbConfigured: true,
+  });
+
+  // The status route is always registered so the SPA can detect the disabled state.
+  routes.push(
+    registerApiRoute('/web/jira/status', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        if (!enabled || !jira || !intake) {
+          return c.json({
+            enabled: false,
+            configured: Boolean(jira),
+            mode: 'direct',
+            site: null,
+            reason: 'missing_config',
+            diagnostics: diagnostics(),
+          });
+        }
+        await auth.ensureUser(loose(c));
+        const tenant = auth.tenant(loose(c));
+        if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
+
+        const site = new URL(jira.baseUrl).host;
+        if (!tenant.orgId) {
+          return c.json({
+            enabled: true,
+            configured: true,
+            mode: 'direct',
+            organizationRequired: true,
+            site,
+            reason: 'organization_required',
+            diagnostics: diagnostics(),
+          });
+        }
+
+        // Deployment-global credentials: configured means ready — there is no
+        // per-org connection step like Linear's OAuth.
+        return c.json({
+          enabled: true,
+          configured: true,
+          mode: 'direct',
+          site,
+          reason: 'ready',
+          diagnostics: diagnostics(),
+        });
+      },
+    }),
+  );
+
+  // Without the integration instance or the intake domain the feature can't
+  // serve org-scoped data — serve only the disabled `status` route.
+  if (!enabled || !jira || !intake) {
+    return routes;
+  }
+
+  // ── List the site's projects (Settings intake-source picker) ────────────
+  routes.push(
+    registerApiRoute('/web/jira/projects', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        try {
+          const sources = await jira.intake.listSources(resolved.tenant);
+          return c.json({
+            projects: sources.map(source => ({
+              id: source.id,
+              name: source.name,
+              key: typeof source.metadata?.key === 'string' ? source.metadata.key : null,
+            })),
+          });
+        } catch (err) {
+          return jiraFetchError(loose(c), err);
+        }
+      },
+    }),
+  );
+
+  routes.push(
+    registerApiRoute('/web/jira/issues/:identifier', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        const identifier = c.req.param('identifier');
+        const factoryProjectId = c.req.query('factoryProjectId');
+        const issueRef = c.req.query('issueRef');
+        if (!ISSUE_KEY_RE.test(identifier)) return c.json({ error: 'invalid_issue_identifier' }, 400);
+        if (!factoryProjectId || !UUID_RE.test(factoryProjectId)) {
+          return c.json({ error: 'invalid_factory_project_id' }, 400);
+        }
+        if (!issueRef || issueRef.length > 2_048) return c.json({ error: 'invalid_issue_ref' }, 400);
+
+        await intake.ensureReady();
+        const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['jira'] });
+        const selection = config.jira!;
+        if (!selection.enabled) {
+          return c.json({ error: 'jira_intake_disabled', message: 'Jira intake is turned off in Settings.' }, 404);
+        }
+        const projectScope = await scopeJiraSourcesToProject({
+          intake,
+          orgId: resolved.tenant.orgId,
+          factoryProjectId,
+          selectedIds: selection.sourceIds ?? [],
+        });
+        if (projectScope.scopes.length === 0) return c.json({ error: 'issue_not_found' }, 404);
+
+        try {
+          const issue = await jira.intake.getIssue({ connection: DEPLOYMENT_CONNECTION, issueId: issueRef });
+          // An unbound project's issue, or one in another Factory's slice that this
+          // Factory never filed, reads like one that doesn't exist (as on Linear).
+          const routed =
+            issue?.sourceId != null &&
+            projectScope.sourceIds.includes(issue.sourceId) &&
+            (projectScope.takes(issue.sourceId, issue.labels) ||
+              !!(await workItems?.getByProjectSource({
+                orgId: resolved.tenant.orgId,
+                factoryProjectId,
+                source: { integrationId: 'jira', type: 'issue', externalId: issue.id },
+              })));
+          if (!issue || issue.identifier.toUpperCase() !== identifier.toUpperCase() || !routed) {
+            return c.json({ error: 'issue_not_found' }, 404);
+          }
+          return c.json({
+            identifier: issue.identifier,
+            title: issue.title,
+            url: issue.url,
+            description: issue.description,
+          });
+        } catch (err) {
+          return jiraFetchError(loose(c), err);
+        }
+      },
+    }),
+  );
+
+  return routes;
+}

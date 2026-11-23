@@ -8,33 +8,37 @@
  *
  * @example
  * ```typescript
- * import { Workspace } from '@mastra/core';
- * import { LocalFilesystem } from '@mastra/workspace-fs-local';
- * import { AgentFS } from '@mastra/workspace-fs-agentfs';
- * import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+ * import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+ * import { E2BSandbox } from '@mastra/e2b';
+ * import { S3Filesystem } from '@mastra/s3';
  *
- * // Simple workspace with local filesystem
- * const workspace = new Workspace({
+ * // Local filesystems use paths relative to their base directory.
+ * const localWorkspace = new Workspace({
  *   filesystem: new LocalFilesystem({ basePath: './workspace' }),
  * });
  *
- * // Full workspace with AgentFS and cloud sandbox
- * const fullWorkspace = new Workspace({
- *   filesystem: new AgentFS({ path: './agent.db' }),
- *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
+ * await localWorkspace.init();
+ * await localWorkspace.filesystem?.writeFile('app.py', 'print("Hello locally!")');
+ *
+ * // Mounted cloud filesystems use their absolute mount paths.
+ * const cloudWorkspace = new Workspace({
+ *   mounts: {
+ *     '/code': new S3Filesystem({ bucket: 'my-code', region: 'us-east-1' }),
+ *   },
+ *   sandbox: new E2BSandbox(),
  * });
  *
- * await fullWorkspace.init();
- * await fullWorkspace.filesystem?.writeFile('/code/app.py', 'print("Hello!")');
- * const result = await fullWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });
+ * await cloudWorkspace.init();
+ * await cloudWorkspace.filesystem?.writeFile('/code/app.py', 'print("Hello from E2B!")');
+ * const result = await cloudWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });
  * ```
  */
 
 import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
+import type { DefinitionSource } from '../observability';
 import { RequestContext } from '../request-context';
-import { pMap, pMapSkip } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
@@ -60,7 +64,12 @@ import type {
 } from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
-import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
+import {
+  WorkspaceSkillsImpl,
+  ResolvedSourceWorkspaceSkills,
+  LocalSkillSource,
+  SKILL_SCOPE_DOCUMENT_PREFIX,
+} from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
@@ -275,13 +284,14 @@ export interface WorkspaceConfig<
 
   /**
    * Vector store for semantic search.
-   * When provided along with embedder, enables vector and hybrid search.
+   * When provided along with embedder, enables vector and hybrid search. A store that generates
+   * embeddings itself, such as `MongoDBVector` with `autoEmbed`, needs no embedder.
    */
   vectorStore?: MastraVector;
 
   /**
    * Embedder function for generating vectors.
-   * Required when vectorStore is provided.
+   * Required when vectorStore is provided, unless the store generates embeddings itself.
    */
   embedder?: Embedder;
 
@@ -464,6 +474,8 @@ export interface RegisteredWorkspace {
   source: 'mastra' | 'agent';
   agentId?: string;
   agentName?: string;
+  /** Where the registering agent is defined, for agent workspaces. */
+  agentSource?: DefinitionSource;
 }
 
 // =============================================================================
@@ -529,6 +541,8 @@ export interface WorkspaceInfo {
  * (`batchReadFiles`).
  */
 const FS_READ_CONCURRENCY = 8;
+/** Mirrors SearchEngine.search default when no topK is supplied. */
+const DEFAULT_SEARCH_TOP_K = 10;
 
 /**
  * Parse the user-facing `bm25` config union into the `BM25SearchConfig` shape
@@ -552,10 +566,27 @@ function parseBM25Config(
 // =============================================================================
 
 /**
- * Workspace provides agents with filesystem and execution capabilities.
+ * Provides agents with filesystem and execution capabilities through configured providers.
  *
- * At minimum, a workspace has either a filesystem or a sandbox (or both).
- * Users pass instantiated provider objects to the constructor.
+ * Supply a filesystem, a sandbox, or both. File operations require a filesystem;
+ * command execution requires a sandbox.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ * });
+ * ```
+ *
+ * @see For documentation bundled with your installed package, locate
+ * `@mastra/core/package.json` with your project's resolver or package-manager
+ * tooling, then read `dist/docs/SKILL.md` from that package root and follow its
+ * reference links. Use package-manager tools for virtual or archived packages.
+ *
+ * @see [Workspace documentation](https://mastra.ai/docs/workspace/overview)
+ * if packaged docs are unavailable.
  */
 export class Workspace<
   TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
@@ -670,16 +701,18 @@ export class Workspace<
       this._browser = config.browser;
     }
 
-    // Validate vector search config - embedder is required with vectorStore
-    if (config.vectorStore && !config.embedder) {
+    // Validate vector search config - a vectorStore needs an embedder unless it embeds server-side
+    const embedsServerSide = !config.embedder && config.vectorStore?.isSelfEmbedding === true;
+    if (config.vectorStore && !config.embedder && !embedsServerSide) {
       throw new WorkspaceError('vectorStore requires an embedder', 'INVALID_SEARCH_CONFIG');
     }
 
     // Create search engine if search is configured
-    if (config.bm25 || (config.vectorStore && config.embedder)) {
+    if (config.bm25 || (config.vectorStore && (config.embedder || embedsServerSide))) {
       const buildIndexName = (): string => {
-        // Sanitize default name: replace all non-alphanumeric chars with underscores
-        const defaultName = `${this.id}_search`.replace(/[^a-zA-Z0-9_]/g, '_');
+        // Sanitize default name: replace all non-alphanumeric chars with underscores.
+        // A store that embeds server-side keeps its index apart from one holding client-supplied vectors.
+        const defaultName = `${this.id}_search${embedsServerSide ? '_selfembed' : ''}`.replace(/[^a-zA-Z0-9_]/g, '_');
         const indexName = config.searchIndexName ?? defaultName;
 
         // Validate SQL identifier format
@@ -703,7 +736,7 @@ export class Workspace<
       this._searchEngine = new SearchEngine({
         bm25: config.bm25 ? parseBM25Config(config.bm25) : undefined,
         vector:
-          config.vectorStore && config.embedder
+          config.vectorStore && (config.embedder || embedsServerSide)
             ? {
                 vectorStore: config.vectorStore,
                 embedder: config.embedder,
@@ -758,6 +791,14 @@ export class Workspace<
 
   get status(): WorkspaceStatus {
     return this._status;
+  }
+
+  /**
+   * Compact span representation. Without it, the trace serializer would walk the
+   * workspace's config and its filesystem/sandbox providers, which can hold credentials.
+   */
+  serializeForSpan(): { id: string; name: string; status: WorkspaceStatus } {
+    return { id: this.id, name: this.name, status: this._status };
   }
 
   /**
@@ -848,8 +889,15 @@ export class Workspace<
     if (!this._filesystemResolver) return this._fs;
     let pending = this._filesystemRequestCache.get(requestContext);
     if (!pending) {
-      pending = Promise.resolve(this._filesystemResolver({ requestContext }));
+      pending = Promise.resolve().then(() => this._filesystemResolver!({ requestContext }));
       this._filesystemRequestCache.set(requestContext, pending);
+      // Don't keep a failure around: a transient resolver error would otherwise
+      // disable filesystem and skill tools for the rest of the request.
+      pending.catch(() => {
+        if (this._filesystemRequestCache.get(requestContext) === pending) {
+          this._filesystemRequestCache.delete(requestContext);
+        }
+      });
     }
     return pending;
   }
@@ -952,17 +1000,37 @@ export class Workspace<
 
     // Lazy initialization
     if (!this._skills) {
-      // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
-      const source = this._config.skillSource ?? this._fs ?? new LocalSkillSource();
-
-      this._skills = new WorkspaceSkillsImpl({
-        source,
+      const baseConfig = {
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
         assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
-      });
+      };
+
+      // Priority: explicit skillSource > resolved filesystem (per request) > static filesystem
+      //           > LocalSkillSource (read-only from local disk, only when no filesystem is configured)
+      if (!this._config.skillSource && this._filesystemResolver) {
+        this._skills = new ResolvedSourceWorkspaceSkills({
+          ...baseConfig,
+          source: async ({ requestContext }) => {
+            const fs = await this.resolveFilesystem({ requestContext: requestContext ?? new RequestContext() });
+            if (!fs) {
+              throw new WorkspaceError(
+                'Filesystem resolver returned no filesystem; cannot discover skills',
+                'FILESYSTEM_NOT_RESOLVED',
+                this.id,
+              );
+            }
+            return fs;
+          },
+        });
+      } else {
+        this._skills = new WorkspaceSkillsImpl({
+          ...baseConfig,
+          source: this._config.skillSource ?? this._fs ?? new LocalSkillSource(),
+        });
+      }
     }
 
     return this._skills;
@@ -1049,7 +1117,24 @@ export class Workspace<
       throw new SearchNotAvailableError();
     }
     this.lastAccessedAt = new Date();
-    return this._searchEngine.search(query, options);
+
+    // Documents tagged with `skillScope` belong to request-scoped skill views
+    // (dynamic paths or resolver-backed filesystems). They are only meaningful
+    // through `skills.getScoped(...).search()`; exposing them here would leak
+    // one request's skills into another's unscoped workspace search. Exclude
+    // them in the vector query so persisted records from previous processes do
+    // not consume topK before filtering. BM25 ignores the vector filter, so
+    // over-fetch its currently indexed scoped documents before post-filtering.
+    const scopedCount = this._searchEngine.countByPrefix(SKILL_SCOPE_DOCUMENT_PREFIX);
+    const topK = options?.topK ?? DEFAULT_SEARCH_TOP_K;
+    const unscopedFilter = { skillScope: { $exists: false } };
+    const filter = options?.filter ? { $and: [options.filter, unscopedFilter] } : unscopedFilter;
+    const results = await this._searchEngine.search(query, {
+      ...options,
+      topK: topK + scopedCount,
+      filter,
+    });
+    return results.filter(result => result.metadata?.skillScope === undefined).slice(0, topK);
   }
 
   /**
@@ -1123,9 +1208,10 @@ export class Workspace<
     }
 
     const fs = this._fs;
+    const { default: pMap, pMapSkip } = await import('p-map');
     return pMap(
       files,
-      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof pMapSkip> => {
+      async (filePath): Promise<{ filePath: string; docs: IndexDocument[] } | typeof import('p-map').pMapSkip> => {
         try {
           const content = (await fs.readFile(filePath, { encoding: 'utf-8' })) as string;
           const chunks = splitIntoChunks(content);
@@ -1140,7 +1226,7 @@ export class Workspace<
                 }));
           return { filePath, docs };
         } catch {
-          return pMapSkip;
+          return pMapSkip as typeof import('p-map').pMapSkip;
         }
       },
       { stopOnError: false, concurrency: FS_READ_CONCURRENCY },
@@ -1158,6 +1244,7 @@ export class Workspace<
     if (!engine) return [];
     try {
       const entries = await this.batchReadFiles(paths);
+      const pMap = (await import('p-map')).default;
       // Clear stale single-doc/chunked entries from previous indexing passes.
       await pMap(entries, ({ filePath }) => engine.removeSource(filePath), {
         concurrency: FS_READ_CONCURRENCY,
@@ -1656,6 +1743,11 @@ export class Workspace<
    * Called by Mastra when the logger is set.
    * @internal
    */
+  /** Logger set by Mastra, if any. */
+  get logger(): IMastraLogger | undefined {
+    return this._logger;
+  }
+
   __setLogger(logger: IMastraLogger): void {
     this._logger = logger;
 

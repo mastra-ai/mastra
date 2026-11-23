@@ -16,7 +16,7 @@ import { getMicrophoneStream } from '@mastra/node-audio';
 
 const voice = new OpenAIRealtimeVoice({
   apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4o-mini-realtime',
+  model: 'gpt-realtime-2.1-mini',
 });
 
 voice.updateSession({
@@ -28,7 +28,7 @@ voice.updateSession({
 });
 
 // Connect to the realtime service
-await voice.open();
+await voice.connect();
 
 // Audio data from voice provider
 voice.on('speaking', (audioData: Int16Array) => {
@@ -64,6 +64,7 @@ voice.close();
 ## Documentation
 
 - [@mastra/voice-openai-realtime documentation](https://mastra.ai/integrations/voice/openai)
+- [Reference documentation](https://mastra.ai/reference/voice/voice.connect)
 
 ## Changelog
 

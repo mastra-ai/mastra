@@ -1,77 +1,255 @@
-/* All three must be registered: an unregistered custom property is a raw token,
-   it cannot be interpolated by a transition or a keyframe. */
-@property --composer-ring-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
+@property --composer-ring-lift {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 0%;
 }
 
-/* Offset rather than a second driver of the angle: the spin picks up from
-   wherever the pointer left the arc instead of snapping back to 0deg. */
-@property --composer-ring-spin {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
-@property --composer-ring-strength {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-
+/*
+ * Top-lit rim: a gradient laid on the box's 1px shadow rim, fading out down the sides. Drawn by a
+ * masked pseudo-element rather than a border, so it adds no line and no layout.
+ */
 .composer-ring {
-  --composer-ring-color: var(--accent1);
+  --composer-ring-lit: var(--foreground);
+  --composer-ring-lift-rest: 5%;
+  --composer-ring-lift-hover: 10%;
+  --composer-ring-lift-focus: 14%;
+  --composer-ring-lift: var(--composer-ring-lift-rest);
 
-  background-color: var(--composer-ring-edge, color-mix(in oklab, var(--border2) 40%, transparent));
-  background-image: conic-gradient(
-    from calc(var(--composer-ring-angle) + var(--composer-ring-spin) - 60deg),
-    transparent 0deg,
-    color-mix(in oklab, var(--composer-ring-color) calc(var(--composer-ring-strength) * 100%), transparent) 60deg,
-    transparent 120deg
-  );
-  transition:
-    --composer-ring-strength 320ms ease-out,
-    box-shadow 320ms ease-out;
+  transition: --composer-ring-lift var(--duration-normal) var(--ease-out-custom);
+
+  &::before {
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+    inset: -1px;
+    padding: 1px;
+    border-radius: calc(var(--composer-radius) + 1px);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--composer-ring-lit) var(--composer-ring-lift), transparent),
+      transparent 70%
+    );
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    content: '';
+  }
 }
 
-/* The ring is the composer's only edge. */
-.composer-ring > [data-slot='composer-box'] {
-  border-color: transparent;
+@media (hover: hover) {
+  .composer-ring:hover {
+    --composer-ring-lift: var(--composer-ring-lift-hover);
+  }
 }
 
 .composer-ring:focus-within {
-  background-color: var(--border2);
+  --composer-ring-lift: var(--composer-ring-lift-focus);
 }
 
-/* The arc tracks the cursor, so it lights on hover only — focus brightens the edge instead. */
-.composer-ring:hover {
-  --composer-ring-strength: 0.4;
+html.light .composer-ring {
+  --composer-ring-lit: var(--border-strong);
+  --composer-ring-lift-rest: 14%;
+  --composer-ring-lift-hover: 24%;
+  --composer-ring-lift-focus: 32%;
 }
 
-.composer-ring[data-busy='true'] {
-  --composer-ring-strength: 0.65;
+.composer-ring-drift {
+  --drift-ink: var(--foreground);
+  --drift-rim: 60%;
+  --drift-haze: 8%;
 
-  animation: composer-ring-spin 2.4s linear infinite;
-  box-shadow: 0 4px 20px -4px color-mix(in oklab, var(--composer-ring-color) 12%, transparent);
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity calc(var(--duration-slow) * 3) var(--ease-in-out-custom);
 }
 
-@keyframes composer-ring-spin {
-  from {
-    --composer-ring-spin: 0deg;
+html.light .composer-ring-drift {
+  --drift-rim: 42%;
+  --drift-haze: 4%;
+}
+
+.composer-ring-drift-rim,
+.composer-ring-drift-haze {
+  position: absolute;
+  container-type: inline-size;
+}
+
+/* Lights the box's 1px shadow rim rather than drawing a second edge. */
+.composer-ring-drift-rim {
+  inset: -1px;
+  padding: 1px;
+  border-radius: calc(var(--composer-radius) + 1px);
+  opacity: var(--drift-rim);
+  mask:
+    linear-gradient(to bottom, #000 20%, transparent 60%),
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: intersect, exclude;
+}
+
+.composer-ring-drift-haze {
+  inset: 0 0 auto;
+  height: min(60%, 1.5rem);
+  overflow: clip;
+  border-radius: var(--composer-radius) var(--composer-radius) 0 0;
+  opacity: var(--drift-haze);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+
+.composer-ring-drift-rim > span,
+.composer-ring-drift-haze > span {
+  --drift-width: clamp(3rem, 22cqw, 12rem);
+
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: var(--drift-width);
+  margin-left: calc(var(--drift-width) / -2);
+  animation: composer-ring-drift-a 6.3s cubic-bezier(0.45, 0, 0.55, 1) infinite paused;
+
+  &:nth-child(2) {
+    --drift-width: clamp(2rem, 13cqw, 7rem);
+
+    animation-name: composer-ring-drift-b;
+    animation-duration: 8.9s;
+    animation-delay: -2.7s;
   }
 
-  to {
-    --composer-ring-spin: 360deg;
+  &:nth-child(3) {
+    --drift-width: clamp(4rem, 30cqw, 16rem);
+
+    animation-name: composer-ring-drift-c;
+    animation-duration: 11.3s;
+    animation-delay: -6.1s;
+  }
+}
+
+.composer-ring-drift-rim > span {
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--drift-ink) 70%, transparent) 40%,
+    var(--drift-ink),
+    color-mix(in oklab, var(--drift-ink) 70%, transparent) 60%,
+    transparent
+  );
+}
+
+.composer-ring-drift-haze > span {
+  background-image: radial-gradient(50% 100% at 50% 0%, var(--drift-ink), transparent);
+}
+
+.composer-ring[data-busy='true'] > .composer-ring-drift {
+  opacity: 1;
+
+  & span > span {
+    animation-play-state: running;
+  }
+}
+
+/* Co-prime periods with uneven stops, so the pattern takes minutes to repeat; the first light never fades below half. */
+@keyframes composer-ring-drift-a {
+  0%,
+  100% {
+    translate: -6cqw 0;
+    opacity: 0.9;
+  }
+
+  23% {
+    translate: 14cqw 0;
+    opacity: 0.55;
+  }
+
+  41% {
+    translate: 4cqw 0;
+    opacity: 1;
+  }
+
+  67% {
+    translate: -19cqw 0;
+    opacity: 0.6;
+  }
+
+  84% {
+    translate: -11cqw 0;
+    opacity: 0.85;
+  }
+}
+
+@keyframes composer-ring-drift-b {
+  0%,
+  100% {
+    translate: 22cqw 0;
+    opacity: 0;
+  }
+
+  18% {
+    translate: 9cqw 0;
+    opacity: 0.7;
+  }
+
+  46% {
+    translate: -14cqw 0;
+    opacity: 0.45;
+  }
+
+  61% {
+    translate: -26cqw 0;
+    opacity: 0.75;
+  }
+
+  82% {
+    translate: -31cqw 0;
+    opacity: 0;
+  }
+}
+
+@keyframes composer-ring-drift-c {
+  0%,
+  100% {
+    translate: -24cqw 0;
+    opacity: 0;
+  }
+
+  29% {
+    translate: -3cqw 0;
+    opacity: 0.35;
+  }
+
+  53% {
+    translate: 17cqw 0;
+    opacity: 0.5;
+  }
+
+  78% {
+    translate: 28cqw 0;
+    opacity: 0.2;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .composer-ring {
+  .composer-ring,
+  .composer-ring-drift {
     transition: none;
   }
 
-  .composer-ring[data-busy='true'] {
+  .composer-ring-drift span > span {
     animation: none;
+
+    &:not(:first-child) {
+      display: none;
+    }
+  }
+}
+
+@media (forced-colors: active) {
+  .composer-ring::before,
+  .composer-ring-drift {
+    display: none;
   }
 }

@@ -1,22 +1,25 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  Cloud,
-  CreditCard,
-  Keyboard,
-  LifeBuoy,
-  LogOut,
-  Mail,
-  MessageSquare,
-  Plus,
-  Settings,
-  User,
-  UserPlus,
-  Users,
-} from 'lucide-react';
 import { useState } from 'react';
 import { GithubIcon } from '../../icons/GithubIcon';
 import { Button } from '../Button';
 import { DropdownMenu } from './dropdown-menu';
+import type { DropdownMenuRadioOption } from './dropdown-menu';
+import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
+import { IconArrowsUpDown } from '@/ds/icons/central/IconArrowsUpDown';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconCircleDashed } from '@/ds/icons/central/IconCircleDashed';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
+import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
+import { IconKeyboard } from '@/ds/icons/central/IconKeyboard';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
+import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
+import { IconUser } from '@/ds/icons/central/IconUser';
+import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
+import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
 
 const meta: Meta<typeof DropdownMenu> = {
   title: 'Elements/DropdownMenu',
@@ -29,18 +32,89 @@ const meta: Meta<typeof DropdownMenu> = {
 export default meta;
 type Story = StoryObj<typeof DropdownMenu>;
 
+const menuItems = (
+  <DropdownMenu.Content>
+    <DropdownMenu.Item>Profile</DropdownMenu.Item>
+    <DropdownMenu.Item>Settings</DropdownMenu.Item>
+    <DropdownMenu.Item>Billing</DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item>Log out</DropdownMenu.Item>
+  </DropdownMenu.Content>
+);
+
 export const Default: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button>Open Menu</Button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content>
-        <DropdownMenu.Item>Profile</DropdownMenu.Item>
-        <DropdownMenu.Item>Settings</DropdownMenu.Item>
-        <DropdownMenu.Item>Billing</DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <DropdownMenu.Item>Log out</DropdownMenu.Item>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
+      {menuItems}
+    </DropdownMenu>
+  ),
+};
+
+/** The trigger is a design-system Button: `variant`, `size` and `tooltip` apply directly. */
+export const Variants: Story = {
+  render: () => (
+    <div className="grid gap-4">
+      {(['default', 'ghost', 'primary'] as const).map(variant => (
+        <div key={variant} className="flex items-center gap-2">
+          {(['sm', 'md', 'lg'] as const).map(size => (
+            <DropdownMenu key={size}>
+              <DropdownMenu.Trigger variant={variant} size={size}>
+                {variant} / {size}
+              </DropdownMenu.Trigger>
+              {menuItems}
+            </DropdownMenu>
+          ))}
+          <DropdownMenu>
+            <DropdownMenu.Trigger variant={variant} size="icon-md" tooltip="More actions">
+              <IconSettingsGear5 />
+            </DropdownMenu.Trigger>
+            {menuItems}
+          </DropdownMenu>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+/** Pass `render` to project the menu behavior onto your own element; the trigger's `variant`/`size` are then ignored. */
+export const CustomRender: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="md">Open menu</Button>} />
+      {menuItems}
+    </DropdownMenu>
+  ),
+};
+
+export const Compact: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="sm">Open menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-max min-w-0">
+        <DropdownMenu.Item size="sm">
+          <IconUser />
+          Profile
+        </DropdownMenu.Item>
+        <DropdownMenu.Item size="sm">
+          <IconSettingsGear5 />
+          Settings
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ),
+};
+
+export const CompactWithManyItems: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="sm">Open long menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-40 min-w-0">
+        {Array.from({ length: 30 }, (_, i) => (
+          <DropdownMenu.Item key={i} size="sm">
+            Item {i + 1}
+          </DropdownMenu.Item>
+        ))}
       </DropdownMenu.Content>
     </DropdownMenu>
   ),
@@ -49,29 +123,27 @@ export const Default: Story = {
 export const WithIcons: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
-          <User />
+          <IconUser />
           <span>Profile</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <Settings />
+          <IconSettingsGear5 />
           <span>Settings</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <CreditCard />
+          <IconCreditCard1 />
           <span>Billing</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <Keyboard />
+          <IconKeyboard />
           <span>Keyboard shortcuts</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LogOut />
+          <IconArrowBoxLeft />
           <span>Log out</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -82,25 +154,23 @@ export const WithIcons: Story = {
 export const WithLabelsAndGroups: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Label>My Account</DropdownMenu.Label>
         <DropdownMenu.Separator />
         <DropdownMenu.Group>
           <DropdownMenu.Item>
-            <User />
+            <IconUser />
             <span>Profile</span>
             <DropdownMenu.Shortcut>Ctrl+P</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <CreditCard />
+            <IconCreditCard1 />
             <span>Billing</span>
             <DropdownMenu.Shortcut>Ctrl+B</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <Settings />
+            <IconSettingsGear5 />
             <span>Settings</span>
             <DropdownMenu.Shortcut>Ctrl+S</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
@@ -108,22 +178,22 @@ export const WithLabelsAndGroups: Story = {
         <DropdownMenu.Separator />
         <DropdownMenu.Group>
           <DropdownMenu.Item>
-            <Users />
+            <IconUserDuo />
             <span>Team</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <Plus />
-            <span>New Team</span>
+            <IconPlusMedium />
+            <span>New team</span>
             <DropdownMenu.Shortcut>Ctrl+T</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
         </DropdownMenu.Group>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LogOut />
+          <IconArrowBoxLeft />
           <span>Log out</span>
           <DropdownMenu.Shortcut>Ctrl+Q</DropdownMenu.Shortcut>
         </DropdownMenu.Item>
@@ -140,17 +210,15 @@ export const WithCheckboxItems: Story = {
 
     return (
       <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline">View Options</Button>
-        </DropdownMenu.Trigger>
+        <DropdownMenu.Trigger>View Options</DropdownMenu.Trigger>
         <DropdownMenu.Content className="w-56">
           <DropdownMenu.Label>Appearance</DropdownMenu.Label>
           <DropdownMenu.Separator />
           <DropdownMenu.CheckboxItem checked={showStatusBar} onCheckedChange={setShowStatusBar}>
-            Status Bar
+            Status bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showActivityBar} onCheckedChange={setShowActivityBar}>
-            Activity Bar
+            Activity bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showPanel} onCheckedChange={setShowPanel}>
             Panel
@@ -167,9 +235,7 @@ export const WithRadioItems: Story = {
 
     return (
       <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline">Panel Position</Button>
-        </DropdownMenu.Trigger>
+        <DropdownMenu.Trigger>Panel Position</DropdownMenu.Trigger>
         <DropdownMenu.Content className="w-56">
           <DropdownMenu.Label>Panel Position</DropdownMenu.Label>
           <DropdownMenu.Separator />
@@ -184,50 +250,126 @@ export const WithRadioItems: Story = {
   },
 };
 
+type ListSort = 'activity' | 'updated' | 'created';
+type OwnerScope = 'mine' | 'all';
+type ItemStatus = 'all' | 'working' | 'idle';
+
+const DEFAULT_LIST_SORT: ListSort = 'activity';
+const DEFAULT_OWNER_SCOPE: OwnerScope = 'mine';
+const DEFAULT_ITEM_STATUS: ItemStatus = 'all';
+
+const listSortOptions: readonly DropdownMenuRadioOption<ListSort>[] = [
+  { value: 'activity', label: 'Activity' },
+  { value: 'updated', label: 'Last updated' },
+  { value: 'created', label: 'Last created' },
+];
+
+const ownerScopeOptions: readonly DropdownMenuRadioOption<OwnerScope>[] = [
+  { value: 'mine', label: 'Mine' },
+  { value: 'all', label: 'Everyone' },
+];
+
+const itemStatusOptions: readonly DropdownMenuRadioOption<ItemStatus>[] = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'working', label: 'Working' },
+  { value: 'idle', label: 'Idle' },
+];
+
+/** Each `RadioSub` row shows its selected label, so a properties menu reads its current state without opening a submenu. */
+export const WithRadioSubs: Story = {
+  render: function Render() {
+    const [sort, setSort] = useState<ListSort>(DEFAULT_LIST_SORT);
+    const [owner, setOwner] = useState<OwnerScope>(DEFAULT_OWNER_SCOPE);
+    const [status, setStatus] = useState<ItemStatus>(DEFAULT_ITEM_STATUS);
+    const changed = sort !== DEFAULT_LIST_SORT || owner !== DEFAULT_OWNER_SCOPE || status !== DEFAULT_ITEM_STATUS;
+
+    return (
+      <DropdownMenu>
+        <DropdownMenu.Trigger size="icon-sm" variant={changed ? 'default' : 'ghost'} tooltip="List properties">
+          <IconSettingsSliderHor aria-hidden />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.RadioSub
+            label="Sort"
+            icon={<IconArrowsUpDown aria-hidden />}
+            options={listSortOptions}
+            value={sort}
+            onValueChange={setSort}
+          />
+          <DropdownMenu.RadioSub
+            label="Owner"
+            icon={<IconUser aria-hidden />}
+            options={ownerScopeOptions}
+            value={owner}
+            onValueChange={setOwner}
+          />
+          <DropdownMenu.RadioSub
+            label="Status"
+            icon={<IconCircleDashed aria-hidden />}
+            options={itemStatusOptions}
+            value={status}
+            onValueChange={setStatus}
+          />
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            disabled={!changed}
+            onClick={() => {
+              setSort(DEFAULT_LIST_SORT);
+              setOwner(DEFAULT_OWNER_SCOPE);
+              setStatus(DEFAULT_ITEM_STATUS);
+            }}
+          >
+            <IconArrowRotateCounterClockwise aria-hidden />
+            <span>Reset to default</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+  },
+};
+
 export const WithSubMenu: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
-          <Mail />
+          <IconEmail2 />
           <span>Email</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <MessageSquare />
+          <IconChatBubble7 />
           <span>Message</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent>
             <DropdownMenu.Item>
-              <Mail />
+              <IconEmail2 />
               <span>Email</span>
             </DropdownMenu.Item>
             <DropdownMenu.Item>
-              <MessageSquare />
+              <IconChatBubble7 />
               <span>Message</span>
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
             <DropdownMenu.Item>
-              <Plus />
+              <IconPlusMedium />
               <span>More...</span>
             </DropdownMenu.Item>
           </DropdownMenu.SubContent>
         </DropdownMenu.Sub>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LifeBuoy />
+          <IconRescueRing />
           <span>Support</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <Cloud />
+          <IconCloud />
           <span>API</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -242,9 +384,7 @@ export const WithManyItems: Story = {
 
     return (
       <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline">Open long menu</Button>
-        </DropdownMenu.Trigger>
+        <DropdownMenu.Trigger>Open long menu</DropdownMenu.Trigger>
         <DropdownMenu.Content className="w-56">
           <DropdownMenu.Label>Many items</DropdownMenu.Label>
           <DropdownMenu.Separator />
@@ -254,7 +394,7 @@ export const WithManyItems: Story = {
           <DropdownMenu.Separator />
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>
-              <UserPlus />
+              <IconUserAdd />
               <span>Nested (many)</span>
             </DropdownMenu.SubTrigger>
             <DropdownMenu.SubContent>
@@ -272,24 +412,81 @@ export const WithManyItems: Story = {
 export const WithDisabledItems: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
           <GithubIcon />
           <span>GitHub</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item disabled>
-          <Cloud />
+          <IconCloud />
           <span>Deploy (coming soon)</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LifeBuoy />
+          <IconRescueRing />
           <span>Support</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
   ),
+};
+
+/** Every item kind side by side, to compare against ContextMenu / Select / Combobox. */
+export const KitchenSink: Story = {
+  render: () => {
+    const [checked, setChecked] = useState(true);
+    const [radio, setRadio] = useState('medium');
+    return (
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
+        <DropdownMenu.Content className="w-56">
+          <DropdownMenu.Label>Account</DropdownMenu.Label>
+          <DropdownMenu.Item>Plain item</DropdownMenu.Item>
+          <DropdownMenu.Item>
+            <IconUser />
+            <span>With icon</span>
+            <DropdownMenu.Shortcut>⇧⌘P</DropdownMenu.Shortcut>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled>
+            <IconCreditCard1 />
+            <span>Disabled</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.CheckboxItem checked={checked} onCheckedChange={setChecked}>
+            Checkbox item
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.RadioGroup value={radio} onValueChange={setRadio}>
+            <DropdownMenu.RadioItem value="small">Radio small</DropdownMenu.RadioItem>
+            <DropdownMenu.RadioItem value="medium">Radio medium</DropdownMenu.RadioItem>
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Label inset>Inset label</DropdownMenu.Label>
+          <DropdownMenu.Item inset>Inset item</DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Sub>
+            <DropdownMenu.SubTrigger>
+              <IconUserAdd />
+              <span>Sub menu</span>
+            </DropdownMenu.SubTrigger>
+            <DropdownMenu.SubContent>
+              <DropdownMenu.Item>
+                <IconEmail2 />
+                <span>Email</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item>
+                <IconChatBubble7 />
+                <span>Message</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Sub>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive">
+            <IconArrowBoxLeft />
+            <span>Destructive</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+  },
 };

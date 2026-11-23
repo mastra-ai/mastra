@@ -18,11 +18,12 @@
 export interface BuildLlmPromptArgsInput {
   /**
    * The resolved AI SDK language model the request is about to be sent to.
-   * Only `supportedUrls` is read; other fields are ignored.
+   * Only `supportedUrls` and `provider` are read; other fields are ignored.
    */
   model:
     | {
         supportedUrls?: Record<string, RegExp[]> | PromiseLike<Record<string, RegExp[]>>;
+        provider?: string;
       }
     | null
     | undefined;
@@ -36,18 +37,32 @@ export interface BuildLlmPromptArgsInput {
    * underlying `MessageList` default (10) when omitted.
    */
   downloadConcurrency?: number;
+  /**
+   * Replace user attachments that fail to download with a text placeholder
+   * instead of failing the prompt. Set on the last-resort retry after error
+   * processors and fallback models could not recover the download failure.
+   */
+  skipUnavailableAttachments?: boolean;
 }
 
 export interface BuildLlmPromptArgsResult {
   supportedUrls: Record<string, RegExp[]> | undefined;
   downloadRetries: number | undefined;
   downloadConcurrency: number | undefined;
+  /**
+   * The provider the prompt is being built for, so conversion can tell stored
+   * provider-executed tool results produced by *this* provider apart from ones
+   * produced by a different provider earlier in the same thread.
+   */
+  targetProvider: string | undefined;
+  skipUnavailableAttachments: boolean | undefined;
 }
 
 export async function buildLlmPromptArgs({
   model,
   downloadRetries,
   downloadConcurrency,
+  skipUnavailableAttachments,
 }: BuildLlmPromptArgsInput): Promise<BuildLlmPromptArgsResult> {
   let supportedUrls: Record<string, RegExp[]> | undefined;
   const raw = model?.supportedUrls;
@@ -62,5 +77,7 @@ export async function buildLlmPromptArgs({
     supportedUrls,
     downloadRetries,
     downloadConcurrency,
+    targetProvider: model?.provider,
+    skipUnavailableAttachments,
   };
 }

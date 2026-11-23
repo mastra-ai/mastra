@@ -55,6 +55,6 @@ export function composeStepInput(
     // Restore type-narrowed defaults for the canonical fields if the
     // processor returned undefined for any of them.
     messageId: processInputStepResult.messageId ?? current.messageId,
-    model: (processInputStepResult.model ?? current.model) as MastraLanguageModel,
+    model: processInputStepResult.model ?? current.model,
   };
 }

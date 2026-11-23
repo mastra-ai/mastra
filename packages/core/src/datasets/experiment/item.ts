@@ -10,6 +10,7 @@ import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
   experimentScoreKey,
+  flushForTrajectoryScorers,
   resolveScorers,
   runScorersForItem,
 } from './scorer';
@@ -151,6 +152,7 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
           }
         : undefined;
 
+    await flushForTrajectoryScorers(mastra, scorers, execResult.traceId);
     scores = await runScorersForItem(
       scorers,
       item,

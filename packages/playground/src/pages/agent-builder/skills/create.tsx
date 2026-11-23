@@ -1,17 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowLeftIcon } from 'lucide-react';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { useStoredSkills } from '@mastra/react/hooks/agents';
+import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { Navigate, useNavigate } from 'react-router';
 import { SkillBuilderStarter } from '@/domains/agent-builder/components/skill-starter/skill-builder-starter';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
-import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 export default function AgentBuilderSkillsCreate() {
   const { hasPermission, rbacEnabled } = usePermissions();
   const canWrite = !rbacEnabled || hasPermission('stored-skills:write');
   // Warm caches the edit page needs on first paint.
-  useStoredSkills({ enabled: canWrite });
+  useStoredSkills({ queryOptions: { enabled: canWrite } });
   useStoredWorkspaces();
   useBuilderSettings();
   const navigate = useNavigate();
@@ -30,10 +30,9 @@ export default function AgentBuilderSkillsCreate() {
               viewTransition: true,
             })
           }
-          className="rounded-full"
           tooltip="Skills list"
         >
-          <ArrowLeftIcon />
+          <IconArrowLeft />
         </Button>
       </div>
       <SkillBuilderStarter />

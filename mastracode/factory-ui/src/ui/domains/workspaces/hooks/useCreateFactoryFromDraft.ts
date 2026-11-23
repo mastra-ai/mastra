@@ -1,11 +1,11 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useApplyProviderOMDefaults } from '../../../../hooks/use-om';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
-import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/intake';
+import { useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../../../../hooks/useIntakeConfig';
+import { fetchIntakeConfig, IntakeBindingConflictError, selectIntakeSource } from '../../factory/services/intake';
 import { updateFactoryDefaultModel } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
 import type { CreateFactoryDraft } from './useCreateFactoryFlow';
@@ -19,10 +19,10 @@ export interface CreateFactoryFromDraftOptions {
 }
 
 /**
- * The wizard's single write: create the Factory, link the repository, feed its
- * issue intake (plus the Linear project when one was picked), and save the
- * model its runs start on. Nothing before this touches the server, so an
- * abandoned wizard leaves nothing behind.
+ * The wizard's single write: create the Factory, link the repository (which
+ * feeds its issue intake), route the selected project-management source, and
+ * save the model its runs start on. Nothing before this touches the server, so
+ * an abandoned wizard leaves nothing behind.
  */
 export function useCreateFactoryFromDraft({
   draft,
@@ -34,29 +34,38 @@ export function useCreateFactoryFromDraft({
   const queryClient = useQueryClient();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
-  const applyOMDefaults = useApplyProviderOMDefaults();
   const saveIntakeBinding = useSaveIntakeBindingMutation();
-  const saveIntakeConfig = useSaveIntakeConfigMutation();
+  const saveLinearSelection = useSaveIntakeSelectionMutation('linear');
+  const saveJiraSelection = useSaveIntakeSelectionMutation('jira');
 
-  // One config write for both sources — two read-modify-writes would drop
-  // each other's selection.
-  const feedBoard = async (repositorySlug: string, linear?: { sourceId: string; factoryProjectId: string }) => {
-    if (linear) {
+  const feedProject = async (input: {
+    integrationId: 'linear' | 'jira';
+    sourceId: string;
+    factoryProjectId: string;
+  }) => {
+    try {
       await saveIntakeBinding.mutateAsync({
-        integrationId: 'linear',
-        sourceId: linear.sourceId,
-        factoryProjectId: linear.factoryProjectId,
+        integrationId: input.integrationId,
+        sourceId: input.sourceId,
+        factoryProjectId: input.factoryProjectId,
       });
+    } catch (error) {
+      // A Jira project already feeding another factory with all its issues is not taken over; the
+      // new factory is still created and can take a labelled slice from Settings › Work Intake.
+      if (!(error instanceof IntakeBindingConflictError)) throw error;
+      toast.warning('This Jira project already feeds another factory', {
+        description: 'Add a label filter in Settings › Work Intake to route some of its issues here.',
+      });
+      return;
     }
     const config = await fetchIntakeConfig(baseUrl);
-    const githubSelection = selectIntakeSource(config.github, repositorySlug);
-    const linearSelection = linear ? selectIntakeSource(config.linear, linear.sourceId) : config.linear;
-    if (githubSelection === config.github && linearSelection === config.linear) return;
-    await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection, linear: linearSelection });
+    const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
+    if (selection === config[input.integrationId]) return;
+    await (input.integrationId === 'linear' ? saveLinearSelection : saveJiraSelection).mutateAsync(selection);
   };
 
   return useMutation({
-    mutationFn: async ({ providerId, modelId }: { providerId: string; modelId: string }) => {
+    mutationFn: async ({ modelId }: { modelId: string }) => {
       if (!draft?.name || !draft.repository) throw new Error('Start over from the name step.');
 
       const factory = draft.factoryId
@@ -69,16 +78,22 @@ export function useCreateFactoryFromDraft({
         await onRepositoryLinked(linked.projectRepositoryId);
       }
 
-      const linearPick = draft.linearProjectId
-        ? { sourceId: draft.linearProjectId, factoryProjectId: factory.id }
-        : undefined;
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
-        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId: factory.id }),
-        feedBoard(draft.repository.fullName, linearPick),
+        draft.linearProjectId
+          ? feedProject({
+              integrationId: 'linear',
+              sourceId: draft.linearProjectId,
+              factoryProjectId: factory.id,
+            })
+          : undefined,
+        draft.jiraProjectId
+          ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id })
+          : undefined,
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await onCreated(factory);
+      return factory;
     },
   });
 }

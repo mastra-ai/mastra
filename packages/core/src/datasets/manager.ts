@@ -4,9 +4,11 @@ import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
-import type { DatasetTenancyFilters, TargetType } from '../storage/types.js';
+import type { DatasetTenancyFilters, ListDatasetsInput, TargetType } from '../storage/types.js';
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
+import { deleteExperimentTraces } from './experiment-traces.js';
+import { assertSupportedPatterns } from './validation/index.js';
 
 /**
  * Build a {@link DatasetTenancyFilters} from public manager args. Returns
@@ -137,6 +139,9 @@ export class DatasetsManager {
       groundTruthSchema = zodToJsonSchema(groundTruthSchema);
     }
 
+    assertSupportedPatterns(inputSchema);
+    assertSupportedPatterns(groundTruthSchema);
+
     const result = await store.createDataset({
       ...rest,
       inputSchema: inputSchema as Record<string, unknown> | undefined,
@@ -181,7 +186,8 @@ export class DatasetsManager {
    */
   async list(args?: {
     page?: number;
-    perPage?: number;
+    /** Datasets per page, or `false` to return every match on one page. */
+    perPage?: number | false;
     filters?: {
       organizationId?: string;
       projectId?: string;
@@ -193,14 +199,21 @@ export class DatasetsManager {
        * Filter to datasets whose `targetIds` intersect this list (any overlap matches).
        */
       targetIds?: string[];
+      /**
+       * Only return datasets with these IDs. An empty array matches no datasets.
+       * Pass `perPage: false` to get every match; otherwise the page size still applies.
+       */
+      datasetIds?: string[];
       /** Substring match on dataset `name`, case-insensitive. */
       name?: string;
     };
+    orderBy?: ListDatasetsInput['orderBy'];
   }) {
     const store = await this.#getDatasetsStore();
     return store.listDatasets({
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
       ...(args?.filters ? { filters: args.filters } : {}),
+      ...(args?.orderBy ? { orderBy: args.orderBy } : {}),
     });
   }
 
@@ -237,67 +250,154 @@ export class DatasetsManager {
   }
 
   /**
+   * Delete an experiment (run) by ID, optionally scoped to a tenant.
+   *
+   * Unlike {@link Dataset.deleteExperiment} this does not require the experiment
+   * to still belong to a dataset, so it can clean up experiments orphaned by
+   * dataset deletion (their `datasetId` is nulled out).
+   *
+   * When `organizationId` / `projectId` are provided, the delete is scoped to
+   * that tenancy: an experiment row in another tenant is a silent no-op (no
+   * error) so cross-tenant existence is not leaked via error timing/text.
+   *
+   * The experiment's traces are deleted too: they are excluded from normal trace
+   * reads, so leaving them behind would make them invisible but still-retained
+   * data. Stores without an observability domain — or without tenant-scoped trace
+   * deletion — log a warning and skip the trace cascade so the experiment itself
+   * is still deleted.
+   */
+  async deleteExperiment(args: { experimentId: string; organizationId?: string; projectId?: string }) {
+    const experimentsStore = await this.#getExperimentsStore();
+    const filters = scopeFromArgs(args);
+
+    // Must run before the relational delete: that cascade removes the result
+    // rows carrying the trace ids.
+    const storage = this.#mastra.getStorage();
+    if (storage) {
+      await deleteExperimentTraces({
+        storage,
+        experimentsStore,
+        experimentId: args.experimentId,
+        ...(filters !== undefined ? { filters } : {}),
+        logger: this.#mastra.getLogger(),
+      });
+    }
+
+    return experimentsStore.deleteExperiment({ id: args.experimentId, filters });
+  }
+
+  /**
    * Compare two or more experiments.
    *
-   * Uses the internal `compareExperiments` function for pairwise comparison,
-   * then enriches results with per-item input/groundTruth/output data.
+   * Each contender is compared pairwise against the baseline with the internal
+   * `compareExperiments` function; the pairs are then merged so every item has
+   * a result entry for every experiment (or `null` when it did not run the item).
    */
-  async compareExperiments(args: { experimentIds: string[]; baselineId?: string }) {
-    const { experimentIds, baselineId } = args;
+  async compareExperiments(args: {
+    experimentIds: string[];
+    baselineId?: string;
+    organizationId?: string;
+    projectId?: string;
+  }) {
+    const experimentIds = [...new Set(args.experimentIds)];
 
     if (experimentIds.length < 2) {
       throw new MastraError({
         id: 'COMPARE_INVALID_INPUT',
-        text: 'compareExperiments requires at least 2 experiment IDs.',
+        text: 'compareExperiments requires at least 2 distinct experiment IDs.',
         domain: 'STORAGE',
         category: 'USER',
       });
     }
 
-    const resolvedBaseline = baselineId ?? experimentIds[0]!;
-    const otherExperimentId = experimentIds.find(id => id !== resolvedBaseline) ?? experimentIds[1]!;
+    const baselineId = args.baselineId ?? experimentIds[0]!;
+    if (!experimentIds.includes(baselineId)) {
+      throw new MastraError({
+        id: 'COMPARE_INVALID_INPUT',
+        text: `baselineId "${baselineId}" must be one of experimentIds.`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
 
-    const internal = await compareExperimentsInternal(this.#mastra, {
-      experimentIdA: resolvedBaseline,
-      experimentIdB: otherExperimentId,
-    });
-
-    // Load results for both runs to get input/groundTruth/output
+    const contenderIds = experimentIds.filter(id => id !== baselineId);
     const experimentsStore = await this.#getExperimentsStore();
-    const [resultsA, resultsB] = await Promise.all([
-      experimentsStore.listExperimentResults({
-        experimentId: resolvedBaseline,
-        pagination: { page: 0, perPage: false },
-      }),
-      experimentsStore.listExperimentResults({
-        experimentId: otherExperimentId,
-        pagination: { page: 0, perPage: false },
-      }),
+
+    // When scoped, every experiment must belong to the caller's tenancy. A mismatch
+    // looks the same as a missing experiment so other tenants' IDs don't leak.
+    const filters = scopeFromArgs(args);
+    if (filters) {
+      const found = await Promise.all(experimentIds.map(id => experimentsStore.getExperimentById({ id, filters })));
+      const missingIndex = found.findIndex(experiment => !experiment);
+      if (missingIndex !== -1) {
+        throw new MastraError({
+          id: 'EXPERIMENT_NOT_FOUND',
+          text: `Experiment not found: ${experimentIds[missingIndex]}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+    }
+
+    const [pairs, resultLists] = await Promise.all([
+      Promise.all(
+        contenderIds.map(contenderId =>
+          compareExperimentsInternal(this.#mastra, { experimentIdA: baselineId, experimentIdB: contenderId }),
+        ),
+      ),
+      Promise.all(
+        experimentIds.map(experimentId =>
+          experimentsStore.listExperimentResults({ experimentId, pagination: { page: 0, perPage: false } }),
+        ),
+      ),
     ]);
 
-    // Build results maps by itemId
-    const resultsMapA = new Map(resultsA.results.map(r => [r.itemId, r]));
-    const resultsMapB = new Map(resultsB.results.map(r => [r.itemId, r]));
+    const resultsByExperiment = new Map(
+      experimentIds.map((experimentId, index) => [
+        experimentId,
+        new Map(resultLists[index]!.results.map(result => [result.itemId, result])),
+      ]),
+    );
 
-    // Transform internal items to MVP shape
-    const items = internal.items.map(item => {
-      const resultA = resultsMapA.get(item.itemId);
-      const resultB = resultsMapB.get(item.itemId);
+    // scores[experimentId][itemId] — baseline scores are merged across pairs so
+    // scorers that only some contenders share still show up on the baseline.
+    const scores = new Map<string, Map<string, Record<string, number | null>>>(
+      experimentIds.map(experimentId => [experimentId, new Map()]),
+    );
+    const itemIds = new Set<string>();
+    pairs.forEach((pair, index) => {
+      const contenderId = contenderIds[index]!;
+      for (const item of pair.items) {
+        itemIds.add(item.itemId);
+        const baselineScores = scores.get(baselineId)!;
+        baselineScores.set(item.itemId, { ...baselineScores.get(item.itemId), ...item.scoresA });
+        scores.get(contenderId)!.set(item.itemId, item.scoresB);
+      }
+    });
+
+    const items = [...itemIds].map(itemId => {
+      let source: { input: unknown; groundTruth: unknown } | undefined;
+      // Object.fromEntries keeps caller-chosen experiment IDs like "__proto__" as own keys.
+      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> =
+        Object.fromEntries(
+          experimentIds.map(experimentId => {
+            const result = resultsByExperiment.get(experimentId)!.get(itemId);
+            source ??= result;
+            return [
+              experimentId,
+              result ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} } : null,
+            ];
+          }),
+        );
 
       return {
-        itemId: item.itemId,
-        input: resultA?.input ?? resultB?.input ?? null,
-        groundTruth: resultA?.groundTruth ?? resultB?.groundTruth ?? null,
-        results: {
-          [resolvedBaseline]: resultA ? { output: resultA.output, scores: item.scoresA } : null,
-          [otherExperimentId]: resultB ? { output: resultB.output, scores: item.scoresB } : null,
-        },
+        itemId,
+        input: source?.input ?? null,
+        groundTruth: source?.groundTruth ?? null,
+        results,
       };
     });
 
-    return {
-      baselineId: resolvedBaseline,
-      items,
-    };
+    return { baselineId, items };
   }
 }

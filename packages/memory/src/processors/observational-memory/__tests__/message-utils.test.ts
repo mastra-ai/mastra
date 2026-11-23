@@ -1,7 +1,13 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
-import { getObservableMessages, stripThreadTags } from '../message-utils';
+import {
+  filterObservedMessages,
+  findLastCompletedObservationBoundary,
+  getObservableMessages,
+  getUnobservedParts,
+  stripThreadTags,
+} from '../message-utils';
 
 const THREAD_ID = 'thread-1';
 const RESOURCE_ID = 'resource-1';
@@ -33,16 +39,18 @@ describe('getObservableMessages', () => {
 
   it('keeps the synthetic continuation live while excluding it from the OM window', () => {
     const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+    // Stored messages were saved before this turn, so they carry earlier timestamps than the live input.
+    const stored = (message: MastraDBMessage) => ({ ...message, createdAt: new Date('2026-07-19T00:00:00.000Z') });
     messageList.add(createMessage('input-1', 'hello'), 'input');
-    messageList.add(createMessage('memory-1', 'durable memory context'), 'memory');
+    messageList.add(stored(createMessage('memory-1', 'durable memory context')), 'memory');
     messageList.add(
-      createMessage('om-continuation', '<system-reminder>Continue naturally</system-reminder>'),
+      stored(createMessage('om-continuation', '<system-reminder>Continue naturally</system-reminder>')),
       'memory',
     );
     messageList.add(createMessage('response-1', 'hi', 'assistant'), 'response');
 
     expect(messageList.get.all.db().map(m => m.id)).toContain('om-continuation');
-    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['input-1', 'memory-1', 'response-1']);
+    expect(getObservableMessages(messageList).map(m => m.id)).toEqual(['memory-1', 'input-1', 'response-1']);
   });
 });
 
@@ -78,5 +86,164 @@ describe('stripThreadTags', () => {
     // Generous budget — linear implementation finishes in a few ms;
     // a quadratic implementation would take multiple seconds.
     expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+describe('reflection markers on the live user message', () => {
+  it('does not treat a reflection end marker as an observation boundary, so the message stays observable', () => {
+    const message = createMessage('input-1', 'Keep me observable');
+    message.content.parts.push(
+      { type: 'data-om-observation-start', data: { operationType: 'reflection' } } as any,
+      { type: 'data-om-observation-end', data: { operationType: 'reflection' } } as any,
+      { type: 'data-om-observation-failed', data: { operationType: 'reflection' } } as any,
+    );
+
+    expect(findLastCompletedObservationBoundary(message)).toBe(-1);
+    expect(getUnobservedParts(message)).toContainEqual({ type: 'text', text: 'Keep me observable' });
+  });
+
+  it('still honours observation end markers as boundaries', () => {
+    const message = createMessage('input-1', 'Already observed');
+    message.content.parts.push({ type: 'data-om-observation-end', data: { operationType: 'observation' } } as any);
+    expect(findLastCompletedObservationBoundary(message)).toBe(1);
+  });
+});
+
+describe('pruning a message whose tool call is still pending', () => {
+  const reasoning = (text: string, signature?: string) =>
+    ({
+      type: 'reasoning',
+      reasoning: text,
+      details: [{ type: 'text', text }],
+      ...(signature ? { providerMetadata: { anthropic: { signature } } } : {}),
+    }) as any;
+
+  const call = (toolCallId: string) =>
+    ({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId, toolName: 'lookup', args: {} },
+    }) as any;
+
+  const result = (toolCallId: string) =>
+    ({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId, toolName: 'lookup', args: {}, result: { ok: true } },
+    }) as any;
+
+  const endMarker = () => ({ type: 'data-om-observation-end', data: { operationType: 'observation' } }) as any;
+
+  const textPart = (text: string) => ({ type: 'text', text }) as any;
+
+  function pruneWith(markerParts: any[]) {
+    const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+    messageList.add(createMessage('user-1', 'go'), 'memory');
+    messageList.add(
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: { format: 2, parts: markerParts },
+        type: 'text',
+        createdAt: new Date('2026-07-20T00:00:01.000Z'),
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    filterObservedMessages({ messageList });
+    const marker = messageList.get.all.db().find(m => m.id === 'assistant-1');
+    return marker?.content.parts ?? [];
+  }
+
+  it('keeps the signed reasoning block of the call it preserves', () => {
+    const parts = pruneWith([
+      reasoning('observed thinking', 'sig-old'),
+      call('old'),
+      result('old'),
+      reasoning('pending thinking', 'sig-pending'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed block shared by parallel calls when only one is pending', () => {
+    const parts = pruneWith([
+      reasoning('parallel thinking', 'sig-parallel'),
+      call('done'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('parallel thinking', 'sig-parallel'), call('pending'), result('pending')]);
+  });
+
+  it('keeps the shared signed block when the completed parallel sibling is stored in result state', () => {
+    const parts = pruneWith([
+      reasoning('parallel thinking', 'sig-parallel'),
+      result('done'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('parallel thinking', 'sig-parallel'), call('pending'), result('pending')]);
+  });
+
+  it('drops unsigned reasoning and signed reasoning from an already-observed step', () => {
+    const parts = pruneWith([
+      reasoning('signed but observed', 'sig-old'),
+      call('old'),
+      result('old'),
+      reasoning('unsigned thinking'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed reasoning when text sits between it and the pending call', () => {
+    const parts = pruneWith([
+      reasoning('observed thinking', 'sig-old'),
+      call('old'),
+      result('old'),
+      reasoning('pending thinking', 'sig-pending'),
+      textPart('Here is what I found.'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed reasoning when a step marker sits between it and the pending call', () => {
+    const parts = pruneWith([
+      reasoning('pending thinking', 'sig-pending'),
+      { type: 'step-start' } as any,
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
+  });
+
+  it('does not attach an earlier step signature to a call from a later step', () => {
+    const parts = pruneWith([
+      reasoning('step one thinking', 'sig-step-one'),
+      result('done'),
+      { type: 'step-start' } as any,
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([call('pending'), result('pending')]);
   });
 });

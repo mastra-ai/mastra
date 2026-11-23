@@ -1,12 +1,48 @@
 import { MastraServerCache } from '@mastra/core/cache';
-import { Decoder, type GlideClient } from '@valkey/valkey-glide';
+import { Decoder } from '@valkey/valkey-glide';
+import type { GlideClient } from '@valkey/valkey-glide';
 
 export interface ValkeyServerCacheOptions {
   keyPrefix?: string;
+  /**
+   * Lifetime of cached values in seconds, refreshed on every write. Defaults to
+   * 300; `0` means no expiry. A cache list and its index counter always share
+   * this TTL so they expire together (see `listPushIndexed`).
+   */
   ttlSeconds?: number;
 }
 
 const stringValue = (value: unknown): string => (Buffer.isBuffer(value) ? value.toString() : String(value));
+
+/**
+ * Atomic "allocate index + append + refresh TTLs" used by `listPushIndexed`.
+ *
+ * KEYS[1] = list key, KEYS[2] = counter key
+ * ARGV[1] = JSON-serialized object WITHOUT an `index` property
+ * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
+ *
+ * The index is spliced into the JSON text as the first property rather than
+ * decoded/re-encoded with cjson, which would silently alter large integers
+ * and sparse arrays. `JSON.stringify` of an object always starts with `{`,
+ * so `{...}` → `{"index":N,...}` and `{}` → `{"index":N}`.
+ */
+const LIST_PUSH_INDEXED_SCRIPT = `
+local i = redis.call('INCR', KEYS[2]) - 1
+local body = ARGV[1]
+local doc
+if #body <= 2 then
+  doc = '{"index":' .. i .. '}'
+else
+  doc = '{"index":' .. i .. ',' .. string.sub(body, 2)
+end
+redis.call('RPUSH', KEYS[1], doc)
+local ttl = tonumber(ARGV[2])
+if ttl > 0 then
+  redis.call('EXPIRE', KEYS[1], ttl)
+  redis.call('EXPIRE', KEYS[2], ttl)
+end
+return i
+`.trim();
 
 /** GLIDE-backed Valkey cache for Mastra server state. */
 export class ValkeyServerCache extends MastraServerCache {
@@ -91,5 +127,31 @@ export class ValkeyServerCache extends MastraServerCache {
     const value = Number(await this.command(['INCR', fullKey]));
     if (this.ttlSeconds > 0) await this.command(['EXPIRE', fullKey, String(this.ttlSeconds)]);
     return value;
+  }
+
+  /**
+   * Single round-trip index allocation + list append + TTL refresh via Lua.
+   * The list and counter keys share one TTL; see
+   * {@link ValkeyServerCacheOptions.ttlSeconds}.
+   */
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    const { index: _ignored, ...body } = value;
+    const result = await this.command([
+      'EVAL',
+      LIST_PUSH_INDEXED_SCRIPT,
+      '2',
+      this.getKey(listKey),
+      this.getKey(counterKey),
+      JSON.stringify(body),
+      // A cache without expiry stays that way; otherwise `ttlMs` can only
+      // raise the default.
+      String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
+    ]);
+    return Number(result);
   }
 }

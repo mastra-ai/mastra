@@ -6,10 +6,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getCapabilityFileName } from './capability-file.js';
+import type { ProviderCapabilityFile } from './capability-file.js';
 import type {
   AttachmentCapabilities,
   MastraModelGatewayInterface,
   ProviderConfig,
+  ReasoningCapabilities,
   StructuredOutputCapabilities,
   TemperatureCapabilities,
 } from './gateways/base.js';
@@ -29,31 +31,32 @@ interface GatewayWithStructuredOutputCapabilities {
   getStructuredOutputCapabilities(): StructuredOutputCapabilities;
 }
 
+interface GatewayWithReasoningCapabilities {
+  getReasoningCapabilities(): ReasoningCapabilities;
+}
+
 function hasAttachmentCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithAttachmentCapabilities {
-  return (
-    'getAttachmentCapabilities' in gateway &&
-    typeof (gateway as { getAttachmentCapabilities?: unknown }).getAttachmentCapabilities === 'function'
-  );
+  return 'getAttachmentCapabilities' in gateway && typeof gateway.getAttachmentCapabilities === 'function';
 }
 
 function hasTemperatureCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithTemperatureCapabilities {
-  return (
-    'getTemperatureCapabilities' in gateway &&
-    typeof (gateway as { getTemperatureCapabilities?: unknown }).getTemperatureCapabilities === 'function'
-  );
+  return 'getTemperatureCapabilities' in gateway && typeof gateway.getTemperatureCapabilities === 'function';
 }
 
 function hasStructuredOutputCapabilities(
   gateway: MastraModelGatewayInterface,
 ): gateway is MastraModelGatewayInterface & GatewayWithStructuredOutputCapabilities {
-  return (
-    'getStructuredOutputCapabilities' in gateway &&
-    typeof (gateway as { getStructuredOutputCapabilities?: unknown }).getStructuredOutputCapabilities === 'function'
-  );
+  return 'getStructuredOutputCapabilities' in gateway && typeof gateway.getStructuredOutputCapabilities === 'function';
+}
+
+function hasReasoningCapabilities(
+  gateway: MastraModelGatewayInterface,
+): gateway is MastraModelGatewayInterface & GatewayWithReasoningCapabilities {
+  return 'getReasoningCapabilities' in gateway && typeof gateway.getReasoningCapabilities === 'function';
 }
 
 /**
@@ -123,6 +126,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
   attachmentCapabilities: AttachmentCapabilities;
   temperatureCapabilities: TemperatureCapabilities;
   structuredOutputCapabilities: StructuredOutputCapabilities;
+  reasoningCapabilities: ReasoningCapabilities;
   failedGateways: string[];
 }> {
   const enabledGateways: MastraModelGatewayInterface[] = [];
@@ -138,6 +142,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
   const allAttachmentCapabilities: AttachmentCapabilities = {};
   const allTemperatureCapabilities: TemperatureCapabilities = {};
   const allStructuredOutputCapabilities: StructuredOutputCapabilities = {};
+  const allReasoningCapabilities: ReasoningCapabilities = {};
   const failedGateways: string[] = [];
 
   const maxRetries = 3;
@@ -174,6 +179,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
     const gatewayStructuredOutputCaps = hasStructuredOutputCapabilities(gateway)
       ? gateway.getStructuredOutputCapabilities()
       : undefined;
+    const gatewayReasoningCaps = hasReasoningCapabilities(gateway) ? gateway.getReasoningCapabilities() : undefined;
 
     for (const [providerId, config] of Object.entries(providers)) {
       // For true gateways, use gateway id as prefix (e.g., "netlify/anthropic")
@@ -199,6 +205,9 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
       if (gatewayStructuredOutputCaps?.[providerId]) {
         allStructuredOutputCapabilities[typeProviderId] = gatewayStructuredOutputCaps[providerId];
       }
+      if (gatewayReasoningCaps?.[providerId]) {
+        allReasoningCapabilities[typeProviderId] = gatewayReasoningCaps[providerId];
+      }
     }
   }
 
@@ -208,6 +217,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
     attachmentCapabilities: allAttachmentCapabilities,
     temperatureCapabilities: allTemperatureCapabilities,
     structuredOutputCapabilities: allStructuredOutputCapabilities,
+    reasoningCapabilities: allReasoningCapabilities,
     failedGateways,
   };
 }
@@ -296,7 +306,9 @@ export type ModelForProvider<P extends Provider> = ProviderModelsMap[P][number];
  * @param jsonPath - Path to write the JSON file
  * @param typesPath - Path to write the .d.ts file
  * @param providers - Provider configurations
- * @param models - Model lists by provider
+ * @param models - Model lists by provider (used for the .d.ts; the JSON derives them from `providers[*].models`)
+ * @param options.includeModelsKey - Also write the top-level `models` map. Only needed for files that
+ *   older @mastra/core versions may read (the shared ~/.cache/mastra registry), since they require it.
  */
 export async function writeRegistryFiles(
   jsonPath: string,
@@ -306,6 +318,8 @@ export async function writeRegistryFiles(
   attachmentCapabilities?: AttachmentCapabilities,
   temperatureCapabilities?: TemperatureCapabilities,
   structuredOutputCapabilities?: StructuredOutputCapabilities,
+  reasoningCapabilities?: ReasoningCapabilities,
+  options: { includeModelsKey?: boolean } = {},
 ): Promise<void> {
   // 0. Ensure directories exist
   const jsonDir = path.dirname(jsonPath);
@@ -314,9 +328,11 @@ export async function writeRegistryFiles(
   await fs.mkdir(typesDir, { recursive: true });
 
   // 1. Write JSON file atomically to prevent corruption from concurrent writes
+  // Each provider already carries its model list, so the top-level `models` map is omitted
+  // by default to avoid storing every list twice. Readers derive it from `providers`.
   const registryData = {
     providers,
-    models,
+    ...(options.includeModelsKey ? { models } : {}),
     version: '1.0.0',
   };
 
@@ -331,7 +347,8 @@ export async function writeRegistryFiles(
   const hasCapabilities =
     (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) ||
     (temperatureCapabilities && Object.keys(temperatureCapabilities).length > 0) ||
-    (structuredOutputCapabilities && Object.keys(structuredOutputCapabilities).length > 0);
+    (structuredOutputCapabilities && Object.keys(structuredOutputCapabilities).length > 0) ||
+    (reasoningCapabilities && Object.keys(reasoningCapabilities).length > 0);
 
   // Remove stale files even when the latest registry has no capability data.
   await fs.rm(capDir, { recursive: true, force: true });
@@ -344,15 +361,17 @@ export async function writeRegistryFiles(
       ...(attachmentCapabilities ? Object.keys(attachmentCapabilities) : []),
       ...(temperatureCapabilities ? Object.keys(temperatureCapabilities) : []),
       ...(structuredOutputCapabilities ? Object.keys(structuredOutputCapabilities) : []),
+      ...(reasoningCapabilities ? Object.keys(reasoningCapabilities) : []),
     ]);
 
     for (const provider of allProviderIds) {
-      const capData: Record<string, string[]> = {};
+      const capData: ProviderCapabilityFile = {};
       if (attachmentCapabilities?.[provider]) capData.attachment = attachmentCapabilities[provider];
       if (temperatureCapabilities?.[provider]) capData.temperature = temperatureCapabilities[provider];
       if (structuredOutputCapabilities?.[provider]) {
         capData.structuredOutput = structuredOutputCapabilities[provider];
       }
+      if (reasoningCapabilities?.[provider]) capData.reasoning = reasoningCapabilities[provider];
 
       const providerFile = path.join(capDir, getCapabilityFileName(provider));
       await atomicWriteFile(providerFile, JSON.stringify(capData, null, 2), 'utf-8');

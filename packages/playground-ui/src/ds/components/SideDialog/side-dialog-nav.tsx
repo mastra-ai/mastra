@@ -1,5 +1,6 @@
-import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { cn } from '@/lib/utils';
 
 export type SideDialogNavProps = {
@@ -18,16 +19,14 @@ export function SideDialogNav({ onNext, onPrevious, className }: SideDialogNavPr
   };
 
   return (
-    <div className={cn('flex items-center gap-4', '[&_svg]:size-[1.1em] [&_svg]:text-neutral3', className)}>
+    <div className={cn('flex items-center gap-3', '[&_svg]:size-[1.1em] [&_svg]:text-muted-foreground', className)}>
       {(onNext || onPrevious) && (
-        <div className={cn('flex items-baseline gap-4')}>
-          <Button onClick={handleOnPrevious} disabled={!onPrevious}>
+        <div className={cn('flex items-baseline gap-3')}>
+          <Button onClick={handleOnPrevious} disabled={!onPrevious} icon={<IconArrowUp />}>
             Previous
-            <ArrowUpIcon />
           </Button>
-          <Button onClick={handleOnNext} disabled={!onNext}>
+          <Button onClick={handleOnNext} disabled={!onNext} icon={<IconArrowDown />}>
             Next
-            <ArrowDownIcon />
           </Button>
         </div>
       )}

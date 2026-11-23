@@ -1,0 +1,87 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Run the grouped shell commands.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_grouped_error_text",
+            "name": "execute_command",
+            "arguments": {
+              "description": "Printing output that mentions an error",
+              "command": "printf 'error: this is only output\\n'",
+              "timeout": 10,
+              "cwd": null,
+              "tail": 40,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_grouped_error_text"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_grouped_missing_path",
+            "name": "execute_command",
+            "arguments": {
+              "description": "Listing a path that does not exist",
+              "command": "ls /definitely-not-a-real-path",
+              "timeout": 10,
+              "cwd": null,
+              "tail": 40,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_grouped_missing_path"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_grouped_subdir",
+            "name": "execute_command",
+            "arguments": {
+              "description": "Listing the nested package",
+              "command": "cd packages/core && ls",
+              "timeout": 10,
+              "cwd": null,
+              "tail": 40,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_grouped_subdir"
+      },
+      "response": {
+        "content": "Grouped shell commands complete."
+      }
+    }
+  ]
+}

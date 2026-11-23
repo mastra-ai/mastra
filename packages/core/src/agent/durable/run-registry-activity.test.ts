@@ -10,8 +10,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Mastra } from '../../mastra';
 import {
   __resetRunRegistryActivityForTests,
+  abandonDurableAgentExecutions,
+  getActiveDurableAgentWorkflowExecutions,
   globalRunRegistry,
   markRunActive,
   RUN_REGISTRY_TTL_MS,
@@ -95,5 +98,26 @@ describe('globalRunRegistry activity keep-alive', () => {
 
     release();
     expect(vi.getTimerCount()).toBe(before);
+  });
+});
+
+describe('globalRunRegistry shutdown helpers', () => {
+  afterEach(() => {
+    globalRunRegistry.clear();
+  });
+
+  // `get()` on a missing runId refreshes the TTL of a key with no value, so
+  // iterating the cache yields `undefined` until that key expires.
+  it('skip keys that were read but never set', async () => {
+    const mastra = new Mastra({ logger: false });
+    const execution = Promise.resolve();
+    const abandon = vi.fn(async () => {});
+    globalRunRegistry.set('run-live', { mastra, workflowExecution: execution, executionFence: { abandon } } as any);
+    globalRunRegistry.get('run-never-registered');
+    expect([...globalRunRegistry.values()]).toContain(undefined);
+
+    expect(getActiveDurableAgentWorkflowExecutions(mastra)).toEqual([execution]);
+    await abandonDurableAgentExecutions(mastra);
+    expect(abandon).toHaveBeenCalledTimes(1);
   });
 });

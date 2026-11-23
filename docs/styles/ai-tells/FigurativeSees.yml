@@ -1,0 +1,34 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say who uses it or what changed. Disable this rule for prose about eyesight."
+level: error
+nonword: true
+ignorecase: true
+# "Sees" is an AI fingerprint for the witness construction: a library "sees
+# heavy use," a metric "sees a spike," "2024 saw the introduction of" a
+# feature, an era that "saw" a shift. Nothing in the sentence has eyes; the
+# verb stands in for a plain statement of usage or change. The complement is
+# the discriminator, so literal seeing (a person, a camera, a compiler
+# reading input) stays quiet. Every token measured at zero across the Go and
+# Python standard libraries. "Never sees" stays in the commit style's
+# CommitFigurativeVerbs: pre-LLM prose uses it literally for a component
+# that never receives an input, so it floods here but reads as the tell in a
+# commit message.
+tokens:
+  # --- Usage witness: an artifact experiencing its own popularity ("sees
+  # heavy use," "sees widespread adoption").
+  - "\\bsees? (?:heavy|light|little|wide|widespread|broad|frequent|regular|daily|active|production|real-world|significant|substantial|increasing|growing|renewed|continued|limited|occasional) (?:use|usage|adoption|traffic|activity)\\b"
+
+  # --- Metric witness: a number watching itself move ("sees a spike in
+  # errors," "saw a drop in latency").
+  - "\\bs(?:ees?|aw) (?:a|an) (?:spike|surge|uptick|bump|dip|drop|decline|rise|jump) in\\b"
+
+  # --- Historical witness: a span of time given eyes ("2024 saw the
+  # introduction of," "the year saw record growth," "an era that saw").
+  - "\\bsaw the (?:introduction|arrival|rise|emergence|addition|launch|birth|release) of\\b"
+  - "\\b(?:19|20)\\d\\d (?:also |famously )?saw\\b"
+  - "\\b(?:year|quarter|month|decade|era|release|version) (?:that )?(?:saw|has seen|will see)\\b"
+
+  # --- Weathered-veteran idiom ("has seen its fair share," "has seen
+  # better days").
+  - "\\bhas seen (?:its (?:fair )?share|better days)\\b"

@@ -2,7 +2,6 @@
 title: "Reference: Keyword coverage scorer | Evals"
 description: "The createKeywordCoverageScorer() function evaluates how well an LLM's output covers the important keywords from the input."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -33,7 +32,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
   {
     name: 'analyzeStepResult',
     type: 'object',
-    description: 'Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }',
+    description: 'Object with keyword coverage: { totalKeywordsLength: number, matchedKeywordsLength: number }',
   },
   {
     name: 'score',
@@ -48,13 +47,13 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ```typescript oxfmt:false
 {
   runId: string,
-  extractStepResult: {
+  preprocessStepResult: {
     referenceKeywords: Set<string>,
     responseKeywords: Set<string>
   },
   analyzeStepResult: {
-    totalKeywords: number,
-    matchedKeywords: number
+    totalKeywordsLength: number,
+    matchedKeywordsLength: number
   },
   score: number
 }
@@ -69,7 +68,7 @@ The scorer evaluates keyword coverage by matching keywords with the following fe
 - Word form variation handling
 - Special handling of technical terms and compound words
 
-### Scoring Process
+### Scoring process
 
 1. Processes keywords from input and output:
    - Filters out common words and stop words
@@ -92,7 +91,7 @@ A coverage score between 0 and 1:
 - **0.1 to 0.3**: Low coverage, few keywords matched.
 - **0.0**: The response contains none of the keywords.
 
-### Special Cases
+### Special cases
 
 The scorer handles several special cases:
 

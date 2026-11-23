@@ -37,6 +37,8 @@ function scheduleToDoc(schedule: Schedule): Record<string, any> {
     metadata: schedule.metadata ?? null,
     owner_type: schedule.ownerType ?? null,
     owner_id: schedule.ownerId ?? null,
+    run_at: schedule.runAt ?? null,
+    end_at: schedule.endAt ?? null,
   };
 }
 
@@ -60,6 +62,8 @@ function docToSchedule(doc: Record<string, any>): Schedule {
   if (doc.metadata != null) schedule.metadata = doc.metadata as Record<string, unknown>;
   if (doc.owner_type != null) schedule.ownerType = String(doc.owner_type) as Schedule['ownerType'];
   if (doc.owner_id != null) schedule.ownerId = String(doc.owner_id);
+  if (doc.run_at != null) schedule.runAt = Number(doc.run_at);
+  if (doc.end_at != null) schedule.endAt = Number(doc.end_at);
   return schedule;
 }
 
@@ -242,6 +246,8 @@ export class SchedulesMongoDB extends SchedulesStorage {
     if ('metadata' in patch) $set.metadata = patch.metadata ?? null;
     if ('ownerType' in patch) $set.owner_type = (patch.ownerType as string | undefined) ?? null;
     if ('ownerId' in patch) $set.owner_id = (patch.ownerId as string | undefined) ?? null;
+    if ('runAt' in patch) $set.run_at = patch.runAt ?? null;
+    if ('endAt' in patch) $set.end_at = patch.endAt ?? null;
 
     $set.updated_at = Date.now();
 
@@ -257,6 +263,7 @@ export class SchedulesMongoDB extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const collection = await this.getSchedulesCollection();
     const result = await collection.updateOne(
@@ -267,6 +274,7 @@ export class SchedulesMongoDB extends SchedulesStorage {
           last_fire_at: lastFireAt,
           last_run_id: lastRunId,
           updated_at: Date.now(),
+          ...(newStatus ? { status: newStatus } : {}),
         },
       },
     );

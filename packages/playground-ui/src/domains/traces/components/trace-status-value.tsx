@@ -1,3 +1,5 @@
+import { Badge } from '@/ds/components/Badge';
+import type { BadgeVariant } from '@/ds/components/Badge';
 import { Shimmer } from '@/ds/components/Shimmer';
 
 export type TraceStatusValueStatus = 'success' | 'error' | 'running';
@@ -8,10 +10,10 @@ const STATUS_LABELS: Record<TraceStatusValueStatus, string> = {
   running: 'Running',
 };
 
-const STATUS_STYLES: Record<TraceStatusValueStatus, string> = {
-  success: 'text-accent1',
-  error: 'text-error',
-  running: 'text-neutral4',
+const STATUS_VARIANTS: Record<TraceStatusValueStatus, BadgeVariant> = {
+  success: 'success',
+  error: 'destructive',
+  running: 'neutral',
 };
 
 export interface TraceStatusValueProps {
@@ -19,12 +21,9 @@ export interface TraceStatusValueProps {
 }
 
 export function TraceStatusValue({ status }: TraceStatusValueProps) {
-  const label = STATUS_LABELS[status];
-  const className = STATUS_STYLES[status];
-
   return (
-    <Shimmer active={status === 'running'} className={className}>
-      {label}
-    </Shimmer>
+    <Badge variant={STATUS_VARIANTS[status]} emphasis="subtle">
+      <Shimmer active={status === 'running'}>{STATUS_LABELS[status]}</Shimmer>
+    </Badge>
   );
 }

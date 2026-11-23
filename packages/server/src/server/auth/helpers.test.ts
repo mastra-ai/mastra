@@ -1,13 +1,16 @@
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
-import { describe, expect, it } from 'vitest';
+import { CompositeAuth, MastraAuthProvider } from '@mastra/core/server';
+import { describe, expect, it, vi } from 'vitest';
 
-import { MASTRA_USER_KEY } from '../constants';
+import { MASTRA_AUTH_MODE_KEY, MASTRA_NORMALIZED_USER_KEY, MASTRA_USER_KEY } from '../constants';
+import { HTTPException } from '../http-exception';
 
 import {
   canAccessPublicly,
   checkRules,
   coreAuthMiddleware,
+  findMatchingCustomRoute,
   isCustomRoutePublic,
   isDevPlaygroundRequest,
   isProtectedCustomRoute,
@@ -61,6 +64,39 @@ describe('auth helpers', () => {
         expect(pathMatchesPattern('/api/v1/123', '/api/:version/:id')).toBe(true);
         expect(pathMatchesPattern('/api/v1/', '/api/:version/:id')).toBe(false);
       });
+    });
+  });
+
+  describe('findMatchingCustomRoute security', () => {
+    it('does not treat dots in a static path as regex wildcards', () => {
+      const routes = [
+        { path: '/a.b', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/axb', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/axb', 'GET', routes)?.route.path).toBe('/axb');
+      expect(findMatchingCustomRoute('/a.b', 'GET', routes)?.route.path).toBe('/a.b');
+      expect(pathMatchesPattern('/axb', '/a.b')).toBe(false);
+    });
+
+    it('decodes path params before returning them for FGA', () => {
+      const routes = [
+        { path: '/docs/:docId', method: 'GET', handler: async () => new Response('ok'), requiresAuth: true },
+      ] as any;
+
+      const match = findMatchingCustomRoute('/docs/%6fpen', 'GET', routes);
+      expect(match?.params).toEqual({ docId: 'open' });
+    });
+
+    it('matches case-sensitively, like Hono', () => {
+      const routes = [
+        { path: '/admin', method: 'GET', handler: async () => new Response('public'), requiresAuth: false },
+        { path: '/Admin', method: 'GET', handler: async () => new Response('protected'), requiresAuth: true },
+      ] as any;
+
+      expect(findMatchingCustomRoute('/admin', 'GET', routes)?.route.path).toBe('/admin');
+      expect(findMatchingCustomRoute('/Admin', 'GET', routes)?.route.path).toBe('/Admin');
+      expect(findMatchingCustomRoute('/ADMIN', 'GET', routes)).toBeUndefined();
     });
   });
 
@@ -154,6 +190,49 @@ describe('auth helpers', () => {
       expect(await checkRules(rules, '/api/public/file.jpg', 'GET', {})).toBe(true);
     });
 
+    it('should not fall through to a later rule when a matching condition returns false', async () => {
+      const layered: MastraAuthConfig['rules'] = [
+        { path: '/api/admin/*', condition: (user: any) => user?.role === 'admin', allow: true },
+        { path: '/api/*', allow: true },
+      ];
+      expect(await checkRules(layered, '/api/admin/dashboard', 'GET', { role: 'user' })).toBe(false);
+      expect(await checkRules(layered, '/api/admin/dashboard', 'GET', { role: 'admin' })).toBe(true);
+      expect(await checkRules(layered, '/api/agents', 'GET', { role: 'user' })).toBe(true);
+    });
+
+    it('should await async conditions', async () => {
+      const asyncRule = (condition: (user: any) => Promise<boolean>): MastraAuthConfig['rules'] => [
+        { path: '/api/admin/*', condition },
+        { path: '/api/*', allow: true },
+      ];
+      expect(
+        await checkRules(
+          asyncRule(async () => true),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(true);
+      expect(
+        await checkRules(
+          asyncRule(async () => false),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(false);
+      expect(
+        await checkRules(
+          asyncRule(async () => {
+            throw new Error('boom');
+          }),
+          '/api/admin/x',
+          'GET',
+          {},
+        ),
+      ).toBe(false);
+    });
+
     it('should deny access when no rules match', async () => {
       expect(await checkRules(rules, '/api/other/resource', 'GET', {})).toBe(false);
     });
@@ -234,6 +313,25 @@ describe('auth helpers', () => {
   });
 
   describe('isCustomRoutePublic', () => {
+    it('follows the route Hono dispatches when patterns overlap', () => {
+      // Hono runs the first registered match, so the public '/custom/*' serves
+      // '/custom/private/123' and the later protected route never runs for it.
+      const config = new Map<string, boolean>([
+        ['GET:/custom/*', false],
+        ['GET:/custom/private/:id', true],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(true);
+      expect(isCustomRoutePublic('/custom/other', 'GET', config)).toBe(true);
+
+      const reversed = new Map<string, boolean>([
+        ['GET:/custom/private/:id', true],
+        ['GET:/custom/*', false],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', reversed)).toBe(false);
+      expect(isProtectedCustomRoute('/custom/private/123', 'GET', reversed)).toBe(true);
+      expect(isCustomRoutePublic('/custom/other', 'GET', reversed)).toBe(true);
+    });
+
     it('should return false when customRouteAuthConfig is undefined', () => {
       expect(isCustomRoutePublic('/api/test', 'GET', undefined)).toBe(false);
     });
@@ -553,6 +651,44 @@ describe('auth helpers', () => {
     });
   });
 
+  describe('coreAuthMiddleware - public custom routes', () => {
+    const customRouteAuthConfig = new Map<string, boolean>([
+      ['GET:/custom/health', false],
+      ['POST:/webhooks/:id', false],
+      ['GET:/custom/private', true],
+    ]);
+
+    const run = (path: string, method: string, requiresAuth?: boolean) =>
+      coreAuthMiddleware({
+        path,
+        method,
+        getHeader: () => undefined,
+        mastra: { getServer: () => ({}), getLogger: () => null } as any,
+        authConfig: { protected: ['/*'], authenticateToken: async () => null },
+        customRouteAuthConfig,
+        requestContext: { get: () => undefined, set: () => {} } as any,
+        rawRequest: {},
+        token: undefined,
+        requiresAuth,
+        buildAuthorizeContext: () => null,
+      } as any);
+
+    it('passes static and parameterized custom routes with requiresAuth false', async () => {
+      expect((await run('/custom/health', 'GET')).action).toBe('next');
+      expect((await run('/webhooks/abc', 'POST')).action).toBe('next');
+    });
+
+    it('still authenticates other methods, private routes, and unregistered routes', async () => {
+      expect((await run('/custom/health', 'POST')).action).toBe('error');
+      expect((await run('/custom/private', 'GET')).action).toBe('error');
+      expect((await run('/custom/unknown', 'GET')).action).toBe('error');
+    });
+
+    it('still authenticates when the middleware explicitly requires auth', async () => {
+      expect((await run('/custom/health', 'GET', true)).action).toBe('error');
+    });
+  });
+
   describe('coreAuthMiddleware - mapUserToResourceId', () => {
     function createMockMastra() {
       return {
@@ -599,6 +735,86 @@ describe('auth helpers', () => {
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-123');
     });
 
+    describe('provider pending response headers', () => {
+      // Mirrors how providers key per-request state: by the underlying web Request.
+      const unwrap = (req: any): Request => (req instanceof Request ? req : req.raw);
+
+      function stashingProvider(extra: Record<string, unknown> = {}) {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        return {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v2; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          ...extra,
+        };
+      }
+
+      it('emits headers the provider stashed against the raw Request', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider() as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
+      });
+
+      it('emits headers stashed during the post-refresh retry, not the stale first attempt', async () => {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        let calls = 0;
+        const provider = {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            calls++;
+            if (calls === 1) return null; // expired session → middleware refreshes
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v3; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          getSessionIdFromRequest: () => 'v1',
+          refreshSession: async () => ({ id: 'v2', userId: 'user-1', expiresAt: new Date(), createdAt: new Date() }),
+          getSessionHeaders: (session: { id: string }) => ({ 'Set-Cookie': `wos-session=${session.id}; Path=/` }),
+          getClearSessionHeaders: () => ({}),
+          createSession: async () => ({}),
+          validateSession: async () => null,
+          destroySession: async () => {},
+        };
+
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents', { headers: { Cookie: 'wos-session=v1' } }),
+          mastra: createMockMastra(),
+          authConfig: provider as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v3; Path=/' });
+      });
+
+      it('still authenticates when consumePendingResponseHeaders throws', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider({
+            consumePendingResponseHeaders: () => {
+              throw new Error('boom');
+            },
+          }) as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+      });
+    });
+
     it('should support composite resource IDs', async () => {
       const user = { id: 'user-123', orgId: 'org-456' };
       const requestContext = createRequestContext();
@@ -616,39 +832,30 @@ describe('auth helpers', () => {
 
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('org-456:user-123');
     });
-    it('should not set resource ID when mapUserToResourceId returns null', async () => {
-      const requestContext = createRequestContext();
+    it.each([null, undefined, '', '   ', 0, false, {}, []])(
+      'rejects an invalid mapped resource ID: %s',
+      async resourceId => {
+        const requestContext = createRequestContext();
 
-      await coreAuthMiddleware({
-        ...baseCtx,
-        mastra: createMockMastra(),
-        authConfig: {
-          protected: ['/api/*'],
-          authenticateToken: async () => ({ id: 'user-123' }),
-          mapUserToResourceId: () => null,
-        },
-        requestContext,
-      });
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          mastra: createMockMastra(),
+          authConfig: {
+            protected: ['/api/*'],
+            authenticateToken: async () => ({ id: 'user-123' }),
+            mapUserToResourceId: vi.fn().mockReturnValue(resourceId),
+          },
+          requestContext,
+        });
 
-      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
-    });
-
-    it('should not set resource ID when mapUserToResourceId returns undefined', async () => {
-      const requestContext = createRequestContext();
-
-      await coreAuthMiddleware({
-        ...baseCtx,
-        mastra: createMockMastra(),
-        authConfig: {
-          protected: ['/api/*'],
-          authenticateToken: async () => ({ id: 'user-123' }),
-          mapUserToResourceId: () => undefined,
-        },
-        requestContext,
-      });
-
-      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
-    });
+        expect(result).toEqual({
+          action: 'error',
+          status: 500,
+          body: { error: 'Failed to map authenticated user to a resource ID' },
+        });
+        expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+      },
+    );
 
     it('should not set resource ID when mapUserToResourceId is not provided', async () => {
       const requestContext = createRequestContext();
@@ -706,6 +913,228 @@ describe('auth helpers', () => {
         body: { error: 'Failed to map authenticated user to a resource ID' },
       });
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+  });
+
+  describe('coreAuthMiddleware - normalized user (MASTRA_NORMALIZED_USER_KEY)', () => {
+    function createRequestContext() {
+      const store = new Map<string, unknown>();
+      return {
+        get: (key: string) => store.get(key),
+        set: (key: string, value: unknown) => store.set(key, value),
+      };
+    }
+
+    const baseCtx = {
+      path: '/api/agents',
+      method: 'GET',
+      getHeader: () => undefined,
+      rawRequest: {},
+      token: 'valid-token',
+      buildAuthorizeContext: () => null,
+    };
+
+    const mockMastra = (server: Record<string, unknown> = {}) =>
+      ({
+        getServer: () => server,
+        getLogger: () => null,
+      }) as any;
+
+    it('sets the normalized user via default normalization for inline auth configs', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ sub: 'user-9', name: 'Ada', picture: 'https://img.test/a.png' }),
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({
+        id: 'user-9',
+        name: 'Ada',
+        avatarUrl: 'https://img.test/a.png',
+      });
+    });
+
+    it("uses the auth config's toMastraUser when present", async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ wrapped: { uid: 'u-1' } }),
+          toMastraUser: (user: any) => ({ id: user.wrapped.uid, role: 'custom-role' }),
+        } as any,
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({ id: 'u-1', role: 'custom-role' });
+    });
+
+    it('keeps the provider-supplied role (role from user object wins)', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra({
+          rbac: {
+            getPermissions: async () => [],
+            getRoles: async () => ['rbac-role'],
+          },
+        }),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-1', role: 'provider-role' }),
+          authorizeUser: async () => true,
+        },
+        requestContext,
+      });
+
+      expect((requestContext.get(MASTRA_NORMALIZED_USER_KEY) as any).role).toBe('provider-role');
+    });
+
+    it('populates role from the primary RBAC role when the provider user has none', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra({
+          rbac: {
+            getPermissions: async () => ['read'],
+            getRoles: async () => ['admin', 'viewer'],
+          },
+        }),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-1', name: 'Ada' }),
+          authorizeUser: async () => true,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({ id: 'user-1', name: 'Ada', role: 'admin' });
+    });
+
+    it('leaves the key unset when the user shape cannot be normalized, without failing the request', async () => {
+      const requestContext = createRequestContext();
+      const user = { email: 'no-id@example.com' };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => user,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_USER_KEY)).toBe(user);
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toBeUndefined();
+    });
+
+    it('does not set the key for unauthenticated public requests', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        token: undefined,
+        path: '/public/thing',
+        mastra: mockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          public: ['/public/*'],
+          authenticateToken: async () => null,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toBeUndefined();
+    });
+
+    it("uses the winning CompositeAuth provider's toMastraUser and still maps its resource id", async () => {
+      class RejectingAuth extends MastraAuthProvider<{ id: string }> {
+        async authenticateToken() {
+          return null;
+        }
+        async authorizeUser() {
+          return true;
+        }
+      }
+      class WrappedAuth extends MastraAuthProvider<{ account: { key: string } }> {
+        mapUserToResourceId = (user: { account: { key: string } }) => `resource-${user.account.key}`;
+        async authenticateToken() {
+          return { account: { key: 'k-1' } };
+        }
+        async authorizeUser() {
+          return true;
+        }
+        override toMastraUser(user: { account: { key: string } }) {
+          return { id: user.account.key, role: 'member' };
+        }
+      }
+
+      const requestContext = createRequestContext();
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: new CompositeAuth([new RejectingAuth(), new WrappedAuth()]),
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({ id: 'k-1', role: 'member' });
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-k-1');
+    });
+  });
+
+  describe('coreAuthMiddleware - errors thrown by authenticateToken', () => {
+    const run = (thrown: unknown) =>
+      coreAuthMiddleware({
+        path: '/api/agents',
+        method: 'GET',
+        getHeader: () => undefined,
+        rawRequest: {},
+        token: 'valid-token',
+        buildAuthorizeContext: () => null,
+        mastra: { getServer: () => ({}), getLogger: () => null } as any,
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => {
+            throw thrown;
+          },
+        },
+        requestContext: { get: () => undefined, set: () => {} } as any,
+      });
+
+    it.each([
+      [503, 'Authentication service unavailable'],
+      [403, 'Account disabled'],
+      [401, 'Session revoked'],
+    ] as const)('preserves HTTPException %s status and message', async (status, message) => {
+      const result = await run(new HTTPException(status, { message }));
+      expect(result).toMatchObject({ action: 'error', status, body: { error: message } });
+    });
+
+    it.each([
+      ['plain Error', new Error('db connection string leaked')],
+      ['object with status/message', { status: 503, message: 'secret' }],
+      ['HTTPException with 200', new HTTPException(200, { message: 'ok' })],
+      ['HTTPException with 302', new HTTPException(302, { message: 'redirect' })],
+    ])('redacts %s to a generic 401', async (_label, thrown) => {
+      const result = await run(thrown);
+      expect(result).toMatchObject({ action: 'error', status: 401, body: { error: 'Invalid or expired token' } });
     });
   });
 
@@ -829,6 +1258,41 @@ describe('auth helpers', () => {
       expect(headers['Set-Cookie']).toContain('wos-session=new-session');
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+    });
+
+    it('should preserve an HTTPException thrown by the re-authentication after refresh', async () => {
+      let callCount = 0;
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => {
+          callCount++;
+          if (callCount === 1) return null;
+          throw new HTTPException(503, { message: 'Authentication service unavailable' });
+        },
+        getSessionIdFromRequest: () => 'old-session',
+        refreshSession: async () => ({
+          id: 'new-session',
+          userId: 'user-1',
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+        }),
+        getSessionHeaders: (session: any) => ({ 'Set-Cookie': `wos-session=${session.id}` }),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext: createRequestContext(),
+        rawRequest: createRawRequest(),
+      });
+
+      expect(callCount).toBe(2);
+      expect(result).toMatchObject({
+        action: 'error',
+        status: 503,
+        body: { error: 'Authentication service unavailable' },
+      });
     });
 
     it('should return 401 when refresh token is also expired', async () => {
@@ -960,6 +1424,52 @@ describe('auth helpers', () => {
 
       expect(result).toEqual({ action: 'next' });
       expect(result).not.toHaveProperty('headers');
+    });
+  });
+
+  describe('coreAuthMiddleware - deny-by-default with studio-only RBAC', () => {
+    // RBAC configured only under `studio`, auth config has no authorize/authorizeUser/rules.
+    const rbac = {
+      getRoles: async () => ['viewer'],
+      getPermissions: async () => ['agents:read'],
+      hasPermission: async () => false,
+      hasAllPermissions: async () => false,
+      hasAnyPermission: async () => false,
+    };
+    const mastra = {
+      getServer: () => ({}),
+      getStudio: () => ({ rbac }),
+      getLogger: () => null,
+    } as any;
+
+    const run = (authMode: string | undefined, user: Record<string, unknown>) => {
+      const store = new Map<string, unknown>([[MASTRA_AUTH_MODE_KEY, authMode]]);
+      return coreAuthMiddleware({
+        path: '/api/agents',
+        method: 'GET',
+        getHeader: () => undefined,
+        mastra,
+        authConfig: { protected: ['/api/*'], authenticateToken: async () => user },
+        requestContext: { get: k => store.get(k), set: (k, v) => store.set(k, v) },
+        rawRequest: {} as any,
+        token: 'valid-token',
+        buildAuthorizeContext: () => null,
+      });
+    };
+
+    it('denies a non-admin studio user', async () => {
+      const result = await run('studio', { id: 'u1', role: 'viewer' });
+      expect(result).toMatchObject({ action: 'error', status: 403 });
+    });
+
+    it('allows an admin studio user via default rules', async () => {
+      const result = await run('studio', { id: 'u1', role: 'admin' });
+      expect(result.action).toBe('next');
+    });
+
+    it('does not apply studio RBAC to non-studio requests', async () => {
+      const result = await run(undefined, { id: 'u1', role: 'viewer' });
+      expect(result.action).toBe('next');
     });
   });
 });

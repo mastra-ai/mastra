@@ -1,7 +1,7 @@
-import { ChevronDownIcon } from 'lucide-react';
 import type { TraceListMode } from '../trace-filters';
 import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 
 const TRACES_LIST_MODE_LABELS: Record<TraceListMode, string> = {
   traces: 'Top-level traces only',
@@ -23,9 +23,8 @@ export function TracesListModeToggle({ value, onChange, disabled }: TracesListMo
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size="md" variant="default" disabled={disabled}>
+        <Button size="md" variant="default" disabled={disabled} icon={<IconChevronDownMedium />}>
           {TRACES_LIST_MODE_LABELS[value]}
-          <ChevronDownIcon />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start">

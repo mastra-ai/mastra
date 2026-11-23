@@ -1,3 +1,8 @@
-export { NoDataPageLayout } from './no-data-page-layout';
 export { PageLayout } from './page-layout';
-export { PageHeadingContext, usePageHeading } from './page-heading-context';
+export type {
+  PageLayoutFormProps,
+  PageLayoutVariant,
+  PageLayoutPageProps,
+  PageLayoutProps,
+  PageLayoutSettingsProps,
+} from './page-layout';

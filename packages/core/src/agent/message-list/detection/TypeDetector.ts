@@ -1,13 +1,14 @@
 import type { Message as AIV4Message, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 
 import type { MastraDBMessage, MastraMessageV1 } from '../state/types';
-import type { AIV5Type, AIV6Type, AIV7Type, CoreMessageV4 } from '../types';
+import type { AIV5Type, AIV6Type, AIV7Type, AIV7ForwardCompatibleUIMessage, CoreMessageV4 } from '../types';
 
 /**
  * Type representing all possible message input formats
  */
 export type MessageInput =
   | AIV7Type.UIMessage
+  | AIV7ForwardCompatibleUIMessage
   | AIV7Type.ModelMessage
   | AIV6Type.UIMessage
   | AIV6Type.ModelMessage
@@ -75,7 +76,7 @@ export class TypeDetector {
    * Check if a message is an AIV6 UIMessage.
    *
    * At runtime, the v5 and v6 UI shapes overlap heavily. We only treat a
-   * message as distinctly v6 if it uses v6-only parts or tool states.
+   * message as distinctly v6 if it uses v6-only parts, tool states, or fields.
    */
   static isAIV6UIMessage(msg: MessageInput): msg is AIV6Type.UIMessage {
     return (
@@ -123,9 +124,7 @@ export class TypeDetector {
       !TypeDetector.isMastraMessage(msg) &&
       !('parts' in msg) &&
       'content' in msg &&
-      TypeDetector.hasAIV6CoreMessageCharacteristics(
-        msg as CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | AIV7Type.ModelMessage | AIV4Message,
-      )
+      TypeDetector.hasAIV6CoreMessageCharacteristics(msg)
     );
   }
 
@@ -146,13 +145,24 @@ export class TypeDetector {
    * Check if a message has AIV6-only UI characteristics.
    */
   static hasAIV6UIMessageCharacteristics(
-    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | UIMessageV4 | AIV4Message,
+    msg:
+      | AIV7Type.UIMessage
+      | AIV7ForwardCompatibleUIMessage
+      | AIV6Type.UIMessage
+      | AIV5Type.UIMessage
+      | UIMessageV4
+      | AIV4Message,
   ): msg is AIV6Type.UIMessage {
     if (!('parts' in msg) || !msg.parts) return false;
 
     for (const part of msg.parts) {
       if (part.type === 'source-document') return true;
       if (part.type === 'dynamic-tool') return true;
+
+      // v5 tool parts only ever carry `callProviderMetadata`, so the result half marks v6.
+      // Without this an `output-available` part fell through to the v5 adapter, which
+      // dropped the `mastra.modelOutput` projection riding on it (issue #22012).
+      if ('resultProviderMetadata' in part) return true;
 
       if (
         'toolCallId' in part &&
@@ -172,7 +182,13 @@ export class TypeDetector {
    * V5 UIMessages have specific part types and field names that differ from V4.
    */
   static hasAIV5UIMessageCharacteristics(
-    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | UIMessageV4 | AIV4Message,
+    msg:
+      | AIV7Type.UIMessage
+      | AIV7ForwardCompatibleUIMessage
+      | AIV6Type.UIMessage
+      | AIV5Type.UIMessage
+      | UIMessageV4
+      | AIV4Message,
   ): msg is AIV5Type.UIMessage {
     // AI SDK v4 has separate arrays of tool invocations, reasoning, and
     // attachments that do not preserve overall part ordering, so their

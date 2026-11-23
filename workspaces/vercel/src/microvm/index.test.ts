@@ -1,4 +1,4 @@
-import { Workspace, createWorkspaceTools } from '@mastra/core/workspace';
+import { SandboxUnsupportedFeatureError, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { VercelSandbox } from './index';
 
@@ -239,6 +239,17 @@ describe('VercelSandbox', () => {
       expect(createMock).toHaveBeenCalledTimes(1);
       expect(fake.writeFiles).toHaveBeenCalledTimes(1);
     });
+
+    it('rejects an explicit per-file mode without uploading', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'hi', mode: 0o600 }])).rejects.toThrow(
+        SandboxUnsupportedFeatureError,
+      );
+      expect(fake.writeFiles).not.toHaveBeenCalled();
+    });
   });
 
   describe('executeCommand()', () => {
@@ -398,6 +409,9 @@ describe('VercelSandbox', () => {
       expect(text).toContain('Vercel Sandbox');
       expect(text).toContain('Firecracker MicroVM');
       expect(text).toContain('node24');
+      expect(text).toContain('Workspace filesystem mounting tools are not available through this Mastra adapter');
+      expect(text).toContain('the underlying Vercel Sandbox supports FUSE mounts');
+      expect(text).not.toContain('Filesystem mounting (FUSE) is not supported');
     });
 
     it('honors a string override', () => {

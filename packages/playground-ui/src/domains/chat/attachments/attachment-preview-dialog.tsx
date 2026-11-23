@@ -1,0 +1,230 @@
+import type { RefObject } from 'react';
+import { ComposerAttachmentEntry } from './composer-attachment-entry';
+import { useAttachmentPreview } from './use-attachment-preview';
+import type { AttachmentPreviewProps } from './use-attachment-preview';
+import { Button } from '@/ds/components/Button';
+import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
+import { IconAudio } from '@/ds/icons/central/IconAudio';
+import { IconFileBend } from '@/ds/icons/central/IconFileBend';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconVideoClip } from '@/ds/icons/central/IconVideoClip';
+import { cn } from '@/utils/cn';
+
+interface PdfEntryProps extends AttachmentPreviewProps {
+  data: string;
+  url?: string;
+}
+
+const ctaClassName =
+  'h-full w-full flex items-center justify-center rounded-[inherit] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus [&:is(button,a)]:cursor-pointer';
+const fileTypeIconClassName = 'text-badge-red-indicator';
+
+export const PdfEntry = ({ data, url, ...previewProps }: PdfEntryProps) => {
+  const { open, setOpen, triggerRef } = useAttachmentPreview(previewProps);
+
+  if (url) {
+    return (
+      <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener">
+        <ComposerAttachmentEntry>
+          <IconFileText className={fileTypeIconClassName} aria-label="View PDF" />
+        </ComposerAttachmentEntry>
+      </a>
+    );
+  }
+
+  return (
+    <>
+      <button ref={triggerRef} onClick={() => setOpen(true)} className={ctaClassName} type="button">
+        <ComposerAttachmentEntry>
+          <IconFileText className={fileTypeIconClassName} aria-label="View PDF" />
+        </ComposerAttachmentEntry>
+      </button>
+
+      <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} returnFocusRef={triggerRef} />
+    </>
+  );
+};
+
+interface PdfPreviewDialogProps {
+  returnFocusRef?: RefObject<HTMLButtonElement | null>;
+  data: string;
+  title?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export const PdfPreviewDialog = ({ data, title, open, onOpenChange, returnFocusRef }: PdfPreviewDialogProps) => {
+  const isInlinePdf = data.startsWith('data:application/pdf');
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="xl" finalFocus={returnFocusRef}>
+        <DialogHeader>
+          <DialogTitle>{title ?? 'PDF preview'}</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          {open && (
+            <>
+              <iframe src={data} title={title ?? 'PDF preview'} className="h-[60dvh] w-full" />
+              <Button
+                render={
+                  <a
+                    href={data}
+                    download={isInlinePdf ? (title ?? 'attachment.pdf') : undefined}
+                    target={isInlinePdf ? undefined : '_blank'}
+                    rel="noreferrer noopener"
+                  />
+                }
+                size="sm"
+                className="mt-3"
+              >
+                {isInlinePdf ? 'Download PDF' : 'Open PDF in a new tab'}
+              </Button>
+            </>
+          )}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+interface FileChipEntryProps {
+  name: string;
+  url?: string;
+  contentType?: string;
+}
+const iconForContentType = (contentType?: string) => {
+  if (contentType?.startsWith('video/')) return { Icon: IconVideoClip, label: 'Video file' };
+  if (contentType?.startsWith('audio/')) return { Icon: IconAudio, label: 'Audio file' };
+  if (contentType?.startsWith('text/') || contentType === 'application/pdf')
+    return { Icon: IconFileText, label: 'Document file' };
+  return { Icon: IconFileBend, label: 'File' };
+};
+export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {
+  const { Icon, label } = iconForContentType(contentType);
+  const icon = <Icon className={fileTypeIconClassName} aria-label={label} />;
+
+  if (url) {
+    return (
+      <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener" title={name}>
+        <ComposerAttachmentEntry>{icon}</ComposerAttachmentEntry>
+      </a>
+    );
+  }
+
+  return (
+    <div className={ctaClassName} title={name}>
+      <ComposerAttachmentEntry>{icon}</ComposerAttachmentEntry>
+    </div>
+  );
+};
+
+interface ImageEntryProps extends AttachmentPreviewProps {
+  src: string;
+  name?: string;
+}
+
+export const ImageEntry = ({ src, name, ...previewProps }: ImageEntryProps) => {
+  const { open, setOpen, triggerRef } = useAttachmentPreview(previewProps);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        onClick={() => setOpen(true)}
+        type="button"
+        className={ctaClassName}
+        aria-label={name ? `Preview ${name}` : 'Preview image'}
+      >
+        <ComposerAttachmentEntry variant="image">
+          <img src={src} className="aspect-ratio max-h-35 max-w-full object-cover" alt={name ?? 'Preview'} />
+        </ComposerAttachmentEntry>
+      </button>
+      <ImagePreviewDialog src={src} open={open} onOpenChange={setOpen} returnFocusRef={triggerRef} />
+    </>
+  );
+};
+
+interface ImagePreviewDialogProps {
+  returnFocusRef?: RefObject<HTMLButtonElement | null>;
+  src: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export const ImagePreviewDialog = ({ src, open, onOpenChange, returnFocusRef }: ImagePreviewDialogProps) => {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="xl" finalFocus={returnFocusRef}>
+        <DialogHeader>
+          <DialogTitle>Image preview</DialogTitle>
+        </DialogHeader>
+        <DialogBody>{open && <img src={src} alt="Image" />}</DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+interface TxtEntryProps extends AttachmentPreviewProps {
+  data: string;
+  name?: string;
+}
+
+export const TxtEntry = ({ data, name, ...previewProps }: TxtEntryProps) => {
+  const { open, setOpen, triggerRef } = useAttachmentPreview(previewProps);
+
+  const formattedContent =
+    name === undefined ? (data.match(/^<attachment[^>]*>([\s\S]*)<\/attachment>$/)?.[1] ?? data) : data;
+  const filename =
+    name ??
+    data
+      .match(/^<attachment name="([^"]*)">/)?.[1]
+      ?.replaceAll('&quot;', '"')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        onClick={() => setOpen(true)}
+        className={cn(ctaClassName, 'min-w-0')}
+        type="button"
+        aria-label={filename ? `Preview ${filename}` : 'Preview text attachment'}
+        title={filename}
+      >
+        <ComposerAttachmentEntry name={filename}>
+          <IconFileText className={fileTypeIconClassName} aria-hidden="true" />
+        </ComposerAttachmentEntry>
+      </button>
+      <TxtPreviewDialog
+        data={formattedContent}
+        title={filename}
+        open={open}
+        onOpenChange={setOpen}
+        returnFocusRef={triggerRef}
+      />
+    </>
+  );
+};
+
+interface TxtPreviewDialogProps {
+  returnFocusRef?: RefObject<HTMLButtonElement | null>;
+  data: string;
+  title?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export const TxtPreviewDialog = ({ data, title, open, onOpenChange, returnFocusRef }: TxtPreviewDialogProps) => {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="xl" finalFocus={returnFocusRef}>
+        <DialogHeader>
+          <DialogTitle>{title ?? 'Text preview'}</DialogTitle>
+        </DialogHeader>
+        <DialogBody>{open && <div className="whitespace-pre-wrap">{data}</div>}</DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+};

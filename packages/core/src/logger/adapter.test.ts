@@ -302,6 +302,16 @@ describe('Mastra logger wiring', () => {
     expect(warnSpy.mock.calls[0]![0]).toContain('already wired to another Mastra instance');
   });
 
+  it('does not warn on re-attach when loggerOptions.export is false', () => {
+    const logger = new ConsoleLogger({ level: LogLevel.INFO });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    new Mastra({ logger, loggerOptions: { export: false }, __ephemeral: true });
+    new Mastra({ logger, loggerOptions: { export: false }, __ephemeral: true });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
   it('warns when a different family member sharing an attachment key is attached to a second Mastra instance', () => {
     // Models PinoLogger's family-shared ref cell: root and child are distinct
     // instances whose adapter context lives on one shared cell, so attaching

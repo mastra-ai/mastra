@@ -11,6 +11,7 @@ import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
@@ -45,10 +46,19 @@ import {
   shiftRange,
   validatePercentiles,
 } from './olap';
+import type { PartitioningOptions } from './partitioning';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
-import { FEEDBACK_TYPED_COLUMNS } from './signal-schema';
-import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
+import { FEEDBACK_EVENT_COLUMNS, FEEDBACK_TYPED_COLUMNS } from './signal-schema';
+import { buildInsert, withPartitionRetry, FEEDBACK_SELECT_COLUMNS } from './sql';
+
+const FEEDBACK_CONFLICT_KEYS = new Set(['feedbackId', 'timestamp']);
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT ("feedbackId", "timestamp") DO UPDATE SET ${FEEDBACK_EVENT_COLUMNS.map(
+  column => column.name,
+)
+  .filter(column => !FEEDBACK_CONFLICT_KEYS.has(column))
+  .map(column => `"${column}" = EXCLUDED."${column}"`)
+  .join(', ')}`;
 
 // ---------------------------------------------------------------------------
 // Filter helpers specific to the feedback signal
@@ -96,21 +106,102 @@ function pushFeedbackIdentity(
 // Writes
 // ---------------------------------------------------------------------------
 
-export async function createFeedback(client: DbClient, schema: string, args: CreateFeedbackArgs): Promise<void> {
-  const row = feedbackRecordToRow(args.feedback);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row]);
-  if (insert) await client.query(insert.text, insert.values);
+export async function createFeedback(
+  client: DbClient,
+  schema: string,
+  args: CreateFeedbackArgs,
+  partitioning: PartitioningOptions,
+): Promise<void> {
+  await writeFeedback(client, schema, [args.feedback], args.onConflict, partitioning);
+}
+
+export async function replaceFeedback(
+  client: DbClient,
+  schema: string,
+  args: CreateFeedbackArgs,
+  partitioning: PartitioningOptions,
+): Promise<void> {
+  await writeFeedback(client, schema, [args.feedback], 'replace', partitioning, true);
 }
 
 export async function batchCreateFeedback(
   client: DbClient,
   schema: string,
   args: BatchCreateFeedbackArgs,
+  partitioning: PartitioningOptions,
 ): Promise<void> {
-  if (args.feedbacks.length === 0) return;
-  const rows = args.feedbacks.map(feedbackRecordToRow);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
-  if (insert) await client.query(insert.text, insert.values);
+  await writeFeedback(client, schema, args.feedbacks, args.onConflict, partitioning);
+}
+
+/** Serialize feedback writes by ID, including absent IDs and retries with a different timestamp. */
+async function writeFeedback(
+  client: DbClient,
+  schema: string,
+  feedbacks: BatchCreateFeedbackArgs['feedbacks'],
+  onConflict: CreateFeedbackArgs['onConflict'],
+  partitioning: PartitioningOptions,
+  preserveIdentity = false,
+): Promise<void> {
+  if (!feedbacks.length) return;
+  const currentFeedback = new Map(
+    (onConflict === 'ignore' ? [...feedbacks].reverse() : feedbacks).map(feedback => [feedback.feedbackId, feedback]),
+  );
+  const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
+  const ids = [...currentFeedback.keys()].sort();
+  await withPartitionRetry(client, schema, TABLE_FEEDBACK_EVENTS, rows, partitioning, () =>
+    client.tx(async tx => {
+      // Acquire locks in the same sorted-ID order for every batch, in one round trip.
+      // PostgreSQL evaluates this output expression after ORDER BY (the lock isn't a sort key).
+      await tx.query(
+        `SELECT pg_advisory_xact_lock(hashtextextended(lock_key, 0))
+         FROM unnest($1::text[]) WITH ORDINALITY AS locks(lock_key, position)
+         ORDER BY position`,
+        [ids.map(id => JSON.stringify([schema, TABLE_FEEDBACK_EVENTS, id]))],
+      );
+      const existing = await tx.any<Record<string, any>>(
+        `SELECT DISTINCT ON ("feedbackId") "feedbackId", "traceId", "timestamp", "organizationId", "resourceId"
+         FROM ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}
+         WHERE "feedbackId" = ANY($1::text[]) ORDER BY "feedbackId", "cursorId" DESC`,
+        [ids],
+      );
+      const byId = new Map(existing.map(row => [row.feedbackId, row]));
+      const accepted = rows.filter(row => {
+        const previous = byId.get(row.feedbackId);
+        if (!previous) return true;
+        if (onConflict === 'ignore') return false;
+        if (
+          preserveIdentity &&
+          (previous.traceId !== row.traceId ||
+            new Date(previous.timestamp).getTime() !== new Date(row.timestamp as string).getTime() ||
+            (previous.organizationId ?? null) !== (row.organizationId ?? null) ||
+            (previous.resourceId ?? null) !== (row.resourceId ?? null))
+        ) {
+          throw new MastraError({
+            id: 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT',
+            domain: ErrorDomain.MASTRA_OBSERVABILITY,
+            category: ErrorCategory.USER,
+            text: 'Feedback replacement must preserve its trace, timestamp, and tenant',
+          });
+        }
+        return true;
+      });
+      const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, accepted, FEEDBACK_UPSERT_CLAUSE);
+      if (insert) await tx.query(insert.text, insert.values);
+    }),
+  );
+}
+
+export async function getFeedbackById(
+  client: DbClient,
+  schema: string,
+  feedbackId: string,
+): Promise<FeedbackRecord | null> {
+  const row = await client.oneOrNone<Record<string, any>>(
+    `SELECT ${FEEDBACK_SELECT_COLUMNS} FROM ${qualifiedTable(schema, TABLE_FEEDBACK_EVENTS)}
+     WHERE "feedbackId" = $1 ORDER BY "cursorId" DESC LIMIT 1`,
+    [feedbackId],
+  );
+  return row ? rowToFeedbackRecord(row) : null;
 }
 
 export async function updateFeedbackReviewStatus(
@@ -136,6 +227,32 @@ export async function updateFeedbackReviewStatus(
     });
   }
   return rowToFeedbackRecord(row);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(client: DbClient, schema: string, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const values: unknown[] = [...args.feedbackIds];
+  const placeholders = args.feedbackIds.map((_, i) => `$${i + 1}`).join(', ');
+  const conditions = [`"feedbackId" IN (${placeholders})`];
+  if (args.organizationId !== undefined) {
+    values.push(args.organizationId);
+    conditions.push(`"organizationId" = $${values.length}`);
+  }
+  if (args.resourceId !== undefined) {
+    values.push(args.resourceId);
+    conditions.push(`"resourceId" = $${values.length}`);
+  }
+  await client.query(`DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`, values);
 }
 
 // ---------------------------------------------------------------------------

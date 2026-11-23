@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,12 +10,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
 import { authEnabledNoRbacCapabilities, currentUser } from './fixtures/auth';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -64,7 +60,6 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
 } as never;
 

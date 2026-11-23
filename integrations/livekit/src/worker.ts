@@ -17,6 +17,9 @@ import type {
 import { parseSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
 import { startVoiceCallObservability } from './observability';
+import { observeVoiceSession } from './speech';
+import type { VoiceSpeechCompleteHook, VoiceTurnMetricsHook } from './turn-metrics';
+import { notifyVoiceObserver } from './turn-metrics';
 import { ensureVoiceCallThread, persistSpokenGreeting } from './voice-thread';
 import { isEouMethodRequested, queueWorkerSetup, requestEouMethod } from './worker-setup';
 import { createWorkflowReplyGenerator } from './workflow-generator';
@@ -79,6 +82,10 @@ export interface VoiceCallEndArgs {
 export type VoiceCallEndHook = (args: VoiceCallEndArgs) => void | Promise<void>;
 
 export interface CreateLiveKitWorkerOptions {
+  /** Generation and server-playout metrics; observer errors never interrupt the call. */
+  onTurnMetrics?: VoiceTurnMetricsHook;
+  /** Playback completion, separate from onTurnComplete. Does not reconcile memory. */
+  onSpeechComplete?: VoiceSpeechCompleteHook;
   /** The Mastra instance whose agents handle voice sessions. */
   mastra: Mastra;
   /**
@@ -126,7 +133,8 @@ export interface CreateLiveKitWorkerOptions {
   /**
    * End-of-turn detection. `'multilingual'` or `'english'` load LiveKit's semantic turn
    * detector model from `@livekit/agents-plugin-livekit`; other values are passed through
-   * (e.g. `'vad'`, `'stt'`, `'manual'`).
+   * (e.g. `'vad'`, `'stt'`, `'manual'`). To construct a `TurnDetector` instance per call (they
+   * need the LiveKit job context), use `configuration.turnDetection`; this option is its fallback.
    */
   turnDetection?: 'multilingual' | 'english' | TurnDetectionSetting;
   /** Turn handling tuning (endpointing delays, interruption sensitivity, preemptive generation). */
@@ -149,8 +157,7 @@ export interface CreateLiveKitWorkerOptions {
    * `agent.getMemory()` does), so a `Memory` that relies on the Mastra instance for storage works.
    */
   memoryInstance?:
-    | MastraMemory
-    | ((args: ResolveMastraAgentArgs) => MastraMemory | undefined | Promise<MastraMemory | undefined>);
+    MastraMemory | ((args: ResolveMastraAgentArgs) => MastraMemory | undefined | Promise<MastraMemory | undefined>);
   /**
    * Spoken while a Mastra tool call runs. Works on both the agent and workflow paths; on the
    * workflow path it fires only for tool calls the reply step surfaces to its `writer` (use
@@ -386,8 +393,7 @@ export type SessionComponentResolver<T> = (
  * Return `undefined` (or empty) for no greeting on that call.
  */
 export type GreetingText =
-  | string
-  | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
+  string | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
 
 /**
  * The opening greeting spoken when the session starts — and the vehicle for a required AI
@@ -543,6 +549,19 @@ export interface LiveKitWorkerConfiguration {
    * call setup, so keep it fast — when it constructs plugin instances, cache them across calls.
    */
   tts?: SessionComponentResolver<voice.AgentSessionOptions['tts']>;
+  /**
+   * Per-call end-of-turn detection: a resolver invoked once per call (post-connect, inside the
+   * LiveKit job) with the call {@link VoiceCallContext}, returning anything the top-level
+   * `turnDetection` option accepts. LiveKit's `TurnDetector` instances read the job's inference
+   * executor from their constructor, so they can only be built here — not at module scope. Return
+   * `undefined` to fall back to the top-level `turnDetection`.
+   *
+   * The semantic turn detector's inference runners must register before the agent server boots,
+   * so when this resolver is set the worker eagerly imports `@livekit/agents-plugin-livekit`
+   * (if installed). Set the top-level `turnDetection` to `'multilingual'` or `'english'` to
+   * pre-register only that model; otherwise both are kept available.
+   */
+  turnDetection?: SessionComponentResolver<TurnDetectionSetting>;
 }
 
 /**
@@ -586,6 +605,24 @@ export async function resolveSessionComponent<T>(
 ): Promise<T | undefined> {
   const resolved = resolver ? await resolver(context) : undefined;
   return resolved ?? fallback;
+}
+
+/**
+ * Resolves this call's end-of-turn detection: the `configuration.turnDetection` resolver first,
+ * then the static `turnDetection` option (loading the LiveKit semantic model for the
+ * `'multilingual'` / `'english'` shorthands). Must run inside the job — LiveKit's turn detectors
+ * read the job's inference executor when constructed. Exported for unit testing.
+ */
+export async function resolveTurnDetection(
+  options: Pick<CreateLiveKitWorkerOptions, 'turnDetection' | 'configuration'>,
+  context: VoiceCallContext,
+): Promise<TurnDetectionSetting | undefined> {
+  const resolved = await options.configuration?.turnDetection?.(context);
+  if (resolved) return resolved;
+  if (options.turnDetection === 'multilingual' || options.turnDetection === 'english') {
+    return loadTurnDetector(options.turnDetection);
+  }
+  return options.turnDetection;
 }
 
 /** A {@link GreetingConfiguration} whose `text` resolver has been resolved to a plain string. */
@@ -810,8 +847,18 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
   // server only spawns its inference process for runners registered before it starts —
   // so begin the import now (worker definition happens at module scope, before
   // runLiveKitWorker boots the server, which awaits this).
+  //
+  // A per-call `configuration.turnDetection` resolver builds its detector inside the job, so we
+  // can't know which model it wants: keep the runner(s) named by the static option, or both.
+  const hasTurnDetectionResolver = options.configuration?.turnDetection !== undefined;
   if (options.turnDetection === 'multilingual' || options.turnDetection === 'english') {
     requestEouMethod(EOU_METHODS[options.turnDetection]);
+  } else if (hasTurnDetectionResolver) {
+    for (const method of Object.values(EOU_METHODS)) {
+      requestEouMethod(method);
+    }
+  }
+  if (options.turnDetection === 'multilingual' || options.turnDetection === 'english' || hasTurnDetectionResolver) {
     queueWorkerSetup(
       import('@livekit/agents-plugin-livekit')
         .then(() => {
@@ -881,18 +928,12 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       await ctx.connect();
       const roomName = ctx.room.name ?? 'mastra-voice';
 
-      let vad: VAD | undefined;
+      // LiveKit provisions its default VAD for undefined; null explicitly disables it.
+      let vad: VAD | null = null;
       if (options.vad && options.vad !== 'silero') {
         vad = options.vad;
       } else if (wantsSileroVad) {
         vad = ctx.proc.userData.vad ?? (await loadSileroVad());
-      }
-
-      let turnDetection: TurnDetectionSetting | undefined;
-      if (options.turnDetection === 'multilingual' || options.turnDetection === 'english') {
-        turnDetection = await loadTurnDetector(options.turnDetection);
-      } else {
-        turnDetection = options.turnDetection;
       }
 
       const memory = resolveMemory(options, mastraAgent, args, roomName);
@@ -967,7 +1008,12 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           ? { everyMs: greetingConfig.repeatEvery, text: greetingConfig.repeatText }
           : undefined;
 
+      const onTurnMetrics: VoiceTurnMetricsHook = metric => {
+        voiceObs?.recordTurn(metric);
+        notifyVoiceObserver(options.onTurnMetrics, metric);
+      };
       const agent = createMastraVoiceAgent({
+        onTurnMetrics,
         ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
         instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
         memory,
@@ -981,11 +1027,13 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       // Per-call STT/TTS: the `configuration.stt` / `configuration.tts` resolvers pick this
       // call's transcriber and voice (per-tenant voices/languages keyed off the dispatch
       // metadata), falling back to the static top-level options. The same context feeds the
-      // greeting resolver below.
+      // greeting resolver below. Turn detection resolves here too: LiveKit's `TurnDetector`
+      // constructors read the job's inference executor, so instances must be built inside the job.
       const callContext: VoiceCallContext = { metadata, requestContext, roomName, ctx };
-      const [stt, tts] = await Promise.all([
+      const [stt, tts, turnDetection] = await Promise.all([
         resolveSessionComponent(options.configuration?.stt, options.stt, callContext),
         resolveSessionComponent(options.configuration?.tts, options.tts, callContext),
+        resolveTurnDetection(options, callContext),
       ]);
 
       const session = new voice.AgentSession({
@@ -998,6 +1046,13 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
 
       // Subscribe before start so the first turn's metrics are captured.
       voiceObs?.attach(session);
+      const detachSpeechObserver = observeVoiceSession(session, {
+        onTurnMetrics,
+        onSpeechComplete: options.onSpeechComplete,
+      });
+      ctx.addShutdownCallback(async () => {
+        detachSpeechObserver();
+      });
 
       try {
         await session.start({
@@ -1029,6 +1084,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         }
         await options.onSessionStart?.({ session, ctx, agent, metadata });
       } catch (error) {
+        detachSpeechObserver();
         voiceObs?.finalize({ error });
         throw error;
       }

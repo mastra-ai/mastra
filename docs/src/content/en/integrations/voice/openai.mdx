@@ -1,13 +1,30 @@
 ---
 title: "OpenAI | Voice"
-description: "Add OpenAI text-to-speech and speech-to-text to Mastra with configurable models, voices, audio formats, synthesis, and transcription."
+description: "Give Mastra agents OpenAI API tools through Mastra Connect, and add OpenAI text-to-speech, speech-to-text, and realtime voice to Mastra."
 packages:
+  - "@mastra/connect"
   - "@mastra/voice-openai"
   - "@mastra/node-audio"
   - "@mastra/voice-openai-realtime"
 ---
 
+import OpenaiConnectTools from "@site/src/components/connect/generated/openai.mdx";
+
 # OpenAI
+
+Use OpenAI with Mastra in three ways:
+
+- **Agent tools** let an agent call OpenAI APIs, for example to create images or manage files and vector stores, through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Voice](#voice)** adds text-to-speech and speech-to-text with `OpenAIVoice`.
+- **[Realtime](#realtime)** adds speech-to-speech conversations with `OpenAIRealtimeVoice`.
+
+To use an OpenAI model as the agent's language model, see [OpenAI models](/models/providers/openai) instead.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<OpenaiConnectTools />
 
 ## Voice
 
@@ -234,7 +251,7 @@ const voice = new OpenAIRealtimeVoice()
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
   apiKey: 'your-openai-api-key',
-  model: 'gpt-5.1-realtime-preview-2024-12-17',
+  model: 'gpt-realtime-2.1-mini',
   speaker: 'alloy', // Default voice
 })
 
@@ -284,7 +301,7 @@ voice.connect()
     type: 'string',
     description: 'The model ID to use for real-time voice interactions.',
     isOptional: true,
-    defaultValue: "'gpt-5.1-realtime-preview-2024-12-17'",
+    defaultValue: "'gpt-realtime-2.1-mini'",
   },
   {
     name: 'apiKey',
@@ -302,7 +319,7 @@ voice.connect()
 ]}
 />
 
-#### Voice Activity Detection (VAD) Configuration
+#### Voice activity detection (VAD) configuration
 
 <PropertiesTable
   content={[
@@ -464,6 +481,30 @@ Disconnects from the OpenAI Realtime session and cleans up resources. Should be 
 
 Returns: `void`
 
+#### `sendEvent()`
+
+Sends a raw client event to the OpenAI Realtime session. Use this for session control that has no dedicated method, such as adding conversation items. Events sent before the session is created are queued and sent once it is.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: 'string',
+    description: 'OpenAI Realtime client event type, such as conversation.item.create.',
+    isOptional: false,
+  },
+  {
+    name: 'data',
+    type: 'Record<string, unknown>',
+    description: 'Event payload sent alongside the type.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+]}
+/>
+
+Returns: `void`
+
 #### `getSpeakers()`
 
 Returns a list of available voice speakers.
@@ -540,36 +581,30 @@ The OpenAIRealtimeVoice class emits the following events:
 ]}
 />
 
-#### OpenAI Realtime Events
+#### OpenAI Realtime events
 
-You can also listen to [OpenAI Realtime utility events](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events) by prefixing with 'openAIRealtime:':
+Every server event received from the OpenAI Realtime API is also emitted with the `openAIRealtime:` prefix, using the [OpenAI server event type](https://platform.openai.com/docs/api-reference/realtime-server-events) as the suffix. The callback receives the complete event payload.
+
+```typescript
+voice.on('openAIRealtime:rate_limits.updated', event => {
+  console.log(event.rate_limits)
+})
+```
+
+#### Socket events
 
 <PropertiesTable
   content={[
   {
-    name: 'openAIRealtime:conversation.created',
+    name: 'open',
     type: 'event',
-    description: 'Emitted when a new conversation is created.',
+    description: 'Emitted when the WebSocket connection to OpenAI opens.',
   },
   {
-    name: 'openAIRealtime:conversation.interrupted',
+    name: 'close',
     type: 'event',
-    description: 'Emitted when a conversation is interrupted.',
-  },
-  {
-    name: 'openAIRealtime:conversation.updated',
-    type: 'event',
-    description: 'Emitted when a conversation is updated.',
-  },
-  {
-    name: 'openAIRealtime:conversation.item.appended',
-    type: 'event',
-    description: 'Emitted when an item is appended to the conversation.',
-  },
-  {
-    name: 'openAIRealtime:conversation.item.completed',
-    type: 'event',
-    description: 'Emitted when an item in the conversation is completed.',
+    description:
+      'Emitted when the WebSocket connection closes, including when OpenAI closes it. Callback receives { code: number, reason: string }.',
   },
 ]}
 />
@@ -594,5 +629,5 @@ The following voice options are available:
 - Server-side Voice Activity Detection (VAD) provides better accuracy for speech detection
 - All audio data is processed as Int16Array format
 - The voice instance must be connected with `connect()` before using other methods
-- Always call `close()` when done to properly clean up resources
+- Always call `close()` when done to clean up resources
 - Memory management is handled by OpenAI Realtime API

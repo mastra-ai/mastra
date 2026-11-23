@@ -1,6 +1,8 @@
+import { stripVTControlCharacters } from 'node:util';
 import { Text, visibleWidth } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 
+import { ErrorDisplayComponent } from '../error-display.js';
 import { JudgeDisplayComponent } from '../judge-display.js';
 import { NotificationComponent } from '../notification.js';
 import { OMOutputComponent } from '../om-output.js';
@@ -52,7 +54,7 @@ describe('width-aware custom component rendering', () => {
   it('reflows judge output without changing its result', () => {
     const component = new JudgeDisplayComponent({ decision: 'continue', reason: source }, 2, 10);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows notifications while retaining metadata and source content', () => {
@@ -63,14 +65,40 @@ describe('width-aware custom component rendering', () => {
       kind: 'status',
     });
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
+  });
+
+  it('keeps background completion notifications compact until expanded', () => {
+    const component = new NotificationComponent({
+      message: 'view failed in background',
+      source: 'background-work',
+      priority: 'high',
+      kind: 'background-task-failed',
+      status: 'failed',
+      backgroundCompletion: {
+        taskId: 'task-1',
+        toolName: 'view',
+        argsSummary: '{"path":"missing.ts"}',
+        errorSummary: 'File not found: missing.ts',
+      },
+    });
+
+    const compact = component.render(140).join('\n');
+    expect(compact).toContain('failed in background');
+    expect(compact).toContain('task-1');
+    expect(compact).not.toContain('File not found');
+
+    component.setExpanded(true);
+    const expanded = component.render(140).join('\n');
+    expect(expanded).toContain('invocation · {"path":"missing.ts"}');
+    expect(expanded).toContain('failure · File not found: missing.ts');
   });
 
   it('reflows expanded observational-memory output without collapsing it', () => {
     const component = new OMOutputComponent({ type: 'observation', observations: source });
     component.setExpanded(true);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows streaming shell output without changing expansion or its buffer', () => {
@@ -79,7 +107,7 @@ describe('width-aware custom component rendering', () => {
     component.appendOutput(source);
     expectReflow(component);
     expect(component.isExpanded()).toBe(true);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows ANSI-styled shell output across simple and complex Unicode widths', () => {
@@ -89,14 +117,14 @@ describe('width-aware custom component rendering', () => {
 
     expectReflow(component, 180, 32);
     expect(component.render(32).every(line => visibleWidth(line) <= 32)).toBe(true);
-    expect(component.render(180).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(180).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('reflows expanded slash-command output without collapsing it', () => {
     const component = new SlashCommandComponent('review', source);
     component.setExpanded(true);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('renders slash-command output at widths narrower than its fixed chrome', () => {
@@ -110,7 +138,7 @@ describe('width-aware custom component rendering', () => {
     component.addText(source);
     component.finish(false, 25, source);
     expectReflow(component);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
   it('renders subagent tasks at widths narrower than their fixed chrome', () => {
@@ -123,31 +151,53 @@ describe('width-aware custom component rendering', () => {
     component.setExpanded(true);
     expectReflow(component);
     expect(component.isExpanded()).toBe(true);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    expect(stripVTControlCharacters(component.render(140).join('\n'))).toContain('unique-restored-tail');
   });
 
-  it('reflows quiet task progress without changing task status', () => {
+  it('wraps the error card message under its left bar at narrow widths', () => {
+    const component = new ErrorDisplayComponent(new Error(source), {}, ui);
+    const lines = component.render(40);
+    expect(lines.every(line => visibleWidth(line) <= 40)).toBe(true);
+    // The message wraps inside the card, so every row (heading and continuation rows) keeps the bar.
+    const plain = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, '').trimEnd());
+    expect(plain.length).toBeGreaterThan(2);
+    expect(plain[0]).toBe('▎ Error');
+    expect(plain.every(line => line.startsWith('▎ '))).toBe(true);
+    expect(plain.at(-1)).toContain('unique-restored-tail');
+    expect(plain.join('\n')).not.toMatch(/[╭╮╰╯│]/);
+  });
+
+  it('keeps the error card within widths narrower than its chrome', () => {
+    const component = new ErrorDisplayComponent(new Error('boom'), {}, ui);
+    expect(component.render(8).every(line => visibleWidth(line) <= 8)).toBe(true);
+  });
+
+  it('reflows compact task progress without changing task status', () => {
     const component = new TaskProgressComponent();
     component.updateTasks([
       { id: 'active', content: source, activeForm: source, status: 'in_progress' },
       { id: 'pending', content: source, activeForm: source, status: 'pending' },
     ]);
-    component.setQuietMode(true);
     expectReflow(component);
     expect(component.getTasks().map(task => task.status)).toEqual(['in_progress', 'pending']);
   });
 
-  it('reflows enhanced tool output without changing quiet, streaming, or partial state', () => {
+  it('reflows enhanced tool output without changing compact, streaming, or partial state', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: source },
-      { quietDisplayMode: 'quiet', collapsedByDefault: false },
+      { collapsedByDefault: false },
       ui,
     );
     component.appendStreamingOutput(source);
     expectReflow(component);
-    expect(component.getChatSpacingKind()).toBe('quiet-shell-tool');
+    expect(component.getChatSpacingKind()).toBe('shell-tool');
     expect(component.isComplete()).toBe(false);
-    expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+    // Compact rendering hides output; the (syntax-highlighted) command footer still survives reflow.
+    const visible = component
+      .render(140)
+      .join('\n')
+      .replace(/\u001b\[[0-9;]*m/g, '');
+    expect(visible).toContain('unique-restored-tail');
   });
 });

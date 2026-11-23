@@ -1,4 +1,9 @@
-import { OBSERVATIONAL_MEMORY_TABLE_SCHEMA, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
 import { describe, expect, it } from 'vitest';
 
@@ -19,6 +24,7 @@ function convergedCatalog({ withOmIndex }: { withOmIndex: boolean }) {
     mastra_messages: Object.keys(TABLE_SCHEMAS.mastra_messages ?? {}),
     mastra_resources: Object.keys(TABLE_SCHEMAS.mastra_resources ?? {}),
     [OM_TABLE]: Object.keys(omSchema),
+    [TABLE_MEMORY_RUN_FENCES]: Object.keys(RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES]),
   };
   return {
     tables: Object.keys(tables).map(t => ({ TABLE_NAME: t })),
@@ -55,17 +61,51 @@ async function initMemoryWithSnapshot(fixture: ReturnType<typeof convergedCatalo
   return { operations, memory, statements };
 }
 
-describe('memory domain init consults the schema snapshot', () => {
-  it('issues no statements at all when the snapshot shows a converged schema', async () => {
-    const { statements } = await initMemoryWithSnapshot(convergedCatalog({ withOmIndex: true }));
+describe('listThreads pagination', () => {
+  it.each([NaN, Infinity, -Infinity, 1.5, -0.5, -1])('rejects %s before querying an empty database', async value => {
+    const { pool, statements } = createMockPool(convergedCatalog({ withOmIndex: true }));
+    const operations = new StoreOperationsMySQL({ pool, database: 'mastra' });
+    const memory = new MemoryMySQL({ pool, operations, skipDefaultIndexes: true });
+
+    await expect(memory.listThreads({ perPage: value })).rejects.toThrow('perPage must be >= 0');
+    for (const perPage of [10, 0, undefined, false] as const) {
+      await expect(memory.listThreads({ page: value, perPage })).rejects.toThrow('page must be >= 0');
+    }
     expect(statements).toEqual([]);
+  });
+
+  it.each([10, 0, undefined, false] as const)('queries with valid perPage %s', async perPage => {
+    const { pool, statements } = createMockPool(convergedCatalog({ withOmIndex: true }));
+    const operations = new StoreOperationsMySQL({ pool, database: 'mastra' });
+    const memory = new MemoryMySQL({ pool, operations, skipDefaultIndexes: true });
+
+    expect(await memory.listThreads({ page: 2, perPage })).toEqual({
+      threads: [],
+      total: 0,
+      page: 2,
+      perPage: perPage ?? 100,
+      hasMore: false,
+    });
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatch(/COUNT/i);
+  });
+});
+
+// Every init runs one read for the observational-memory supersededBy backfill (keys with more
+// than one live record); with none found, it writes nothing.
+const backfillRead = expect.stringMatching(/`supersededBy` IS NULL GROUP BY/);
+
+describe('memory domain init consults the schema snapshot', () => {
+  it('issues no DDL when the snapshot shows a converged schema', async () => {
+    const { statements } = await initMemoryWithSnapshot(convergedCatalog({ withOmIndex: true }));
+    expect(statements).toEqual([backfillRead]);
   });
 
   it('creates idx_om_lookup_key once and maintains the snapshot', async () => {
     const { memory, statements } = await initMemoryWithSnapshot(convergedCatalog({ withOmIndex: false }));
-    expect(statements).toEqual([expect.stringMatching(/^CREATE INDEX idx_om_lookup_key/)]);
+    expect(statements).toEqual([expect.stringMatching(/^CREATE INDEX idx_om_lookup_key/), backfillRead]);
     statements.length = 0;
     await memory.init(); // second init in the same snapshot window
-    expect(statements).toEqual([]);
+    expect(statements).toEqual([backfillRead]);
   });
 });

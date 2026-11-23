@@ -1,0 +1,12 @@
+---
+extends: existence
+message: "AI punctuation: '%s'. Backtick it if it is a CLI flag or literal, or use a real em dash for punctuation."
+level: error
+nonword: true
+# Split from EmDashUsage: a literal double hyphen is the ASCII em-dash
+# stand-in AI reaches for when it cannot type the character. The two real
+# fixes differ from the em-dash rule's (comma/period/parens), so it carries
+# its own message: backtick CLI flags or literal double hyphens, or promote
+# genuine punctuation to a real em dash character.
+tokens:
+  - '--'

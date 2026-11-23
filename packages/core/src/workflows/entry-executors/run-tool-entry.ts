@@ -24,12 +24,13 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     requestContext,
     suspend,
     resumeData,
+    suspendData,
     runId,
     workflowId,
-    state,
     setState,
     abortSignal,
     actor,
+    writer,
     ...rest
   } = ctx;
   const observabilityContext = resolveObservabilityContext(rest);
@@ -39,15 +40,24 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     actor: resolveEntryActor(entry.options as Record<string, unknown> | undefined, actor),
     ...observabilityContext,
     abortSignal,
+    writer,
     resumeData,
-    workflow: {
-      runId,
-      suspend,
-      resumeData,
-      workflowId,
-      state,
-      setState,
-    },
+    suspendPayload: suspendData,
+    // `state` forwards to the step's, which throws on storage v2 runs and isn't enumerable there.
+    workflow: Object.defineProperty(
+      {
+        runId,
+        suspend,
+        resumeData,
+        suspendPayload: suspendData,
+        workflowId,
+        getState: ctx.getState,
+        setState,
+        updateState: ctx.updateState,
+      },
+      'state',
+      { enumerable: Object.prototype.propertyIsEnumerable.call(ctx, 'state'), get: () => ctx.state },
+    ),
   };
 
   return tool.execute(inputData, toolContext);

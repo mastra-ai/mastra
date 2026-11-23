@@ -185,6 +185,40 @@ export default defineMastraCodePlugin({
   );
 }
 
+function writeReloadFailurePluginSource(pluginDir: string, broken: boolean): void {
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+
+  // The broken edit throws from a field resolver, so the module still imports
+  // but the plugin record fails to load: a bad update to a working plugin.
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E reload failure tests.',
+  tools: {
+    ${TOOL_NAME}: {
+      tool: createTool({
+        id: '${TOOL_NAME}',
+        description: 'Return the reload failure plugin result.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async input => ({ result: '${broken ? 'version-two' : 'version-one'}-' + input.query }),
+      }),
+    },
+  },
+  signalProviders: () => {
+    ${broken ? `throw new Error('e2e plugin reload broke');` : ''}
+    return [];
+  },
+});
+`,
+  );
+}
+
 function writeGithubInstallInvalidPackageManagerPluginSource(pluginDir: string): void {
   const pluginSrcDir = join(pluginDir, 'src');
   mkdirSync(pluginSrcDir, { recursive: true });
@@ -598,6 +632,11 @@ export const pluginsStreamingToolOutputScenario: McE2eScenario = {
     await runtime.waitForScreenText(/E2E plugin progress visible before completion/i, terminal, 10_000);
     await runtime.waitForScreenText(/Streaming plugin tool completed/i, terminal, 10_000);
 
+    terminal.write('\x05'); // Ctrl+E: expand the subagent-style plugin block.
+    await runtime.waitForScreenText(/subagent\s+e2e-plugin/i, terminal, 10_000);
+    await runtime.waitForScreenText(/stream progress/i, terminal, 10_000);
+    await runtime.waitForScreenText(/"done": true/i, terminal, 10_000);
+
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
@@ -708,6 +747,117 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
     }
     // The run() screen assertions wait for version-one and version-two, while the second AIMock follow-up response
     // deliberately avoids version-two. That ensures the visible updated version comes from the plugin tool result.
+  },
+};
+
+export const pluginsLocalReloadFailureScenario: McE2eScenario = {
+  name: 'plugins-local-reload-failure',
+  description: 'Keeps a working local plugin and shows an error when an edit makes its reload fail.',
+  testName: 'keeps a plugin tool and shows an error when its reload fails',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-local-reload-failure.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    hotReloadPluginDir = join(projectDir, 'fixtures', 'plugins', 'reload-failure-plugin');
+    writeReloadFailurePluginSource(hotReloadPluginDir, false);
+    writePluginRegistry(projectDir, hotReloadPluginDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('Call the reload failure plugin before the broken edit.');
+    await runtime.waitForScreenText(/version-one-before/i, terminal, 10_000);
+
+    if (!hotReloadPluginDir) throw new Error('Reload failure plugin directory was not prepared');
+    writeReloadFailurePluginSource(hotReloadPluginDir, true);
+
+    // The local entry watcher reloads the plugin on its own; the failure must reach the screen.
+    await runtime.waitForScreenText(/failed to reload: e2e plugin reload broke/i, terminal, 10_000);
+
+    terminal.submit('Call the reload failure plugin after the broken edit.');
+    await runtime.waitForScreenText(/version-one-after/i, terminal, 10_000);
+    // The turn must end on the text reply to the tool result, not loop into more tool calls.
+    await runtime.waitForScreenText(/Reload failure plugin follow-up complete/i, terminal, 10_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const lastRequest = requests.at(-1);
+    const names = getToolNames(lastRequest ? [lastRequest] : []);
+    if (!names.includes(TOOL_NAME)) {
+      throw new Error(
+        `Expected the request after the failed reload to still expose ${TOOL_NAME}. Names: ${names.join(', ')}`,
+      );
+    }
+    // The follow-up responses never mention version-one, so the visible version-one-after comes from the kept tool.
+  },
+};
+
+function writeStartFailurePluginSource(pluginDir: string): void {
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { defineMastraCodePlugin, SignalProvider } from 'mastracode/plugin';
+
+class StartFailureSignalProvider extends SignalProvider<'e2e-start-failure-signals'> {
+  readonly id = 'e2e-start-failure-signals' as const;
+
+  async start(): Promise<void> {
+    throw new Error('e2e provider start broke');
+  }
+}
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E provider start failure tests.',
+  signalProviders: () => [new StartFailureSignalProvider()],
+});
+`,
+  );
+}
+
+export const pluginsSignalProviderStartFailureScenario: McE2eScenario = {
+  name: 'plugins-signal-provider-start-failure',
+  description: 'Shows an error when a plugin signal provider fails to start while Mastra Code boots.',
+  testName: 'shows a plugin signal provider startup failure in the TUI',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    const pluginDir = join(projectDir, 'fixtures', 'plugins', 'start-failure-plugin');
+    writeStartFailurePluginSource(pluginDir);
+    writePluginRegistry(projectDir, pluginDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+    // The provider fails while Mastra Code boots, before the TUI subscribes to plugin errors.
+    await runtime.waitForScreenText(
+      /signal provider "e2e-start-failure-signals" failed to start: e2e provider start broke/i,
+      terminal,
+      10_000,
+    );
+
+    terminal.keyCtrlC();
   },
 };
 
@@ -828,9 +978,10 @@ function createGithubInstallScenario(
   };
 }
 
-export const pluginsGithubInstallPnpm10Scenario = createGithubInstallScenario('10', '10.24.0');
-export const pluginsGithubInstallPnpm11Scenario = createGithubInstallScenario('11', '11.8.0');
-export const pluginsGithubInstallMissingCorepackScenario = createGithubInstallScenario('10', '10.24.0', {
+export const pluginsGithubInstallPnpm10Scenario = createGithubInstallScenario('10', '10.34.5');
+export const pluginsGithubInstallPnpm11Scenario = createGithubInstallScenario('11', '11.27.1');
+export const pluginsGithubInstallPnpm12Scenario = createGithubInstallScenario('11', '12.6.0');
+export const pluginsGithubInstallMissingCorepackScenario = createGithubInstallScenario('10', '10.35.5', {
   missingCorepack: true,
 });
 
@@ -1035,7 +1186,7 @@ export const pluginsBlockedConfigScenario: McE2eScenario = {
     await runtime.waitForScreenText(new RegExp(PLUGIN_ID), terminal, 8_000);
     await runtime.waitForScreenText(/blocked/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.waitForScreenText(/│ ›/i, terminal, 8_000);
+    await runtime.waitForScreenText(/→/, terminal, 8_000);
 
     terminal.submit(`/plugins ${PLUGIN_ID}`);
     await runtime.waitForScreenText(/blocked by plugins\.json disabledPlugins/i, terminal, 8_000);
@@ -1069,7 +1220,7 @@ export const pluginsAssetsLoadingScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project: project/i, terminal, 15_000);
     await terminal.flushInput?.();
-    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await runtime.waitForScreenText(/→/, terminal, 10_000);
 
     terminal.submit('/help');
     await runtime.waitForScreenText(/Custom Commands/i, terminal, 8_000);
@@ -1086,10 +1237,11 @@ export const pluginsAssetsLoadingScenario: McE2eScenario = {
     await runtime.waitForScreenText(/E2E plugin bundled command autocomplete description/i, terminal, 20_000);
     runtime.printScreen('plugin command autocomplete', terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/E2E plugin bundled command executed\./i, terminal, 15_000);
+    // The command block stays collapsed to its header; verifyAimockRequests checks the template was sent.
+    await runtime.waitForScreenText(/• command \/\S*e2e-plugin-a/i, terminal, 15_000);
     await runtime.waitForScreenText(/MC plugin bundled command response/i, terminal, 15_000);
 
-    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await runtime.waitForScreenText(/→/, terminal, 10_000);
     await typeTextSlowly(terminal, '/skill/e2e-plugin');
     await runtime.waitForScreenText(/E2E plugin bundled skill autocomplete description/i, terminal, 20_000);
     runtime.printScreen('plugin skill autocomplete', terminal);

@@ -1,0 +1,55 @@
+---
+extends: existence
+message: "AI shell noun: '%s'. Delete the noun and the copula. Start the sentence at the claim."
+level: error
+nonword: true
+ignorecase: true
+# The shell noun and its copula: an abstract noun, "is" or "was", and a
+# that-clause that carries the whole claim ("The problem is that the
+# index goes stale," "The difference is that the second build read the
+# cache," "The question is whether the cache survives a restart," "One
+# catch is that the daemon keeps the lock"). The noun promises content
+# and the that-clause delivers it, so the first four words are a runway:
+# the sentence says nothing until "that," then says it once. It is the
+# colon spelling of LabelAndExplain ("The catch: the daemon keeps the
+# lock") with the colon written out as a copula, and the rule joined the
+# padding family when a documentation-corpus audit (2026-09) found the
+# construction on nearly every page that had already lost its colons.
+#
+# The plain form drops the shell: "The index goes stale after a rename."
+# Where the noun carries a real distinction, keep it and make it the
+# subject of a verb: "Renaming stales the index."
+#
+# The noun list is curated to the shells, the nouns whose content is
+# nothing but the clause after them. Nouns that name a kind of statement
+# ("the rule is that," "the invariant is that," "the requirement is
+# that," "the theory is that") stay out: those definitions are the
+# sentence's content in human docs, and the Go and Python standard
+# libraries use "the rule is that" ten times and "the invariant is that"
+# five. The ordinal enumeration ("The first is that ... The second is
+# that") is its own construction and stays out too.
+#
+# Costs across the Go and Python standard libraries, one broken line per
+# sentence so multi-word tokens count low: the bare determiner, noun,
+# and copula measures fifty-two ("The problem is that the toplevel
+# target call," "The idea is that functions can 'delegate'
+# checks to inner functions," "The difference is that t.ctime() produces
+# ' 2' for the day"), one adjective ahead of the noun twenty-three ("The
+# only downside is that we send PUSH_PROMISEs slightly less," "A final
+# twist is that we'd prefer to have reproducible builds"), and the "here"
+# spelling six. Every hit is the construction itself and fires by
+# design. "Simply that" and "just that" measure zero and ride along.
+# "The key here is," "The point here is," "The idea here is," "The
+# insight here is," and "The important thing here is" stay in
+# Metacommentary, so the "here" token leaves those nouns out.
+tokens:
+  # --- The determiner, an optional adjective, the shell noun, and the
+  # copula ahead of "that" or "whether" ("The problem is that," "Another
+  # difference is that," "The only reason was that," "Its downside is
+  # that," "The question is whether").
+  - "\\b(?:the|a|an|one|another|its|their|our|my|this) (?:[a-z-]+ )?(?:problem|difference|reason|catch|trick|result|upshot|cost|point|issue|risk|effect|consequence|question|answer|key|idea|assumption|trade-off|tradeoff|downside|drawback|benefit|advantage|twist|kicker|payoff|lesson|takeaway|fact|truth|thing|caveat|complication|implication|concern|insight|distinction|challenge) (?:is|was) (?:simply |just )?(?:that|whether)\\b"
+
+  # --- The same with "here" between the noun and the copula ("The
+  # problem here is that," "The issue here was that"). The nouns
+  # Metacommentary already takes with "here" are left out.
+  - "\\b(?:the|a|an|one|another|its|their|our|my|this) (?:[a-z-]+ )?(?:problem|difference|reason|catch|trick|result|upshot|cost|issue|risk|effect|consequence|question|answer|assumption|trade-off|tradeoff|downside|drawback|benefit|advantage|twist|kicker|payoff|lesson|takeaway|fact|truth|caveat|complication|implication|concern|distinction|challenge) here (?:is|was) (?:simply |just )?(?:that|whether)\\b"

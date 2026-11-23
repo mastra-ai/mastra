@@ -1,6 +1,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MastraServerCache } from '../../cache';
+import { MockMemory } from '../../memory/mock';
 import { ResponseCache } from '../../processors/processors/response-cache';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
@@ -101,6 +102,7 @@ function createAgent(args: {
   scope?: string | null;
   modelId?: string;
   responseText?: string;
+  memory?: MockMemory;
 }) {
   const model = createRecordingModel(args.modelId ?? 'test-model', args.responseText ?? 'Cached response text');
   const agentId = args.agentId ?? 'response-cache-agent';
@@ -109,6 +111,7 @@ function createAgent(args: {
     name: 'Response Cache Agent',
     instructions: 'You are a test agent',
     model,
+    ...(args.memory ? { memory: args.memory } : {}),
     inputProcessors: [
       new ResponseCache({
         cache: args.cache,
@@ -354,20 +357,86 @@ describe('ResponseCache processor (integration via Agent)', () => {
       expect(second.text).toBe('Cached response text');
       expect(noScopeAgent.model.doGenerateCalls).toHaveLength(1);
     });
+
+    it('falls back to the memory resource id when MASTRA_RESOURCE_ID_KEY is absent', async () => {
+      const memAgent = createAgent({ cache, agentId: 'memory-tenant', memory: new MockMemory() });
+
+      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-alice' } });
+      await waitForSets(cache, 1);
+
+      const second = await memAgent.agent.generate('shared prompt', {
+        memory: { resource: 'user-bob', thread: 'thread-bob' },
+      });
+
+      expect(second.text).toBe('Cached response text');
+      expect(memAgent.model.doGenerateCalls).toHaveLength(2);
+      expect(cache.store.size).toBe(2);
+    });
+
+    it('reuses the cache for the same memory resource', async () => {
+      const memAgent = createAgent({ cache, agentId: 'memory-same', memory: new MockMemory() });
+
+      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-1' } });
+      await waitForSets(cache, 1);
+
+      // Fresh thread so memory history does not change the prompt.
+      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-2' } });
+
+      expect(memAgent.model.doGenerateCalls).toHaveLength(1);
+    });
+
+    it('MASTRA_RESOURCE_ID_KEY takes precedence over the memory resource id', async () => {
+      const memAgent = createAgent({ cache, agentId: 'memory-precedence', memory: new MockMemory() });
+
+      const ctxA = new RequestContext();
+      ctxA.set(MASTRA_RESOURCE_ID_KEY, 'auth-user');
+      await memAgent.agent.generate('shared prompt', {
+        requestContext: ctxA,
+        memory: { resource: 'auth-user', thread: 'thread-a' },
+      });
+      await waitForSets(cache, 1);
+
+      // The memory resource is forced to the auth resource, so scope stays the same.
+      const ctxB = new RequestContext();
+      ctxB.set(MASTRA_RESOURCE_ID_KEY, 'auth-user');
+      await memAgent.agent.generate('shared prompt', {
+        requestContext: ctxB,
+        memory: { resource: 'other-user', thread: 'thread-b' },
+      });
+
+      expect(memAgent.model.doGenerateCalls).toHaveLength(1);
+    });
+
+    it('explicit scope: null shares the cache across memory resources', async () => {
+      const memAgent = createAgent({ cache, scope: null, agentId: 'memory-shared', memory: new MockMemory() });
+
+      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-alice', thread: 'thread-alice' } });
+      await waitForSets(cache, 1);
+      await memAgent.agent.generate('shared prompt', { memory: { resource: 'user-bob', thread: 'thread-bob' } });
+
+      expect(memAgent.model.doGenerateCalls).toHaveLength(1);
+    });
   });
 
   describe('stream()', () => {
-    it('returns the cached chunks on the second identical call', async () => {
+    it('returns cached chunks without replaying the original inference timestamp', async () => {
       const firstStream = await agent.stream('Stream me');
+      const firstChunks = [];
+      for await (const chunk of firstStream.fullStream) {
+        firstChunks.push(chunk);
+      }
       const firstText = await firstStream.text;
       expect(firstText).toBe('Cached response text');
       expect(model.doStreamCalls).toHaveLength(1);
+      const firstStepStart = firstChunks.find(chunk => chunk.type === 'step-start');
+      expect(firstStepStart).toBeDefined();
+      expect(firstStepStart?.payload.startedAt).toEqual(expect.any(Number));
 
       await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
 
       const secondStream = await agent.stream('Stream me');
-      const collectedChunks: unknown[] = [];
+      const collectedChunks = [];
       for await (const chunk of secondStream.fullStream) {
         collectedChunks.push(chunk);
       }
@@ -376,6 +445,9 @@ describe('ResponseCache processor (integration via Agent)', () => {
       expect(secondText).toBe('Cached response text');
       expect(model.doStreamCalls).toHaveLength(1);
       expect(collectedChunks.length).toBeGreaterThan(0);
+      const replayedStepStart = collectedChunks.find(chunk => chunk.type === 'step-start');
+      expect(replayedStepStart).toBeDefined();
+      expect(replayedStepStart?.payload).not.toHaveProperty('startedAt');
     });
 
     it('preserves finishReason and usage on cache hit', async () => {

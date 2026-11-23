@@ -78,6 +78,61 @@ describe('createTool', () => {
   });
 });
 
+describe('createTool in a workflow', () => {
+  it('reads workflow getters that use their own object', async () => {
+    class WorkflowContext {
+      #state = { count: 1 };
+      runId = 'run-1';
+      workflowId = 'wf';
+      suspend = async () => {};
+      constructor() {
+        // An own accessor, as Mastra's workflow contexts define `state`.
+        Object.defineProperty(this, 'state', {
+          enumerable: true,
+          get() {
+            return this.#state;
+          },
+        });
+      }
+    }
+    const workflow = new WorkflowContext();
+    const tool = createTool({
+      id: 'read-state',
+      description: 'Reads workflow state',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => ({ state: context.workflow?.state, runId: context.workflow?.runId }),
+    });
+
+    const output = await tool.execute?.({}, { workflow } as any);
+
+    expect(output).toStrictEqual({ state: { count: 1 }, runId: 'run-1' });
+  });
+
+  it('hands a flat workflow context its updateState', async () => {
+    const updateState = vi.fn(async (_update: Record<string, unknown>) => {});
+    const tool = createTool({
+      id: 'update-state',
+      description: 'Updates workflow state',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context.workflow?.updateState({ count: 2 });
+        return {};
+      },
+    });
+
+    await tool.execute?.({}, {
+      workflowId: 'wf',
+      runId: 'run-1',
+      state: { count: 1 },
+      setState: vi.fn(),
+      updateState,
+      suspend: async () => {},
+    } as any);
+
+    expect(updateState).toHaveBeenCalledWith({ count: 2 });
+  });
+});
+
 describe('createTool with providerOptions', () => {
   it('should preserve providerOptions when creating a tool', () => {
     const toolWithProviderOptions = createTool({
@@ -364,5 +419,43 @@ describe('AgentToolExecutionContext', () => {
 
     expect(capturedContext.agent).toBeDefined();
     expect(capturedContext.agent.agentId).toBe('');
+  });
+
+  it('should expose the background task adoption bridge in context.background', async () => {
+    let capturedContext: any;
+    const backgroundTask = {
+      taskId: 'task-123',
+      disposition: 'deferred' as const,
+      adopt: vi.fn(),
+    };
+
+    const tool = createTool({
+      id: 'background-adoption-test',
+      description: 'Test tool for background operation adoption',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async (_input, context) => {
+        capturedContext = context;
+        return { success: true };
+      },
+    });
+
+    await tool.execute(
+      { message: 'hello' },
+      {
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+        toolCallId: 'call-background',
+        messages: [],
+        suspend: async () => {},
+        isBackgroundTask: true,
+        background: backgroundTask,
+      },
+    );
+
+    expect(capturedContext.agent).toMatchObject({
+      agentId: 'test-agent',
+      toolCallId: 'call-background',
+    });
+    expect(capturedContext.background).toBe(backgroundTask);
   });
 });

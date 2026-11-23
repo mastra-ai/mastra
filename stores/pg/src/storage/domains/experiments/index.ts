@@ -1,6 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -9,6 +11,7 @@ import {
   ExperimentsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   safelyParseJSON,
   ensureDate,
 } from '@mastra/core/storage';
@@ -28,17 +31,40 @@ import type {
   ListExperimentResultsOutput,
   CreateIndexOptions,
   TABLE_NAMES,
+  StorageColumn,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
+import { schemaNamePrefix } from '../../../shared/schema-name';
+import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 const DEFAULT_PRUNE_BATCH_SIZE = 1000;
+
+/**
+ * Column list for reading experiment rows. Each `timestamp` column comes back
+ * twice: as itself, and as its `*Z` mirror derived in the query with
+ * `AT TIME ZONE 'UTC'`. A plain `timestamp` otherwise round-trips through the
+ * session timezone, and reading the stored `*Z` column instead would return the
+ * insert time for rows written before the mirrors were filled in. Deriving it
+ * here makes legacy rows read correctly with no backfill to run at startup.
+ */
+function selectWithMirrors(schema: Record<string, StorageColumn>): string {
+  return Object.entries(schema)
+    .flatMap(([name, definition]) =>
+      definition.type === 'timestamp' ? [`"${name}"`, `"${name}" AT TIME ZONE 'UTC' AS "${name}Z"`] : [`"${name}"`],
+    )
+    .join(', ');
+}
+
+const EXPERIMENT_COLUMNS = selectWithMirrors(EXPERIMENTS_SCHEMA);
+const EXPERIMENT_RESULT_COLUMNS = selectWithMirrors(EXPERIMENT_RESULTS_SCHEMA);
 
 export class ExperimentsPG extends ExperimentsStorage {
   #db: PgDB;
@@ -50,9 +76,9 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   /**
    * Experiments prune as whole units: an aged experiment and its result rows go
-   * together, mirroring `deleteExperiment`. Anchored on `completedAt` (not the
-   * `completedAtZ` mirror, which carries a `DEFAULT NOW()` this domain never
-   * overrides — it holds insert time even for running rows). `completedAt` is
+   * together, mirroring `deleteExperiment`. Anchored on `completedAt` rather
+   * than its `completedAtZ` mirror: both are written together, but
+   * `completedAt` is the column the retention index covers. `completedAt` is
    * written as a UTC ISO string and stays NULL while running, so
    * `completedAt < cutoff` is false for in-flight experiments.
    */
@@ -62,8 +88,8 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (ExperimentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -104,6 +130,9 @@ export class ExperimentsPG extends ExperimentsStorage {
         'scorerIds',
       ],
     });
+    // Tables created before targetType/targetId became nullable keep NOT NULL,
+    // which breaks caller-driven experiments.
+    await this.#db.dropNotNull({ tableName: TABLE_EXPERIMENTS, columns: ['targetType', 'targetId'] });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
@@ -132,7 +161,7 @@ export class ExperimentsPG extends ExperimentsStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(ExperimentsPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -230,6 +259,13 @@ export class ExperimentsPG extends ExperimentsStorage {
         table: TABLE_EXPERIMENT_RESULTS,
         columns: ['organizationId', 'projectId'],
       },
+      // Tags JSONB GIN index — backs the `"tags" @> ...::jsonb` containment filter.
+      {
+        name: 'idx_experiment_results_tags_gin',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['tags'],
+        method: 'gin',
+      },
     ];
   }
 
@@ -304,7 +340,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
-      input: safelyParseJSON(row.input),
+      input: row.input === null ? null : safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : null,
@@ -360,6 +396,10 @@ export class ExperimentsPG extends ExperimentsStorage {
           completedAt: null,
           createdAt: nowIso,
           updatedAt: nowIso,
+          startedAtZ: null,
+          completedAtZ: null,
+          createdAtZ: nowIso,
+          updatedAtZ: nowIso,
         },
       });
 
@@ -406,7 +446,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
     try {
-      const existing = await this.getExperimentById({ id: input.id });
+      const existing = await this.#getExperimentById(this.#db.client, { id: input.id });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
@@ -432,7 +472,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       }
       if (input.metadata !== undefined) {
         setClauses.push(`"metadata" = $${paramIndex++}`);
-        values.push(JSON.stringify(input.metadata));
+        values.push(toPgJson(input.metadata));
       }
       if (input.status !== undefined) {
         setClauses.push(`"status" = $${paramIndex++}`);
@@ -455,12 +495,14 @@ export class ExperimentsPG extends ExperimentsStorage {
         values.push(input.skippedCount);
       }
       if (input.startedAt !== undefined) {
-        setClauses.push(`"startedAt" = $${paramIndex++}`);
-        values.push(input.startedAt?.toISOString() ?? null);
+        const iso = input.startedAt?.toISOString() ?? null;
+        setClauses.push(`"startedAt" = $${paramIndex++}`, `"startedAtZ" = $${paramIndex++}`);
+        values.push(iso, iso);
       }
       if (input.completedAt !== undefined) {
-        setClauses.push(`"completedAt" = $${paramIndex++}`);
-        values.push(input.completedAt?.toISOString() ?? null);
+        const iso = input.completedAt?.toISOString() ?? null;
+        setClauses.push(`"completedAt" = $${paramIndex++}`, `"completedAtZ" = $${paramIndex++}`);
+        values.push(iso, iso);
       }
 
       values.push(input.id);
@@ -470,7 +512,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       );
 
       // Re-SELECT to get correctly transformed fields (timestamps, jsonb)
-      const updated = await this.getExperimentById({ id: input.id });
+      const updated = await this.#getExperimentById(this.#db.client, { id: input.id });
       return updated!;
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -485,18 +527,26 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({
-    id,
-    filters,
-  }: {
-    id: string;
-    filters?: ExperimentTenancyFilters;
-  }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
+    return this.#getExperimentById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<Experiment | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT ${EXPERIMENT_COLUMNS} FROM ${tableName} WHERE ${whereSql}`, [
+        id,
+        ...params,
+      ]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -512,6 +562,10 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
@@ -571,7 +625,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -585,8 +639,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      const rows = await this.#db.readClient.manyOrNone(
+        `SELECT ${EXPERIMENT_COLUMNS} FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 
@@ -645,60 +699,81 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   // --- Experiment results ---
 
+  async #resolvePurgeMetadata(
+    t: TxClient,
+    datasetId: string | null | undefined,
+    itemId: string,
+  ): Promise<Record<string, unknown> | null> {
+    if (!datasetId) return null;
+
+    const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
+    const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
+    const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
+    if (!dataset) return null;
+
+    const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+      `SELECT "metadata" FROM ${itemsTable}
+       WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+       LIMIT 1`,
+      [itemId, datasetId],
+    );
+    return purge?.metadata ?? null;
+  }
+
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const id = input.id ?? crypto.randomUUID();
-      const now = new Date();
-      const nowIso = now.toISOString();
+      const resultsTable = getTableName({
+        indexName: TABLE_EXPERIMENT_RESULTS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
-      await this.#db.insert({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        record: {
-          id,
-          experimentId: input.experimentId,
-          itemId: input.itemId,
-          itemDatasetVersion: input.itemDatasetVersion ?? null,
-          organizationId: input.organizationId ?? null,
-          projectId: input.projectId ?? null,
-          input: input.input,
-          output: input.output ?? null,
-          groundTruth: input.groundTruth ?? null,
-          metadata: input.metadata ?? null,
-          error: input.error ?? null,
-          startedAt: input.startedAt.toISOString(),
-          completedAt: input.completedAt.toISOString(),
-          retryCount: input.retryCount,
-          attempt: input.attempt ?? 0,
-          traceId: input.traceId ?? null,
-          status: input.status ?? null,
-          tags: input.tags ?? null,
-          toolMockReport: input.toolMockReport ?? null,
-          createdAt: nowIso,
-        },
+      const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
+        );
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner?.datasetId, input.itemId);
+        const nowIso = new Date().toISOString();
+        return t.one(
+          `INSERT INTO ${resultsTable} (
+            "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
+            "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
+            "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt",
+            "startedAtZ", "completedAtZ", "createdAtZ"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+            $21, $22, $23)
+          RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
+          [
+            id,
+            input.experimentId,
+            input.itemId,
+            input.itemDatasetVersion ?? null,
+            input.organizationId ?? null,
+            input.projectId ?? null,
+            toPgJson(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : toPgJson(input.output),
+            purgeMetadata || input.groundTruth == null ? null : toPgJson(input.groundTruth),
+            toPgJson(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : toPgJson(input.error),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            input.retryCount,
+            input.attempt ?? 0,
+            input.traceId ?? null,
+            input.status ?? null,
+            purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
+            nowIso,
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            nowIso,
+          ],
+        );
       });
 
-      return {
-        id,
-        experimentId: input.experimentId,
-        itemId: input.itemId,
-        itemDatasetVersion: input.itemDatasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        input: input.input,
-        output: input.output ?? null,
-        groundTruth: input.groundTruth ?? null,
-        metadata: input.metadata ?? null,
-        error: input.error ?? null,
-        startedAt: input.startedAt,
-        completedAt: input.completedAt,
-        retryCount: input.retryCount,
-        attempt: input.attempt ?? 0,
-        traceId: input.traceId ?? null,
-        status: input.status ?? null,
-        tags: input.tags ?? null,
-        toolMockReport: input.toolMockReport ?? null,
-        createdAt: now,
-      };
+      return this.transformExperimentResultRow(row);
     } catch (error) {
       throw new MastraError(
         {
@@ -714,9 +789,17 @@ export class ExperimentsPG extends ExperimentsStorage {
   async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const attempt = input.attempt ?? 0;
 
       const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
+        );
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner?.datasetId, input.itemId);
+        const nowIso = new Date().toISOString();
+
         // Natural key lookup under FOR UPDATE so concurrent retries serialize
         // on the same row instead of inserting duplicates.
         // Note: COALESCE("attempt", 0) is an expression predicate, so the
@@ -736,9 +819,11 @@ export class ExperimentsPG extends ExperimentsStorage {
             `INSERT INTO ${tableName} (
               "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
               "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
-              "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-            RETURNING *`,
+              "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt",
+              "startedAtZ", "completedAtZ", "createdAtZ"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+              $21, $22, $23)
+            RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
             [
               id,
               input.experimentId,
@@ -746,20 +831,23 @@ export class ExperimentsPG extends ExperimentsStorage {
               input.itemDatasetVersion ?? null,
               input.organizationId ?? null,
               input.projectId ?? null,
-              JSON.stringify(input.input),
-              input.output != null ? JSON.stringify(input.output) : null,
-              input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
-              input.metadata != null ? JSON.stringify(input.metadata) : null,
-              input.error != null ? JSON.stringify(input.error) : null,
+              toPgJson(purgeMetadata ? null : input.input),
+              purgeMetadata || input.output == null ? null : toPgJson(input.output),
+              purgeMetadata || input.groundTruth == null ? null : toPgJson(input.groundTruth),
+              toPgJson(purgeMetadata ?? input.metadata ?? null),
+              purgeMetadata || input.error == null ? null : toPgJson(input.error),
               input.startedAt.toISOString(),
               input.completedAt.toISOString(),
               input.retryCount,
               attempt,
               input.traceId ?? null,
               input.status ?? null,
-              input.tags != null ? JSON.stringify(input.tags) : null,
-              input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
-              new Date().toISOString(),
+              purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
+              purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
+              nowIso,
+              input.startedAt.toISOString(),
+              input.completedAt.toISOString(),
+              nowIso,
             ],
           );
         }
@@ -770,26 +858,29 @@ export class ExperimentsPG extends ExperimentsStorage {
             "itemDatasetVersion" = $2, "organizationId" = $3, "projectId" = $4,
             "input" = $5, "output" = $6, "groundTruth" = $7, "metadata" = $8, "error" = $9,
             "startedAt" = $10, "completedAt" = $11, "retryCount" = $12, "attempt" = $13,
-            "traceId" = $14, "status" = $15, "tags" = $16, "toolMockReport" = $17
-          WHERE "id" = $1 RETURNING *`,
+            "traceId" = $14, "status" = $15, "tags" = $16, "toolMockReport" = $17,
+            "startedAtZ" = $18, "completedAtZ" = $19
+          WHERE "id" = $1 RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
           [
             existing.id,
             input.itemDatasetVersion ?? null,
             input.organizationId ?? null,
             input.projectId ?? null,
-            JSON.stringify(input.input),
-            input.output != null ? JSON.stringify(input.output) : null,
-            input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
-            input.metadata != null ? JSON.stringify(input.metadata) : null,
-            input.error != null ? JSON.stringify(input.error) : null,
+            toPgJson(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : toPgJson(input.output),
+            purgeMetadata || input.groundTruth == null ? null : toPgJson(input.groundTruth),
+            toPgJson(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : toPgJson(input.error),
             input.startedAt.toISOString(),
             input.completedAt.toISOString(),
             input.retryCount,
             attempt,
             input.traceId ?? null,
             input.status ?? null,
-            input.tags != null ? JSON.stringify(input.tags) : null,
-            input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
+            purgeMetadata || input.tags == null ? null : toPgJson(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : toPgJson(input.toolMockReport),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
           ],
         );
       });
@@ -810,47 +901,40 @@ export class ExperimentsPG extends ExperimentsStorage {
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const setClauses: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
-      if (input.status !== undefined) {
-        setClauses.push(`"status" = $${paramIndex++}`);
-        values.push(input.status);
-      }
-      if (input.tags !== undefined) {
-        setClauses.push(`"tags" = $${paramIndex++}`);
-        values.push(JSON.stringify(input.tags));
-      }
-      if (input.comment !== undefined) {
-        setClauses.push(`"comment" = $${paramIndex++}`);
-        values.push(input.comment);
-      }
+      const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null; itemId: string }>(
+          `SELECT e."datasetId", r."itemId"
+           FROM ${tableName} r
+           JOIN ${experimentsTable} e ON e."id" = r."experimentId"
+           WHERE r."id" = $1${input.experimentId !== undefined ? ' AND r."experimentId" = $2' : ''}`,
+          input.experimentId !== undefined ? [input.id, input.experimentId] : [input.id],
+        );
+        if (!owner) return null;
 
-      if (setClauses.length === 0) {
-        const existing = await this.getExperimentResultById({ id: input.id });
-        if (!existing) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { resultId: input.id },
-          });
-        }
-        return existing;
-      }
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner.datasetId, owner.itemId);
 
-      values.push(input.id);
-      let whereClause = `"id" = $${paramIndex}`;
-      if (input.experimentId) {
-        paramIndex++;
-        values.push(input.experimentId);
-        whereClause += ` AND "experimentId" = $${paramIndex}`;
-      }
-      const row = await this.#db.client.oneOrNone(
-        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClause} RETURNING *`,
-        values,
-      );
+        return t.oneOrNone(
+          `UPDATE ${tableName}
+           SET "status" = CASE WHEN $2 THEN $3 ELSE "status" END,
+               "tags" = CASE WHEN $4 THEN NULL WHEN $5 THEN $6::jsonb ELSE "tags" END,
+               "comment" = CASE WHEN $4 THEN NULL WHEN $7 THEN $8 ELSE "comment" END
+           WHERE "id" = $1${input.experimentId !== undefined ? ' AND "experimentId" = $9' : ''}
+           RETURNING ${EXPERIMENT_RESULT_COLUMNS}`,
+          [
+            input.id,
+            input.status !== undefined,
+            input.status ?? null,
+            Boolean(purgeMetadata),
+            input.tags !== undefined,
+            input.tags === undefined ? null : toPgJson(input.tags),
+            input.comment !== undefined,
+            input.comment ?? null,
+            ...(input.experimentId !== undefined ? [input.experimentId] : []),
+          ],
+        );
+      });
 
       if (!row) {
         throw new MastraError({
@@ -875,18 +959,29 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({
-    id,
-    filters,
-  }: {
+  async getExperimentResultById(args: {
     id: string;
     filters?: ExperimentTenancyFilters;
   }): Promise<ExperimentResult | null> {
+    return this.#getExperimentResultById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentResultById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<ExperimentResult | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT ${EXPERIMENT_RESULT_COLUMNS} FROM ${tableName} WHERE ${whereSql}`, [
+        id,
+        ...params,
+      ]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -902,6 +997,10 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+        field: 'startedAt',
+        direction: 'ASC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
 
@@ -917,6 +1016,11 @@ export class ExperimentsPG extends ExperimentsStorage {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
       }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        conditions.push(`"tags" @> $${paramIndex++}::jsonb`);
+        queryParams.push(toPgJson([tag]));
+      }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
@@ -931,7 +1035,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -945,8 +1049,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      const rows = await this.#db.readClient.manyOrNone(
+        `SELECT ${EXPERIMENT_RESULT_COLUMNS} FROM ${tableName} ${whereClause} ORDER BY "${orderBy.field}" ${orderBy.direction}, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
 
@@ -1014,7 +1118,7 @@ export class ExperimentsPG extends ExperimentsStorage {
   async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT
           "experimentId",
           COUNT(*)::int as total,

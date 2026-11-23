@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import { SidebarPanel } from '@mastra/playground-ui/domains/agents/chat/sidebar-panel';
 import { AgentLayout } from '../agent-layout';
-import { SidebarPanel } from '../sidebar-panel';
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
@@ -99,7 +99,7 @@ function LeftPanel({
       {versionSelector}
 
       <div className="px-4 pt-3">
-        <Txt variant="ui-sm" className="text-neutral3">
+        <Txt variant="caption" tone="muted">
           Edit your agent's system prompt, tools, and variables below.
         </Txt>
       </div>

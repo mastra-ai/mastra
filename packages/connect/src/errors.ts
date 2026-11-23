@@ -1,0 +1,223 @@
+export type MastraConnectErrorCode =
+  | 'missing_access_token'
+  | 'missing_project_id'
+  | 'missing_connection_id'
+  | 'invalid_options'
+  | 'connection_not_found'
+  | 'unauthorized'
+  | 'proxy_error'
+  | 'unsupported_credential_type'
+  | 'no_active_connection'
+  | 'platform_error'
+  // A `ConnectClient` call exceeded its `timeoutMs`.
+  | 'timeout'
+  // The events service rejected the resume cursor (expired or out of range).
+  // Restart the subscription without a cursor and reconcile.
+  | 'invalid_cursor'
+  // A response did not match the documented contract.
+  | 'invalid_response'
+  // Raised at tool-execute time when the caller supplies a connection_name
+  // that does not match any active connection for the provider. Recovery is
+  // to call `<provider>__list_connections` and retry with a valid name.
+  | 'unknown_connection';
+
+const MAX_DETAIL_LENGTH = 2000;
+
+export class MastraConnectError extends Error {
+  readonly code: MastraConnectErrorCode;
+  readonly status?: number;
+  readonly detail?: string;
+  /**
+   * Axios-compatible alias for {@link status}. Generated provider tools come
+   * from upstream Nango templates whose error handlers check
+   * `error.response.status` (the axios/Nango SDK shape). Exposing the HTTP
+   * status under `response.status` as well lets that generated code work
+   * unchanged against the errors this package throws. Only set when the error
+   * carries an HTTP status.
+   */
+  readonly response?: { status: number };
+  /**
+   * The platform's RFC-7807 problem `type` (for example
+   * `connection_needs_reauth`). Only set when the platform itself produced the
+   * error, so a provider error that happens to carry a `type` field is never
+   * mistaken for a platform condition.
+   */
+  readonly problemCode?: string;
+  /**
+   * Whether the error came from the Mastra platform itself or was passed
+   * through from the upstream provider by the connection proxy. Unset for
+   * errors raised client-side (invalid options, transport failures).
+   */
+  readonly source?: MastraConnectErrorSource;
+  /** Delay the server asked for via `Retry-After`, on 429 and 503 responses. */
+  readonly retryAfterMs?: number;
+
+  constructor(code: MastraConnectErrorCode, message: string, options?: MastraConnectErrorOptions) {
+    super(message);
+    this.name = 'MastraConnectError';
+    this.code = code;
+    this.status = options?.status;
+    this.detail = options?.detail ? truncate(options.detail) : undefined;
+    if (typeof options?.status === 'number') {
+      this.response = { status: options.status };
+    }
+    if (options?.problemCode) this.problemCode = options.problemCode;
+    if (options?.source) this.source = options.source;
+    if (options?.retryAfterMs !== undefined) this.retryAfterMs = options.retryAfterMs;
+  }
+}
+
+export type MastraConnectErrorSource = 'platform' | 'provider';
+
+export interface MastraConnectErrorOptions {
+  status?: number;
+  detail?: string;
+  problemCode?: string;
+  source?: MastraConnectErrorSource;
+  retryAfterMs?: number;
+}
+
+/**
+ * Reads `Retry-After` from a 429 or 503 response. The header is either a
+ * number of seconds or an HTTP date; anything else (or any other status)
+ * yields undefined.
+ */
+export function parseRetryAfterMs(response: Response, now: number = Date.now()): number | undefined {
+  if (response.status !== 429 && response.status !== 503) return undefined;
+  const value = response.headers.get('retry-after')?.trim();
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  // HTTP dates always name a weekday (RFC 9110); this keeps `Date.parse` from accepting bare numbers like "1.5".
+  if (!/^[a-z]{3,9},? /i.test(value)) return undefined;
+  const date = Date.parse(value);
+  if (Number.isNaN(date)) return undefined;
+  return Math.max(0, date - now);
+}
+
+/**
+ * A caller configuration mistake (for example an unknown tool name in
+ * `requireApproval`) that must fail resolution instead of being downgraded
+ * to the resolver's warn-and-skip path, which exists for provider-side
+ * failures. Internal to the package: callers observe it as a regular
+ * `MastraConnectError` with code `invalid_options`.
+ *
+ * @internal
+ */
+export class MastraConnectConfigError extends MastraConnectError {
+  constructor(message: string) {
+    super('invalid_options', message);
+  }
+}
+
+function truncate(text: string): string {
+  return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
+}
+
+/**
+ * Pulls the first human-readable message from an array of error entries. Many
+ * providers (Clerk, Linear's GraphQL envelope, Nango v2) return
+ * `{ errors: [{ message, long_message, code }] }`; surfacing the first message
+ * is the most useful detail without echoing the whole payload.
+ */
+function extractFirstArrayMessage(errors: unknown[]): string | undefined {
+  for (const entry of errors) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as { message?: unknown; long_message?: unknown };
+    const message = typeof record.long_message === 'string' ? record.long_message : record.message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return undefined;
+}
+
+interface ProblemJson {
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  code?: string;
+  error?: string | { message?: unknown; code?: unknown };
+  // GitHub-style bodies surface a top-level `message` string.
+  message?: string;
+  // Jira surfaces human-readable messages as `errorMessages: string[]`.
+  errorMessages?: unknown;
+  // Many providers (Clerk, Nango v2, Linear's GraphQL envelope) surface
+  // errors as an array of objects with a `message` / `long_message` field.
+  // Jira instead uses an object map of `{ field: message }`.
+  errors?: unknown;
+}
+
+/**
+ * Extracts a human-readable detail string from an RFC-7807 problem JSON body
+ * (or a plain `{ error }` body) without echoing anything else from the response.
+ * Returns undefined when the body is not parseable JSON.
+ */
+export async function extractProblemDetail(
+  response: Response,
+  secret?: string,
+): Promise<{ detail?: string; code?: string; type?: string; isProblemJson: boolean }> {
+  const problem = await readProblemDetail(response);
+  if (problem.detail === undefined) return problem;
+  // A server that echoes the request's bearer token must not leak it into
+  // error messages and logs. Redact before truncating, so a token cut in two
+  // by the length limit can't leak its first part.
+  const detail = secret ? problem.detail.split(secret).join('[REDACTED]') : problem.detail;
+  return { ...problem, detail: truncate(detail) };
+}
+
+async function readProblemDetail(
+  response: Response,
+): Promise<{ detail?: string; code?: string; type?: string; isProblemJson: boolean }> {
+  const contentType = response.headers.get('content-type') ?? '';
+  // Platform-originated errors are identified strictly by the RFC-7807 content
+  // type. A provider error body that merely *looks* problem-shaped (e.g.
+  // ASP.NET ProblemDetails served as application/json) must not be
+  // misclassified as a platform error.
+  const isProblemJson = contentType.includes('application/problem+json');
+  try {
+    const data = (await response.clone().json()) as ProblemJson;
+    if (data && typeof data === 'object') {
+      // Microsoft Graph and OData services nest the code: `{ "error": { "code", "message" } }`.
+      // It is only used as a last-resort detail; `code` stays the platform's own top-level code.
+      const nestedCode =
+        data.error && typeof data.error === 'object' && typeof data.error.code === 'string' && data.error.code
+          ? data.error.code
+          : undefined;
+      const code = typeof data.code === 'string' ? data.code : undefined;
+      // The RFC-7807 problem type; the platform's machine-readable condition.
+      const type = typeof data.type === 'string' && data.type ? data.type : undefined;
+      for (const field of ['detail', 'title', 'error', 'message'] as const) {
+        const value = data[field];
+        if (typeof value === 'string' && value) {
+          return { detail: value, code, type, isProblemJson };
+        }
+        // OpenAI and similar providers nest the message: `{ "error": { "message": "..." } }`.
+        if (field === 'error' && value && typeof value === 'object') {
+          const message = value.message;
+          if (typeof message === 'string' && message) {
+            return { detail: message, code, type, isProblemJson };
+          }
+        }
+      }
+      // Jira: `{ errorMessages: ["..."], errors: {} }`.
+      if (Array.isArray(data.errorMessages)) {
+        const message = data.errorMessages.find(entry => typeof entry === 'string' && entry);
+        if (typeof message === 'string') return { detail: message, code, type, isProblemJson };
+      }
+      if (Array.isArray(data.errors)) {
+        const message = extractFirstArrayMessage(data.errors);
+        if (message) return { detail: message, code, type, isProblemJson };
+      } else if (data.errors && typeof data.errors === 'object') {
+        // Jira: `{ errorMessages: [], errors: { summary: "Field required" } }`.
+        const entry = Object.entries(data.errors).find(([, value]) => typeof value === 'string' && value);
+        if (entry) return { detail: `${entry[0]}: ${entry[1]}`, code, type, isProblemJson };
+      }
+      // Graph sometimes returns an empty message (e.g. a 401 `UnknownError`);
+      // its code is then the only diagnostic it offers.
+      if (nestedCode) return { detail: nestedCode, code, type, isProblemJson };
+      return { code, type, isProblemJson };
+    }
+  } catch {
+    // Non-JSON body: fall through without echoing it.
+  }
+  return { isProblemJson };
+}

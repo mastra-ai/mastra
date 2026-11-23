@@ -1,7 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
+import type { CurrentUser } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -9,7 +9,6 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderSkillsView from '../view';
-import type { CurrentUser } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -59,7 +58,6 @@ const renderPage = (skillId: string) => {
 };
 
 beforeEach(() => {
-  usePlaygroundStore.setState({ requestContext: {} });
   setCurrentUser({ id: 'viewer-1' });
   server.use(
     http.get(`${BASE_URL}/api/stored/skills`, () =>

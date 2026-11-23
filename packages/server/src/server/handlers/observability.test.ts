@@ -9,6 +9,7 @@ import type {
   LightSpanRecord,
 } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
 import {
@@ -24,6 +25,7 @@ import {
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
 import { LIST_METRICS, NEW_ROUTES } from './observability-new-endpoints';
+import { NO_OBSERVABILITY_STORAGE_CAPABILITIES } from './observability-shared';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
@@ -53,6 +55,7 @@ const createMockObservabilityStore = () => ({
   listLogs: vi.fn(),
   listScores: vi.fn(),
   createScore: vi.fn(),
+  deleteScores: vi.fn(),
   getScoreById: vi.fn(),
   getScoreAggregate: vi.fn(),
   getScoreBreakdown: vi.fn(),
@@ -60,6 +63,7 @@ const createMockObservabilityStore = () => ({
   getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  deleteFeedback: vi.fn(),
   updateFeedbackReviewStatus: vi.fn(),
   getFeedbackAggregate: vi.fn(),
   getFeedbackBreakdown: vi.fn(),
@@ -1615,7 +1619,7 @@ describe('Observability Handlers', () => {
         score: scoreData,
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createScore).toHaveBeenCalledWith({
         score: expect.objectContaining({ ...scoreData, scoreId: expect.any(String), timestamp: expect.any(Date) }),
       });
@@ -1694,6 +1698,140 @@ describe('Observability Handlers', () => {
   });
 
   describe('LIST_FEEDBACK_ROUTE', () => {
+    it.each(['absent', 'unsupported', 'batch-error', 'individual-error', 'empty', 'no-ids'])(
+      'given %s resolution, when listing feedback, then preserves unresolved records without unnecessary lookups',
+      async scenario => {
+        const getUser = vi.fn().mockRejectedValue(new Error('User lookup failed'));
+        const getUsers = vi.fn().mockRejectedValue(new Error('Batch lookup failed'));
+        const provider = {
+          authenticateToken: vi.fn(),
+          getCurrentUser: vi.fn(),
+          getUser,
+          ...(scenario === 'individual-error' ? {} : { getUsers }),
+        };
+        const mastra = Object.assign(mockMastra, {
+          getServer: () => ({
+            auth:
+              scenario === 'absent'
+                ? undefined
+                : scenario === 'unsupported'
+                  ? { authenticateToken: vi.fn() }
+                  : provider,
+          }),
+        });
+        const feedback =
+          scenario === 'empty'
+            ? []
+            : [
+                {
+                  timestamp: new Date(),
+                  feedbackType: 'comment',
+                  value: 'hi',
+                  reviewStatus: 'needs-review',
+                  ...(scenario === 'no-ids' ? {} : { feedbackUserId: 'missing' }),
+                },
+              ];
+        mockObservabilityStore.listFeedback.mockResolvedValue({ feedback });
+        const response = await NEW_ROUTES.LIST_FEEDBACK.handler(createTestServerContext({ mastra }));
+        expect(NEW_ROUTES.LIST_FEEDBACK.responseSchema!.parse(response)).toEqual({ feedback });
+        expect(getUsers).toHaveBeenCalledTimes(scenario === 'batch-error' ? 1 : 0);
+        expect(getUser).toHaveBeenCalledTimes(scenario === 'individual-error' ? 1 : 0);
+      },
+    );
+
+    it('given separate Studio auth, when Studio lists feedback, then uses only the Studio directory', async () => {
+      const getUser = vi.fn().mockResolvedValue({ id: 'user-1', name: 'Server' });
+      const studioGetUser = vi.fn().mockResolvedValue({ id: 'user-1', name: 'Studio' });
+      const mastra = Object.assign(mockMastra, {
+        getServer: () => ({ auth: { authenticateToken: vi.fn(), getCurrentUser: vi.fn(), getUser } }),
+        getStudio: () => ({ auth: { authenticateToken: vi.fn(), getCurrentUser: vi.fn(), getUser: studioGetUser } }),
+      });
+      mockObservabilityStore.listFeedback.mockResolvedValue({
+        feedback: [
+          {
+            timestamp: new Date(),
+            feedbackType: 'comment',
+            value: 'hi',
+            reviewStatus: 'needs-review',
+            feedbackUserId: 'user-1',
+          },
+        ],
+      });
+      const result = await NEW_ROUTES.LIST_FEEDBACK.handler({
+        ...createTestServerContext({ mastra }),
+        request: new Request('http://localhost/observability/feedback', {
+          headers: { 'x-mastra-client-type': 'studio' },
+        }),
+      });
+      expect(result.feedback[0]).toHaveProperty('author', { id: 'user-1', name: 'Studio' });
+      expect(getUser).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, 'page', 'delta'] as const)(
+      'given mixed feedback authors, when listing in %s mode, then preserves records and metadata',
+      async mode => {
+        const getUsers = vi
+          .fn()
+          .mockResolvedValue([
+            { id: 'normalized-id', name: 'Alice', email: 'alice@example.com', token: 'secret' },
+            null,
+          ]);
+        const mastra = Object.assign(mockMastra, {
+          getServer: () => ({
+            auth: { authenticateToken: vi.fn(), getCurrentUser: vi.fn(), getUser: vi.fn(), getUsers },
+          }),
+        });
+        const feedback = ['user-1', undefined, 'deleted', 'user-1'].map((feedbackUserId, index) => ({
+          feedbackId: String(index),
+          timestamp: new Date(),
+          feedbackType: 'comment',
+          value: 'hi',
+          reviewStatus: 'needs-review',
+          ...(feedbackUserId ? { feedbackUserId } : {}),
+        }));
+        const pagination = { total: 4, page: 0, perPage: 10, hasMore: false };
+        const metadata =
+          mode === 'delta' ? { delta: { limit: 10, hasMore: true }, deltaCursor: 'next' } : { pagination };
+        mockObservabilityStore.getFeatures.mockReturnValue(['delta-polling']);
+        mockObservabilityStore.listFeedback.mockResolvedValue({ feedback, ...metadata });
+
+        const response = await NEW_ROUTES.LIST_FEEDBACK.handler({ ...createTestServerContext({ mastra }), mode });
+        const result = NEW_ROUTES.LIST_FEEDBACK.responseSchema!.parse(response);
+        const author = { id: 'user-1', name: 'Alice', email: 'alice@example.com' };
+        expect(result).toEqual({
+          ...metadata,
+          feedback: [{ ...feedback[0], author }, feedback[1], feedback[2], { ...feedback[3], author }],
+        });
+        expect(getUsers).toHaveBeenCalledExactlyOnceWith(['user-1', 'deleted']);
+      },
+    );
+
+    it('given an author profile, when validating the list response, then retains only public author fields', () => {
+      const result = NEW_ROUTES.LIST_FEEDBACK.responseSchema!.parse({
+        feedback: [
+          {
+            timestamp: new Date(),
+            feedbackType: 'comment',
+            value: 'hi',
+            reviewStatus: 'needs-review',
+            author: {
+              id: 'user-1',
+              name: 'Alice',
+              email: 'alice@example.com',
+              avatarUrl: 'avatar.png',
+              token: 'private',
+            },
+          },
+        ],
+      });
+      expect(result.feedback[0]).toHaveProperty('author', {
+        id: 'user-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        avatarUrl: 'avatar.png',
+      });
+    });
+
     it('should return paginated results with default parameters', async () => {
       const mockResult = {
         pagination: {
@@ -1793,34 +1931,57 @@ describe('Observability Handlers', () => {
     });
   });
 
-  describe('UPDATE_FEEDBACK_REVIEW_STATUS_ROUTE', () => {
-    it('should update and return the feedback review status', async () => {
-      const feedback = {
-        feedbackId: 'feedback-123',
-        timestamp: new Date('2026-09-01T12:00:00.000Z'),
-        traceId: 'trace-123',
-        feedbackSource: 'user',
-        feedbackType: 'comment',
-        value: 'Needs follow-up',
-        reviewStatus: 'reviewed' as const,
-      };
-      (mockObservabilityStore.updateFeedbackReviewStatus as ReturnType<typeof vi.fn>).mockResolvedValue(feedback);
+  describe('CREATE_FEEDBACK_ROUTE', () => {
+    it('given an authenticated user, when creating feedback, then persists their ID instead of the submitted ID', async () => {
+      const context = createTestServerContext({ mastra: mockMastra });
+      context.requestContext.set(MASTRA_USER_KEY, { id: 'authenticated-user' });
 
-      const result = await NEW_ROUTES.UPDATE_FEEDBACK_REVIEW_STATUS.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        feedbackId: 'feedback-123',
-        reviewStatus: 'reviewed',
+      const result = await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...context,
+        feedback: {
+          traceId: 'trace-123',
+          source: 'user',
+          feedbackType: 'comment',
+          value: 'hi',
+          feedbackUserId: 'submitted-user',
+        },
       });
 
-      expect(result).toEqual(feedback);
-      expect(mockObservabilityStore.updateFeedbackReviewStatus).toHaveBeenCalledWith({
-        feedbackId: 'feedback-123',
-        reviewStatus: 'reviewed',
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
+        feedback: expect.objectContaining({ feedbackUserId: 'authenticated-user' }),
       });
     });
-  });
 
-  describe('CREATE_FEEDBACK_ROUTE', () => {
+    it.each([undefined, null, {}, { id: '' }, { id: '  ' }, { id: 123 }])(
+      'given unusable identity %j, when creating feedback, then preserves optional explicit attribution',
+      async user => {
+        const context = createTestServerContext({ mastra: mockMastra });
+        context.requestContext.set(MASTRA_USER_KEY, user);
+        context.requestContext.set('mastra__resourceId', 'trace-subject');
+        for (const feedbackUserId of [undefined, 'explicit-user']) {
+          const result = await NEW_ROUTES.CREATE_FEEDBACK.handler({
+            ...context,
+            feedback: {
+              traceId: 'trace-123',
+              source: 'user',
+              feedbackType: 'comment',
+              value: 'hi',
+              ...(feedbackUserId ? { feedbackUserId } : {}),
+            },
+          });
+          expect(result).toMatchObject({
+            success: true,
+            data: { traceId: 'trace-123', timestamp: expect.any(String) },
+          });
+          const stored = mockObservabilityStore.createFeedback.mock.lastCall?.[0].feedback;
+          if (feedbackUserId) expect(stored.feedbackUserId).toBe(feedbackUserId);
+          else expect(stored.feedbackUserId).toBeNull();
+        }
+      },
+    );
+
     it('should create feedback successfully', async () => {
       (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
@@ -1838,8 +1999,9 @@ describe('Observability Handlers', () => {
         feedback: feedbackData,
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({
           ...feedbackData,
           feedbackId: expect.any(String),
@@ -1868,6 +2030,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
       });
     });
@@ -1881,6 +2044,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ reviewStatus: 'needs-review' }),
       });
     });
@@ -1900,6 +2064,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        onConflict: 'ignore',
         feedback: expect.objectContaining({ reviewStatus: 'reviewed' }),
       });
     });
@@ -1953,6 +2118,130 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'create feedback'");
+    });
+  });
+
+  describe('DELETE_SCORES_ROUTE', () => {
+    it('should delete scores successfully', async () => {
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_SCORES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreIds: ['score-1', 'score-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteScores).toHaveBeenCalledWith({ scoreIds: ['score-1', 'score-2'] });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass tenant scope to the storage layer', async () => {
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.DELETE_SCORES.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        scoreIds: ['score-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+
+      expect(mockObservabilityStore.deleteScores).toHaveBeenCalledWith({
+        scoreIds: ['score-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+    });
+
+    it('should throw 500 when storage is not available', async () => {
+      const mastraWithoutStorage = createMockMastra(undefined);
+
+      try {
+        await NEW_ROUTES.DELETE_SCORES.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+          scoreIds: ['score-1'],
+        });
+        expect.fail('expected handler to throw');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Storage is not available');
+      }
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database delete failed');
+      (mockObservabilityStore.deleteScores as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.DELETE_SCORES.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          scoreIds: ['score-1'],
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete scores'");
+    });
+  });
+
+  describe('DELETE_FEEDBACK_ROUTE', () => {
+    it('should delete feedback successfully', async () => {
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await NEW_ROUTES.DELETE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackIds: ['fb-1', 'fb-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.deleteFeedback).toHaveBeenCalledWith({ feedbackIds: ['fb-1', 'fb-2'] });
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should pass tenant scope to the storage layer', async () => {
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.DELETE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackIds: ['fb-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+
+      expect(mockObservabilityStore.deleteFeedback).toHaveBeenCalledWith({
+        feedbackIds: ['fb-1'],
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+      });
+    });
+
+    it('should throw 500 when storage is not available', async () => {
+      const mastraWithoutStorage = createMockMastra(undefined);
+
+      try {
+        await NEW_ROUTES.DELETE_FEEDBACK.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+          feedbackIds: ['fb-1'],
+        });
+        expect.fail('expected handler to throw');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Storage is not available');
+      }
+    });
+
+    it('should call handleError when storage throws', async () => {
+      const storageError = new Error('Database delete failed');
+      (mockObservabilityStore.deleteFeedback as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+
+      await expect(
+        NEW_ROUTES.DELETE_FEEDBACK.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          feedbackIds: ['fb-1'],
+        }),
+      ).rejects.toThrow();
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'delete feedback'");
     });
   });
 
@@ -3100,6 +3389,112 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, "Error calling: 'get tags'");
+    });
+  });
+
+  describe('discovery routes on stores without discovery support', () => {
+    const createLegacyMastra = async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class LegacyObservabilityStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new LegacyObservabilityStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+      return createMockMastra(storage);
+    };
+
+    it.each([
+      ['GET_ENTITY_TYPES', {}, { entityTypes: [] }],
+      ['GET_ENTITY_NAMES', {}, { names: [] }],
+      ['GET_SERVICE_NAMES', {}, { serviceNames: [] }],
+      ['GET_ENVIRONMENTS', {}, { environments: [] }],
+      ['GET_TAGS', {}, { tags: [] }],
+      ['GET_METRIC_NAMES', {}, { names: [] }],
+      ['GET_METRIC_LABEL_KEYS', { metricName: 'mastra_agent_duration_ms' }, { keys: [] }],
+      ['GET_METRIC_LABEL_VALUES', { metricName: 'mastra_agent_duration_ms', labelKey: 'agent' }, { values: [] }],
+    ] as const)('%s returns an empty result instead of an error', async (routeKey, params, expected) => {
+      const mastra = await createLegacyMastra();
+      const route = NEW_ROUTES[routeKey] as { handler: (args: unknown) => Promise<unknown> };
+
+      const result = await route.handler({ ...createTestServerContext({ mastra }), ...params });
+
+      expect(result).toEqual(expected);
+      expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET_CAPABILITIES', () => {
+    it('reports every flag as unsupported when no storage is configured', async () => {
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(undefined) }),
+      });
+
+      expect(result).toEqual({
+        observabilityStorageType: null,
+        capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+      });
+    });
+
+    it('reports the configured store and its declared capabilities', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class DeclaredStore extends ObservabilityStorage {
+        override getFeatures() {
+          return [
+            'metrics',
+            'tag-discovery',
+            'trace-query',
+            'trace-query-context-ids',
+            'trace-query-context-fields',
+            'trace-query-root-span-fields',
+            'trace-query-root-entity-id',
+            'span-query',
+            'span-query-context-fields',
+            'feedback',
+          ] as const;
+        }
+      }
+      const storage = createMockStorage(
+        new DeclaredStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(storage) }),
+      });
+
+      expect(result.observabilityStorageType).toBe('DeclaredStore');
+      expect(result.capabilities).toMatchObject({
+        metrics: true,
+        logs: false,
+        traceQuery: true,
+        traceQueryContextIds: true,
+        traceQueryContextFields: true,
+        traceQueryRootSpanFields: true,
+        traceQueryRootEntityId: true,
+        traceQueryRootDuration: false,
+        spanQuery: true,
+        spanQueryContextFields: true,
+        feedback: true,
+      });
+      expect(result.capabilities.discovery.tags).toBe(true);
+    });
+
+    it('reports legacy stores without feature declarations as unsupported', async () => {
+      const { ObservabilityStorage } = await import('@mastra/core/storage');
+      class LegacyStore extends ObservabilityStorage {}
+      const storage = createMockStorage(
+        new LegacyStore() as unknown as ReturnType<typeof createMockObservabilityStore>,
+        mockScoresStore,
+      );
+
+      const result = await NEW_ROUTES.GET_CAPABILITIES.handler({
+        ...createTestServerContext({ mastra: createMockMastra(storage) }),
+      });
+
+      expect(result).toEqual({
+        observabilityStorageType: 'LegacyStore',
+        capabilities: NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+      });
     });
   });
 });

@@ -16,9 +16,10 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
+import type { Processor } from '../../../../processors';
 import { TaskSignalProvider } from '../../../../signals';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines, anyToolResult } from '../aimock-scenario';
 
 describeForAllEngines(
   'AIMock loop scenario: output step processor (per-step)',
@@ -56,13 +57,16 @@ describeForAllEngines(
         fixtures: llm => {
           // Turn 1: emit a tool call
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: { key: 'alpha' } }],
             },
           );
           // Turn 2: final text
-          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value for alpha is VALUE_FOR_alpha.' });
+          llm.on(
+            { endpoint: 'chat', predicate: anyToolResult },
+            { content: 'The value for alpha is VALUE_FOR_alpha.' },
+          );
         },
       });
 
@@ -137,14 +141,14 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               toolCalls: [
                 { id: 'call_lookup_memory_regression', name: 'lookup_memory_regression', arguments: { key: 'beta' } },
               ],
             },
           );
-          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'VALUE_FOR_beta' });
+          llm.on({ endpoint: 'chat', predicate: anyToolResult }, { content: 'VALUE_FOR_beta' });
         },
       });
 
@@ -221,7 +225,7 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               toolCalls: [
                 {
@@ -346,7 +350,7 @@ describeForAllEngines(
         },
         fixtures: llm => {
           llm.on(
-            { endpoint: 'chat', hasToolResult: false },
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
             {
               content: 'TEXT_BEFORE_TASK_WRITE',
               toolCalls: [
@@ -395,6 +399,192 @@ describeForAllEngines(
         ],
         [{ type: 'text', text: 'TASK_SIGNAL_TEXT_DONE' }],
       ]);
+    });
+
+    // stopWhen ending the run on a step that has both text and a tool call (#24917). The model
+    // writes a sentence, then calls `ask` to hand the turn back to the user; stopWhen stops there.
+    const askTool = createTool({
+      id: 'ask',
+      description: 'Ask the user a question.',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async () => ({ answered: true }),
+    });
+    const noteTool = createTool({
+      id: 'note',
+      description: 'Write an internal note.',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async () => ({}),
+    });
+    const askCall = { id: 'call_ask', name: 'ask', arguments: { question: 'ok?' } };
+    const stopOnAsk = ({ steps }: { steps: any[] }) =>
+      steps.at(-1)?.toolCalls?.some((c: any) => (c.toolName ?? c.payload?.toolName) === 'ask') ?? false;
+    const passThrough: Processor = { id: 'pass-through', processOutputStream: async ({ part }) => part };
+    const streamedText = (chunks: { type: string; payload?: any }[] | undefined) =>
+      (chunks ?? [])
+        .filter(c => c.type === 'text-delta')
+        .map(c => c.payload.text)
+        .join('');
+
+    // Technical: with an output processor, a final step holding text + a tool call used to lose
+    // its text from stream.text and steps[].text once stopWhen ended the run (#24917).
+    for (const withProcessor of [false, true]) {
+      it(`a question asked alongside a sentence keeps the sentence (processor: ${withProcessor})`, async () => {
+        const { output, chunks } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'hi',
+          tools: { ask: askTool },
+          stopWhen: stopOnAsk as any,
+          collectChunks: true,
+          ...(withProcessor ? { outputProcessors: [passThrough] } : {}),
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Hello there.', toolCalls: [askCall] });
+          },
+        });
+
+        const steps = await output.steps;
+        expect(streamedText(chunks)).toBe('Hello there.');
+        expect(steps).toHaveLength(1);
+        expect(steps.at(-1)!.text).toBe('Hello there.');
+        expect(await output.text).toBe('Hello there.');
+      });
+
+      // Technical: when the final step is tool-only, text from an earlier step must not be
+      // reported as the final step's text or the run text.
+      it(`a question asked without a sentence reports no text (processor: ${withProcessor})`, async () => {
+        const { output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'hi',
+          tools: { ask: askTool, note: noteTool },
+          stopWhen: stopOnAsk as any,
+          ...(withProcessor ? { outputProcessors: [passThrough] } : {}),
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', predicate: req => !anyToolResult(req) },
+              {
+                content: 'Let me check.',
+                toolCalls: [{ id: 'call_note', name: 'note', arguments: { question: 'x' } }],
+              },
+            );
+            llm.on({ endpoint: 'chat', predicate: anyToolResult }, { toolCalls: [askCall] });
+          },
+        });
+
+        const steps = await output.steps;
+        expect(steps).toHaveLength(2);
+        expect(steps.at(-1)!.text).toBe('');
+        expect(await output.text).toBe('');
+      });
+    }
+
+    // Technical: a processOutputStream rewrite of text-delta on a text + tool-call final step is
+    // what steps[].text and output.text report, not the raw model text.
+    for (const [label, rewrite] of [
+      ['redacts', '[REDACTED]'],
+      ['clears', ''],
+    ] as const) {
+      it(`a sentence the processor ${label} before a question is reported as processed`, async () => {
+        const redact: Processor = {
+          id: 'redact',
+          processOutputStream: async ({ part }) =>
+            part.type === 'text-delta' ? { ...part, payload: { ...part.payload, text: rewrite } } : part,
+        };
+        const { output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'hi',
+          tools: { ask: askTool },
+          stopWhen: stopOnAsk as any,
+          outputProcessors: [redact],
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'SECRET', toolCalls: [askCall] });
+          },
+        });
+
+        expect((await output.steps).at(-1)!.text).toBe(rewrite);
+        expect(await output.text).toBe(rewrite);
+      });
+    }
+
+    // Technical: processOutputResult edits to an earlier step must be what onFinish receives,
+    // even when stopWhen ends the run on a later tool-only step.
+    it('onFinish gets the redacted sentence when the run stops on a question', async () => {
+      const redactFinish: Processor = {
+        id: 'redact-finish-messages',
+        processOutputResult: async ({ messages }) =>
+          messages.map(message => ({
+            ...message,
+            content: {
+              ...message.content,
+              parts: message.content.parts?.map(part =>
+                part.type === 'text' ? { ...part, text: part.text.replace('SECRET', '[r]') } : part,
+              ),
+            },
+          })),
+      };
+      let finishMessages: unknown;
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'hi',
+        tools: { ask: askTool, note: noteTool },
+        stopWhen: stopOnAsk as any,
+        outputProcessors: [redactFinish],
+        onFinish: async ({ messages }: { messages: unknown }) => {
+          finishMessages = messages;
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', predicate: req => !anyToolResult(req) },
+            { content: 'SECRET ', toolCalls: [{ id: 'call_note', name: 'note', arguments: { question: 'x' } }] },
+          );
+          llm.on({ endpoint: 'chat', predicate: anyToolResult }, { toolCalls: [askCall] });
+        },
+      });
+
+      expect(JSON.stringify(finishMessages)).toContain('[r]');
+      expect(JSON.stringify(finishMessages)).not.toContain('SECRET');
+    });
+
+    // #26346: feedback continuation must not duplicate earlier text during result processing.
+    // Technical: processOutputResult rewrites appear on their own steps, not only the last step.
+    // Known gap: durable, evented and inngest engines report the raw step text ('firstmore') because the
+    // processOutputResult rewrite is not reconciled back onto steps after a feedback continuation.
+    const itFailsOnDurable = engine === 'durable' || engine === 'evented' || engine === 'inngest' ? it.fails : it;
+    itFailsOnDurable('a reply continued after feedback reports each processed part on its own step', async () => {
+      const upper: Processor = {
+        id: 'collapse-continuation-result',
+        processOutputResult: async ({ messages }) =>
+          messages.map(message => {
+            if (message.role !== 'assistant' || message.content?.metadata?.completionResult) return message;
+            const text = message.content.parts
+              ?.map(part => (part.type === 'text' ? part.text.toUpperCase() : ''))
+              .join('');
+            return { ...message, content: { ...message.content, content: text, parts: [{ type: 'text', text }] } };
+          }),
+      };
+      let iteration = 0;
+
+      const { output } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'hi',
+        maxSteps: 2,
+        outputProcessors: [upper],
+        onIterationComplete: async () =>
+          ++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined,
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'first' });
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'more' });
+        },
+      });
+
+      const full = await output.getFullOutput();
+      expect(await output.text).toBe('FIRSTMORE');
+      expect(full.text).toBe('FIRSTMORE');
+      expect(full.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
     });
   },
   {},

@@ -10,19 +10,14 @@ type ModelRequestHeaders = Record<string, string>;
 type BedrockModel = ReturnType<ReturnType<typeof createAmazonBedrock>>;
 type BedrockPrompt = Parameters<BedrockModel['doGenerate']>[0]['prompt'];
 
-const CACHEABLE_BEDROCK_MODEL_IDS = [
-  'anthropic.claude-3-5-haiku-',
-  'anthropic.claude-3-5-sonnet-20241022-v2:0',
-  'anthropic.claude-3-7-sonnet-',
-  'anthropic.claude-fable-5',
-  'anthropic.claude-haiku-4-5-',
-  'anthropic.claude-opus-4-',
-  'anthropic.claude-sonnet-4-',
-  'anthropic.claude-sonnet-5',
-];
+// Claude 3.x is a closed set: only these three variants support cachePoint on Bedrock.
+// claude-3-5-sonnet-20240620 is intentionally excluded (only the 20241022-v2:0 variant caches).
+// Every Claude 4+ and every named family (opus-5, sonnet-5, fable, mythos, …) supports it.
+const CLAUDE_3_CACHEABLE = /claude-3-7-sonnet|claude-3-5-sonnet-20241022|claude-3-5-haiku/;
 
 export function supportsBedrockPromptCaching(modelId: string): boolean {
-  return CACHEABLE_BEDROCK_MODEL_IDS.some(cacheableModelId => modelId.includes(cacheableModelId));
+  if (!modelId.includes('anthropic.claude')) return false;
+  return /anthropic\.claude-3-/.test(modelId) ? CLAUDE_3_CACHEABLE.test(modelId) : true;
 }
 
 export function addBedrockCachePoints(prompt: BedrockPrompt): BedrockPrompt {

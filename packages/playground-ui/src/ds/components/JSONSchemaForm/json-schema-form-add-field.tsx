@@ -3,6 +3,7 @@ import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 export type JSONSchemaFormAddFieldProps = Omit<ButtonProps, 'onClick'>;
 
@@ -11,14 +12,14 @@ export function AddField({ children, ...props }: JSONSchemaFormAddFieldProps) {
   const nestedContext = useJSONSchemaFormNestedContext();
 
   // Use nested context parentPath if available, otherwise add to root
-  const parentPath = nestedContext ? nestedContext.parentPath : [];
+  const parentPath = nestedContext?.parentPath;
 
   const handleClick = React.useCallback(() => {
-    addField(parentPath);
+    addField(parentPath ?? []);
   }, [addField, parentPath]);
 
   return (
-    <Button type="button" {...props} onClick={handleClick}>
+    <Button icon={<IconPlusMedium />} type="button" {...props} onClick={handleClick}>
       {children || 'Add field'}
     </Button>
   );

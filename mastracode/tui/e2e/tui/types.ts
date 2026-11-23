@@ -5,9 +5,22 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'factory-client-mode'
   | 'abort-followup'
+  | 'abort-escape-off'
+  | 'abort-escape-durable'
+  | 'abort-escape-evented'
+  | 'abort-queued-followup'
+  | 'startup-interrupted'
+  | 'account-rotation'
+  | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-cross-project'
+  | 'agent-connections-expected-reply-watchdog'
+  | 'agent-connections-tool-flow'
+  | 'agent-connections-notification-signal'
+  | 'agents-md-autoload'
   | 'autocomplete-wrapping-navigation'
   | 'api-key-delete-env'
   | 'api-key-multi-provider-delete'
@@ -16,19 +29,32 @@ export type ScenarioName =
   | 'approval-overlay-focus'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'automated-chat-unix-pubsub'
+  | 'background-adoption-deferred'
+  | 'background-adoption-awaited'
+  | 'background-adoption-cancel'
+  | 'background-adoption-failure'
+  | 'background-placeholder-opt-in'
+  | 'background-placeholder-opt-out'
+  | 'background-subagents'
+  | 'background-tools-settings'
   | 'browser-active-pending-status'
   | 'browser-model-picker'
   | 'browser-viewport'
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
+  | 'browser-status-model'
+  | 'browser-status-chat-model'
   | 'browser-tool-unavailable'
   | 'browserbase-startup-restore'
   | 'browser-toggle-attach'
   | 'browser-wizard-browserbase'
   | 'browser-wizard-export'
   | 'clipboard-image-paste'
+  | 'connect-command'
   | 'commit-attribution-prompt'
+  | 'codex-fast-model-picker'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
   | 'custom-pack-import-rename'
@@ -38,15 +64,21 @@ export type ScenarioName =
   | 'custom-provider-management'
   | 'custom-provider-modal-validation'
   | 'custom-provider-model-selector'
+  | 'cross-agent-settings'
   | 'custom-slash-command'
   | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'
   | 'debug-logging'
+  | 'experimental-agent-durable'
+  | 'experimental-agent-evented'
+  | 'experimental-agent-settings'
   | 'file-attachment-blocked-retry'
   | 'file-attachment-history-reload'
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'schedules-command'
+  | 'schedules-multiline-prompt'
   | 'github-signals-multi-subscribe'
   | 'github-signals-legacy-upgrade'
   | 'github-signals-tool-multi-subscribe'
@@ -59,10 +91,21 @@ export type ScenarioName =
   | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
+  | 'goal-judge-esc-loaded'
+  | 'goal-judge-esc-unloaded'
+  | 'goal-max-runs-ends-goal'
+  | 'goal-resume-single-render'
+  | 'goal-survives-new-thread'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
+  | 'initial-prompt'
+  | 'initial-prompt-skill'
+  | 'initial-prompt-resume'
+  | 'tui-prompt-resume'
   | 'openai-strict-schema'
+  | 'pack-flag-startup'
   | 'plan-approval-goal-handoff'
+  | 'plan-approval-goal-replaces-active'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
   | 'permission-request-hook'
@@ -71,6 +114,8 @@ export type ScenarioName =
   | 'persistent-goal-reload'
   | 'plugins-local-tool'
   | 'plugins-local-hot-reload'
+  | 'plugins-local-reload-failure'
+  | 'plugins-signal-provider-start-failure'
   | 'plugins-github-install-gh-cli-pnpm-10'
   | 'plugins-github-install-gh-cli-pnpm-11'
   | 'plugins-github-install-missing-corepack'
@@ -84,6 +129,7 @@ export type ScenarioName =
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'provider-history-rejection-retry'
+  | 'provider-safety-rejection'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
   | 'profile-command'
@@ -92,11 +138,12 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'knowledge-browser'
+  | 'knowledge-settings'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-keeps-om-auto'
   | 'login-preserves-model-pack'
-  | 'login-seeds-om-default'
   | 'modal-and-shell'
   | 'mcp-disable-enable'
   | 'mcp-http-tool-call'
@@ -108,15 +155,26 @@ export type ScenarioName =
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
   | 'model-search'
+  | 'mouse-modal-and-autocomplete'
+  | 'mouse-input-mode'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
+  | 'mode-switch-applies-pack-model'
   | 'models-pack-activation-persistence'
+  | 'models-pack-memory-auto'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
+  | 'notification-signal-interrupt'
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'
+  | 'om-auto-selection'
+  | 'om-auto-preview-google-api-key'
+  | 'om-auto-preview-stored-google-key'
+  | 'om-auto-preview-anthropic-only'
+  | 'missing-embedder-headless'
+  | 'missing-embedder-tui'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
@@ -125,36 +183,42 @@ export type ScenarioName =
   | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'onboarding-om-follows-login'
-  | 'quiet-settings'
+  | 'legacy-settings-no-prompt'
+  | 'legacy-settings-upgrade'
+  | 'preview-lines-settings'
   | 'web-search-provider-settings'
-  | 'quiet-streaming-preview-height'
-  | 'quiet-tool-history-parity'
+  | 'streaming-preview-height'
+  | 'tool-history-parity'
   | 'report-issue-command'
   | 'request-access-modal'
   | 'state-commands'
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
-  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'legacy-thread-model-restore'
+  | 'saved-thread-model-restore'
   | 'shell-passthrough-during-run'
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'
   | 'shell-passthrough-nonpersistent'
+  | 'skill-tab-autocomplete'
   | 'skills-command-activation'
   | 'skills-symlink-dedupe'
+  | 'status-footer-inline-start'
   | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
   | 'stream-error-retry'
   | 'streaming-render-stability'
   | 'streaming-tool-args'
+  | 'subagents-command'
   | 'subagent-delegation'
   | 'subagent-plan-execute-tools'
   | 'subagent-model-startup-restore'
@@ -162,7 +226,10 @@ export type ScenarioName =
   | 'task-patch-tools'
   | 'task-progress-events'
   | 'terminal-resize-reflow'
+  | 'think-picker-per-model'
   | 'task-prompt-context-next-turn'
+  | 'resume-locked-thread'
+  | 'resume-missing-thread'
   | 'thread-history'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'
@@ -171,6 +238,7 @@ export type ScenarioName =
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'
+  | 'gateway-web-search'
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
@@ -186,8 +254,21 @@ export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
+  /** Send an SGR left click at the first on-screen occurrence of `text`. */
+  clickText?: (text: string) => Promise<void>;
+  /** Press at `text` + `fromOffset` columns, drag and release at `text` + `toOffset` columns. */
+  dragText?: (text: string, fromOffset: number, toOffset: number) => Promise<void>;
+  /** Texts the app copied through OSC 52, oldest first. */
+  clipboardWrites?: () => string[];
+  /** Move the mouse (no button held) over the first on-screen occurrence of `text`. */
+  hoverText?: (text: string) => void;
+  /** Send SGR wheel events at the screen centre. */
+  wheel?: (direction: 'up' | 'down', count?: number) => void;
+  /** xterm's current mouse tracking mode ('none' when the terminal owns the mouse). */
+  mouseTracking?: () => string;
   resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
+  serializeHistory?: () => { output: string };
   submit: (text: string) => void;
   write: (text: string) => void;
 };
@@ -209,6 +290,8 @@ export type McE2eScenarioRuntime = {
 };
 
 export type McE2ePrepareContext = {
+  /** AIMock server origin, set when the scenario uses `useOpenAIModel`. */
+  aimockUrl?: string;
   appDataDir: string;
   dbPath: string;
   homeDir: string;
@@ -229,7 +312,17 @@ export type McE2eStartMastraCodeAppOptions = {
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<
-    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+    Pick<
+      MastraTUIOptions,
+      | 'appName'
+      | 'initialMessage'
+      | 'initialPackId'
+      | 'resumeSkipNotice'
+      | 'inlineQuestions'
+      | 'processMemoryDiagnostics'
+      | 'resumeThreadId'
+      | 'verbose'
+    >
   >;
 };
 
@@ -250,6 +343,10 @@ export type McE2eScenario = {
   projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
+  /** Opt into OM model work, which deterministic TUI scenarios suppress by default. */
+  enableObservationalMemory?: boolean;
+  /** Opt into title model work, which deterministic TUI scenarios suppress by default. */
+  enableTitleGeneration?: boolean;
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;

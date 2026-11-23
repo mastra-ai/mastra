@@ -8,16 +8,19 @@ export { fastModePrompt } from './fast.js';
 
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
+import type { RequestContextReader } from '../../auth/account-routing-context.js';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
+import { resolveProviderWebSearchRoute } from '../model.js';
 import {
-  loadAgentInstructions,
+  loadSessionInstructions,
+  loadSessionInstructionsAsync,
   formatInstructionSource,
-  createGitRefInstructionReader,
   AGENT_INSTRUCTIONS_HEADING,
 } from './agent-instructions.js';
+import type { InstructionSource } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
 import { modelSpecificPrompts } from './model.js';
@@ -28,9 +31,17 @@ import { buildToolGuidance } from './tool-guidance.js';
 export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
-  /** The subconscious knowledge tools are registered on the agent. */
-  hasSubconscious?: boolean;
   hostInstructions?: string;
+  /** Request whose credentials decide the model's transport, and so its web search tool. */
+  requestContext?: RequestContextReader;
+  /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
+  disabledBuiltinTools?: readonly string[];
+  /** Host-configured workspace-relative plans directory (see `MastraCodeConfig.plansDir`). */
+  plansDir?: string;
+  /** Agent tools removed via `disabledTools` (e.g. `web_search`); treated as denied. */
+  disabledTools?: readonly string[];
+  /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
+  submitPlanAvailable?: boolean;
   currentDate: string;
   workingDir: string;
 }
@@ -79,17 +90,30 @@ export function buildFullPrompt(ctx: PromptContext): string {
   return joinPromptSections(buildFullPromptSections(ctx));
 }
 
+export async function buildFullPromptSectionsAsync(ctx: PromptContext): Promise<PromptSection[]> {
+  const sources = ctx.workingDir
+    ? await loadSessionInstructionsAsync({
+        workingDir: ctx.workingDir,
+        instructionRoots: Array.isArray(ctx.state?.instructionRoots) ? ctx.state.instructionRoots : undefined,
+        configDir: ctx.state?.configDir,
+        untrustedCheckout: ctx.state?.untrustedCheckout === true,
+        baseRef: typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined,
+        skipGlobal: ctx.state?.skipGlobalInstructions === true,
+      })
+    : [];
+  return buildFullPromptSections(ctx, sources);
+}
+
 /**
  * Build the system prompt as labeled sections. `buildFullPrompt` is the join of
  * these, so the two can never disagree about what the model receives.
  */
-export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
+export function buildFullPromptSections(ctx: PromptContext, loadedInstructions?: InstructionSource[]): PromptSection[] {
   // Determine whether web search tools are available
-  const modelId = ctx.modelId;
+  // Parallel/Tavily register web_search and web_extract; provider search registers only web_search.
+  const hasWebExtract = hasParallelKey() || hasTavilyKey();
   const hasWebSearch =
-    hasParallelKey() ||
-    hasTavilyKey() ||
-    (!!modelId && (modelId.startsWith('anthropic/') || modelId.startsWith('openai/')));
+    hasWebExtract || resolveProviderWebSearchRoute(ctx.modelId, { requestContext: ctx.requestContext }) !== undefined;
 
   // Collect per-tool deny rules so guidance omits denied tools
   const deniedTools = new Set<string>();
@@ -100,6 +124,11 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     }
   }
 
+  // Disabled built-ins are never registered, so they are denied for guidance too.
+  for (const name of ctx.disabledBuiltinTools ?? []) deniedTools.add(name);
+  // `createDynamicTools` drops disabled agent tools (such as web_search), so omit their guidance too.
+  for (const name of ctx.disabledTools ?? []) deniedTools.add(name);
+
   // LSP is opt-in — when it is off the tool is never registered, so its
   // guidance must not be advertised either.
   if (resolveLspSetting(loadSettings().lsp) === false) deniedTools.add(MC_TOOLS.LSP_INSPECT);
@@ -108,9 +137,10 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
-    hasSubconscious: ctx.hasSubconscious === true,
+    hasWebExtract,
+    hasSubagents: ctx.hasSubagents,
     deniedTools,
-    plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
+    plansDir: getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir }),
   });
 
   // Map new context to base context
@@ -123,13 +153,19 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     date: ctx.currentDate,
     mode: ctx.modeId,
     modelId: ctx.modelId,
+    coAuthorName: ctx.coAuthorName,
+    coAuthorEmail: ctx.coAuthorEmail,
     activePlan: ctx.state?.activePlan,
+    hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
+    planApprovalStartsGoal: ctx.planApprovalStartsGoal,
     toolGuidance,
   };
 
   const base = buildBasePrompt(baseCtx);
   const entry = modePrompts[ctx.modeId] || modePrompts.build;
-  const modeSpecific = (typeof entry === 'function' ? entry(ctx) : entry) ?? '';
+  const modeSpecific =
+    (typeof entry === 'function' ? entry({ ...ctx, submitPlanAvailable: !deniedTools.has('submit_plan') }) : entry) ??
+    '';
   const modelSpecific = ctx.modelId
     ? (modelSpecificPrompts[ctx.modelId as keyof typeof modelSpecificPrompts] ?? '')
     : '';
@@ -148,24 +184,29 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // without one, project-scope files are skipped entirely. Home-directory
   // (global) instructions belong to whoever owns the machine, so hosts that
   // run sessions for someone else opt out of them entirely.
+  // A host booting several checkouts under one working directory names them
+  // as `instructionRoots`, so each checkout's own files load.
   const configDir = ctx.state?.configDir as string | undefined;
-  const untrustedCheckout = ctx.state?.untrustedCheckout === true;
-  const skipGlobalInstructions = ctx.state?.skipGlobalInstructions === true;
   const baseRef = typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined;
-  const projectReader = untrustedCheckout
-    ? baseRef
-      ? createGitRefInstructionReader(ctx.workingDir, baseRef)
-      : { exists: () => false, read: () => '' }
+  const instructionRoots = Array.isArray(ctx.state?.instructionRoots)
+    ? (ctx.state.instructionRoots as string[])
     : undefined;
   // No working directory means a hosted session with no project attached:
   // load NO instruction files at all — project locations would resolve
   // against the server's own cwd, and global locations against the server's
   // homedir. Neither belongs in a hosted session's prompt.
-  const instructionSources = ctx.workingDir
-    ? loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
-        skipGlobal: skipGlobalInstructions,
-      })
-    : [];
+  const instructionSources =
+    loadedInstructions ??
+    (ctx.workingDir
+      ? loadSessionInstructions({
+          workingDir: ctx.workingDir,
+          instructionRoots,
+          configDir,
+          untrustedCheckout: ctx.state?.untrustedCheckout === true,
+          baseRef,
+          skipGlobal: ctx.state?.skipGlobalInstructions === true,
+        })
+      : []);
   // Emitted per source so each AGENTS.md/CLAUDE.md can be costed individually.
   // The heading rides on the first source's section, which is exactly how
   // `formatAgentInstructions` lays the block out, so joining the sections

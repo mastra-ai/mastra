@@ -7,7 +7,7 @@ description: "Browse CrofAI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/crof.svg" alt="CrofAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CrofAI
 
-Access 23 CrofAI models through Mastra's model router. Authentication is handled automatically using the `CROF_API_KEY` environment variable.
+Access 24 CrofAI models through Mastra's model router. Authentication is handled automatically using the `CROF_API_KEY` environment variable.
 
 Learn more in the [CrofAI documentation](https://crof.ai/docs).
 
@@ -80,6 +80,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.08,
     "outputCost": 0.1
+  },
+  {
+    "model": "crof/deepseek-v4-flash-vision-exp",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.08,
+    "outputCost": 0.2
   },
   {
     "model": "crof/deepseek-v4-pro",
@@ -331,6 +343,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -348,6 +362,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
@@ -359,5 +375,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

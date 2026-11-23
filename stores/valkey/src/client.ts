@@ -1,4 +1,5 @@
-import { Batch, Decoder, GlideClient, type GlideClientConfiguration, type GlideString } from '@valkey/valkey-glide';
+import { Batch, Decoder, GlideClient } from '@valkey/valkey-glide';
+import type { GlideClientConfiguration, GlideString } from '@valkey/valkey-glide';
 
 export interface ValkeyMulti {
   del(key: string): ValkeyMulti;
@@ -21,6 +22,7 @@ export interface ValkeyClient {
   zRank(key: string, value: string): Promise<number | null>;
   zAdd(key: string, value: { score: number; value: string }): Promise<number>;
   zRem(key: string, value: string): Promise<number>;
+  eval(script: string, options: { keys: string[]; arguments: string[] }): Promise<unknown>;
   multi(): ValkeyMulti;
 }
 
@@ -131,13 +133,20 @@ export class GlideValkeyClient implements ValkeyClient {
     return asNumber(await this.command(['ZREM', key, value]));
   }
 
+  eval(script: string, { keys, arguments: args }: { keys: string[]; arguments: string[] }): Promise<unknown> {
+    return this.command(['EVAL', script, String(keys.length), ...keys, ...args]);
+  }
+
   multi(): ValkeyMulti {
     return new GlideMultiAdapter(() => this.getClient());
   }
 
   private getClient(): Promise<GlideClient> {
     if (this.suppliedClient) return Promise.resolve(this.suppliedClient);
-    this.clientPromise ??= GlideClient.createClient(this.config!);
+    this.clientPromise ??= GlideClient.createClient({
+      ...this.config!,
+      clientInfoTag: this.config?.clientInfoTag ?? 'mastra',
+    });
     return this.clientPromise;
   }
 

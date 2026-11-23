@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the actual behavior. Disable this rule for athletics or plumbing prose."
+message: "AI overused verb: '%s'. Describe the actual behavior. Disable this rule for athletics or plumbing prose."
 level: error
 nonword: true
 ignorecase: true
@@ -18,7 +18,7 @@ tokens:
   - "\\brun(?:s|ning)? afoul of\\b"
   - "\\brun(?:s|ning)? roughshod over\\b"
 
-  # --- Range theater: coverage dressed as a sprint ("runs the gamut,"
+  # --- Range theater: coverage phrased as a sprint ("runs the gamut,"
   # "runs the full spectrum").
   - "\\brun(?:s|ning)? the (?:full )?(?:gamut|spectrum)\\b"
 

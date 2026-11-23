@@ -3,8 +3,7 @@
  * This is the "brain" that makes the agent a good coding assistant.
  *
  * Product-specific strings (the agent's display name and the commit
- * `Co-Authored-By` name) are parameterized via `productName` / `coAuthorName`
- * and default to "Mastra Code" so existing callers keep identical output.
+ * `Co-Authored-By` name) are parameterized via `productName` / `coAuthorName`.
  */
 
 export interface PromptContext {
@@ -18,19 +17,27 @@ export interface PromptContext {
   modelId?: string;
   activePlan?: { title: string; plan: string; approvedAt: string } | null;
   toolGuidance: string;
+  /** Whether subagent guidance should be included. Defaults to true for compatibility. */
+  hasSubagents?: boolean;
   /** Display name used in the prompt header. Default: "Mastra Code". */
   productName?: string;
-  /** Name used in the commit `Co-Authored-By` line. Default: "Mastra Code". */
+  /** Name used in the commit `Co-Authored-By` line. Default: "mastra-platform[bot]". */
   coAuthorName?: string;
-  /** Email used in the commit `Co-Authored-By` line. Default: "noreply@mastra.ai". */
+  /** Email used in the commit `Co-Authored-By` line. Default: the mastra-platform bot noreply address. */
   coAuthorEmail?: string;
+  /** Whether approving a submit_plan plan starts it as a goal. False for hosts without goals (Factory). Default: true. */
+  planApprovalStartsGoal?: boolean;
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
   const commonBinaries = formatCommonBinaries(ctx.commonBinaries);
   const productName = ctx.productName ?? 'Mastra Code';
-  const coAuthorName = ctx.coAuthorName ?? 'Mastra Code';
-  const coAuthorEmail = ctx.coAuthorEmail ?? 'noreply@mastra.ai';
+  const coAuthorName = ctx.coAuthorName ?? 'mastra-platform[bot]';
+  const coAuthorEmail = ctx.coAuthorEmail ?? '284800079+mastra-platform[bot]@users.noreply.github.com';
+  const goalEntryGuidance =
+    ctx.planApprovalStartsGoal === false
+      ? '- Approving a plan submitted with the submit_plan tool switches to Build mode for implementation; it does not start a goal.'
+      : '- Users can start goal mode directly with /goal <objective>. In plan mode, approving a plan submitted with the submit_plan tool starts it as a goal.';
 
   return `You are ${productName}, an interactive CLI coding agent that helps users with software engineering tasks.
 
@@ -59,7 +66,7 @@ ${ctx.toolGuidance}
 
 ## Goal Mode Awareness
 - ${productName} has a goal mode for longer-running work. A goal is a persistent objective that the agent continues pursuing across turns until a judge decides the goal is complete, should continue, should pause, or should wait for user input.
-- Users can start goal mode directly with /goal <objective>. In plan mode, plans submitted with the submit_plan tool may also be started as a goal if the user selects that option in the approval UI.
+${goalEntryGuidance}
 - Help users create good goals by making objectives concrete, outcome-focused, verifiable, and bounded. Prefer goals that state the desired end state, relevant constraints, and what proof or verification should be produced.
 - When writing implementation plans, make them goal-ready: structure steps so they can be carried out autonomously after approval, include clear verification criteria, call out risks/blockers, and avoid vague instructions that would leave the goal judge unable to determine completion.
 - If a proposed goal is too broad or ambiguous to pursue safely, ask a focused clarification or suggest a tighter objective.
@@ -85,19 +92,24 @@ ${ctx.toolGuidance}
 Don't commit files likely to contain secrets (\`.env\`, \`*.key\`, \`credentials.json\`). Warn if asked.
 
 ## Commits
-Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName}${ctx.modelId ? ` (${ctx.modelId})` : ''} <${coAuthorEmail}>\` in the message body.
+Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName} <${coAuthorEmail}>\` in the message body.
 
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.
-When \`github_subscribe_pr\` and \`github_unsubscribe_pr\` are available, a successful \`gh pr create\` subscribes the current thread automatically, so do not call \`github_subscribe_pr\` after creating a PR. Use it only for an existing PR or to recover when automatic subscription did not occur. Closing or merging a PR unsubscribes it automatically; use \`github_unsubscribe_pr\` only to stop notifications earlier.
+When the work resolves Linear issues (ones you were asked to work on, or that the conversation, branch name, or work item names), end the description with one \`Fixes <ID>\` line per issue, each on its own line (e.g. \`Fixes ENG-123\` and \`Fixes ENG-124\` on separate lines), so the GitHub ↔ Linear sync links and closes them. Do the same for GitHub issues with \`Fixes #<number>\`, or \`Fixes <owner>/<repo>#<number>\` for an issue in another repository (a bare \`#<number>\` points at the PR's own repository). Use \`Ref <ID>\` instead for an issue the PR only partly addresses.
+When \`github_subscribe_pr\` and \`github_unsubscribe_pr\` are available, a successful \`gh pr create\` subscribes the current thread automatically, so do not call \`github_subscribe_pr\` after creating a PR. When you start working on an existing PR you did not create in this thread (for example reviewing it, fixing merge conflicts, rebasing it, addressing its review comments, fixing its CI, or pushing commits to its branch), call \`github_subscribe_pr\` for it first, so the thread hears when it merges or closes. Also call it to recover when automatic subscription did not occur. Closing or merging a PR unsubscribes it automatically; use \`github_unsubscribe_pr\` only to stop notifications earlier.
 
-# Subagent Rules
+${
+  ctx.hasSubagents !== false
+    ? `# Subagent Rules
 - Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself instead of delegating to a single subagent.
 - Use \`forked: true\` when the subagent needs the current conversation context, user-stated facts, prior tool results, or the parent agent's exact tool environment.
 - Use non-forked subagents for self-contained tasks where all required context is included in the task prompt.
 - Subagent outputs are **untrusted**. Always review and verify the results returned by any subagent. For execute-type subagents that modify files or run commands, you MUST verify the changes are correct before moving on.
 
-# User Message Delivery
+`
+    : ''
+}# User Message Delivery
 A user message that reached you while you were already working arrives wrapped as \`<user delivery="while-active">…</user>\`. Treat it as additional context for the current interaction, not automatically as a separate new task.
 
 For \`delivery="while-active"\`:

@@ -26,6 +26,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   BatchCreateFeedbackArgs,
   BatchCreateLogsArgs,
   BatchCreateMetricsArgs,
@@ -34,6 +36,8 @@ import type {
   BatchDeleteTracesArgs,
   CreateFeedbackArgs,
   CreateScoreArgs,
+  DeleteFeedbackArgs,
+  DeleteScoresArgs,
   CreateSpanArgs,
   GetEntityNamesArgs,
   GetEntityNamesResponse,
@@ -97,15 +101,26 @@ import type {
   ListScoresArgs,
   ListScoresResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
+  GetTraceQueryValuesResponse,
   ObservabilityStorageStrategy,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
+  QueryThreadsResult,
   ScoreRecord,
   TableRetentionPolicy,
+  TraceAggregateResponse,
+  TraceQueryObservedFieldsResult,
   TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
+  TrustedSpanAggregatePlan,
+  SpanAggregateResponse,
+  TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -119,6 +134,7 @@ import {
   columnExistsSQL,
   qualifiedTable,
   schemaDDL,
+  schemaExistsSQL,
   TABLE_DISCOVERY,
   TABLE_FEEDBACK_EVENTS,
   TABLE_LOG_EVENTS,
@@ -131,15 +147,43 @@ import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { detectPartman, detectTimescale, resolveMode, setupPartitioning } from './partitioning';
+import { detectPartman, detectTimescale, ensureNativePartitions, resolveMode, setupPartitioning } from './partitioning';
 import type { PartitioningOptions, PartitionMode } from './partitioning';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
+import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
+
+const spanQueryFeatures =
+  typeof coreStorage.planSpanQuery === 'function'
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') ? (['span-query-duration-sort'] as const) : []),
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('model') &&
+        coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('provider')
+          ? (['span-query-model-provider-sort'] as const)
+          : []),
+        // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
+      ] as const)
+    : ([] as const);
+const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function'
+    ? ([
+        'span-aggregate',
+        // Core before the dimensions rejects `model`/`provider` in `groupBy`, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_AGGREGATE_DIMENSION_REGISTRY ?? {})
+          ? (['span-aggregate-model-dimensions'] as const)
+          : []),
+      ] as const)
+    : ([] as const);
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
@@ -155,7 +199,13 @@ export type VNextPostgresObservabilityConfig = PgDomainConfig & {
 };
 
 function wrapError(op: string, error: unknown, details?: Record<string, unknown>): never {
-  if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+  if (
+    error instanceof MastraError ||
+    error instanceof coreStorage.TraceQueryCursorError ||
+    error instanceof coreStorage.TraceQueryExecutionError ||
+    error instanceof coreStorage.TraceQueryResourceLimitError
+  )
+    throw error;
   throw new MastraError(
     {
       id: createStorageErrorId('PG', op, 'FAILED'),
@@ -169,6 +219,8 @@ function wrapError(op: string, error: unknown, details?: Record<string, unknown>
 
 export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   readonly #client: DbClient;
+  /** Reader-backed client for standalone reads; writes, DDL, and discovery-cache refresh stay on #client. */
+  readonly #readClient: DbClient;
   readonly #schema: string;
   readonly #partitioning: PartitioningOptions;
   readonly #discoveryConfig: DiscoveryConfig;
@@ -177,8 +229,9 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   constructor(config: VNextPostgresObservabilityConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
+    const { client, readClient, schemaName } = resolvePgConfig(config);
     this.#client = client;
+    this.#readClient = readClient;
     this.#schema = schemaName ?? 'public';
     this.#partitioning = config.partitioning ?? {};
     this.#discoveryConfig = config.discovery ?? {};
@@ -228,14 +281,21 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
-      try {
-        await this.#client.none(schemaDDL(this.#schema));
-      } catch (error) {
-        // `CREATE SCHEMA IF NOT EXISTS` is not atomic; two concurrent
-        // init() calls against a fresh schema can both pass the
-        // existence probe and one will surface 42P06 or a 23505 on
-        // pg_namespace_nspname_index. Treat it as success.
-        if (!isDuplicateSchemaError(error)) throw error;
+      // Only issue CREATE SCHEMA when the schema is missing. Postgres checks
+      // the database-level CREATE privilege before the IF NOT EXISTS clause,
+      // so running it unconditionally fails with 42501 for roles that can
+      // create tables in an existing schema but cannot create schemas.
+      const schemaExists = await this.#client.oneOrNone(schemaExistsSQL, [this.#schema]);
+      if (!schemaExists) {
+        try {
+          await this.#client.none(schemaDDL(this.#schema));
+        } catch (error) {
+          // `CREATE SCHEMA IF NOT EXISTS` is not atomic; two concurrent
+          // init() calls against a fresh schema can both pass the
+          // existence probe and one will surface 42P06 or a 23505 on
+          // pg_namespace_nspname_index. Treat it as success.
+          if (!isDuplicateSchemaError(error)) throw error;
+        }
       }
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
@@ -275,6 +335,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   /** Resolved partition mode after init(). Useful for tests and diagnostics. */
   get partitionMode(): PartitionMode | undefined {
     return this.#partitionMode;
+  }
+
+  /**
+   * Create any missing day partitions from yesterday through today +
+   * `futureDays`, without the rest of init(). For apps whose runtime role
+   * cannot run DDL: call it on a schedule with a role that owns the
+   * observability tables. Safe to call repeatedly on one instance. Does
+   * nothing with TimescaleDB or pg_partman, which create their own partitions.
+   */
+  async ensurePartitions(): Promise<void> {
+    return this.#run('VNEXT_ENSURE_PARTITIONS', async () => {
+      const mode = (this.#partitionMode ??= await resolveMode(this.#client, this.#partitioning));
+      if (mode === 'native') await ensureNativePartitions(this.#client, this.#schema, this.#partitioning);
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -343,8 +417,75 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs', 'trace-query'] as const;
-    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
+    if (!deltaPollingFeatureEnabled()) {
+      return [
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'trace-query',
+        'trace-aggregate',
+        ...traceAggregateOps.aggregateTimeToFirstFeatures,
+        ...spanQueryFeatures,
+        ...spanAggregateFeatures,
+        ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'feedback-replacement',
+        'trace-query-context-ids',
+        ...traceQueryOps.contextFieldFeatures,
+        ...traceQueryOps.timingFeatures,
+        ...traceQueryOps.outcomeFeatures,
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
+      ] as const;
+    }
+    return [
+      'metrics',
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
+      'delta-polling',
+      'trace-query',
+      'trace-aggregate',
+      ...traceAggregateOps.aggregateTimeToFirstFeatures,
+      ...spanQueryFeatures,
+      ...spanAggregateFeatures,
+      ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
+      'trace-query-root-duration',
+      'trace-query-discovery',
+      'thread-query',
+      'trace-query-tenant-scope',
+      'feedback',
+      'feedback-replacement',
+      'trace-query-context-ids',
+      ...traceQueryOps.contextFieldFeatures,
+      ...traceQueryOps.timingFeatures,
+      ...traceQueryOps.outcomeFeatures,
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
+    ] as const;
+  }
+
+  /**
+   * Partitioning options for the write path, with `mode` fixed to the mode
+   * this store resolved (in init(), or lazily in prune()) so the write path
+   * does not detect it again. Until then the configured mode stands in and
+   * the write path resolves it itself when a partition is missing.
+   */
+  #writePartitioning(): PartitioningOptions {
+    return { ...this.#partitioning, mode: this.#partitionMode ?? this.#partitioning.mode };
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -360,16 +501,24 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async createSpan(args: CreateSpanArgs): Promise<void> {
-    await this.#run('CREATE_SPAN', () => tracingOps.createSpan(this.#client, this.#schema, args), {
-      traceId: args.span.traceId,
-      spanId: args.span.spanId,
-    });
+    await this.#run(
+      'CREATE_SPAN',
+      () => tracingOps.createSpan(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        traceId: args.span.traceId,
+        spanId: args.span.spanId,
+      },
+    );
   }
 
   override async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_SPANS', () => tracingOps.batchCreateSpans(this.#client, this.#schema, args), {
-      count: args.records.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_SPANS',
+      () => tracingOps.batchCreateSpans(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.records.length,
+      },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -377,49 +526,99 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
-    return this.#run('GET_SPAN', () => tracingOps.getSpan(this.#client, this.#schema, args), {
+    return this.#run('GET_SPAN', () => tracingOps.getSpan(this.#readClient, this.#schema, args), {
       traceId: args.traceId,
       spanId: args.spanId,
     });
   }
 
   override async getSpans(args: GetSpansArgs): Promise<GetSpansResponse> {
-    return this.#run('GET_SPANS', () => tracingOps.getSpans(this.#client, this.#schema, args), {
+    return this.#run('GET_SPANS', () => tracingOps.getSpans(this.#readClient, this.#schema, args), {
       traceId: args.traceId,
       count: args.spanIds.length,
     });
   }
 
   override async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
-    return this.#run('GET_ROOT_SPAN', () => tracesOps.getRootSpan(this.#client, this.#schema, args), {
+    return this.#run('GET_ROOT_SPAN', () => tracesOps.getRootSpan(this.#readClient, this.#schema, args), {
       traceId: args.traceId,
     });
   }
 
   override async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
-    return this.#run('GET_TRACE', () => tracingOps.getTrace(this.#client, this.#schema, args), {
+    return this.#run('GET_TRACE', () => tracingOps.getTrace(this.#readClient, this.#schema, args), {
       traceId: args.traceId,
     });
   }
 
   override async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
-    return this.#run('GET_TRACE_LIGHT', () => tracingOps.getTraceLight(this.#client, this.#schema, args), {
+    return this.#run('GET_TRACE_LIGHT', () => tracingOps.getTraceLight(this.#readClient, this.#schema, args), {
       traceId: args.traceId,
     });
   }
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
-    return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#client, this.#schema, args));
+    return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#readClient, this.#schema, args));
+  }
+  override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    return this.#run('LIST_TRACES_LIGHT', () => tracesOps.listTracesLight(this.#readClient, this.#schema, args));
+  }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return this.#run('QUERY_SPANS', () =>
+      spanQueryOps.querySpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
   }
 
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return this.#run('QUERY_TRACES', () =>
-      traceQueryOps.queryTraces(this.#client, this.#schema, plan, this.#traceQueryTimeoutMs),
+      traceQueryOps.queryTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    return this.#run('AGGREGATE_TRACES', () =>
+      traceAggregateOps.aggregateTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    return this.#run('AGGREGATE_SPANS', () =>
+      traceAggregateOps.aggregateSpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async getTraceQueryObservedFields(
+    plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    return this.#run('GET_TRACE_QUERY_OBSERVED_FIELDS', () =>
+      traceQueryOps.getTraceQueryObservedFields(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    return this.#run('GET_TRACE_QUERY_VALUES', () =>
+      traceQueryOps.getTraceQueryValues(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
+    return this.#run('QUERY_THREADS', () =>
+      plan.result === 'threadRows'
+        ? threadQueryOps.queryThreadRows(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs)
+        : traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 
   override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
-    return this.#run('LIST_BRANCHES', () => tracesOps.listBranches(this.#client, this.#schema, args));
+    return this.#run('LIST_BRANCHES', () => tracesOps.listBranches(this.#readClient, this.#schema, args));
   }
 
   // -------------------------------------------------------------------------
@@ -427,34 +626,76 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_LOGS', () => logsOps.batchCreateLogs(this.#client, this.#schema, args), {
-      count: args.logs.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_LOGS',
+      () => logsOps.batchCreateLogs(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.logs.length,
+      },
+    );
   }
 
   override async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_METRICS', () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args), {
-      count: args.metrics.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_METRICS',
+      () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.metrics.length,
+      },
+    );
   }
 
   override async createScore(args: CreateScoreArgs): Promise<void> {
-    await this.#run('CREATE_SCORE', () => scoresOps.createScore(this.#client, this.#schema, args));
+    await this.#run('CREATE_SCORE', () =>
+      scoresOps.createScore(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
   }
 
   override async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_SCORES', () => scoresOps.batchCreateScores(this.#client, this.#schema, args), {
-      count: args.scores.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_SCORES',
+      () => scoresOps.batchCreateScores(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.scores.length,
+      },
+    );
+  }
+
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    await this.#run('REPLACE_FEEDBACK', () =>
+      feedbackOps.replaceFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
   }
 
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
-    await this.#run('CREATE_FEEDBACK', () => feedbackOps.createFeedback(this.#client, this.#schema, args));
+    await this.#run('CREATE_FEEDBACK', () =>
+      feedbackOps.createFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
   }
 
   override async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_FEEDBACK', () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args), {
-      count: args.feedbacks.length,
+    await this.#run(
+      'BATCH_CREATE_FEEDBACK',
+      () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        count: args.feedbacks.length,
+      },
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Scores / feedback — deletes
+  // -------------------------------------------------------------------------
+
+  override async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    await this.#run('DELETE_SCORES', () => scoresOps.deleteScores(this.#client, this.#schema, args), {
+      count: args.scoreIds.length,
+    });
+  }
+
+  override async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    await this.#run('DELETE_FEEDBACK', () => feedbackOps.deleteFeedback(this.#client, this.#schema, args), {
+      count: args.feedbackIds.length,
     });
   }
 
@@ -463,25 +704,36 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async listLogs(args: ListLogsArgs): Promise<ListLogsResponse> {
-    return this.#run('LIST_LOGS', () => logsOps.listLogs(this.#client, this.#schema, args));
+    return this.#run('LIST_LOGS', () => logsOps.listLogs(this.#readClient, this.#schema, args));
   }
 
   override async listMetrics(args: ListMetricsArgs): Promise<ListMetricsResponse> {
-    return this.#run('LIST_METRICS', () => metricsOps.listMetrics(this.#client, this.#schema, args));
+    return this.#run('LIST_METRICS', () => metricsOps.listMetrics(this.#readClient, this.#schema, args));
   }
 
   override async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
-    return this.#run('LIST_SCORES', () => scoresOps.listScores(this.#client, this.#schema, args));
+    return this.#run('LIST_SCORES', () => scoresOps.listScores(this.#readClient, this.#schema, args));
   }
 
   override async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
-    return this.#run('GET_SCORE_BY_ID', () => scoresOps.getScoreById(this.#client, this.#schema, scoreId), {
+    return this.#run('GET_SCORE_BY_ID', () => scoresOps.getScoreById(this.#readClient, this.#schema, scoreId), {
       scoreId,
     });
   }
 
+  override async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.#run(
+      'GET_FEEDBACK_BY_ID',
+      // Single-feedback reads supply accepted identities after writes and must not lag behind them.
+      () => feedbackOps.getFeedbackById(this.#client, this.#schema, feedbackId),
+      {
+        feedbackId,
+      },
+    );
+  }
+
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
-    return this.#run('LIST_FEEDBACK', () => feedbackOps.listFeedback(this.#client, this.#schema, args));
+    return this.#run('LIST_FEEDBACK', () => feedbackOps.listFeedback(this.#readClient, this.#schema, args));
   }
 
   override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
@@ -497,19 +749,23 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getMetricAggregate(args: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
-    return this.#run('GET_METRIC_AGGREGATE', () => metricsOps.getMetricAggregate(this.#client, this.#schema, args));
+    return this.#run('GET_METRIC_AGGREGATE', () => metricsOps.getMetricAggregate(this.#readClient, this.#schema, args));
   }
 
   override async getMetricBreakdown(args: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
-    return this.#run('GET_METRIC_BREAKDOWN', () => metricsOps.getMetricBreakdown(this.#client, this.#schema, args));
+    return this.#run('GET_METRIC_BREAKDOWN', () => metricsOps.getMetricBreakdown(this.#readClient, this.#schema, args));
   }
 
   override async getMetricTimeSeries(args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
-    return this.#run('GET_METRIC_TIME_SERIES', () => metricsOps.getMetricTimeSeries(this.#client, this.#schema, args));
+    return this.#run('GET_METRIC_TIME_SERIES', () =>
+      metricsOps.getMetricTimeSeries(this.#readClient, this.#schema, args),
+    );
   }
 
   override async getMetricPercentiles(args: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
-    return this.#run('GET_METRIC_PERCENTILES', () => metricsOps.getMetricPercentiles(this.#client, this.#schema, args));
+    return this.#run('GET_METRIC_PERCENTILES', () =>
+      metricsOps.getMetricPercentiles(this.#readClient, this.#schema, args),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -517,19 +773,21 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
-    return this.#run('GET_SCORE_AGGREGATE', () => scoresOps.getScoreAggregate(this.#client, this.#schema, args));
+    return this.#run('GET_SCORE_AGGREGATE', () => scoresOps.getScoreAggregate(this.#readClient, this.#schema, args));
   }
 
   override async getScoreBreakdown(args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
-    return this.#run('GET_SCORE_BREAKDOWN', () => scoresOps.getScoreBreakdown(this.#client, this.#schema, args));
+    return this.#run('GET_SCORE_BREAKDOWN', () => scoresOps.getScoreBreakdown(this.#readClient, this.#schema, args));
   }
 
   override async getScoreTimeSeries(args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
-    return this.#run('GET_SCORE_TIME_SERIES', () => scoresOps.getScoreTimeSeries(this.#client, this.#schema, args));
+    return this.#run('GET_SCORE_TIME_SERIES', () => scoresOps.getScoreTimeSeries(this.#readClient, this.#schema, args));
   }
 
   override async getScorePercentiles(args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
-    return this.#run('GET_SCORE_PERCENTILES', () => scoresOps.getScorePercentiles(this.#client, this.#schema, args));
+    return this.#run('GET_SCORE_PERCENTILES', () =>
+      scoresOps.getScorePercentiles(this.#readClient, this.#schema, args),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -538,25 +796,25 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
     return this.#run('GET_FEEDBACK_AGGREGATE', () =>
-      feedbackOps.getFeedbackAggregate(this.#client, this.#schema, args),
+      feedbackOps.getFeedbackAggregate(this.#readClient, this.#schema, args),
     );
   }
 
   override async getFeedbackBreakdown(args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
     return this.#run('GET_FEEDBACK_BREAKDOWN', () =>
-      feedbackOps.getFeedbackBreakdown(this.#client, this.#schema, args),
+      feedbackOps.getFeedbackBreakdown(this.#readClient, this.#schema, args),
     );
   }
 
   override async getFeedbackTimeSeries(args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
     return this.#run('GET_FEEDBACK_TIME_SERIES', () =>
-      feedbackOps.getFeedbackTimeSeries(this.#client, this.#schema, args),
+      feedbackOps.getFeedbackTimeSeries(this.#readClient, this.#schema, args),
     );
   }
 
   override async getFeedbackPercentiles(args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
     return this.#run('GET_FEEDBACK_PERCENTILES', () =>
-      feedbackOps.getFeedbackPercentiles(this.#client, this.#schema, args),
+      feedbackOps.getFeedbackPercentiles(this.#readClient, this.#schema, args),
     );
   }
 

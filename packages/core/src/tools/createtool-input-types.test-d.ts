@@ -1,6 +1,7 @@
 import { jsonSchema } from '@mastra/schema-compat';
 import { describe, it, expectTypeOf } from 'vitest';
 import zDefault from 'zod';
+import z3 from 'zod/v3';
 import { z } from 'zod/v4';
 
 import { createTool } from './tool';
@@ -57,12 +58,76 @@ describe('createTool execute inputData type inference (issue #16528)', () => {
     });
   });
 
+  it('preserves Zod v3 input and output inference', () => {
+    createTool({
+      id: 'zod-v3',
+      description: 'Test',
+      inputSchema: z3.object({ name: z3.string() }),
+      outputSchema: z3.object({ greeting: z3.string() }),
+      execute: async inputData => {
+        expectTypeOf(inputData).toEqualTypeOf<{ name: string }>();
+        return { greeting: `Hello ${inputData.name}` };
+      },
+    });
+
+    createTool({
+      id: 'zod-v3-invalid-output',
+      description: 'Test',
+      outputSchema: z3.object({ greeting: z3.string() }),
+      // @ts-expect-error - outputSchema requires greeting to be a string
+      execute: async () => ({ greeting: 42 }),
+    });
+  });
+
+  it('infers the parsed output from a transformed Zod v4 input schema', () => {
+    createTool({
+      id: 'transformed-input',
+      description: 'Test',
+      inputSchema: z.object({ name: z.string() }).transform(({ name }) => ({ nameLength: name.length })),
+      execute: async inputData => {
+        expectTypeOf(inputData).toEqualTypeOf<{ nameLength: number }>();
+        return undefined;
+      },
+    });
+  });
+
+  it('rejects objects that do not match a supported schema shape', () => {
+    createTool({
+      id: 'invalid-schema',
+      description: 'Test',
+      // @ts-expect-error - arbitrary objects are not supported schemas
+      inputSchema: { unsupported: true },
+    });
+  });
+
   it('does not break tools without an inputSchema', () => {
     createTool({
       id: 'no-input',
       description: 'Test',
       execute: async inputData => {
         expectTypeOf(inputData).toBeUnknown();
+        return undefined;
+      },
+    });
+  });
+});
+
+describe('createTool structural Zod schema inference (issue #23658)', () => {
+  it('accepts the minimal structural shape used to identify Zod schemas', () => {
+    const structuralZodSchema = {
+      _output: {} as { name: string },
+      _input: {} as { name: string },
+      _def: {},
+      parse: (_data: unknown) => ({ name: 'Grace' }),
+      safeParse: (_data: unknown): unknown => ({ success: true, data: { name: 'Grace' } }),
+    };
+
+    createTool({
+      id: 'structural-zod-schema',
+      description: 'Test',
+      inputSchema: structuralZodSchema,
+      execute: async inputData => {
+        expectTypeOf(inputData).toEqualTypeOf<{ name: string }>();
         return undefined;
       },
     });

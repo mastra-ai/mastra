@@ -21,9 +21,9 @@ workflow.sleepUntil(new Date(Date.now() + 5000))
   content={[
   {
     name: 'dateOrCallback',
-    type: 'Date | ((params: ExecuteFunctionParams) => Promise<Date>)',
+    type: 'Date | ExecuteFunction<TState, TPrevSchema, Date, any, any, TEngineType>',
     description:
-      'Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.',
+      'Either a Date object or a step-style execute function that returns a Date. The callback receives the execution context typed to the workflow state and the previous step output, and can compute the target time dynamically based on input data.',
     isOptional: false,
   },
   {
@@ -36,7 +36,8 @@ workflow.sleepUntil(new Date(Date.now() + 5000))
       {
         name: 'id',
         type: 'string',
-        description: 'Stable entry id. Overrides the generated sleep step id.',
+        description:
+          'Stable entry id. Overrides the generated sleep step id. The generated id is `sleep_<workflowId>_<n>`, where `n` starts at the number of `.sleep()` and `.sleepUntil()` calls before this one and moves up past any id already in use. If the workflow is already registered with a Mastra instance that has a custom `idGenerator` when `.sleepUntil()` is called, that generator produces the part after `sleep_` instead. Adding or removing a sleep changes the ids of later unnamed sleeps.',
         isOptional: true,
       },
       {

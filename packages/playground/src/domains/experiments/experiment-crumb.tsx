@@ -1,18 +1,64 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ExperimentStatusIcon } from '@mastra/playground-ui/domains/experiments/components/experiment-stats';
+import { useDatasetExperiment, useExperiment } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+
+const useCurrentExperiment = () => {
+  const { experimentId } = useParams<{ experimentId: string }>();
+  // The page owns the fetch; re-fetching an errored lookup on mount would loop with the page's not-found shell.
+  const { data } = useExperiment({
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(experimentId), retryOnMount: false },
+  });
+  return { experimentId, experiment: data };
+};
+
+/** Current experiment, kept fresh while it runs. */
+const useLiveExperiment = () => {
+  const { experimentId, experiment } = useCurrentExperiment();
+  const datasetId = experiment?.datasetId ?? '';
+  // `useExperiment` doesn't poll; the dataset-scoped query does while the run is active, so the crumb follows it.
+  const { data: datasetExperiment } = useDatasetExperiment({
+    datasetId,
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(datasetId && experimentId), retryOnMount: false },
+  });
+  return datasetExperiment ?? experiment;
+};
 
 /**
- * Experiment breadcrumb: shows the experiment name, falling back to the
+ * Experiment breadcrumb label: the experiment name, falling back to the
  * truncated id while loading or when the experiment was created without one.
  */
 export function ExperimentCrumb() {
-  const { experimentId } = useParams<{ experimentId: string }>();
-  const { data } = useExperiments();
-
+  const { experimentId, experiment } = useCurrentExperiment();
   if (!experimentId) return null;
 
-  const experiment = data?.experiments?.find(e => e.id === experimentId);
   const shortId = experimentId.length > 8 ? `${experimentId.slice(0, 8)}...` : experimentId;
+  return experiment?.name || shortId;
+}
 
-  return <>{experiment?.name || shortId}</>;
+/** Run status icon rendered through the crumb `icon` slot. */
+export function ExperimentCrumbStatusIcon() {
+  const experiment = useLiveExperiment();
+  return experiment?.status ? <ExperimentStatusIcon status={experiment.status} /> : null;
+}
+
+/** Item count rendered next to the experiment name once the run settles; the page body shows an active run's progress. */
+export function ExperimentCrumbItemCount() {
+  const experiment = useLiveExperiment();
+  if (!experiment || experiment.status === 'running' || experiment.status === 'pending') return null;
+
+  const { totalItems, failedCount } = experiment;
+  const count = `${totalItems} ${totalItems === 1 ? 'item' : 'items'}`;
+
+  return (
+    <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
+      <Metadata>
+        <Metadata.Item>{count}</Metadata.Item>
+        {failedCount > 0 && <Metadata.Item>{failedCount} errored</Metadata.Item>}
+      </Metadata>
+    </Txt>
+  );
 }

@@ -1,0 +1,24 @@
+---
+extends: sequence
+# Four consecutive common nouns: "customer feedback analysis pipeline
+# stalled." A noun string makes the reader unwind how the nouns relate; an
+# explanatory phrase carries the same content without the puzzle. The line
+# sits at four because three-noun compounds saturate technical prose
+# ("config file path"). The leading negated token anchors each stack to its
+# start, so a longer stack raises one alert instead of one per window. The
+# anchored tag keeps proper nouns (NNP) out, and the pattern skips temporal
+# nouns ("yesterday") the tagger files as NN. A stack that opens a paragraph
+# has no leading token to anchor on and goes unflagged.
+message: "AI noun string: '%[2]s %[3]s %[4]s %[5]s'. Rewrite the stack as a phrase that shows how the nouns relate."
+level: error
+tokens:
+  - negate: true
+    tag: ^NNS?$
+  - pattern: '(?i)(?!(?:yesterday|today|tomorrow|tonight)$)\S+'
+    tag: ^NNS?$
+  - pattern: '(?i)(?!(?:yesterday|today|tomorrow|tonight)$)\S+'
+    tag: ^NNS?$
+  - pattern: '(?i)(?!(?:yesterday|today|tomorrow|tonight)$)\S+'
+    tag: ^NNS?$
+  - pattern: '(?i)(?!(?:yesterday|today|tomorrow|tonight)$)\S+'
+    tag: ^NNS?$

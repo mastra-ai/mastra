@@ -1,0 +1,85 @@
+[
+  {
+    "provider": "resend",
+    "tool": "resend_send_email",
+    "method": "POST",
+    "path": "/emails",
+    "input": {
+      "body": {
+        "from": "example",
+        "to": "example",
+        "subject": "example",
+        "text": "Example email body"
+      }
+    },
+    "response": {}
+  },
+  {
+    "provider": "resend",
+    "tool": "resend_get_email",
+    "method": "GET",
+    "path": "/emails/{email_id}",
+    "input": {
+      "email_id": "example"
+    },
+    "response": {}
+  },
+  {
+    "provider": "resend",
+    "tool": "resend_list_emails",
+    "method": "GET",
+    "path": "/emails",
+    "input": {},
+    "response": {}
+  },
+  {
+    "provider": "resend",
+    "tool": "resend_cancel_email",
+    "method": "POST",
+    "path": "/emails/{email_id}/cancel",
+    "input": {
+      "email_id": "example"
+    },
+    "response": {}
+  },
+  {
+    "provider": "resend",
+    "tool": "resend_list_domains",
+    "method": "GET",
+    "path": "/domains",
+    "input": {},
+    "response": {}
+  },
+  {
+    "provider": "resend",
+    "tool": "resend_get_domain",
+    "method": "GET",
+    "path": "/domains/{domain_id}",
+    "input": {
+      "domain_id": "example"
+    },
+    "response": {}
+  },
+  {
+    "provider": "resend",
+    "tool": "resend_create_domain",
+    "method": "POST",
+    "path": "/domains",
+    "input": {
+      "body": {
+        "name": "example"
+      }
+    },
+    "response": {}
+  },
+  {
+    "provider": "resend",
+    "tool": "resend_verify_domain",
+    "method": "POST",
+    "path": "/domains/{domain_id}/verify",
+    "input": {
+      "domain_id": "example"
+    },
+    "response": {}
+  }
+]

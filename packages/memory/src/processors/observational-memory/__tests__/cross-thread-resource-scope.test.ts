@@ -111,11 +111,63 @@ const observerText = `<observations>
 </observations>
 <current-task>Help the user</current-task>`;
 
+const resourceObserverText = `<observations>
+<thread id="thread-A">
+## January 28, 2026
+- 🔴 User asked for help with a task
+<current-task>Help the user</current-task>
+</thread>
+<thread id="thread-B">
+## January 28, 2026
+- 🔴 User continued the task on another thread
+<current-task>Help the user</current-task>
+</thread>
+</observations>`;
+
 const omTriggerTool = createTool({
   id: 'test',
   description: 'Trigger tool for OM testing',
   inputSchema: z.object({ action: z.string().optional() }),
   execute: async () => ({ success: true }),
+});
+
+describe('count-free observational memory context', () => {
+  it.each(['thread', 'resource'] as const)('loads %s-scoped messages without totals', async scope => {
+    const store = new InMemoryStore();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          scope,
+          model: createSimpleModel(observerText) as any,
+        },
+      },
+    });
+    const threadId = `count-free-${scope}`;
+    const resourceId = `resource-${scope}`;
+    await memory.createThread({ threadId, resourceId });
+    await memory.saveMessages({
+      messages: [
+        {
+          id: `message-${scope}`,
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Unobserved message' }] },
+        },
+      ],
+    });
+    await (await memory.omEngine)!.getOrCreateRecord(threadId, resourceId);
+    const memoryStore = await store.getStore('memory');
+    const listMessages = vi.spyOn(memoryStore!, scope === 'resource' ? 'listMessagesByResourceId' : 'listMessages');
+
+    const context = await memory.getContext({ threadId, resourceId });
+
+    expect(listMessages).toHaveBeenCalledWith(expect.objectContaining({ perPage: false, includeTotal: false }));
+    expect(context.messages.map(message => message.id)).toContain(`message-${scope}`);
+  });
 });
 
 describe('repro #15367 — cross-thread messages with resource-scoped OM', () => {
@@ -129,7 +181,7 @@ describe('repro #15367 — cross-thread messages with resource-scoped OM', () =>
           enabled: true,
           scope: 'resource',
           observation: {
-            model: createSimpleModel(observerText) as any,
+            model: createSimpleModel(resourceObserverText) as any,
             messageTokens: 20,
             bufferTokens: false,
           },

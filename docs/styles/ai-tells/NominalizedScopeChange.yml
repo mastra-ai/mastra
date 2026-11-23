@@ -1,0 +1,32 @@
+---
+extends: existence
+message: "AI nominalization: '%s'. Make the changed rule the subject and state what it catches now."
+level: error
+nonword: true
+ignorecase: true
+# The change-as-noun: prose that says "the widening covers the inflections"
+# or "after the narrowing, alerts stay identical" instead of naming the rule
+# and what it catches now. A maintainer flagged the habit in drafts written
+# for this repository, the same route that put "measured cost" into
+# FigurativeIdioms: vocabulary coined while describing rule edits hardens
+# into formula, and the gates treat the project's own tics as tells.
+#
+# The gate is a determiner followed by a scope-change gerund, admitted only
+# when the next thing is punctuation, a preposition, or a common predicate
+# verb. That closed continuation list is what separates the nominal from the
+# adjectival reading ("the widening gap," "a narrowing conversion") without
+# a noun blocklist, which would be open-ended. A sequence rule with a
+# part-of-speech gate was tried first and lost: the tagger reads "applies"
+# and "drops" after a gerund as plural nouns, so "the narrowing applies"
+# never matched. The verb list means an unlisted predicate escapes; the
+# punctuation and preposition continuations carry most of the real uses.
+#
+# Determiner-plus-gerund forms for all five words measured zero across the
+# Go standard library comments. The Python standard library holds one:
+# "applying the narrowing to a block of code," in the typing docs, which the
+# "to" continuation admits. That is the one measured hit, the usual
+# tolerance in this package; prose about type narrowing or compiler
+# conversions disables the rule.
+tokens:
+  - '\b(?:the|this|that|its|a|an|each) (?:widening|narrowing|tightening|loosening|broadening)(?=[,.;:!?)]|\s+(?:of|to|in|on|for|with|at|by|from|into|over|across|against|around)\b|\s+(?:is|was|does|did|covers?|covered|catches|caught|keeps?|kept|drops?|dropped|adds?|added|applies|applied|holds?|held|survives?|survived|stays?|stayed|lands?|landed|flags?|flagged|fires?|fired|matches|matched|misses|missed|costs?|means|meant|makes|made|leaves?|left|brings?|brought|touches|touched|remains?|remained|needs?|needed|trades?|traded|turns?|turned|extends?|extended|loses|lost|gains?|gained)\b)'
+---

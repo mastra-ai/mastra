@@ -4,20 +4,47 @@
  * This is distinct from a caller-supplied abort so that timeouts can be reported as
  * failures rather than treated as clean cancellations.
  */
+export type MastraTimeoutType = 'step' | 'total' | 'firstChunk';
+
 export class MastraTimeoutError extends Error {
-  readonly timeoutType: 'step' | 'total';
+  readonly timeoutType: MastraTimeoutType;
   readonly timeoutMs: number;
 
-  constructor({ timeoutType, timeoutMs }: { timeoutType: 'step' | 'total'; timeoutMs: number }) {
+  constructor({ timeoutType, timeoutMs }: { timeoutType: MastraTimeoutType; timeoutMs: number }) {
     super(
       timeoutType === 'total'
         ? `Agent execution timed out after ${timeoutMs}ms (modelSettings.timeout.totalMs)`
-        : `Model call timed out after ${timeoutMs}ms (modelSettings.timeout.stepMs)`,
+        : timeoutType === 'firstChunk'
+          ? `Model call timed out before first content after ${timeoutMs}ms (modelSettings.timeout.firstChunkMs)`
+          : `Model call timed out after ${timeoutMs}ms (modelSettings.timeout.stepMs)`,
     );
     this.name = 'MastraTimeoutError';
     this.timeoutType = timeoutType;
     this.timeoutMs = timeoutMs;
   }
+}
+
+/**
+ * How long a total deadline's memory save may hold back the deadline error. A save that takes longer
+ * (a hung store) finishes in the background; the caller still sees the deadline on time.
+ */
+export const DEADLINE_SAVE_WAIT_MS = 1_000;
+
+/** How long a durable run keeps its claim waiting for that save, so a hung store cannot block a later run with the same ID. */
+export const DEADLINE_SAVE_CLAIM_HOLD_MS = 30_000;
+
+/** Resolves when `promise` settles or `ms` passes, whichever is first. Never rejects. */
+export function settledOrElapsed(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise.then(
+      () => {},
+      () => {},
+    ),
+    new Promise<void>(resolve => {
+      timer = setTimeout(resolve, ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 export function isMastraTimeoutError(error: unknown): error is MastraTimeoutError {
@@ -36,7 +63,7 @@ export type TimeoutAbortSignal = {
   signal: AbortSignal | undefined;
   /** Rejects with a `MastraTimeoutError` when the budget elapses. Undefined when no timeout is configured. */
   timeoutPromise?: Promise<never>;
-  /** Clears the timer and detaches listeners. Safe to call more than once. */
+  /** Clears the timer and, unless `detachParentOnCleanup` is false, detaches the parent listener. Safe to call more than once. */
   cleanup: () => void;
 };
 
@@ -45,15 +72,21 @@ export type TimeoutAbortSignal = {
  *
  * When `timeoutMs` is undefined this is a pass-through: the parent signal is returned
  * unchanged and no timer is created.
+ *
+ * Set `detachParentOnCleanup: false` when the parent signal lives no longer than the
+ * derived signal and `cleanup` may run while consumers still hold the derived signal:
+ * cleanup then only clears the timer, so a later parent abort still propagates.
  */
 export function createTimeoutAbortSignal({
   parentSignal,
   timeoutMs,
   timeoutType,
+  detachParentOnCleanup = true,
 }: {
   parentSignal?: AbortSignal;
   timeoutMs?: number;
-  timeoutType: 'step' | 'total';
+  timeoutType: MastraTimeoutType;
+  detachParentOnCleanup?: boolean;
 }): TimeoutAbortSignal {
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return { signal: parentSignal, cleanup: () => {} };
@@ -93,7 +126,9 @@ export function createTimeoutAbortSignal({
     timeoutPromise,
     cleanup: () => {
       clearTimeout(timer);
-      parentSignal?.removeEventListener('abort', onParentAbort);
+      if (detachParentOnCleanup) {
+        parentSignal?.removeEventListener('abort', onParentAbort);
+      }
     },
   };
 }
@@ -125,7 +160,7 @@ export function guardStreamWithAbort<T>(
       new TransformStream<T, T>({
         flush: () => onSettled(),
       }) as any,
-    ) as ReadableStream<T>;
+    );
   }
 
   const reader = stream.getReader();
@@ -146,6 +181,46 @@ export function guardStreamWithAbort<T>(
           return;
         }
         controller.enqueue(value);
+      } catch (error) {
+        settle();
+        reader.cancel(error).catch(() => {});
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      settle();
+      return reader.cancel(reason);
+    },
+  });
+}
+
+export function guardStreamUntilMatch<T>(
+  stream: ReadableStream<T>,
+  signal: AbortSignal | undefined,
+  matches: (chunk: T) => boolean,
+  onMatchedOrSettled: () => void,
+): ReadableStream<T> {
+  if (!signal) return stream;
+
+  const reader = stream.getReader();
+  let active = true;
+  const settle = () => {
+    if (!active) return;
+    active = false;
+    onMatchedOrSettled();
+  };
+
+  return new ReadableStream<T>({
+    async pull(controller) {
+      try {
+        const result = active ? await raceAgainstAbort(reader.read(), signal) : await reader.read();
+        if (result.done) {
+          settle();
+          controller.close();
+          return;
+        }
+        if (matches(result.value)) settle();
+        controller.enqueue(result.value);
       } catch (error) {
         settle();
         reader.cancel(error).catch(() => {});

@@ -66,7 +66,9 @@ async function parseSubcommand(args: string[], onAction = vi.fn()) {
 
 describe('create option parsing', () => {
   it('rejects providers outside the create-specific provider set', () => {
-    expect(() => parseCreateLLMProvider('groq')).toThrow('Choose a valid provider: openai, anthropic, google, xai');
+    expect(() => parseCreateLLMProvider('groq')).toThrow(
+      'Choose a valid provider: mastra, openai, anthropic, google, xai',
+    );
   });
 
   it.each([
@@ -145,6 +147,14 @@ describe('create option validation', () => {
 });
 
 describe('shared create Commander wiring', () => {
+  it('documents incompatible creation mode options in help output', () => {
+    const help = createRoot(vi.fn()).helpInformation().replaceAll(/\s+/g, ' ');
+
+    expect(help).toContain('cannot be used with --template, --llm, or --llm-api-key');
+    expect(help).toContain('cannot be used with --empty or --template');
+    expect(help).toContain('-l, --llm <provider>');
+  });
+
   it('applies the create defaults', async () => {
     const action = vi.fn();
     await parseRoot(['project'], action);

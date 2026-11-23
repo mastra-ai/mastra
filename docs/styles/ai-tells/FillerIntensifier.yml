@@ -1,0 +1,38 @@
+---
+extends: existence
+message: "AI intensifier: '%s'. Delete the intensifier. The determiner already states the count."
+level: error
+ignorecase: true
+tokens:
+  # "single" riding a determiner that already carries the count is pure
+  # emphasis: "a single command" claims nothing "a command" does not,
+  # and "every single time" is "every time" with a drumroll. The (?!-)
+  # lookahead keeps hyphenated compounds ("a single-threaded server",
+  # "the single-variable form") out of scope, where the word does real
+  # work. "no single" and "any single" are redundant the same way: "no"
+  # already means not one, so "no single component owns this" survives
+  # as "no component owns this alone". Recasting those takes more than
+  # deletion, and forcing that choice is the point of the alert.
+  - "(?:a|one|every|this|that|no|any) single(?!-)"
+
+  # "any one" is what "any single" turns into when a writer dodges the
+  # token above, and it carries the same nothing: "any one of the
+  # checks can veto" is "any of the checks can veto". "no one", "each
+  # one", and "every one" stay out, since those head ordinary pronoun
+  # phrases rather than intensified nouns.
+  - "any one(?!-)"
+
+  # "the single most important" belongs to AbsoluteAssertions, so it is
+  # carved out here rather than double-flagged.
+  - "the single(?!-| most important)"
+
+  # The synonyms take the same ride: "a lone exception", "its sole
+  # purpose", "a mere formality", "one solitary warning". "sole" is
+  # flagged even where legal boilerplate likes it ("the sole
+  # discretion"), on the package's flag-hard stance.
+  - "(?:a|one|the|this|that|its|their|whose) (?:lone|sole|solitary|mere)(?!-)"
+
+  # "a singular focus" is the same intensifier, but "the singular" is
+  # how grammar writing names the number ("the singular form"), so the
+  # definite article stays out for this word alone.
+  - "(?:a|one|this|that|its|their|whose) singular(?!-)"

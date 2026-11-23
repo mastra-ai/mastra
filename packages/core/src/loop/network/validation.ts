@@ -186,6 +186,46 @@ export type ValidationRunResult = CompletionRunResult;
 // ============================================================================
 
 /**
+ * Extracts a human-readable description from an arbitrary thrown value.
+ *
+ * Scorers can reject with anything — `null`, `undefined`, strings, plain
+ * objects, null-prototype objects, or objects whose `message`/`reason` getters
+ * throw. Reading `error.message` directly crashes on `null`/`undefined` and
+ * loses the text of string rejections, so every access here is guarded.
+ */
+function describeScorerError(error: unknown): string {
+  if (typeof error === 'string') return error;
+
+  if (typeof error === 'object' && error !== null) {
+    for (const key of ['message', 'reason'] as const) {
+      try {
+        const value = (error as Record<string, unknown>)[key];
+        if (typeof value === 'string' && value.length > 0) return value;
+      } catch {
+        // Hostile getter — fall through to stringification.
+      }
+    }
+
+    try {
+      const stringified = safeStringify(error);
+      if (typeof stringified === 'string' && stringified.length > 0 && stringified !== '{}') {
+        return stringified;
+      }
+    } catch {
+      // Fall through to the generic fallback.
+    }
+
+    return 'unknown error';
+  }
+
+  try {
+    return String(error);
+  } catch {
+    return 'unknown error';
+  }
+}
+
+/**
  * Run a single scorer and return the result.
  *
  * Scorers receive:
@@ -219,11 +259,11 @@ async function runSingleScorer(
       scorerName: scorer.name ?? scorer.id,
       duration: Date.now() - start,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       score: 0,
       passed: false,
-      reason: `Scorer threw an error: ${error.message}`,
+      reason: `Scorer threw an error: ${describeScorerError(error)}`,
       scorerId: scorer.id,
       scorerName: scorer.name ?? scorer.id,
       duration: Date.now() - start,
@@ -252,39 +292,85 @@ export async function runCompletionScorers(
   const results: ScorerResult[] = [];
   let timedOut = false;
 
-  const timeoutPromise = new Promise<'timeout'>(resolve => {
-    setTimeout(() => resolve('timeout'), timeout);
+  // Sentinel resolved once when the shared deadline elapses. A single timer is
+  // used for every scorer race so the deadline is a hard bound: an overrunning
+  // or never-settling scorer cannot keep the call waiting past `timeout`.
+  const DEADLINE = Symbol('completion-timeout');
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const deadlinePromise = new Promise<typeof DEADLINE>(resolve => {
+    timeoutHandle = setTimeout(() => resolve(DEADLINE), timeout);
   });
 
-  if (parallel) {
-    const scorerPromises = scorers.map(scorer => runSingleScorer(scorer, context));
-    const raceResult = await Promise.race([Promise.all(scorerPromises), timeoutPromise]);
+  // Builds an errored result for a scorer that did not settle before the deadline.
+  const unfinishedResult = (scorer: MastraScorer<any, any, any, any>): ScorerResult => ({
+    score: 0,
+    passed: false,
+    reason: 'Scorer did not finish before the completion timeout',
+    scorerId: scorer.id,
+    scorerName: scorer.name ?? scorer.id,
+    duration: Date.now() - startTime,
+    errored: true,
+  });
 
-    if (raceResult === 'timeout') {
-      timedOut = true;
-      const settledResults = await Promise.allSettled(scorerPromises);
-      for (const settled of settledResults) {
-        if (settled.status === 'fulfilled') {
-          results.push(settled.value);
+  try {
+    if (parallel) {
+      // Race each scorer individually against the shared deadline. Scorers that
+      // win their race contribute their real result; the rest are recorded as
+      // errored "did not finish" entries. Late results from unfinished scorers
+      // are ignored so they cannot change the returned verdict. `Scorer.run` has
+      // no cancellation contract, so overrunning scorers are abandoned, not
+      // aborted — attach a no-op catch to avoid unhandled rejection warnings.
+      const raced = scorers.map(scorer => {
+        const scorerPromise = runSingleScorer(scorer, context);
+        scorerPromise.catch(() => {});
+        return Promise.race([scorerPromise.then(result => ({ scorer, result })), deadlinePromise]);
+      });
+
+      const outcomes = await Promise.all(raced);
+      for (const outcome of outcomes) {
+        if (outcome === DEADLINE) {
+          timedOut = true;
+        }
+      }
+
+      for (let i = 0; i < scorers.length; i++) {
+        const outcome = outcomes[i];
+        if (outcome === DEADLINE) {
+          results.push(unfinishedResult(scorers[i]!));
+        } else {
+          results.push(outcome!.result);
         }
       }
     } else {
-      results.push(...raceResult);
-    }
-  } else {
-    for (const scorer of scorers) {
-      if (Date.now() - startTime > timeout) {
-        timedOut = true;
-        break;
+      for (const scorer of scorers) {
+        if (Date.now() - startTime >= timeout) {
+          timedOut = true;
+          results.push(unfinishedResult(scorer));
+          break;
+        }
+
+        // Bound each scorer by the shared deadline so a single scorer that
+        // overruns cannot push the returned verdict past the timeout.
+        const scorerPromise = runSingleScorer(scorer, context);
+        scorerPromise.catch(() => {});
+        const outcome = await Promise.race([scorerPromise.then(result => ({ result })), deadlinePromise]);
+
+        if (outcome === DEADLINE) {
+          timedOut = true;
+          results.push(unfinishedResult(scorer));
+          break;
+        }
+
+        const result = outcome.result;
+        results.push(result);
+
+        // Short-circuit
+        if (strategy === 'all' && !result.passed) break;
+        if (strategy === 'any' && result.passed) break;
       }
-
-      const result = await runSingleScorer(scorer, context);
-      results.push(result);
-
-      // Short-circuit
-      if (strategy === 'all' && !result.passed) break;
-      if (strategy === 'any' && result.passed) break;
     }
+  } finally {
+    clearTimeout(timeoutHandle);
   }
 
   const complete =

@@ -1,8 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { type } from 'arktype';
+import * as v from 'valibot';
+import { describe, expect, it, vi } from 'vitest';
+import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 
+import { RequestContext } from '../request-context';
+import { toStandardSchema } from '../schema';
 import { createTool } from './tool';
-import { validateToolInput } from './validation';
+import {
+  getModelFacingValidationError,
+  validateRequestContext,
+  validateToolInput,
+  validateToolOutput,
+  validateToolSuspendData,
+} from './validation';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -861,6 +872,83 @@ describe('Tool Output Validation Tests', () => {
     } else {
       throw new Error('Result is not a validation error');
     }
+  });
+
+  it("should return the tool's real result and log when outputValidation is 'warn'", async () => {
+    const tool = createTool({
+      id: 'created-order',
+      description: 'Creates an order; the side effect has happened by the time the result is returned',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string(), total: z.number() }),
+      outputValidation: 'warn',
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ orderId: 'ord_1', total: '12.50' }),
+    });
+    const warn = vi.fn();
+    const mastra = { getLogger: () => ({ warn }) };
+
+    const result = await tool.execute({ sku: 'sku_1' }, { mastra } as any);
+
+    expect(result).toEqual({ orderId: 'ord_1', total: '12.50' });
+    expect(warn).toHaveBeenCalledWith('Tool output validation failed', {
+      toolId: 'created-order',
+      issuePaths: ['total'],
+    });
+  });
+
+  it("should still return the validated result when outputValidation is 'warn' and the output is valid", async () => {
+    const tool = createTool({
+      id: 'created-order-valid',
+      description: 'Creates an order',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string(), total: z.coerce.number() }),
+      outputValidation: 'warn',
+      execute: async () => ({ orderId: 'ord_1', total: '12.50' as unknown as number }),
+    });
+
+    const result = await tool.execute({ sku: 'sku_1' });
+
+    expect(result).toEqual({ orderId: 'ord_1', total: 12.5 });
+  });
+
+  it('should log output validation failures in strict mode and still return the error', async () => {
+    const tool = createTool({
+      id: 'strict-order',
+      description: 'Creates an order',
+      inputSchema: z.object({ sku: z.string() }),
+      outputSchema: z.object({ orderId: z.string() }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ orderId: 1 }),
+    });
+    const warn = vi.fn();
+    const mastra = { getLogger: () => ({ warn }) };
+
+    const result: any = await tool.execute({ sku: 'sku_1' }, { mastra } as any);
+
+    expect(result).toMatchObject({ error: true });
+    expect(result.message).toContain('Tool output validation failed for strict-order');
+    expect(warn).toHaveBeenCalledWith('Tool output validation failed', {
+      toolId: 'strict-order',
+      issuePaths: ['orderId'],
+    });
+  });
+
+  it('should redact sensitive keys from the output echoed in the validation error', async () => {
+    const tool = createTool({
+      id: 'leaky-output',
+      description: 'Returns credentials alongside invalid data',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ count: z.number() }),
+      // @ts-expect-error intentionally incorrect output
+      execute: async () => ({ count: 'nope', apiKey: 'sk-live-123', nested: { token: 'tok-456' } }),
+    });
+
+    const result: any = await tool.execute({});
+
+    expect(result).toMatchObject({ error: true });
+    expect(result.message).toContain('[REDACTED]');
+    expect(result.message).not.toContain('sk-live-123');
+    expect(result.message).not.toContain('tok-456');
   });
 
   it('should validate output types correctly', async () => {
@@ -2409,47 +2497,306 @@ describe('Standard Schema path segment format (PathSegment objects) — mock sch
   });
 });
 
-describe('Standard Schema path segment format (PathSegment objects)', () => {
-  // The Standard Schema spec allows path segments to be either a plain PropertyKey
-  // (e.g. 'fieldName') OR a PathSegment object (e.g. { key: 'fieldName' }).
-  // Valibot and ArkType use the { key: PropertyKey } object format.
-  // This mock schema simulates that format without requiring those libraries.
-  function makeMockSchemaWithObjectPaths(issues: { message: string; path: { key: string }[] }[]) {
-    const jsonSchemaFn = () => ({ type: 'object' as const, properties: { name: { type: 'string' } } });
-    return {
-      '~standard': {
-        vendor: 'mock',
-        version: 1 as const,
-        validate: (_data: unknown) => ({ issues }),
-        types: undefined,
-        jsonSchema: { input: jsonSchemaFn, output: jsonSchemaFn },
-      },
-    } as any;
-  }
+describe('validateToolInput - Errors After Null-Strip Retry (GitHub #24539)', () => {
+  it('reports the retry failure instead of already-stripped optional nulls', () => {
+    const schema = z.object({
+      hero: z.object({ name: z.string() }).optional(),
+      events: z.array(z.string()).min(1),
+    });
 
-  it('validateToolInput: nested error path renders field names, not [object Object]', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Invalid type', path: [{ key: 'user' }, { key: 'email' }] },
-    ]);
-
-    const result = validateToolInput(schema, { user: { email: 123 } });
+    const result = validateToolInput(schema, { hero: null, events: [] }, 'test-tool');
 
     expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('user.email');
-    expect(result.error!.message).not.toContain('[object Object]');
+    expect(result.error?.message).toContain('- events:');
+    expect(result.error?.message).not.toContain('- hero:');
+    expect(result.error?.validationErrors).toHaveProperty('fields.events');
+    expect(result.error?.validationErrors).not.toHaveProperty('fields.hero');
   });
 
-  it('validateToolInput: multiple nested paths all render correctly', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Required', path: [{ key: 'address' }, { key: 'city' }] },
-      { message: 'Too short', path: [{ key: 'address' }, { key: 'zip' }] },
-    ]);
+  it('still reports a required field sent as null', () => {
+    const schema = z.object({
+      title: z.string(),
+      note: z.string().optional(),
+    });
 
-    const result = validateToolInput(schema, { address: {} });
+    const result = validateToolInput(schema, { title: null, note: 'ok' }, 'test-tool');
 
     expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('address.city');
-    expect(result.error!.message).toContain('address.zip');
-    expect(result.error!.message).not.toContain('[object Object]');
+    expect(result.error?.message).toContain('- title:');
+  });
+
+  it('does not report a valid nullable null when another field fails', () => {
+    const schema = z.object({
+      parent: z.string().nullable(),
+      count: z.number(),
+    });
+
+    const result = validateToolInput(schema, { parent: null, count: 'x' }, 'test-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- count:');
+    expect(result.error?.message).not.toContain('- parent:');
+  });
+});
+
+describe('validateRequestContext', () => {
+  it('rejects values when a Valibot schema returns both value and issues', () => {
+    const valibotSchema = v.object({ tenantId: v.string() });
+    const jsonSchema = () => ({ type: 'object' as const, properties: { tenantId: { type: 'string' as const } } });
+    const schema = {
+      '~standard': { ...valibotSchema['~standard'], jsonSchema: { input: jsonSchema, output: jsonSchema } },
+    };
+    const requestContext = new RequestContext([['tenantId', 42]]);
+
+    const result = validateRequestContext(schema as any, requestContext, 'tenant-tool');
+
+    expect(result.error?.message).toContain('tenantId');
+  });
+});
+
+describe('validateToolInput - combined fallback corrections (GitHub #25825)', () => {
+  it('combines stringified JSON coercion with null stripping', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'] });
+  });
+
+  it('combines prompt alias normalization with null stripping', () => {
+    const schema = z.object({ prompt: z.string(), threadId: z.string().optional() });
+    const result = validateToolInput(schema, { query: 'hi', threadId: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({ prompt: 'hi' });
+  });
+
+  it('strips nulls inside stringified JSON objects', () => {
+    const schema = z.object({ meta: z.object({ a: z.string().optional() }) });
+    const result = validateToolInput(schema, { meta: '{"a":null}' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ meta: {} });
+  });
+
+  it('preserves nullable fields while combining corrections', () => {
+    const schema = z.object({
+      args: z.array(z.string()),
+      note: z.string().optional(),
+      parent: z.string().nullable(),
+    });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'], parent: null });
+  });
+
+  it('applies the prompt alias with a root refinement and keeps nullable fields', () => {
+    const schema = z
+      .object({ prompt: z.string(), parent: z.string().nullable() })
+      .refine(value => value.prompt.length > 0, { message: 'prompt required' });
+    const result = validateToolInput(schema, { query: 'hi', prompt: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'hi', parent: null });
+  });
+
+  it('reports only remaining issues when corrections are not enough', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('count');
+    expect(result.error?.message).not.toContain('- args');
+    expect(result.error?.message).not.toContain('- note');
+  });
+
+  it('reports remaining issues after a failed prompt alias retry', () => {
+    const schema = z.object({ prompt: z.string(), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { query: 'hi', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- prompt');
+    expect(result.error?.message).not.toContain('- note');
+  });
+
+  it('does not report fields already fixed by coercion', () => {
+    const schema = z.object({ args: z.array(z.string()), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a"]', count: 'x' });
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- args');
+  });
+});
+
+/**
+ * When a tool's `toModelOutput` is skipped for a validation error, the model gets the error's
+ * model-facing form. `toModelOutput` is where a tool keeps fields out of the prompt, so that form
+ * must not quote the tool's output, the request context or suspend data, and only errors Mastra
+ * created may carry it. (#30211)
+ */
+describe('getModelFacingValidationError', () => {
+  const EMAIL = 'jane.doe@example.com';
+
+  it('names the failing argument fields and issue kinds, without the argument excerpt or issue messages', () => {
+    const { error } = validateToolInput(z.object({ query: z.string().min(1) }), { query: '', note: EMAIL }, 'lookup');
+
+    expect(error?.message).toContain('Provided arguments');
+    expect(getModelFacingValidationError(error)).toEqual({
+      error: true,
+      message:
+        'Tool input validation failed for lookup. Please fix the following errors and try again:\n- query: too_small',
+      validationErrors: { errors: [], fields: { query: { errors: ['too_small'], fields: {} } } },
+    });
+  });
+
+  it('never forwards an input issue message, which can quote a value an input transform resolved', () => {
+    // A transform resolves the model's customer id to a stored email; a custom refinement then
+    // rejects it with a message quoting that email, which the model never sent.
+    const emails: Record<string, string> = { 'cust-1': EMAIL };
+    const schema = z.object({
+      customer: z
+        .string()
+        .transform(id => emails[id] ?? id)
+        .pipe(z.string().refine(() => false, { error: issue => `rejected ${String(issue.input)}` })),
+    });
+    const { error } = validateToolInput(schema, { customer: 'cust-1' }, 'lookup');
+
+    expect(JSON.stringify(error)).toContain(`rejected ${EMAIL}`);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('- customer: custom');
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+    expect(JSON.stringify(modelFacing)).not.toContain('rejected');
+  });
+
+  it('replaces undeclared input path segments, such as record keys a transform produced, with *', () => {
+    const emails: Record<string, string> = { 'cust-1': EMAIL };
+    const schema = z
+      .object({ contacts: z.record(z.string(), z.string()) })
+      .transform(({ contacts }) => ({
+        contacts: Object.fromEntries(Object.entries(contacts).map(([id, note]) => [emails[id] ?? id, note])),
+      }))
+      .pipe(z.object({ contacts: z.record(z.string(), z.string().min(3)) }));
+    const { error } = validateToolInput(schema, { contacts: { 'cust-1': 'x' } }, 'lookup');
+
+    expect(error?.message).toContain(`contacts.${EMAIL}`);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('- contacts.*: too_small');
+    expect(modelFacing?.validationErrors).toEqual({
+      errors: [],
+      fields: { contacts: { errors: [], fields: { '*': { errors: ['too_small'], fields: {} } } } },
+    });
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it('describes Zod v3 and Valibot issues by kind and expected type, never by message', () => {
+    const emails: Record<string, string> = { 'cust-1': EMAIL };
+    const zod3Schema = z3.object({
+      customer: z3
+        .string()
+        .transform(id => emails[id] ?? id)
+        .pipe(z3.enum(['allowed@example.com'])),
+      count: z3.number(),
+    });
+    const zod3 = validateToolInput(toStandardSchema(zod3Schema), { customer: 'cust-1', count: 'four' }, 'lookup').error;
+    expect(JSON.stringify(zod3)).toContain(EMAIL);
+    const zod3ModelFacing = getModelFacingValidationError(zod3);
+    expect(zod3ModelFacing?.message).toContain('- customer: invalid_enum_value');
+    expect(zod3ModelFacing?.message).toContain('- count: invalid_type (expected number)');
+    expect(JSON.stringify(zod3ModelFacing)).not.toContain(EMAIL);
+    expect(JSON.stringify(zod3ModelFacing)).not.toContain('four');
+
+    // Valibot only implements StandardSchemaV1; add the JSON Schema half like the tests above.
+    const valibotSchema = v.object({ contact: v.pipe(v.string(), v.email()), count: v.number() });
+    const jsonSchema = () => ({
+      type: 'object' as const,
+      properties: { contact: { type: 'string' as const }, count: { type: 'number' as const } },
+    });
+    const valibot = validateToolInput(
+      { '~standard': { ...valibotSchema['~standard'], jsonSchema: { input: jsonSchema, output: jsonSchema } } } as any,
+      { contact: 'not-an-email', count: 'four' },
+      'lookup',
+    ).error;
+    expect(JSON.stringify(valibot)).toContain('not-an-email');
+    const valibotModelFacing = getModelFacingValidationError(valibot);
+    expect(valibotModelFacing?.message).toContain('- contact: email');
+    expect(valibotModelFacing?.message).toContain('- count: number (expected number)');
+    expect(JSON.stringify(valibotModelFacing)).not.toContain('not-an-email');
+    expect(JSON.stringify(valibotModelFacing)).not.toContain('four');
+  });
+
+  it('never forwards issue metadata a custom check can set, such as an ArkType expected value', () => {
+    const token = 'PrivateCustomerToken123';
+    const arkSchema = type({ token: type('string').narrow((value, ctx) => ctx.reject({ expected: value })) });
+    const { error } = validateToolOutput(arkSchema, { token }, 'lookup');
+
+    expect(JSON.stringify(error)).toContain(token);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('- token: predicate');
+    expect(JSON.stringify(modelFacing)).not.toContain(token);
+
+    // Any Standard Schema library: kinds and types off the fixed lists become `invalid`.
+    const custom = {
+      '~standard': {
+        version: 1,
+        vendor: 'custom',
+        validate: () => ({ issues: [{ message: token, path: ['token'], code: token, type: token, expected: token }] }),
+        jsonSchema: {
+          input: () => ({ type: 'object', properties: { token: { type: 'string' } } }),
+          output: () => ({ type: 'object', properties: { token: { type: 'string' } } }),
+        },
+      },
+    };
+    const customError = validateToolOutput(custom as any, { token }, 'lookup').error;
+    const customModelFacing = getModelFacingValidationError(customError);
+    expect(customModelFacing?.message).toContain('- token: invalid');
+    expect(JSON.stringify(customModelFacing)).not.toContain(token);
+  });
+
+  it('names only the failing output fields, never the output or values an issue message quotes', () => {
+    const schema = z.object({
+      contact: z.string().refine(() => false, { error: issue => `rejected ${String(issue.input)}` }),
+      tags: z.record(z.string(), z.number()),
+    });
+    const { error } = validateToolOutput(schema, { contact: EMAIL, tags: { [EMAIL]: 'x' } }, 'lookup');
+
+    expect(error?.message).toContain(EMAIL);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toBe(
+      'Tool output validation failed for lookup. The tool returned output that does not match its output schema:\n' +
+        '- contact: custom\n' +
+        '- tags.*: invalid_type (expected number)',
+    );
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it('names only the failing request-context keys, never the context values', () => {
+    const { error } = validateRequestContext(
+      z.object({ tenantId: z.string() }),
+      new RequestContext([['userEmail', EMAIL]]),
+      'lookup',
+    );
+
+    expect(error?.message).toContain(EMAIL);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('tenantId');
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it('names only the failing suspend-data fields, never the suspend data', () => {
+    const { error } = validateToolSuspendData(z.object({ reason: z.string() }), { reason: 7, email: EMAIL }, 'lookup');
+
+    expect(error?.message).toContain(EMAIL);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('reason');
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it("is absent on anything that only has a validation error's fields", () => {
+    const { error } = validateToolInput(z.object({ query: z.string() }), {}, 'lookup');
+
+    expect(getModelFacingValidationError(error)).toBeDefined();
+    // Copies made by tool code, JSON (HTTP, storage, pubsub) or structured clone lose the marker.
+    expect(getModelFacingValidationError({ ...error })).toBeUndefined();
+    expect(getModelFacingValidationError(JSON.parse(JSON.stringify(error)))).toBeUndefined();
+    expect(getModelFacingValidationError(structuredClone(error))).toBeUndefined();
+    expect(
+      getModelFacingValidationError({ error: true, message: 'x', validationErrors: { errors: [], fields: {} } }),
+    ).toBeUndefined();
+    // The marker never shows up in serialized output.
+    expect(JSON.stringify(error)).not.toContain('modelFacing');
   });
 });

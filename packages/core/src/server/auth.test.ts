@@ -271,6 +271,38 @@ describe('Composite auth', () => {
       });
     });
 
+    describe('resource mapping validation', () => {
+      it.each([null, undefined, '', '   ', 0, false, {}, []])(
+        'rejects an invalid selected mapping: %s',
+        async resourceId => {
+          const provider = new MockAuthProvider(true, true, false, { id: 'bob' });
+          provider.mapUserToResourceId = vi.fn().mockReturnValue(resourceId);
+          const composite = new CompositeAuth([provider]);
+          const user = await composite.authenticateToken('token', mockRequest);
+          expect(() => composite.mapUserToResourceId?.(user)).toThrow('must return a non-empty string');
+        },
+      );
+
+      it.each([false, true])('preserves an unmapped provider with nested composite = %s', async nested => {
+        const mapped = new MockAuthProvider(false);
+        mapped.mapUserToResourceId = () => 'alice';
+        const unmapped = new MockAuthProvider(true, true, false, { id: 'bob' });
+        const inner = new CompositeAuth([mapped, unmapped]);
+        const composite = nested ? new CompositeAuth([inner]) : inner;
+        const user = await composite.authenticateToken('token', mockRequest);
+        expect(composite.mapUserToResourceId).toBeTypeOf('function');
+        expect(composite.mapUserToResourceId?.(user)).toBeUndefined();
+      });
+
+      it('rejects an invalid mapping inside nested composites', async () => {
+        const provider = new MockAuthProvider(true, true, false, { id: 'bob' });
+        provider.mapUserToResourceId = () => null;
+        const composite = new CompositeAuth([new CompositeAuth([provider])]);
+        const user = await composite.authenticateToken('token', mockRequest);
+        expect(() => composite.mapUserToResourceId?.(user)).toThrow('must return a non-empty string');
+      });
+    });
+
     describe('integration scenarios', () => {
       it('should work with mixed success/failure authentication and authorization', async () => {
         const user1 = { id: 1, role: 'user' };
@@ -367,5 +399,39 @@ describe('Composite auth', () => {
         expect(typeof (compositeAuth as any).getUser).toBe('function');
       });
     });
+  });
+});
+
+describe('MastraAuthProvider mapUserToResourceId', () => {
+  class MethodMappedAuth extends MastraAuthProvider<{ id: string }> {
+    async authenticateToken(token: string) {
+      return { id: token };
+    }
+    async authorizeUser() {
+      return true;
+    }
+    mapUserToResourceId(user: { id: string }) {
+      return `method:${user.id}`;
+    }
+  }
+
+  it('keeps a mapUserToResourceId method defined on a subclass', () => {
+    const auth = new MethodMappedAuth();
+    expect(auth.mapUserToResourceId({ id: 'user-1' })).toBe('method:user-1');
+  });
+
+  it('lets CompositeAuth map users through a subclass method', async () => {
+    const composite = new CompositeAuth([new MethodMappedAuth()]);
+    const user = await composite.authenticateToken('user-1', new Request('http://localhost'));
+    expect(composite.mapUserToResourceId?.(user)).toBe('method:user-1');
+  });
+
+  it('lets the constructor option override a subclass method', () => {
+    const auth = new (class extends MethodMappedAuth {
+      constructor() {
+        super({ mapUserToResourceId: user => `option:${user.id}` });
+      }
+    })();
+    expect(auth.mapUserToResourceId({ id: 'user-1' })).toBe('option:user-1');
   });
 });

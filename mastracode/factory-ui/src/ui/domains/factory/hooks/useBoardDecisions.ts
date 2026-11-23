@@ -1,14 +1,22 @@
 import { useMemo } from 'react';
 
-import { useFactoryDecisionAction, useFactoryDecisionStatus } from '../../../../hooks/useFactoryDecisions';
+import {
+  factoryDecisionStatusQueryOptions,
+  useFactoryDecisionAction,
+  useFactoryDecisionStatus,
+} from '../../../../hooks/useFactoryDecisions';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/decisions';
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
+export function boardDecisionsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return factoryDecisionStatusQueryOptions(baseUrl, factoryProjectId, BOARD_STATUSES);
+}
+
 /** Per card: the run proposed on it, and the effect already in flight or failed behind it. */
 export function useItemDecisions(factoryProjectId: string | undefined) {
   const status = useFactoryDecisionStatus(factoryProjectId, BOARD_STATUSES);
-  return useMemo(() => {
+  const byItem = useMemo(() => {
     const proposalByItem = new Map<string, FactoryDecisionSummary>();
     const effectByItem = new Map<string, FactoryDecisionSummary>();
     for (const decision of status.data?.decisions ?? []) {
@@ -18,11 +26,13 @@ export function useItemDecisions(factoryProjectId: string | undefined) {
     }
     return { proposalByItem, effectByItem };
   }, [status.data]);
+  // Refused or never answered, the decisions say nothing of what is queued on a card now.
+  return { ...byItem, isPending: status.isPending, isCurrent: status.isSuccess };
 }
 
 /** The board's decisions with the actions a person takes on them. */
 export function useBoardDecisions(factoryProjectId: string) {
-  const { proposalByItem, effectByItem } = useItemDecisions(factoryProjectId);
+  const { proposalByItem, effectByItem, isCurrent } = useItemDecisions(factoryProjectId);
   const approve = useFactoryDecisionAction(factoryProjectId, 'approve');
   const dismiss = useFactoryDecisionAction(factoryProjectId, 'dismiss');
   const retry = useFactoryDecisionAction(factoryProjectId, 'retry');
@@ -30,6 +40,7 @@ export function useBoardDecisions(factoryProjectId: string) {
   return {
     proposalByItem,
     effectByItem,
+    isCurrent,
     approvingId: approve.isPending ? approve.variables : undefined,
     approve: (decisionId: string) => approve.mutate(decisionId),
     dismiss: (decisionId: string) => dismiss.mutate(decisionId),

@@ -101,18 +101,17 @@ describe('LifelinePoint — when the point selects a theme', () => {
   it('places the tooltip centred just above the point', () => {
     renderPoint();
     const point = screen.getByRole('button', { name: /Linked theme/ });
-    point.getBoundingClientRect = () =>
-      ({
-        left: 100,
-        top: 200,
-        width: 40,
-        height: 12,
-        right: 140,
-        bottom: 212,
-        x: 100,
-        y: 200,
-        toJSON: () => ({}),
-      }) as DOMRect;
+    point.getBoundingClientRect = () => ({
+      left: 100,
+      top: 200,
+      width: 40,
+      height: 12,
+      right: 140,
+      bottom: 212,
+      x: 100,
+      y: 200,
+      toJSON: () => ({}),
+    });
 
     fireEvent.mouseEnter(point);
 

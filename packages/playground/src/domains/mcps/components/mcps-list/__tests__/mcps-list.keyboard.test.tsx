@@ -10,11 +10,13 @@ import { renderWithProviders, waitForMutationsIdle } from '@/test/render';
 
 type McpServer = McpServerListResponse['servers'][number];
 
-const mcpServers = [
-  { id: 'server-a', name: 'Server A' },
-  { id: 'server-b', name: 'Server B' },
-  { id: 'server-c', name: 'Server C' },
-] as unknown as McpServer[];
+const versionDetail: McpServer['version_detail'] = { version: '1.0.0', release_date: '2026-01-01', is_latest: true };
+
+const mcpServers: McpServer[] = [
+  { id: 'server-a', name: 'Server A', version_detail: versionDetail, transports: ['streamable-http', 'sse'] },
+  { id: 'server-b', name: 'Server B', version_detail: versionDetail, transports: ['streamable-http'] },
+  { id: 'server-c', name: 'Server C', version_detail: versionDetail, transports: ['streamable-http', 'sse'] },
+];
 
 const useToolsHandler = () => {
   server.use(http.get('*/api/mcp/:serverId/tools', () => HttpResponse.json({ tools: [] })));

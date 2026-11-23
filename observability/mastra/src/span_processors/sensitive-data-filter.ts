@@ -114,9 +114,10 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
   /**
    * Process a span by filtering sensitive data across its key fields.
    * Fields processed: attributes, metadata, input, output, errorInfo, requestContext.
+   * The span is mutated in place, as the SpanOutputProcessor contract requires.
    *
    * @param span - The input span to filter
-   * @returns A new span with sensitive values redacted
+   * @returns The same span instance with sensitive values redacted
    */
   process(span: AnySpan): AnySpan {
     const indexedState = this.redactionStyle === 'indexed' ? this.getTraceState(span.traceId) : undefined;
@@ -125,6 +126,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     span.input = this.tryFilter(span.input, indexedState);
     span.output = this.tryFilter(span.output, indexedState);
     span.errorInfo = this.tryFilter(span.errorInfo, indexedState);
+    span.stopReasonContext = this.tryFilter(span.stopReasonContext, indexedState);
     span.requestContext = this.tryFilter(span.requestContext, indexedState);
     return span;
   }
@@ -159,9 +161,8 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     if (obj === null || typeof obj !== 'object') {
       // Handle string values - check if they contain JSON that needs redacting
       if (typeof obj === 'string') {
-        // Quick check - JSON objects/arrays start with { or [
         const trimmed = obj.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        if (this.isJsonCandidate(trimmed)) {
           return this.redactJsonString(obj, indexedState);
         }
       }
@@ -188,17 +189,43 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       const normKey = this.normalizeKey(key);
 
       if (this.isSensitive(normKey)) {
-        if (obj[key] && typeof obj[key] === 'object') {
-          filtered[key] = this.deepFilter(obj[key], seen, indexedState);
-        } else {
-          filtered[key] = this.redactValue(obj[key], normKey, indexedState);
-        }
+        // Everything under a sensitive key is sensitive, including nested objects and arrays.
+        filtered[key] =
+          obj[key] && typeof obj[key] === 'object'
+            ? this.redactionToken
+            : this.redactValue(obj[key], normKey, indexedState);
       } else {
         filtered[key] = this.deepFilter(obj[key], seen, indexedState);
       }
     }
 
     return filtered;
+  }
+
+  private isJsonCandidate(value: string): boolean {
+    const opening = value[0];
+    if (opening !== '{' && opening !== '[') return false;
+
+    let index = 1;
+    while (value[index] === ' ' || value[index] === '\t' || value[index] === '\r' || value[index] === '\n') {
+      index++;
+    }
+    const first = value[index];
+    if (first === undefined) return false;
+    if (opening === '{') return first === '"' || first === '}';
+
+    // Reject impossible prefixes (including serialization markers), not malformed JSON.
+    return (
+      first === ']' ||
+      first === '{' ||
+      first === '[' ||
+      first === '"' ||
+      first === '-' ||
+      (first >= '0' && first <= '9') ||
+      first === 't' ||
+      first === 'f' ||
+      first === 'n'
+    );
   }
 
   private tryFilter(value: any, indexedState?: IndexedRedactionState): any {

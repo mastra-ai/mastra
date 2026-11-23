@@ -1,0 +1,41 @@
+---
+extends: existence
+message: "AI upkeep frame: '%s'. Say what the mechanism does to the thing, not what state it keeps it in."
+level: error
+nonword: true
+ignorecase: true
+# The upkeep frame: a mechanism credited with keeping something in a
+# state or away from a place ("keeps a re-run cheap," "keeps the index
+# small," "keeps search fast," "keeps an orphan away from every
+# extractor," "keeps the rest clear of it," "keeps a reader from mistaking
+# one for the other"). A documentation-corpus audit (2026-09) counted
+# twenty of these with no rule reading the family. The plain sentence
+# says what the mechanism does: the cache makes a re-run cheap, the
+# sweep removes the orphan, the label tells a reader which is which.
+#
+# The frame is ordinary English with most adjectives ("keep the buffer
+# small," "keeps the connection open"), so the adjective list is the
+# gate: the ones the audit saw and agent prose reaches for, matching
+# seven times across the Go and Python standard libraries ("keep the sort
+# result deterministic," "keeping the heap reasonably small," "keep the
+# tar command happy"), each the figure. The causative "keeps X from
+# being" stays out with twelve hits ("keeps the garbage collector from
+# being invoked"), because that is how both corpora say "prevents"; only
+# the cognition complement fires, since a reader kept from mistaking is
+# the artifact deciding what the reader knows. "Keeps X honest" is
+# EnforcementMetaphors' and "keeps X quiet" FigurativeQuiet's, so both
+# stay out of the list here.
+tokens:
+  # --- The state kept ("keeps a re-run cheap," "keeps the index small,"
+  # "kept the output legible"). One to three words of object.
+  - "\\bke(?:eps?|eping|pt) (?:(?:a|an|the|this|that|these|those|its|their|each|every|our|your|my|all|both|any|some) )?(?:[a-z'-]+ ){1,3}(?:cheap|green|lean|legible|pristine|deterministic|settled|immutable|sharp|fresh|sane|happy|whole|small|fast|short|thin|light|tight|current|safe|stable|simple|flat|portable|readable|reproducible|idempotent|hermetic|reversible|auditable|explainable|boring)\\b"
+
+  # --- The distance kept ("keeps an orphan away from every extractor,"
+  # "keeps the rest clear of it," "keeps log lines off the bars"). "Keeps
+  # X out of Y" stays out with the causative, since a gitignore entry
+  # that keeps a file out of history is plain English.
+  - "\\bke(?:eps?|eping|pt) (?:a|an|the|this|that|these|those|its|their|each|every|our|your|my|all|both|any|some) (?:[a-z'-]+ ){1,3}(?:clear of|away from|off the)\\b"
+
+  # --- The reader kept from a thought ("keeps a reader from mistaking X
+  # for Y," "keeps a failure from reading as a removal").
+  - "\\bke(?:eps?|eping|pt) (?:a|an|the|this|that|these|those|its|their|each|every|our|your|my|all|both|any|some) (?:[a-z'-]+ ){1,3}from (?:mistaking|reading|thinking|believing|seeing|treating|assuming|guessing|deciding|confusing|misreading|learning|knowing|noticing)\\b"

@@ -1,16 +1,16 @@
 ---
-title: "Reference: Memory class | Memory"
-description: "The Memory class provides a reliable system for managing conversation history and thread-based message storage in Mastra."
+title: 'Reference: Memory class | Memory'
+description: 'The Memory class provides a reliable system for managing conversation history and thread-based message storage in Mastra.'
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/memory"
-  - "@mastra/pg"
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
+  - '@mastra/pg'
 ---
 
 # Memory class
 
-The `Memory` class provides a reliable system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and embedder.
+The `Memory` class provides a reliable system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and, unless that vector store embeds text itself, an embedder.
 
 ## Usage example
 
@@ -47,7 +47,7 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
     name: 'storage',
     type: 'MastraCompositeStore',
     description:
-      'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
+      'Storage implementation for persisting memory data. Optional: when omitted, an agent uses the storage of the Mastra instance it belongs to. If neither is configured, accessing `memory.storage` throws `Memory requires a storage provider to function`.',
     isOptional: true,
   },
   {
@@ -58,8 +58,16 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
   },
   {
     name: 'embedder',
-    type: 'EmbeddingModel<string> | EmbeddingModelV2<string>',
-    description: 'Embedder instance for vector embeddings. Required when semantic recall is enabled.',
+    type: 'string | EmbeddingModel<string> | EmbeddingModelV2<string>',
+    description:
+      'Embedder for vector embeddings, as a model-router ID string (for example `"openai/text-embedding-3-small"`), an `EmbeddingModel`, or an `EmbeddingModelV2`. Required when semantic recall is enabled and the vector store doesn\'t generate embeddings itself (`vector.isSelfEmbedding` is false).',
+    isOptional: true,
+  },
+  {
+    name: 'embeddingDimension',
+    type: 'number',
+    description:
+      'Output dimension of the embedder, as a positive integer. When set, Memory uses it to name the semantic recall index instead of embedding a probe string on first use. It must match the vectors the embedder returns: a mismatch throws a `MASTRA_MEMORY_EMBEDDING_DIMENSION_MISMATCH` error before any index is created. See [Setting the embedding dimension](/docs/memory/semantic-recall#setting-the-embedding-dimension).',
     isOptional: true,
   },
   {
@@ -74,9 +82,16 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             name: 'lastMessages',
             type: 'number | false',
             description:
-              'Number of most recent messages to include in context. Set to `false` to disable the message history feature entirely (messages are not loaded into context or saved). Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To load messages without saving new ones, use the `readOnly` option.',
+              'Number of most recent messages to include in context. Set to `false` to disable the message history feature entirely (messages are not loaded into context or saved). Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To load messages without saving new ones, use the `readOnly` option. The window slides forward on every request, so once a thread exceeds the limit, each turn invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory) instead.',
             isOptional: true,
             defaultValue: '10',
+          },
+          {
+            name: 'messageHistory',
+            type: '{ maxTokens: number; atMaxRemoveTokens?: number }',
+            description:
+              'Token budget for the complete prompt, including remembered history, system instructions, context, and the current turn. When the prompt exceeds `maxTokens`, the oldest remembered messages are dropped until the prompt is at most `maxTokens - atMaxRemoveTokens` (defaults to 25% of `maxTokens`). Protected content is never removed. Linked tool calls and results are removed together. During agent runs, trimmed history is excluded from later turns via a persisted per-thread boundary, but the messages themselves stay in storage. When set without an explicit `lastMessages`, the default 10-message cap is not applied. Set `maxTokens` to `0` to disable message history. Prefer this over `lastMessages`, since message count is a poor proxy for context size.',
+            isOptional: true,
           },
           {
             name: 'readOnly',
@@ -87,10 +102,18 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             defaultValue: 'false',
           },
           {
-            name: 'semanticRecall',
-            type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+            name: 'retainFullInput',
+            type: 'boolean',
             description:
-              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.',
+              "When true, the request input is processed exactly as supplied instead of being filtered against stored history. Use this when you assemble the input yourself and need the message sequence preserved. Stored history is still loaded underneath, and every input message that isn't already stored is saved to the thread, including few-shot examples. Can be set per call on `memory.options` or agent-wide in the memory constructor options.",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'semanticRecall',
+            type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource'; maxChunkChars?: number }",
+            description:
+              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires a vector store, and an embedder unless the vector store embeds text itself (`isSelfEmbedding`). Default topK is 4, default messageRange is {before: 1, after: 1}. `maxChunkChars` caps the characters of message text per embedded chunk; see [Long messages](/docs/memory/semantic-recall#long-messages).',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -113,9 +136,9 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
           },
           {
             name: 'generateTitle',
-            type: 'boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }',
+            type: 'boolean | { model?: DynamicArgument<MastraModelConfig>; instructions?: DynamicArgument<string>; minMessages?: number; emitEvent?: boolean }',
             description:
-              'Controls automatic thread title generation from the conversation transcript. Can be a boolean or an object with custom model and instructions.',
+              "Controls automatic thread title generation from the conversation transcript. Accepts a boolean or an object with a custom model (any `MastraModelConfig`: a model instance, a `\"provider/model\"` ID, or an OpenAI-compatible config; defaults to the agent's own model), custom instructions, a minimum message count, and `emitEvent`. With `emitEvent: true` the run's stream waits for the title and emits it as a transient `data-thread-title` chunk before `finish` (durable and evented agents persist the title but don't emit the chunk yet).",
             isOptional: true,
             defaultValue: 'false',
           },
@@ -137,6 +160,124 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
   },
 ]}
 />
+
+## `saveMessages()`
+
+`agent.generate()` and `agent.stream()` persist messages for you. Call `memory.saveMessages()` when you need to write messages yourself, for example to seed a thread, to import a transcript, or to store messages that originated outside Mastra. Each message needs a `threadId` and a `resourceId`, so create the thread with [`createThread()`](/reference/memory/createThread) before saving into it.
+
+```typescript
+await memory.saveMessages({
+  messages: [
+    {
+      id: 'msg-1',
+      threadId: 'thread-123',
+      resourceId: 'user-456',
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Where is my order?' }],
+      },
+    },
+  ],
+})
+```
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'messages',
+    type: 'MastraDBMessage[]',
+    description: 'The messages to save. Every message must include a `threadId` and a `resourceId`.',
+  },
+  {
+    name: 'memoryConfig',
+    type: 'MemoryConfig',
+    description: 'Per-call memory options. Merged over the options passed to the constructor.',
+    isOptional: true,
+  },
+  {
+    name: 'observabilityContext',
+    type: 'Partial<ObservabilityContext>',
+    description: 'Tracing context attached to the save operation.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns `Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>`. `usage` is present when the embedder reports token usage while indexing messages for semantic recall.
+
+### `MastraDBMessage`
+
+Storage uses a single message shape, `MastraDBMessage`. The methods that hand messages back or take them in use this shape, including `saveMessages()` and [`recall()`](/reference/memory/recall).
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Message identifier.',
+  },
+  {
+    name: 'role',
+    type: "'user' | 'assistant' | 'system' | 'signal'",
+    description: 'Who produced the message. System messages and transient signals are not persisted.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread the message belongs to. Required when saving.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Resource (usually a user or tenant) the message belongs to. Required when saving.',
+    isOptional: true,
+  },
+  {
+    name: 'createdAt',
+    type: 'Date',
+    description: 'Message timestamp.',
+  },
+  {
+    name: 'content',
+    type: 'MastraMessageContentV2',
+    description: 'The message body. Its `parts` array holds the text, reasoning, tool calls, and attachments.',
+  },
+]}
+/>
+
+`content.parts` is the part the agent actually reads. `content.format` is always `2` for stored messages, and `content.metadata` carries arbitrary custom data. `content.toolInvocations`, `content.reasoning`, and `content.experimental_attachments` are flat mirrors kept for AI SDK v4 compatibility; write to `parts` instead.
+
+```typescript
+const assistantMessage = {
+  id: 'msg-2',
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [
+      { type: 'text', text: 'It ships tomorrow.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'lookupOrder',
+          args: { orderId: 'A-1' },
+          result: { eta: '2026-10-30' },
+        },
+      },
+    ],
+    metadata: { source: 'import' },
+  },
+}
+```
 
 ## Extended usage example
 
@@ -180,14 +321,14 @@ export const agent = new Agent({
 import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
-import { PgStore, PgVector } from '@mastra/pg'
+import { PostgresStore, PgVector } from '@mastra/pg'
 
 export const agent = new Agent({
   name: 'pg-agent',
   instructions: 'You are an agent with optimized PostgreSQL memory.',
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
-    storage: new PgStore({
+    storage: new PostgresStore({
       id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),
@@ -205,8 +346,10 @@ export const agent = new Agent({
         indexConfig: {
           type: 'hnsw', // Use HNSW for better performance
           metric: 'dotproduct', // Optimal for OpenAI embeddings
-          m: 16, // Number of bi-directional links
-          efConstruction: 64, // Construction-time candidate list size
+          hnsw: {
+            m: 16, // Number of bi-directional links
+            efConstruction: 64, // Construction-time candidate list size
+          },
         },
       },
       workingMemory: {
@@ -230,5 +373,6 @@ export const agent = new Agent({
 - [listThreads](/reference/memory/listThreads)
 - [deleteMessages](/reference/memory/deleteMessages)
 - [cloneThread](/reference/memory/cloneThread)
+- [copyThread](/reference/memory/copyThread)
 - [settled](/reference/memory/settled)
 - [Clone Utility Methods](/reference/memory/clone-utilities)

@@ -1,0 +1,120 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import type { UseQueryResult } from '@tanstack/react-query';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useIncidentioSourcesQuery } from '../../../../hooks/useIncidentioData';
+import type { IncidentioStatus } from '../../factory/services/incidentio';
+import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
+import {
+  AddPlatformAccountButton,
+  connectionName,
+  PlatformConnectButton,
+  PlatformConnectionActions,
+} from './PlatformProviderConnections';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
+import type { IntakeSectionProps } from './IntakeProviderCard';
+import { RoutedSourcePicker } from './IntakeSourceRouting';
+import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+
+// A deployment API key serves follow-ups without a Platform connection.
+export function isIncidentioDirectConfigured(status: IncidentioStatus | undefined) {
+  return Boolean(status?.enabled && status.configured && status.mode === 'api-key' && status.reason === 'ready');
+}
+
+export function IncidentioIntakeSection({
+  config,
+  listed,
+  statusQuery,
+  connectionsQuery,
+}: IntakeSectionProps & {
+  statusQuery: UseQueryResult<IncidentioStatus>;
+  connectionsQuery: UseQueryResult<PlatformProviderConnection[]>;
+}) {
+  const selection = useIntakeSelection('incidentio');
+  const factories = useFactoriesQuery().data ?? [];
+  const directConfigured = isIncidentioDirectConfigured(statusQuery.data);
+  const connections = connectionsQuery.data ?? [];
+  const active = connections.filter(connection => connection.status === 'active');
+  const credentialActive = directConfigured || active.length > 0;
+  const sourcesQuery = useIncidentioSourcesQuery(credentialActive);
+  const sources = sourcesQuery.data ?? [];
+  const description = connectionDescription();
+  function connectionDescription() {
+    if (!directConfigured && connectionsQuery.isError) return "Couldn't load incident.io connections.";
+    if (statusQuery.isError && !active.length) return "Couldn't load incident.io status.";
+    if (!directConfigured && connections.some(connection => connection.status === 'needs_reauth'))
+      return 'An incident.io account needs to be reconnected to keep syncing follow-ups.';
+    if (!credentialActive) return 'Connect incident.io to sync follow-ups.';
+    return undefined;
+  }
+  const account = directConfigured
+    ? 'incident.io API key configured on this server'
+    : connections.map(connectionName).join(', ');
+  const unavailable = !directConfigured && (connectionsQuery.isError || statusQuery.isError);
+  return (
+    <IntakeProviderCard
+      name="incident.io"
+      icon={<SettingsIntegrationIcon provider="incidentio" />}
+      account={account}
+      listed={listed}
+      description={description}
+      connection={
+        !directConfigured &&
+        !unavailable &&
+        (listed ? (
+          <>
+            {connections.length > 0 && <AddPlatformAccountButton provider="incident-io" />}
+            <PlatformConnectionActions provider="incident-io" connections={connections} />
+          </>
+        ) : (
+          <PlatformConnectButton provider="incident-io" />
+        ))
+      }
+      action={
+        unavailable && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => {
+              void connectionsQuery.refetch();
+              void statusQuery.refetch();
+            }}
+          >
+            Retry
+          </Button>
+        )
+      }
+    >
+      {(credentialActive || Boolean(config.incidentio.sourceIds?.length)) && (
+        <RoutedSourcePicker
+          integrationId="incidentio"
+          routingLabel="incident.io"
+          factories={factories}
+          label="Follow-up sources"
+          addLabel="Add follow-up source"
+          itemIcon={<SettingsIntegrationIcon provider="incidentio" />}
+          groups={[
+            {
+              id: 'incidentio-follow-ups',
+              items: sources.map(source => ({ id: source.id, label: source.name })),
+            },
+          ]}
+          selectedIds={config.incidentio.sourceIds}
+          saving={selection.saving}
+          loading={credentialActive && sourcesQuery.isPending}
+          error={
+            !credentialActive
+              ? 'Reconnect incident.io to add follow-up sources.'
+              : sourcesQuery.isError
+                ? "Couldn't load follow-up sources."
+                : undefined
+          }
+          onRetry={credentialActive ? () => void sourcesQuery.refetch() : undefined}
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
+        />
+      )}
+    </IntakeProviderCard>
+  );
+}

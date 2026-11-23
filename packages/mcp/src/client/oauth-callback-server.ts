@@ -6,7 +6,7 @@
  * with MCPOAuthClientProvider to complete the authorization-code flow for
  * OAuth-protected MCP servers.
  *
- * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+ * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
  */
 
 import { timingSafeEqual } from 'node:crypto';
@@ -80,6 +80,11 @@ export interface OAuthCallbackResult {
    * The state parameter echoed back by the authorization server.
    */
   state: string;
+
+  /**
+   * RFC 9207 authorization-server issuer returned with the callback, when present.
+   */
+  iss?: string;
 }
 
 /**
@@ -120,9 +125,9 @@ export interface OAuthCallbackServer {
  * its preferred port, followed by the sequential fallback-port variants that
  * createOAuthCallbackServer will try when the preferred port is in use.
  *
- * This is the single source of the candidate list: register all of these as
- * redirect_uris during dynamic client registration so a fallback-bound
- * callback URL always matches a registered URI.
+ * This is the single source of the candidate list: include all of these as
+ * redirect_uris in the pre-registered client or the hosted Client ID Metadata
+ * Document so a fallback-bound callback URL always matches a listed URI.
  */
 export function getCallbackUrlCandidates(redirectUrl: string | URL): URL[] {
   const base = new URL(redirectUrl.toString());
@@ -272,7 +277,7 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     }
 
     respond(200, SUCCESS_HTML);
-    settle({ result: { code, state } });
+    settle({ result: { code, state, iss: url.searchParams.get('iss') ?? undefined } });
   });
 
   // Bind the hostname the redirect URL names (brackets stripped for IPv6
@@ -326,10 +331,6 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
 
     close() {
       settle({ error: new Error('OAuth callback server closed before receiving an authorization code') });
-      // Browsers keep the callback connection alive after the response, and
-      // server.close() waits for every socket to end — without this the port
-      // stays held until the keep-alive timeout expires.
-      server.closeIdleConnections();
       return new Promise<void>((resolve, reject) => {
         server.close(error => {
           // Closing twice is fine (e.g. an explicit cancel followed by the
@@ -340,6 +341,12 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
             resolve();
           }
         });
+        // server.close() waits for every socket to end. Browsers keep the
+        // callback connection alive after the response and also open spare
+        // connections that never send a request (which Node doesn't treat as
+        // idle), so drop them all: the server is one-shot and its only
+        // response was sent when the flow settled.
+        server.closeAllConnections();
       });
     },
   };

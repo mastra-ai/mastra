@@ -8,7 +8,7 @@ packages:
 
 # Metric queries
 
-Metric queries read raw and aggregated metric data from the observability storage domain. For exporter and storage setup, see the [Metrics overview](/docs/observability/metrics/overview). For automatic metric names and labels, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics).
+Metric queries read raw and aggregated metric data from the observability storage domain. For exporter and storage setup, see the [Metrics overview](/docs/observability/metrics/overview). For automatic metric names and labels, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics). Metrics you emit with [`MetricsContext.emit()`](/reference/observability/metrics/metrics-context) are queried the same way, by the name you passed to `emit()`.
 
 ## Access
 
@@ -114,6 +114,7 @@ All metric operations accept the same optional `filters` object. Raw list reques
 | `userId` | `string` | User ID |
 | `organizationId` | `string` | Organization ID |
 | `experimentId` | `string` | Experiment or evaluation run ID |
+| `experimentIds` | `string[]` | One to 1,000 experiment IDs |
 | `serviceName` | `string` | Service name |
 | `environment` | `string` | Environment name |
 | `resourceId` | `string` | Resource ID |
@@ -191,7 +192,7 @@ Groups matching records by one or more dimensions and aggregates each group. The
 | `aggregation` | `AggregationType` | Yes | Aggregation for each group |
 | `distinctColumn` | `MetricDistinctColumn` | For `count_distinct` | Column whose distinct values are counted |
 | `filters` | `MetricsFilter` | No | Shared metric filters |
-| `limit` | `number` | No | Positive integer up to 1,000. Required for high-cardinality groupings. |
+| `limit` | `number` | No | Positive integer up to 1,000. Keeps only the top groups after sorting by `orderDirection`. When omitted, all groups are returned. Set it for high-cardinality groupings such as `threadId` to bound the response. When grouping by a label key, some stores, such as PostgreSQL, exclude rows where the label is missing or empty, so the groups might not add up to the overall total even without a `limit`. Use `getMetricAggregate()` for that total. |
 | `orderDirection` | `'ASC' \| 'DESC'` | No | Sort direction for the aggregated value. Storage implementations default to `DESC`. |
 
 #### Returns

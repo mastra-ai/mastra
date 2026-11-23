@@ -9,6 +9,7 @@ import type {
   StreamEvent,
   WorkflowStateField,
   WorkflowRunStatus,
+  WorkflowRunState,
 } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -40,7 +41,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
-import { getEffectiveResourceId, validateRunOwnership } from './utils';
+import { getEffectiveResourceId, getHandlerFGAProvider, getPublicWorkflowById, validateRunOwnership } from './utils';
 
 /**
  * Statuses a run cannot come back from. Streaming one of these runIds again would
@@ -49,6 +50,15 @@ import { getEffectiveResourceId, validateRunOwnership } from './utils';
  * in the workflow's run map, and a finished run has already been dropped from it.
  */
 const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
+
+/**
+ * A run's result with its step results read: a storage v2 result's `steps` is a loader that
+ * reads them from storage, which a response can't carry, so it answers with them as for v1.
+ */
+async function withLoadedSteps<T extends { steps?: unknown }>(result: T): Promise<T> {
+  const steps: unknown = result.steps;
+  return typeof steps === 'function' ? { ...result, steps: await steps() } : result;
+}
 
 /**
  * Runs whose chunks are already being written to the cache in this process,
@@ -111,7 +121,7 @@ export interface WorkflowContext extends Context {
   requestContext?: RequestContext;
 }
 
-async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
+export async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   const logger = mastra.getLogger();
 
   if (!workflowId) {
@@ -121,14 +131,10 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   let workflow;
 
   // First check registry for temporary workflows
-  workflow = WorkflowRegistry.getWorkflow(workflowId);
+  workflow = WorkflowRegistry.getWorkflow(workflowId, mastra);
 
   if (!workflow) {
-    try {
-      workflow = mastra.getWorkflowById(workflowId);
-    } catch (error) {
-      logger.debug('Error getting workflow, searching agents for workflow', error);
-    }
+    workflow = getPublicWorkflowById(mastra, workflowId);
   }
 
   if (!workflow) {
@@ -173,6 +179,11 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   summary: 'List all workflows',
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'list_workflows',
+    description: 'List the workflows you can run, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, partial, requestContext }: any) => {
     try {
@@ -184,7 +195,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       }, {});
 
       // Filter workflows by FGA if configured
-      const fgaProvider = mastra.getServer?.()?.fga;
+      const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
       const user = requestContext?.get('user');
       if (fgaProvider) {
         if (!user) {
@@ -236,7 +247,7 @@ export const LIST_WORKFLOW_RUN_COUNTS_ROUTE = createRoute({
   requiresAuth: true,
   handler: (async ({ mastra, requestContext }: any) => {
     try {
-      const fgaProvider = mastra.getServer?.()?.fga;
+      const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
       const user = requestContext?.get('user');
       // FGA with no user can never see anything — answer before touching storage.
       if (fgaProvider && !user) {
@@ -324,6 +335,11 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   summary: 'Get workflow by ID',
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow',
+    description: 'Get details for one workflow, including its input schema and steps.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, workflowId }: any) => {
     try {
@@ -360,6 +376,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
     offset,
     resourceId,
     status,
+    summary,
     requestContext,
   }) => {
     try {
@@ -402,16 +419,43 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
         page: finalPage,
         resourceId: effectiveResourceId,
         status,
+        ...(summary ? { summary: true } : {}),
       })) || {
         runs: [],
         total: 0,
       };
+      if (summary) {
+        // Adapters may ignore `summary`, so always trim here to keep the response small.
+        return {
+          ...workflowRuns,
+          runs: workflowRuns.runs.map(run => ({ ...run, snapshot: toSummarySnapshot(run.snapshot) })),
+        };
+      }
       return workflowRuns;
     } catch (error) {
       return handleError(error, 'Error getting workflow runs');
     }
   },
 });
+
+function toSummarySnapshot(
+  snapshot: WorkflowRunState | string,
+): Pick<WorkflowRunState, 'status' | 'timestamp'> | string {
+  let parsed: unknown;
+  if (typeof snapshot === 'string') {
+    try {
+      parsed = JSON.parse(snapshot);
+    } catch {
+      // Never echo an unparseable (possibly huge) snapshot back in summary mode.
+      return '';
+    }
+  } else {
+    parsed = snapshot;
+  }
+  if (!parsed || typeof parsed !== 'object') return '';
+  const { status, timestamp } = parsed as WorkflowRunState;
+  return { status, timestamp };
+}
 
 export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   method: 'GET',
@@ -422,8 +466,13 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   responseSchema: workflowRunResultSchema,
   summary: 'Get workflow run by ID',
   description:
-    'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result,metadata)',
+    'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=result,steps). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow_run',
+    description: 'Get the status and result of a workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows, requestContext }) => {
     try {
@@ -455,7 +504,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       return run;
     } catch (error) {
@@ -497,7 +546,7 @@ export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       if (!run) {
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       await workflow.deleteWorkflowRunById(runId);
 
@@ -539,6 +588,15 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
+      if (runId) {
+        const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+        await validateRunOwnership(
+          existingRun,
+          getEffectiveResourceId(requestContext, undefined),
+          mastra,
+          requestContext,
+        );
+      }
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId, disableScorers });
 
       return { runId: run.runId };
@@ -579,6 +637,12 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       }
 
       const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+      await validateRunOwnership(
+        existingRun,
+        getEffectiveResourceId(requestContext, undefined),
+        mastra,
+        requestContext,
+      );
 
       if (existingRun && TERMINAL_RUN_STATUSES.includes(existingRun.status)) {
         throw new HTTPException(409, {
@@ -640,7 +704,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
@@ -669,6 +733,12 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Start workflow asynchronously',
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'start_workflow',
+    description:
+      'Run a workflow and wait for it to finish or suspend. Returns the run id and the result, or the suspend payload.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
@@ -685,8 +755,17 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
+      if (runId) {
+        const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+        await validateRunOwnership(
+          existingRun,
+          getEffectiveResourceId(requestContext, undefined),
+          mastra,
+          requestContext,
+        );
+      }
       const _run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
-      const result = await _run.start({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.start({ ...params, requestContext }));
       return result;
     } catch (error) {
       return handleError(error, 'Error starting async workflow');
@@ -730,7 +809,7 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       // Fire-and-forget: attach .catch so a rejected start (e.g. invalid input
@@ -787,7 +866,7 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
@@ -821,6 +900,11 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow asynchronously',
   description: 'Resumes a suspended workflow execution asynchronously without streaming',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'resume_workflow_run',
+    description: 'Resume a suspended workflow run with resume data and wait for it to finish or suspend again.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
@@ -846,10 +930,10 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.resume({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.resume({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -905,7 +989,7 @@ export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const result = await _run.resumeAsync({ ...params, requestContext });
@@ -953,7 +1037,7 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
@@ -1006,10 +1090,10 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.restart({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.restart({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1054,7 +1138,7 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
@@ -1079,8 +1163,16 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
   description: 'Restarts all active workflow runs asynchronously',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId }) => {
+  handler: async ({ mastra, workflowId, requestContext }) => {
     try {
+      // Restarting every active run spans all owners, so only a privileged caller may do it:
+      // checked as access to a run with no owner.
+      await validateRunOwnership(
+        { resourceId: null },
+        getEffectiveResourceId(requestContext, undefined),
+        mastra,
+        requestContext,
+      );
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -1110,8 +1202,16 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
   description: 'Restarts all active workflow runs',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId }) => {
+  handler: async ({ mastra, workflowId, requestContext }) => {
     try {
+      // Restarting every active run spans all owners, so only a privileged caller may do it:
+      // checked as access to a run with no owner.
+      await validateRunOwnership(
+        { resourceId: null },
+        getEffectiveResourceId(requestContext, undefined),
+        mastra,
+        requestContext,
+      );
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
@@ -1169,10 +1269,10 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.timeTravel({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.timeTravel({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1217,7 +1317,7 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
@@ -1268,7 +1368,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       if (!existingRun) {
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
-      await validateRunOwnership(existingRun, effectiveResourceId);
+      await validateRunOwnership(existingRun, effectiveResourceId, mastra, requestContext);
 
       const serverCache = mastra.getServerCache();
 
@@ -1295,6 +1395,11 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Cancel workflow run',
   description: 'Cancels an in-progress workflow execution',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'cancel_workflow_run',
+    description: 'Cancel an in-progress workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext }) => {
     try {
@@ -1320,7 +1425,7 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
@@ -1366,6 +1471,15 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 
       const serverCache = mastra.getServerCache();
 
+      if (runId) {
+        const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
+        await validateRunOwnership(
+          existingRun,
+          getEffectiveResourceId(requestContext, undefined),
+          mastra,
+          requestContext,
+        );
+      }
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
       const result = run.streamLegacy({
         ...params,
@@ -1420,7 +1534,7 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      await validateRunOwnership(run, effectiveResourceId);
+      await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
@@ -1451,11 +1565,30 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 // Used by standalone OrchestrationWorker instances with HttpRemoteStrategy.
 // ============================================================================
 
+// Identifies the workflow a nested step runs under, up to the top-level run.
+// Nested workflows are usually reachable only from their parent's step graph.
+export type StepExecutionParentWorkflow = {
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  parentWorkflow?: StepExecutionParentWorkflow;
+};
+
+const stepExecutionParentWorkflowSchema: z.ZodType<StepExecutionParentWorkflow> = z.lazy(() =>
+  z.object({
+    workflowId: z.string(),
+    runId: z.string(),
+    executionPath: z.array(z.number().int().nonnegative()),
+    parentWorkflow: stepExecutionParentWorkflowSchema.optional(),
+  }),
+);
+
 // `workflowId` and `runId` are taken from path params (single source of
 // truth); they are intentionally omitted from the request body schema.
 const stepExecutionBodySchema = z.object({
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
+  parentWorkflow: stepExecutionParentWorkflowSchema.optional(),
   stepResults: z.record(z.string(), z.unknown()),
   state: z.record(z.string(), z.unknown()),
   requestContext: z.record(z.string(), z.unknown()),
@@ -1466,6 +1599,7 @@ const stepExecutionBodySchema = z.object({
   format: z.enum(['legacy', 'vnext']).optional(),
   perStep: z.boolean().optional(),
   validateInputs: z.boolean().optional(),
+  storageVersion: z.union([z.literal(1), z.literal(2)]).optional(),
 });
 
 type StepExecutionBody = z.infer<typeof stepExecutionBodySchema>;
@@ -1515,6 +1649,17 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
   requiresAuth: true,
   handler: (async ({ mastra, workflowId, runId, ...body }: StepExecutionHandlerArgs) => {
     try {
+      // The adapter replaces the body's requestContext with the server-built context.
+      const candidate = body.requestContext as unknown as RequestContext | undefined;
+      const serverRequestContext = typeof candidate?.get === 'function' ? candidate : undefined;
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflowId });
+      await validateRunOwnership(
+        existingRun,
+        getEffectiveResourceId(serverRequestContext, undefined),
+        mastra,
+        serverRequestContext,
+      );
       // Auth is enforced by the framework via `requiresAuth: true` and the
       // deployer's `authenticateToken` provider. Note that when NO auth
       // provider is configured, the framework currently treats the route
@@ -1527,6 +1672,7 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
         runId,
         stepId: body.stepId,
         executionPath: body.executionPath,
+        parentWorkflow: body.parentWorkflow,
         stepResults: body.stepResults,
         state: body.state,
         requestContext: body.requestContext,
@@ -1537,6 +1683,7 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
         format: body.format,
         perStep: body.perStep,
         validateInputs: body.validateInputs,
+        storageVersion: body.storageVersion,
       });
 
       return result;
@@ -1573,6 +1720,7 @@ const receiveWorkflowEventResponseSchema = z.object({
 interface ReceiveWorkflowEventHandlerArgs {
   mastra: Mastra;
   event: Event;
+  requestContext?: RequestContext;
 }
 
 /**
@@ -1606,8 +1754,20 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
   // definitions, so `workflows:execute` is the more accurate fit. `write` is
   // kept for back-compat with service principals that already grant it.
   requiresPermission: ['workflows:write', 'workflows:execute'],
-  handler: (async ({ mastra, event }: ReceiveWorkflowEventHandlerArgs) => {
+  handler: (async ({ mastra, event, requestContext }: ReceiveWorkflowEventHandlerArgs) => {
     try {
+      const workflowName = (event.data as { workflowId?: unknown } | undefined)?.workflowId;
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const existingRun = await workflowsStore?.getWorkflowRunById({
+        runId: event.runId,
+        ...(typeof workflowName === 'string' ? { workflowName } : {}),
+      });
+      await validateRunOwnership(
+        existingRun,
+        getEffectiveResourceId(requestContext, undefined),
+        mastra,
+        requestContext,
+      );
       // The wire schema carries `createdAt` as a string; coerce to Date here
       // before handing off to the in-process pipeline, which expects an `Event`.
       const rawCreatedAt = (event as unknown as { createdAt: unknown }).createdAt;

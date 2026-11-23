@@ -1,0 +1,90 @@
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+
+export type LinearRuleOverrides = Partial<
+  Record<FactoryLinearEventName, FactoryRuleHandler<FactoryLinearRuleContext> | null | undefined>
+>;
+export type LinearEventRules = Readonly<
+  Record<FactoryLinearEventName, FactoryRuleHandler<FactoryLinearRuleContext> | null>
+>;
+
+function linearIssueObserved(context: FactoryLinearRuleContext) {
+  if (context.item || !context.intake) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:issue-triage`,
+    // Filed on the default board's first phase; the project's intake routes place it from there.
+    board: context.intake.board,
+    source: 'linear-issue',
+    sourceKey: `linear:${context.issue.identifier}`,
+    title: `${context.issue.identifier}: ${context.issue.title}`,
+    url: context.issue.url,
+    stage: context.intake.initialPhase,
+    metadata: {
+      linearIssueId: context.issue.id,
+      ...(context.issue.projectId ? { linearProjectId: context.issue.projectId } : {}),
+      identifier: context.issue.identifier,
+      sourceCreatedAt: context.issue.createdAt,
+      linearState: context.issue.state,
+      linearStateType: context.issue.stateType,
+      linearPriority: context.issue.priorityLabel,
+      linearAssignee: context.issue.assignee,
+      linearCreator: context.issue.creator,
+      linearTeam: context.issue.team,
+      labels: [...context.issue.labels] as string[],
+      ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
+      ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
+    },
+  } as const;
+}
+
+function linearIssueClosed(context: FactoryLinearRuleContext) {
+  if (!context.item || context.item.source !== 'linear-issue') return;
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
+  // Only terminal state types trigger close.
+  const stateType = context.issue.stateType;
+  if (stateType !== 'completed' && stateType !== 'canceled') return;
+  const canceled = stateType === 'canceled';
+  const target = canceled ? closure.canceled : closure.completed;
+  return closedByRoutes(canceled, {
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: context.board,
+    stage: target.phase,
+    message: {
+      text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
+    },
+  });
+}
+
+export const defaultLinearRules = Object.freeze({
+  issueObserved: linearIssueObserved,
+  issueClosed: linearIssueClosed,
+} satisfies LinearEventRules);
+
+export function resolveLinearRules(overrides?: LinearRuleOverrides): LinearEventRules {
+  if (
+    overrides !== undefined &&
+    (overrides === null ||
+      typeof overrides !== 'object' ||
+      Array.isArray(overrides) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(overrides)))
+  ) {
+    throw new Error('Linear rules must be a plain object.');
+  }
+  const rules: Record<string, FactoryRuleHandler<FactoryLinearRuleContext> | null> = { ...defaultLinearRules };
+  for (const key of Reflect.ownKeys(overrides ?? {})) {
+    if (typeof key !== 'string' || !Object.hasOwn(defaultLinearRules, key)) {
+      throw new Error(`Unknown Linear rule event: ${String(key)}.`);
+    }
+    const handler = overrides?.[key as FactoryLinearEventName];
+    if (handler !== undefined && handler !== null && typeof handler !== 'function') {
+      throw new Error(`Linear rule ${key} must be a function, null, or undefined.`);
+    }
+    if (handler !== undefined) rules[key] = handler;
+  }
+  return recordExplicitRuleOverrides(Object.freeze(rules) as LinearEventRules, overrides);
+}

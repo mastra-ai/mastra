@@ -1,4 +1,5 @@
 import { describeFactoryStorageContract } from '@internal/storage-test-utils';
+import { Pool } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PgFactoryStorage } from './factory-storage';
@@ -81,6 +82,69 @@ describe('PgFactoryStorage capabilities', () => {
     }
   });
 
+  it('destroys the updateAtomic client if its rollback fails', async () => {
+    const storage = new PgFactoryStorage({ connectionString });
+    const primary = new Error('select failed');
+    const rollbackError = new Error('rollback failed');
+    const release = vi.fn();
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(primary)
+      .mockRejectedValueOnce(rollbackError);
+    const pool = storage.authDatabase().pool;
+
+    try {
+      await storage.ensureCollections([{ name: 'atomic_rollback_test', columns: { id: { type: 'uuid-pk' } } }]);
+      const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+      try {
+        const failure = await storage.ops
+          .updateAtomic('atomic_rollback_test', {}, async row => row)
+          .catch(error => error);
+        expect(failure).toBeInstanceOf(AggregateError);
+        expect(failure.errors).toEqual([primary, rollbackError]);
+        expect(query).toHaveBeenNthCalledWith(3, 'ROLLBACK');
+        expect(release).toHaveBeenCalledWith(rollbackError);
+      } finally {
+        connect.mockRestore();
+      }
+    } finally {
+      await storage.close();
+    }
+  });
+
+  it.each(['withTransaction', 'updateAtomic'] as const)(
+    'destroys the %s client when BEGIN rejects without running the operation',
+    async path => {
+      const storage = new PgFactoryStorage({ connectionString });
+      const beginError = new Error('BEGIN timed out after reaching PostgreSQL');
+      const release = vi.fn();
+      const query = vi.fn().mockRejectedValueOnce(beginError);
+      const pool = storage.authDatabase().pool;
+      try {
+        if (path === 'updateAtomic') {
+          await storage.ensureCollections([{ name: 'atomic_begin_test', columns: { id: { type: 'uuid-pk' } } }]);
+        }
+        const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+        try {
+          const callback = vi.fn(async () => ({}));
+          if (path === 'withTransaction') {
+            await expect(storage.withTransaction(callback)).rejects.toBe(beginError);
+          } else {
+            await expect(storage.ops.updateAtomic('atomic_begin_test', {}, callback)).rejects.toBe(beginError);
+          }
+          expect(callback).not.toHaveBeenCalled();
+          expect(query).toHaveBeenCalledTimes(1);
+          expect(release).toHaveBeenCalledWith(beginError);
+        } finally {
+          connect.mockRestore();
+        }
+      } finally {
+        await storage.close();
+      }
+    },
+  );
+
   it('authDatabase exposes the shared pool tagged as postgres', () => {
     const storage = new PgFactoryStorage({ connectionString });
     const db = storage.authDatabase();
@@ -122,6 +186,29 @@ describe('PgFactoryStorage capabilities', () => {
       }
     } finally {
       await storage.ops.deleteMany(table, {}).catch(() => {});
+      await storage.close();
+    }
+  });
+
+  it('widens an integer column to bigint on a table created before the schema changed', async () => {
+    const storage = new PgFactoryStorage({ connectionString });
+    const pool = new Pool({ connectionString });
+    const table = 'bigint_widening';
+    const epochMs = 1_780_000_000_000;
+    const columnsAs = (type: 'integer' | 'bigint') => ({ id: { type: 'uuid-pk' as const }, stamp: { type } });
+
+    try {
+      await pool.query(`DROP TABLE IF EXISTS "${table}"`);
+      await storage.ensureCollections([{ name: table, columns: columnsAs('integer') }]);
+      await storage.ensureCollections([{ name: table, columns: columnsAs('bigint') }]);
+
+      const inserted = await storage.ops.insertOne(table, { stamp: epochMs });
+      expect(inserted.stamp).toBe(epochMs);
+      const found = await storage.ops.findOne<{ stamp: number }>(table, { stamp: epochMs });
+      expect(found?.stamp).toBe(epochMs);
+    } finally {
+      await pool.query(`DROP TABLE IF EXISTS "${table}"`).catch(() => {});
+      await pool.end();
       await storage.close();
     }
   });

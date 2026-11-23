@@ -22,9 +22,10 @@ import type {
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
 } from '@mastra/core/storage/domains/prompt-blocks';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules', 'requestContextSchema'] as const;
@@ -39,8 +40,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (PromptBlocksPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -67,7 +68,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     // Tables
@@ -91,7 +92,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return PromptBlocksPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -146,9 +147,17 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StoragePromptBlockType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StoragePromptBlockType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -171,6 +180,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
   async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
     const { promptBlock } = input;
+    let draftInserted = false;
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -187,13 +197,14 @@ export class PromptBlocksPG extends PromptBlocksStorage {
           'draft',
           null,
           promptBlock.authorId ?? null,
-          promptBlock.metadata ? JSON.stringify(promptBlock.metadata) : null,
+          promptBlock.metadata ? toPgJson(promptBlock.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
           nowIso,
         ],
       );
+      draftInserted = true;
 
       // 2. Extract snapshot fields and create version 1
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = promptBlock;
@@ -217,18 +228,21 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         updatedAt: now,
       };
     } catch (error) {
-      if (error instanceof MastraError) throw error;
-      // Best-effort cleanup
-      try {
-        const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [promptBlock.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [promptBlock.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_PROMPT_BLOCK', 'FAILED'),
@@ -246,7 +260,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
 
-      const existingBlock = await this.getById(id);
+      const existingBlock = await this.#getById(this.#db.client, id);
       if (!existingBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND'),
@@ -282,7 +296,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingBlock.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -297,7 +311,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       // Always update the record (at minimum updatedAt/updatedAtZ are set)
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedBlock = await this.getById(id);
+      const updatedBlock = await this.#getById(this.#db.client, id);
       if (!updatedBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
@@ -380,13 +394,13 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -403,7 +417,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...queryParams, limitValue, offset],
       );
@@ -464,9 +478,9 @@ export class PromptBlocksPG extends PromptBlocksStorage {
           input.name,
           input.description ?? null,
           input.content,
-          input.rules ? JSON.stringify(input.rules) : null,
-          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.rules ? toPgJson(input.rules) : null,
+          input.requestContextSchema ? toPgJson(input.requestContextSchema) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,
@@ -497,7 +511,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -524,7 +538,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "blockId" = $1 AND "versionNumber" = $2`,
         [blockId, versionNumber],
       );
@@ -554,7 +568,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "blockId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [blockId],
       );
@@ -603,9 +617,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`, [
-        blockId,
-      ]);
+      const countResult = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`,
+        [blockId],
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -619,7 +634,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "blockId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [blockId, limitValue, offset],
       );
@@ -702,7 +717,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`, [
+      const result = await this.#db.readClient.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`, [
         blockId,
       ]);
       return parseInt(result.count, 10);

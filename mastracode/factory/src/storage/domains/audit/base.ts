@@ -2,42 +2,22 @@
  * Factory audit events domain — the append-only "who did what, when" trail
  * behind the software factory.
  *
- * One `audit_events` row records a single audited mutation (work-item change,
- * stage move, run start, worktree create/delete, git action, intake config
- * change). Rows are append-only: there is no update/delete API, and the table
- * is the local source of truth even when the WorkOS Audit Logs mirror is
- * unavailable.
+ * Rows are append-only: there is no update/delete API, and the table is the
+ * local source of truth even when the WorkOS Audit Logs mirror is unavailable.
+ * Tenancy is org-first, like `work_items`: `actor_id` records who acted but
+ * never scopes reads.
  *
- * Tenancy is **org-first**, like `work_items`: events are scoped by `org_id`
- * and (usually) `factory_project_id`; `actor_id` records who acted but never
- * scopes reads.
- *
- * v1 action taxonomy (register these in the WorkOS dashboard under
- * Audit Logs → Events for the export mirror to accept them):
- *   - factory.work_item.created
- *   - factory.work_item.updated
- *   - factory.work_item.stage_moved
- *   - factory.work_item.deleted
- *   - factory.run.started
- *   - factory.worktree.created
- *   - factory.worktree.deleted
- *   - factory.git.commit
- *   - factory.git.push
- *   - factory.git.pr_opened
- *   - factory.intake.config_updated
- *
- * v1.1 adds agent-level actions (also register these in WorkOS):
- *   - factory.agent.commit
- *   - factory.agent.push
- *   - factory.agent.pr_opened
+ * The actions the trail holds are listed in `./actions.ts`.
  *
  * Agent events carry `actor_type = 'agent'` with `actor_id = 'agent:<threadId>'`
  * and `metadata.startedBy = <userId>` chaining accountability back to the human
- * whose message drove the run.
+ * whose message drove the run. Rule-driven events carry `actor_type = 'system'`.
  */
 
-import { FactoryStorageDomain } from '@mastra/core/storage';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+
+import type { AuditActorType } from './actors.js';
 
 /** What an audit event acted on (WorkOS Audit Logs target shape). */
 export interface AuditTarget {
@@ -49,8 +29,24 @@ export interface AuditTarget {
   name?: string;
 }
 
-/** Who performed the audited action. */
-export type AuditActorType = 'human' | 'agent';
+export type { AuditActorType } from './actors.js';
+
+/** Display name and avatar of a human actor, stamped at record time because MastraAuthStudio cannot resolve users by id. */
+export interface AuditActorProfileInput {
+  name?: string;
+  avatarUrl?: string;
+}
+
+export const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
+
+export function auditActorProfile(
+  user: { name?: string; email?: string; avatarUrl?: string } | undefined,
+): AuditActorProfileInput | undefined {
+  const name = user?.name?.trim() || user?.email?.trim();
+  const avatarUrl = user?.avatarUrl?.trim();
+  if (!name && !avatarUrl) return undefined;
+  return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
+}
 
 /** Request context captured alongside the event. */
 export interface AuditContext {
@@ -84,13 +80,14 @@ export interface AuditEventRow {
   occurredAt: Date;
 }
 
-export interface RecordAuditEventInput {
+export interface RecordAuditEventInput<Action extends string = string> {
+  idempotencyKey?: string;
   orgId: string;
   actorId: string;
   /** Who performed the action; defaults to 'human'. */
   actorType?: AuditActorType;
-  /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
-  action: string;
+  actorProfile?: AuditActorProfileInput;
+  action: Action;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
   factoryProjectId?: string;
@@ -110,12 +107,17 @@ export interface ListAuditEventsInput {
   actorId?: string;
   /** Opaque cursor from a previous page (`nextCursor`). */
   before?: string;
+  /**
+   * Page oldest-first, strictly after this cursor: `nextCursor` of a previous
+   * `after` page, or `encodeAuditCursor` of a row. Can't be combined with `before`.
+   */
+  after?: string;
   limit?: number;
 }
 
 export interface AuditEventPage {
   events: AuditEventRow[];
-  /** Pass back as `before` to fetch the next (older) page; absent at the end. */
+  /** Pass back as `before` (or `after`, when paging forward) to fetch the next page; absent at the end. */
   nextCursor?: string;
 }
 
@@ -155,6 +157,23 @@ export function decodeAuditCursor(cursor: string): { occurredAt: Date; id: strin
   const id = cursor.slice(sep + 1);
   if (Number.isNaN(occurredAt.getTime()) || !id) return undefined;
   return { occurredAt, id };
+}
+
+/** An `after` cursor at an instant: paging from it skips every row recorded at or before then. */
+export function auditCursorAt(instant: Date): string {
+  return `${instant.toISOString()}_ffffffff-ffff-ffff-ffff-ffffffffffff`;
+}
+
+const AUDIT_EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Decode an `after` cursor, or `undefined` when it can't be paged from. Its id
+ * must be a UUID like every audit row id: Postgres rejects any other id in the
+ * keyset comparison.
+ */
+export function decodeAuditAfterCursor(cursor: string): { occurredAt: Date; id: string } | undefined {
+  const decoded = decodeAuditCursor(cursor);
+  return decoded && AUDIT_EVENT_ID.test(decoded.id) ? decoded : undefined;
 }
 
 export const AUDIT_EVENTS_SCHEMA: CollectionSchema = {
@@ -233,13 +252,42 @@ export class AuditStorage extends FactoryStorageDomain {
 
   /** Append one audit event. Throws on failure — swallow-on-failure lives in the caller. */
   async record(input: RecordAuditEventInput): Promise<AuditEventRow> {
+    if (input.idempotencyKey) return (await this.recordOnce(input)).event;
+    return this.#insert(input);
+  }
+
+  async recordOnce(input: RecordAuditEventInput): Promise<{ event: AuditEventRow; created: boolean }> {
+    if (!input.idempotencyKey) throw new Error('An audit idempotency key is required');
+    const hash = Buffer.from(
+      await globalThis.crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(
+          JSON.stringify([input.orgId, input.factoryProjectId ?? null, input.action, input.idempotencyKey]),
+        ),
+      ),
+    ).toString('hex');
+    const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    try {
+      return { event: await this.#insert(input, id), created: true };
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+      const existing = await this.#db.findOne<AuditEventDbRow>('audit_events', { id, org_id: input.orgId });
+      if (!existing) throw error;
+      return { event: toRow(existing), created: false };
+    }
+  }
+
+  async #insert(input: RecordAuditEventInput, id?: string): Promise<AuditEventRow> {
     const inserted = await this.#db.insertOne<AuditEventDbRow>('audit_events', {
+      ...(id ? { id } : {}),
       org_id: input.orgId,
       actor_id: input.actorId,
       actor_type: input.actorType ?? 'human',
       action: input.action,
       targets: input.targets,
-      metadata: boundAuditMetadata(input.metadata),
+      metadata: boundAuditMetadata(
+        input.actorProfile ? { ...input.metadata, [ACTOR_PROFILE_METADATA_KEY]: input.actorProfile } : input.metadata,
+      ),
       factory_project_id: input.factoryProjectId ?? null,
       project_repository_id: input.projectRepositoryId ?? null,
       context: input.context ?? {},
@@ -248,8 +296,9 @@ export class AuditStorage extends FactoryStorageDomain {
     return toRow(inserted);
   }
 
-  /** List an org's audit events newest-first with keyset pagination. */
+  /** List an org's audit events newest-first (or oldest-first with `after`) with keyset pagination. */
   async list(input: ListAuditEventsInput): Promise<AuditEventPage> {
+    if (input.before && input.after) throw new Error('Audit list takes `before` or `after`, not both');
     const limit = clampAuditLimit(input.limit);
 
     const where: CollectionWhere = { org_id: input.orgId };
@@ -257,12 +306,21 @@ export class AuditStorage extends FactoryStorageDomain {
     if (input.actions && input.actions.length > 0) where.action = { in: input.actions };
     if (input.actorId) where.actor_id = input.actorId;
 
-    const cursor = input.before ? decodeAuditCursor(input.before) : undefined;
+    const forward = input.after !== undefined;
+    const cursor =
+      input.after !== undefined
+        ? decodeAuditAfterCursor(input.after)
+        : input.before
+          ? decodeAuditCursor(input.before)
+          : undefined;
+    // Paging forward from an unreadable cursor would replay the whole trail.
+    if (forward && !cursor) throw new Error(`Invalid audit cursor '${input.after}'`);
+    const direction = forward ? 'asc' : 'desc';
 
     const rows = await this.#db.findMany<AuditEventDbRow>('audit_events', where, {
       orderBy: [
-        ['occurred_at', 'desc'],
-        ['id', 'desc'],
+        ['occurred_at', direction],
+        ['id', direction],
       ],
       limit: limit + 1,
       ...(cursor ? { cursor: { values: [cursor.occurredAt, cursor.id] } } : {}),

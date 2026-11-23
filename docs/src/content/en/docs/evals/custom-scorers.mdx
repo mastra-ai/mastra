@@ -7,7 +7,7 @@ packages:
 
 # Custom scorers
 
-Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.
+Use `createScorer` to build custom evaluation logic. Each step can use a JavaScript function or an LLM-based prompt object, depending on what you're evaluating.
 
 ## The four-step pipeline
 
@@ -18,7 +18,7 @@ All scorers in Mastra follow a consistent four-step evaluation pipeline:
 1. **generateScore** (required): Convert analysis into a numerical score
 1. **generateReason** (optional): Generate human-readable explanations
 
-Each step can use either **functions** or **prompt objects** (LLM-based evaluation), giving you the flexibility to combine deterministic algorithms with AI judgment as needed.
+Combine **functions** and **prompt objects** within a scorer to use deterministic checks for some steps and LLM-based evaluation for others.
 
 ## Functions vs prompt objects
 
@@ -78,7 +78,7 @@ const quoteSourcesScorer = createScorer({
   id: 'quote-sources',
   description: 'Check if the response includes sources',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: 'You are a strict evaluator.',
   },
 })
@@ -107,7 +107,7 @@ console.log(result.score) // 1
 console.log(result.analyzeStepResult) // { hasSources: true, sources: ["Wikipedia"] }
 ```
 
-### Agent Type for Agent Evaluation
+### Agent type for agent evaluation
 
 For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. The same scorer can evaluate an agent and score traces:
 
@@ -122,7 +122,7 @@ const myScorer = createScorer({
 
 ## Step-by-step breakdown
 
-### preprocess Step (Optional)
+### `preprocess` step (optional)
 
 Prepares input/output data when you need to extract specific elements or filter content, or alternatively transform complex data structures.
 
@@ -164,7 +164,7 @@ const glutenCheckerScorer = createScorer(...)
 
 **Data Flow:** Results are available to subsequent steps as `results.preprocessStepResult`
 
-### analyze Step (Optional)
+### `analyze` step (optional)
 
 Performs core evaluation analysis, gathering insights that will inform the scoring decision.
 
@@ -340,6 +340,62 @@ The `prepareRun` function can also be async.
 
 :::
 
+## Skipping runs that can't be scored
+
+Some scorers only apply to a subset of runs. A scorer that judges how well a refund was handled has nothing to say about a run where no refund was requested.
+
+Return [`notScorable()`](/reference/evals/not-scorable) from a function step to declare that the run has nothing to evaluate. Remaining steps are skipped and the run is left out of the scorer's aggregates:
+
+```typescript title="src/mastra/scorers/refund-judge.ts"
+import { createScorer, notScorable } from '@mastra/core/evals'
+import { extractToolCalls } from '@mastra/evals/scorers/utils'
+
+export const refundJudge = createScorer({
+  id: 'refund-judge',
+  description: 'Judges how well refund requests were handled',
+  type: 'agent',
+  judge: {
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+    instructions: 'You are a strict QA reviewer for customer-support refund handling.',
+  },
+})
+  .preprocess(({ run }) => {
+    const { tools } = extractToolCalls(run.output)
+    return tools.includes('refundCustomer')
+      ? { tools }
+      : notScorable('refundCustomer was not called')
+  })
+  .generateScore({
+    description: 'Score the refund handling from 0 to 1',
+    createPrompt: ({ run }) =>
+      `Rate this refund handling from 0 to 1:\n${JSON.stringify(run.output)}`,
+  })
+```
+
+Put the check in `preprocess` so it runs before any judge step. `notScorable()` is different from an [eligibility filter](/docs/evals/overview#how-live-evaluations-work): filters decide from request context whether the scorer runs at all, while `notScorable()` lets the scorer inspect the run's input and output first.
+
+See the [`notScorable()` reference](/reference/evals/not-scorable) for the result shape and how live scoring, `runEvals()`, and experiments treat a skipped run.
+
+## Anchoring the judge's score scale
+
+A prompt-object `generateScore` step asks the judge for `{ score: number }`. Mastra forwards whatever number comes back without clamping or normalizing it, so the prompt is the only thing defining your scale:
+
+```typescript title="src/mastra/scorers/refund-judge.ts" oxfmt:false
+.generateScore({
+  description: 'Score the refund handling from 0 to 1',
+  createPrompt: ({ run }) => `Rate this refund handling:
+- 1.0: refund issued correctly, no policy breach
+- 0.5: refund issued but policy explained poorly or a step was missed
+- 0.0: refund not issued, or issued against policy
+
+${JSON.stringify(run.output)}`,
+})
+```
+
+`Rate this refund handling from 0 to 1` alone leaves the middle of the scale undefined, and judges fill that gap differently between calls. Name the endpoints and describe at least one middle value. Leave the output format out of the prompt: the step already asks the judge for `{ score: number }`, and a prompt that says "return only the number" makes the judge answer in a shape the step can't read. If your scorer must not drift outside a range, clamp or reject the value in a function step instead of trusting the judge.
+
+This matters most for [gates](/docs/evals/gates-and-verdicts), whose thresholds must be between 0 and 1 even though the judge's number is stored exactly as returned. A prompt that asks for a 1 to 10 score makes a failing `2` pass every threshold you're allowed to set. The gate then never fires.
+
 ## Example: Create a custom scorer
 
 A custom scorer in Mastra uses `createScorer` with four core components:
@@ -409,7 +465,7 @@ export const glutenCheckerScorer = createScorer({
   id: 'gluten-checker',
   description: 'Check if the output contains any gluten',
   judge: {
-    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -438,18 +494,18 @@ export const glutenCheckerScorer = createScorer({
   })
 ```
 
-### Judge Configuration
+### Judge configuration
 
 Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript oxfmt:false
 judge: {
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```
 
-### Analysis Step
+### Analysis step
 
 Defines how the LLM should analyze the input and what structured output to return.
 
@@ -473,7 +529,7 @@ The analysis step uses a prompt object to:
 - Define expected output structure with a Standard JSON Schema (both boolean result and list of gluten sources)
 - Generate runtime prompts based on the input content
 
-### Score Generation
+### Score generation
 
 Converts the LLM's structured analysis into a numerical score.
 
@@ -483,9 +539,9 @@ Converts the LLM's structured analysis into a numerical score.
 })
 ```
 
-The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so we use that boolean result: 1 for gluten-free, 0 for contains gluten.
+The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so the scorer uses that boolean result: 1 for gluten-free, 0 for contains gluten.
 
-### Reason Generation
+### Reason generation
 
 Provides human-readable explanations for the score using another LLM call.
 

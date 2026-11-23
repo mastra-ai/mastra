@@ -1,0 +1,81 @@
+import type { ComponentPropsWithoutRef } from 'react';
+import type { SidebarState } from '../root/sidebar-context';
+import { useMaybeSidebarState } from '../root/sidebar-context';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
+import type { LinkComponent } from '@/ds/types/link-component';
+import { cn } from '@/lib/utils';
+
+export type SidebarNavHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'children'> & {
+  children?: React.ReactNode;
+  icon?: React.ReactNode;
+  action?: React.ReactNode;
+  state?: SidebarState;
+  href?: string;
+  isActive?: boolean;
+  LinkComponent?: LinkComponent;
+};
+
+export function SidebarNavHeader({
+  children,
+  icon,
+  action,
+  className,
+  state: stateProp,
+  href,
+  isActive,
+  LinkComponent: LinkProp,
+  ...props
+}: SidebarNavHeaderProps) {
+  const context = useMaybeSidebarState();
+  const state = stateProp ?? context?.state ?? 'default';
+  const showTitle = state === 'default';
+  const Link = LinkProp ?? context?.LinkComponent ?? 'a';
+
+  const toneClassName = isActive ? 'text-foreground' : 'text-muted-foreground';
+
+  return (
+    // Collapsed, the title keeps its expanded height, so nothing moves vertically between the two states.
+    <div className={cn('flex min-w-0 items-center', showTitle ? 'mt-3 min-h-7' : 'relative h-4.5', className)}>
+      {showTitle ? (
+        <>
+          {icon ? (
+            <span aria-hidden="true" className={cn('flex shrink-0 pl-3 [&_svg]:size-icon-md', toneClassName)}>
+              {icon}
+            </span>
+          ) : null}
+          <header
+            {...props}
+            className={cn('max-w-full min-w-0 flex-1 truncate text-column', icon ? 'pl-2' : 'pl-3', toneClassName)}
+          >
+            {href ? (
+              <Link
+                href={href}
+                className={cn('block min-w-0 truncate', {
+                  'hover:text-foreground': !isActive,
+                  'text-foreground': isActive,
+                })}
+              >
+                {children}
+              </Link>
+            ) : (
+              children
+            )}
+          </header>
+          {action}
+        </>
+      ) : (
+        <>
+          <VisuallyHidden asChild>
+            <header {...props}>{children}</header>
+          </VisuallyHidden>
+          {/* Centred in the whole space between the two groups: 14px above the title, its 18px, 4px below. */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-3 top-[3.5px] h-px bg-border motion-safe:animate-[sidebar-rail-in_calc(var(--resize-dur)*0.6)_ease-out_both]"
+          />
+          {action ? <VisuallyHidden>{action}</VisuallyHidden> : null}
+        </>
+      )}
+    </div>
+  );
+}

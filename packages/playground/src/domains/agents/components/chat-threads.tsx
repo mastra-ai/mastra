@@ -1,17 +1,8 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import {
-  ThreadList,
-  ThreadListEmpty,
-  ThreadListItem,
-  ThreadListItems,
-  ThreadListNewItem,
-} from '@mastra/playground-ui/components/ThreadList';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agents/chat';
+import { ChatThreads as SharedChatThreads } from '@mastra/playground-ui/domains/agents/chat/chat-threads';
+import { RenameThreadDialog } from './rename-thread-dialog';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
@@ -20,124 +11,28 @@ export interface ChatThreadsProps {
   resourceId: string;
   resourceType: 'agent' | 'network';
   embedded?: boolean;
+  isLoading?: boolean;
 }
 
-export const ChatThreads = ({
-  threads,
-  threadId,
-  onDelete,
-  resourceId,
-  resourceType,
-  embedded = false,
-}: ChatThreadsProps) => {
-  const { Link, paths } = useLinkComponent();
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const { canDelete } = usePermissions();
-
-  const canDeleteThread = canDelete('memory');
-  const newThreadLink =
-    resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
+export function ChatThreads(props: ChatThreadsProps) {
+  const { canDelete, canEdit } = usePermissions();
+  const threadsPanel = useThreadsPanel();
 
   return (
-    <>
-      <ThreadList embedded={embedded}>
-        <ThreadListNewItem as={Link} to={newThreadLink}>
-          <Icon>
-            <Plus />
-          </Icon>
-          New Chat
-        </ThreadListNewItem>
-
-        {threads.length === 0 ? (
-          <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>
-        ) : (
-          <ThreadListItems>
-            {threads.map(thread => {
-              const isActive = thread.id === threadId;
-
-              const threadLink =
-                resourceType === 'agent'
-                  ? paths.agentThreadLink(resourceId, thread.id)
-                  : paths.networkThreadLink(resourceId, thread.id);
-
-              return (
-                <ThreadListItem
-                  key={thread.id}
-                  as={Link}
-                  to={threadLink}
-                  isActive={isActive}
-                  onDelete={canDeleteThread ? () => setDeleteId(thread.id) : undefined}
-                  deleteLabel="delete thread"
-                >
-                  <ThreadTitle title={thread.title} id={thread.id} createdAt={thread.createdAt} />
-                </ThreadListItem>
-              );
-            })}
-          </ThreadListItems>
-        )}
-      </ThreadList>
-
-      <DeleteThreadDialog
-        open={!!deleteId}
-        onOpenChange={() => setDeleteId(null)}
-        onDelete={() => {
-          if (deleteId) {
-            onDelete(deleteId);
-          }
-        }}
-      />
-    </>
+    <SharedChatThreads
+      {...props}
+      canDeleteThread={canDelete('memory')}
+      canRenameThread={props.resourceType === 'agent' && canEdit('memory')}
+      onHidePanel={threadsPanel?.collapse}
+      onCollapseEmpty={threadsPanel?.collapseOnce}
+      renderRenameDialog={(thread, onClose) => (
+        <RenameThreadDialog
+          agentId={props.resourceId}
+          threadId={thread.id}
+          initialTitle={thread.title ?? ''}
+          onOpenChange={open => !open && onClose()}
+        />
+      )}
+    />
   );
-};
-
-interface DeleteThreadDialogProps {
-  open: boolean;
-  onOpenChange: (n: boolean) => void;
-  onDelete: () => void;
 }
-const DeleteThreadDialog = ({ open, onOpenChange, onDelete }: DeleteThreadDialogProps) => {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialog.Content>
-        <AlertDialog.Header>
-          <AlertDialog.Title>Are you absolutely sure?</AlertDialog.Title>
-          <AlertDialog.Description>
-            This action cannot be undone. This will permanently delete your chat and remove it from our servers.
-          </AlertDialog.Description>
-        </AlertDialog.Header>
-        <AlertDialog.Footer>
-          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-          <AlertDialog.Action onClick={onDelete}>Continue</AlertDialog.Action>
-        </AlertDialog.Footer>
-      </AlertDialog.Content>
-    </AlertDialog>
-  );
-};
-
-function isDefaultThreadName(name: string): boolean {
-  const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
-  return defaultPattern.test(name);
-}
-
-function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; createdAt?: Date }) {
-  const titleText =
-    title && !isDefaultThreadName(title)
-      ? title
-      : createdAt
-        ? formatDay(createdAt)
-        : `Thread ${id ? id.substring(id.length - 5) : ''}`;
-
-  return <span className="block truncate">{titleText}</span>;
-}
-
-const formatDay = (date: Date) => {
-  const options: Intl.DateTimeFormatOptions = {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: true,
-  };
-  return new Date(date).toLocaleString('en-us', options).replace(',', ' at');
-};

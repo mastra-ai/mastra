@@ -1,12 +1,12 @@
-import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { DeleteAgentConfirmation } from '@mastra/playground-ui/domains/agents/components/delete-agent-confirmation';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Trash2 } from 'lucide-react';
+import { useStoredAgentMutations, useStoredAgentDependents } from '@mastra/react/hooks/agents';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AgentImpactWarnings } from './agent-impact-warnings';
-import { useStoredAgentMutations, useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agents';
 
 interface UseDeleteAgentActionParams {
   agentId: string;
@@ -16,7 +16,7 @@ interface UseDeleteAgentActionParams {
 const useDeleteAgentAction = ({ agentId }: UseDeleteAgentActionParams) => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { deleteStoredAgent } = useStoredAgentMutations(agentId);
+  const { deleteStoredAgent } = useStoredAgentMutations({ agentId: agentId });
 
   const confirm = async () => {
     try {
@@ -54,40 +54,26 @@ const DeleteAgentDialog = ({
   isPending,
   onConfirm,
 }: DeleteAgentDialogProps) => {
-  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId, { enabled: open });
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents({
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(agentId) && open },
+  });
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialog.Content data-testid="agent-builder-delete-agent-dialog">
-        <AlertDialog.Header>
-          <AlertDialog.Title>Delete agent?</AlertDialog.Title>
-          <AlertDialog.Description>
-            This permanently deletes &quot;{agentName}&quot; and removes its conversation history. This cannot be
-            undone.
-          </AlertDialog.Description>
-        </AlertDialog.Header>
-        <AlertDialog.Body className="pt-0">
-          <AgentImpactWarnings agentId={agentId} variant="delete" enabled={open} />
-        </AlertDialog.Body>
-        <AlertDialog.Footer>
-          <AlertDialog.Cancel data-testid="agent-builder-delete-agent-cancel" disabled={isPending}>
-            Cancel
-          </AlertDialog.Cancel>
-          <Button
-            variant="primary"
-            data-testid="agent-builder-delete-agent-confirm"
-            disabled={isPending || isDependentsLoading}
-            onClick={() => {
-              // Use a plain button (not AlertDialog.Close) so the dialog stays
-              // open while the request is in flight and on error.
-              onConfirm();
-            }}
-          >
-            {isPending ? 'Deleting…' : 'Delete agent'}
-          </Button>
-        </AlertDialog.Footer>
-      </AlertDialog.Content>
-    </AlertDialog>
+    <DeleteAgentConfirmation
+      open={open}
+      onOpenChange={onOpenChange}
+      description={
+        <>
+          This permanently deletes &quot;{agentName}&quot; and removes its conversation history. This cannot be undone.
+        </>
+      }
+      isPending={isPending}
+      isDependentsLoading={isDependentsLoading}
+      onConfirm={onConfirm}
+    >
+      <AgentImpactWarnings agentId={agentId} variant="delete" enabled={open} />
+    </DeleteAgentConfirmation>
   );
 };
 
@@ -103,6 +89,7 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
   return (
     <>
       <Button
+        icon={<TrashIcon />}
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="agent-builder-delete-agent"
@@ -131,13 +118,13 @@ export const DeleteAgentMenuItem = ({ agentId, agentName, disabled = false }: De
       <DropdownMenu.Item
         data-testid="agent-builder-mobile-menu-delete"
         disabled={disabled}
-        className="text-red-500 focus:text-red-400"
+        variant="destructive"
         onSelect={event => {
           event.preventDefault();
           setOpen(true);
         }}
       >
-        <Trash2 />
+        <TrashIcon />
         <span>Delete agent</span>
       </DropdownMenu.Item>
       <DeleteAgentDialog

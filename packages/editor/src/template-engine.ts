@@ -21,6 +21,9 @@ function resolvePath(context: Record<string, unknown>, path: string): unknown {
     if (current === null || current === undefined || typeof current !== 'object') {
       return undefined;
     }
+    if (!Object.prototype.hasOwnProperty.call(current, segment)) {
+      return undefined;
+    }
     current = (current as Record<string, unknown>)[segment];
   }
 

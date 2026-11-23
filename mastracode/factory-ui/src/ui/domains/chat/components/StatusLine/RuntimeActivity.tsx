@@ -1,11 +1,13 @@
+import { agentGlyph } from '@mastra/playground-ui/components/AgentIndicator';
 import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
-import { Brain } from 'lucide-react';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
-import type { OMWorkByBudget } from '../../services/runtime';
-import { omWork } from '../../services/runtime';
+import type { OMWorkByBudget } from '../../services/om';
+import { omWork } from '../../services/om';
 
-const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
+const MemoryGlyph = agentGlyph('memory');
+
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
 
 function holdingLabel({ messages, observations }: OMWorkByBudget): string | undefined {
   if (messages === 'blocking') return 'saving memory';
@@ -13,7 +15,6 @@ function holdingLabel({ messages, observations }: OMWorkByBudget): string | unde
   return undefined;
 }
 
-/** Memory work that holds the turn, and decode throughput. Background memory work shimmers on its budget instead. */
 export function RuntimeActivity() {
   const runtime = useChatRuntime();
   const label = holdingLabel(omWork(runtime));
@@ -22,7 +23,7 @@ export function RuntimeActivity() {
     <>
       {label && (
         <span className={statusItem}>
-          <Brain size={13} /> <Shimmer>{label}</Shimmer>
+          <MemoryGlyph size={13} /> <Shimmer>{label}</Shimmer>
         </span>
       )}
       {runtime.tokensPerSec > 0 && <span className={statusItem}>{runtime.tokensPerSec} tok/s</span>}

@@ -1,7 +1,6 @@
 import type { FavoriteToggleResponse, StoredSkillResponse, ListStoredSkillsResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type FavoriteContext = {
   previousDetail?: StoredSkillResponse | null;
@@ -21,10 +20,9 @@ const applyFavoriteToSkill = (skill: StoredSkillResponse, favorited: boolean): S
  * detail cache (`['stored-skill', id]`) and any list caches
  * (`['stored-skills', ...]`) and rolls back on error.
  */
-export const useToggleStoredSkillFavorite = (skillId?: string) => {
+export const useToggleStoredSkillFavorite = (skillId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useMutation<FavoriteToggleResponse, Error, { favorited: boolean }, FavoriteContext>({
     mutationFn: async ({ favorited }) => {
@@ -45,7 +43,7 @@ export const useToggleStoredSkillFavorite = (skillId?: string) => {
       for (const [key, value] of listQueries) {
         previousLists.push([key, value]);
         if (!value?.skills) continue;
-        queryClient.setQueryData<ListStoredSkillsResponse>(key as readonly unknown[], {
+        queryClient.setQueryData<ListStoredSkillsResponse>(key, {
           ...value,
           skills: value.skills.map(s => (s.id === skillId ? applyFavoriteToSkill(s, favorited) : s)),
         });

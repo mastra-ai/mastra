@@ -4,14 +4,11 @@
  * Inspired by pi-mono's OAuth implementation:
  * https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/openai-codex.ts
  *
- * NOTE: This module uses Node.js crypto and http for the OAuth callback.
+ * NOTE: This module uses Node.js http for the OAuth callback.
  * It is only intended for CLI use, not browser environments.
  */
 
 // NEVER convert to top-level imports - breaks browser/Vite builds (web-ui)
-let _randomBytes: ((size: number) => Buffer) | null = null;
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-let _cryptoPromise: Promise<typeof import('node:crypto')> | null = null;
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let _httpPromise: Promise<typeof import('node:http')> | null = null;
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -23,10 +20,6 @@ type HttpServer = {
   close: () => void;
 };
 if (typeof process !== 'undefined' && (process.versions?.node || process.versions?.bun)) {
-  _cryptoPromise = import('node:crypto').then(m => {
-    _randomBytes = m.randomBytes;
-    return m;
-  });
   _httpPromise = import('node:http').then(m => {
     _http = m;
     return m;
@@ -62,6 +55,7 @@ const DEFAULT_CALLBACK_PORT = 1455;
 const FALLBACK_CALLBACK_PORT = 1457;
 const DEFAULT_TOKEN_EXPIRES_IN_SECONDS = 3600;
 const DEVICE_AUTH_TIMEOUT_MS = 15 * 60 * 1000;
+const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
 const SCOPE = 'openid profile email offline_access api.connectors.read api.connectors.invoke';
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
 
@@ -89,15 +83,24 @@ type TokenResult = TokenSuccess | TokenFailure;
 
 type JwtPayload = {
   chatgpt_account_id?: string;
+  email?: string;
   [JWT_CLAIM_PATH]?: {
     chatgpt_account_id?: string;
+    email?: string;
   };
   [key: string]: unknown;
 };
 
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(OAUTH_REQUEST_TIMEOUT_MS);
+  return signal ? AbortSignal.any([timeout, signal]) : timeout;
+}
+
 async function createState(): Promise<string> {
-  const randomBytes = await getRandomBytes();
-  return randomBytes(16).toString('hex');
+  if (typeof process === 'undefined' || !(process.versions?.node || process.versions?.bun)) {
+    throw new Error('OpenAI Codex OAuth is only available in Node.js environments');
+  }
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('hex');
 }
 
 function decodeJwt(token: string): JwtPayload | null {
@@ -140,6 +143,18 @@ function requireAccountId(tokens: { idToken?: string; access: string }, fallback
   return accountId;
 }
 
+function extractEmailFromClaims(payload: JwtPayload): string | null {
+  const email = payload.email ?? payload[JWT_CLAIM_PATH]?.email;
+  return typeof email === 'string' && email.length > 0 ? email : null;
+}
+
+function getEmailFromTokens(tokens: { idToken?: string; access: string }): string | undefined {
+  const fromIdToken = tokens.idToken ? extractEmailFromClaims(decodeJwt(tokens.idToken) ?? {}) : null;
+  if (fromIdToken) return fromIdToken;
+  const fromAccessToken = extractEmailFromClaims(decodeJwt(tokens.access) ?? {});
+  return fromAccessToken ?? undefined;
+}
+
 type TokenResponseJson = {
   id_token?: string;
   access_token?: string;
@@ -149,7 +164,9 @@ type TokenResponseJson = {
 
 function tokenResponseToResult(json: TokenResponseJson, logPrefix: string): TokenResult {
   if (!json.access_token || !json.refresh_token) {
-    console.error(`[openai-codex] ${logPrefix} response missing fields:`, json);
+    console.error(
+      `[openai-codex] ${logPrefix} response missing required fields (access_token=${Boolean(json.access_token)}, refresh_token=${Boolean(json.refresh_token)})`,
+    );
     return { type: 'failed' };
   }
 
@@ -162,9 +179,15 @@ function tokenResponseToResult(json: TokenResponseJson, logPrefix: string): Toke
   };
 }
 
-async function exchangeAuthorizationCode(code: string, verifier: string, redirectUri: string): Promise<TokenResult> {
+async function exchangeAuthorizationCode(
+  code: string,
+  verifier: string,
+  redirectUri: string,
+  signal?: AbortSignal,
+): Promise<TokenResult> {
   const response = await fetch(TOKEN_URL, {
     method: 'POST',
+    signal: requestSignal(signal),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
@@ -176,8 +199,7 @@ async function exchangeAuthorizationCode(code: string, verifier: string, redirec
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    console.error('[openai-codex] code->token failed:', response.status, text);
+    console.error('[openai-codex] code->token failed:', response.status);
     return { type: 'failed' };
   }
 
@@ -188,6 +210,7 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
   try {
     const response = await fetch(TOKEN_URL, {
       method: 'POST',
+      signal: requestSignal(),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
@@ -197,26 +220,15 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      console.error('[openai-codex] Token refresh failed:', response.status, text);
+      console.error('[openai-codex] Token refresh failed:', response.status);
       return { type: 'failed' };
     }
 
     return tokenResponseToResult((await response.json()) as TokenResponseJson, 'Token refresh');
-  } catch (error) {
-    console.error('[openai-codex] Token refresh error:', error);
+  } catch {
+    console.error('[openai-codex] Token refresh request failed');
     return { type: 'failed' };
   }
-}
-
-async function getRandomBytes() {
-  if (!_randomBytes && _cryptoPromise) {
-    _randomBytes = (await _cryptoPromise).randomBytes;
-  }
-  if (!_randomBytes) {
-    throw new Error('OpenAI Codex OAuth is only available in Node.js environments');
-  }
-  return _randomBytes;
 }
 
 async function createAuthorizationFlow(
@@ -418,7 +430,7 @@ export async function startCodexDeviceLogin(options?: { signal?: AbortSignal }):
       'User-Agent': 'mastracode',
     },
     body: JSON.stringify({ client_id: CLIENT_ID, originator: 'mastracode' }),
-    signal: options?.signal,
+    signal: requestSignal(options?.signal),
   });
 
   if (!response.ok) {
@@ -476,7 +488,7 @@ export async function pollCodexDeviceLogin(
       device_auth_id: pending.deviceAuthId,
       user_code: pending.userCode,
     }),
-    signal: options?.signal,
+    signal: requestSignal(options?.signal),
   });
 
   if (pollResponse.ok) {
@@ -493,6 +505,7 @@ export async function pollCodexDeviceLogin(
       data.authorization_code,
       data.code_verifier,
       DEVICE_REDIRECT_URI,
+      options?.signal,
     );
     if (tokenResult.type !== 'success') {
       return { status: 'failed', error: 'Token exchange failed' };
@@ -512,15 +525,15 @@ export async function pollCodexDeviceLogin(
         refresh: tokenResult.refresh,
         expires: tokenResult.expires,
         accountId,
+        email: getEmailFromTokens(tokenResult),
       },
     };
   }
 
   if (pollResponse.status !== 403 && pollResponse.status !== 404) {
-    const text = await pollResponse.text().catch(() => '');
     return {
       status: 'failed',
-      error: `OpenAI Codex device authorization failed: ${pollResponse.status}${text ? ` ${text}` : ''}`,
+      error: `OpenAI Codex device authorization failed: ${pollResponse.status}`,
     };
   }
 
@@ -686,7 +699,7 @@ export async function loginOpenAICodex(options: {
       throw new Error('Missing authorization code');
     }
 
-    const tokenResult = await exchangeAuthorizationCode(code, verifier, server.redirectUri);
+    const tokenResult = await exchangeAuthorizationCode(code, verifier, server.redirectUri, options.signal);
     if (tokenResult.type !== 'success') {
       throw new Error('Token exchange failed');
     }
@@ -698,6 +711,7 @@ export async function loginOpenAICodex(options: {
       refresh: tokenResult.refresh,
       expires: tokenResult.expires,
       accountId,
+      email: getEmailFromTokens(tokenResult),
     };
   } finally {
     server.close();
@@ -720,6 +734,7 @@ export const __testing = {
 export async function refreshOpenAICodexToken(
   refreshToken: string,
   previousAccountId?: string,
+  previousEmail?: string,
 ): Promise<OAuthCredentials> {
   const result = await refreshAccessToken(refreshToken);
   if (result.type !== 'success') {
@@ -733,6 +748,7 @@ export async function refreshOpenAICodexToken(
     refresh: result.refresh,
     expires: result.expires,
     accountId,
+    email: getEmailFromTokens(result) ?? previousEmail,
   };
 }
 
@@ -755,10 +771,28 @@ export const openaiCodexOAuthProvider: OAuthProviderInterface = {
   },
 
   async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-    return refreshOpenAICodexToken(credentials.refresh, credentials.accountId as string | undefined);
+    return refreshOpenAICodexToken(
+      credentials.refresh,
+      credentials.accountId as string | undefined,
+      credentials.email as string | undefined,
+    );
   },
 
   getApiKey(credentials: OAuthCredentials): string {
     return credentials.access;
+  },
+
+  getAccountLabel(credentials: OAuthCredentials): Promise<string | undefined> {
+    const email = credentials.email;
+    return Promise.resolve(typeof email === 'string' && email.length > 0 ? email : undefined);
+  },
+
+  /**
+   * The ChatGPT account/workspace id from the token, when present — stable
+   * across refreshes and re-authorizations of one subscription.
+   */
+  getAccountIdentity(credentials: OAuthCredentials): string | undefined {
+    const accountId = credentials.accountId;
+    return typeof accountId === 'string' && accountId.length > 0 ? accountId : undefined;
   },
 };

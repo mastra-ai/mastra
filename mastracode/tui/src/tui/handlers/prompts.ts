@@ -8,6 +8,7 @@ import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import { switchModeWithPack } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import type { TUIState } from '../state.js';
 import { theme } from '../theme.js';
@@ -55,12 +56,14 @@ export async function handleAskQuestion(
         if (event.type !== 'tool_suspension_cancelled' || event.toolCallId !== toolCallId) return;
         if (cancelled) return;
         cancelled = true;
-        unsubscribeCancel();
         retract();
-        resolve();
+        finish('dismissed');
       }) ?? (() => {});
-    const finish = () => {
+    const finish = (decision: 'answered' | 'dismissed') => {
       unsubscribeCancel();
+      state.hookManager
+        ?.runPermissionResult('ask_question', toolCallId, 'ask_user', decision, { question, options, selectionMode })
+        .catch(() => {});
       resolve();
     };
 
@@ -105,19 +108,19 @@ export async function handleAskQuestion(
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-                finish();
+                finish('answered');
                 processNextInlineQuestion(state);
               },
               onSubmitMulti: answers => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-                finish();
+                finish('answered');
                 processNextInlineQuestion(state);
               },
               onCancel: () => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-                finish();
+                finish('dismissed');
                 processNextInlineQuestion(state);
               },
             });
@@ -134,19 +137,19 @@ export async function handleAskQuestion(
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-                  finish();
+                  finish('answered');
                   processNextInlineQuestion(state);
                 },
                 onSubmitMulti: answers => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-                  finish();
+                  finish('answered');
                   processNextInlineQuestion(state);
                 },
                 onCancel: () => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-                  finish();
+                  finish('dismissed');
                   processNextInlineQuestion(state);
                 },
               },
@@ -167,7 +170,7 @@ export async function handleAskQuestion(
           // Don't let ask_user errors crash the process — skip the question
           state.activeInlineQuestion = undefined;
           state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-          finish();
+          finish('dismissed');
           processNextInlineQuestion(state);
         }
       };
@@ -193,17 +196,17 @@ export async function handleAskQuestion(
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-          finish();
+          finish('answered');
         },
         onSubmitMulti: answers => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-          finish();
+          finish('answered');
         },
         onCancel: () => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-          finish();
+          finish('dismissed');
         },
       });
       showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
@@ -283,7 +286,8 @@ export async function handleSandboxAccessRequest(
 
 /**
  * Handle a suspended submit_plan tool call.
- * Shows the plan inline with Approve/Use as Goal/Request Changes options.
+ * Shows the plan inline with Approve/Request Changes options. Approving starts
+ * the plan as the thread goal.
  *
  * On each submission the plan is saved to a `.md` file and the previous plan
  * content is snapshotted so that resubmissions can show a diff.
@@ -336,6 +340,35 @@ function resumeApprovedPlan(
 
 function formatPlanGoalObjective(title: string, plan: string): string {
   return `# ${title}\n\n${plan}`;
+}
+
+/**
+ * Resolves `true` once the resumed tool's result is recorded (`tool_end`), or
+ * `false` if the run ends or parks first.
+ */
+function waitForToolEnd(
+  session: TUIState['session'],
+  toolCallId: string,
+): { promise: Promise<boolean>; cancel: () => void } {
+  let unsubscribe: (() => void) | undefined;
+  let settle!: (recorded: boolean) => void;
+  const promise = new Promise<boolean>(resolve => {
+    settle = resolve;
+  });
+  const cancel = () => {
+    unsubscribe?.();
+    unsubscribe = undefined;
+    settle(false);
+  };
+  unsubscribe = session.subscribe(event => {
+    if (event.type === 'tool_end' && event.toolCallId === toolCallId) {
+      settle(true);
+      cancel();
+    } else if (event.type === 'agent_end' || event.type === 'error' || event.type === 'tool_suspended') {
+      cancel();
+    }
+  });
+  return { promise, cancel };
 }
 
 export async function handlePlanApproval(
@@ -398,40 +431,76 @@ export async function handlePlanApproval(
         state.ui.setFocus(state.editor);
       }
     };
+    const restoreApprovalAfterError = (error: unknown) => {
+      ctx.showError(`Failed to start plan: ${error instanceof Error ? error.message : String(error)}`);
+      approvalComponent.activate(approvalOptions);
+      state.activeInlinePlanApproval = approvalComponent;
+      state.ui.requestRender();
+      if (state.ui.hasOverlay()) {
+        state.pendingFocus = approvalComponent;
+      } else {
+        state.ui.setFocus(approvalComponent);
+      }
+    };
     const approvalOptions = {
       toolCallId,
       title: resolvedTitle,
       plan,
       planFilename,
       previousPlan,
+      // Goals are local-only, so Factory approvals are plain approvals.
+      startsGoal: Boolean(state.local),
       onApprove: async () => {
         releaseApprovalFocus();
-        firePermissionResult('approved');
+        try {
+          await switchModeWithPack(ctx, 'build');
+        } catch (error) {
+          restoreApprovalAfterError(error);
+          return;
+        }
         await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
+        firePermissionResult('approved');
+
+        // The approved run keeps going into implementation, so the plan has to
+        // replace any active goal before it resumes: the core goal step reads
+        // the objective at every judge boundary, and an earlier goal (e.g. the
+        // one that produced this plan) would otherwise judge the implementation
+        // and only hand over to the plan once the work was already done.
+        // A failure to set the goal must not block approval: fall back to a
+        // plain approval so the suspended plan still resumes. Goals are
+        // local-only, so Factory mode always takes the plain approval path.
+        const goal = !state.local
+          ? null
+          : await ctx
+              .setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.')
+              .catch((error: unknown) => {
+                ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
+                return null;
+              });
+        const approvalRecorded = goal ? waitForToolEnd(state.session, toolCallId) : undefined;
+
         const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
         // The controller emits the resumed tool's terminal events while this
         // handler owns its serialized event queue. Let those events reach their
-        // render boundaries immediately instead of waiting for the resume promise.
+        // render boundaries immediately instead of waiting for the resumed run.
         resolve();
-        await resumed;
-      },
-      onGoal: async () => {
-        releaseApprovalFocus();
-        firePermissionResult('approved');
-        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
-        await resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
 
-        // The plan-mode resume reaches its idle boundary before `startGoal` sends
-        // the canonical goal reminder, so this starts a fresh build-mode run.
-        const objective = formatPlanGoalObjective(resolvedTitle, plan);
-        await ctx.startGoal(objective, 'Goal cancelled.');
-
-        const goal = state.goalManager.getGoal();
-        if (goal?.id) {
-          state.planStartedGoalId = goal.id;
+        if (goal && approvalRecorded) {
+          let recorded = false;
+          try {
+            recorded = await Promise.race([approvalRecorded.promise, resumed.then(() => false)]);
+          } finally {
+            approvalRecorded.cancel();
+          }
+          // Once the approval result is persisted, deliver the goal reminder
+          // into the resumed run. If that run already ended, only record the
+          // reminder: the goal is set, and a second run would start on
+          // finished work.
+          if (recorded) {
+            await ctx.sendGoalReminder(goal, { persistIfIdle: true });
+          }
         }
-
-        resolve();
+        await resumed;
       },
       onReject: () => {
         releaseApprovalFocus();

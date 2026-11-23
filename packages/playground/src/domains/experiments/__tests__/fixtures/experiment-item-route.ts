@@ -6,7 +6,8 @@ import type {
   RouteResponse,
 } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
-import { TraceStatus, type PaginationInfo } from '@mastra/core/storage';
+import { TraceStatus } from '@mastra/core/storage';
+import type { PaginationInfo } from '@mastra/core/storage';
 
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
@@ -28,13 +29,13 @@ const baseSpan = {
 
 export const experimentTraceRootSpan = {
   ...baseSpan,
-  spanId: 'experiment-span-root',
+  spanId: 'root01',
   name: 'Experiment agent run',
   parentSpanId: null,
 };
 export const experimentTraceChildSpan = {
   ...baseSpan,
-  spanId: 'experiment-span-child',
+  spanId: 'child1',
   name: 'Experiment tool call',
   spanType: SpanType.TOOL_CALL,
   parentSpanId: experimentTraceRootSpan.spanId,
@@ -42,6 +43,20 @@ export const experimentTraceChildSpan = {
 export const experimentTraceSpans: GetTraceResponse = {
   traceId: TRACE_ID,
   spans: [experimentTraceRootSpan, experimentTraceChildSpan],
+};
+/** Same trace, with a term that only lives in the tool span's `metadata`. */
+export const experimentTraceSpansWithMetadata: GetTraceResponse = {
+  traceId: TRACE_ID,
+  spans: [
+    experimentTraceRootSpan,
+    { ...experimentTraceChildSpan, metadata: { ticket: 'zanzibar-payload-term' } },
+    {
+      ...experimentTraceChildSpan,
+      spanId: 'span-sibling',
+      name: 'Experiment model call',
+      spanType: SpanType.MODEL_GENERATION,
+    },
+  ],
 };
 export const experimentSpanDetailById: Record<string, GetSpanResponse> = {
   [experimentTraceRootSpan.spanId]: {
@@ -119,7 +134,14 @@ const baseResult: DatasetExperimentResult = {
 /** Three results, itemIds item-1..item-3, result ids res-1..res-3. */
 export const results: DatasetExperimentResult[] = [
   baseResult,
-  { ...baseResult, id: 'res-2', itemId: 'item-2', input: { q: 'second question' }, output: { a: 'second answer' } },
+  {
+    ...baseResult,
+    id: 'res-2',
+    itemId: 'item-2',
+    input: { q: 'second question' },
+    output: { a: 'second answer' },
+    tags: ['alpha'],
+  },
   {
     ...baseResult,
     id: 'res-3',
@@ -146,6 +168,7 @@ export const experimentTraceFeedback: RouteResponse<'GET /observability/feedback
       feedbackId: 'experiment-trace-feedback',
       traceId: TRACE_ID,
       feedbackType: 'comment',
+      reviewStatus: 'needs-review',
       value: 'Trace feedback for the experiment run',
       timestamp: new Date('2026-07-21T00:00:21.000Z'),
     },
@@ -160,6 +183,7 @@ export const experimentSpanFeedback: RouteResponse<'GET /observability/feedback'
       traceId: TRACE_ID,
       spanId: experimentTraceChildSpan.spanId,
       feedbackType: 'comment',
+      reviewStatus: 'needs-review',
       value: 'Child span feedback for the tool call',
       timestamp: new Date('2026-07-21T00:00:22.000Z'),
     },
@@ -181,8 +205,8 @@ export const experimentTraceScores: ListScoresResponse = {
       entity: { id: 'agent-1' },
       traceId: TRACE_ID,
       spanId: experimentTraceRootSpan.spanId,
-      createdAt: new Date('2026-07-21T00:00:23.000Z'),
-      updatedAt: null,
+      createdAt: '2026-07-21T00:00:23.000Z',
+      updatedAt: '2026-07-21T00:00:23.000Z',
     },
   ],
   pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
@@ -196,4 +220,31 @@ export const experimentResultScoresResponse: ListScoresResponse = {
     scorer: { ...score.scorer, hasJudge: false },
   })),
   pagination: { total: 1, page: 0, perPage: 100, hasMore: false },
+};
+
+type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
+type MetricAggregateResponse = Awaited<ReturnType<MastraClient['getMetricAggregate']>>;
+
+/** `POST /api/observability/metrics/aggregate` before any metric has been recorded. */
+export const emptyMetricAggregate: MetricAggregateResponse = { value: null };
+
+/** `DELETE /api/experiments/:experimentId`. */
+export const experimentDeletedResponse: RouteResponse<'DELETE /experiments/:experimentId'> = { success: true };
+
+/** `POST /api/observability/metrics/breakdown` for the shared `TRACE_ID`: 1,200 in + 300 out tokens, $0.0015. */
+export const experimentUsageBreakdown: MetricBreakdownResponse = {
+  groups: [
+    {
+      dimensions: { traceId: TRACE_ID, name: 'mastra_model_total_input_tokens' },
+      value: 1200,
+      estimatedCost: 0.001,
+      costUnit: 'usd',
+    },
+    {
+      dimensions: { traceId: TRACE_ID, name: 'mastra_model_total_output_tokens' },
+      value: 300,
+      estimatedCost: 0.0005,
+      costUnit: 'usd',
+    },
+  ],
 };

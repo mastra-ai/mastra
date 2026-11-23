@@ -4,6 +4,17 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "userMessage": "Goal: # E2E Goal Plan",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The plan goal handoff is verified.\"}"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
         "userMessage": "Create a concise goal implementation plan for the plan approval e2e test.",
         "hasToolResult": false
       },
@@ -14,7 +25,7 @@
             "name": "write_file",
             "arguments": {
               "path": ".mastracode/plans/e2e-goal-plan.md",
-              "content": "# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Select Use as /goal.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.\n",
+              "content": "# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Approve the plan.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.\n",
               "overwrite": true
             }
           }
@@ -30,7 +41,7 @@
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
         "hasToolResult": true,
-        "toolCallId": "call_plan_goal_e2e_write"
+        "turnIndex": 1
       },
       "response": {
         "toolCalls": [
@@ -52,10 +63,21 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "hasToolResult": true,
+        "turnIndex": 2
+      },
+      "response": {
+        "content": "Resumed plan output after approval."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
         "userMessage": "E2E Goal Plan"
       },
       "response": {
-        "content": "Plan goal handoff e2e goal run started."
+        "content": "Unexpected second goal run."
       }
     }
   ]

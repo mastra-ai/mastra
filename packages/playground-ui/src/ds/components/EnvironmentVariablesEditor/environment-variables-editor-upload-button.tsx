@@ -1,8 +1,7 @@
-import { UploadIcon } from 'lucide-react';
-
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorUploadButtonProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
+import { IconArrowOutOfBox } from '@/ds/icons/central/IconArrowOutOfBox';
 
 export function EnvironmentVariablesEditorUploadButton({
   children = 'Import .env',
@@ -45,9 +44,9 @@ export function EnvironmentVariablesEditorUploadButton({
             editor.fileInputRef.current?.click();
           }
         }}
+        icon={<IconArrowOutOfBox />}
         {...props}
       >
-        <UploadIcon />
         {children}
       </Button>
     </>

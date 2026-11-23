@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-async function prepareBinding(storage: WorkItemsStorage, options: { issue?: number; kickoffKey?: string } = {}) {
+async function prepareBinding(
+  storage: WorkItemsStorage,
+  options: { issue?: number; kickoffKey?: string; sessionId?: string } = {},
+) {
   const issue = options.issue ?? 1;
   return storage.prepareRunStart({
     orgId: 'org-1',
@@ -25,7 +30,11 @@ async function prepareBinding(storage: WorkItemsStorage, options: { issue?: numb
       },
     },
     role: 'work',
-    session: { sessionId: 'session-1', branch: `factory/issue-${issue}`, threadId: 'thread-1' },
+    session: {
+      sessionId: options.sessionId ?? 'session-1',
+      branch: `factory/issue-${issue}`,
+      threadId: 'thread-1',
+    },
     resourceId: 'resource-1',
     kickoffKey: options.kickoffKey ?? 'kickoff-1',
     kickoffMessage: null,
@@ -178,6 +187,108 @@ describe('Factory run binding authority', () => {
       ]);
     });
 
+    it('keeps an over-age binding that keep vouches for, and revokes it when keep declines', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      const olderThan = new Date(Date.now() + 60_000);
+      const seen: string[] = [];
+
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan,
+          now: new Date(),
+          keep: async binding => {
+            seen.push(binding.id);
+            return true;
+          },
+        }),
+      ).resolves.toBe(0);
+      expect(seen).toEqual([prepared.binding.id]);
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, prepared.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'active' }),
+      ]);
+
+      await expect(
+        storage.revokeStaleRunBindings({ olderThan, now: new Date(), keep: async () => false }),
+      ).resolves.toBe(1);
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, prepared.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'revoked' }),
+      ]);
+    });
+
+    it('only consults keep for over-age bindings', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      await prepareBinding(storage);
+      let calls = 0;
+
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() - 60_000),
+          now: new Date(),
+          keep: async () => {
+            calls += 1;
+            return true;
+          },
+        }),
+      ).resolves.toBe(0);
+      expect(calls).toBe(0);
+    });
+
+    it('still revokes a kept over-age binding whose work item reached a terminal stage', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      await storage.update({
+        orgId: 'org-1',
+        id: prepared.item.id,
+        userId: 'user-1',
+        patch: { stages: ['done'] },
+      });
+
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() + 60_000),
+          now: new Date(),
+          keep: async () => true,
+        }),
+      ).resolves.toBe(1);
+    });
+
+    it('carries on to the next binding when one card cannot be read', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const unreadable = await prepareBinding(storage);
+      // Its own session: a second run in the same session would replace the first assignment.
+      const finished = await prepareBinding(storage, { issue: 2, kickoffKey: 'kickoff-2', sessionId: 'session-2' });
+      await storage.update({
+        orgId: 'org-1',
+        id: finished.item.id,
+        userId: 'user-1',
+        patch: { stages: ['done'] },
+      });
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const get = storage.get.bind(storage);
+      const read = vi.spyOn(storage, 'get').mockImplementation(async input => {
+        if (input.id === unreadable.item.id) throw new Error('connection lost');
+        return get(input);
+      });
+
+      await expect(
+        storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
+      ).resolves.toBe(1);
+      read.mockRestore();
+
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, unreadable.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'active' }),
+      ]);
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, finished.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'revoked' }),
+      ]);
+      expect(error).toHaveBeenCalledWith(
+        `[factory] stale-binding sweep could not read card ${unreadable.item.id}`,
+        'connection lost',
+      );
+      error.mockRestore();
+    });
+
     it('revokes fresh bindings whose work item reached a terminal stage', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepareBinding(storage);
@@ -193,6 +304,24 @@ describe('Factory run binding authority', () => {
       ).resolves.toBe(1);
     });
 
+    it('finds the session binding without a thread and stops once it is revoked', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      const find = (orgId = 'org-1') =>
+        storage.findActiveRunBindingForSession({ orgId, factoryProjectId: PROJECT_ID, sessionId: 'session-1' });
+
+      await expect(find()).resolves.toMatchObject({ id: prepared.binding.id, role: 'work' });
+      await expect(find('org-2')).resolves.toBeNull();
+
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: prepared.binding.id,
+        revokedAt: new Date(),
+      });
+      await expect(find()).resolves.toBeNull();
+    });
+
     it('revokes fresh bindings whose work item is missing', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepareBinding(storage);
@@ -202,6 +331,66 @@ describe('Factory run binding authority', () => {
         storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
       ).resolves.toBe(1);
       await expect(storage.listActiveRunBindings()).resolves.toEqual([]);
+    });
+
+    it("keeps fresh bindings in a custom board's working phase and revokes them in its terminal phase", async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const boards = createBoardRegistry({ boards: [createTestBoard()] });
+      storage.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:9' },
+            title: 'Release 9',
+            board: 'release',
+            stages: ['shipping'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'release',
+        session: { sessionId: 'session-9', branch: 'factory/release-9', threadId: 'thread-9' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-9',
+        kickoffMessage: null,
+      });
+      const sweep = () => storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() });
+
+      await expect(sweep()).resolves.toBe(0);
+
+      await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: ['shipped'] } });
+      await expect(sweep()).resolves.toBe(1);
+    });
+
+    it('never revokes a fresh binding on a guess when the board is not installed', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:10' },
+            title: 'Unknown 10',
+            board: 'not-installed',
+            stages: ['finished'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-10', branch: 'factory/unknown-10', threadId: 'thread-10' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-10',
+        kickoffMessage: null,
+      });
+
+      await expect(
+        storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
+      ).resolves.toBe(0);
     });
   });
 });

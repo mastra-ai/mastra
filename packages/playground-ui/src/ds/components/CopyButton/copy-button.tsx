@@ -1,9 +1,7 @@
-import { CopyIcon, CheckIcon } from 'lucide-react';
-import { useState } from 'react';
-
-import type { ButtonProps } from '../Button';
+import type { ButtonProps, IconButtonSize } from '../Button';
 import { Button } from '../Button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 export type CopyButtonProps = {
@@ -12,8 +10,9 @@ export type CopyButtonProps = {
   showToast?: boolean;
   tooltip?: string;
   className?: string;
-  size?: ButtonProps['size'];
+  size?: IconButtonSize;
   variant?: ButtonProps['variant'];
+  disabled?: boolean;
 };
 
 export function CopyButton({
@@ -21,38 +20,29 @@ export function CopyButton({
   copyMessage,
   showToast,
   tooltip = 'Copy to clipboard',
-  size = 'sm',
+  size = 'icon-sm',
   variant,
   className,
+  disabled,
 }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false);
-  const { handleCopy: originalHandleCopy } = useCopyToClipboard({
+  const { isCopied, handleCopy } = useCopyToClipboard({
     text: content,
     copyMessage,
     showToast,
   });
 
-  const handleCopy = () => {
-    originalHandleCopy();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          onClick={handleCopy}
-          type="button"
-          size={size}
-          variant={variant}
-          className={className}
-          aria-label={copied ? 'Copied!' : tooltip}
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{copied ? 'Copied!' : tooltip}</TooltipContent>
-    </Tooltip>
+    <Button
+      onClick={handleCopy}
+      type="button"
+      size={size}
+      variant={variant}
+      className={className}
+      disabled={disabled}
+      tooltip={isCopied ? 'Copied!' : tooltip}
+      aria-label={isCopied ? 'Copied!' : tooltip}
+    >
+      {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
+    </Button>
   );
 }

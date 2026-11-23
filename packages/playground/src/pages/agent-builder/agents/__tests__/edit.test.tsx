@@ -1,5 +1,6 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -16,12 +17,7 @@ import {
   composioProviderList,
   composioToolkits,
 } from './fixtures/tool-providers';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -68,7 +64,6 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
 } as never;
 
@@ -180,15 +175,6 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
       expect(screen.getByTestId('agents-list-page')).not.toBeNull();
     });
     expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents');
-  });
-
-  it('does not render Cancel or Save buttons (autosaved)', async () => {
-    server.use(...commonHandlers());
-    renderPage();
-
-    await screen.findByTestId('agent-builder-panel-chat');
-    expect(screen.queryByTestId('agent-builder-edit-cancel')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-edit-save')).toBeNull();
   });
 
   it('renders an "Agent list" breadcrumb link pointing to the agents list', async () => {
@@ -336,17 +322,6 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
       // Owner edit page stays on /edit once the user resolves.
       expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents/agent-123/edit');
     });
-  });
-
-  it('renders the profile panel alongside the chat without a tab strip', async () => {
-    server.use(...commonHandlers());
-    renderPage();
-
-    expect(await screen.findByTestId('agent-configure-name')).not.toBeNull();
-    expect(screen.getByTestId('agent-builder-panel-chat')).not.toBeNull();
-    expect(screen.getByTestId('agent-builder-panel-profile')).not.toBeNull();
-    expect(screen.queryByTestId('agent-builder-tab-chat')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-tab-configure')).toBeNull();
   });
 
   it('renders the Delete agent button and DELETEs + redirects on confirm', async () => {

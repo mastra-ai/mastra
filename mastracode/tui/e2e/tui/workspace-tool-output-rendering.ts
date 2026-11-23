@@ -25,7 +25,7 @@ export const workspaceToolOutputRenderingScenario: McE2eScenario = {
     terminal.submit('Render workspace shell and lsp outputs.');
 
     await runtime.waitForScreenText(/\$ printf 'WORKSPACE_E2E_SHELL_OUTPUT/i, terminal, 10_000);
-    await runtime.waitForScreenText(/│ WORKSPACE_E2E_SHELL_OUTPUT/i, terminal, 10_000);
+    await runtime.waitForScreenText(/^\s+WORKSPACE_E2E_SHELL_OUTPUT/im, terminal, 10_000);
     await runtime.waitForScreenText(/lsp_inspect\s+src\/workspace-output-e2e\.ts\s+L1/i, terminal, 15_000);
     await runtime.waitForScreenText(/WORKSPACE_E2E_SYMBOL/i, terminal, 15_000);
     await runtime.waitForScreenText(/Workspace tool output rendering complete\./i, terminal, 15_000);

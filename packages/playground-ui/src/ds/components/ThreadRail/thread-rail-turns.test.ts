@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
 import { buildThreadRailTurns, getClientMessageKey, startsUserTurn } from './thread-rail-turns';
+import { toUntrustedAppContext } from '@/utils/mcp-app-context';
 
 type Parts = MastraDBMessage['content']['parts'];
 
@@ -119,6 +120,17 @@ describe('buildThreadRailTurns', () => {
 
   it('returns no turns for a thread that never had a user message', () => {
     expect(buildThreadRailTurns([assistantMessage('a', 'answer')])).toEqual([]);
+  });
+
+  describe('when a user message carries MCP App context', () => {
+    it('summarizes only the text the user typed', () => {
+      const message = withParts('u', [
+        { type: 'text', text: 'Show me the traces' },
+        { type: 'text', text: toUntrustedAppContext(['{"page":"traces"}']) },
+      ]);
+
+      expect(promptOf(message)).toBe('Show me the traces');
+    });
   });
 
   describe('reply preview', () => {

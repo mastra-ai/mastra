@@ -55,7 +55,10 @@ export class SandboxFeatureNotSupportedError extends WorkspaceError {
 
 export class SearchNotAvailableError extends WorkspaceError {
   constructor() {
-    super('Workspace does not have search configured (enable bm25 or provide vectorStore + embedder)', 'NO_SEARCH');
+    super(
+      'Workspace does not have search configured (enable bm25, or provide a vectorStore with an embedder or one that generates embeddings itself)',
+      'NO_SEARCH',
+    );
     this.name = 'SearchNotAvailableError';
   }
 }
@@ -125,6 +128,19 @@ export class NotDirectoryError extends FilesystemError {
   constructor(path: string) {
     super(`Path is not a directory: ${path}`, 'ENOTDIR', path);
     this.name = 'NotDirectoryError';
+  }
+}
+
+/**
+ * Thrown by a filesystem's optional native `grep()` capability when the
+ * requested pattern can't be executed natively (e.g., JS regex syntax the
+ * provider's search engine doesn't support). Callers catch this and fall
+ * back to the host-side walk-and-read implementation.
+ */
+export class UnsupportedGrepPatternError extends FilesystemError {
+  constructor(pattern: string, reason?: string) {
+    super(`Unsupported grep pattern: ${pattern}${reason ? ` (${reason})` : ''}`, 'EUNSUPPORTED_PATTERN', pattern);
+    this.name = 'UnsupportedGrepPatternError';
   }
 }
 

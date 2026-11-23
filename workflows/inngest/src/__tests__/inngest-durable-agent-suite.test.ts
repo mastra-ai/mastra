@@ -39,13 +39,22 @@ createDurableAgentTestSuite({
     const mastra = getSharedMastra();
     const testId = generateTestId();
 
+    // Every agent registers on the one shared Mastra, so a per-test store can't be honoured.
+    if (config.storage) {
+      throw new Error('The Inngest durable agent suite shares one Mastra storage; config.storage is not supported');
+    }
+
     // Create a regular Mastra Agent
     const agent = new Agent({
-      id: `${config.id}-${testId}`,
+      id: config.exactId ? config.id : `${config.id}-${testId}`,
       name: config.name || config.id,
       instructions: config.instructions,
       model: config.model,
       tools: config.tools,
+      ...(config.agents ? { agents: config.agents } : {}),
+      ...(config.memory ? { memory: config.memory } : {}),
+      ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
+      ...(config.requestContextSchema ? { requestContextSchema: config.requestContextSchema } : {}),
     });
 
     // Wrap with Inngest durable execution
@@ -91,5 +100,18 @@ createDurableAgentTestSuite({
     // not auto-attached, so `for await (textStream)` can hang waiting for run-scoped
     // events that never get routed to this run's subscribers.
     workspace: true,
+    // Crash-recovery drives DurableAgent.recover()/recoverActiveRuns() against two
+    // in-process "hosts" over shared storage. Inngest orchestrates retries and
+    // recovery externally, and this harness cannot host two processes.
+    recovery: true,
+    // FGA tests wire a per-test mock provider into the Mastra host
+    // (`server: { fga }`). This harness registers every agent on one shared
+    // Mastra instance built in setupSharedTestInfrastructure(), so a per-test
+    // provider cannot be injected — and a suite-wide gate would fail-close
+    // every other domain (their calls carry no user identity or actor).
+    // Actor threading through the Inngest event chain is covered by the
+    // ActorSignal params on inngest run.start()/resume(); enforcement is
+    // engine-agnostic (gated in DurableAgent.stream() before the workflow).
+    fga: true,
   },
 });

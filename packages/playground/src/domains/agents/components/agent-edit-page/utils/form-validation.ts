@@ -1,4 +1,3 @@
-import { v4 as uuid } from '@lukeed/uuid';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { z } from 'zod';
@@ -19,20 +18,12 @@ export type SkillFormValue = {
   files: InMemoryFileNode[];
 };
 
-export type InlineInstructionBlock = {
-  id: string;
-  type: 'prompt_block';
-  content: string;
-  rules?: RuleGroup;
-};
-
-export type RefInstructionBlock = {
-  id: string;
-  type: 'prompt_block_ref';
-  promptBlockId: string;
-};
-
-export type InstructionBlock = InlineInstructionBlock | RefInstructionBlock;
+export type {
+  InlineInstructionBlock,
+  RefInstructionBlock,
+  InstructionBlock,
+} from '@mastra/playground-ui/domains/instruction-blocks';
+export { createInstructionBlock, createRefInstructionBlock } from '@mastra/playground-ui/domains/instruction-blocks';
 
 const ruleSchema = z.object({
   field: z.string(),
@@ -79,22 +70,10 @@ const refInstructionBlockSchema = z.object({
   id: z.string(),
   type: z.literal('prompt_block_ref'),
   promptBlockId: z.string().min(1),
+  rules: ruleGroupSchema.optional(),
 });
 
 const instructionBlockSchema = z.discriminatedUnion('type', [inlineInstructionBlockSchema, refInstructionBlockSchema]);
-
-export const createInstructionBlock = (content = '', rules?: RuleGroup): InlineInstructionBlock => ({
-  id: uuid(),
-  type: 'prompt_block',
-  content,
-  rules,
-});
-
-export const createRefInstructionBlock = (promptBlockId: string): RefInstructionBlock => ({
-  id: uuid(),
-  type: 'prompt_block_ref',
-  promptBlockId,
-});
 
 const scoringSamplingConfigSchema = z.object({
   type: z.enum(['ratio']),
@@ -201,12 +180,27 @@ export const agentFormSchema = z.object({
     provider: z.string().min(1, 'Provider is required'),
     name: z.string().min(1, 'Model is required'),
   }),
+  modelList: z
+    .array(
+      z.object({
+        id: z.string(),
+        model: z.object({
+          provider: z.string(),
+          modelId: z.string(),
+          modelVersion: z.string(),
+        }),
+        enabled: z.boolean(),
+        maxRetries: z.number(),
+      }),
+    )
+    .optional(),
   tools: z.record(z.string(), entityConfigSchema).optional(),
   integrationTools: z.record(z.string(), entityConfigSchema).optional(),
   workflows: z.record(z.string(), entityConfigSchema).optional(),
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
   memory: memoryConfigSchema.optional(),
+  memoryRef: z.object({ type: z.literal('id'), memoryId: z.string() }).optional(),
   variables: z.custom<JsonSchema>().optional(),
   instructionBlocks: z.array(instructionBlockSchema).optional(),
   mcpClients: z
@@ -234,7 +228,8 @@ export const agentFormSchema = z.object({
   workspace: z
     .discriminatedUnion('type', [
       z.object({ type: z.literal('id'), workspaceId: z.string() }),
-      z.object({ type: z.literal('inline'), config: z.record(z.string(), z.unknown()) }),
+      z.object({ type: z.literal('inline'), config: z.object({ name: z.string() }).catchall(z.unknown()) }),
+      z.object({ type: z.literal('provider'), provider: z.string(), config: z.record(z.string(), z.unknown()) }),
     ])
     .optional(),
 });

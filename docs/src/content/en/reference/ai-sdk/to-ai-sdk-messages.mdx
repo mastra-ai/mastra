@@ -99,6 +99,22 @@ Returns an array of AI SDK `UIMessage` objects typed for the selected version.
 ]}
 />
 
+## Terminal error parts
+
+When a v2 agent reaches a terminal failure, Mastra stores the failed assistant turn with an `error` part. The stored payload contains only the error name and message:
+
+```typescript
+const terminalErrorPart = {
+  type: 'error',
+  error: {
+    name: 'Error',
+    message: 'The model request failed.',
+  },
+}
+```
+
+`toAISdkMessages()` preserves this part in AI SDK UI messages so your application can render failed turns from history. Mastra removes `error` parts when it converts messages into provider prompts. An assistant message containing only an `error` part is omitted from the next model request.
+
 ## Examples
 
 ### Using the default AI SDK v5 types

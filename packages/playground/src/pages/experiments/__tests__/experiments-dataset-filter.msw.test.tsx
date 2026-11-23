@@ -1,9 +1,11 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { EXPERIMENTS_PER_PAGE } from '@mastra/react/hooks/experiments';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
+import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
   buildListExperimentsResponse,
@@ -16,7 +18,6 @@ import {
   noScorers,
   noWorkflows,
 } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
-import { EXPERIMENTS_PAGE_SIZE } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -35,9 +36,14 @@ interface HandlerOptions {
 }
 
 function setupHandlers({ globalList = experimentsAcrossDatasets }: HandlerOptions = {}) {
-  const calls = { global: 0, datasetPerPage: undefined as string | null | undefined };
+  const calls = {
+    global: 0,
+    datasetPage: undefined as string | null | undefined,
+    datasetPerPage: undefined as string | null | undefined,
+  };
 
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
@@ -47,7 +53,9 @@ function setupHandlers({ globalList = experimentsAcrossDatasets }: HandlerOption
       return HttpResponse.json(buildListExperimentsResponse(globalList));
     }),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments`, ({ params, request }) => {
-      calls.datasetPerPage = new URL(request.url).searchParams.get('perPage');
+      const searchParams = new URL(request.url).searchParams;
+      calls.datasetPage = searchParams.get('page');
+      calls.datasetPerPage = searchParams.get('perPage');
       return HttpResponse.json(
         buildListExperimentsResponse(experimentsAcrossDatasets.filter(exp => exp.datasetId === params.datasetId)),
       );
@@ -92,12 +100,13 @@ describe('Experiments page — dataset filter from URL', () => {
     expect(await screen.findByText('entity-extraction / model-b')).toBeDefined();
   });
 
-  it('requests a full page from the dataset-scoped endpoint instead of the global list', async () => {
+  it('requests the first page from the dataset-scoped endpoint instead of the global list', async () => {
     const calls = setupHandlers();
     renderPage('/experiments?dataset=dataset-1');
 
     await screen.findByText('entity-extraction / model-a');
-    expect(calls.datasetPerPage).toBe(String(EXPERIMENTS_PAGE_SIZE));
+    expect(calls.datasetPage).toBe('0');
+    expect(calls.datasetPerPage).toBe(String(EXPERIMENTS_PER_PAGE));
     expect(calls.global).toBe(0);
   });
 
@@ -107,7 +116,7 @@ describe('Experiments page — dataset filter from URL', () => {
 
     // The column header only renders once the (empty) list has loaded.
     expect(await screen.findByText('Target')).toBeDefined();
-    expect(screen.getByRole('button', { name: /reset/i })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Experiments filters' })).toBeDefined();
     expect(screen.queryByText('No Experiments yet')).toBeNull();
   });
 
@@ -119,11 +128,11 @@ describe('Experiments page — dataset filter from URL', () => {
     expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
   });
 
-  it('clears the ?dataset= param when filters are reset', async () => {
+  it('clears the ?dataset= param when the Dataset chip is removed', async () => {
     setupHandlers();
     renderPage('/experiments?dataset=dataset-1');
 
-    fireEvent.click(await screen.findByRole('button', { name: /reset/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Dataset filter' }));
 
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments'));
     expect(screen.getByText('entity-extraction / model-b')).toBeDefined();

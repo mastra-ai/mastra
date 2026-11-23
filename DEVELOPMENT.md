@@ -1,12 +1,12 @@
 # Mastra Development Guide
 
-This guide provides instructions for developers who want to contribute to or work with the Mastra codebase.
+This guide provides instructions for developers who want to work with the Mastra codebase.
 
 ## Prerequisites
 
-- **Node.js** (v22.13.0 or later)
-- **pnpm** (v10.18.0 or later) - Mastra uses pnpm for package management
-- **Docker** (for local development services) - Only needed for a subset of tests, not required for general development
+- **Node.js** (v22.19.0 or later on Node 22, or v24.11.0 or later)
+- **pnpm** (v11.21.0 or later): Mastra uses pnpm for package management
+- **Docker** (for local development services): Only needed for a subset of tests, not required for general development
 
 ## Getting started
 
@@ -148,7 +148,14 @@ Mastra uses Vitest for testing. You can run all tests or only specific packages.
   pnpm test:watch
   ```
 
-Some tests require environment variables to be set. If you're unsure about the required variables, ask for help in the pull request or wait for CI to run the tests.
+Some tests require environment variables to be set. Copy the block below to a `.env` file in the root directory; only fill what your test target needs. CI-only keys (Pinecone/Cloudflare) can stay empty for `test:core`.
+
+| Var | Needed for |
+| `OPENAI_API_KEY` | `pnpm test:core`, `test:memory`, agent evals |
+| `ANTHROPIC_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Gateway/provider fallback tests |
+| `COHERE_API_KEY` / `PINECONE_API_KEY` | RAG/vector provider tests (CI-only, optional locally) |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Cloudflare store tests (CI-only, optional locally) |
+| `DB_URL=postgresql://postgres:postgres@localhost:5432/mastra` | pg store tests (after `pnpm run dev:services:up`) |
 
 Create a `.env` file in the root directory with the following content:
 
@@ -167,36 +174,10 @@ Afterwards, start the development services:
 pnpm run dev:services:up
 ```
 
-## Contributing
-
-1. **Create a branch for your changes**:
-
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make your changes and ensure tests pass**:
-
-   ```bash
-   pnpm test
-   ```
-
-3. **Create a changeset** (for version management):
-
-   ```bash
-   pnpm changeset
-   ```
-
-   Follow the prompts to describe your changes.
-
-4. **Open a pull request** with your changes. Link the related issue(s) in the PR description (e.g. with `Fixes #1234`) and provide a clear description of the problem and solution. PRs without linked issues may be closed.
-
-5. **Resolve all Coderabbit comments**. Coderabbit is our AI assistant that helps maintainers review code. It will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review.
-
 ## Documentation
 
-The documentation site is built from the `docs/` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on contributing to the docs.
+The documentation site is built from the `docs/` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on running the docs locally.
 
 ## Need help?
 
-Join the [Mastra Discord community](https://discord.gg/BTYqqHKUrf) for support and discussions.
+Join the [Mastra Discord community](https://discord.gg/mastra-ai) for support and discussions.

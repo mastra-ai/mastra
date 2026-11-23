@@ -7,14 +7,20 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
+import { FGADeniedError } from '../../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../../auth/ee/interfaces/fga';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
+import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { SaveQueueManager } from '../../save-queue';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 
 // ============================================================================
 // Helper Functions
@@ -44,6 +50,27 @@ function createTextModel(text: string) {
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
         },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
+function createTerminalErrorModel(errorMessage: string, partialText?: string) {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        ...(partialText
+          ? [
+              { type: 'response-metadata' as const, id: 'id-error', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start' as const, id: 'text-error' },
+              { type: 'text-delta' as const, id: 'text-error', delta: partialText },
+              { type: 'text-end' as const, id: 'text-error' },
+            ]
+          : []),
+        { type: 'error', error: new Error(errorMessage) },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -93,6 +120,75 @@ describe('DurableAgent memory configuration', () => {
 
   afterEach(async () => {
     await pubsub.close();
+  });
+
+  describe.each(['default', 'evented'] as const)('%s initial input authorization', engine => {
+    it.each(['stream', 'generate'] as const)(
+      '%s: denying WRITE on an existing readable thread neither saves input nor runs the model (COR-1472)',
+      async method => {
+        const memory = new MockMemory();
+        const threadId = `denied-initial-input-${engine}-${method}`;
+        const resourceId = 'read-only-customer';
+        await memory.createThread({ threadId, resourceId });
+        const model = createTextModel('This request must not execute.');
+        const generate = vi.spyOn(model, 'doGenerate');
+        const stream = vi.spyOn(model, 'doStream');
+        const permissions: string[] = [];
+        const fga: IFGAProvider = {
+          check: async (_user, input) => input.permission !== 'memory:write',
+          filterAccessible: async () => [],
+          require: async (user, input) => {
+            permissions.push(input.permission);
+            if (input.permission === 'memory:write') {
+              throw new FGADeniedError(user, input.resource, input.permission);
+            }
+          },
+        };
+        const agent = new Agent({
+          id: 'denied-input-agent',
+          name: 'Denied Input Agent',
+          instructions: 'Answer the request.',
+          model,
+          memory,
+        });
+        const durableAgent =
+          engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+        new Mastra({
+          agents: { agent: durableAgent },
+          storage: memory.storage,
+          server: { fga },
+          pubsub,
+          logger: false,
+        });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { id: 'reader' });
+        const options = { memory: { thread: threadId, resource: resourceId }, requestContext };
+        try {
+          if (method === 'generate') {
+            await expect(durableAgent.generate('Do not persist this unauthorized request.', options)).rejects.toThrow();
+          } else {
+            const result = await durableAgent.stream('Do not persist this unauthorized request.', options);
+            try {
+              const chunks = [];
+              for await (const chunk of result.fullStream) chunks.push(chunk);
+              expect(chunks.some(chunk => chunk.type === 'error')).toBe(true);
+            } finally {
+              result.cleanup();
+            }
+          }
+          // Existing threads require READ during preparation; WRITE must be checked again at acceptance.
+          expect(permissions).toContain('memory:read');
+          expect(permissions).toContain('memory:write');
+          expect(generate).not.toHaveBeenCalled();
+          expect(stream).not.toHaveBeenCalled();
+          const store = (await memory.storage.getStore('memory'))!;
+          expect((await store.listMessages({ threadId, perPage: false })).messages).toEqual([]);
+        } finally {
+          generate.mockRestore();
+          stream.mockRestore();
+        }
+      },
+    );
   });
 
   describe('basic memory options', () => {
@@ -209,64 +305,86 @@ describe('DurableAgent memory configuration', () => {
       expect(result.resourceId).toBeUndefined();
     });
 
-    it('should persist both user input and assistant response after a completed stream', async () => {
+    it('persists an error-only assistant message through the default durable flush path', async () => {
       const mockMemory = new MockMemory();
+      const flushMessages = vi.spyOn(SaveQueueManager.prototype, 'flushMessages');
       const baseAgent = new Agent({
-        id: 'persist-response-agent',
-        name: 'Persist Response Agent',
-        instructions: 'Test response persistence',
-        model: createTextModel('assistant response') as LanguageModelV2,
+        id: 'persist-terminal-error-agent',
+        name: 'Persist Terminal Error Agent',
+        instructions: 'Test terminal error persistence',
+        model: createTerminalErrorModel('durable terminal failure') as LanguageModelV2,
         memory: mockMemory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const threadId = 'thread-terminal-error';
+      const resourceId = 'resource-terminal-error';
 
       const result = await durableAgent.stream('user input', {
-        memory: { thread: 'thread-persist-response', resource: 'resource-persist-response' },
+        memory: { thread: threadId, resource: resourceId },
       });
-      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      try {
+        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+        }
+      } catch {
+        // The durable bridge surfaces the terminal stream error to consumers.
       }
 
-      const messages = await mockMemory.recall({
-        threadId: 'thread-persist-response',
-        resourceId: 'resource-persist-response',
+      await vi.waitFor(async () => {
+        const recalled = await mockMemory.recall({ threadId, resourceId });
+        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
       });
 
-      expect(messages.messages.map(message => message.role)).toEqual(['user', 'assistant']);
-      expect(JSON.stringify(messages.messages[0]?.content)).toContain('user input');
-      expect(JSON.stringify(messages.messages[1]?.content)).toContain('assistant response');
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      expect(messages[1]?.content.parts).toMatchObject([
+        { type: 'error', error: { name: 'Error', message: 'durable terminal failure' } },
+      ]);
+      expect(messages[1]?.content.parts).toHaveLength(1);
+      expect(flushMessages).toHaveBeenCalled();
+      expect(
+        flushMessages.mock.calls.some(([messageList]) =>
+          messageList.get.all.db().some(message => message.content.parts?.some(part => part.type === 'error')),
+        ),
+      ).toBe(true);
       result.cleanup();
     });
 
-    it('does not persist messages when memory is readOnly', async () => {
+    it('appends a terminal error after partial assistant output in durable memory', async () => {
       const mockMemory = new MockMemory();
-      await mockMemory.createThread({ threadId: 'thread-readonly', resourceId: 'resource-readonly' });
-
       const baseAgent = new Agent({
-        id: 'readonly-persist-agent',
-        name: 'ReadOnly Persist Agent',
-        instructions: 'Test readOnly persistence',
-        model: createTextModel('assistant response') as LanguageModelV2,
+        id: 'persist-partial-terminal-error-agent',
+        name: 'Persist Partial Terminal Error Agent',
+        instructions: 'Test partial terminal error persistence',
+        model: createTerminalErrorModel('durable partial failure', 'partial response') as LanguageModelV2,
         memory: mockMemory,
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const threadId = 'thread-partial-terminal-error';
+      const resourceId = 'resource-partial-terminal-error';
 
       const result = await durableAgent.stream('user input', {
-        memory: {
-          thread: 'thread-readonly',
-          resource: 'resource-readonly',
-          options: { readOnly: true },
-        },
+        memory: { thread: threadId, resource: resourceId },
       });
-      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      try {
+        for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+        }
+      } catch {
+        // The durable bridge surfaces the terminal stream error to consumers.
       }
 
-      const messages = await mockMemory.recall({
-        threadId: 'thread-readonly',
-        resourceId: 'resource-readonly',
+      await vi.waitFor(async () => {
+        const recalled = await mockMemory.recall({ threadId, resourceId });
+        expect(recalled.messages.map(message => message.role)).toEqual(['user', 'assistant']);
       });
 
-      // readOnly means "read memory but do not save new messages".
-      expect(messages.messages).toEqual([]);
+      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      expect(messages[1]?.content.parts).toMatchObject([
+        { type: 'text', text: 'partial response' },
+        { type: 'error', error: { name: 'Error', message: 'durable partial failure' } },
+      ]);
+      expect(messages[1]?.content.parts?.at(-1)).toMatchObject({
+        type: 'error',
+        error: { name: 'Error', message: 'durable partial failure' },
+      });
       result.cleanup();
     });
   });
@@ -441,58 +559,6 @@ describe('DurableAgent memory configuration', () => {
       expect(parsed.state.threadId).toBe('thread-undefined');
     });
   });
-
-  describe('memory with streaming', () => {
-    it('should pass memory options through stream()', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'stream-memory-agent',
-        name: 'Stream Memory Agent',
-        instructions: 'Test stream memory',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { runId, threadId, resourceId, cleanup } = await durableAgent.stream('Hello', {
-        memory: {
-          thread: 'stream-thread-123',
-          resource: 'stream-user-456',
-        },
-      });
-
-      expect(runId).toBeDefined();
-      expect(threadId).toBe('stream-thread-123');
-      expect(resourceId).toBe('stream-user-456');
-      cleanup();
-    });
-
-    it('should handle memory options with readOnly in stream()', async () => {
-      const mockModel = createTextModel('Hello!');
-
-      const baseAgent = new Agent({
-        id: 'readonly-stream-agent',
-        name: 'ReadOnly Stream Agent',
-        instructions: 'Test readonly stream',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
-        memory: {
-          thread: 'readonly-stream-thread',
-          resource: 'readonly-stream-user',
-          options: {
-            readOnly: true,
-          },
-        },
-      });
-
-      expect(runId).toBeDefined();
-      cleanup();
-    });
-  });
-
   describe('memory with tools', () => {
     it('should preserve memory context when using tools', async () => {
       const mockModel = createToolCallModel('searchTool', { query: 'test' });
@@ -675,12 +741,9 @@ describe('DurableAgent memory edge cases', () => {
   // title-generation branch, so `memory.options.generateTitle` silently never fired for
   // durable/evented agents (and Inngest). See create-durable-agentic-workflow.ts.
   describe('generateTitle', () => {
-    it('generates a thread title from the first message after a completed durable stream', async () => {
+    it('finishes the stream before lifecycle-managed title generation completes', async () => {
       const mockMemory = new MockMemory();
-      // Mirror the non-durable title-generation test: a dedicated title model so we can
-      // assert the exact generated title, wired via getMergedThreadConfig.
-      const titleModel = createTextModel('Generated Thread Title');
-      mockMemory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel as LanguageModelV2 } });
+      mockMemory.getMergedThreadConfig = () => ({ generateTitle: true });
 
       const baseAgent = new Agent({
         id: 'title-durable-agent',
@@ -689,6 +752,11 @@ describe('DurableAgent memory edge cases', () => {
         model: createTextModel('assistant response') as LanguageModelV2,
         memory: mockMemory,
       });
+      let resolveTitle: (title: string) => void;
+      const titlePending = new Promise<string>(resolve => {
+        resolveTitle = resolve;
+      });
+      const generateTitle = vi.spyOn(baseAgent, 'genTitle').mockReturnValue(titlePending);
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const result = await durableAgent.stream('What is the weather like today?', {
@@ -697,8 +765,14 @@ describe('DurableAgent memory edge cases', () => {
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
       }
 
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
-      expect(thread?.title).toBe('Generated Thread Title');
+      expect(generateTitle).toHaveBeenCalledTimes(1);
+      expect((await mockMemory.getThreadById({ threadId: 'thread-title' }))?.title).toBe('');
+
+      resolveTitle!('Generated Thread Title');
+      await vi.waitFor(async () => {
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-title' });
+        expect(thread?.title).toBe('Generated Thread Title');
+      });
       result.cleanup();
     });
 

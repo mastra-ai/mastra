@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { createClient } from '@libsql/client';
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
@@ -14,6 +12,9 @@ import type {
   RetentionConfig,
 } from '@mastra/core/storage';
 
+import { gateIfLocalFile } from '../shared/file-transaction-gate';
+import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
+import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './db/client';
 import { withClientWriteLock } from './db/write-lock';
@@ -301,7 +302,7 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
 
     const values: Record<string, unknown> = { ...row };
     if (schema.columns[pk]!.type === 'uuid-pk' && values[pk] === undefined) {
-      values[pk] = randomUUID();
+      values[pk] = globalThis.crypto.randomUUID();
     }
 
     const columns = Object.keys(values).filter(column => values[column] !== undefined);
@@ -379,8 +380,13 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     const filter = this.#buildWhere(schema, where);
     const sql = `UPDATE "${schema.name}" SET ${columns.map(c => `"${c}" = ?`).join(', ')} WHERE ${filter.sql}`;
     const args = [...columns.map(column => this.#serialize(this.#column(schema, column), set[column])), ...filter.args];
-    const result = await this.#client.execute({ sql, args });
-    return result.rowsAffected;
+    try {
+      const result = await this.#client.execute({ sql, args });
+      return result.rowsAffected;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new UniqueViolationError(collection, { cause: error });
+      throw error;
+    }
   }
 
   async updateMany(collection: string, where: CollectionWhere, set: Record<string, unknown>): Promise<number> {
@@ -437,11 +443,18 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     super();
     this.#config = config;
     const isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
-    this.#client = createClient({
+    const client = createClient({
       url: config.url,
       ...(config.authToken ? { authToken: config.authToken } : {}),
       ...(isLocalDb ? { timeout: DEFAULT_CONNECTION_TIMEOUT_MS } : {}),
     });
+    this.#client = isSingleConnectionDatabase(config)
+      ? gateSingleConnectionClient(client)
+      : isLocalDb
+        ? gateIfLocalFile(resetConnectionsAfterBusy(client, { maxWaitMs: DEFAULT_CONNECTION_TIMEOUT_MS }), config.url, {
+            maxWaitMs: DEFAULT_CONNECTION_TIMEOUT_MS,
+          })
+        : client;
     this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas, fn => withClientWriteLock(this.#client, fn));
   }
 
@@ -460,9 +473,6 @@ export class LibSQLFactoryStorage extends FactoryStorage {
 
   async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
     return withClientWriteLock(this.#client, async () => {
-      if (this.#config.url.includes(':memory:')) {
-        return fn(new LibSQLFactoryStorageOps(this.#client, this.#schemas, runWithoutWriteLock));
-      }
       const transaction = await this.#client.transaction('write');
       try {
         const result = await fn(new LibSQLFactoryStorageOps(transaction, this.#schemas, runWithoutWriteLock));
@@ -486,6 +496,14 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     });
   }
 
+  async collectionExists(name: string): Promise<boolean> {
+    const result = await this.#client.execute({
+      sql: `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`,
+      args: [name],
+    });
+    return result.rows.length > 0;
+  }
+
   async close(): Promise<void> {
     await this.#client.close();
   }
@@ -505,25 +523,39 @@ export class LibSQLFactoryStorage extends FactoryStorage {
 
   /**
    * A table created by an older schema may still say NOT NULL on a column the
-   * current schema declares nullable — inserts of null then fail on databases
-   * that predate the change. SQLite has no `ALTER COLUMN DROP NOT NULL`, so
-   * relaxation swaps in a table rebuilt from the current schema (create shadow
-   * → copy → drop → rename) atomically.
+   * current schema declares nullable, or on a column the schema no longer
+   * declares at all — inserts that write null or omit it then fail on
+   * databases that predate the change. SQLite has no `ALTER COLUMN DROP NOT
+   * NULL`, so relaxation swaps in a rebuilt table (create shadow → copy → drop
+   * → rename) atomically. Columns the schema no longer declares are carried
+   * over, nullable, with their data and defaults.
    */
   async #relaxDriftedNotNulls(schema: CollectionSchema): Promise<void> {
     const info = await this.#client.execute(`PRAGMA table_info("${schema.name}")`);
-    const hasDrift = info.rows.some(row => {
-      const spec = schema.columns[String(row.name)];
-      if (!spec || spec.type === 'uuid-pk' || spec.primaryKey) return false;
-      return spec.nullable === true && Number(row.notnull) === 1;
-    });
+    // Every column this adapter created is a plain identifier; leave anything else untouched.
+    const retired = info.rows.filter(
+      row => !(String(row.name) in schema.columns) && IDENTIFIER_RE.test(String(row.name)),
+    );
+    const hasDrift =
+      retired.some(row => Number(row.notnull) === 1 && Number(row.pk) === 0) ||
+      info.rows.some(row => {
+        const spec = schema.columns[String(row.name)];
+        if (!spec || spec.type === 'uuid-pk' || spec.primaryKey) return false;
+        return spec.nullable === true && Number(row.notnull) === 1;
+      });
     if (!hasDrift) return;
 
     // The additive ADD COLUMN pass has already run, so every schema column
     // exists on the old table and can be copied straight across.
-    const ddl = Object.entries(schema.columns).map(([name, spec]) => this.#columnDdl(name, spec));
+    const ddl = [
+      ...Object.entries(schema.columns).map(([name, spec]) => this.#columnDdl(name, spec)),
+      ...retired.map(row => {
+        const fallback = row.dflt_value === null || row.dflt_value === undefined ? '' : ` DEFAULT ${row.dflt_value}`;
+        return `"${String(row.name)}" ${String(row.type)}${fallback}`;
+      }),
+    ];
     const shadow = `${schema.name}__nullable_rebuild`;
-    const cols = Object.keys(schema.columns)
+    const cols = [...Object.keys(schema.columns), ...retired.map(row => String(row.name))]
       .map(name => `"${name}"`)
       .join(', ');
     await this.#client.batch(

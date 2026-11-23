@@ -5,11 +5,11 @@
     "testName": "OpenAI reasoning e2e test",
     "model": "o4-mini",
     "createdAt": "2026-03-24T13:48:10.128Z",
-    "updatedAt": "2026-07-14T14:03:50.917Z"
+    "updatedAt": "2026-09-16T08:59:02.123Z"
   },
   "recordings": [
     {
-      "hash": "fb48017f28d78358",
+      "hash": "dc3fd98b01b1a7e2",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -150,7 +150,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -169,11 +172,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -204,36 +212,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -247,7 +255,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -263,7 +274,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -312,12 +326,14 @@
                   "optional"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               }
             }
           }
         },
-        "timestamp": 1784037779690
+        "timestamp": 1789549081604
       },
       "response": {
         "status": 200,
@@ -326,13 +342,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b1117b9f0da105-CDG",
+          "cf-ray": "a3beaac079d9d358-FRA",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:03:11 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "11940",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Wed, 16 Sep 2026 08:58:14 GMT",
+          "openai-processing-ms": "12819",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -340,21 +354,21 @@
           "x-ratelimit-limit-requests": "30000",
           "x-ratelimit-limit-tokens": "150000000",
           "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149998782",
+          "x-ratelimit-remaining-tokens": "149998795",
           "x-ratelimit-reset-requests": "2ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_72ba335587a040649e52cba0c2afec1a"
+          "x-request-id": "req_427188bcb65b4e95a7318dd39c81c7c9"
         },
         "body": {
-          "id": "resp_0a3431b41f8060d3006a564193f1b881a2be2266753c58cc8b",
+          "id": "resp_0d07ac1c1f829a30006aaa5a1a1ec087d29e9151e5ef618141",
           "object": "response",
-          "created_at": 1784037779,
+          "created_at": 1789549082,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037791,
+          "completed_at": 1789549094,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -365,14 +379,14 @@
           "moderation": null,
           "output": [
             {
-              "id": "rs_0a3431b41f8060d3006a56419494f081a2aacb7dbfcde72faa",
+              "id": "rs_0d07ac1c1f829a30006aaa5a1abee087d2b0e19d16ed88335d",
               "type": "reasoning",
               "content": [],
-              "encrypted_content": "gAAAAABqVkGfscQzI5NuQYTQpoobl2yx4Mt5GR2fqe4CVmV39EOie9j7lb-JYLBOALoSkb2RCDSJHUgNlT7iqNQnsmJHQhpZOf6JEXv09CpqBiVJlTtWewqiCvkCsbgz6lpDcUmFkz8qn5kylfVhlus2QmBjICc9oild-HSrWCprCF3w--8DfkRGqdVZKhlPdhtKfQl1xSYvA4wzgAj1J86fFrN8RQ2rGv4VPCg6RId1SqW3DZgrEzhsnh_ahpIbCRrvXyxIudDg_wJXlGhbFu5t9klUXyTzZUofnFQkyKl1wRBwMtHHEiJWkKRyXqBXU33nruLdmSm85ChE-7MFm5XPyTD5GGee09DM8eD8eE1QcVhe3w90ML3Cmb4Ly9Iw-WFVwvbNceSnnamtvc9muFWuc7MRJKjoDQW5HdwY7oHkcPeunXHig1tVnIdYTOu9scdx2TjI-KKM_6j72Wzry5u9Vxv0qgBrx5HM-2gq-26XAOHQVcVpB4dVrw4dfrja6PYQjWDYjxkq1Nz6puHgWoFHayusPULVWSzlMp2fBsonJYQqMI_9uPrgAAqQDykY6x7d9pr6KnO76FuYEgL0w9-M2N-WyP_Oy4fGfFuNVhwjwZnz--XSMszG3uH33R4Ehgd2u2LWZxXdF1MpfXs6fbVoQwx0BSN251-gPbNjpcAioqRJ-JMzgnnEtJnryN5Qpzp4X1Csut27ylXhONKk9t-1dLkErTuwmcAKkKWwJ6XMoh3J5nHvv8wrAHtVGvNpWnDmMUIP5hELXco1YkGVUaCS8tTSOM96avNo6VkW6z6jl0WFrV1jcb9MnnibTrWOuR9_6bNJe0CELIPgov2g9xvYi4Lrsa0ffAH6vAfLpDCxz-1WcS2xDIwefSAebrf_A2M0atSeZ-JYgOHgOtQ6IaCQKZ-uBtjqYX4Vj7Hwv4o5A8QeDvBhaolt1dafSyKnkFYl0ulhMAR3mgM1jBtxjRt1gxvHHMF1ha4N8VDQ_7PBDUlB0-YxyvsKsyToxYKtZHhQ2HSC-CxHIwxQ1l1wOwFUXLO6StMTOvo_2EUwF8t_zbC1OdSKzjeMj44kFg7YzZ6mlR-pDLxe1z4grHiMiiU2HhcFP9SMgCRwF5Z3pKPCyAEKda_a2BSuEGHeoZbKWBtBGKsthki1UZ1Iq3_rezvWUYHpYRGh9uZ6lTgle2sACJfz-QjRXDDO0EoUXyULsd5NKVuaEEqdWSlpExL4oJJE1bwJ72xfkHg_VZSWZaohHUJXAhiYL19s4lrdPc-uhGrbU8SVlaVUDJnNRZfKzt9A1QHiFMF3EVGLRsRerHSYBgIarwajcghBSGisclRSQm0qhUzlO0M_qVK5BBAfBSwGeWvVAFJvD7cYudrzgZi_Nk9cxOl3obUxZOPL0twePfhI9mXvndsIXYZroFFYscCP-khODd4lzxa-660QMTqFoopCxeQT8psQRVKRt0pvYR6t5IMER4dscr0gtiLdH4v3HWreJVMUKIFGX1Ww1_HgV9uKHlNLMKMfKIHExyQWz-itxjuYtqXuBzFaH4OyuH6iV4ng_q3HvdzcusQmFkHzZpGFBa5TqblthrlGsZSgN8RRYAmCCz-1j2XMJ1bdKAWscnQkSUYCNYljE2M6n01X-IqALyDjFvpXbbIfMuQybWBjHeUdTYlsb1zE3X9QUf8AgYm6IcdlQ6chop-YfLUkiGNLzoul0ARM8nseZjlqk5k5FPpo0d2gn38kG_SXUSKfMAKePweDCuSC9UKMzYKqUpMzhNYmHImNvDF2GwFJV4pp9yJA7L3aVDpSDSEaER7tqAS2IyPH58I8KUEF9ZuGKBSWIXJ93ZEn8-dwZr4QaFKIb-Jig90dTngg7VE5QBW-ENX6p_0qByjKDfssdZvyaZyI1hhwpgK3MI5Vzv-sjdnQG-Vkpw2sX-TSicJwPV6Rw5f0IF9UyGW8lap0IUaIcCicBk_ClgQrIs_yUiNVWARFXJ-M1ySND99LfHS5X_VIxt3kQar-4sfRQWdHNVdMQtQ9aTgjNEQLgxes-f5XPoqpa4hY3s9rW0R5jB-cRr_9sbANqI4_YeKthL8TjqSOqcX9pMsvppYZqFfbQxH76Qbgx2HnO1RZiUt9EiukceY9n1yj3L4sTtvW-2osFGPvnoihm9ClUvoIFS2U5i4u5C8HQyujJh6T5i0b7ITUvL6ebJ2h1mJFTL9Adre0YtktdjNYPqtZ-DIosmrJDD2EP8RlfmYKUTaz5nd6b5SDIxiEeyyamUhmV_R5Cex9x-W2-NDCgYqaSoPd-OxtwBowHUzwsGOEqVUwnOQ3TeWZI-aja9kngzcDMmnChVuDh5lfbhvK4bJiEEWjr_MMOS0_X6eoZKf_g2hma6DaPD2meHCH4C7MI5HBvbktQ2M6v0wzt9iEAbW41GF5aufmaCtZx2H6gqJYy3HL-7N-86REfM_6YSMzc268SsOxTbH_rIiKfOb27afhg5PtzzekcONwhuCYnb_yVOvE6eFhi5VzE9Y5tFZ9VtngwmWl49zbAWByHA7lL8S5U18hIJffHqtzK_o7wayRs0OsFukxYccwLmRURYX8nAMhfmdSk25TtnaZq8kTYCC2Ir__ngI2alsCUBBEg2LpNudH_97Zs11eXVv47waH8qDE057b6b0sdKQo26WV4pB7m_8z-U1vl8_X2TL3tngqsG6Qzy0xHP8HVUZJEFos6lBOctXHSZp1GhtIKhYVYZppEv7wqtdBAdenl4x4GyRegDzmYfZEUxXiWDuPqcc_rLjQ9VHsEc5FIhIulvU1H9hvzCgNaXPQuSDDp_hJyxr9uqwo818ThiPbJtLsyhZcLSeB9sDA55P1RmQL2inVCFDU_QMq4D02DKh7bIG4tQF6fpRUL97Hk6DGQA2Wh5V7pKjxkWbpJw6FU1fRd72Ri9trQvUMC6oh-ys3wdwp2gaN9z4QEc6JrOPnG7uq_1Q4gPDzIn9jSbXyTrveldTIhwjidGPXH7zCGA8p1kF3z6C4dl5baiYNB0uDCLEoOm8rW3uCyUd5ymdSy2ppF1vpiKTpIT1PJfeqDgHJoCY2fVTn4-FALOlp-7bR8JnCiioWeg9zaLitLkd9C3znI1dLRCDLkGiea5noMA2cjJ9G-AAMNdzxlrQXdL8jvc6VEn6IB6iw3lkS1nHAS0OzM-qR56j0THlrNnjlNWXsot3j-NDEXmWjZSepBonRKLK_SeTMOdIdJSGu_a-pj39f7bbk1KQt_ItSLmAeJIlzgphpN07FXziWf0Bg9MqT9tqx-eUVoqeYZn2MahQJSFvmBddQ6TpkvFcI6XKvzyuq1iKPXxA06jupIAQVLf-zerEzP4sneBKyxvpg1JDAmbkjS8m1X7DsjpXAFFRPJapOLwcgaRrRNfFXGI88EM8rtnIkG3W-knLVnmYHw8x0eVSwQGiU0tQOXhTNl1bli7VTypSo_FSlvaxlE90up0N3FyA99tDt9_zyMuKbi_433D_N7Cgd7zNw2RxK0RwPOJjwwFiPtKRkX5cVW_J_GXuaT1-JQX0B_ZoYQUZ_sCLYfEA12Ncy7XHO4og3m3hOFYZyQMXMKraEryzvoSFWBtATQFLHTiJlsILC9TQgVEm3bvyC6HeZRV_E4jtUX22sSAa2zvTEzN4dXxwWcDUzX-WbUyOgQGJHtnuWqj6HFc5GgiNYjd9T2UxvhnTZb_N936Yc9X3IdSp_QEApbkqKBqiyMQ-MA-53IUlpF_KvhaVT_x4QnaJgG3eaAKHHQf_x5Ap8iUFE3gWWSlnRtxRbOv3KAjiUutRuzGROzpfuTIGQOH10b6cYnPGtI58oB2N-_J1juLq7fVZxQZBiwK55ijqhqDcFBMSLbpW1tIGf0WRL3rYZWdADlOP0MwfMPlrAS7VYMzKZBB81DRqIMS-0yO4lh7CCJKnId7KFoIrFF7hah1kj376cG2_B0_chICteLmrxUeN3heAmD0wrmbiP_C2PEh047NsHdUVTuz_SBk6JKqUKcIA7yHz9zn26VO6NC5-mjtJeM8srByEcQs-BeQzU6bmrGp4aVsBM8VxPd8clSOgbcbZT8MRVDvTR8pOHe8bjv6hn2vTNXS3hxQZiyqYmMq3OzHjKW0mSDRq4H8PWZhEejMqlaO-aPSqmDLKUfhZYm0W7gNCkuMzdzLdjgA8ECN3XWvMcL3SMC-7EYqiakAfwSFksO8015P7-bGbkwBn633cLYIEskLTxLRaiawnrl1te4PFSvws1wDj7TIoyiEwbIcDR-GLTX2Ghy9EtO0msJRnWQ_mlcRYJeqiIDsRhA2q8Sgscyaj-Imk0uaaW4jUpL0oJj__WqK8Add-IjM7jVtNG-_HHeT0ZCz0iizdt6mk0Qgt_za7F8dagc3JzyRzkFFgazU7xCAL7Li-UCNRRFybtYJLgVJTjUKOSH29q3J17Ssk1NHd7eP-E8VnPncHIbkR6RILZAKYO-A3iVbcqdYFgwoGqdfdSjdDIsCFvEMv3u1-0DdJVAKsNEA09s41ev5hhmtL9GrIKBVH_tCqFbkME1q9egJ0lyCWfXwHexSMT6gszSQ4SLL5Jfs46qLF_uSNePXfcz5nQo5qVz1y46XCUuf_L9iOsTxaHLzhXEXvh2rGoAaV4kTUeOka8pefZxjOLTOhrt3qDjtyI9eb_JQcMnCBm6lSvbMiFpX3I6-fdwya1Ix36gpiDdDlyHqPQWKy76qb0Ukh7Ml6RwUXskyQ-An-Z4UBxfsdGVeL4xSsQ6JM8Io86Swvf_pET4B--7GeRdqDwj06C7FKGy9VVDTz083hXrgyxikQgNaK36gPRCY1jdG0ckF2oTxJI1wZ75JjGudC-itLT-PFxiAsfzOmuMsg4qycwEuMBOZYlyEk6gQpcrHlK-cz4CdS--HSalD9DVJzQNeyW2Ia-ZMQ0iq9wDA-rCbnoAtILynf5XNu2n9844DEAs8WsV0ShkYkTtKmLjZFC92IXTrWvz8h6CMJ9UYDxl2Pj5qAllx4dXO52QKkCBsY64pm5fd4kJnkGawhIgmjH_qIVazmCg10Na8lVwRC_DkKNSttjN0E5Zf69SwKcZ1kqgGWY_0n3xM0Kc9y8u7NzCjz-Iqemk8EILU7okZ1xciWP3ftMZreXRmx623MSZ8KiWtouJjiloUcXCeLtakF5wWGi7QdCD6Est0Lj0YhQhJkloUFi48Kl-xATIx0crbDmjCqoizWtOP8ZPOfRdzjXjC42G6Ca4EjBAaZltN7ZBp15TYBZS7EK7dzykp7NfoQGjK-VspRThOkv0WhGOveNfa7QhTU5ON-GWcklhfbov4cwvIC78lJ7QwNIaw6go_rw5L4UhP7JOXUuWs_J_pqCheT3XioRX1iV3vgSqBI4NM71AK7JahVdoGEDaAhpfLpUHm3YtgcNHWOeUMueulr1ZGWDzzKqvQTB9JqZ3xD3sd7a3HSoXuxLiTfNNNresL4nwel4ITOhNRt-gvl6D9o7x-Sk80B1unDCsyobLt0CxouHsW8ED16tE0y8njqRMS3RVqq3vKruhuNqrGJjx5d4coRxRpSJsUfwP948UVIPFoThUFr29LSAlZtCNppgTxqJc_Br7ay7Moje_2kUMfbLVyBnIa8Aq_uBRoM3NvlNtvV-qlPIThH5c-8V6ZGZFEnLT40QscH3MCkczCP3g5l8fHZMAl-q1HgBuoo7LU8bH_SWAOCFbkJYvwL5NpqL8978hCtkhEtCXdNkmsqyLImu85ntebG6mpWy9DINojsfzIFAzLcmZCR9zhcAPeMhwIXqXXhZZOYCd8WS9dlHvj8tSXOIEYfu1owtR8iUneTJ-nU5S2zQhquVIsMJEARTAkcy41lfVOH2GKLUu9hYTnVUOOzwNFi5hHG0zGWERVMvWtqwOXXmksTeM77v6X06zuCzjdh7nFXMs8tgID-VFlKW6zZT95MqgJeEUvriTrjzux7wXskPnWcY8rcmP70TqibxdRXGbwjX6HUtj3i1iewHerByL_Z-J502MTZzpesOILMNibaVzYjg3l9OyepWE4e8yI7LDF6qlKHWh6uF3Nx2Pag=",
+              "encrypted_content": "gAAAAABqqlomucBp_4NZKPdjpCUb7uZC3HzXPGTi_HAsxe0DPGyNbFom4VwIuSWoVrCd_aKYELbnJcy0g5o_18U9t7238v8YXj5U2LjVC4_Vwvea3QYv3Al4c_tXKNkUbt3VNsQyNf3nQKC7J9EA9M6S_NGvvUngSq9PFJAECkPpt5CxwoqWC5DSaBQIHNkZwQODBJ2bVqOkVF_Kqo1etDpXiRsjgNExvBxr-YrImiKR1CT0Uut3TIH7ZpZTs4ZQvkpmxC_JCQ1ygUNxuHjbFJ9R744Z3fgqFWYFs8FlSMZhPSXnGq1-BQE08Z9Pi-F29D9KlrfYtRaUcdtNpYbjPFOu5zmTrEYIdHeuDVn1ZzjFHG2jIaR4sgC-nw_wwMx0iAkagb0ZX_-Pi2e9NLud5j7_2EjO2_WO40PCz26PwTboXLwdbbjrsgyw-N5c4lad6q0kaQBqEAOBUHa5A2VPeiaop6JMPAANEbW5L9GvetKnFYtjgfqUJnIfbPojeOvO4hmfHKqI7hO6BkPmFSzx6KwtaVWAMhrTuyvQ_dUhvVONu9ZyohqnW5u4JGE3frN5xMgE4gxNGzhpt6g1DdjZWJBpp7e-qDPubajlCmKsioh-3YIuHdcW08V7hFRv3hANJS1FSfqMwaRkobw5uCwzDONMlcxnKV_Ny58S2BwnJApNDhBMCdE3_W2EYIeSKsP1E3H02PGl0I2skGq5vcwomrgAW_a9fm570MwTmjH7K5DWvUtWe3jJJZZ59JC75CB2t4pkJw-_LX_yW35zdRxgHdyQ-2eW5p2WNcQ2dHJajB_drgDlbHd4qqj7hhBgRSQLVIwgWND62f8MgHrS-i8z1ASkhRG6-RQMIVPCmj4KkgMagP48P-VYN0OZ3ON1jPpOs_4KvaCHW10ZnJ-JVTUhR5F9XNh59sV1G98f5nxKi1ua3nzGiibp--nlTRJvLBGCY7IEzjILB2_Mx4Hqhp9hUUbEdIrhMxipOCjQagIA-u7mE70ExjYvWMoRVXg5RfvIt4trvbkxfLCYPdAKtQB_7arVwsokQEHBq8E8vjn5S1e0KBvrIbJkN3wVNCzE_1o3VylwMpP0YSS9-LIadNFwrcXwKDW57cMLpSlmZ6NhKQp7PWNdSl_jMZZfjl5bOv9cmVaiq1r6odUV8gGy6seU45IOrCqGESDyv3EXyjsKAQC9vRoMx0POPtctesI7rusOg084ub8B7Je2lHSB3fgO0xXgMcPxitV0zRCcxydfwPc8AzlmbvcC4izELCfNcs_C7ZltAMoT2RVzEFyxk9uNeOE6StLM4IOw_G1TgbQFzvmmOMS8x9fu9CF7LrFt44EKHuvY4mgk9iyrXcbD6u5H9EVbRDNJk41QfAap--4-vpPw_c5S1xpZWy2kqTewXims7YCTEzZ9BMyW8E6sCwgw-E19HQf9EAr-l7VeHXRQRFgz6KbfO0mH1J0Vz-Abkk3QvVv-PhyweOdPgqX1Vg571t0a214DHkXbw7EbOawQd9yIyXeMWti-EmOkWamzF-EDUhUEJyjAUSo2XVaztruGTPWKBGpPyQAjcRHXHs4fOAde4RaerjRdNdwmnJ3D0tzUefVuQiaiFWdS9cHFhRHv2l7a61gzwW34Cur5wdAOTNGSzXez-jhzObbFRgzzOpJybHUQA0ynG1-vxJ0Ne4xR0uD7UCYV2ZDnh2nX7UWyy4Kzed-hN-mU_gLaYxhRgbWvPqOQgggkktsGWmdedJaPOqOKK-9dWH9DZr_fu_tiDdeuEmrv4v001tmNHmG8mptuokuYbrkdh6btlkbFMdlyUhiNTrMAYbalfwV4H0e1gDgb_lb6MmZ3l7nchp-x0upWUFZA3v44yUccQMUcos0x-Sg1UG55di_2hdF9Qe1SPb1ybpQh7e9_fvBGm3EGVmIkDeicIsITQ9LIt4CzksIhhZC4328TksHEAACEoQG5MGILLCMMcZZonqAmKgkffOQOwviWaWsgSLCkhnbRHu8gQyhKuWOhxwz0cvutyB78uMIOrZg3a0N-5hVAo7B0JdRpmWAc0aV9HxEQnlHF-aIO20EZHS2izkpg7nDOzb7Ud5NOg7nIVyNONuHudMqxH-vCvapaGoEXf2RULq6lcwH_uDW-iTwMhdT10xEP5kjB4LJWDjcQMd16ddKOPinGHcoa-Cuow2tMYxu9DWT4vhU9j6rg58kEAtLkIUbSh0dn86ar6Pl3MheQN-LFrlV44JmTOhcEQ_ywkavRNjWrFbm_SiUqK9T0O0Nns13ZlhrfAy9F-i9_TEGTi-KIdYqx_r1LVe7BVA5Mai_IFeb3BPobBwwJveYUUb-zvGiVXLSPnTQGND7ra58R9GHkdK3X_92JqsKjDNgK9MDs7raK87cxHptVTPmOfG5BZhgobODBbXwfAQiFL3j4V_R-cpQ4rzlk0HMcpGAgaDREj5S9Z2urOr10ShK4PQ5YthRCaMGTRbCRf9PiRJGmQAr01RilI3OGpY57DY6xcf4_QGtW2I0_Q3cYg_YzQeyfsRY_Oh2D5_5O2UPpaim1TnyxvAHBibmdCbsyMa15n2x_QYtlgDHxGLFLG80JDGAERQPpoFKD5yPG0178WCHPghYZ5OAJMxNinOKkmq3EKRmUOYypSXlEmsQVaFP63j9h2FjgDnaShJ84eSg8AH2J7nHuKwHQUR9ODLMNE7i5bBQC8uzE6FepDmNW6AdDG4324IjAxRQns9dNOLDLZCflKpn0rX6yT8L3o-vZnx27j267tfJSZnDNeZV--HXFFioYq_65ud0i-oi35q1lEBtvbzTgBldItgX9yrPllCbkDnDvXqofsfRXdvE0LUC1FfoL2WY5tCGbwcTic1Uyx_ICwpmwE4BsQk0CNbRgYhnNmcQ2RZ0IWVj8m9SmkOR4LYOPyrjRLUFShJzUr1-KasKlycV43VdqfwIpYSDGby7CZ4t0Xm6jS1wmXYP89Dh88NBXLD72aBDizMDHBiUmMph12VjQ55A8oFM41b_6Jx42A0EndkLye4_fMERgfny9T3g-VUDIT0_fKQYPGcBM4QsMmrtlxwKtqn0aT1Tutj5cvxu2BvOYeWaK9MDmlHGekRqOiJFu61QmZb-ke0EZ5ApDQYwja6xeo9TF_7Z_-wEpJqIJdcn19ln7jvvfDULbUO-DZprXRvPjvoKTHSI-NkJhztcfCeCvp8z5Ba3ZWXtrBIBIDHhjM8U4HwBwowa_lJ6907gpNZf5S1zNsBIxGs3aR_fo6il6X_xhWEDtteWLULLLh_1ego_OrA4EaUXGvyofdN_r3xhCVl4BE2jlpeFP9IET7KyyKLVncxbKn-Ybny5plaBsJde1Ud46QIdLjnn5C2wD_NOvn88QxB4Ke-Q2QS52Gb7wo0fN78gc0Y6Pk3nJj2t6E2jXzKd6YgKsezGM3opA12js8Y7h8oWZ6UjJafGc7j-5E59aT0RNojxDKig_SgMJZ1aOZvf33fl9WyXvkvEh-vZp2DLumYj2T5UCnt5RK6hCWG9_1GCPx04PJspeTSv8UmNsnIuMVuZd9wVdWWj40GmZnARXjHkRCYCXg5jkqNaYGWz5PK6tbcAjKS15_VSaJIkelM6XNTL-wqfJ3RyRLJCZcZUzAq1Ce__uMsGqnu63quF1jJnOtVSbioUzHVJ7wVNFZyAinBEl3rj6m9vkTI8HnrKhAuiDhJNgsP10qEWWeqxQTdDOhJatOYmuwl98on3wEsotd-iyRPESTvJGCURCIEx_6tZxRgPtkm0g9gvodrrR-w4OfI3wRfZbU2L3hrztQzltWhRWuIrLQQFn_TQItB5E1V4QDwCzsHsH8tx-gOFR9CrS7aGAqwsdGb75yNlqXkDln8KNHqmDHcNck3Wnf0ViiVL5RJxCZlbekg8lpimLCydlxVxX-YM4YPeTDWc0BQ1Bl_VsveOEuxib9nRtBhi1z3XFvKxu4ZWeP12zpjFcMQrsTpDVU_rdtyW0Ajc3kqCUoROh_sJTC-WUWL68Rxy2aAIY5mWjF3Z2R9XUQlKWZaLIWHuu02PFBb3wzGmNmMOQSLqdHYBijUTXpAuKvYbloZM8_zJQ7gb6I71SoonrSTPxNBIZcZnOz2puIYoK55z_a-6SXbTWiXSaVBi6QZDETcbwvwUPurEj31rwKr9hYvJjHlzEZHXuYE9VuycZhnaBLdvQlOHmIAGp0sZ7ELZ4mHOedBT4XugcGmq-P5p5eVUt7_TBnPS-1DL9YWA8Ai6Rcsbf7q_04vrTDjCXKFfHnD_Q4KrikJcs69n4Uyy-JUMyFs2oUDHo0o1c8khSyrPF8LbZxNTS_kA-0iMjEgmwF-8O4jfvhIO9Kw6DIkOPVDtsIa-JtwFQ7hYqark3nW94CucTlqwZ8eY-_D3tj-fs6j1o6xQnhyCC4JIQL9Frb2DxJzpiWM5ky4sHibK6i7MF8qJbD72-MDCvQxkwi4JYbKk-55Ha4wvXj6TglFe9x7muzCOe4mgOTIreNkpGkqRCzVrrseXvsDhx93VdLxD1ic5ZMxZvAoRvp1qZgHUcm6kBsUvgKslFYkFX45PiXByFfuZ6uHebrlrdyGgHu6aOO8Jd5FfG7wlcZ3z-FHllEBmalE-4VWHLDboAJnP2b0BfAsHaHydwLCVoT5m8zWLTFHeQL5L8_vVIHOiyDH6hwXl1lgaZrCMi60kdI3hN6JCBierNIpJhqHtL62oM3JBJVWJR0w72Rr2b5_Y2nPsluly3za3PBG4twoDGzUcoSUGz4itDatBitHQhWzdcICGvuQh2tgREGbmCtRI-Bj-CFdxJMEA3t9X0Ntb7Y3WZwteOyaWvjZTiHrnIHqaGAR0cYfJH_x-nK_9pKDEJ4WfWHbaN7pzWd6QnNbnUZVKBS3rX9BYw63YcJ1bNxiiuimMkYX2tgJOsOH24PWui0mdftzABremwxqfanhdKJPVrKlYTDt6NNCI4b9NmvxTdsbVEsUPsJoZFv_z3hQNjml-M3f_7fc3o-b676kwp4i7sfMTMD87gTYX9A_pCHRe6ROi_BoM7CWJRp7NgAs6i0cLSLdy7pxg_1wXCBRf2-iEikPMDtdrnnFOa7kM64bluhjFSJzZBuv_lYVhsNMAsqZaT3zYdQP8h0fx1VKoR8ot_3hLSoE6QngywaU1zUwhSvUFZBCuDaNSnWF5UEsJTjZqWHW9mSgvQ12oN7BqnSq86Ene0xNtcKQDce7xzdszU7-h7F9K6a5ebWJwVGSuYnsMnQ0TdPLaprx_kiM0spKCebaPt5svEj6YvgGVz0_A85NfylIDoLP7c4NnYtWTRPXWtdEgelnbTCgScAi0o1IZKLcaJQksN5em2UXQ5iRMvysdRL343veDcU4l_Y2CKKLjuBzU1SBV9SzSLaGmENKB05YKg-ePsFZoat4PKx1Qt68jVlFw23yiQwocWVuKAZ_xXpF0WwNAL-hFT2X7l2Iyt8L_lVwaRuiJ04PkzYuJ8NyUTq8Rtde3JfiSgpzfkaAVBGP3Zcvxbf-wUXUufZ5tVBzkM-pJNBjnUJej5RVZ_BNc63zwH7_L2i8FwlYCzfl0rogvsWrt9aR60yUV5Bfpz3KjTy3tWh-1bxzwdzuUCSsC50TDJB_0oW5YPukgxYIsvg8Ty82pEAV-Hn29tHpvDZ0oERM9NNY6WbOw4egqRAD2I_za9YEa_WiQp91h91cLrU5cUkQIaMc5WeknhYzw37-2Nbk8NemJLIyKZ0cII-iKNPX7Q-wae2HNoWaBnZWqH405gxy7KLyVT_Er3iTJytxR4t9yi_csVmeWDuWk27A-IRfIhY7QMJY6GBwdcJn1shAENT8PmkYmRQN2G09VEwd_FfMTWSn8a7wkfdN3cqh-6_x3sLru5GrkWmCX0FCVFFWRfeYIdYj_l-oR3IvnkHcMiY9hT7HuVR_kXDpUnw6-OsWK87DMXMbgjljsg6FcBalMC0BdcOaS8zDXrN-IMNaalfOGKuln0n1ZjgQSaq8XccA7CMFzqU2Y=",
               "summary": []
             },
             {
-              "id": "msg_0a3431b41f8060d3006a56419d2c1081a2bfc69fa112c2c5a3",
+              "id": "msg_0d07ac1c1f829a30006aaa5a23f23887d2aa125b273d87205b",
               "type": "message",
               "status": "completed",
               "content": [
@@ -380,7 +394,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckj1e2bl80000o8pnz7e6v9x0\",\"stringRegex\":\"test-sample\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-01-01T12:00:00Z\",\"dateAfter\":\"2024-06-15T00:00:00Z\",\"dateBefore\":\"2026-01-01T00:00:00Z\",\"actualData\":\"2025-12-25T10:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"sample\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"widget\"},\"default\":\"\"}"
+                  "text": "{\"string\":\"Hello\",\"stringMin\":\"HELLO\",\"stringMax\":\"Short\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-abc\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2026-09-16T12:00:00Z\",\"dateAfter\":\"2024-06-01T00:00:00Z\",\"dateBefore\":\"2026-09-15T23:59:59Z\",\"actualData\":\"2026-09-16T12:00:00Z\",\"object\":{\"foo\":\"foo\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":30}},\"objectPassthrough\":{  \t}, \"objectLoose\":{  },\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"string\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"widget\"},\"default\":\"\"}"
                 }
               ],
               "role": "assistant"
@@ -524,7 +538,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -543,11 +560,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -578,36 +600,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -621,7 +643,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -637,7 +662,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -686,7 +714,9 @@
                   "optional"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               },
               "strict": true
             },
@@ -716,16 +746,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 1012,
+            "input_tokens": 998,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 1432,
+            "output_tokens": 1295,
             "output_tokens_details": {
-              "reasoning_tokens": 1088
+              "reasoning_tokens": 960
             },
-            "total_tokens": 2444
+            "total_tokens": 2293
           },
           "user": null,
           "metadata": {}
@@ -734,7 +764,7 @@
       }
     },
     {
-      "hash": "4da02db22db38f85",
+      "hash": "3cbc06c658fc784d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -875,7 +905,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -894,11 +927,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -929,36 +967,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -972,7 +1010,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -988,7 +1029,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -1037,13 +1081,15 @@
                   "optional"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037791887
+        "timestamp": 1789549094719
       },
       "response": {
         "status": 200,
@@ -1052,13 +1098,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b111c7a9dda105-CDG",
+          "cf-ray": "a3beab123de9d358-FRA",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:03:27 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "15855",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Wed, 16 Sep 2026 08:58:35 GMT",
+          "openai-processing-ms": "21057",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -1069,18 +1113,18 @@
           "x-ratelimit-remaining-tokens": "149998962",
           "x-ratelimit-reset-requests": "2ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_190794dd01974db3ac858606237aabe9"
+          "x-request-id": "req_d824b9432e1947d18faafb4b241d2782"
         },
         "body": {
-          "id": "resp_0f899a5568081958006a5641a005088192b196cadc739519ee",
+          "id": "resp_0a6aa8d6f98b6dee006aaa5a27082887d297f4f3efc58aec0a",
           "object": "response",
-          "created_at": 1784037792,
+          "created_at": 1789549095,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037807,
+          "completed_at": 1789549115,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1091,18 +1135,18 @@
           "moderation": null,
           "output": [
             {
-              "id": "rs_0f899a5568081958006a5641a077d8819289a5bddf7cee02f5",
+              "id": "rs_0a6aa8d6f98b6dee006aaa5a2a7cc887d2be782ada289b7c45",
               "type": "reasoning",
               "content": [],
-              "encrypted_content": "gAAAAABqVkGvgEWCQbVyjfb_vYhMqBnDarGCjDNNB69vzH1muFF9BqeY94-gzLsKT5PB_dSEa7mrCj-CJEWmuoQ0RN8BfrrBSQmxZo2sR8PWPXzp3e708oqIeBTAgtj7-lvbUYPxfGUkCldBuxBApp2lI-owBpBT4_H9BOjcvHbcCb5ILaA58xy7EsJDepNXu66Yezc1IUfLhHcGPpx7Y3hgwRhr4Lzpx8NtzBY9MloZ3QZTkGf35QYlcpT7yEF09NkqTYfP0zQOwGahw2-7wn56jEaMmsnF8aabHbFH0WCb1wifS3eSSnpbN7I578I-lSYy7uTMZHZ8lslkyLXpPDbD9x1j8xf6mL9Y7XP-rA3XvwtJm7NNtawxQzZhtmJI8rpKb8Xiq6rmS7lYqKx1Be2bXIbMYNykWZ17_oC4YwYCVcJJJsptlvKoKWKb7MElTLbRyog3zIzuQ6fYdfHI4Sz6f2uM0Tj1fuTIzkDx1g0_C8A4oreJOEzoR8DqA4PPU9hULsfTAvgWp_lWEl0KJ2KKWmOK74q7WgQZtkFi2SDkl51BlHh1FIVgctxA5AjI6zsUQQ-Gzs4dafyBxVrgHkGToa1NMCGof1PStIWadQbYKL0XyffpzwHecmqnspdhoqRiAZxWRVVz5fGd4yFA0sVl8ve1xf4qAYeJPHSKcvvPx-OGFgm_qKoT5tBYxT10RgXeRDQVASmA5FskDueo__pxofWLHZK0X5GCAzU4YleKRxV-HP1fvBt_8bD0gGBQJK-xnif4lI5sFFoixlsS5ccXeOMGJXzVdiAkc93Kt9FRgUQARaTSOZG2FNMfVfgqwGSghIncydTgBZXlfJEaIZlElI05iRC3TwZaEl9mebPh82vWzVLhr53-WcX-S_cm8KfEGmm8GITG-sJ0Q8GBDKjamFmgXBEJHfTHAQI1miy1ZMZfXhMZfJ7B1VxhUAbGcFkJWyDiiXvyYllDDON7JspY-SCl-rH_MPt9PZsIsJ-peaPWQxQLunmkdpIaLQBqf0_mhrW6YBPoXccfei1jQle46SbMDUrkGCU3XQwK7_1WxdAQhtei6fh3eFtiyjxmNB84Yy-ITKkcIIsvJgN1Bi--cKSXwTb2QSTxYUwKE_qXk_Qnysp_qRcNsMobZccwxMlOBd-6aKF5f1hFrzHZ0ZZNwJN5J9suur1rWXzP1n5kHZ-0NInXASR3i-hjC7XqEargO26iCMDmM-sHEcjcVlHbc3lMhD2OpBRwgx8k8nPyYLcLkKY3OouppNepg5RxgoFrB6yJG5fxN35-yvHOhOVtHTIzjwsuu6Dut2yYjue1fukGTXG0PYDV5PqXvQqSsSUiTHBWksvV94swTDdnXvdt4H0TSUm6OApmM1b7YdaejLswqbDZOF7bKPGoBKs9elcUYaKss9MWxIyaQiqMhawuDhb_UzESLaHds9mLlrPMms8UPs0reXgMY3DdVtgvJA7aImzNcKihW09OqlcQeQQNnInykPR_LhKagiQsd40VVCtIOETS11umtmheEwes_rdS6wfganLVgD5fZVuI275lo0FHQKG-BYrAhRULJ4x2bSXV8ZAksA8Gp3Zbv_VZTVF3Pd15KIg4Fo1-CqIu_HN4jZ0RgQbcqJ8epiTYOhyoEWaD8IZJ6gHnyevFaw2BLCbdr9inv0HDzjd_4OfP4hJ9QeQp72zlFJf0qQag4Dbj0GJ_sKXVtGa87k7-e-7AJRZW01F1comlXBCKjNzVxlom3HaYDwejzus0rl_bxlY3fuMVWieIxawDbac2Mhefz8TmMsudfo3ZUPKvN-sxPnqp9WlwpP_PDrye5PFYgrEd0V2EmwnNcHfhqBjD0Yks2gwOfF37F9fSRN8bdV6a0QHMYh5p1WrUY7YHkFT7KWYUwJV3Tazc6Ak0KIY5KopOmtFuec9Tj6pS9MIM06pILHaZfRvgimCkrQIWnJRj6JdseAyJdXWrXqN8ccu8UGnM32MvfMbJNXcfAVcpHHfEGZKaQ6Xtq5vyQLBiF1fBmSD3gUp7eLozxt4IDrsXLQ2gkJh3SuwKxpDb5VtOaL8ZiDd7bjaoEW7I8mkLC6QI9LCGPRvmFCM3IHmkiwzjZNCbcMmaRFeuVatDlniycOLxUJjDWt1hZCL09nrHPNq2AodPQv9JcD-dj_D_DV1FqslJFPYRCXE37HZ7oXH6hFdcupR7QkOT3TQJ-4XuqH8wxdfYwyJ6MLxuYjZgZdK4BXb00ZUjn-E6YUYWKpYRqzvo35xvXr2BsK1zdLOqIkpC0vElNfCS36W-Rijuuu1qLCEBaNxeLeWx_Ho6GF2mb2MPTCCFpqD3bAxoiLHuKs5WauxlA9XGd_IRqs4pkB1I3DUTAC3GYgV1etpELnVbSceS0KtInTo-vaYJLUph8Yr1itjEdubDWAb3xlR3hqb7JTySx8IwL0P9I7uyyZlHkv-xV9I66JKGHZobqTXDs4LpzyFcxJJBUcA5WMxUfsHSNCc9uHVMMBPC1lIopyJhHm2HM8dIVDBt63WGXUVwC5QM4IEYeqA4yrAB4vBsrFZ2ULHCeepUHqnp3zJsGVw7YQHe_azsCiTtWHBgolyXMScURuDnWdzbDbqgQXhVAUP1LobK5wz-K2uJCxp818MTZLjvbw9KBv5aHS_o8AfKuRHTnTOjf-aYEDd5HGF7VSrsPq4zDBayDs8HVORPuAz4hlnvfxm98xjKfVT66OC6_RibUBe60_c9OnnIVmY49CrppKRTXQnBh0KgcS3Iwhpk_PJH738yRe-xNp1J0jfI23EjevGjruT6h_WviolNqjHIxtiTgCjOGdkEDCBEdjuKs8zHsmDOs7-XjlrQ6vUDxB4haBXEkzOl5tBq3F6K3-lhyPOHQhr4DZOPKLnMjV0nzhftHQ4O5AlwEwMPPUKPUyp_Dnzm2ww-P6ii59DgLBqjeNB-nhwvIhTRTM6HQqRZTHDmL6kLWqtdCiNMS4nI6LK1oaWg9VFdSZVW-CkAEsekJWEf9fL6O1hYtmXQeiJCps5vY11Of7N-iRnKuQvyZ7igAUDx2fl7-33KUenmhfuhiqVhy-BuZ4I5iwnk1Lj8v7fizDnH4vQ8vapuROaAhjU0oJ-xPlt3SJ2OllAUC4q4CgPv2CjbO9WVQ-va3CuWyjCfG3zMYlaKyvVBfW_j08u2aVu0uW2bIGYbvBj3-RIq44KoKcvE3L1mJvSwu624f5-kPyL608R4hqL8JwjfqkGIA82jJ3jYCMslSOVD5QFkFVqzLL2FipKdUQ4GQ9Zag3AlxY2xQR8ublORQy7YUbIhLb3wqacpsCWYgEtQUqlJ2JBa6isjpjCEKPot5lm8m3jCgs1fQNbK43y1vgjH2_TeUqboRRuTB2t_OHea7aYWFgkp9TTPJGiQnYBz1sIZVZPna3u6CvTZYUxk3q0MBqtWbVkL7zHzXMMJQHbej1mIMgnNed8ZMM4VdK7egUrbB8xVttDxDz_ywm0wE6Ure0vD5LNq6agO1j97KkFF-7z-QP7l7d0Ri6p-aUVfBiuqZjo_xSsgyuvRyB4yR4RefN1ABVHNNeDqq-6A6pi85dxJ28gLn5yIDz5aiI15JUBQVGTe9-f08u_-jQWIaBe94nBbMXvOXppsv-_qq9HxGSLTRNPOwlruaGFFQBKDlU_k1GTMukM7Flj64m7J7YzOKks0KBfKh95YWE8TJ_f8kQORuA8Q-eGw9IgrepiAyTcsJFGt1x_QlwShCEXPKWZzdMLtA_zOCsW3qxFY1Z12W0DbMrZCt8pH22orwwpYHlsfjgKZrRgkZvOQ1SRKt5eG5Z4kFQkRhc2P4_y8Dyv81TN0-W86dsCpdV_T_RMEwN4dEh4ujNMW4Z69_vWMXPm0yRSDVW2M7doHoOQsbBnkGoTFfwshcK8UJUVu6mCYserZX762sQDCWtOm8PXLj4C56JGJjlO1NeUNP1YfrW8pt6WeulpwRDQKdv0lLxM6KDtZgEr_KKmCXIzNZCvRG52wCxtizhS0rlfhII1QQbqoJquQHlWF9nfKUW8uZSUGk2TvkqJb89rWpZXWtdB-pl8JXU2D96JYHdYtjpWFQrXAm_zhpmKtBcfw8wm3AT-QeW1QvOS7FfmFB6JUlrOWxcsgnwo6k-tDUW3e9HBuNVmV38rXEddYoFhDBk-Xd7OPvgJ140bJROqOG51liPC7VYQ2SsKhuC_KfdICcGgd0SDuZRzk3hWZJdjdI53lW21_RjqQxJP9fn6PSV47E1u2_ZSej7yvsywztDzNODXNV4TsUGMOxBekCUvVnO1yRD5_9YqWWHIQdgXUZQUw3OJj41K4J7ApJ3wXnGAZJL84ZpPGKNXNEHkb6i20ycr6Kcjuos5rxzkgI3tNPvk_stlQWC0sleR4HVHw228_hPrl5pxdxRr068XHlYrfLc4ucvesoFmUAjUU6FBnsX4T9uIoiUv62SHF3uT_5NnGsnv648sX7m4N6xxBJjhV9dOPLM2wXD6yrJBTA-GXIQKI7ZeJV2uZHIndR2RKe2bfamvaoLNxrW8_z2tKeInkdwD_O0qD0L9rk5_Gq1hN7x6HbITS3wG1eED1MUhpuF3YRrETEbaIFrXscicds8IIxZrDKF7vFKdSaFbZ_ViWMbvfkTUaxfSL-g9tpABUuVs4fqV4XBWYko_HMt9jL_HN-8tOG7pZ2dtbVe1bf-_17P_m2w3csV5WrujdJVNngzUxgIgzE_y0mWvgrSyAcASm0m-KHiBJw-1W7QjB7paNARPqP5lYOa2B_zAJ_cLaqFigakQJ4QhMSvWnQ9mDJFM1ftMtYwAeaeS_tTpugU-TZhSOCvIg3FCK0-aC24DXWlMV-wpK2srOb9B4GkkTwwW2LN58dITRIkNjZsFaZc3kL2vLHAe1C7WvUh8uDW6TFCgpCMmDCbdJrB09RiuNDtg2qQ9YnKgf060Z5rbqdXMg3A6f6cRZ3IuY2ajD0vPbZyDuSIn3G7YIg5BUQ67QlAhJzF2R0yhlbo4CdULYSixls14NMaL8nM9H8hxodZI-vszUEV6Ws0fdyfhBGL4bnbIxdeWpM31nAer7i2A9WqdX_IjUphbcT1usD282HXTWHURAchf9PF066zsjXMzVbicnnGYJPQxRIvJ5szDZ8XgmAPoGQwTmW7hWhvIK8iwmiZRGfj0hI9Rj3nlHqkWTCvmeBxpXpeFfr936rslKpsVwAt4KnkCQTSrt4UaO2utsOvuGfWHRiMFHhrJTVTjQ5NO5T3XTKfkury8DEFSnfrGQNYvRYo0YTTmotLAocK7p8pAMhQ327glUensGw13AhZvst0-F9R6k2i-fkO1tyPBnbzasWGFP6-Iug6rmn9gwCPePOhPmTe2VCAvwr4QaHh5ILkno43RRFeYqcTLCdsAv3P2nSo-yLENBHWdXN-1auVDzp5zpuZSN5kNy3v1t8QsENq_fcf1nOLF1xTdIV8Hkyy3XjOEw-uSVvVSkl4pFMS4HH2r2fA_HSWwfOLq-ydOJKmXKW0Fy4PfQL9keFV7KNeNbJeC-WIxbeGLBD9mSjn_hvmTI0xKlHlIxs9B8uMfitHbqkqseCA2UQFf3J0_TixQrFfnee-gGchLfP_OyKoYvDy95KxRta2nyGMyry7Pr5TE1qmzzXmQj9rPDaDJFpwjejKDONhoL9WfDtJAmv27iwgwNMbwnPDDAVpm0-b87rSzzCAEPM9xbFGUI5ouS4nAZAUwPDH8b7tXeu12EXtguvybnArWKMlFcpsKUsxrDikjtn0j4F-J9-El6L1UlJK4JXEoREDhxRvspGETNiBPbt-zPcBTlTy0jIxqXWc6NQFWETyPLNSsbrGUzYEN77MQkI8ag4aGk9lFjzJ_jmZsM7d6uCUBmgeCZvWypyqxQohWTsmOMsUtszGic9pw3AjbG3eiJw_yKJdtqXOJab2s6FEiK_tgk6e22VWTvuQPbQdge0bOOv_c-viQ98CFHLyQu5IslaJJMuUS_bZLOCxJ6Bm2fs5ILEhv0lL1oORJC46ibSlYIlSA8cItq6B0EtRJsHGzxRvRhCHQuTr1dn9OmuMNj0J2lK7zWCEZ1eEZLc9wCuIdbUZRE4CJptx8VFtI2aJnwJNTSH8faQCv5l_Q08A5n5V2VmN7UYwYsyp3doHVEMjGKC4eJnsJ1ciHGF21BrbiK32xA_OAHTsCFxyV11wG9r6u53MRPd_jtpw9XW8ykH9h13Zwd_QtFPNZenqXv35bEgdxCgWTIyMIIU4650texZNMQJSmTkoB9LGzuVv0nsEvlZ49t5FeUU9JBYJ66o2-HJqt7w_4U9kZf-B_FZvhr7d-xKa7he2Ir4-yS03ulA-4VpG8lBCCKiXAMKI5spL6syfE9LvmYKY0NWFr4NeM7-4343Ig8iumNAmNEeBnKuodCHjb3cDq8H_4XkpZQ-GmFNCFpOl5Hg1elHS_Bir7Sak8gq7pXJztnkaZzNwQ9QRt-y4qGEGlazG_mWl_Gn1bjHXhy1mlz6aNekTlRkyQh94o65e0Z4loxDAjwZws4uerK_mG1902FlX3e-IW41fVd7LxKun6V_1dsZVE_U_wWPIxVpbUQdUpxPY7bwD1xqCUqgBhlyXEjgh5bGRuBGPagYJNBXDpjN9yw-96VxBj1oQ1ZtbfyrI4RNxZ2Bvh6Z4aeriFlA8b84Y0abstEtnh18KPkR3ylmsf7djsjTPEndQlL0C1jW8XmYIMzKBE3Z_Urt1-6EZV35UBPqo4frH4mgJ0D11tABiHAXcB83S42H25Z82faZo2rVhFTAq8fOsDy5pfqhRK7c2p098OduIoFXuY0wCixrzNanokTHFknvB61ETJ_aZfYMtObxm9mGF1h5D11lDinC2TXYavcKyrE7midQtZhYpwhkX7y8ETtGhzBjHU5Gs3CItY5xicu29eDx0-0lBAsXN2AzXRw5o7jhEIorLT_hTj83tsYhDLlsaHPGUqFekCVDGAjYPJwqWLhCXjNljFRmsbI_3oVf4Bkh1nGoMhbQYAGqyl-9RM83KMp58mliSsQsy2j_MDB4r5ZQ7sa0RhXiLOkbemK7sDbpE-bU8oVkuo6e7eJ40Ol3s41_5YZdVd9lyeFPDDC4rV17VAg9doEGPaRzVTZwSlcLv0N6uGu-HIWF8F4Hj3kye-BtLoSXDBZ5Gf3wbjSQqu5Kk9D7MBR8g2cc-S5jk0ZKrYDwkNCG3F3WkiAUbb6lnJvnkUGodS2gsUyh_08H64emZ0C0WPs9QNSo8pc4HTaIGH0tRboc8R_mbHNK4nYQ35b73NbK20NvUWPqe1OmTQhSz975OfVOM7FU33QPKSxO2qe5vR_90W6p8gKVuJXoH2TkuW52wLV3I-hT-UV-nXpz2bTtONKG_iQUwSWLezO3Q==",
+              "encrypted_content": "gAAAAABqqlo7Y2wDcRUOOIM4UXFR7EE_wrxuFnq9_3v5GSDv5Dw12kyq-iyg7ALvyd3mIMYM8Ps7nEJJwU8WSg9PjmaPWnpqlcgACBD3bftI64fKCsPoQBP0mOs5KhoJuuv8nxZA0jN5YUAfME4G06m7StXzZ__0FELJD46HMAeCtxIf2clWgobdtC33yPi6VzRlCkmSRXL7AJlBy-vdu0PII0aJkrwL_0_PP7kq0TZCLxkuYH98iU-ci2HHg0ZSiejXBAYKxuJoBgHlRkMriXkeSBtWsOVbwpBjh5hmLjckfr8Jg391N6lbY_8gc6N-LeaTQxnMuxxPgKrbxg0x2DKUWC7e8JOCEa-JnR4eO5cvCVxzMSCe1aOYLGMRgOPpkJPKv_ypQakjBoyRms4UmgsKrHPxdWkYfhmZ2TBOIA5I3BoH9aeeYLUFuDpC3P7IxLa1DNNlBRQPHfD9uTufUc8uALw-GAQs7-h62ZEfyULjgN_YB8pznOhjP1YOh3kQPcn6AhJNt5U1JmVjxsKZQFbX8R5s7S91CgThYsi9Z3cPvE0c_qQqcvFAnO6uWHPqVxntfvctBNJIcjyCA2b7ednyJCfHPxLV28C2xmGF51LqF04YJrJpS4jewLwfsOWlPHSXYKysCG48I1_IfaTs00f6A-0Z5fNB7dNtwh0ca4Ia9zDPgQfNZyIbTxXy-MFbKYuLYieXZVe62gbhtN9rn42l4edXKaHv-xjFg1AdoUk8DAs6za12CdY8hdOv51FT5CqD3QUPymojldvuZ7ZRXI15FU3rWQrboCprLxAMjtP54YKYeiN0B-gkdez0ZG8oE3So8woFJJ0byMZqNTcUYocYQ61QIipX208PZC48O7VJy91cYtxXZ1_ZQQzfHcjyxoznqvbJKT1MG9i6Tmg9VioKd6PowTkY2U-3ziiIxTnAGJapTLh1xafh_rns0J5BfgMR051dSL3EYKGpPgSCJoHcFYNf36BzFFVoE_dFLLCNZQoJN-B5DmyEE_zpzYlQwnhMPlw_67w3lji0Vy7riQlOZLphef-7GTtWS3SmlU-PZUP-dqygpIAqOG4cmhxchEBCmIXOtofkqkGIvwCkKdSDae8jWpmzmbyc0iMDMrAyKhMQP9AntWrYcHg_32EzRA72y08ZWo_AU87bSRW72QCuJav3B6va4qzclOErfqGVlDlCvkUZew-kf5P9iCVl_g30pSwbHKcu1y9JiZsUp7-X3NYbc8VBswPB__1Sm6MiVGrtzER0rWN4eAt3Jp_I8l8pr22b-D3fN05YM9m-5QdYFR-yIOp8J6yzj_cabjUZU5VuQlISHCYENZnVFqys06gPZRT8khc9RfbFKCyvsxNVGWOJwM2lmygdBxYmk3Cc_wSnLdw97-h90nou9BEbQAgEMc7P4js31v--fPz-URiaqnuyY23wqsGExBf-RtC-2655uQCNlaHI4S9atgZ6I-TnSy3ZEVu4BCmrFwifviXcNIWbCmIg1XvRIHrZbPnSdt7MYbKbZ3NTlSUbu18ZuRZ0mVvLQVPII4HItQEkpJ62KA35RpbrfeTsF8r4xVHaKhzY791F8mdCYKbcgT7pzHw8VdBaBCfvyAYTvYk0HBh8c2Z-LqFIrX8SLI6-TpATxwn173clE-kpfc7nwAf0o7c_3C5jSRwIbnmRS5TsMWMF4wVyLb6mPA14dHzk2NB8S_JfJlgIiUVKZRK_Xaqd5SsZKbufbyiwMKhsuY4ifXb3ISl4YW2MRexfsTmtHNstE0N530sR2Srv91lPIwnuvVfu1-o5I8xbUASOBn1hcCKc8hb34fX0gxwUedRyTaQYkLqg2NPLRe2csZc9wY8eIs3RKXLIFZu4kial53LLuwNH6nTDw5Aca1pum05OjikhjGho-TDTrWZzGwlcPJuHm5ph5Il692iHr6K4SiEhU9O_3dpPFeB3nBHwIZ-YlXIkECVAjhf_DhRvRvXcbdDPb7f6BzSPfoG-99a3qwXi9jtb7Yirz5pf1Rlk4rmYZxdmJ3Sdar-f_nLRK7SBmV-JSxZz8qz-2nWV8MlDAOtAZhgckK6ej8OSo2eQ49S-5UdR-X7XEt__456u3riCxARNtEvicsQC3-4dqa5gBlRb3GvuMbQFAYZhid6v2RIMiz_v7x3oLlWFiLXr37qRDzdzD4gRTvpnYaliTrhtl1n6_I8o_tRKKftHF0-l2S9OZaqAXQxtUb2OGyE99MckhAEJfi-bAjQEdSnqTsGb4XTABT-O_prws2QyEmKQg-GF5Dgf_odkObf-_7yY8tB2zdJmvMoQCD9l-VD6IGqQF_KuQGoIGiy8fTnvKQUTseVMGDfjofJWCOfn_Q9s4NykcgSRmwagNySzGOylnukEDPhUZVPUK7rUonzua9NvkSJZQevkL_4oMQq_LpMVB6eLzBlappEC0jOf4X_CQK77nbvFIRnEbL0Zuj1iwTPzX2NH1wsj6vi9GJAV3dV20JqrX60tqGaFZR8BfJaUtoALVrhIqVs0WZHSFiG9vzLKJIpY0OFtxZkWxs3IpSESCSRcBnhSqaUGbi9hKrjxaLzPPja-IBPy7sb3A8-n7Tetnu0FFPsBUl1Ym0p4LkOGPwcdeHf0hBf56yG5rJ4MPV0gRXRUGYdsEzdOWRfUDlSvZT_H0iDQgQqjRmFIBHIxJWSglsi7UqmVoDmRizHME7pbaqS80tafuRAwOB8gSpf4WDHGYDTrGvoAN_auXQIjhDjGmJ0hvgDDMCeaiKoiZmriZixta3hAJcp3Mq8Lvm3CCMxF_Onwif4049GTltNwfLuk7omlyFrsubKCUezCn41__rqftF30nEbqFT1Bxxg5W65h53i0vKXrpkpvjoENviNH3P6cnYDmkF8AOYztmrx6SbuSB8gizgkbgkd0i_f5hgkCTqAZUY8ShvkS4MmWy9qasWUa_kilxRa9sjCOsQRLFphbgweMfkKFbjnzJngcAZtVyalq1Ig3Gw6kd202R8PWSau7FAVLww1ywuBwX4sDgIPD0Y4S9Jaxcs6WxO-CmknUXAXxDOJTS5TR6ZFgEN-CJlwZdFn6Gy-3e0cDWQnH4V9MhMMI-niIrBOEF7ndGWuBecgCwMaBrwXXuH3HDKVR4XtqqNYJ3f-kPQJdunyiegZAJewl03c9B81dhNqNYLu3B-JhYAg3Cq_qIIuVPw9erQMxGaCu3jCkYiqMlXbCiOHTVodzKN2DhKvIj2tsiw_6wlewRi1Oc6-JZ6yHH_s-Qm1dTIbGFHgsj528g2dACyyEsir5lpImdluW8SAQl1u-jAvR7BvW9Ag1IvGix8_JOsVrurVq06fcIYliczRh5x3wbZEppgytOIZVlxLnoTHGP628W6PTlyb5Jn7ZrO-xI4g-CgnibjbZx8JagdMN9V8aSA1DJfzgoPNJLtn9j8EtktJzTArJnY80FMWMnwjFwrtu0W6GqUeJnZ0pB1gMdG88fe3bS5j81sAmAjV4ksY7Ff6S5UHlCziQvScQv_Asw14xi_K5gyk-A31TJjRrLMIrST4z1VHj5tOI5SPytrd5K3IPv4KUknryWl3DdSRn7stgGsqPmwBaNbSYf7eIdF1T_Zdqm9c8M9t6GBs2luLsYZ22Shm_rpj95ixNcSzORteS7eXpXjKZRp7-pWzuCnbYH-EXW_iHSvrF8GNWbBmONF_VcQaxwVhHUkfMBSy9yiDAJd777f6qCPmOYd2Jar0CuM1cHO4NJMTlwFilUcS7JAROfiwMlk-Vf0q18r5RphFAmQXEfnq5YZMB2VAQ6qjK2gttPGrRcWiluYEx7bC_NQk5zRE9Tw2_0lRBEPQBjmbD-7mVmzEExiFn-6zAZjw3jN82Z7fmJec820eWuofr_QnsIiJX6DOp8HzUNM0YyMrVQ4ofou2peIDbGA-OJIR225GhOrl0rS7-hDxpjQUGYYGSUfD4f39vo7X9kW8CeODEX7Ce0O0b9i1AHC10l95zC-ilSGXF4_o_VmO7r3HNbON0Z6T5a2jJZtgcHB5cDeKBuW7tHOImw9Gx8C7E8CfWw0eLdUsbXu4HhF4shCmERjVi414SK-diRqHw4xnolTDX2IjgYiTQc4lbhYhokDEZy7Rzlc8R_Sfynv5hNVy1vJ5jd4vAFJn922tqrRPZrmjMuUngp2j9_cagiC8-HPdfgy5Tybi8LhzSGnJyx-uVlbrI6sJaBCRtfJ7DlqaZeuJv2lGMNs9Y64XPCpYxFKXD9mD3jEid2t-CJNPuLa0WY_ars0GafnHoyOoUhxCg9hoPcyT-0YQcqmAufFvaGZP5lHeoxaNTcDgxKv4ebSLgyIRJg65z70lp6woSkjrJBnKsDVidaVob0kI1-Ubv-86w5Rz2-SfkFjY_oHi_Sa7dw2je5p-On8KSmKv7vgiFaJqwhuob9JF55Wl_g8ZjDhvbtksXTkBGimyF7IuQ2gQtVBxGX0g1ZQSFdrdu7xg3oqeYVZmVYDlTkhuAHPTaMU6X1cyt5wkVuYGxWGZ0CwKM11ffqJKorO0IazV3pTCuHZcbyHMzGI5bmBekVBl2fwDnsy63_6cPKDxVOqS8mQTYYisOUjMqkqXZAuX_QxGgSL9rIjeSop5NFO_y3QOxqPZLDVRGk-scrIp_MqsJq6RySTkElHlgNJW0eCDoFVlLTcVn9Tl-ZLoMcWlwstaS6n9Qxq0RdaieQg901ot9N8fSjhm4s8mo5QYSFthBiKOJTali8N1BhO3KTWoq5v_1vKrI6tITBGhecNs9f83yqbRFq5we9ZxlE7J692I4RTXZcJ3O10R8fsWcpT896JMq9pfs8F0zqT1SN8pACXluAdk2q_OaYY7Wi5V7iwBdjCNf0NtOQeUsMSvH7TfqLp6wjWF3A76AnhilYNN6Ae-XALUofBGTVzlDjjBO9F8_lCSTXfUMLpSHNTkFjUCQmQ5SjQEeblsdJH2SRIoINjFB3nJyIPg6pR5fNqD6rYmtQuVpfIUDBh4dGpgPP2day5kLbG4F5kd_KpPEYu8kqVkelJcBI3QPYi5PSNgwSanTVmr8WHpbu9bBCf6Aa5IRPprY6XUXmiH3_74JEVJVxjlAmJDWwPAeQiyHulBBJmldbHGUqR-uz2VKDycesmfritJRSsgFFfrZcX9Kp8jrwxcSNLqUGUx3O9FxXW-mkxJltt_qiLqqzIbHBBx2AXh3tOlPZm-MilcNL15S0RrLFi8-e5A3C6UC0Tm0xhmcWyEfD33Gxbt7KjDLMmO3-gN4xPsAmEdBTud2KmHBcX7qz__rRM5hC1NFEcYuvEHLRGh1zq3Kp2fXYJBq_ViIIiEt9DpTDwvTEz7GwNyZsz9Idte-ZpBmjlCZasmofsbUSvIMkPLXDjdvOeBUK-84hgjkom4cezZUXFKwbzbZgr1Cq6UOFhsAn3Y0sW2vN-nnUR66Yb8vCh6zbzSUYJv6MFM8c_4oT2lkzVNkbGubxwhIdc241XqaQ3bbtVNXqSPtQjn2Ez0d1UYR-whVLazKIW97KJ9rIHyEIG-QsZ3CI_wBCiuNxocuFxKlTKhScCgKAXjlf90I6sJxVeIsrhmbWiZiAbR4O75LPzDyW5V3QdBHYb4HQ-e-YxRx088yqfm1b9azXBQhjNt4j8QeispLX5cz-itCJ4RWj725CWq9M1gmXE2G6dqkqndkbyzAcALp-nnRtzTGXUkIqVLkVwB9ceTZOXFQYg7yGtU1hLaXFfsFFatOuRu5RAEnTmrJNS8PXJTrRpiRiAHIVUQDYvya5WjHf_wcv9DcoAXTX4cUSk8aVtyed42yfZRp3IyZq-870-1f9r7ZyIGHQWHHFbnWo3E2lHByOvufJgjHjrY3Rrk19o_xQuiu2nKkRftLbVbN3jITugkOwMarpmz9jCoVE5qJOStg81Li2l61zmBbktyVRdF3f0gYYf2MXjneEpBa-41VAvVsmeqSlzRSNRKPTzAkoFejPWf6p5tQ3ZJlrboE6znKwa1dduuEpYrl7lv5Sf77xWTJEuhoMVyJ8LM5XvSihuJJm2oWRmoo151b9RLUYgf55H1E1VcKGa0VdlDJJ_nhsMZ2rqemYSZ5s35JvmKb6V2BYGD9Kr8rtAPou39tmR7hOWRm06aGYtUcwDKyL5rFn5lHuadhA9SwSS3FqPt2LLuILGOaJNuvSLHOXi_CIOEh299KBwZXtbAr4vuhDWu2j_py9-25kRvqO9-Pk_DVw59l0FPHsp3kcLR8eFA_8I8axgR9OQFeHgQy9SRENQCiAyTlNfXnS0k6oSWb_HtR9BNYeB_xBXwzkuahEoFrZhjMGbUG_2ukrEYkmP6E9kGFL0SQitoXIn2RPsBiRJXHxMi4QeyviPRQWnR6P2Q8TSa9y-c_-KtOwrVrsbjDZj8mzovp2av3owCpBLZdu9aLq_vzRSutQgeWY0WaL-4lA22q2gzjnAaKEGISg_tUB-4031J-rljv3yH2uIyb8NF0_zHGwIcRWVGeqPYUrQ7_UOGmBRYPilr5Q1ZbIf93HaiIEFMbxB-Yiz9w2XYBX1Q4gWwf51Qsa1ZCjATZ3n9d55LFTQxbsvbltcy_Fc9XcGyqL3uEL4j0MPuOJ3M1XbvJVU5F2_DeXAzVRVuie5LNXm7JF7AqgZ9KcpeyiG52JKuLCduCdB3JJ71ybP0ONx3LqF8FAb4MUzX_MWEBv8-kttmFMiyHGrTglPLROuetEADmPcFNVEoxUMeybG1HHsi5boVp0r9aLKTKb_hhv1N2AxC3ugEFvu82i6FKH774A1AsMPYe5KJI9SI1Wy_6eEyEmtsGDDECOMvOGG0CA3r4yVER9uDKo9qZyKMa-BVyApOIlmuzkYlsa2rx-KAYNXyiMdRzqPvHx2XxKG0ii7lxHAhcoTVEJdFH0jqo2iFdJWvNsrucKV1zbj_OccnIpjta0CDw2pCF8Mz4xPI2Fv1Z7aTkb8oeB66E-KEHycLCTSmNp89pr8H_HWSvPd8zW698a8eggesbqnhd67HgpQLW3UOmXPvWA5HY2vz3-1-EgAH9n5fsqEV-adWH-qVRQmCHxkS0bdvFviXxRyASKZ5TThUw0Hhp9lJvvurx96suDYIOKLTWvwBgJ0lkldxRf1VX6D9fh9WTxlCHQVCFcYThpHAWnbfgYCsf7Kb7nbZNi3GU4-xgBLgGxkszanCrdIPyOK0AQlSW5kwlEdT3B4eXhHW_9sgSzQ72EtswW4DAj8wHbyYE7tcAcnmIQK_V_rEQI7b77aVIj0GCDqMG6ESfeNLwbFhms05e9qA02_OK9WPMVqP-KDfArHYir3dxzTnyqSgDxZEjAkIQPoXFgJmxSe2gvMNsRSSQYcGDbAa9MTZyoH30KpbDWans129KWOTxXu50DUHaYZ0FAhZWNf79lc9zNXL4_-P1pgLQkK2lhrwEOoAJI_cL7w_oFXEWS_ss3wEYI6wm6psCtcK_CsMPJ4zXOzYFAtY7xg33YCjfnvND60pzB9WoHsBHMg-qXtBOdz0uhs7AD2_jeK6tdrvxBDpkczh1UvkJrX8WLK4RGxx5zaT4R5QyM3iZbCFtNEJGNPkE2bQmAPb3ggjnhS6aR4W32qVY9dFUc1C2RRBaQ9pE6tM0MqLYA6OE7UYjAZwnwAyajSRTxmd7D_nG_y8lmU8bMDXQvAoM6GsTdSAzr8PGV7Xm5xfailrJSQ1mE5cIfbD0d7_EloC4BydjsA5wOn-5dUBaK4q8l_OFW3Anr56bXIQfBviyuQ46qSV1_zJX2dUiCTLJ8PETjGJ-TVHbVb_oBtqI6pgM-6zt9GAYJeycd_-9NnV7sZzlpySD-oznY41gmucZwwjSxKJhaDqi_Awnd_xqCsiRhHEK1fpmIa-z-VW8Sp4nuJpqSzjmVWoWa0-Ul9rKZmsnQAT5_gNUEThNvlsuwMIedn-bIMO-WIVbIM1nNDK3l_Y7zwqYQgj8kKVDspbI9SUqhT7rcpJ4oQ1B14SGg6hIsKm88dz6cJIqXkwAbTO5JOS2m-MnPAHtn1KzFM-552K4VikcWY2rpjKVj3362Z4FgapZ8XFqR5SOJWRrIy6VElaF59kvSG0n356FGVCk63OH1lvIyuOgQZyR0CXFnmnmDcVgC5NmvMQe0CK1LIRFQOgLlB49Fw6XV2wDxVXlJ8qlrvq77Ayr9z1zVodLLWoC-TOI1r-LP2MtRBXJeG1X52ignxj5sHRGVJPRTFiCVFpNkF9q7hlRRrzr4QurFOrqNfEavsA0EyFLjwi1kUcVQJ-4AxB_ZkmvxDldUaJmSMEgFr3yXfGh_a-q_UsY3AXUh4j7Ph5TC2TCwk96eXKEcr-kJ9BDEVK_kfntX0TWQxkD-nCc6LMu1uShz3maaG2Om4H5JV9xQV33hMeNThb2-HRQ0ONlk9tJzTjrxq2cTxJoDMYZI9T84DFQfKTENBUyUaRvx-8u9Htk0n0z1cYIQ_KGxRxIbfJ4g8VKw_ul-bf4c3cRk1FAIgpe28D-1NA7v8IQTgURZ_QrZ1OBX_I9BWZTGU9ZcrNATF0tY_uZg3wsObeJcTbwO-E6CNf42PvNPVNRBBwsoANl2a7TQ-UJ7iYRmRJlJCy7ffMqZw6l2rcTo6pRWWp9k_kx0AOy3Oy9O58LOViUUh_hmLlMUlS9VBMhS449HVR5TUIV49Sc_hSizQCTY4WHyIUcD_nu_swtqKjvpk-AyGlnLh9JETcHb_Ifp_3qej9QYGF07C5MnI_XY4_uf0_aLy-uZZmXybIhZxs0geBK6z9_iPddjnCiaWimRuBty-tFHAP1HoorgNl90_tvflbYHGKhXSUtskd7Vlif4EyjWNGHKxZ8VleHkk-K6P92VjyAA5tguWKPbMTBMustWkqAXscAvYnjz-QtouLxQ46lDhcnv81lzINBJ8qKTu0_sAyTAOM96OaKam-c7VDJ1UH1_3KRAWYMuMmAIlllUAbZmzNb2VCA_M2VDAvcX4Kk4faRIZcVOZsOUi-JbbKdJSqGJqHSbhsEKHBP8WJFJfigFUazxSOQtuYyECFHHI5N7IEU995hJJDrEBb_WiQLarxTnsUYLiLWX6TS5mqvyDJ_s2uNJzoWprE83gY-iqxuEbOaSjiMc04Id6zuJffGgWnpeDRWjg8y7j4-vf9KqD9M51vSMyF5I0JCRSLw7vG1cdyD",
               "summary": []
             },
             {
-              "id": "fc_0f899a5568081958006a5641ad21608192abb5e89bce2bd48a",
+              "id": "fc_0a6aa8d6f98b6dee006aaa5a38a25487d283682d66c8fdfbeb",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"sample text\",\"stringMin\":\"hello\",\"stringMax\":\"shortstr\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-06-20T12:00:00Z\",\"dateAfter\":\"2025-01-02T00:00:00Z\",\"dateBefore\":\"2020-01-01T00:00:00Z\",\"actualData\":\"2023-12-31T23:59:59Z\",\"object\":{\"foo\":\"fooValue\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"sample\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}",
-              "call_id": "call_TA4prUC2RqZ2HGE02uETcki0",
+              "arguments": "{\"string\":\"Hello world\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortText\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"550e8400-e29b-41d4-a716-446655440000\",\"stringCuid\":\"cjo2cz0kv0000w3uqx2n3l7yk\",\"stringRegex\":\"test-abc\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2023-12-31T23:59:59Z\",\"dateAfter\":\"2024-06-01T12:00:00Z\",\"dateBefore\":\"2026-01-01T00:00:00Z\",\"actualData\":\"2022-07-15T08:30:00Z\",\"object\":{\"foo\":\"fooVal\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"type\":\"admin\",\"permissions\":[\"read\",\"write\"]},\"default\":\"test\"}",
+              "call_id": "call_If9Aow1y7BfYaQY2mxLknh2v",
               "name": "manySchemasTool"
             }
           ],
@@ -1271,7 +1315,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -1290,11 +1337,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -1325,36 +1377,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -1368,7 +1420,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -1384,7 +1439,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -1433,7 +1491,9 @@
                   "default"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               },
               "strict": true
             }
@@ -1447,11 +1507,11 @@
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 1769,
+            "output_tokens": 1965,
             "output_tokens_details": {
-              "reasoning_tokens": 1408
+              "reasoning_tokens": 1600
             },
-            "total_tokens": 2544
+            "total_tokens": 2740
           },
           "user": null,
           "metadata": {}
@@ -1460,7 +1520,7 @@
       }
     },
     {
-      "hash": "0fc2a91f3fdf0a19",
+      "hash": "836e8f24563d6122",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1478,18 +1538,18 @@
             },
             {
               "type": "item_reference",
-              "id": "rs_0f899a5568081958006a5641a077d8819289a5bddf7cee02f5"
+              "id": "rs_0a6aa8d6f98b6dee006aaa5a2a7cc887d2be782ada289b7c45"
             },
             {
               "type": "function_call",
-              "call_id": "call_TA4prUC2RqZ2HGE02uETcki0",
+              "call_id": "call_If9Aow1y7BfYaQY2mxLknh2v",
               "name": "manySchemasTool",
-              "arguments": "{\"string\":\"sample text\",\"stringMin\":\"hello\",\"stringMax\":\"shortstr\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-06-20T12:00:00Z\",\"dateAfter\":\"2025-01-02T00:00:00Z\",\"dateBefore\":\"2020-01-01T00:00:00Z\",\"actualData\":\"2023-12-31T23:59:59Z\",\"object\":{\"foo\":\"fooValue\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"sample\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
+              "arguments": "{\"string\":\"Hello world\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortText\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"550e8400-e29b-41d4-a716-446655440000\",\"stringCuid\":\"cjo2cz0kv0000w3uqx2n3l7yk\",\"stringRegex\":\"test-abc\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2023-12-31T23:59:59Z\",\"dateAfter\":\"2024-06-01T12:00:00Z\",\"dateBefore\":\"2026-01-01T00:00:00Z\",\"actualData\":\"2022-07-15T08:30:00Z\",\"object\":{\"foo\":\"fooVal\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"type\":\"admin\",\"permissions\":[\"read\",\"write\"]},\"default\":\"test\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_TA4prUC2RqZ2HGE02uETcki0",
-              "output": "{\"string\":\"sample text\",\"stringMin\":\"hello\",\"stringMax\":\"shortstr\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-06-20T12:00:00Z\",\"dateAfter\":\"2025-01-02T00:00:00Z\",\"dateBefore\":\"2020-01-01T00:00:00Z\",\"actualData\":\"2023-12-31T23:59:59Z\",\"object\":{\"foo\":\"fooValue\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"sample\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
+              "call_id": "call_If9Aow1y7BfYaQY2mxLknh2v",
+              "output": "{\"string\":\"Hello world\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortText\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"550e8400-e29b-41d4-a716-446655440000\",\"stringCuid\":\"cjo2cz0kv0000w3uqx2n3l7yk\",\"stringRegex\":\"test-abc\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2023-12-31T23:59:59Z\",\"dateAfter\":\"2024-06-01T12:00:00Z\",\"dateBefore\":\"2026-01-01T00:00:00Z\",\"actualData\":\"2022-07-15T08:30:00Z\",\"object\":{\"foo\":\"fooVal\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"type\":\"admin\",\"permissions\":[\"read\",\"write\"]},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -1616,7 +1676,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -1635,11 +1698,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -1670,36 +1738,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -1713,7 +1781,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -1729,7 +1800,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -1778,13 +1852,15 @@
                   "optional"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037807867
+        "timestamp": 1789549116027
       },
       "response": {
         "status": 200,
@@ -1793,13 +1869,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b1122b8f00a105-CDG",
+          "cf-ray": "a3beab976f85d358-FRA",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:03:29 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "1338",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Wed, 16 Sep 2026 08:58:37 GMT",
+          "openai-processing-ms": "1608",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -1807,21 +1881,21 @@
           "x-ratelimit-limit-requests": "30000",
           "x-ratelimit-limit-tokens": "150000000",
           "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149996890",
+          "x-ratelimit-remaining-tokens": "149996690",
           "x-ratelimit-reset-requests": "2ms",
           "x-ratelimit-reset-tokens": "1ms",
-          "x-request-id": "req_d211f8cd77b74bfa9c9fb6571d0ea088"
+          "x-request-id": "req_11d7fac8d3d4416dacd1d089b0a10960"
         },
         "body": {
-          "id": "resp_0f899a5568081958006a5641b002148192a8d6e0f9639a01a3",
+          "id": "resp_0a6aa8d6f98b6dee006aaa5a3c2f3487d29bfdba889b0bf809",
           "object": "response",
-          "created_at": 1784037808,
+          "created_at": 1789549116,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037809,
+          "completed_at": 1789549117,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1832,7 +1906,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0f899a5568081958006a5641b0ab108192a8b04db508376c85",
+              "id": "msg_0a6aa8d6f98b6dee006aaa5a3d548087d2a7c48f9f3b8df899",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1840,7 +1914,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The `manySchemasTool` has been called with valid sample data for all fields (including optional and nullable) as per the schema. Let me know if you need anything else!"
+                  "text": "The tool has been called with valid sample data. Let me know if you need anything else!"
                 }
               ],
               "role": "assistant"
@@ -2011,7 +2085,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -2030,11 +2107,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -2065,36 +2147,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -2108,7 +2190,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -2124,7 +2209,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -2173,7 +2261,9 @@
                   "default"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               },
               "strict": true
             }
@@ -2182,16 +2272,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 2846,
+            "input_tokens": 3048,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 1664
             },
-            "output_tokens": 40,
+            "output_tokens": 23,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 2886
+            "total_tokens": 3071
           },
           "user": null,
           "metadata": {}
@@ -2200,7 +2290,7 @@
       }
     },
     {
-      "hash": "53bd3088716adf84",
+      "hash": "eed05c10448b819a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2341,7 +2431,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -2360,11 +2453,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -2395,36 +2493,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -2438,7 +2536,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -2454,7 +2555,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -2503,13 +2607,15 @@
                   "optional"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037809331
+        "timestamp": 1789549117830
       },
       "response": {
         "status": 200,
@@ -2518,13 +2624,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b11234a948a105-CDG",
+          "cf-ray": "a3beaba2bf6bd358-FRA",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:03:47 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "17758",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Wed, 16 Sep 2026 08:58:58 GMT",
+          "openai-processing-ms": "20127",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -2532,21 +2636,21 @@
           "x-ratelimit-limit-requests": "30000",
           "x-ratelimit-limit-tokens": "150000000",
           "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149998955",
+          "x-ratelimit-remaining-tokens": "149998957",
           "x-ratelimit-reset-requests": "2ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_8a4bc2c4c32e48de83874279833860b1"
+          "x-request-id": "req_e42739741a8b4b46a27f40b2304133d0"
         },
         "body": {
-          "id": "resp_0afac68796a204c0006a5641b17624819ea2a19b3102507f2f",
+          "id": "resp_06b79c2a77ee9e71006aaa5a3dfacc87d2b4a11e267aef576e",
           "object": "response",
-          "created_at": 1784037809,
+          "created_at": 1789549118,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037827,
+          "completed_at": 1789549137,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2557,18 +2661,18 @@
           "moderation": null,
           "output": [
             {
-              "id": "rs_0afac68796a204c0006a5641b20ac0819ea806741d882f8556",
+              "id": "rs_06b79c2a77ee9e71006aaa5a3ed0ec87d280cb3cce7b767dd2",
               "type": "reasoning",
               "content": [],
-              "encrypted_content": "gAAAAABqVkHD93vjL6YipMROAXUnrAp04rf3fKjhxZCcw27BqEK7vkFHypfyPqcZofbHDzwIGoiyctYPdw0rPWzjnH7ikIDsrxfRvlX-6XDqfuR2QLGJwKN88DPk-vkifv2NARloB-hue0biifWCbwMTEu0YSljFQbmJN9eCw3xEKE5ZkJ1u-Q7mRXoHl9Yy5Pr1TaIum5eWRMvasSkLZ7QUjd5TPk2jeBEpHpcBE_PqAcztKXnr9xoHh6PdeMRUweQOU3EcTELJEo2CZ8ojYiCgZuDof3RXcSGbzV5hEh_R1neZ2oPe3MyyCM_Zm_b_iwdIa0xqNe2KZqNm5n1Bd-_2FoHNzO71BwH-wcwecLTqfGvQf2XCMaRcYkgEIQNlTs1NvZSsdXsiQcWq8YV3V4b9YowrCZ9bHETROgeT_5hx7afVtvLHl2vcJzpIwUVza4JrOoGigOGuL7yiN5ZDnSeaheS63mWNNXCrxGVOyyOW2QKanG2hmYZ4Qwxx0Hxc02sPR_gjn8DWkSY8HHj0SdCnR9axOMkj3Ye9upyNDXM-msFYG27yJ4acZBzlaviM8POwg4AD8wW1WCRMHzKt6DZ12X3xdKFdfvniqI3jBLFJT0EflJEjqO_mJdwhZQiRDrgXiM2D7XnQI_5jsFi48McnCvGN7oECMlVvJ8Gc7Vd3jsWC8-poEhL-WR1uW0U2YdTU0l32FelbgmJI_aqpJCFL7A0NLbu1xa-CUihfV_6twhBjjzJtYiidKsL3osdQJvMgCI3CXOhZVoEEmP_XDHggeljXxKGJHG7TFYDPk7xhpHmsAhA-Uxp2KyH-lIMdiW-ZIaocveGwyK5_dui8WLnpi7vcDKT6sF4ZlLhE01UFNW6HVrFs3nC87f-jsarnr_g-6jtzmbOw0KNOPt6EQ9G20P2hyXGjCcIUC8qRgQrs-PEwqmqtjrp2PwOc3MOcr2MHhGNHZ0mT32T0gSvSn2j_2LAi8wq3JFABEFisXLRXw54k-bnLHJHR2GO16aSJUmneH4ZOWPhEjIioVG6DzvChPjYUcEimxyhbiZbpPXbQ_IhV9i-9A-aqYivAvppDg2bqlFTCMhP-r2jZ1TaoWug8UlZ0FJ3i_zB7aDZZt7XGEImYBCtpcTI9Tw9UEwPVe_eeNWGkn9uP2Yy3wO-yVZTyiNAVOwfHOiSF0zL03wc7fSlgE6vam2Akie_ou8fgkm-_IvlGaBsfcF6g1D4Fa7XXKKq8SFzEg0RXTakQql1T0q-j9AZYgykBrJ_u3GReFBi7NYqrBEGkt62biiur-kTwxpM2eyhuYBW-MbOwrbOD6cD2NEj_dBCUuNMtxdwvY7VDS7JT159MRnCk8sG5IxRmBls7wuSLkeov8XSUPWbN6MlBnAiDXSR_yBnaF3Yy76jdJxGwPAB5z7jVvcyidxRXnTSUnPSqDQ5FUSQ7UHE6FtI4ETd2RqkXIpIWoqcJ9KOXB8HqJznp-GLiA3mK8oaRXkXkxZ7NKH_61Gi16qnDXt35O-bosOEfMc46R1-jY7zuK5k1UuWdgYBQLQg_BjOlj8aAQoF6M1vRiRgmDcpuky-ZRXaBaP5IAOF9syM4PMI4i7P2v-rHrSPElqQqmB-LEH31tTTimQdq--oS1QOeKaeWScPU6uq_QcMu8LlwvN4lye0V4DR1zcTZXX-NwGqqpLYi57s3RTbwKQJ-fXsDbtrzy9Y9UV1WZ-1Ct-3fHs6unmfJ4_qhZL_u2c_-9XdAvr7eYOFAzt3lgArXdjqqVcU_tVZBRAhqXJxNZ1vnOnuM4uJfW_3FJ09W2HaqxNWdK3WKEzW_9j4fkPNPOFinpl3DdMab2r_CYqxQ8qMHXoSQrWuB_3rn7Md13xwyCsbyU1siqK6UheICtzSQTmoaxBhS1mNf3qKW_PtjyPpzJ4NADbl4OgmVn7kaFwITPo5Af7tp35oTt-UDgC4iAmsyxY7gLSWoGrX1IdRrK0neB8l_OGavGb4TRXnuem1NTDuAznyfRcmHExjiIfSJYFmMGk2Gg3Dz8HnnVF6qH_xLVd4_TTtFBgVxzLQelfG07Jbhnfr7nAXOTlMKnEwNiSdYpP9Z0W-Ol2eu3UX2gWpNRMLqvSaTqgQQCAiFRByM0u_j8_TU3QlTub0avB-Lsrm0xc-750Ls6rEzm5zC3TRyw12BdMTB6N4SM1UX9vOl1Ym9Q3b9XHrh5sfE7v0ucAC-TzCv36zVQafFpGB6RyABB8qhYhHPIOxcBSx5Ay0TkWnFLe9TcYnAz8OJk1PGvEvtwUYnbzcfGBDSH4eC47_mNFWonpocHFgCUkCTjjUgmoqp2rgUAZPpswbXiOHeP-H6VtGAKtSFj9Vo3nwNgPjzBKRuaLveStuaEroomiJRICQh5Z7_KCzRTfg3yz-qhT2Xcdr6v0ZrpUQ-FPgq1TGDSp8ZmUWZQanuDHd_0z7DARjV1YJtThhpj_aLXEylVTY295RT4-mTHm7a12THsg6WxVeIOtQN98tzVJthPbudqtY9BINivksQvN7Gb8-kQ0G8LesDFsJ-Y74uBkw0_7l_sWd1CTra553Vn7qLd7YTw0CbwSYdI7b6z7OqUnbj5iXGvcnP4gwLYUVPaMo_0IlVzWtvx07UfhSHxEBfOoNJZ4tDs4bI80lL9cKqtoAw8aVm7tb0sfTh5Dfno2byqmVpa1QUQ-ZUvG4zK9hxOx1Qq57P8q2BySjzOkx2w-0IDV8rB0bHrjbG5GXfw9W0BDWLrJFpOZA_DV0cmcgBc438QMSRaj0K5IKo2WG7ZYLBMTGiR0E_BzQ-CtpXqHtZAuZ4ZvSXQwb6DUzIwMVgT5J2Mpd9aee3lpL5zHjF0bF2Pf1SdBUMTVW1P_Hphf9NDUjsieSL-oXlWGqLZgc09ibvw7oZGo0hMhACgoJdQy5k4sZUFY8pJTnYQVrM8bfrkp5CCMOYbgYkUyzxojyrm4ENONsdvcKBUgpHPLx75U2MAyMcTZqOr8OJEicf2c2hnr4T76uwy3ZBI_sePhgHOXOfSe2IucC35GzBzpQavA_RTEg1shb0qdKKCY9NWwCGAi1Mdk8wqiI-V82f4VX7orfDdIV77zINRvl8rE7y8vG9T6SIiw0HFge1FpsVo8z34s6DBIl57EtZiMP_uAUzqO6_kaK9oLaLs7OQE18VI99br_3DVHVJzJCMqVJdTkgozAbLpSJ2ze1SH4wYnxyMvi9ommthaBgRExzTjpS_hp0bu_uOVrqnlsq0GAa6EJfSagHYQ5dL3nDjJxShyvrGcYOUfOF4KAkLpwccoqEoCZWRWV5yG_aQZZlTW3yobOVUEPHdqbJMcBoHiJEGt4GXUF_xPaLsjhglZjx3r6AvbOOjXUvOLfKlfy-oFaXP6ZWgl8A8ghzQTenYuYaJaQN7vA5v6VGEdt4QGPQjkAcr8Tfe5b4HvhQEP94M6lA2tg1BMIh7LF90JAQdNCk_1zBWQxEwuIo2dXZQazif9RP_CGEpdbSOKsHgANpc3n3DA3n68YtoVL6g2tn7IpAUI5GRYViWDdoov61x_Mt8R0SdxJS3X-x8lr7ETaVHszQhpYP55aT2TSmrRO0cM1DU7PizgxnTMismvWVNLlNzjV21g-cyL3K-DLcFfHiCuP020fzk3BlKgApN_pWMY6zva2acXlRDRxAUTljqRXrpTZH1lhiFPYCejivMD1SAkb2WYOWHMxEnLzX6pWX3THFzbYBqEpwVYjdlLkwQNquXAPFb-EYmNTcum82lbtjCqiXM027jDAY7MKdmMHvgXIFNXDm_f1ALyOyfoawG63FdEUKwhAF2bYYaK0_E3nIXL2ZvXk_jGvc-hhXfBXhHZcbpjmZbBiwe_vsH_Y5J9Z8ev_74az_Brdetg6accbwGoUnFXFVF2V9LsRZqDZ0rJbkcP20AX0DhVCtAZICwJGKQt5RkukC0u7goPE9vJOrzT3Rehd7xOFYRFJ6Rkh1yla1I9uBUO3sgQVKpy_-TZggu8e-zZQdItagfB6UJeVM7zRFf066ZnGSiEVCIOtMnK2qtMf05k7FT1Z-rTQKtQhrD-rHaxgNeQaBSJ0rO9RclkNXP2ZY-oI7o43sIJOuKs2RHopnwr4MOoD1Zib4VCgxaoVoaBh30oWWvbXRXzhMEPpvjQvOKUlTuXUtpbNVLPIJh3EYjXCgeKsvcJNoS8p0oMdW1Ukh7LRupUYIwTXMxYHTveGjfEAafP7Ihcrjct7BG12rsBrD20l-132csAYbUnPNU7RCJrba4U4iB9TUv_HqsiHG9yVliJgB84XNUXyMqwueL7HQuyaR8jVfXkXTB0VAzBN0kunxUIQkfDDsZTv9LhQW01SSS4_O1E5aq4-dZ49pvmXbqJvoBReUgCehS-465jKHBxZe49W2LI2CP-DFlhAwlLhPiIHbJj5xDmkxLTI4rYbsoBPBp6-8qG5Zkr9-flv3KumXV3dNAgR59dYVPpoeu8yZCTfY_rMDNaITV6ni-bW9wgr6IfopSR_H2m5cHRhdNop5BGvXd4WVvO_JtvHBMgW8CGBQ-NmqZu0fq6sXFu3CMqHaIwGtDxHpI4bCznSkKmRiJtDDfj-jhBIx1quOv92nPzKtLqksCKCMI6khLvwWSpDPchWwd3TQqMqMVPps397sdmt9-EOfqqKbTQV60Ap-pxgIIX7zJh9w0tZvDJR3H1ItACO4ueZkLecmaRPSaT8N1kg_wUGz3Hn6Me5ZrzQL2eImAcF_YQCInNbHacdrcxjmrGrh1ucPsOgxzbBweOGLcFFmls-BaJl0p8--rY7XvXvlzkDWj5hfNaiDHvzMLGNpk6ixrm-iBXRLns8KSKyPgZ6FGj6FqzlkWL0iJYJrefHzoZMqQEHhYeQLKGx9dzPx99dkNzYSjjwt-qWkQhuX6eRn4QyQJNs4i-uYewvJPE0sJwLf2HyKEtPCCuKLww0-wg6Pb1-LHXrVOlawmcrUfsCyNAih0ug-7_hG26-yY2tAWF2pRpzJM-X9PG1uq3p9EsfejJbtSQaW0YeQxJujtOW-V76vN7ywMxgGxZPg-KWd6lIICdxyVZsbrsMCMSid9wtiWMP_ROCKtZSr12NACGDuJGPLZvCUceZC2-lNIX5kcAN3wY-EJTMBgXFOAf1eYTBevfOHjAkXnKbibt41pwm9JlkOz5oYVFP1DHk2y3nmJm2pAXSN7roP70Wr8efc2iAYQVuQ87ERj9W4_bLXwMM32Qif6Zcvv91TIFl4MbpfMhkFSh1l-N1GNw_kWD0ZJxJWTIR4G6o1EtRjjwLISGw9ClQgY1QXc1VCyJhQxupPVVLWiKS6nnh0bkng01yxVRXq9km5RDxb30d3a0A_22Kj8hjWfPSf1QujCl3qBDql9EhFyeYvClgM8hafpiGTL5Us2jPZggSS8YqH9aloDp9CEufUYujHzs4kLZHQdZt7_4uYTnJCWxWJdyYeAwMOtJiODVicwxPq2opDCam5-6DMTWY32OAvCS0epzCMwT_qsW3JXorfkBG31MpiFZOT7KhEpCB_EYOLWdKTw06VFedr-h0bLbfq3uO6alYOuZvMNGPy7s6PLHAAEUTSmV3zQBX6IcRg7bB-CJtIwRzBA9JNvcAjA6vLBN-3YfxGHr8fNIyXeAI4fmShaV_8VHfYyXilegyHKS5aJhnia117HkqH68gip65ZSRTHPvrWfE9AR6ROn3pwpzKmWuhlVx3Sxfo0lM_8af81Z_zZtt31B5NkbN1jTSvajrRZ24Ie48I77cGiEl4UjvN0Nh21DGoKdBuwt9C5hcpjt3oWC7bjmoAqPCfv3iBSvT00x6aMq3F2vaG1g0XgDg7QrMDOBpFgU358Yguy6Emax8yy4W0LBoYVdp8GtV-lSfPLn02-vRo-Zwm8aY5ndKURneVrqN26unBz0038sydar5Nw6XBoWOm8ukHgvHwb0aWj9cNAIwGZ_gVKJgknn0p5H2i5FsU3ovEEVJKPLztQslHkyNBTHbq3zlqVPktFpON6vmH7xtuwIa4kfsnLLEwjcDYqAUAKJ-9dzM2nd590hDpS6XyaqLIumTF_5eW3m6FNKc9Wo91qEzCpJ7K1ZUcPUM5zIRuwzXTzeWfmqalW3Yc1H7NXavWIgPLW8L773Ov8D9zQim9TNUzDnMvxzolp-7prkIyY8QKsy-NcZTPL11OO_FvOzwxN92nHm2e12wULPeV_SDX3M2HS_tN9L7kU10DwbknantxzI7xM_ECrNmia6aF2qMHZsFFauya9j_6Iav3R-EUUbS5U4MIt3HAqPeSy03UDIG37D4IYHeOLvdCRLurX33pN_bCcnH_LcZ3pENWyw_QLHi9pnwQGjoS4V0GSI_o0LKcQ6DAj1me4proLY3hsLTecLA92DocLev7dKpE8BH--Hwhm14wfR7Xhyfw0sojFjuiHTkIqVn3u7ha3Brd3HAnbSwP2Eh_vE3sIh1GofviQQqxFIEbBPvAYeHxx-xUun3iUbAytIjz0JWPLyRn_JNWkdFimwRg0E-zfWEUe0JKRbf2ybmiO32dTWqF_hYn9IJVYTwhmpIu0U761f6TMZOp04X3-OMOLm648H0c5BVQEu3pl-msP76xlK8-UBYayby_9lKToKSpYoqWSf0xPPdRwzJ_2cni1pWabjBsM_scAphVim290trg4c3gW2rA0mETZpB9bLgZeT-cS141OEyUWllhiW3NFCfbPY6Pn2mRDLyQWqKwM1xM9O-FOjMQ5N2yP4Tr0xXkNlm6MLDjqHSspo6Ob1r879XwFBtpG2FiwmWi4gXUZbybvkcVkvkYRk5iid03mV1GEmEP72wsXxDXZEK46hmCPKAbp3_J1l0GObxHRRSVIvf_P5o1SOWls7AgNTXwEbcDywDQw7uEu8LG4twQiC-Owx08jIEMNJrHeJ9K6m74Y0AiWxL1HuJhytrETjbWWxvzjYQFV41MdB5uE7X0D-XrCIbDzxlawYu0sEfcI84Sy0TeKoCoNym8iw8xRm85CXGN6VuaeOlAfvrvpJnCIHA4CMf_jmEp_5rMWn9uhBog_BcEzvSWghSRCRHGD7YL5dzFysCYbDlKXDZ2BBI1CkvP13cBT5xZ8f4joU119IC1xut0IAUA2QC-VUoVou1xPfhifz6ICJHduhJMkSlbcV8lGuP0KM30r7oAFSaVBVGgDpc-uLevq9CCftWXSyGsoyO4_4CO4CtLYWtE4QH3WCyu9viG_PNc_CQEus-CkEzNA165pBmNqNarj38oEKAlysCVkmJCUbmPtx-oKFLrWQP5PoJLmfzEqc7Z8RhPJCI0uu8QkkML4RJcmMEQOGxr9dANMqmk4LaJf82yXnRjqdOIXSJ0FhaxzL__Q1OO46FTgNV7qmYWclnvjWNMjugAzdDkRpLwT8f4jF2A-xIj0lUwdsKlRkuP3UTB1RaMLVOCL1EiyyiK1MJFDDgVBUtCySGEsPJ3xW-XFnEnM8nqpl6aKG-C7H6fEw37OrMF-eGXb7FDX_h3hLyDVWSm5yh_m4yS1vXka7tocMVbBjNlEa7fM_9ybQJEtHa0muL3K3N0QqIo-C63MqDGFWZdYd6pO2tjklr-CgO9OHORewYTigVZDRI5CEv7Aybyvod6cjrMlUi_FF-GUrQ23rmc37phs5fKmXYv1jjcJUONpcUlhT5OoFWbOpv3MIr98xWG8t6vTkLT0j02HJ9MjtMoiQSHurZLNKH3fz_U-lnulG_DThiv-qZb18QQaJyyRYkek8NdkW5LJGJ8cI6H1X2oVfurJ-TY6iesZJSD4f2l1PyGczG5Su7yRFtmZdVo4WfquRVc0L2hp4K0Aff5HZ6bqKgiLh5gQD7oIblcFXexOdbpchxbfqBvZoSeWPUe56Md7_HuJbc7ffLPEjBttfZl3SGtsBi-V1C0cZ0d2U-rnriiQVWSKeXwbFdby5ClfNIRasiReYkXFwptoIOqrHu8R-BiChphrtYT46uQ5q9xeyyL60mgYqWMXCI2tunqWG-LJKK2zQle6bsDEejbskGXiYwrWeegCBl2QoBb4VqHXG6wsUWVOKhkoJA_Xik-rXOmPoUXlJsNcFFMzdcdjOW3DVrkuTPlkx-lVhDOAyvhPtFUkzEJk8jPtjjGP-GN6cZhpHUB2qeUwOqltVZoyb4wxtz7zwgQH8Fkq7ieJxlODQT5Ho01tziMgV6KjudJXRObrbfS4uHJ0i2m-wl20em79-xiEwuwPVljKbrotwoR5IZepbk9Yc738ZY9ur6raCuY0rgDDY3gKcQMwnlO2s0IB6HBaA-cRYGGca-w4-YkW0zHwVYbSQV0uaZ6yqzb0aAFGAYyRvwWnF4t0KdApyQx4PPz0LxXMnJVOrSekWqIoMkJcusiq2NHTqJir1lhImh_VM3E-_SybmPADXcHpYlxeYI6MxwCCIvnwoi5hV63_drU9nBf_T4jtpZq09wg43-zawDDmTJvFH3cS2qGxPdK7rWRAwSse1mYNWvd0i44MWyuygkc9hpgunurOJCRMxo8g36dQTUqORQ5dRm4Qmk2bP-nmdD39q-kb8MPpSKbXFZZQJkyTbDZVdi54Zdg10VdHDJJY9xgs6pbLN0ttZFykf5Hcoy1qVhfdzYkdCVMvRUuLSjaimeDsxT_hrFt-2-HkUOHoGLiFWH9o29AhWVj75cvRXItOFySmzdK7UWcQiAktASvLXDeYRrRUjZzA6QPE0-_skbCN0plqrJOA_SLdKlxrym4x1AkFiAHVfMx1k98Esp42T1E-v44tZTwwtEZnGMxR8EV_Y_j_VdTFRKzq_r_qCcDOz559eB17fuefZYuvoJqzJ4XU1YHKfu-edHFFXT4tJ_KGvmlYB2uYTMEX0OdJQ9ITEC8R7ZXUwlBjbC--EXC6ACv-4JyKd91mm47AWAHDaXXI90qM54SCDRGo6lt4i8QiIZnMJbAwDBjv9d6rWdEe17w7bAMC1MU0GTh37nWH1PwRfcVl_tRorGC-NbA5eZfM-uIkBSYXxf_0-D_jZ3nP0PXm600xQaYK-qyMb1hNXYsjPzc75u1GBW-NVxaoFDxizTXL6TPlOOLED1gk-QDd_JwbXQm7Onk2A17bmvEGq_5qo5qD9-_8e5lhmAHp09be2iv1SyrrudACBc63CGimWKoFNxvMVpPD_w4Zj9OICRuuGpmQp5FUXeyfHec2ivZjcxaECMWCxa7_w9UWpz6frVHG1_YSUcmKwJt461j5LpIPol2A_KZBFm89J4X13JDeoq0EZXIW4U6pVXXmzZaK-Y0VLgq0Pl3I6xBRk7_86Ypb8o9z7Wmf0L3P5Z9MrZJyVvPnaj1Gk7dhLAbSpBamVGFdY3j6cDK0gbXLR3sgqBYcv9ccdfy14KDCf5mpgcmkuOy5cyxKWudi86bKbGZn-N2PoiuYVphPURbd339K1qAKuzKZTWKWlPO05ibFvqhHZl_-UVp1SH-pv5kpFBU-2VEP6AkoVW5RE_hXX9tPEON-NJYBnUuZUYtVMhmIO5TfGfR3jHSj-uxzNGEBpjH3BqywCzWWltEzWVtlxaF1FPrsJGoPQpRnAgUuP7J9BlfR8d2GQZWUHnJdUm6yxDDfmHKirkqr7C1Br-q7KrdQZ979_upYhIXnq9c4eNfRuTDy7Ecoei1PWVOZFux_GoknZB2C-HehYW2wPiGcnVRQqM5yDviqOrPg4y2qv_FmmTUltPIwTNenzFsNPOdVi9DSRZ-abjstfkKTdzcrdnsVww5_UewoT_b0ILa1qQ7Tp0I2cLgwn6d4Cd1ttmeXTw36nCypQ4H1kFumOzyucX-9zO_de7nlmlWHfLkw9C5Om-dftnP5y3oW5_9ZysA-4wwj39mrEO9-8yB43eDHbpexUXeSaoZOVpvb7JWiksY7CJ7L9a_WatFdVsePJ6VCA6kgmbJlnN21aQkti1bi9zCKjcc3WMfyKykHqrPzOFA8tg--0S_wHd3lJ_6VxXtgDLqIZTj10ZP26vkjpHF4-dfOsFBIR319bbuRhrZedhYGwndqf8GBq7Y59KUDMkd-asPPs9wzzUHQ7Jp3i2EkapTMT1KcCHybrWft50qfzy7OAEfZ5-jyD0qiD5tnkzygahmzZOH9rucZJeVvU3Mm_zQdETAN2I38J6UG4vhk6oHRB2i8XHbRb6uGD4_z6gmyhn0gHPjfKPlDc9WrBuhvYv8qaP_hI9ZFkMLe2IHBKiswfpzKvdD_kMneM16zd-o7NjoSwrPI5Q1dxo07TgIXeDfNYmF3zYqL9YgAWxz8DFi6hk9bVzKU7wSk341F4sKZUUtrn7J5HnX1gvwMnhfhHgE-SuPyD90z9_pi_NFAvMk2l-v8GH8Edd0E5qvb18M_Mxk0QZZTBjxlgpHEPwFNARtIR25di4TW-rYA16fa-RSEVwyuTUt1CkKC79BsMFCnHkT9OOFRBRTvZOVBNbkcZVj-j7IxiXbU3BtPe_ca96t3TUcaTu_EGbKdoc-bytJtUhswO7b4Nex9SJg2wC-D53vLgDvNXZUvrrFsu14wfcM5xGMPTB16Je6X3uPSc7t_9vG54bb0Q6WWgA-aI7j-iv7P0UAYFrapyocI2mui08IhTz019KeXQCDDlHQlQDCiFqIju_RFa8oFkLYyu1l4-mR-SEPHX_UdHvesnpYJTuWpH7Is3ozySSqqhgT2Xg1E23B0MMCCISXAtXBi8cGoJz-BiNCEr3hcJ_S-LDeT2oK66HIISCVvkvMgs7mzOP7qoJ5l3DiAlEEsAwGRLCiE13xH_Nk3pMoy1lqjirWvWmlhWjFs1uHSWPHW__fAJ_qJXsrTAAjHZSAnOnHPKN7bj7buG621VVFG7yAV49bSkg9yqDx2SxeKrhQr1U21ttrGPVm9VVG-gjX06w76DscmRytYYDfK2qteFcFuaBGSmdOv3WIY-LLUsdJIG-zw8WJiahpFxI5hr7O9zpj-2c3g9-UiEvwM_9pbuZDX0YIqTKxyEDdGuIo5rSFNjVLwaCynmruBG-_1VpzogSy_p0q4LFVlq9r55eODpOmgA4lVUCxYOUIhmAzlSyFQ0QPjZc2hSlUW-2xCR732GBjJEP-ueeUIsjbFzuJF3ROqVmPjC0WkiTAv8h-01oRakLUANcst42ysPNfEZyLp-WxOPTD6OW1vL1ppTU7Nzk-gqTxSX-hO_eCR3Zt3lJdHebNnYDdhAHGoSbYu_Z03JqXSHiYqlCZOf-BNmkQMEzudDPT90O8YoKBybUZvyI9K5lb_DZEG8Lygq_4PXFqUYQ6IJvX-8Cj7DToKECXqw5ozS3LIHbB_jWeLEAFLA0EeUy9BAGptkgf6q_gtj0TnqDcXuXDNq9Gi6nooP9gkjUuB8h-OlbGfmATVCaGZmDAQuFnnaxITUvEzdoYHwxS3dIgDAkppRPazmgPS9NjmgNz2CGW-gs31bLY72dTIuunkwj7vLIyfg0lT4kfsvieyhw13x3IUv-1iAdF2l3-nUgulN-BL4sQqQCbt9E7UDyDHnDmgbFY5fYOU3TkGtTDLbKg2UazEh2QpCf-X1SU-pllWO__q0Cckzi3zbNwz1oObOTcWq9xxcxj_Q5zSSqkKKZEjPNifD6IzRff4z0NEbxnkJxdVkZGzCK0RpMtruY-lpVkn8mDRlDwoZW9L0r-FBLsKa97rUkkADqC09JyXCSMdU1MiJ4qQsqO2flH5PHH82VEKRHGSjbph5RtP6Im3I_EQUnf1Y5xPiDXIJpaFGq3Om3B5ma2cO2y0o1Oe42t9PU76809Obyya_Bt2weoLhkbL4ZGghp49t0v1X5Ph-6LELbhyKF5bzZTrk6VJJXZU4d6FH_1aQG6MrdGzyUY0wQHVcP8bRJcrapb-hzTAZuT0JBIgvaBvRsGjgdsE8RGKGXjOgQfCvzda_d5yKtDOBX1KOcwyAknuqg9KGM-mHnzL9jsfPVXM-V-nvc-pYVSd0lC_TH718zg32DDU0yMbrNV3xKGYq1zPo_d7Ac8K1Aqvqzm7-O-bgqq36tr6neG4n7eD8lAMpY4D92N-ZLQ3sGAQlEVrZ10pDAVASACo1R-7VsDUxYximZEcfpdhQ1dolGzjhM8xQ56wsvV1bms-4Qz6k3nRA6L8nmjVs66DyybXzxw0UG4DYFXLi8PKlaHxrCRhO5aFywNSVzBAqLnkcRKSYEvexe1vizF6h6-JRlir4BAEos7emRuu28qxUp3SUmaGDiAEYUOqXC3A53Wg4NVLie_pAV_oQhW1bAgqs_2sFqebLvY8JPdO3SPeexuMk1qUg-UNa0jtFP1TeDIdnSUQKn-KAa9alO4eAqK8r0kSZLZR2pCzGdQXwC_ef6Ny-0jd6yndT4RWOLdZv6f-xaR3lW1yHFxj18XfQKS91LI4Eu31E7dSMigEkvgMERHtRR3pCZ3pdWHq4Pw7oifa5uYvP4WTw4kCZQW3XVT2lRA6dZRZHd8vaFoPNrDVwRPeomgs9K9eIkc7S_kPJcAkZaNoAvmMWWWlr1lA_Lfz0nHaxkcnr7eLYjOr9vLgF0YrrfiFMTFLixgS8zVqyuTMZvzttYZWEussePcqJ7Ao7Y92klH3NBTLa7f1_9CE8Rz73_WhunwaofCMz0WSFntNpNdgl0jwDR2i3oM6Ul8yfI759NCSWkiBGxRHEoES71iNRLKnVTFuY9Y73xghvgcMzgfM9iTFBoAHSNaF8F6EFSjwhythBF5CPgSdFT16zdF0PcmjoXQ8vrKdkfqtsGclvs0FnACHFN67Um0t_jjMBPSwGcv10Wq404vErGRCjtUVZHNQBlu_CIqfq-Y_siG77uwb2phxtoneNSVNgrSWZWWlWopvnS4KKD12Is-E4jzBdQQnQxpTHsgvnohxpb7VZFP6c4G6T07vrd2IBNMGeaZDn2on7I0DiTkWQv8TUEYazcvN2zfQO71M=",
+              "encrypted_content": "gAAAAABqqlpStEoorE0DnEA60bn_gdTOY-itRg6FswkHEUg9nKkRAo7AMwKIUls0jWRR2qiXmrnVrfwRsqZ193CJgPiGkWU2wUCFozpd5W7cY093CaYurhHOTTh0YIyl0Rwvv586jN4cgWwR0sp88pCuyqBmVEnfEx8bCxzWQGAdqy93ZOJkzxtB356LR3Pt6Aq-lErEI-xpXbiZkv4BahdLhaxBGJlK973ry2FlMgMT9nJ2dKhdBVPFc2gdNiWlQ90dcpgOflzhe1hOaS0qPM-dU9SZByR_m7K1Cd-R_4Ev7CPo6V-Ah21yKoifXXs4GxQl58OjbHEOsxVCtWjjywgqjizvdFvXLNlGUIIigH4iZNV9stpj6DSv1cLZK4ufx-uNxbSDCrgbYBOr1ZtXUy8LjnE47a8nNm9zXau0d3nEjnlfa37CSuRg7HITbrl-htUjEKZWj7Q4oE5Lm3cK04b1aA5tMEazrfMtmHhqm0DKKxnOTdWYjWPlYAxqqBs3kbqhL48Vh9QNpSPqw6AoCAawk3TL-HlYeCbfshMIzsOOfcUb-SaEpLtk0KUmyUafs65Nrey8aSI8ppFPmFj7QpNfREji_jYVQ8Bzt6ZV_GyTIhZy6SQeapx7Ts88J-nSsBY9JXPSlJAwX4FnIoEV9-XzTDdf32yu5SXtIiqBMsTLZ1o5_cjS2LGdo3nGKeWIT7URZw7E0Kny5F0UJdxndIVv615-Rv-D2siMzpnuM6kQtbagE3NdrNuadys07NUDUlp3zyPmi_a4es216_QeItarDSRE4jD4uxpuTIivIn0RZjfakZm1JolHK6z7S-eufMLE5kpYnK5K2mzvNMnDTs4OglxqaPPP6El8uzewX-_JV-kaKw0wnIUlvyvGC4KlKfu82nuAXiM9Q-yZ5UlGkHsw-ybFyPTnKWlUPTkM2FYk2uhIqSyK9bYMZMIOH58Oerkbo1IWeoR7GrazDokn8sv0N7ROpIuqFVjeTyt-WhucsxVDTOMtJ9QxIBTB-YJnj8nGGyEDC99PCkptSw5SqiiaKZ2sw3-PTcFY83cP9kDgzmvj2uS2QPxODXIt1IhGKEQLuBCGL5dGg1wQqgNpiHpUPG1Vo6HB_OKy7xX0YxXwHUJpO5YQY9d6uAhOofuDlWkAujgdsLiTlsEoM9H6FvAAYOBczgTmVvhOd8UEzxgh0AqT0a_2yk_PLps1xMCtyYpzoquDlCdz5SCn669mV4LduZjoldeg_tc3xeWyyrBdIgn1ewtj2P4LWyhCkII8o7negaGP2ZkSQCqxERa1y0PsWiUpP6rUMMZPmhPLyUZzZXJ-Hwbuxls9uRMCEtlPLOGS7yrBk3uLNV_Hf1B0I8hwWGM9bK3-nlEBvJmON96tsRpwQuDbAYto3uKp_PEENiS4Hyhk_PxTdS-sI3Om94VTNlFMLF5PIzmOayjMEwElaH4ciuNDbEZVVrf47NocwxXJ2bxp_X8ECB00rDgCRpmRKZ1k2ZwoSLLBfekIBN4o4nyBVwDvhAV2mqQ7v9YgR6G8G-l5xoj65Z8bUs5Y3ZZp0zyc8_y6lX7pMkzD8lxg5YukdtY_IvuX-G7v_psl7NaAPOJC1voGLXZL-7huW_YoVnzvcvHV64qg3dJ9YvuEyeX1Y6QRSRGcRlfb7ZOAj_FE0I4csa1kFDBfy2G4NRFWm9P-g5t213byxdV0jJaAcEScb3p2C8BNoEJSljMyWimkBP4ZidFmRTg7oV1A9aet_AWSjfK6zEkKZeJh9CWllnhCzKRm6O_Vpm_emTkMYext-joXwy5cPQxf8-ub9OnBmmqCFdv84rSHbZq8v-hauqjU1ksjBN9Yb--Yba4d51XZ_-wq8xoV7GjfhPklFgXCGN4TUBXaKc7SQO4jPESaYeIKfkUTrIopGrcq4k5-oFyQceimGaaL8cGIwczFUYSJUnXupHcofdepOEQIPdjqiIrNys7VJCtjoHDHZjgKTlNeb_mBYuBJrLfiApazJkQWcmMULj542pkcwXLvjfO0_0amdvjv-F8bFxyBaXxl6aYUnG8n1OF4ioXWo7hR9dVQOX-Rua8jKUELP8M-CNYn7U3e8iaFINK5XW3Bg3Cc5SKaI2WSOSrTU3CR4YpWdopIw15dgAmngTRUxbuw5LK84oCZz18_-1ULJNs2g4T6basflPW8fKPwLnTWs8Fi-mE1yhMeFxw_TaRhmliPlk-eK7lGj3wYbwzUFAJntcJEBs0XM_9JB0cJtPMz13HapvadpTIDEiWaJBX_FtKRCNeMumM4sAIj_dCjvygP6IjLzwAai4uX8MJo2c44ZqIu9HiVu8FdRFIfGuvxoAz75fmEozYICFUoFEPVE30DtBLx-FblrFCkL2pDktzbynNvUji5f5n1tv1Ew3oSkaPIbK6yUTHybAX5_icziBoRN1rE9Qm5is-foHgQS-w2iBQO8XG2ZkzCcZbgdn88H80hosfrT7dZQmtcefyMbGSATjirrqPeBtTF3JWr-xHcoeH6NkhaNZxVmhTb2WEtg-0tGg9BNduj5dWE7k_5vaR92gsVSNK6tK_4_tjm429bCsRdPwGK3F3wsmUUPyj5e9Ah237nySETXFQQicrhpD-N9TinKVqa657cPrRS4vMmJzexxZ12YC-4NqzgXX6JxhK4ISNjordzng--eekTnF6GS7C5cuHpyMHXljTRA-PfvTgG7G2PzvOSW059FrtvmzE0oaZRvfx05TGG3W8-TK7hNkIQ4d2Vs6qLCrA9VYZDISsOIxBdcP32uE2PA_qAIfDlODE4h142ZzlSbCynBUE-ir6AEFQzsunmIHfAPYhBPCnurnacKIv1OEwEZd4Td2mzlW5RK41Cuc4KqjrUW58Y6pLXkK0x_9frSXT4-dv-pG1MaxP3fx5s4YbY5xPH_SsYZGmh3mY_WiwIE4cPY9iGXLcRvx6vKwp1iLKJb0xzYN744fqE5ZU83j0CDbEurt8a82dXd1F8CuCFPECSXdByQa3bRwvhSPgtgvqCLoIWjr3QH8KKzElXW8H0XazaJ09dLkmuQhe9mVvb0Onv_7L7AKbnB2Fj5dkzowyCaG32EiIB0y0oDsB2yErMNJxh_w7GCYlDSp-RIs1um5P5cEiDLPfMW2HJ7X4wIpMNU7lJAbSs6qjO7sOrghDnfqis3buVhAJWzIV6qOaIndPgis5pqMkS7-LbgTup86x6ReqBxtE-qUDB5r7t3HECE83dNjqAiiBeKVlHFw0-IYxDOVfVUqsmolSBsg89Cy9qdn1ksBi5VawXOjjYTNM-zInnpmSXkm784w09PUc-8HQOlI499osACftAmTY2msOvImmjMX-3G_Sm61gyTzPKWov8v_xJZML-9kkVFrgznrNLHHUZ8xXzm3xj5rwMhGAY-19wkLZj70jJHGIF7cLDmILDE2qvRNGRXBdlBiR6bNKu4fpSmHTyk3hiPe8-8wzjH8uVoCe5q4qXF01qWglX_D0UwM_tN8PDs0CN-5IQ3JPZZZu50-Z5vaSGMRjbWpqDabl6zOIng0Xuj3BzS9qNENsgnQgDUIKYMOoi3l6I7zOYwY3He4aNrEVpEYxgm7hB6ra2rvaEaTKnGDRL5dFzHOhBiwyOZqmiXowN8-tyJ-E2Zg_NJkxwQztlXDkj0H96ID6cEXZVfSNZgMjWCuSNC6LZywaHv0wden3PIMMmFOR7p6xiSZGT9uoC72-pLNMuIKjuTLrRJUPsQIJAJ2dh82E4vCXJ0X9yzLZpef3KDrbk44g1suTj9vHQsRBfGq_PEiS3nu-aacuQ27Tg-TZf2GH_f-NFwOZ6aOIHvh5x0ydEIHJ5z1rnT71nsuCbRrpWJbCZ71ocIDf4vXqvtaecZiPq5il8QHB2hwRiNtQe9MpFSYnZjAvZG10y88y1CVCj0XmwkVNgWftBueOi36OpbA_Mt9m3LuLt0n1w__GaJ2NZf-xgcnaj9yOwuObzD-ckb6gnp4dkAbedsbOMe6ZnR5PsNI2hck0LeVIXZ1_oyhuwlQ6lR-i2PzmBKslR-DTHE4Ug3wKyt39f3280rbf_qiNdKaiu8ePJuT1XYOxtsevaShCvRSB8hUj1r5TUNMGv0M5V9pSNTXX5vgg_KH9WDWwdmVAzZRAR7MD5VozDFoUdqq6gaTJtPJDJwYHSU4E_aCBNfNrBVAsaYmBjOhld2ogqUKgHM7TAPaMhclLPGQslZuNSWmAd0hAoesC4XxJs4xJoret6KMAswYGlTajMQCkpKF585xxXEXp7XbhNMiHCpd_hqS8hR81VxlF4c-bQmpODuc9y8pfOwUyHrmd0t9WgCjU47JYPIxWACrHvi4shQqU4TAuLBiaJaXZPTj2FVbTgbqs20xjSAKghdXL_AdODdV_3rx6sSrG3D_GUmdghVc-q3JQ5tN22hrPJNwuE4wLEyl2XTDa7AC-9Tn4_kj2nNK4Ntgv7gpjVmZjI_kLQzVeehYkcXrENPtvoyjHrfCNt_HyW_nHhkJIsCUonOkD2bYHp3r2abBbVSmHwdksVNdAXENOPn99NgRu8RKfpWqdf5fxEf8Ydxk4WzNfBZrjfieZ2LALQyw7TKKS2i1pK3T62GnkPP9XHpSaQrKJra7LVAbeJusoobZlKMM7_Lc74wmuxOPTlL0kw4mKnIypx65-cE3eK4kc9XP1abeC_q_2it6GnWDN61lcMDYJ2ElSKu72CESLUQo78-9AL7Xf0lmxtzDE8rlC2VLA-FEFYBMXB8AnYQG1QDQmiBkPmwz8LKcIfW0wSmcP06aFYJxtux3dq_K4W2Tih5D0THB-Oazy_A0Fcj40C9XDTsCtSYyljTdNeUx6CpE46i0c7rDsK0g7XRdaDvuMSwk_phoTfxjnl2G_PPkt3bXmdS_mqYGaL_8BObyB102-ZLOGdAaR6OHrGx7J9zJIOlpf623De4AIOoib4tk_ccLprC00dESs8IrAIbaRZOrtr7oOFsmm8CqJCbh-KxFvSrBY00mLfZOGiIzrcYqCdJenT--l7RMqp4GR63o-xW_lMtDXo_KFhKPh1AdLIqhQMvGidBs0XB3BQ-XgeN5aIJ4SFKfTbvkxwkcf552VrAg_9Ry9IYrUPEfqe3t0atcEAACGpCr1T8PRbnHRIt0sgrPjoTtItNbt_Jrazrk4nVL08rwyvoBp2Nv9ZY4oV31ASYXClWBgfc9NDyG9WyL8GwCgm36oPpk4VeCZsz1Szi8DTwwTpBi2Gq96fjNZbQ34c_2riAHQSoD2R-oiBlJI4xit0yC8FWAzCYA4RNZr_e5956Y7fJQG8cAmaslMlxVj0T4xJTUKtX033QpYYRSi2CKMni3JduW285Tc-HbQBjyxRfdhHNbVuf_Ik9uXbk0RFUlZTI-9C5_nBojbB9eb2wTDPkGzPP8ykFTbBvL4syBg2bgGdGW_9Hz366aI2sn69cXkAuiH8OZdMpkpRouDfs_zHxSniyvHKXTISu3ScDoJ9vrvCbOK5_LXAiOkp2Au2wOpQFeo7nP5p8Gq2ZZQ4D1oduFKzDmMrdc79WRMgUizU8RaTWqzurP3RzJf7pMRWtZVuROYQwvJdOOUPAwdLkoTmTX0yzVVvXLLPNrYSTgw-m7JKv2fa5JJb_tZivHtFRc6gkLlNtLyZIuWvy4DYzjcICFRHzrIEaladhj-SG0CK2eqXBcfpyztDa7RGu3tRVpPaz3_nSjWXIAa7TCoFEXuJtuOCNVaNH2_kfoGVGRCJ5LB8ITirp-K4V4hL7BCfY18NMTKkankJYGwdBMAH7yQWK8HXc-eeL0EeFUiisSky9e77nVIgvcBMdasc_SLrHTOrmU9zJHMvxEh7x_L9_9Q5Ohktw_X40_PL06bxN5jOKz35a7OsNx1GE7gLaUEYUECs8nHG02CHHp4tfvRWO7169aK8B3klAm-N6PmCvFmiCAw0vDEo1VovIv6LyuGm8Rx-Hb6uzkR7LvjBxMKVQYUhXEX1LFNAWQHAy7Qak4vKX_s_4DARu3QKPJVy7_eO-CNxbhr6nZNedCOVYXf9wif4cuQRHZvB0ZzD-s7_H-lXCn0AXJVEtVyi3J5aqWUTPs9TNfiwLsYbk7jhdXJPTXDLwsIifdQbEpqKXs85HmCWj0frSHRmo0XyK3QHuqf4-bQIrYTRS5npL3K_Hx-sWtVpp1d2Hc6Y7Ind3IzJa_SfxTVmpGryfYPkLjDAZm7ZBAyepzSC3KWWv_U-eYQohh6tfx1L4YrTtDwplPK7G26gMC8Mlb2-FVA_RQJ8yAeD_Tsred2DJ5K5nnSnH-CgHeEM928Nt4WYqDX2P32yERo9kjN5Cbjbvf6bi3ykQt8ZNFqmvnw3TFzI60ATPSUOvrHNZKXlOrUTsl8I_oMCSbd9YHi_ukiP_cYGpbmdKLUfmkNgnnBKB_eGZEZosIyUeF0PjmbHnMzfo5Q_D-EI4yYC7ruw1eR8QRVYat4XaZlI-KaOJYuRJpFOhQ3GHx95mgdR6ykQfVXCgUI5TJOuzfEmviDV1-i_V6To1ZQoQCmyWX6dMENdIPeg9voOFDpbCh-HYl4wNUWdT-bLtkQAVpWHERmQCKRNk6SlMzEqdZG6Km5-bKebQuf1mj1JHhC8jFLeONRbdZVlj3Rp1j0uTNRVxcyeL0YD8fmq3qFGJz2TTh0bVjaj4Tz0qPKP9TguRA-fCaqZclio5NzghyCUajDEQOu2dFHnb6RnOomfIKRZn1xpsAE0gKI8JeaAQWvvFTb4W-VjfI_l1U5NZPMVecoxZ_hTWQYjum0s4yGR9PgsppS4xDnykk7XST1qGKVqz0xcYdXELCwrzLQEt6enTnuDkpofrHz6myXJ_RXb6FnV9fz5zUWepXVFL0Q50k228EN1ilvzUGidRxcrcZKK2HNL7HsXDvZV5iTHE79e1y7Dz4BDfAmwp3kxP1teadnTNvBAn3b_n99OkSIrYAfv1BthQbOful7AiI1IIH3Zym05KKtrsVbPoZzZxAi815wa1YZPVbV0KgEip2V5YthXWPqPndlfYVqpPPwUqTY3cLkqIy3kmelJG5CADho2SaPh_sCBz5fJnDB4Ec84q2oEeBxo8x3sCHgyShmtstLX1gtQDsQ--ovb4t7ggIpLfQNThmnAIgwRLkh88v_5Si57LvRtzFxiPMKbbbuesi45Xa3XroSV8fGvk--3QOWDVAHRfxMP3_cdcNxxuvYAt0M-r9Lg8amXEXzUYR3Lv1GOolY1zYCoQCAzfz_2NEzQf1Inv-tjfUGuUDBWhqMNt7UOi2OD6eyqkBCzhjbkYW2tSbzIzDWRcbbdcU3NCL-9i0E4_9NY1ecQXKws4gTnatLf_9etjZGz-mAoA6SwgYFGKuVfdgxLtSJunZar_9ElS0KtKoCJtek5R3pb88P7whxoUaMb068uRG6ZUeCUDCTxTjAq8eVgFTGy8lnPrJcp1qWNKmoowv11AY01yZdDdEKQF18M7nojh5TtTpqSvR_NGoH0_fYb2H_BrD_EQ4bSQFYREy_gUqdK95xzu0iXv7yuXNzdAs3O-jjGevUlzRsZkNWcj2R50opofDHF7y0tPpVgLIIPGIZpB2wXSIUTIoHFhJWrXJeX01RnaI0c88o6AOm724645nD3L7vqRTQSravenrOGM7MrbpNlrMmU3AkpJPttJRt3a4Yck4C_TCDITZnO9J4xuvYmckgCPpZGfPrCLZ9LAaMuthFECGThsB11-mvEc5wWrpwKzTKjmufQRa2g_9e49YKxv1HYTsdtLWmj9oU8sEEaaUY8DVy7mWrG4REX-ILMaxWTLU4LcyCJ33PfShvg3pkIbeStdyxAkfeBMx9o7ZTOt-4AaLzO3EVjdA7SY-4wwJxRs44I4SE4h0vYG0_mqzXU7EMrleEVhpuRNA1-4_tbadSAVmQs93wgpb34Rn4wpOgjcQwTQmqHyrMR0zfA7dGX-aEU5ftcbp-cIrmCTevpcvEpMZIQdmDwYUUEys1PCCcIhY_VaIpOAl1wUdT6swCQ9n6Iyf9wA-641bPs_xU_5onmyiQtTl3ZmvDmukHHfJJN3GGn67tImRppGGf7kc86ORVlA1tuU_f_IcbfCkAdoVfVwzTCS7FmkjZk9q81a3uzzFouCW0QP2FhiZfB3YNaDtnfuHfaDr5kUM4QTOyRGEUjM_6KfKn73TdoSNjNeUxnx1ESHl6N0_YrL1q3euOzZCcUHZikAsjvCHAtGSy4u1NYN00Oftz7MsA0EEAitd1j1GV7pCZI8enAwGuPFPqx0bqZzUPyk_1u1nom8uSffieleRT7nJPaGtYSkW8sDze_QKNWAjZEVfs1qKRt-EaOQbq3SsOnuRIEWvlD72dKsNM_rSNLT4DwPf0Bv2n_CyiaZm6dJhJuIz3phhm0OxKMqtg4xPkaWJ9Lh9OwpmPfICRg8SMtNgumJm7_ES9NRlipulOz_hGgyRjhIPQkpI6AyiIK3xx--O0jdoZCb-HrZSM2NGguafaFVv5yfmMyvkuC4orLVAVSNGfaApGBj_Vjf8vQyLO0GWKu53dKVoHhVEgls5CZFGjCU4c7m_vBIWI_5BjJN3nhSOmUuMcQe545UGGAywi-ql0fZPUzBCU4FRbrLyfAwwnZCRich6S8RFTzeO-lnajQwDyZ3nwsth3QUBG99mL8tncbrFE4JcKtHnH3igqAeasGT65ODJXFWWQmQrIYjyt99l8vJcq5XlFFauxPknG51s1Vu7DCMX4cUFenPWTy7IFDP41ipuWyEIpPX18q3bg-gNCJNN7WQ5yb9172_LKpoQKBbbxK1ODp-6-74932zXgo6Qd6uggTH3YtudGvDBjr0zct6MinG2iegdwhramNZCYjRGCf2rArUtwN8T13q9xMQCCWV0_1mdQS_87blqCH0gfAO-IUKKC9ySgFGfFzPb9RlX-bt-BToWSTDVtp8Pe1lYhUXS_HKrn7wob8uk5CyazRSNvSJM4eCFbiY1v5P4gxTL1S1C47ECxpBKYPvY2TbjsEXRD2_g6yYJF50jBckitrLvJdRQCbmxFKpCrhmPmWfTrtJ3eYWEYB3HvdedM4ZzlEZ5VJe8dXaU3-5Dci_-CaMfwCYbybAiOHmO5AFNYEvP4x6taecHZlSvcFhsg_XtthRBhsIA6LlkGQSL-WrJBgYfzSoF7VoKHu_qJvdBvuYTfYKoq4DQmvN2fJBTsKRrWiJZaYj60ROfzDDm3QX74bTlfVU7ld9Fddb3pu23Gj-baiFsUuSiv1T4oNk8gHWBFe01uuwVTJvn4b-XPd-_Y3rFWfjCsiOh84xnSE01puXvWy8P6JgNXvDgOiR-PfwASrfe4Mffzyy0YN-BmJT_e3Pmxmb0l9FwjioUaxMOmJHid7ubK5i7ZML2Zdh4xtw2k-NYwmHZ-JwJz1aHvVnSa_7jm5k11sRrPslKqrGJjBKWsAK7jb7lPm2vjmXW25TAiTmzSSj9kliwpzB1xDh6RR0E0zRB0MqmVEKdzprHrOeBgb59R97oVcmFUA59pO35pNdG6VzSk_QbDDlLhLUK3bKjo7QTx24HH0py7mvYZ-yipHFAi8UQp7VIEbIefp0ht_MDTkajZ20iFaREupcDCQG--52syb_0JQxXIdH_N7nMsvepFb0YIjb3zmUti-wQ4_Bcm86-5h8ua3T0wg7up8Ty4PyGY9-AMVqoVHA3ukURQAQjy_AhHRhtvzGHaRjHSZ379TluU5hd8VFN17EiLyw-OvCiqCBtX5yLYdgQcSTEEc-c5GDIVTR-n-zB1sJ24TAS5atrLUZG_rnR9fCauweEzp5orzLt20ud-K4bEYNSnrmPaj9J13Q1yJV4mpviM1hI3nTlx8X3jmmxzuxa08H7EauVvfxVT19Al8Yh4FvPcMe7plTSoIDZiiyAzXYAuozYUuW9vpgLgjvMYEmVzzgWLbhnoFXAPivrnYy2g0UXUu2StN95depdzE6Nx6_r8tdGWoTjwhGphCGy-wJx0LyUS7dsec9BYzhBFKYNwiAx6kwt5vw6TLH32t1XzuwN0PYl51Qq2aVI_l4DKBIPTP_Y7t9L5mEcaCywifZHImNf4nvuYsj-HAE5XsnhHxA3nzQ-zaWP5azamdp7m2yjhoHH9Q0qjQ4y_509gCrznPpEqahuJM6Cxgut7jJfZPdh-cNE-fE1vGKxEPAacPMZM0eqfk6_hpjThZcWqxvPvNp4XDwz-YoMFqPSVoSHJeLVvCDHKVWjB8xUiZ_vC72RHMqVIAvSgtryf_XO7GNQUeAxKYBovCOSFtaCeInPkJMNVfE-KeIqOgDXa0280OYCAOJciTpc92MiqrSrI2_G-NG8pf5v0-xshFVG0uPu2QbBOWvtLW19qvX7_yo4bapHLfI_rYO0tLjjjej1Z7ZeCAlhe11DEGjHYEFc3czmKmEahjGmdtDkmv2MfW4pmBCpSrelY7_a0h1id_HGbKhN7wg4Ue_7wpE9xZAyuVdvETtfQKTOgwHz0baALH6qzaF1fwNs1LdroIeVOEp7kvAEthL7q9WK8ld0ElWa0DW2YBkv5mQgnXvm0S5BA8XVv1gqAzbgXUll3kLyr1j50yR1kQCxUVMz7kLFO_fSOdoiHkGrYHv0wharNO8x8C_rsj5hK1qGTztbm5h-W2wIVf9OLLp60VarGVi002aLB2TMkc3p_rR7fOjh00Q9gFamqDD0gi3GtwPe5Rj1QbqDxW7nzs8yolUqIleQm2Q73x-y_Na-UaEe57bfZMFnSSl6sOketTE7PiQG5hBIxphmrd0BhjhiCmfX0Wd-92CVtFZkMyPxVfw1HcFHiHvjYOLtyyei1vKuSECv-SQYQpTfjVOqTkqIJl9yXmqH8mLparJF9urb33BZ4C9WrDEMqAlD2Uxh3lumJVR2gH",
               "summary": []
             },
             {
-              "id": "fc_0afac68796a204c0006a5641c09e70819ebe7274b60c6efc4d",
+              "id": "fc_06b79c2a77ee9e71006aaa5a4efc1087d28537dec80dedeac5",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"HelloMax\",\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-01-01T12:00:00Z\",\"dateAfter\":\"2024-02-01T00:00:00Z\",\"dateBefore\":\"2025-06-01T00:00:00Z\",\"actualData\":\"2025-12-31T23:59:59Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"ItemName\"},\"default\":\"test\"}",
-              "call_id": "call_x7cZUn9CkBTLgdF8afK1TE97",
+              "arguments": "{\"string\":\"Example string\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckl4wz9k10000jqeq1r4k0al0\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"a\",\"b\",\"c\"],\"arrayMin\":[\"only\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2025-12-31T23:59:59Z\",\"dateAfter\":\"2024-02-01T12:00:00Z\",\"dateBefore\":\"2026-01-01T00:00:00Z\",\"actualData\":\"2023-07-21T15:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union string\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}",
+              "call_id": "call_kxGaAOWICrMhWhI7jjapnxvt",
               "name": "manySchemasTool"
             }
           ],
@@ -2737,7 +2841,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -2756,11 +2863,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -2791,36 +2903,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -2834,7 +2946,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -2850,7 +2965,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -2899,7 +3017,9 @@
                   "default"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               },
               "strict": true
             }
@@ -2913,11 +3033,11 @@
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 2508,
+            "output_tokens": 2098,
             "output_tokens_details": {
-              "reasoning_tokens": 2176
+              "reasoning_tokens": 1728
             },
-            "total_tokens": 3289
+            "total_tokens": 2879
           },
           "user": null,
           "metadata": {}
@@ -2926,7 +3046,7 @@
       }
     },
     {
-      "hash": "fa976706dab554f0",
+      "hash": "ad348475b143746d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2944,18 +3064,18 @@
             },
             {
               "type": "item_reference",
-              "id": "rs_0afac68796a204c0006a5641b20ac0819ea806741d882f8556"
+              "id": "rs_06b79c2a77ee9e71006aaa5a3ed0ec87d280cb3cce7b767dd2"
             },
             {
               "type": "function_call",
-              "call_id": "call_x7cZUn9CkBTLgdF8afK1TE97",
+              "call_id": "call_kxGaAOWICrMhWhI7jjapnxvt",
               "name": "manySchemasTool",
-              "arguments": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"HelloMax\",\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-01-01T12:00:00Z\",\"dateAfter\":\"2024-02-01T00:00:00Z\",\"dateBefore\":\"2025-06-01T00:00:00Z\",\"actualData\":\"2025-12-31T23:59:59.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"ItemName\"},\"default\":\"test\"}"
+              "arguments": "{\"string\":\"Example string\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckl4wz9k10000jqeq1r4k0al0\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"a\",\"b\",\"c\"],\"arrayMin\":[\"only\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2025-12-31T23:59:59Z\",\"dateAfter\":\"2024-02-01T12:00:00Z\",\"dateBefore\":\"2026-01-01T00:00:00Z\",\"actualData\":\"2023-07-21T15:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union string\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_x7cZUn9CkBTLgdF8afK1TE97",
-              "output": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"HelloMax\",\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-01-01T12:00:00.000Z\",\"dateAfter\":\"2024-02-01T00:00:00.000Z\",\"dateBefore\":\"2025-06-01T00:00:00.000Z\",\"actualData\":\"2025-12-31T23:59:59.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"ItemName\"},\"default\":\"test\"}"
+              "call_id": "call_kxGaAOWICrMhWhI7jjapnxvt",
+              "output": "{\"string\":\"Example string\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckl4wz9k10000jqeq1r4k0al0\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"a\",\"b\",\"c\"],\"arrayMin\":[\"only\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2025-12-31T23:59:59.000Z\",\"dateAfter\":\"2024-02-01T12:00:00.000Z\",\"dateBefore\":\"2026-01-01T00:00:00.000Z\",\"actualData\":\"2023-07-21T15:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union string\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -3082,7 +3202,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -3101,11 +3224,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -3136,36 +3264,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -3179,7 +3307,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -3195,7 +3326,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -3244,13 +3378,15 @@
                   "optional"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037827283
+        "timestamp": 1789549138232
       },
       "response": {
         "status": 200,
@@ -3259,13 +3395,11 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b112a4d963a105-CDG",
+          "cf-ray": "a3beac2239abd358-FRA",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:03:50 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "3507",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Wed, 16 Sep 2026 08:59:02 GMT",
+          "openai-processing-ms": "3707",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -3273,21 +3407,21 @@
           "x-ratelimit-limit-requests": "30000",
           "x-ratelimit-limit-tokens": "150000000",
           "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149996137",
+          "x-ratelimit-remaining-tokens": "149996542",
           "x-ratelimit-reset-requests": "2ms",
           "x-ratelimit-reset-tokens": "1ms",
-          "x-request-id": "req_7a0036296ba94521a2283655c093cead"
+          "x-request-id": "req_674dff8fb67b40cebf45dcccdf3f5855"
         },
         "body": {
-          "id": "resp_0afac68796a204c0006a5641c36a60819e8510e4f48ea382e8",
+          "id": "resp_06b79c2a77ee9e71006aaa5a525ee487d29d6d68cb0cbc627c",
           "object": "response",
-          "created_at": 1784037827,
+          "created_at": 1789549138,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037830,
+          "completed_at": 1789549141,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3298,7 +3432,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0afac68796a204c0006a5641c3eb30819e8cca855ac900fe76",
+              "id": "msg_06b79c2a77ee9e71006aaa5a533de487d2842c20740817ca30",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3306,7 +3440,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Here’s the validated output from manySchemasTool:\n\n{\n  \"string\": \"Hello, world!\",\n  \"stringMin\": \"Hello\",\n  \"stringMax\": \"HelloMax\",\n  \"stringEmail\": \"example@test.com\",\n  \"stringEmoji\": \"😊\",\n  \"stringUrl\": \"https://www.example.com\",\n  \"stringUuid\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"stringCuid\": \"cjld2cjxh0000qzrmn831i7rn\",\n  \"stringRegex\": \"test-sample\",\n  \"number\": 42,\n  \"numberGt\": 4,\n  \"numberLt\": 5,\n  \"numberGte\": 1,\n  \"numberLte\": 1,\n  \"numberMultipleOf\": 4,\n  \"numberInt\": 7,\n  \"exampleArray\": [\"one\", \"two\", \"three\"],\n  \"arrayMin\": [\"min\"],\n  \"arrayMax\": [\"a\", \"b\", \"c\"],\n  \"date\": \"2025-01-01T12:00:00.000Z\",\n  \"dateAfter\": \"2024-02-01T00:00:00.000Z\",\n  \"dateBefore\": \"2025-06-01T00:00:00.000Z\",\n  \"actualData\": \"2025-12-31T23:59:59.000Z\",\n  \"object\": { \"foo\": \"bar\", \"bar\": 123 },\n  \"objectNested\": { \"user\": { \"name\": \"John\", \"age\": 30 } },\n  \"objectPassthrough\": {},\n  \"objectLoose\": {},\n  \"nullable\": null,\n  \"enum\": \"B\",\n  \"nativeEnum\": \"C\",\n  \"unionPrimitives\": \"union\",\n  \"unionObjects\": { \"amount\": 5, \"inventoryItemName\": \"ItemName\" },\n  \"default\": \"test\"\n}"
+                  "text": "Here is the validated output from the manySchemasTool:\n\n{\"string\":\"Example string\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckl4wz9k10000jqeq1r4k0al0\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"a\",\"b\",\"c\"],\"arrayMin\":[\"only\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2025-12-31T23:59:59.000Z\",\"dateAfter\":\"2024-02-01T12:00:00.000Z\",\"dateBefore\":\"2026-01-01T00:00:00.000Z\",\"actualData\":\"2023-07-21T15:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union string\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
                 }
               ],
               "role": "assistant"
@@ -3477,7 +3611,10 @@
                         "type": "number"
                       }
                     },
-                    "required": ["foo", "bar"],
+                    "required": [
+                      "foo",
+                      "bar"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample object with a string and a number"
                   },
@@ -3496,11 +3633,16 @@
                             "description": "constraints: greater than or equal to 18"
                           }
                         },
-                        "required": ["name", "age"],
+                        "required": [
+                          "name",
+                          "age"
+                        ],
                         "additionalProperties": false
                       }
                     },
-                    "required": ["user"],
+                    "required": [
+                      "user"
+                    ],
                     "additionalProperties": false,
                     "description": "any valid sample data"
                   },
@@ -3531,36 +3673,36 @@
                     ]
                   },
                   "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
+                    "description": "leave this field empty (null value) as an example of a nullable field",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "enum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "nativeEnum": {
                     "type": "string",
-                    "enum": ["A", "B", "C"],
+                    "enum": [
+                      "A",
+                      "B",
+                      "C"
+                    ],
                     "description": "The letter A, B, or C"
                   },
                   "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
+                    "description": "sample text or number",
+                    "type": [
+                      "string",
+                      "number"
+                    ]
                   },
                   "unionObjects": {
                     "anyOf": [
@@ -3574,7 +3716,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["amount", "inventoryItemName"],
+                        "required": [
+                          "amount",
+                          "inventoryItemName"
+                        ],
                         "additionalProperties": false
                       },
                       {
@@ -3590,7 +3735,10 @@
                             }
                           }
                         },
-                        "required": ["type", "permissions"],
+                        "required": [
+                          "type",
+                          "permissions"
+                        ],
                         "additionalProperties": false
                       }
                     ],
@@ -3639,7 +3787,9 @@
                   "default"
                 ],
                 "additionalProperties": false,
-                "x-optional": ["optional"]
+                "x-optional": [
+                  "optional"
+                ]
               },
               "strict": true
             }
@@ -3648,16 +3798,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 3598,
+            "input_tokens": 3195,
             "input_tokens_details": {
               "cache_write_tokens": 0,
-              "cached_tokens": 2688
+              "cached_tokens": 1664
             },
-            "output_tokens": 424,
+            "output_tokens": 319,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 4022
+            "total_tokens": 3514
           },
           "user": null,
           "metadata": {}

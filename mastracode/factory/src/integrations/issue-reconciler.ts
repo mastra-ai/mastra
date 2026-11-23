@@ -1,6 +1,11 @@
-import type { Intake, IntakeIssue } from '../capabilities/intake.js';
+import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '../capabilities/intake.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { storageCards } from './kept-cards.js';
+import type { CardSource } from './kept-cards.js';
+
+export const EXTERNAL_SOURCE_MISSING_KEY = 'externalSourceMissingAt';
+const MISSING_RECHECK_MS = 24 * 60 * 60_000;
 
 export interface IssueReconcileSummary {
   projects: number;
@@ -20,7 +25,7 @@ export interface IssueReconcileSummary {
  */
 export interface IssueReconcileScope<TScope> {
   scopes: TScope[];
-  matches(item: WorkItemRow, scope: TScope): boolean;
+  matches(item: Card, scope: TScope): boolean;
 }
 
 export interface IssueReconcilerOptions<TScope = void> {
@@ -28,15 +33,33 @@ export interface IssueReconcilerOptions<TScope = void> {
   intake: Intake;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   storage: WorkItemsStorage;
-  externalSource?(item: WorkItemRow): { type: string; externalId: string };
-  issueId(item: WorkItemRow): string | undefined;
-  metadata(item: WorkItemRow, issue: IntakeIssue): Record<string, unknown>;
+  /**
+   * Every project's provider-backed cards, kept between sweeps. With it a sweep
+   * that finds nothing to change reads nothing from storage. Without it every
+   * sweep lists the projects and reads each board.
+   */
+  cards?: CardSource;
+  externalSource?(item: Card): { type: string; externalId: string };
+  issueId(item: Card): string | undefined;
+  metadata(
+    item: Card,
+    issue: IntakeIssue,
+    dispatch: ResolvedIntakeDispatch,
+  ): Record<string, unknown> | Promise<Record<string, unknown>>;
   /**
    * Called when a closed issue (stateType 'completed' or 'canceled') is detected
    * on a non-terminal work item. Use this to replay the close event through
    * the provider's rules ingress.
    */
-  onClosed?(item: WorkItemRow, issue: IntakeIssue, project: FactoryProject): Promise<void>;
+  onClosed?(
+    item: Card,
+    issue: IntakeIssue,
+    project: FactoryProject,
+    dispatch: ResolvedIntakeDispatch,
+  ): Promise<Record<string, unknown> | void>;
+  /** Whether the item already rests in a terminal phase of its board. Unknown phases are not terminal. */
+  isTerminal(item: Card): boolean;
+  now?: () => Date;
 }
 
 export type IssueReconciler<TScope = void> = TScope extends void
@@ -46,9 +69,28 @@ export type IssueReconciler<TScope = void> = TScope extends void
 function sameValue(left: unknown, right: unknown): boolean {
   if (Array.isArray(right)) {
     if (!Array.isArray(left)) return right.length === 0;
-    const leftStrings = left.filter((value): value is string => typeof value === 'string').slice().sort();
-    const rightStrings = right.filter((value): value is string => typeof value === 'string').slice().sort();
-    return leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index]);
+    const leftStrings = left
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    const rightStrings = right
+      .filter((value): value is string => typeof value === 'string')
+      .slice()
+      .sort();
+    return (
+      leftStrings.length === rightStrings.length && leftStrings.every((value, index) => value === rightStrings[index])
+    );
+  }
+  if (right !== null && typeof right === 'object') {
+    if (left === null || typeof left !== 'object' || Array.isArray(left)) return false;
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord);
+    const rightKeys = Object.keys(rightRecord);
+    return (
+      leftKeys.length === rightKeys.length &&
+      rightKeys.every(key => Object.hasOwn(leftRecord, key) && sameValue(leftRecord[key], rightRecord[key]))
+    );
   }
   return left === right;
 }
@@ -70,7 +112,12 @@ function withoutUndefined(record: Record<string, unknown>): Record<string, unkno
   return out;
 }
 
-function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId: string): WorkItemRow[] {
+function withoutMissingMarker(record: Record<string, unknown> | null): Record<string, unknown> {
+  const { [EXTERNAL_SOURCE_MISSING_KEY]: _missingAt, ...metadata } = record ?? {};
+  return metadata;
+}
+
+function issueItems(project: FactoryProject, items: readonly Card[], integrationId: string): Card[] {
   return items.filter(
     item =>
       item.factoryProjectId === project.id &&
@@ -79,9 +126,27 @@ function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId
   );
 }
 
-export function createIssueReconciler<TScope = void>(
+function cardMetadata(item: Card): Record<string, unknown> {
+  return withoutMissingMarker({ ...item.workItem.metadata, ...item.metadata });
+}
+
+/**
+ * The metadata a write of `item` builds on. A kept card may be older than the
+ * stored one, and writing its metadata back would undo what changed since, so
+ * the card is read again. Null when the card is gone.
+ */
+async function storedCardMetadata<TScope>(
   options: IssueReconcilerOptions<TScope>,
-): IssueReconciler<TScope> {
+  project: FactoryProject,
+  item: Card,
+): Promise<Record<string, unknown> | null> {
+  if (!options.cards) return cardMetadata(item);
+  const stored = await options.storage.get({ orgId: project.orgId, id: item.id });
+  return stored ? cardMetadata(stored) : null;
+}
+
+export function createIssueReconciler<TScope = void>(options: IssueReconcilerOptions<TScope>): IssueReconciler<TScope> {
+  const now = options.now ?? (() => new Date());
   const run = async (scope?: IssueReconcileScope<TScope>): Promise<IssueReconcileSummary> => {
     const summary: IssueReconcileSummary = {
       projects: 0,
@@ -97,9 +162,17 @@ export function createIssueReconciler<TScope = void>(
     // there are no configured repositories to consider.
     if (scope && scope.scopes.length === 0) return summary;
 
-    const projects = await options.projects.listAll();
-    for (const project of projects) {
-      const all = await options.storage.list({ orgId: project.orgId, factoryProjectId: project.id });
+    const cards = options.cards ?? storageCards({ projects: options.projects, workItems: options.storage });
+    for (const project of await cards.projects()) {
+      let all: readonly Card[];
+      try {
+        all = await cards.cards({ orgId: project.orgId, factoryProjectId: project.id });
+      } catch (error) {
+        // One project's unreadable cards must not end the sweep for every other project.
+        summary.failed += 1;
+        summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
+        continue;
+      }
       const candidates = issueItems(project, all, options.integrationId);
       const items = scope
         ? candidates.filter(item => scope.scopes.some(target => scope.matches(item, target)))
@@ -110,38 +183,83 @@ export function createIssueReconciler<TScope = void>(
       for (const item of items) {
         summary.checked += 1;
         try {
+          const missingAt = item.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
+          const missingTime = typeof missingAt === 'string' ? Date.parse(missingAt) : Number.NaN;
+          const missingAge = now().getTime() - missingTime;
+          if (Number.isFinite(missingTime) && missingAge >= 0 && missingAge < MISSING_RECHECK_MS) {
+            summary.missing += 1;
+            continue;
+          }
+
           const resolved = await options.intake.resolveIntakeDispatch?.({
             orgId: project.orgId,
             externalSource: options.externalSource?.(item) ?? item.externalSource!,
           });
           if (!resolved) {
+            await options.storage.syncCard({
+              orgId: project.orgId,
+              id: item.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+            });
             summary.missing += 1;
             continue;
           }
           const issueId = options.issueId(item) ?? resolved.issueId;
           const issue = await options.intake.getIssue({ ...resolved, issueId });
           if (!issue) {
+            await options.storage.syncCard({
+              orgId: project.orgId,
+              id: item.id,
+              userId: 'factory-rule-dispatcher',
+              patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+            });
             summary.missing += 1;
             continue;
           }
 
+          const hadMissingMarker = typeof missingAt === 'string';
+          const baseMetadata = cardMetadata(item);
           // Close detection for Linear: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
-          const stage = item.stages[0];
-          const isTerminal = stage === 'done' || stage === 'canceled';
-          if (isClosed && !isTerminal && options.onClosed) {
-            await options.onClosed(item, issue, project);
+          if (isClosed && !options.isTerminal(item) && options.onClosed) {
+            const closedMetadata = withoutUndefined((await options.onClosed(item, issue, project, resolved)) ?? {});
+            if (hadMissingMarker || !metadataMatches(baseMetadata, closedMetadata)) {
+              const storedMetadata = await storedCardMetadata(options, project, item);
+              if (!storedMetadata) continue;
+              await options.storage.syncCard({
+                orgId: project.orgId,
+                id: item.id,
+                userId: 'factory-rule-dispatcher',
+                patch: {
+                  metadata: {
+                    ...storedMetadata,
+                    ...closedMetadata,
+                    ...(hadMissingMarker ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}),
+                  },
+                },
+              });
+              summary.updated += 1;
+            }
             summary.closed += 1;
-            continue; // Skip metadata patch for closed issues
+            continue;
           }
 
-          const metadata = withoutUndefined(options.metadata(item, issue));
-          if (metadataMatches(item.metadata, metadata)) continue;
-          await options.storage.update({
+          const metadata = withoutUndefined(await options.metadata(item, issue, resolved));
+          if (!hadMissingMarker && metadataMatches(baseMetadata, metadata)) continue;
+          const storedMetadata = await storedCardMetadata(options, project, item);
+          if (!storedMetadata) continue;
+          await options.storage.syncCard({
             orgId: project.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { ...(item.metadata ?? {}), ...metadata } },
+            patch: {
+              metadata: {
+                ...storedMetadata,
+                ...metadata,
+                ...(hadMissingMarker ? { [EXTERNAL_SOURCE_MISSING_KEY]: undefined } : {}),
+              },
+            },
           });
           summary.updated += 1;
         } catch (error) {

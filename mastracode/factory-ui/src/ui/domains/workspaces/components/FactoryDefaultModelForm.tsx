@@ -1,80 +1,67 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import type { ProviderInfo } from '../../../../api/types';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
-import { useFactoryModelChoice } from '../hooks/useFactoryModelChoice';
-import { ProviderBrandIcon } from './ProviderBrandIcon';
+import type { OnboardingModelLane } from '../hooks/useOnboardingModelLane';
+import { MastraGatewayCreditsNotice } from './MastraGatewayCreditsNotice';
 
 export interface FactoryDefaultModelFormProps {
-  factoryId: string;
-  provider: ProviderInfo;
-  onSaved: () => void;
-  onChangeProvider: () => void;
+  scope: 'org' | 'user';
+  lane: OnboardingModelLane;
 }
 
-/** The model a connected provider runs on, saved as the Factory default. */
-export function FactoryDefaultModelForm({
-  factoryId,
-  provider,
-  onSaved,
-  onChangeProvider,
-}: FactoryDefaultModelFormProps) {
-  const choice = useFactoryModelChoice({ factoryId, providerId: provider.provider, onSaved });
+/** The default model for a connected lane: the company's Factory default or your personal default. */
+export function FactoryDefaultModelForm({ scope, lane }: FactoryDefaultModelFormProps) {
+  const { catalog, connectedProvider } = lane;
+  const label = scope === 'user' ? 'Your default model' : 'Factory default model';
 
-  if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
-  if (choice.catalogError) {
+  if (catalog.isPending)
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
-        {choice.catalogError.message}
-      </Txt>
+      <div role="status" aria-label="Loading models">
+        <div aria-hidden>
+          <Field>
+            <FieldLabel>{label}</FieldLabel>
+            <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
+          </Field>
+        </div>
+      </div>
+    );
+  if (catalog.catalogError || catalog.models.length === 0) {
+    return (
+      <div className="flex flex-col items-start gap-3">
+        <Txt as="p" variant="caption" role="alert">
+          {catalog.catalogError?.message ?? 'No models are available for this connection yet.'}
+        </Txt>
+        <Button disabled={catalog.retrying} onClick={catalog.retry}>
+          {catalog.retrying && <Spinner size="sm" aria-hidden="true" />}
+          Retry
+        </Button>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ProviderBrandIcon provider={provider.provider} />
-          <Txt as="span" variant="ui-md" className="text-icon6">
-            {providerDisplayName(provider.provider)}
-          </Txt>
-        </div>
-        <Button variant="outline" disabled={choice.saving} onClick={onChangeProvider}>
-          Change provider
-        </Button>
-      </div>
-      <label className="flex flex-col gap-2">
-        <Txt as="span" variant="ui-sm" className="text-icon5">
-          Factory default model
-        </Txt>
+    <div className="flex flex-col gap-3">
+      <Field>
+        <FieldLabel>{label}</FieldLabel>
         <ModelCombobox
-          models={choice.models}
-          value={choice.modelId}
-          onValueChange={choice.setModelId}
-          placeholder="Select a default model…"
-          disabled={choice.saving}
+          models={catalog.models}
+          value={lane.modelId ?? ''}
+          onValueChange={lane.pickModel}
+          placeholder="Select a default model"
         />
-      </label>
-      <SharedCredentialNotice modelId={choice.modelId || undefined} />
-      {choice.error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
-          {choice.error}
+      </Field>
+      {lane.pickUnavailable && (
+        <Txt variant="caption" role="alert">
+          Your previous model is no longer available. Choose another model.
         </Txt>
       )}
-      <Button
-        variant="primary"
-        className="w-full"
-        disabled={!choice.modelId || choice.saving}
-        onClick={() => void choice.save()}
-      >
-        {choice.saving && <Spinner size="sm" aria-label="Saving model defaults" />}
-        Finish setup
-      </Button>
+      {scope === 'org' && <SharedCredentialNotice modelId={lane.modelId} />}
+      {connectedProvider?.connectWithMastraAccount && <MastraGatewayCreditsNotice />}
     </div>
   );
 }

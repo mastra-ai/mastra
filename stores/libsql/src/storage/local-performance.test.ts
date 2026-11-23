@@ -162,7 +162,7 @@ describe('LibSQLStore local performance initialization', () => {
     expect(createTableCountAfterThirdInit).toBe(createTableCount);
   });
 
-  it('does not cache in-memory DB init', async () => {
+  it('caches in-memory DB init like any other local DB', async () => {
     const { client, statements } = createMockClient();
     mockCreateClient.mockReturnValueOnce(client as any);
 
@@ -174,7 +174,7 @@ describe('LibSQLStore local performance initialization', () => {
     const secondCreateTableCount = sqls(statements).filter(sql => /^CREATE TABLE/i.test(sql)).length;
 
     expect(firstCreateTableCount).toBeGreaterThan(0);
-    expect(secondCreateTableCount).toBeGreaterThan(firstCreateTableCount);
+    expect(secondCreateTableCount).toBe(firstCreateTableCount);
   });
 
   it('coalesces concurrent local file DB init', async () => {
@@ -189,5 +189,51 @@ describe('LibSQLStore local performance initialization', () => {
     await store.init();
     const createTableCountAfterCachedInit = sqls(statements).filter(sql => /^CREATE TABLE/i.test(sql)).length;
     expect(createTableCountAfterCachedInit).toBe(createTableCount);
+  });
+});
+
+describe('LibSQLStore single-connection gating', () => {
+  const rawClientOf = (store: LibSQLStore) => (store as unknown as { client: unknown }).client;
+
+  it('uses a remote libsql client as-is', () => {
+    const { client } = createMockClient();
+    mockCreateClient.mockReturnValueOnce(client as any);
+
+    const store = new LibSQLStore({ id: 'gate-remote', url: 'libsql://example.turso.io', authToken: 't' });
+    expect(rawClientOf(store)).toBe(client);
+  });
+
+  it('wraps a pooled local file client so a busy refusal resets its connections and restores their PRAGMAs before later calls', async () => {
+    const { client, statements } = createMockClient();
+    const reconnect = vi.fn();
+    const busy = Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
+    const execute = vi.fn((statement: string) =>
+      statement === 'SELECT busy' ? Promise.reject(busy) : client.execute(statement),
+    );
+    mockCreateClient.mockReturnValueOnce({ ...client, reconnect, closed: false, execute } as any);
+
+    const store = new LibSQLStore({ id: 'gate-file', url: 'file:gate.db' });
+    await (store as unknown as { pragmasReady: Promise<void> }).pragmasReady;
+    const wrapped = rawClientOf(store) as { execute: (sql: string) => Promise<unknown> };
+    expect(reconnect).not.toHaveBeenCalled();
+    const executedBefore = statements.length;
+    await expect(wrapped.execute('SELECT busy')).rejects.toBe(busy);
+    expect(reconnect).toHaveBeenCalledOnce();
+    await wrapped.execute('SELECT after');
+    expect(sqls(statements.slice(executedBefore))).toEqual([...storeLevelPragmas, 'SELECT after']);
+  });
+
+  it('gates :memory: and embedded-replica clients', () => {
+    for (const config of [
+      { id: 'gate-memory', url: ':memory:' },
+      { id: 'gate-shared-memory', url: 'file::memory:?cache=shared' },
+      { id: 'gate-replica', url: 'file:replica.db', syncUrl: 'libsql://db.turso.io', authToken: 't' },
+    ]) {
+      const { client } = createMockClient();
+      mockCreateClient.mockReturnValueOnce(client as any);
+
+      const store = new LibSQLStore(config);
+      expect(rawClientOf(store), config.url).not.toBe(client);
+    }
   });
 });

@@ -14,6 +14,10 @@ class TestExporter implements ObservabilityExporter {
     this.events.push(event);
   }
 
+  async flush(): Promise<void> {
+    // no-op
+  }
+
   async shutdown(): Promise<void> {
     // no-op
   }
@@ -35,6 +39,167 @@ describe('Tracing', () => {
 
   describe('Sensitive Data Filtering', () => {
     describe('SensitiveDataFilter Processor', () => {
+      describe('JSON candidates', () => {
+        const markers = [
+          '[MaxDepth]',
+          '[Circular]',
+          '[Circular Reference]',
+          '[Function]',
+          '[Symbol(x)]',
+          '[REDACTED]',
+          '[APIKEY_1]',
+          '{invalid}',
+        ];
+
+        it.each(markers)('preserves %s without attempting JSON parsing across all fields', marker => {
+          const value = { plain: marker, wrapped: ` \t${marker}\r\n` };
+          const span = new DefaultObservabilityInstance({ name: 'candidates', serviceName: 'test' }).startSpan({
+            type: SpanType.AGENT_RUN,
+            name: 'test',
+          });
+          Object.assign(span, {
+            attributes: value,
+            metadata: value,
+            input: value,
+            output: value,
+            errorInfo: value,
+            requestContext: value,
+          });
+          const parse = vi.spyOn(JSON, 'parse');
+          try {
+            new SensitiveDataFilter().process(span);
+            expect(parse.mock.calls.filter(([text]) => text === marker || text === value.wrapped)).toHaveLength(0);
+          } finally {
+            parse.mockRestore();
+          }
+          for (const field of ['attributes', 'metadata', 'input', 'output', 'errorInfo', 'requestContext'] as const) {
+            expect(span[field]).toEqual(value);
+          }
+        });
+
+        it('does not parse 10,000 serialization markers', () => {
+          const input = Array.from({ length: 10_000 }, () => '[MaxDepth]');
+          const span = new DefaultObservabilityInstance({ name: 'candidates', serviceName: 'test' }).startSpan({
+            type: SpanType.AGENT_RUN,
+            name: 'test',
+          });
+          span.input = input;
+          const parse = vi.spyOn(JSON, 'parse');
+          try {
+            new SensitiveDataFilter().process(span);
+            expect(parse.mock.calls.filter(([text]) => text === '[MaxDepth]')).toHaveLength(0);
+          } finally {
+            parse.mockRestore();
+          }
+          expect(span.input).toEqual(input);
+          expect(input.every(value => value === '[MaxDepth]')).toBe(true);
+        });
+
+        const firstValues = [
+          {},
+          [],
+          'text',
+          -1,
+          ...Array.from({ length: 10 }, (_, i) => i),
+          0.5,
+          1e21,
+          true,
+          false,
+          null,
+        ];
+        it.each(['full', 'partial', 'indexed'] as const)(
+          'redacts every valid first token with %s redaction',
+          redactionStyle => {
+            const processor = new SensitiveDataFilter({ redactionStyle });
+            const expected =
+              redactionStyle === 'full' ? '[REDACTED]' : redactionStyle === 'partial' ? 'sec…123' : '[PASSWORD_1]';
+            const span = new DefaultObservabilityInstance({ name: 'candidates', serviceName: 'test' }).startSpan({
+              type: SpanType.AGENT_RUN,
+              name: 'test',
+            });
+            for (const whitespace of ['', ' ', '\t', '\r', '\n', ' \t\r\n']) {
+              for (const first of firstValues) {
+                span.input = `${whitespace}[${whitespace}${JSON.stringify(first)},{"password":"secret123"}]${whitespace}`;
+                processor.process(span);
+                expect(JSON.parse(span.input)).toEqual([first, { password: expected }]);
+                processor.process(span);
+                expect(JSON.parse(span.input)).toEqual([first, { password: expected }]);
+              }
+              span.input = `${whitespace}{${whitespace}"pass\\u0077ord":"secret123","nested":${JSON.stringify('{"password":"secret123"}')}}${whitespace}`;
+              processor.process(span);
+              expect(JSON.parse(span.input)).toEqual({
+                password: expected,
+                nested: JSON.stringify({ password: expected }),
+              });
+              for (const [open, close] of [
+                ['{', '}'],
+                ['[', ']'],
+              ]) {
+                span.input = `${whitespace}${open}${whitespace}${close}${whitespace}`;
+                processor.process(span);
+                expect(span.input).toBe(open + close);
+              }
+            }
+          },
+        );
+
+        it.each([
+          '[',
+          '{',
+          '[ ',
+          '{ ',
+          '[undefined]',
+          '{unquoted:1}',
+          '[true,]',
+          '{"password":',
+          '[1,',
+          '[\u00a0{"password":"secret123"}]',
+          '\u00a0{"password":"secret123"}',
+          '{"password":"secret123"}\u00a0',
+          'ordinary',
+          'true',
+          '123',
+          '"text"',
+        ])('preserves malformed or scalar input %j', input => {
+          const span = new DefaultObservabilityInstance({ name: 'candidates', serviceName: 'test' }).startSpan({
+            type: SpanType.AGENT_RUN,
+            name: 'test',
+          });
+          span.input = input;
+          new SensitiveDataFilter().process(span);
+          expect(span.input).toBe(input);
+        });
+      });
+      it('redacts sensitive keys inside a provider error body recorded as an object', () => {
+        const mockSpan = {
+          id: 'test-span-err',
+          name: 'test-span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          errorInfo: {
+            message: 'Unauthorized',
+            name: 'AI_APICallError',
+            details: {
+              statusCode: 401,
+              responseBody: { error: { message: 'bad key', api_key: 'sk-live-123' } },
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = new SensitiveDataFilter().process(mockSpan);
+
+        expect(filtered!.errorInfo?.details?.responseBody).toEqual({
+          error: { message: 'bad key', api_key: '[REDACTED]' },
+        });
+      });
+
       it('should redact default sensitive fields (case-insensitive)', () => {
         const processor = new SensitiveDataFilter();
 
@@ -193,8 +358,8 @@ describe('Tracing', () => {
               apiKey: 'nested-secret', // Should be redacted (nested)
               temperature: 0.7,
               auth: {
-                token: 'deeply-nested-secret', // Should be redacted (deeply nested)
-                userId: 'user123', // Should be visible
+                token: 'deeply-nested-secret', // Whole object should be redacted
+                userId: 'user123',
               },
             },
             headers: {
@@ -219,7 +384,7 @@ describe('Tracing', () => {
         // All sensitive fields should be redacted at any level
         expect(attributes?.['apiKey']).toBe('[REDACTED]');
         expect(attributes?.['config']['apiKey']).toBe('[REDACTED]');
-        expect(attributes?.['config']['auth']['token']).toBe('[REDACTED]');
+        expect(attributes?.['config']['auth']).toBe('[REDACTED]');
         expect(attributes?.['headers']['Authorization']).toBe('[REDACTED]');
         expect(attributes?.['results'][0]['secret']).toBe('[REDACTED]');
         expect(attributes?.['results'][1]['password']).toBe('[REDACTED]');
@@ -227,10 +392,37 @@ describe('Tracing', () => {
         // Non-sensitive fields should be visible
         expect(attributes?.['model']).toBe('gpt-4');
         expect(attributes?.['config']['temperature']).toBe(0.7);
-        expect(attributes?.['config']['auth']['userId']).toBe('user123');
         expect(attributes?.['headers']['Content-Type']).toBe('application/json');
         expect(attributes?.['results'][0]['data']).toBe('visible');
         expect(attributes?.['results'][1]['value']).toBe(42);
+      });
+
+      it('redacts object and array values under a sensitive key in every style', () => {
+        for (const redactionStyle of ['full', 'partial', 'indexed'] as const) {
+          const span = {
+            id: 'span-obj',
+            name: 'test-span',
+            type: SpanType.MODEL_GENERATION,
+            startTime: new Date(),
+            traceId: 'trace-obj',
+            trace: { traceId: 'trace-obj' } as any,
+            attributes: {
+              secret: { value: 'raw-secret', nested: { more: 'raw' } },
+              credential: ['raw-1', 'raw-2'],
+            },
+            observabilityInstance: {} as any,
+            end: () => {},
+            error: () => {},
+            update: () => {},
+            createChildSpan: () => ({}) as any,
+          } as any;
+
+          const attributes = new SensitiveDataFilter({ redactionStyle }).process(span)!.attributes as any;
+
+          expect(attributes.secret).toBe('[REDACTED]');
+          expect(attributes.credential).toBe('[REDACTED]');
+          expect(JSON.stringify(attributes)).not.toContain('raw');
+        }
       });
 
       it('should redact structured data in JSON strings', () => {
@@ -696,6 +888,47 @@ describe('Tracing', () => {
     });
 
     describe('as part of the default config', () => {
+      it('exports serializer-generated markers without parsing them on start and end', async () => {
+        const tracing = new DefaultObservabilityInstance({
+          serviceName: 'test-tracing',
+          name: 'marker-integration',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          serializationOptions: { maxDepth: 5 },
+          exporters: [testExporter],
+          spanOutputProcessors: [new SensitiveDataFilter()],
+        });
+        const nested = { a: { b: { c: { d: { e: { f: { value: 'deep' } } } } } } };
+        const input = { password: 'secret123', nested };
+        const output = { token: 'live-token', nested };
+        const requestContext = new RequestContext();
+        requestContext.set('token', 'context-token');
+        requestContext.set('nested', nested);
+        const originalInput = structuredClone(input);
+        const originalOutput = structuredClone(output);
+        const parse = vi.spyOn(JSON, 'parse');
+        try {
+          const span = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent', input, requestContext });
+          span.end({ output });
+          expect(testExporter.events).toHaveLength(2);
+          for (const event of testExporter.events) {
+            expect(event.exportedSpan.input).toMatchObject({ password: '[REDACTED]' });
+            expect(JSON.stringify(event.exportedSpan.input)).toContain('[MaxDepth]');
+            expect(event.exportedSpan.requestContext).toMatchObject({ token: '[REDACTED]' });
+            expect(JSON.stringify(event.exportedSpan.requestContext)).toContain('[MaxDepth]');
+          }
+          expect(testExporter.events[1].exportedSpan.output).toMatchObject({ token: '[REDACTED]' });
+          expect(JSON.stringify(testExporter.events[1].exportedSpan.output)).toContain('[MaxDepth]');
+          expect(parse.mock.calls.filter(([text]) => text === '[MaxDepth]')).toHaveLength(0);
+          expect(input).toEqual(originalInput);
+          expect(output).toEqual(originalOutput);
+          expect(requestContext.get('nested')).toEqual(originalInput.nested);
+          expect(requestContext.get('token')).toBe('context-token');
+        } finally {
+          parse.mockRestore();
+          await tracing.shutdown();
+        }
+      });
+
       it('should keep indexed tokens stable across span events', () => {
         const tracing = new DefaultObservabilityInstance({
           serviceName: 'test-tracing',

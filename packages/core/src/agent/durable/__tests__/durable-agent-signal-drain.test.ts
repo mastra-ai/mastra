@@ -19,10 +19,15 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
+import type { ProcessOutputResultArgs } from '../../../processors';
+import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import type { CreatedAgentSignal } from '../../signals';
 import { createSignal } from '../../signals';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
 
 // ----------------------------------------------------------------------------
@@ -111,7 +116,7 @@ function makeSimpleTextModel() {
 
 function createTestSignal(
   text: string,
-  overrides?: Partial<{ type: 'user' | 'state' | 'reactive' | 'notification' }>,
+  overrides?: Partial<{ type: 'user' | 'state' | 'reactive' | 'system-reminder' | 'notification' }>,
 ): CreatedAgentSignal {
   return createSignal({
     type: overrides?.type ?? 'user',
@@ -124,7 +129,7 @@ function createTestSignal(
 // Tests
 // ----------------------------------------------------------------------------
 
-describe('DurableAgent signal drain', () => {
+describe.each([false, true])('DurableAgent signal drain (excluded: %s)', excluded => {
   let pubsub: EventEmitterPubSub;
 
   beforeEach(() => {
@@ -138,116 +143,134 @@ describe('DurableAgent signal drain', () => {
   });
 
   describe('initial signal echoes (Bug 11)', () => {
-    it('echoes input signal messages to the client stream on the first model request', async () => {
-      const agent = new Agent({
-        id: 'signal-echo-agent',
-        name: 'signal-echo-agent',
-        instructions: 'You are helpful.',
-        model: makeSimpleTextModel() as LanguageModelV2,
-      });
+    it.each(['user', 'reactive', 'system-reminder'] as const)(
+      'applies visibility to initial %s signal echoes',
+      async type => {
+        const agent = new Agent({
+          id: 'signal-echo-agent',
+          name: 'signal-echo-agent',
+          instructions: 'You are helpful.',
+          model: makeSimpleTextModel() as LanguageModelV2,
+        });
 
-      const durableAgent = createDurableAgent({ agent, pubsub });
+        const durableAgent = createDurableAgent({ agent, pubsub });
 
-      // Create signals that simulate what getInitialSignalEchoes would return
-      // (signals already in the messageList with role 'signal' from persisted history)
-      const echoSignals = [createTestSignal('echo one'), createTestSignal('echo two')];
+        // Create signals that simulate what getInitialSignalEchoes would return
+        // (signals already in the messageList with role 'signal' from persisted history)
+        const echoSignals = [createTestSignal('echo one', { type }), createTestSignal('echo two', { type })];
 
-      // Intercept the registry entry to inject initialSignalEchoes
-      const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
-      let intercepted = false;
-      vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
-        const entry = originalGet(runId);
-        if (entry && !intercepted) {
-          intercepted = true;
-          entry.initialSignalEchoes = [...echoSignals];
+        // Intercept the registry entry to inject initialSignalEchoes
+        const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+        let intercepted = false;
+        vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
+          const entry = originalGet(runId);
+          if (entry && !intercepted) {
+            intercepted = true;
+            entry.initialSignalEchoes = [...echoSignals];
+          }
+          return entry;
+        });
+
+        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+          maxSteps: 3,
+          hideSignals: excluded ? [type] : undefined,
+        });
+
+        const chunks: any[] = [];
+        for await (const chunk of fullStream) {
+          chunks.push(chunk);
         }
-        return entry;
-      });
+        await cleanup?.();
 
-      const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 3 });
+        // Find the signal data parts in the stream — echoed signals should appear
+        const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
-      const chunks: any[] = [];
-      for await (const chunk of fullStream) {
-        chunks.push(chunk);
-      }
-      await cleanup?.();
-
-      // Find the signal data parts in the stream — echoed signals should appear
-      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
-
-      expect(signalChunks.length).toBe(2);
-      expect(signalChunks[0].data.contents).toBe('echo one');
-      expect(signalChunks[1].data.contents).toBe('echo two');
-    });
+        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(excluded ? [] : ['echo one', 'echo two']);
+      },
+    );
   });
 
   describe('pre-run signal drain', () => {
-    it('drains pre-run signals queued before the first model request', async () => {
-      const agent = new Agent({
-        id: 'prerun-drain-agent',
-        name: 'prerun-drain-agent',
-        instructions: 'You are helpful.',
-        model: makeSimpleTextModel() as LanguageModelV2,
-      });
+    it.each(['user', 'reactive', 'system-reminder'] as const)(
+      'drains pre-run %s signals with matching visibility',
+      async type => {
+        const model = makeSimpleTextModel();
+        const agent = new Agent({
+          id: 'prerun-drain-agent',
+          name: 'prerun-drain-agent',
+          instructions: 'You are helpful.',
+          model,
+        });
 
-      const durableAgent = createDurableAgent({ agent, pubsub });
+        const durableAgent = createDurableAgent({ agent, pubsub });
 
-      // Pre-run signals: queue them via the registry entry's drainPendingSignals
-      // by monkey-patching the registry entry after preparation
-      const preRunSignals = [createTestSignal('prerun signal one'), createTestSignal('prerun signal two')];
+        // Pre-run signals: queue them via the registry entry's drainPendingSignals
+        // by monkey-patching the registry entry after preparation
+        const preRunSignals = [
+          createTestSignal('prerun signal one', { type }),
+          createTestSignal('prerun signal two', { type }),
+        ];
 
-      // We need to intercept the registry entry to inject pre-run signals
-      const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
-      let intercepted = false;
-      const getInterceptor = vi.fn((runId: string) => {
-        const entry = originalGet(runId);
-        if (entry && !intercepted) {
-          intercepted = true;
-          const originalDrain = entry.drainPendingSignals;
-          let preRunDrained = false;
-          entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-            if (scope === 'pre-run' && !preRunDrained) {
-              preRunDrained = true;
-              return preRunSignals;
-            }
-            return originalDrain?.(scope) ?? [];
-          };
+        // We need to intercept the registry entry to inject pre-run signals
+        const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+        let intercepted = false;
+        const getInterceptor = vi.fn((runId: string) => {
+          const entry = originalGet(runId);
+          if (entry && !intercepted) {
+            intercepted = true;
+            const originalDrain = entry.drainPendingSignals;
+            let preRunDrained = false;
+            entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
+              if (scope === 'pre-run' && !preRunDrained) {
+                preRunDrained = true;
+                return preRunSignals;
+              }
+              return originalDrain?.(scope) ?? [];
+            };
+          }
+          return entry;
+        });
+        vi.spyOn(globalRunRegistry, 'get').mockImplementation(getInterceptor);
+
+        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+          maxSteps: 3,
+          hideSignals: excluded ? [type] : undefined,
+        });
+
+        const chunks: any[] = [];
+        for await (const chunk of fullStream) {
+          chunks.push(chunk);
         }
-        return entry;
-      });
-      vi.spyOn(globalRunRegistry, 'get').mockImplementation(getInterceptor);
+        await cleanup?.();
 
-      const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 3 });
+        // Find the signal data parts in the stream
+        const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
-      const chunks: any[] = [];
-      for await (const chunk of fullStream) {
-        chunks.push(chunk);
-      }
-      await cleanup?.();
-
-      // Find the signal data parts in the stream
-      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
-
-      // Pre-run signals should appear in the stream
-      expect(signalChunks.length).toBe(2);
-      expect(signalChunks[0].data.contents).toBe('prerun signal one');
-      expect(signalChunks[1].data.contents).toBe('prerun signal two');
-    });
+        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(
+          excluded ? [] : ['prerun signal one', 'prerun signal two'],
+        );
+        expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain('prerun signal one');
+        expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain('prerun signal two');
+      },
+    );
   });
 
   describe('inter-iteration signal drain (Bug 5)', () => {
-    it('drains pending signals between iterations and forces continuation', async () => {
+    it.each(
+      (['user', 'reactive', 'system-reminder'] as const).flatMap(type => [1, 2].map(drainAt => ({ type, drainAt }))),
+    )('drains pending $type signals at drain $drainAt with matching visibility', async ({ type, drainAt }) => {
       const myTool = {
         description: 'A tool',
         parameters: z.object({ x: z.number() }),
         execute: async ({ x }: { x: number }) => `result-${x}`,
       };
 
+      const model = makeToolThenStopModel();
       const agent = new Agent({
         id: 'inter-iter-drain-agent',
         name: 'inter-iter-drain-agent',
         instructions: 'You are helpful.',
-        model: makeToolThenStopModel() as LanguageModelV2,
+        model,
         tools: { myTool },
       });
 
@@ -255,22 +278,22 @@ describe('DurableAgent signal drain', () => {
 
       // We need signals to be available when drained between iterations.
       // We'll inject them via the registry entry after the first iteration.
-      const pendingSignals = [createTestSignal('inter-iter signal')];
+      const pendingSignals = [createTestSignal('inter-iter signal', { type })];
 
       const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
       let drainCallCount = 0;
+      let installedDrain = false;
       vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
         const entry = originalGet(runId);
-        if (entry) {
+        if (entry && !installedDrain) {
+          installedDrain = true;
           const originalDrain = entry.drainPendingSignals;
           entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-            if (scope === 'pending') {
+            // scope defaults to 'pending' in the real runtime (LoopRuntime contract)
+            if ((scope ?? 'pending') === 'pending') {
               drainCallCount++;
-              // Return signals on the first pending drain (within-iteration
-              // signal-drain step runs first, then predicate). We fire on the
-              // first drain call so the signal is consumed in one of the two
-              // drain sites.
-              if (drainCallCount === 1) {
+              // Exercise both producers: the signal-drain step, then the loop predicate.
+              if (drainCallCount === drainAt) {
                 return pendingSignals;
               }
             }
@@ -280,7 +303,10 @@ describe('DurableAgent signal drain', () => {
         return entry;
       });
 
-      const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 5 });
+      const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+        maxSteps: 5,
+        hideSignals: excluded ? [type] : undefined,
+      });
 
       const chunks: any[] = [];
       for await (const chunk of fullStream) {
@@ -291,63 +317,139 @@ describe('DurableAgent signal drain', () => {
       // Find the signal data parts in the stream
       const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
-      // The inter-iteration signal should appear in the stream
-      expect(signalChunks.length).toBe(1);
-      expect(signalChunks[0].data.contents).toBe('inter-iter signal');
+      expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(excluded ? [] : ['inter-iter signal']);
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
 
       // The drain function should have been called at least once
       expect(drainCallCount).toBeGreaterThanOrEqual(1);
     });
 
-    it('forces loop continuation when signals are drained even if LLM would have stopped', async () => {
-      // Model always produces text (no tool calls) → normally single iteration
-      let callNum = 0;
-      const model = new MockLanguageModelV2({
-        doStream: async () => {
-          callNum++;
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: `resp-${callNum}`, modelId: 'mock-model', timestamp: new Date(0) },
-              { type: 'text-start', id: `text-${callNum}` },
-              { type: 'text-delta', id: `text-${callNum}`, delta: `Response ${callNum}` },
-              { type: 'text-end', id: `text-${callNum}` },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
-              },
-            ]),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          };
+    it.each(['user', 'reactive', 'system-reminder'] as const)(
+      'forces continuation for %s signals and emits them',
+      async type => {
+        // Model always produces text (no tool calls) → normally single iteration
+        let callNum = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async () => {
+            callNum++;
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: `resp-${callNum}`, modelId: 'mock-model', timestamp: new Date(0) },
+                { type: 'text-start', id: `text-${callNum}` },
+                { type: 'text-delta', id: `text-${callNum}`, delta: `Response ${callNum}` },
+                { type: 'text-end', id: `text-${callNum}` },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        });
+
+        const agent = new Agent({
+          id: 'force-continue-agent',
+          name: 'force-continue-agent',
+          instructions: 'You are helpful.',
+          model: model as LanguageModelV2,
+        });
+
+        const durableAgent = createDurableAgent({ agent, pubsub });
+
+        // Inject a pending signal after the first iteration — this should force
+        // the loop to continue even though the model said "stop".
+        const pendingSignals = [createTestSignal('forced continuation signal', { type })];
+        const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+        let pendingDrainCount = 0;
+        vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
+          const entry = originalGet(runId);
+          if (entry) {
+            const originalDrain = entry.drainPendingSignals;
+            entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
+              // scope defaults to 'pending' in the real runtime (LoopRuntime contract)
+              if ((scope ?? 'pending') === 'pending') {
+                pendingDrainCount++;
+                // Return signal on the first pending drain only
+                if (pendingDrainCount === 1) {
+                  return pendingSignals;
+                }
+              }
+              return originalDrain?.(scope) ?? [];
+            };
+          }
+          return entry;
+        });
+
+        const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+          maxSteps: 5,
+          hideSignals: excluded ? [type] : undefined,
+        });
+
+        const chunks: any[] = [];
+        for await (const chunk of fullStream) {
+          chunks.push(chunk);
+        }
+        await cleanup?.();
+
+        // The model should have been called at least twice because the signal
+        // forced continuation after the first "stop" response.
+        expect(callNum).toBeGreaterThanOrEqual(2);
+
+        const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
+        expect(signalChunks.map(chunk => chunk.data.contents)).toEqual(excluded ? [] : ['forced continuation signal']);
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('forced continuation signal');
+      },
+    );
+
+    it('saves output-processor data on the last reply when the predicate drain rotates the id', async () => {
+      // A signal drained on the run's last allowed step rotates the response
+      // message id, then the loop stops before any reply uses it. The
+      // finish-time writer must still land on the last real assistant reply
+      // instead of saving the data part as its own message.
+      const memory = new MockMemory();
+      const threadId = `thread-fallback-drain-${excluded}`;
+      const resourceId = 'resource-fallback-drain';
+
+      const receiptWriter = {
+        id: 'order-receipt',
+        processOutputResult: async ({ writer, messages }: ProcessOutputResultArgs) => {
+          await writer?.custom({ type: 'data-order-card', data: { orderId: 'A-1' } });
+          return messages;
         },
-      });
+      };
 
       const agent = new Agent({
-        id: 'force-continue-agent',
-        name: 'force-continue-agent',
+        id: 'fallback-drain-agent',
+        name: 'fallback-drain-agent',
         instructions: 'You are helpful.',
-        model: model as LanguageModelV2,
+        model: makeSimpleTextModel(),
+        memory,
+        outputProcessors: [receiptWriter],
       });
 
       const durableAgent = createDurableAgent({ agent, pubsub });
 
-      // Inject a pending signal after the first iteration — this should force
-      // the loop to continue even though the model said "stop".
-      const pendingSignals = [createTestSignal('forced continuation signal')];
+      // Drain 1 is the step-side drain before the model runs; drain 2 is the
+      // loop predicate, reached after the only allowed step.
       const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+      let installedDrain = false;
       let pendingDrainCount = 0;
+      let drainedAtPredicate = false;
       vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
         const entry = originalGet(runId);
-        if (entry) {
+        if (entry && !installedDrain) {
+          installedDrain = true;
           const originalDrain = entry.drainPendingSignals;
           entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-            if (scope === 'pending') {
+            if ((scope ?? 'pending') === 'pending') {
               pendingDrainCount++;
-              // Return signal on the first pending drain only
-              if (pendingDrainCount === 1) {
-                return pendingSignals;
+              if (pendingDrainCount === 2) {
+                drainedAtPredicate = true;
+                return [createTestSignal('late signal')];
               }
             }
             return originalDrain?.(scope) ?? [];
@@ -356,22 +458,186 @@ describe('DurableAgent signal drain', () => {
         return entry;
       });
 
-      const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 5 });
-
-      const chunks: any[] = [];
-      for await (const chunk of fullStream) {
-        chunks.push(chunk);
+      const { fullStream, cleanup } = await durableAgent.stream('Hello', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 1,
+      });
+      for await (const _chunk of fullStream) {
+        // drain
       }
       await cleanup?.();
 
-      // The model should have been called at least twice because the signal
-      // forced continuation after the first "stop" response.
-      expect(callNum).toBeGreaterThanOrEqual(2);
+      // Guard: the signal was drained by the loop predicate after the last
+      // allowed step, so the response id rotated with no reply to carry it.
+      expect(drainedAtPredicate).toBe(true);
 
-      // The signal should appear in the stream
-      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
-      expect(signalChunks.length).toBe(1);
-      expect(signalChunks[0].data.contents).toBe('forced continuation signal');
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId });
+        expect(messages.filter(message => message.role === 'assistant')).toHaveLength(1);
+      });
+
+      const { messages } = await memory.recall({ threadId, resourceId });
+      const [reply] = messages.filter(message => message.role === 'assistant');
+      const parts = reply?.content.parts ?? [];
+
+      expect(parts.some(part => part.type === 'text')).toBe(true);
+      expect(parts.some(part => part.type === 'data-order-card')).toBe(true);
     });
   });
+});
+
+// The evented engine hands the loop predicate the iteration body's result state;
+// a transcript the predicate rewrites there must reach the next iteration.
+describe('EventedAgent inter-iteration signal drain', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('carries a signal drained by the loop predicate into the next model call', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const model = makeToolThenStopModel();
+    const agent = new Agent({
+      id: 'evented-inter-iter-drain-agent',
+      name: 'evented-inter-iter-drain-agent',
+      instructions: 'You are helpful.',
+      model,
+      tools: {
+        myTool: {
+          description: 'A tool',
+          parameters: z.object({ x: z.number() }),
+          execute: async ({ x }: { x: number }) => `result-${x}`,
+        },
+      },
+    });
+    const eventedAgent = createEventedAgent({ agent, pubsub });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+      agents: { 'evented-inter-iter-drain-agent': eventedAgent as any },
+    });
+
+    const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+    let drainCallCount = 0;
+    let installedDrain = false;
+    vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
+      const entry = originalGet(runId);
+      if (entry && !installedDrain) {
+        installedDrain = true;
+        const originalDrain = entry.drainPendingSignals;
+        entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
+          // The second pending drain is the loop predicate's, after the first iteration.
+          if ((scope ?? 'pending') === 'pending' && ++drainCallCount === 2) {
+            return [createTestSignal('inter-iter signal')];
+          }
+          return originalDrain?.(scope) ?? [];
+        };
+      }
+      return entry;
+    });
+
+    try {
+      const { fullStream, cleanup } = await eventedAgent.stream('Hello', { maxSteps: 5 });
+      for await (const _chunk of fullStream) {
+        // drain
+      }
+      cleanup?.();
+
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
+    } finally {
+      await mastra.stopWorkers();
+      await pubsub.close();
+    }
+  });
+});
+
+describe.each(['durable', 'evented', 'evented-split'] as const)('%s pending queue notifications', engine => {
+  it('notifies after real admission and tears down subscriptions with the owning run', async () => {
+    let releaseRequest!: () => void;
+    let requestStarted = false;
+    let requestGate = new Promise<void>(resolve => {
+      releaseRequest = resolve;
+    });
+    const baseAgent = new Agent({
+      id: crypto.randomUUID(),
+      name: 'Pending queue owner',
+      instructions: 'Test',
+      memory: new MockMemory(),
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          requestStarted = true;
+          await requestGate;
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'answer' },
+              { type: 'text-delta', id: 'answer', delta: 'Done' },
+              { type: 'text-end', id: 'answer' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const customPubsub = engine === 'evented-split' ? new EventEmitterPubSub() : undefined;
+    const agent =
+      engine === 'durable'
+        ? createDurableAgent({ agent: baseAgent })
+        : createEventedAgent({ agent: baseAgent, pubsub: customPubsub });
+    const mastra = new Mastra({ agents: { owner: agent }, storage: new InMemoryStore(), logger: false });
+    const workflowEvents: string[] = [];
+    await mastra.pubsub.subscribe('workflows', event => workflowEvents.push(event.type));
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    const options = { memory: { thread: scope.threadId, resource: scope.resourceId }, maxSteps: 4 };
+    const stream = await agent.stream('Hello', options);
+    const consumption = stream.output.consumeStream();
+    try {
+      await vi.waitFor(() => expect(requestStarted).toBe(true));
+      const entry = globalRunRegistry.get(stream.runId)!;
+      expect(entry.subscribePendingSignals).toBeTypeOf('function');
+      const notifications = vi.fn();
+      const unsubscribe = entry.subscribePendingSignals!(notifications);
+      const retained = vi.fn();
+      entry.subscribePendingSignals!(retained);
+      const first = await agent.sendSignal({ type: 'user', contents: 'QUEUED_FIRST' }, scope);
+      await expect(first.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      expect(notifications).toHaveBeenCalledTimes(1);
+      expect(retained).toHaveBeenCalledTimes(1);
+      unsubscribe();
+      unsubscribe();
+      const second = await agent.sendSignal({ type: 'user', contents: 'QUEUED_SECOND' }, scope);
+      await expect(second.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      expect(notifications).toHaveBeenCalledTimes(1);
+      expect(retained).toHaveBeenCalledTimes(2);
+      releaseRequest();
+      await consumption;
+      await entry.workflowExecution;
+      stream.cleanup();
+      expect(globalRunRegistry.get(stream.runId)).toBeUndefined();
+
+      requestGate = new Promise<void>(resolve => {
+        releaseRequest = resolve;
+      });
+      const next = await agent.stream('Next run', options);
+      const nextConsumption = next.output.consumeStream();
+      const nextSignal = await agent.sendSignal({ type: 'user', contents: 'QUEUED_NEXT_RUN' }, scope);
+      await expect(nextSignal.accepted).resolves.toMatchObject({ action: 'deliver', runId: next.runId });
+      expect(retained).toHaveBeenCalledTimes(2);
+      expect(notifications).toHaveBeenCalledTimes(1);
+      releaseRequest();
+      await nextConsumption;
+      await globalRunRegistry.get(next.runId)?.workflowExecution;
+      next.cleanup();
+      if (engine !== 'durable') {
+        expect((agent.getWorkflow() as { engineType?: string }).engineType).toBe('evented');
+        expect(workflowEvents).toContain('workflow.start');
+        expect(workflowEvents.some(type => type.startsWith('workflow.step'))).toBe(true);
+      }
+    } finally {
+      releaseRequest();
+      stream.cleanup();
+      await customPubsub?.close();
+    }
+  }, 30_000);
 });

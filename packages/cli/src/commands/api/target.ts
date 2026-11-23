@@ -1,7 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'dotenv';
-import { getToken, type LoginOptions } from '../auth/credentials.js';
+import { isEuRegion } from '../../utils/platform-region.js';
+import { MASTRA_PLATFORM_API_URL } from '../auth/client.js';
+import { getCurrentOrgId, getToken } from '../auth/credentials.js';
+import type { LoginOptions } from '../auth/credentials.js';
 import { fetchServerProjects } from '../server/platform-api.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 import { ApiCliError } from './errors.js';
@@ -11,6 +14,7 @@ const LOCAL_URL = 'http://localhost:4111';
 const OBSERVABILITY_URL = 'https://observability.mastra.ai';
 const OBSERVABILITY_EU_URL = 'https://observability.eu.mastra.ai';
 const TRUSTED_OBSERVABILITY_ORIGINS = new Set([OBSERVABILITY_URL, OBSERVABILITY_EU_URL]);
+const REGION_LOOKUP_TIMEOUT_MS = 5_000;
 const LEARNING_URL = 'https://output.signals.mastra.ai';
 const AUTHORIZATION_HEADER = 'Authorization';
 const PROJECT_ID_HEADER = 'X-Mastra-Project-Id';
@@ -55,11 +59,23 @@ export async function resolveTarget(
         headers[AUTHORIZATION_HEADER] = `Bearer ${token}`;
       }
     }
+    if (
+      isFactoryPath(path) &&
+      isPlatformHostedFactoryInstance(options.url) &&
+      !getHeader(customHeaders, ORGANIZATION_ID_HEADER)
+    ) {
+      const organizationId = await getCurrentOrgId();
+      if (organizationId) {
+        headers[ORGANIZATION_ID_HEADER] = organizationId;
+      }
+    }
     return { baseUrl: options.url, headers, timeoutMs, apiPrefix };
   }
 
   if (isObservabilityPath(path)) {
-    return resolvePlatformServiceTarget(OBSERVABILITY_URL, customHeaders, timeoutMs);
+    return resolvePlatformServiceTarget(OBSERVABILITY_URL, customHeaders, timeoutMs, {
+      resolveObservabilityRegion: fetchFn,
+    });
   }
 
   if (isLearningPath(path)) {
@@ -92,7 +108,13 @@ export async function resolveTarget(
 
     return {
       baseUrl,
-      headers: { Authorization: `Bearer ${token}`, ...customHeaders },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(isFactoryPath(path) && config.organizationId && !getHeader(customHeaders, ORGANIZATION_ID_HEADER)
+          ? { [ORGANIZATION_ID_HEADER]: config.organizationId }
+          : {}),
+        ...customHeaders,
+      },
       timeoutMs,
       apiPrefix,
     };
@@ -112,7 +134,11 @@ async function resolvePlatformServiceTarget(
   baseUrl: string,
   customHeaders: Record<string, string>,
   timeoutMs: number,
-  options: { includeOrganization?: boolean } = {},
+  options: {
+    includeOrganization?: boolean;
+    /** Pick the observability host for the project's region, using this fetch for the lookup. */
+    resolveObservabilityRegion?: typeof fetch;
+  } = {},
 ): Promise<ResolvedTarget> {
   const env = loadDotenv(process.cwd());
   const explicitAuthorization = getHeader(customHeaders, AUTHORIZATION_HEADER);
@@ -152,6 +178,30 @@ async function resolvePlatformServiceTarget(
       ? { ...headers, [AUTHORIZATION_HEADER]: `Bearer ${cliToken}` }
       : undefined;
 
+  if (options.resolveObservabilityRegion) {
+    const endpoint = trustedObservabilityOrigin(
+      process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT,
+    );
+    const authorization = getHeader(headers, AUTHORIZATION_HEADER);
+    if (endpoint) {
+      baseUrl = endpoint;
+    } else if (authorization && projectId) {
+      // User tokens need the org header to read the project; API keys are bound to their org and ignore it.
+      const organizationId =
+        explicitOrganizationId ||
+        envOrganizationId ||
+        projectConfig?.organizationId ||
+        (await getCurrentOrgId()) ||
+        undefined;
+      baseUrl = await lookupObservabilityUrl(options.resolveObservabilityRegion, {
+        authorization,
+        projectId,
+        organizationId,
+        timeoutMs: Math.min(timeoutMs, REGION_LOOKUP_TIMEOUT_MS),
+      });
+    }
+  }
+
   return {
     baseUrl,
     headers,
@@ -160,12 +210,72 @@ async function resolvePlatformServiceTarget(
   };
 }
 
-function isTrustedObservabilityUrl(url: string): boolean {
+/**
+ * Resolves the observability host from the project's production (or first)
+ * environment region, matching the Platform UI. Falls back to the US host when
+ * the lookup fails so existing US projects keep working.
+ */
+async function lookupObservabilityUrl(
+  fetchFn: typeof fetch,
+  params: { authorization: string; projectId: string; organizationId?: string; timeoutMs: number },
+): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), params.timeoutMs);
   try {
-    return TRUSTED_OBSERVABILITY_ORIGINS.has(new URL(url).origin);
-  } catch {
-    return false;
+    const response = await fetchFn(
+      `${MASTRA_PLATFORM_API_URL}/v1/projects/${encodeURIComponent(params.projectId)}/environments`,
+      {
+        method: 'GET',
+        headers: {
+          [AUTHORIZATION_HEADER]: params.authorization,
+          ...(params.organizationId ? { 'x-organization-id': params.organizationId } : {}),
+        },
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      await response.body?.cancel();
+      warnRegionFallback(`status ${response.status}`);
+      return OBSERVABILITY_URL;
+    }
+    const body = (await response.json()) as { environments?: { type?: string; region?: string }[] };
+    const environments = body.environments ?? [];
+    const environment = environments.find(candidate => candidate.type === 'production') ?? environments[0];
+    return isEuRegion(environment?.region) ? OBSERVABILITY_EU_URL : OBSERVABILITY_URL;
+  } catch (error) {
+    warnRegionFallback(
+      controller.signal.aborted
+        ? `timed out after ${params.timeoutMs}ms`
+        : error instanceof Error
+          ? error.message
+          : String(error),
+    );
+    return OBSERVABILITY_URL;
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+/** Goes to stderr so stdout stays parseable JSON. */
+function warnRegionFallback(reason: string): void {
+  console.error(
+    `Warning: could not determine project region (${reason}); defaulting to US observability. ` +
+      'Set MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT or pass --url to override.',
+  );
+}
+
+function trustedObservabilityOrigin(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const origin = new URL(url).origin;
+    return TRUSTED_OBSERVABILITY_ORIGINS.has(origin) ? origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isTrustedObservabilityUrl(url: string): boolean {
+  return trustedObservabilityOrigin(url) !== undefined;
 }
 
 /**
@@ -193,12 +303,27 @@ export function isPlatformHostedInstance(url: string): boolean {
   );
 }
 
+function isPlatformHostedFactoryInstance(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    return hostname.endsWith('.factory.mastra.cloud') || hostname.endsWith('.factory.staging.mastra.cloud');
+  } catch {
+    return false;
+  }
+}
+
 function isObservabilityPath(path?: string): boolean {
   return path?.startsWith('/observability/') || path === '/observability';
 }
 
 function isLearningPath(path?: string): boolean {
   return path?.startsWith('/learning/') || path === '/learning';
+}
+
+function isFactoryPath(path?: string): boolean {
+  return path?.startsWith('/web/factory/') || path === '/web/factory';
 }
 
 function loadDotenv(cwd: string): Record<string, string> {

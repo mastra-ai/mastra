@@ -1,12 +1,10 @@
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Brain, MessageSquare } from 'lucide-react';
-
 import { useChatRuntime } from '../../context/useChatRuntime';
-import type { OMWork } from '../../services/runtime';
-import { omWork } from '../../services/runtime';
+import type { OMWork } from '../../services/om';
+import { omWork } from '../../services/om';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 
 const messageLabel: Record<OMWork, string> = {
   idle: 'Message window until next observation',
@@ -24,11 +22,6 @@ function reading(tokens: number, threshold: number) {
   return `${formatCompactTokens(tokens)} of ${formatCompactTokens(threshold)}k`;
 }
 
-/**
- * Observational-memory budgets: the message window until the next observation
- * and the observations accumulated until the next reflection. Each ring shows
- * how full its budget is, and shimmers while memory works on it.
- */
 export function OperationalMemoryStatus() {
   const runtime = useChatRuntime();
   const om = runtime.omProgress;
@@ -40,7 +33,7 @@ export function OperationalMemoryStatus() {
 
   const messageTone = work.messages === 'blocking' ? 'warning' : 'messages';
   const observationTone = work.observations === 'blocking' ? 'warning' : 'memory';
-  /* A button hides its subtree from assistive tech, so each ring's own label and reading have to be spoken here. */
+  // Buttons hide descendant semantics, so the trigger names both budgets.
   const spoken = [
     showMsg && `${messageLabel[work.messages]}, ${reading(om.pendingTokens, om.threshold)}`,
     showMem && `${observationLabel[work.observations]}, ${reading(om.observationTokens, om.reflectionThreshold)}`,
@@ -48,10 +41,7 @@ export function OperationalMemoryStatus() {
 
   return (
     <Popover>
-      <PopoverTrigger
-        aria-label={`Memory budgets: ${spoken.join('. ')}`}
-        className={cn(buttonVariants({ variant: 'ghost', size: 'xs' }), 'gap-3')}
-      >
+      <PopoverTrigger variant="ghost" size="sm" aria-label={`Memory budgets: ${spoken.join('. ')}`} className="gap-3">
         {showMsg && (
           <TokenBudget
             label={messageLabel[work.messages]}
@@ -75,7 +65,7 @@ export function OperationalMemoryStatus() {
         {showMsg && (
           <TokenBudgetDetail
             description="Read into memory once full"
-            icon={<MessageSquare />}
+            icon={<IconChatBubble7 />}
             label="Messages"
             threshold={om.threshold}
             tokens={om.pendingTokens}
@@ -85,7 +75,7 @@ export function OperationalMemoryStatus() {
         {showMem && (
           <TokenBudgetDetail
             description="Consolidated into a reflection once full"
-            icon={<Brain />}
+            icon={<IconBrain />}
             label="Observations"
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}

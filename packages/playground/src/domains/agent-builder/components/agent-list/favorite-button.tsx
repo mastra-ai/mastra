@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Star } from 'lucide-react';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import type { MouseEvent } from 'react';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { useToggleStoredAgentFavorite } from '@/domains/agent-builder/hooks/use-stored-agent-favorite';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { isAuthenticated } from '@/domains/auth/types';
 
 export interface FavoriteButtonProps {
   agentId: string;
@@ -16,11 +16,6 @@ export interface FavoriteButtonProps {
   /** Show the count badge next to the icon. Defaults to true. */
   showCount?: boolean;
 }
-
-const iconSizes = {
-  sm: 14,
-  md: 16,
-} as const;
 
 /**
  * Toggles the favorite state for a stored agent. Renders nothing if the EE
@@ -63,17 +58,18 @@ export const FavoriteButton = ({
         if (!signedIn) return;
         toggle.mutate({ favorited: !isFavorited });
       }}
-      className={cn('shrink-0', signedIn ? 'cursor-pointer' : 'cursor-not-allowed', className)}
+      className={cn(
+        'shrink-0',
+        signedIn ? 'cursor-pointer' : 'cursor-not-allowed',
+        isFavorited && '[&_svg]:text-badge-amber-indicator',
+        className,
+      )}
     >
-      <Star
-        size={iconSizes[size]}
-        className={cn('shrink-0', isFavorited && 'fill-current text-yellow-300')}
-        aria-hidden
-      />
+      <IconStar className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && typeof favoriteCount === 'number' && (
-        <span className="leading-none whitespace-nowrap">
+        <Txt as="span" variant="label" className="whitespace-nowrap">
           <span className="tabular-nums">{favoriteCount}</span> {countLabel}
-        </span>
+        </Txt>
       )}
     </Button>
   );

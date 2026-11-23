@@ -1,18 +1,14 @@
 import { WorkOSAdminPortal } from '@mastra/auth-workos';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { Context } from 'hono';
 
+import { loose } from '../../routes/route.js';
 import type { AuditEventRow } from '../../storage/domains/audit/base.js';
 import type { FactoryIntegration, IntegrationContext } from '../base.js';
 
 type WorkOSClient = ConstructorParameters<typeof WorkOSAdminPortal>[0];
 
 const UNKNOWN_LOCATION = 'unknown';
-
-function loose(c: unknown): Context {
-  return c as Context;
-}
 
 function flattenMetadata(metadata: Record<string, unknown>): Record<string, string | number | boolean> {
   const flat: Record<string, string | number | boolean> = {};
@@ -42,7 +38,7 @@ export function toWorkOSEvent(event: AuditEventRow): {
   return {
     action: event.action,
     occurredAt: event.occurredAt,
-    actor: { type: event.actorType === 'agent' ? 'agent' : 'user', id: event.actorId },
+    actor: { type: event.actorType === 'human' ? 'user' : event.actorType, id: event.actorId },
     targets: event.targets.map(target => ({
       type: target.type,
       id: target.id,

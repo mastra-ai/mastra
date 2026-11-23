@@ -1,0 +1,16 @@
+extends: existence
+message: "Replace '%s' with the concrete design, option, or complication."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\b(?:a|an|the|one|another|this|that|its|their|each|every|no|first|second|only|last|extra|new|small|minor|major|obvious|real|known) (?:[a-z]+ )?wrinkles?\b'
+  - '\b(?:a|an|the|its|their|this|that|our|your|no|each|every|one|another|whole|full|entire|complete|coherent|better|good|bad|weak|strong|similar|same) (?:[a-z-]+ ){1,2}story\b(?! (?:of|about|behind|from|line|lines|point|points|arc|arcs|mode|book|books|telling|teller|tellers|board|boards|writer|writers|time|hour)\b)'
+  - '\bthrough (?:the|a|an|its|their|this|that|one|another|[a-z]+) (?:[a-z]+ )?lens\b'
+  - '\b(?:a|an|the|its|their|this|that|one|another|each|every|different|second|wider|narrower|[a-z]+ing) (?:[a-z]+ )?lens\b(?! (?:cap|caps|flare|hood|mount|element|elements|array|barrel|system|systems|distortion|assembly)\b)'
+  - '\bheadline (?:number|numbers|figure|figures|result|results|metric|metrics|count|counts|finding|findings|stat|stats|claim|claims|feature|features|change|changes|item|items|win|wins)\b'
+  - '\bthe headline (?:is|was)\b'
+  - '\b(?:a|the|another|its|this|that|every|each) dead[ -]end\b'
+  - '\bdead[ -]ends\b'
+  - '\bblind[ -]spots?\b'
+  - '\b(?:the|a|an|its|their|this|that|one|every|each|another|[a-z]+ing) (?:[a-z]+ )?seams?\b(?! (?:allowance|ripper|tape|welding|welded|weld)\b)'

@@ -23,7 +23,7 @@ import type {
   SandboxInfo,
   SandboxNetworking,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox } from '@vercel/sandbox';
 import { VercelSandboxProcessManager } from './process-manager';
 
@@ -310,8 +310,12 @@ export class VercelSandbox extends MastraSandbox {
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.
    * Relative paths resolve against /vercel/sandbox.
+   *
+   * Per-file permission modes are not supported; an explicit `mode` is
+   * rejected rather than silently discarded.
    */
   async writeFiles(files: SandboxFileInput[]): Promise<void> {
+    assertModesUnsupported(files, 'Vercel');
     await this.ensureRunning();
     await this.sandbox.writeFiles(files.map(f => ({ path: f.path, content: f.content })));
   }
@@ -450,7 +454,7 @@ export class VercelSandbox extends MastraSandbox {
         ? [`- Exposed ports: ${this._ports.join(', ')} (reachable via public HTTPS domains).`]
         : []),
       '- Background/long-running processes are supported via the process tools.',
-      '- Filesystem mounting (FUSE) is not supported.',
+      '- Workspace filesystem mounting tools are not available through this Mastra adapter; the underlying Vercel Sandbox supports FUSE mounts.',
     ].join('\n');
   }
 }

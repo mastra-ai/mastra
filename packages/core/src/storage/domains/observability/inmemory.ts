@@ -25,6 +25,7 @@ import type {
 import { listFeedbackArgsSchema } from './feedback';
 import type {
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
   CreateFeedbackArgs,
   FeedbackFilter,
   GetFeedbackAggregateArgs,
@@ -61,6 +62,7 @@ import { listMetricsArgsSchema } from './metrics';
 import { listScoresArgsSchema } from './scores';
 import type {
   BatchCreateScoresArgs,
+  DeleteScoresArgs,
   CreateScoreArgs,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
@@ -78,6 +80,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   CreateSpanRecord,
   GetRootSpanArgs,
@@ -125,6 +128,11 @@ export interface TraceEntry {
 
 /** In-memory implementation of ObservabilityStorage for testing and development. */
 export class ObservabilityInMemory extends ObservabilityStorage {
+  /** In-memory observability data is local to this process. */
+  public override get persistenceLocation(): 'local' {
+    return 'local';
+  }
+
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -134,10 +142,33 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   override getFeatures() {
     if (!this.deltaPollingFeatureEnabled()) {
-      return undefined;
+      return [
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'feedback',
+        'feedback-replacement',
+      ] as const;
     }
 
-    return ['delta-polling'] as const;
+    return [
+      'metrics',
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
+      'delta-polling',
+      'feedback',
+      'feedback-replacement',
+    ] as const;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -213,6 +244,39 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
     records.push(record);
     cursorIds.set(record, this.allocateObservabilityCursorId());
+  }
+
+  /**
+   * Deletes records whose id field is in `ids`, honoring optional tenant scope.
+   * Removes deleted records from the cursor-id map so delta polling no longer
+   * references them.
+   */
+  private deleteByIdField<T extends Record<string, unknown>>(
+    records: T[],
+    cursorIds: Map<T, number>,
+    ids: string[],
+    idField: keyof T,
+    scope: { organizationId?: string; resourceId?: string },
+  ): void {
+    if (ids.length === 0) {
+      return;
+    }
+    const idSet = new Set(ids);
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i]!;
+      const id = record[idField];
+      if (typeof id !== 'string' || !idSet.has(id)) {
+        continue;
+      }
+      if (scope.organizationId !== undefined && record.organizationId !== scope.organizationId) {
+        continue;
+      }
+      if (scope.resourceId !== undefined && record.resourceId !== scope.resourceId) {
+        continue;
+      }
+      cursorIds.delete(record);
+      records.splice(i, 1);
+    }
   }
 
   private encodeDeltaCursor(cursorId?: number | null): string {
@@ -673,11 +737,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
         const diff = aVal.getTime() - bVal.getTime();
         return sortDirection === 'DESC' ? -diff : diff;
-      } else {
-        // startedAt is never null (required field)
-        const diff = a.startedAt.getTime() - b.startedAt.getTime();
-        return sortDirection === 'DESC' ? -diff : diff;
       }
+      // startedAt is never null (required field)
+      const diff = a.startedAt.getTime() - b.startedAt.getTime();
+      return sortDirection === 'DESC' ? -diff : diff;
     });
 
     // Apply pagination
@@ -1119,21 +1182,45 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    const updated: BatchUpdateUnendedSpansResponse['updated'] = [];
+    for (const record of args.records) {
+      const span = this.db.traces.get(record.traceId)?.spans[record.spanId];
+      if (!span || span.endedAt != null) continue;
+      await this.updateSpan(record);
+      updated.push({ traceId: record.traceId, spanId: record.spanId });
+    }
+    return { updated };
+  }
+
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     const traceIds = new Set<string>(args.traceIds);
     for (const traceId of args.traceIds) {
       const traceEntry = this.db.traces.get(traceId);
-      if (traceEntry) {
-        const scopeReference = traceEntry.rootSpan ?? Object.values(traceEntry.spans)[0];
-        if (!this.matchesDeleteScope(scopeReference, args)) {
-          continue;
-        }
-        this.db.traceCursorIds.delete(traceId);
-        for (const spanId of Object.keys(traceEntry.spans)) {
-          this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
-        }
+      if (!traceEntry) continue;
+
+      // Tenant scope applies per span, like the row-level deletes in SQL adapters,
+      // so spans from other tenants in the same trace are kept.
+      for (const [spanId, span] of Object.entries(traceEntry.spans)) {
+        if (!this.matchesDeleteScope(span, args)) continue;
+        delete traceEntry.spans[spanId];
+        this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
       }
-      this.db.traces.delete(traceId);
+
+      const remainingSpans = Object.values(traceEntry.spans);
+      if (remainingSpans.length === 0) {
+        this.db.traces.delete(traceId);
+        this.db.traceCursorIds.delete(traceId);
+        continue;
+      }
+
+      if (traceEntry.rootSpan && !traceEntry.spans[traceEntry.rootSpan.spanId]) {
+        traceEntry.rootSpan = remainingSpans.find(span => span.parentSpanId == null) ?? null;
+      }
+      if (!traceEntry.rootSpan) {
+        this.db.traceCursorIds.delete(traceId);
+      }
+      this.recomputeTraceProperties(traceEntry);
     }
 
     // Cascade: remove trace-linked signal events. Records without a traceId are untouched.
@@ -1254,6 +1341,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.threadId !== undefined && m.threadId !== filters.threadId) return false;
     if (filters.requestId !== undefined && m.requestId !== filters.requestId) return false;
     if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
+    if (Array.isArray(filters.experimentIds) && !filters.experimentIds.includes(m.experimentId)) return false;
     if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
     if (filters.environment !== undefined && m.environment !== filters.environment) return false;
     const metricExecutionSource = m.executionSource ?? m.source ?? null;
@@ -1867,6 +1955,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    this.deleteByIdField(this.db.scoreRecords, this.db.scoreCursorIds, args.scoreIds, 'scoreId', {
+      organizationId: args.organizationId,
+      resourceId: args.resourceId,
+    });
+  }
+
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     const { mode, filters, pagination, orderBy, after, limit } = listScoresArgsSchema.parse(args);
 
@@ -2199,15 +2294,31 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   // Feedback
   // ============================================================================
 
+  protected override async writeFeedbackReplacement(args: CreateFeedbackArgs): Promise<void> {
+    // No await between checking identity and the synchronous in-memory upsert.
+    this.assertFeedbackReplacementIdentity(
+      args.feedback,
+      this.db.feedbackRecords.find(record => record.feedbackId === args.feedback.feedbackId),
+    );
+    await this.createFeedback({ feedback: args.feedback, onConflict: 'replace' });
+  }
+
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
+    if (
+      args.onConflict === 'ignore' &&
+      args.feedback.feedbackId &&
+      this.db.feedbackRecords.some(record => record.feedbackId === args.feedback.feedbackId)
+    )
+      return;
     const record = {
       ...args.feedback,
       feedbackSource: args.feedback.feedbackSource ?? args.feedback.source ?? '',
       source: args.feedback.feedbackSource ?? args.feedback.source ?? '',
       feedbackUserId:
-        args.feedback.feedbackUserId ??
-        args.feedback.userId ??
-        (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
+        args.feedback.feedbackUserId !== undefined
+          ? args.feedback.feedbackUserId
+          : (args.feedback.userId ??
+            (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null)),
       reviewStatus: args.feedback.reviewStatus ?? 'needs-review',
     } as FeedbackRecord;
     this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
@@ -2215,16 +2326,31 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     for (const fb of args.feedbacks) {
+      if (
+        args.onConflict === 'ignore' &&
+        fb.feedbackId &&
+        this.db.feedbackRecords.some(record => record.feedbackId === fb.feedbackId)
+      )
+        continue;
       const record = {
         ...fb,
         feedbackSource: fb.feedbackSource ?? fb.source ?? '',
         source: fb.feedbackSource ?? fb.source ?? '',
         feedbackUserId:
-          fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+          fb.feedbackUserId !== undefined
+            ? fb.feedbackUserId
+            : (fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null)),
         reviewStatus: fb.reviewStatus ?? 'needs-review',
       } as FeedbackRecord;
       this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
     }
+  }
+
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    this.deleteByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, args.feedbackIds, 'feedbackId', {
+      organizationId: args.organizationId,
+      resourceId: args.resourceId,
+    });
   }
 
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
@@ -2268,6 +2394,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         ),
       ),
     };
+  }
+
+  async getFeedbackById(feedbackId: string): Promise<FeedbackRecord | null> {
+    return this.db.feedbackRecords.find(record => record.feedbackId === feedbackId) ?? null;
   }
 
   async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {

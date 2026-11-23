@@ -96,7 +96,7 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
       ...existingConfig,
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
-      ...(status !== undefined && { status: status as StorageMCPClientType['status'] }),
+      ...(status !== undefined && { status }),
       ...(metadata !== undefined && {
         metadata: { ...existingConfig.metadata, ...metadata },
       }),

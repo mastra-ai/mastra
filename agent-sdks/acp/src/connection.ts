@@ -181,7 +181,12 @@ export class ACPConnection {
       })
       .then(
         response => {
-          this.throwIfPromptDidNotComplete(response);
+          try {
+            this.throwIfPromptDidNotComplete(response);
+          } catch (error) {
+            queue.throw(error);
+            return;
+          }
           queue.close();
         },
         error => {

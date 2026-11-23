@@ -1,0 +1,90 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. State the benefit or the outcome directly. Disable this rule for sports or gaming prose."
+level: error
+nonword: true
+ignorecase: true
+# "Wins" is an AI fingerprint for framing a choice as a contest: an approach
+# "wins the day," a refactor is "a quick win," a tradeoff "wins out." Literal
+# winning is common (a team, a game, a prize), so the complement after the
+# verb is the discriminator, in the FigurativeSits mold, for the idiom
+# tokens.
+#
+# The precedence sense ("last write wins," "the more specific rule wins")
+# was left alone at first as established engineering jargon. A
+# documentation-corpus audit (2026-09) counted thirty occurrences of the
+# contest frame with an inanimate subject ("one item per group wins as
+# primary," "a lower index wins," "records which source won," "losers
+# then split on the second axis") and asked for it, so the
+# determiner-gated subject token now fires on the maintainer's call, with
+# twenty-four corpus hits ("the last one wins," "the other query always
+# wins"), the precedence idiom itself; state the rule that picks instead.
+# "Beats" as precedence ("it beats an explicit flag"), "outranks," the
+# picked winner, and the losers join it at zero to one hit each, and
+# "kicks off" joins at twenty-four ("kick off goroutines"), the sports
+# figure the same audit found in its densest line. "Races" and
+# "dominates" stay out: at twenty-eight and twenty hits they are the data
+# race and the dominator tree, terms of art with no contest in them. The
+# exceptions name the beings who literally win, so "the home team wins"
+# stays quiet inside the subject token.
+exceptions:
+  - "(?i)teams?"
+  - "(?i)players?"
+  - "(?i)sides?"
+  - "(?i)candidates?"
+  - "(?i)contestants?"
+  - "(?i)athletes?"
+  - "(?i)runners?"
+  - "(?i)horses?"
+  - "(?i)people"
+  - "(?i)person"
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)students?"
+  - "(?i)part(?:y|ies)"
+  - "(?i)incumbents?"
+  - "(?i)challengers?"
+tokens:
+  # --- The contest with an inanimate subject: a value or a rule that
+  # "wins" where the plain sentence names the rule that picks it ("a
+  # lower index wins," "the exact match wins as primary," "which source
+  # won"). The trailing lookahead keeps "won't" out.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no|first|last|lower|higher|lowest|highest|earlier|later|earliest|latest|longer|shorter|longest|shortest|most|least) (?:[a-z'-]+ ){0,2}[a-z]+ (?:then |also |never |still |only |always |usually |simply |just )?(?:wins|won|winning)\\b(?!')"
+  - "\\bwhich (?:[a-z]+ )?(?:wins|won)\\b(?!')"
+  - "\\bpick(?:s|ed|ing)? (?:a|the) winner\\b"
+  - "\\blosers?\\b"
+  - "\\boutrank(?:s|ed|ing)?\\b"
+  - "\\bbeats? (?:a|an|the|its|their|this|that|each|every|both|all|any|some|most|out|it|them)\\b(?! (?:per|by)\\b)"
+
+  # --- The starting whistle ("before a later run kicks off," "kick off
+  # the migration").
+  - "\\bkick(?:s|ed|ing)? off\\b"
+
+  # --- Victory idioms: the choice triumphs ("wins the day," "wins out,"
+  # "wins hands down," "comes out on top," "takes the crown").
+  - "\\bwin(?:s|ning)? the day\\b"
+  - "\\bwon the day\\b"
+  - "\\bwin(?:s|ning)? out\\b"
+  - "\\bwon out\\b"
+  - "\\bwin(?:s|ning)? hands down\\b"
+  - "\\bcom(?:es|ing)? out on top\\b"
+  - "\\bcame out on top\\b"
+  - "\\bwin(?:s|ning)? hearts and minds\\b"
+
+  # --- Scored-point framing: progress tallied like a scoreboard ("a quick
+  # win," "an easy win," "chalks up a win," "notch a win," "rack up wins,"
+  # "for the win"). "Quick win" is the strongest tell here.
+  - "\\ban? (?:quick|easy|clear|big|huge|major|real|cheap|early|guaranteed|obvious) win\\b"
+  - "\\b(?:quick|easy|cheap|early) wins\\b"
+  - "\\b(?:chalk|notch|score|rack|bank|log)(?:s|ed|ing)? up (?:a|another|some|several)? ?wins?\\b"
+  - "\\bfor the win\\b"
+
+  # --- Superlative framing: the choice branded a champion ("a winning
+  # formula," "the winning combination," "a winning strategy," "a winning
+  # streak," "a win-win").
+  - "\\ba winning (?:formula|combination|combo|strategy|streak|hand|recipe|play|move)\\b"
+  - "\\bthe winning (?:formula|combination|combo|strategy|hand|recipe|play|move)\\b"
+  - "\\bwin-win\\b"
+  - "\\bwin/win\\b"

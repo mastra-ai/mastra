@@ -12,7 +12,7 @@
  *         the new `run-failed` event so the controller surfaces an error event.
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
@@ -101,12 +101,17 @@ describe('mc send-message reproduction', () => {
 
     await session.sendMessage({ content: 'Hello!' });
 
-    const assistantEnd = events.find(
-      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        e.type === 'message_end' && e.message.role === 'assistant',
+    const assistantStart = events.find(
+      (e): e is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        e.type === 'message_start' && e.message.role === 'assistant',
     );
-    expect(assistantEnd).toBeDefined();
-    expect(assistantEnd!.message.content.parts).toEqual([{ type: 'text', text: 'Hello from the agent!' }]);
+    expect(assistantStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStart!.message.id,
+      event: { type: 'text-delta', delta: 'Hello from the agent!' },
+    });
+    expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
   }, 30000);
 
   it('surfaces error event when model function throws during idle-start', async () => {
@@ -142,7 +147,9 @@ describe('mc send-message reproduction', () => {
       events.push(event);
     });
 
-    await session.sendMessage({ content: 'Hello!' });
+    await expect(session.sendMessage({ content: 'Hello!' })).rejects.toThrow('No model selected');
+    await vi.waitFor(() => expect(events.some(event => event.type === 'agent_end')).toBe(true));
+    await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
 
     // With the fix, the error should propagate through the subscription stream
     // and the controller should emit an error event instead of silently completing
@@ -201,11 +208,16 @@ describe('mc send-message reproduction', () => {
 
     await session.sendMessage({ content: 'Hello!' });
 
-    const assistantEnd = events.find(
-      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        e.type === 'message_end' && e.message.role === 'assistant',
+    const assistantStart = events.find(
+      (e): e is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        e.type === 'message_start' && e.message.role === 'assistant',
     );
-    expect(assistantEnd).toBeDefined();
-    expect(assistantEnd!.message.content.parts).toEqual([{ type: 'text', text: 'Hello from push-only!' }]);
+    expect(assistantStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStart!.message.id,
+      event: { type: 'text-delta', delta: 'Hello from push-only!' },
+    });
+    expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
   }, 30000);
 });

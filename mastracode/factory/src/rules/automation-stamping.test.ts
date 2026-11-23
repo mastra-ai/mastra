@@ -7,9 +7,9 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -47,8 +47,9 @@ describe('governed automation moves', () => {
   it('stamps the rules-engine actor on entered and exited history entries', async () => {
     const created = await workItems.upsert({ orgId: 'org1', userId: 'user_1', factoryProjectId: PROJECT_ID, input });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage: workItems,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition(automationRequest(created.item));
@@ -67,8 +68,9 @@ describe('governed automation moves', () => {
   it('rejects items outside the org without moving them', async () => {
     const created = await workItems.upsert({ orgId: 'org1', userId: 'user_1', factoryProjectId: PROJECT_ID, input });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage: workItems,
+      boards: createTriageWorkRegistry(),
     });
 
     const result = await service.transition(automationRequest(created.item, { orgId: 'org2' }));

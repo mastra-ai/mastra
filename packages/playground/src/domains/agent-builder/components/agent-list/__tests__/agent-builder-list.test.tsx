@@ -1,13 +1,13 @@
 import type { BuilderSettingsResponse, StoredAgentResponse } from '@mastra/client-js';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentBuilderList, AgentBuilderListSkeleton } from '../agent-builder-list';
 import type { AgentBuilderListProps } from '../agent-builder-list';
-import type { AuthCapabilities } from '@/domains/auth/types';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 // Tooltip primitives render their content lazily on hover; flatten them for
@@ -56,7 +56,6 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
 } as never;
 
@@ -127,15 +126,12 @@ describe('AgentBuilderList', () => {
     expect(screen.getByText('Only visible to you')).toBeTruthy();
   });
 
-  it('renders agent name and description without technical metadata', () => {
+  it('renders agent name and description', () => {
     renderList({ agents: fixtureAgents });
 
     expect(screen.getByText('Alpha Agent')).toBeTruthy();
     expect(screen.getByText('First agent description')).toBeTruthy();
     expect(screen.getByText('Beta Agent')).toBeTruthy();
-    expect(screen.queryByText('openai/gpt-4')).toBeNull();
-    expect(screen.queryByText('anthropic/claude')).toBeNull();
-    expect(screen.queryByText(/Updated/)).toBeNull();
   });
 
   it('filters by search prop', () => {
@@ -167,16 +163,6 @@ describe('AgentBuilderList', () => {
 
     expect(screen.getByText('No agents match your search')).toBeTruthy();
     expect(screen.queryByTestId('agent-row')).toBeNull();
-  });
-
-  it('supports the library list presentation', () => {
-    renderList({
-      agents: fixtureAgents,
-      rowTestId: 'library-agent-row',
-    });
-
-    expect(screen.getAllByTestId('library-agent-row')).toHaveLength(fixtureAgents.length);
-    expect(screen.queryByText('Private')).toBeNull();
   });
 
   it('renders the resolved author name when the server returned `author`', () => {

@@ -3,7 +3,6 @@ title: "Reference: chatRoute() | AI SDK"
 description: "Creates a chat route handler for streaming agent conversations using the AI SDK format."
 packages:
   - "@mastra/ai-sdk"
-  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -18,9 +17,9 @@ Use [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) if you need a f
 
 :::note Disconnect behavior
 
-`chatRoute()` forwards the incoming request's `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation.
+By default, `chatRoute()` forwards the incoming request's `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation.
 
-If you want the server to continue generation and persist the final response after disconnect, build a [custom API route](/docs/server/custom-api-routes#continue-generation-after-client-disconnect) around `agent.stream()` and call `consumeStream()` on the returned `MastraModelOutput`.
+Set `resumable: true` to let the generation continue after a disconnect and allow AI SDK UI to reconnect to the active stream. Resumable chats don't support abort-based cancellation because `useChat().stop()` is indistinguishable from a refresh or network interruption at the server.
 
 :::
 
@@ -94,6 +93,14 @@ export const mastra = new Mastra({
     isOptional: true,
   },
   {
+    name: 'resumable',
+    type: 'boolean',
+    description:
+      'Enables AI SDK UI stream resumption. Returns the POST route and a `GET <path>/:chatId/stream` route, uses the AI SDK chat ID as the Mastra thread ID, and lets generation continue after the POST connection closes.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'defaultOptions',
     type: 'AgentExecutionOptions',
     description:
@@ -129,6 +136,21 @@ export const mastra = new Mastra({
     defaultValue: 'false',
   },
   {
+    name: 'includeSubAgentMetadata',
+    type: 'boolean',
+    description:
+      'Whether to stream sub-agent progress as `data-tool-agent` and `data-tool-agent-step` parts when the agent delegates to sub-agents. These parts can include sub-agent reasoning and tool calls and results. Set to `false` if your clients should not receive them.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart; traceId?: string }) => Record<string, unknown> | undefined',
+    description:
+      "A function that receives the current stream part and returns metadata to attach to start and finish chunks. Also receives the run's `traceId` (undefined when tracing is disabled), so you can return it as metadata, for example `({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined)`. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.",
+    isOptional: true,
+  },
+  {
     name: 'heartbeatMs',
     type: 'number',
     description:
@@ -138,18 +160,49 @@ export const mastra = new Mastra({
 ]}
 />
 
+## Resumable streams
+
+Set `resumable: true` on `chatRoute()` and `resume: true` on AI SDK UI's `useChat()` to reconnect after a refresh or network interruption. The route factory returns a two-item array containing:
+
+- `POST <path>`: Starts the agent run. The request's AI SDK chat ID becomes the Mastra memory thread ID.
+- `GET <path>/:chatId/stream`: Replays cached events and follows the active run. The route returns `204` when the run is finished, unavailable, expired, or outside the caller's scope.
+
+Pass the returned array as one entry in `server.apiRoutes`. Mastra flattens nested route arrays during server configuration.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { chatRoute } from '@mastra/ai-sdk'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId',
+        resumable: true,
+      }),
+    ],
+  },
+})
+```
+
+Active-run discovery is process-local. A reconnect request must reach the same running server process that started the generation. Resumable mode doesn't forward the request `AbortSignal`, so `useChat().stop()` closes the client connection without cancelling the agent run.
+
+If the chat uses a resource ID, set `MASTRA_RESOURCE_ID_KEY` in the request context through authentication middleware. Don't send the resource ID only as `memory.resource` in the POST body: the reconnecting GET request has no body, so `chatRoute()` rejects that configuration with `400`.
+
 ## Additional configuration
 
 You can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent:
 
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+const { error, status, sendMessage, messages, stop } = useChat({
   transport: new DefaultChatTransport({
     api: 'http://localhost:4111/chat',
     prepareSendMessagesRequest({ messages }) {
       return {
         body: {
-          messages,
+          // With memory configured, send only the new message. Mastra loads the
+          // rest of the conversation from storage.
+          messages: [messages[messages.length - 1]],
           // Pass memory config
           memory: {
             thread: 'user-1',
@@ -161,3 +214,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
   }),
 })
 ```
+
+Without memory, send the full `messages` array as the chat route uses it as the request context.
+
+With memory, the stored thread is the source of truth, so `regenerate` and editing an earlier message in `useChat` don't change it. To change stored history, use `memory.saveMessages` or the memory store's `updateMessages`, then send a new message.

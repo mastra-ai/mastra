@@ -1,6 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -71,7 +72,7 @@ export function useVisibilityChangeDialog<V extends string>({
   const dialogCopy = pending ? copy[pending] : null;
 
   const dialog = (
-    <Dialog open={isOpen} onOpenChange={open => !open && handleCancel()}>
+    <Dialog open={isOpen} onOpenChange={open => !open && handleCancel()} pending={isPending}>
       <DialogContent data-testid={testIds.dialog}>
         {pending && dialogCopy && (
           <>
@@ -81,17 +82,14 @@ export function useVisibilityChangeDialog<V extends string>({
             </DialogHeader>
             {renderExtraContent?.(pending)}
             <DialogFooter>
-              <Button variant="ghost" onClick={handleCancel} disabled={isPending} data-testid={testIds.cancel}>
-                Cancel
-              </Button>
-              <Button
-                variant="default"
-                onClick={confirmFor(pending)}
-                disabled={isPending || (confirmDisabled?.(pending) ?? false)}
+              <DialogCancel data-testid={testIds.cancel}>Cancel</DialogCancel>
+              <DialogAction
+                onConfirm={confirmFor(pending)}
+                disabled={confirmDisabled?.(pending) ?? false}
                 data-testid={testIds.confirm}
               >
                 Confirm
-              </Button>
+              </DialogAction>
             </DialogFooter>
           </>
         )}

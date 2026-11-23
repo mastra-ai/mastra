@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { Route, Search } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CommandEmpty, CommandGroup } from '../Command';
@@ -15,6 +14,8 @@ import {
   CommandPaletteResults,
   CommandPaletteScope,
 } from './command-palette';
+import { IconDirection1 } from '@/ds/icons/central/IconDirection1';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
 class TestResizeObserver implements ResizeObserver {
   observe() {}
@@ -33,7 +34,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// Spacing between the parts of a composed accessible name is not stable across environments
 const ITEM_NAME = /Settings\s*Path\s*Application navigation\s*\/settings/;
 const SCOPE_NAME = /Navigation\s*2/;
 
@@ -52,14 +52,20 @@ function renderPalette() {
       <CommandPaletteInput placeholder="Search resources" />
       <CommandPaletteBody>
         <CommandPaletteRail aria-label="Search categories">
-          <CommandPaletteScope icon={<Search />} label="All" count={4} active={false} onSelect={() => {}} />
-          <CommandPaletteScope icon={<Route />} label="Navigation" count={2} active onSelect={selectScope} />
+          <CommandPaletteScope
+            icon={<IconMagnifyingGlass />}
+            label="All"
+            count={4}
+            active={false}
+            onSelect={() => {}}
+          />
+          <CommandPaletteScope icon={<IconDirection1 />} label="Navigation" count={2} active onSelect={selectScope} />
         </CommandPaletteRail>
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Application search" />}>
           <CommandEmpty>No matching results.</CommandEmpty>
           <CommandGroup heading="Navigation">
             <CommandPaletteItem
-              icon={<Route />}
+              icon={<IconDirection1 />}
               title="Settings"
               subtitle="Application navigation"
               path="/settings"
@@ -104,7 +110,7 @@ describe('CommandPaletteScope', () => {
   const renderScope = (props: Partial<Parameters<typeof CommandPaletteScope>[0]> = {}) =>
     render(
       <CommandPaletteScope
-        icon={<Search data-testid="scope-icon" />}
+        icon={<IconMagnifyingGlass data-testid="scope-icon" />}
         label="Navigation"
         count={2}
         active={false}
@@ -151,7 +157,6 @@ describe('CommandPaletteScope', () => {
 });
 
 describe('CommandPaletteItem', () => {
-  // cmdk items need the Command root the dialog provides.
   const renderItem = (props: Partial<Parameters<typeof CommandPaletteItem>[0]> = {}) =>
     render(
       <CommandPaletteDialog
@@ -163,14 +168,17 @@ describe('CommandPaletteItem', () => {
       >
         <CommandPaletteResults aria-label="Search results">
           <CommandGroup heading="Navigation">
-            <CommandPaletteItem icon={<Route data-testid="item-icon" />} title="Settings" value="settings" {...props} />
+            <CommandPaletteItem
+              icon={<IconDirection1 data-testid="item-icon" />}
+              title="Settings"
+              value="settings"
+              {...props}
+            />
           </CommandGroup>
         </CommandPaletteResults>
       </CommandPaletteDialog>,
     );
 
-  // The item is an icon, a column of text and an optional shortcut. The column
-  // is a title row and, when there is anything for it, a second line.
   const itemElement = () => screen.getByRole('option');
   const textColumn = () => itemElement().children[1];
   const titleRow = () => textColumn()?.children[0];
@@ -182,7 +190,6 @@ describe('CommandPaletteItem', () => {
     const item = itemElement();
     expect(within(item).getByTestId('item-icon')).toBeTruthy();
     expect(item.textContent).toBe('Settings');
-    // Icon and text column, no shortcut.
     expect(item.childElementCount).toBe(2);
     expect(titleRow()?.childElementCount).toBe(1);
     expect(secondLine()).toBeUndefined();
@@ -225,7 +232,6 @@ describe('CommandPaletteItem', () => {
   it('leaves out the second line entirely with neither a subtitle nor a path', () => {
     renderItem({ badge: 'Path' });
 
-    // Title row and nothing under it.
     expect(textColumn()?.childElementCount).toBe(1);
   });
 
@@ -234,7 +240,6 @@ describe('CommandPaletteItem', () => {
 
     const item = screen.getByRole('option');
     expect(item.classList.contains('my-own-class')).toBe(true);
-    expect(item.classList.contains('rounded-xl')).toBe(true);
   });
 });
 
@@ -256,13 +261,13 @@ describe('CommandPaletteDialog', () => {
   it('dims the page behind it', () => {
     renderDialog();
 
-    expect(document.querySelector('.dialog-overlay-anim')).toBeTruthy();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeTruthy();
   });
 
   it('leaves the page alone when the caller asks', () => {
     renderDialog({ showOverlay: false });
 
-    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
   });
 });
 

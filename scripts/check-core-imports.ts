@@ -101,7 +101,9 @@ function getPackageInfo(packageRoot: string): PackageInfo | undefined {
   };
 
   try {
-    const coreFloorVersion = semver.minVersion(resolveCoreSemverRange(coreRange), { includePrerelease: true })?.version;
+    // minVersion forwards its options to Range, so includePrerelease applies even though @types/semver types it as Options.
+    const rangeOptions: semver.RangeOptions = { includePrerelease: true };
+    const coreFloorVersion = semver.minVersion(resolveCoreSemverRange(coreRange), rangeOptions)?.version;
     const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
 
     if (!coreFloorVersion || !corePackVersion) {
@@ -158,7 +160,7 @@ function findTypeScriptFiles(dir: string): string[] {
     const path = join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      if (entry.name === '__fixtures__') return [];
+      if (entry.name === '__fixtures__' || entry.name === '__tests__') return [];
       return findTypeScriptFiles(path);
     }
 
@@ -234,6 +236,16 @@ function packLocalCore(version: string, tempDir: string) {
     `@mastra/core@${version} is not available from npm; packing local ${relative(repoRoot, corePackageRoot)} because its version matches`,
   );
 
+  if (!existsSync(join(corePackageRoot, 'dist'))) {
+    console.info(`Local ${relative(repoRoot, corePackageRoot)} has no dist/; building it before packing`);
+
+    const build = runCommand('pnpm', ['turbo', 'build', '--filter', './packages/core'], repoRoot);
+
+    if (build.status !== 0) {
+      throw new Error(`Failed to build local @mastra/core@${version}${formatCommandFailure(build)}`);
+    }
+  }
+
   const pack = runCommand('npm', ['pack', corePackageRoot, '--pack-destination', tempDir, '--silent'], repoRoot);
 
   if (pack.status !== 0) {
@@ -249,27 +261,53 @@ function packLocalCore(version: string, tempDir: string) {
   return extractTarball(tarball, tempDir);
 }
 
-function extractCorePackage(packVersion: string, tempDir: string) {
-  const pack = runCommand(
-    'npm',
-    ['pack', `@mastra/core@${packVersion}`, '--pack-destination', tempDir, '--silent'],
-    repoRoot,
-  );
+function findPublishedFloorVersion(coreRange: string) {
+  const view = runCommand('npm', ['view', '@mastra/core', 'versions', '--json'], repoRoot);
+
+  if (view.status !== 0) {
+    return undefined;
+  }
+
+  const versions = JSON.parse(view.stdout) as string[];
+  return semver.minSatisfying(versions, resolveCoreSemverRange(coreRange)) ?? undefined;
+}
+
+function packPublishedCore(version: string, tempDir: string) {
+  return runCommand('npm', ['pack', `@mastra/core@${version}`, '--pack-destination', tempDir, '--silent'], repoRoot);
+}
+
+function extractCorePackage(packVersion: string, coreRange: string, tempDir: string) {
+  let pack = packPublishedCore(packVersion, tempDir);
+  let packedVersion = packVersion;
+
+  if (pack.status !== 0) {
+    const localCoreRoot = packLocalCore(packVersion, tempDir);
+
+    if (localCoreRoot) {
+      return localCoreRoot;
+    }
+
+    // The floor can be a stable version that is only published as a prerelease so far (e.g. >=1.85.1-0 before 1.85.1 ships).
+    // Only fall back to an older version, so imports added after the floor can't pass.
+    const publishedFloor = findPublishedFloorVersion(coreRange);
+
+    if (publishedFloor && semver.lt(publishedFloor, packVersion)) {
+      console.info(
+        `@mastra/core@${packVersion} is not on npm; using the lowest published version in range, ${publishedFloor}`,
+      );
+      pack = packPublishedCore(publishedFloor, tempDir);
+      packedVersion = publishedFloor;
+    }
+  }
 
   if (pack.status === 0) {
     const tarball = pack.stdout.trim().split('\n').at(-1);
 
     if (!tarball) {
-      throw new Error(`npm pack did not return a tarball for @mastra/core@${packVersion}`);
+      throw new Error(`npm pack did not return a tarball for @mastra/core@${packedVersion}`);
     }
 
     return extractTarball(tarball, tempDir);
-  }
-
-  const localCoreRoot = packLocalCore(packVersion, tempDir);
-
-  if (localCoreRoot) {
-    return localCoreRoot;
   }
 
   throw new Error(`Failed to download @mastra/core@${packVersion}${formatCommandFailure(pack)}`);
@@ -466,12 +504,14 @@ try {
     }
 
     try {
-      let floorCoreRoot = floorCoreRoots.get(corePackVersion);
+      // The fallback version depends on the declared range, so cache per version and range.
+      const floorCoreKey = `${corePackVersion}\0${packageInfo.coreRange}`;
+      let floorCoreRoot = floorCoreRoots.get(floorCoreKey);
 
       if (!floorCoreRoot) {
         const versionTempDir = mkdtempSync(join(tempRoot, `core-${corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`));
-        floorCoreRoot = extractCorePackage(corePackVersion, versionTempDir);
-        floorCoreRoots.set(corePackVersion, floorCoreRoot);
+        floorCoreRoot = extractCorePackage(corePackVersion, packageInfo.coreRange, versionTempDir);
+        floorCoreRoots.set(floorCoreKey, floorCoreRoot);
       }
 
       if (checkPackage(packageInfo, floorCoreRoot, tempRoot) !== 0) {

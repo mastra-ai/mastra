@@ -198,6 +198,41 @@ describe('InMemoryServerCache', () => {
       });
     });
 
+    describe('listPushIndexed', () => {
+      it('assigns sequential 0-based indices and stores them on the list entries', async () => {
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'a' })).toBe(0);
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(1);
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'c' })).toBe(2);
+
+        expect(await cache.listFromTo('events', 0)).toEqual([
+          { type: 'a', index: 0 },
+          { type: 'b', index: 1 },
+          { type: 'c', index: 2 },
+        ]);
+        expect(await cache.increment('events:counter')).toBe(4);
+      });
+
+      it('keeps the log and counter for the requested TTL when it outlasts the cache default', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
+        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' }, 5_000);
+        await new Promise(resolve => setTimeout(resolve, 60));
+
+        // Both keys must survive together, or numbering would restart under an
+        // observer that still holds the old cursor.
+        expect(await ttlCache.listFromTo('events', 0)).toEqual([{ type: 'a', index: 0 }]);
+        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' }, 5_000)).toBe(1);
+      });
+
+      it('expires the log and counter on the cache default without a requested TTL', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
+        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' });
+        await new Promise(resolve => setTimeout(resolve, 60));
+
+        expect(await ttlCache.listFromTo('events', 0)).toEqual([]);
+        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(0);
+      });
+    });
+
     describe('increment', () => {
       it('should return 1 on first increment (key does not exist)', async () => {
         const result = await cache.increment('counter');

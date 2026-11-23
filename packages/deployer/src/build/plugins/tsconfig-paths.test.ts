@@ -101,50 +101,107 @@ describe('tsconfig-paths plugin', () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    it('should resolve path aliases when tsconfig has JSONC comments', async () => {
-      // Copy the with-comments fixture to temp dir
-      const tsConfigContent = fs.readFileSync(join(fixturesDir, 'tsconfig-with-comments.json'), 'utf-8');
-      const tsConfigPath = join(tempDir, 'tsconfig.json');
-      fs.writeFileSync(tsConfigPath, tsConfigContent);
+    it('resolves aliases from the exact explicit config file', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.custom.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        `{
+          // Explicit configs can be JSONC and do not need to be named tsconfig.json.
+          "compilerOptions": {
+            "baseUrl": ".",
+            "paths": {
+              "@src/*": ["src/*"]
+            }
+          }
+        }`,
+      );
 
-      // Create source files
       const srcDir = join(tempDir, 'src');
       fs.mkdirSync(srcDir, { recursive: true });
       fs.writeFileSync(join(srcDir, 'utils.ts'), `export const hello = 'world';`);
       fs.writeFileSync(join(srcDir, 'index.ts'), `import { hello } from '@src/utils';\nconsole.log(hello);`);
 
-      // Create the plugin with explicit tsconfig path
-      const plugin = tsConfigPaths({ tsConfigPath });
-
-      // Build using rollup to test plugin behavior
       const bundle = await rollup({
         logLevel: 'silent',
         input: join(srcDir, 'index.ts'),
-        plugins: [
-          plugin,
-          {
-            name: 'mock-resolver',
-            resolveId(id) {
-              if (id.includes('/src/utils')) {
-                return { id: join(srcDir, 'utils.ts'), external: false };
-              }
-              return null;
+        plugins: [tsConfigPaths({ tsConfigPath })],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].code).not.toContain(`'@src/utils'`);
+      expect(result.output[0].code).toContain('world');
+    });
+
+    it('does not let paths configuration shadow ordinary package imports', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            paths: {
+              '@src/*': ['src/*'],
             },
-            load(id) {
-              if (id.endsWith('utils.ts')) {
-                return `export const hello = 'world';`;
-              }
-              if (id.endsWith('index.ts')) {
-                return `import { hello } from '@src/utils';\nconsole.log(hello);`;
-              }
-              return null;
+          },
+        }),
+      );
+
+      const srcDir = join(tempDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(join(tempDir, 'utils.ts'), `export const source = 'local';`);
+      const packageFile = join(tempDir, 'utils-package.ts');
+      fs.writeFileSync(packageFile, `export const source = 'package';`);
+      const indexFile = join(srcDir, 'index.ts');
+      fs.writeFileSync(indexFile, `import { source } from 'utils';\nconsole.log(source);`);
+
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [
+          tsConfigPaths({ tsConfigPath }),
+          {
+            name: 'package-resolver',
+            resolveId(id) {
+              return id === 'utils' ? packageFile : null;
             },
           },
         ],
       });
 
       const result = await bundle.generate({ format: 'esm' });
-      expect(result.output[0].code).toContain('hello');
+      expect(result.output[0].code).toContain('package');
+      expect(result.output[0].code).not.toContain('local');
+    });
+
+    it('resolves inherited aliases relative to the config that defines them', async () => {
+      const appDir = join(tempDir, 'apps', 'app');
+      fs.mkdirSync(appDir, { recursive: true });
+      fs.writeFileSync(
+        join(tempDir, 'tsconfig.base.json'),
+        JSON.stringify({
+          compilerOptions: {
+            paths: {
+              '@lib/*': ['./lib/*'],
+            },
+          },
+        }),
+      );
+      const tsConfigPath = join(appDir, 'tsconfig.json');
+      fs.writeFileSync(tsConfigPath, JSON.stringify({ extends: '../../tsconfig.base.json' }));
+
+      fs.mkdirSync(join(tempDir, 'lib'), { recursive: true });
+      fs.writeFileSync(join(tempDir, 'lib', 'utils.ts'), `export const value = 42;`);
+      const indexFile = join(appDir, 'index.ts');
+      fs.writeFileSync(indexFile, `import { value } from '@lib/utils';\nconsole.log(value);`);
+
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [tsConfigPaths({ tsConfigPath })],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].code).toContain('42');
+      expect(result.output[0].code).not.toContain(`'@lib/utils'`);
     });
 
     it('should resolve aliases from extended tsconfig', async () => {
@@ -237,6 +294,83 @@ describe('tsconfig-paths plugin', () => {
       const result = await bundle.generate({ format: 'esm' });
       expect(result.output[0].code).not.toContain(`'~/utils/build-flags.js'`);
       expect(result.output[0].code).toContain('Mastra');
+    });
+
+    it('should resolve extensionless alias imports of files with dots in their names', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              'src/*': ['src/*'],
+            },
+          },
+        }),
+      );
+
+      const srcDir = join(tempDir, 'src');
+      fs.mkdirSync(join(srcDir, 'repositories'), { recursive: true });
+      fs.writeFileSync(
+        join(srcDir, 'repositories', 'keyword-repository.interface.ts'),
+        `export const kind = 'interface';`,
+      );
+      fs.writeFileSync(join(srcDir, 'repositories', 'keyword.fixtures.ts'), `export const fixture = 'fixture';`);
+
+      const indexFile = join(srcDir, 'index.ts');
+      fs.writeFileSync(
+        indexFile,
+        `import { kind } from 'src/repositories/keyword-repository.interface';\nimport { fixture } from 'src/repositories/keyword.fixtures';\nconsole.log(kind, fixture);`,
+      );
+
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [tsConfigPaths({ tsConfigPath })],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].imports).toEqual([]);
+      expect(result.output[0].code).toContain('interface');
+      expect(result.output[0].code).toContain('fixture');
+    });
+
+    it('resolves relative importers from the configured cwd', async () => {
+      const appDir = join(tempDir, 'apps', 'custom');
+      const srcDir = join(appDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(
+        join(appDir, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              '@/*': ['src/*'],
+            },
+          },
+        }),
+      );
+      const valueFile = join(srcDir, 'value.js');
+      fs.writeFileSync(valueFile, `export const value = 'resolved';`);
+      fs.writeFileSync(join(srcDir, 'index.js'), `import { value } from '@/value';`);
+
+      const plugin = tsConfigPaths({ cwd: tempDir });
+      const resolveId = typeof plugin.resolveId === 'object' ? plugin.resolveId.handler : plugin.resolveId!;
+      let resolvedImporter: string | undefined;
+      await resolveId.call(
+        {
+          resolve: async (_id: string, importer: string | undefined) => {
+            resolvedImporter = importer;
+            return null;
+          },
+        } as any,
+        'unmapped-package',
+        'apps/custom/src/index.js',
+        { attributes: {}, isEntry: false },
+      );
+
+      expect(resolvedImporter).toBe(join(srcDir, 'index.js'));
     });
 
     it('should not externalize @mastra/server imports from aliased modules', async () => {

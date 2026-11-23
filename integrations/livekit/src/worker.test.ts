@@ -1,5 +1,5 @@
-import { InferenceRunner, voice } from '@livekit/agents';
-import type { JobContext, JobProcess } from '@livekit/agents';
+import { inference, InferenceRunner, initializeLogger, voice } from '@livekit/agents';
+import type { JobContext, JobProcess, VAD } from '@livekit/agents';
 import type { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -10,12 +10,19 @@ import {
   resolveGreetingText,
   resolveMemoryInstance,
   resolveSessionComponent,
+  resolveTurnDetection,
   runEndCall,
   speakGreeting,
   waitForAgentDoneSpeaking,
 } from './worker';
-import type { GreetingContext, ResolveMastraAgentArgs, VoiceCallContext } from './worker';
-import { workerSetupComplete } from './worker-setup';
+import type {
+  CreateLiveKitWorkerOptions,
+  GreetingContext,
+  ResolveMastraAgentArgs,
+  SessionStartArgs,
+  VoiceCallContext,
+} from './worker';
+import { isEouMethodRequested, workerSetupComplete } from './worker-setup';
 
 function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent' | 'getLogger', unknown>> = {}): Mastra {
   return {
@@ -62,6 +69,20 @@ describe('createLiveKitWorker', () => {
     expect(runners).toContain('lk_end_of_utterance_multilingual');
     // The unused language model is pruned so the inference process doesn't demand its files.
     expect(runners).not.toContain('lk_end_of_utterance_en');
+  });
+
+  it('keeps both turn detector runners registered for a per-call turnDetection resolver', async () => {
+    createLiveKitWorker({
+      mastra: fakeMastra(),
+      vad: false,
+      configuration: { turnDetection: () => undefined },
+    });
+    await workerSetupComplete();
+    // The resolver builds its detector inside the job, so we can't know which model it wants:
+    // both runners are requested, so neither gets pruned. (The plugin import is module-cached
+    // after the previous test, so assert on the request set that drives pruning.)
+    expect(isEouMethodRequested('lk_end_of_utterance_multilingual')).toBe(true);
+    expect(isEouMethodRequested('lk_end_of_utterance_en')).toBe(true);
   });
 
   it('returns a LiveKit agent definition', () => {
@@ -173,6 +194,64 @@ describe('createLiveKitWorker', () => {
     expect(context.requestContext).toBeDefined();
     // Both resolvers receive the same per-call context.
     expect(tts.mock.calls[0]![0]).toBe(context);
+  });
+});
+
+describe('worker session VAD', () => {
+  beforeEach(() => {
+    initializeLogger({ level: 'silent', pretty: false });
+    // Keep the real session constructor; skip connecting audio to a LiveKit room.
+    vi.spyOn(voice.AgentSession.prototype, 'start').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  async function startSession(options: Pick<CreateLiveKitWorkerOptions, 'vad' | 'sessionOptions'>, prewarmedVad?: VAD) {
+    const onSessionStart = vi.fn<(args: SessionStartArgs) => void>();
+    const definition = createLiveKitWorker({
+      mastra: fakeMastra(),
+      generate: async () => null,
+      memory: false,
+      observability: false,
+      turnDetection: 'manual',
+      onSessionStart,
+      ...options,
+    });
+    const ctx = fakeJobContext();
+    ctx.addShutdownCallback = vi.fn();
+    ctx.proc.userData.vad = prewarmedVad;
+    await definition.entry(ctx);
+    expect(onSessionStart).toHaveBeenCalledOnce();
+    return onSessionStart.mock.calls[0]![0].session;
+  }
+
+  it('disables VAD when vad is false instead of enabling the LiveKit default', async () => {
+    const session = await startSession({ vad: false });
+    expect(session.vad).toBeUndefined();
+  });
+
+  it('uses an explicitly supplied VAD', async () => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad });
+    expect(session.vad).toBe(vad);
+  });
+
+  it.each([undefined, 'silero'] as const)('uses the prewarmed VAD when vad is %s', async vadOption => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad: vadOption }, vad);
+    expect(session.vad).toBe(vad);
+  });
+
+  it('allows sessionOptions to override vad false with a VAD instance', async () => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad: false, sessionOptions: { vad } });
+    expect(session.vad).toBe(vad);
+  });
+
+  it('allows sessionOptions to disable an explicitly supplied VAD', async () => {
+    const vad = new inference.VAD({ model: 'silero' });
+    const session = await startSession({ vad, sessionOptions: { vad: null } });
+    expect(session.vad).toBeUndefined();
   });
 });
 
@@ -326,6 +405,44 @@ describe('resolveSessionComponent', () => {
 
   it('uses the static option when there is no resolver', async () => {
     expect(await resolveSessionComponent(undefined, 'static', context)).toBe('static');
+  });
+});
+
+describe('resolveTurnDetection', () => {
+  const context: VoiceCallContext = {
+    metadata: { requestContext: { tenant: 'meridian' } },
+    roomName: 'room-1',
+    ctx: fakeJobContext(),
+  };
+  // Stands in for a LiveKit `TurnDetector` instance, which can only be constructed inside a job.
+  const detector = { unlikelyThreshold: () => 0.5 } as unknown as voice.AgentSessionOptions['turnDetection'] & object;
+
+  it('invokes the configuration resolver with the call context and uses its detector', async () => {
+    const resolver = vi.fn((_c: VoiceCallContext) => detector);
+    const resolved = await resolveTurnDetection(
+      { turnDetection: 'vad', configuration: { turnDetection: resolver } },
+      context,
+    );
+    expect(resolved).toBe(detector);
+    expect(resolver).toHaveBeenCalledWith(context);
+  });
+
+  it('awaits an async resolver', async () => {
+    const resolved = await resolveTurnDetection({ configuration: { turnDetection: async () => detector } }, context);
+    expect(resolved).toBe(detector);
+  });
+
+  it('falls back to the static option when the resolver returns undefined', async () => {
+    const resolved = await resolveTurnDetection(
+      { turnDetection: 'manual', configuration: { turnDetection: () => undefined } },
+      context,
+    );
+    expect(resolved).toBe('manual');
+  });
+
+  it('passes the static option through when there is no resolver', async () => {
+    expect(await resolveTurnDetection({ turnDetection: 'stt' }, context)).toBe('stt');
+    expect(await resolveTurnDetection({}, context)).toBeUndefined();
   });
 });
 

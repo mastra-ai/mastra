@@ -1,7 +1,8 @@
 {
   "name": "@mastra/couchbase",
-  "version": "1.1.2",
+  "version": "1.1.6-alpha.0",
   "description": "Couchbase vector store provider for Mastra",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,26 +23,25 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "coverage": "vitest run --coverage",
     "pretest": "node scripts/start-docker.js",
     "test": "vitest run",
     "posttest": "docker compose down -v"
   },
   "dependencies": {
-    "couchbase": "^4.7.1"
+    "couchbase": "^4.7.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -50,7 +50,8 @@
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

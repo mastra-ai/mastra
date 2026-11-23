@@ -19,10 +19,11 @@ vi.mock('./resolve-project.js', () => ({
   resolveProject: mockResolveProject,
 }));
 
-const mockFetchEnvironments = vi.fn();
+const mockFetchEnvironmentList = vi.fn();
 
-vi.mock('./platform-api.js', () => ({
-  fetchEnvironments: mockFetchEnvironments,
+vi.mock('./platform-api.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('./platform-api.js')>()),
+  fetchEnvironmentList: mockFetchEnvironmentList,
 }));
 
 const mockGetServerProjectEnv = vi.fn();
@@ -69,45 +70,89 @@ beforeEach(() => {
 });
 
 describe('envVarsPullAction', () => {
-  it('writes both environment-scoped and project-scoped vars (regression: pull read project scope only)', async () => {
-    // Joel's repro: vars added through the UI land on the environment row;
-    // the initial-deploy vars live on the project row. Pull must merge both.
-    mockGetServerProjectEnv.mockResolvedValue({ A: '1' });
-    mockFetchEnvironments.mockResolvedValue([environment({ envVars: { B: '2' } })]);
+  it("pulls only the selected environment's vars when the environment is the authority (regression: QA pull wrote production values)", async () => {
+    // For env-first projects the platform answers the legacy project-scope
+    // endpoint with the *production* environment's vars. Merging that in on
+    // top of the selected environment made `pull qa` write production's
+    // value for every key both environments define.
+    mockGetServerProjectEnv.mockResolvedValue({ API_KEY: 'prod-key', ONLY_IN_PROD: '1' });
+    mockFetchEnvironmentList.mockResolvedValue({
+      envVarsAuthority: 'environment',
+      environments: [
+        environment({ id: 'env-1', slug: 'my-app', envVars: { API_KEY: 'prod-key', ONLY_IN_PROD: '1' } }),
+        environment({
+          id: 'env-2',
+          name: 'QA',
+          slug: 'my-app--qa',
+          type: 'staging',
+          envVars: { API_KEY: 'qa-key', ONLY_IN_QA: '1' },
+        }),
+      ],
+    });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { envVarsPullAction } = await import('./vars.js');
+    await envVarsPullAction('my-app--qa', {});
+
+    expect(mockGetServerProjectEnv).not.toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    const [filePath, content, options] = mockWriteFile.mock.calls[0]!;
+    expect(filePath).toContain('.env');
+    expect(content).toContain('API_KEY="qa-key"');
+    expect(content).toContain('ONLY_IN_QA="1"');
+    expect(content).not.toContain('prod-key');
+    expect(content).not.toContain('ONLY_IN_PROD=');
+    expect(content).toContain('Pulled from Mastra environment my-app--qa');
+    expect(options).toEqual({ encoding: 'utf-8', mode: 0o600, flag: 'wx' });
+    expect(mockChmod).toHaveBeenCalledWith(filePath, 0o600);
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s) from my-app--qa'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('treats a missing envVarsAuthority as environment (platforms that predate the field)', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ SHARED: 'production' });
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { SHARED: 'environment' } })] });
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { envVarsPullAction } = await import('./vars.js');
     await envVarsPullAction(undefined, {});
 
-    expect(mockWriteFile).toHaveBeenCalledTimes(1);
-    const [filePath, content, options] = mockWriteFile.mock.calls[0]!;
-    expect(filePath).toContain('.env');
+    expect(mockGetServerProjectEnv).not.toHaveBeenCalled();
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('SHARED="environment"');
+    expect(content).not.toContain('SHARED="production"');
+    spy.mockRestore();
+  });
+
+  it('pulls the project-scoped vars when a legacy project is the authority', async () => {
+    // Un-adopted legacy projects still boot from the project row; the
+    // environment row's vars are not read by anything, so they are not pulled.
+    mockGetServerProjectEnv.mockResolvedValue({ A: '1', SHARED: 'project' });
+    mockFetchEnvironmentList.mockResolvedValue({
+      envVarsAuthority: 'project',
+      environments: [environment({ envVars: { SHARED: 'environment', STALE: 'unread' } })],
+    });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { envVarsPullAction } = await import('./vars.js');
+    await envVarsPullAction(undefined, {});
+
+    expect(mockGetServerProjectEnv).toHaveBeenCalledWith('tok', 'org-1', 'proj-1');
+    const [, content] = mockWriteFile.mock.calls[0]!;
     expect(content).toContain('A="1"');
-    expect(content).toContain('B="2"');
-    expect(options).toEqual({ encoding: 'utf-8', mode: 0o600, flag: 'wx' });
-    expect(mockChmod).toHaveBeenCalledWith(filePath, 0o600);
+    expect(content).toContain('SHARED="project"');
+    expect(content).not.toContain('SHARED="environment"');
+    expect(content).not.toContain('STALE=');
     expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s)'))).toBe(true);
     spy.mockRestore();
   });
 
-  it('project-scoped values win over environment-scoped values (matches deploy-time merge)', async () => {
-    mockGetServerProjectEnv.mockResolvedValue({ SHARED: 'project' });
-    mockFetchEnvironments.mockResolvedValue([environment({ envVars: { SHARED: 'environment' } })]);
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
-
-    const { envVarsPullAction } = await import('./vars.js');
-    await envVarsPullAction(undefined, {});
-
-    const [, content] = mockWriteFile.mock.calls[0]!;
-    expect(content).toContain('SHARED="project"');
-    expect(content).not.toContain('SHARED="environment"');
-    spy.mockRestore();
-  });
-
   it('lists managed var names as comments without values', async () => {
-    mockFetchEnvironments.mockResolvedValue([
-      environment({ envVars: { B: '2' }, managedEnvVarNames: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] }),
-    ]);
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [
+        environment({ envVars: { B: '2' }, managedEnvVarNames: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] }),
+      ],
+    });
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { envVarsPullAction } = await import('./vars.js');
@@ -121,11 +166,40 @@ describe('envVarsPullAction', () => {
     spy.mockRestore();
   });
 
+  it('lists write-only secrets as comments instead of writing the placeholder', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [
+        environment({
+          envVars: { LOG_LEVEL: 'debug', OPENAI_API_KEY: '__mastra_secret__', REDIS_URL: '__mastra_secret__' },
+        }),
+      ],
+    });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { envVarsPullAction } = await import('./vars.js');
+    await envVarsPullAction(undefined, {});
+
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('LOG_LEVEL="debug"');
+    expect(content).not.toContain('__mastra_secret__');
+    expect(content).toContain('# OPENAI_API_KEY');
+    expect(content).toContain('# REDIS_URL');
+    expect(content).not.toMatch(/^OPENAI_API_KEY=/m);
+    expect(content).not.toMatch(/^REDIS_URL=/m);
+    const output = spy.mock.calls.map(c => String(c[0])).join('\n');
+    expect(output).toContain('Pulled 1 variable(s)');
+    expect(output).toContain('2 secret name(s) listed as comments');
+    expect(output).not.toContain('__mastra_secret__');
+    spy.mockRestore();
+  });
+
   it('selects the environment by name, slug, or id', async () => {
-    mockFetchEnvironments.mockResolvedValue([
-      environment({ id: 'env-1', slug: 'my-app', envVars: { PROD: '1' } }),
-      environment({ id: 'env-2', name: 'Staging', slug: 'my-app-staging', type: 'staging', envVars: { STAGE: '1' } }),
-    ]);
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [
+        environment({ id: 'env-1', slug: 'my-app', envVars: { PROD: '1' } }),
+        environment({ id: 'env-2', name: 'Staging', slug: 'my-app-staging', type: 'staging', envVars: { STAGE: '1' } }),
+      ],
+    });
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { envVarsPullAction } = await import('./vars.js');
@@ -138,10 +212,12 @@ describe('envVarsPullAction', () => {
   });
 
   it('requires an environment argument when the project has more than one', async () => {
-    mockFetchEnvironments.mockResolvedValue([
-      environment({ id: 'env-1', slug: 'my-app' }),
-      environment({ id: 'env-2', slug: 'my-app-staging' }),
-    ]);
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [
+        environment({ id: 'env-1', slug: 'my-app' }),
+        environment({ id: 'env-2', slug: 'my-app-staging' }),
+      ],
+    });
 
     const { envVarsPullAction } = await import('./vars.js');
     await expect(envVarsPullAction(undefined, {})).rejects.toThrow(/my-app-staging/);
@@ -149,7 +225,7 @@ describe('envVarsPullAction', () => {
   });
 
   it('throws when the named environment does not exist', async () => {
-    mockFetchEnvironments.mockResolvedValue([environment({})]);
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({})] });
 
     const { envVarsPullAction } = await import('./vars.js');
     await expect(envVarsPullAction('nope', {})).rejects.toThrow('Environment not found: nope');
@@ -157,7 +233,7 @@ describe('envVarsPullAction', () => {
   });
 
   it('throws when the project has no environments', async () => {
-    mockFetchEnvironments.mockResolvedValue([]);
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [] });
 
     const { envVarsPullAction } = await import('./vars.js');
     await expect(envVarsPullAction(undefined, {})).rejects.toThrow('No environments found');
@@ -165,7 +241,7 @@ describe('envVarsPullAction', () => {
   });
 
   it('writes to a custom output file', async () => {
-    mockFetchEnvironments.mockResolvedValue([environment({ envVars: { FOO: 'bar' } })]);
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { FOO: 'bar' } })] });
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { envVarsPullAction } = await import('./vars.js');
@@ -178,7 +254,7 @@ describe('envVarsPullAction', () => {
   });
 
   it('requires --force before overwriting an existing output file', async () => {
-    mockFetchEnvironments.mockResolvedValue([environment({ envVars: { FOO: 'bar' } })]);
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { FOO: 'bar' } })] });
     const error = Object.assign(new Error('EEXIST'), { code: 'EEXIST' });
     mockWriteFile.mockRejectedValueOnce(error);
 
@@ -194,7 +270,7 @@ describe('envVarsPullAction', () => {
   });
 
   it('overwrites an existing output file when --force is set', async () => {
-    mockFetchEnvironments.mockResolvedValue([environment({ envVars: { FOO: 'bar' } })]);
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { FOO: 'bar' } })] });
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { envVarsPullAction } = await import('./vars.js');
@@ -210,9 +286,9 @@ describe('envVarsPullAction', () => {
   });
 
   it('escapes special characters and skips unsafe keys like the legacy pull', async () => {
-    mockFetchEnvironments.mockResolvedValue([
-      environment({ envVars: { TOKEN: 'price=$100`cmd`\nline2', 'bad-key': 'nope' } }),
-    ]);
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [environment({ envVars: { TOKEN: 'price=$100`cmd`\nline2', 'bad-key': 'nope' } })],
+    });
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const { envVarsPullAction } = await import('./vars.js');

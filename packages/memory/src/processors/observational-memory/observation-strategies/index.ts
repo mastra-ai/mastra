@@ -32,6 +32,7 @@ ObservationStrategy.create = ((om: ObservationalMemory, opts: ObservationRunOpts
     obscureThreadIds: om.getObscureThreadIds(),
     onIndexObservations: om.onIndexObservations,
     emitDebugEvent: e => om.emitDebugEvent(e),
+    prepareObserverContext: (observations, record) => om.prepareObserverContext(observations, record),
   };
 
   if (opts.cycleId) return new AsyncBufferObservationStrategy(deps, opts);

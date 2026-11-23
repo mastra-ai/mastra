@@ -1,15 +1,12 @@
-import type { SignalCatalogEntry } from '@mastra/client-js';
-import { X } from 'lucide-react';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
-import { nodeColor } from '@/ds/components/SankeyChart';
-
-function selectionLabel(catalog: readonly SignalCatalogEntry[], selection: ThemeSelection) {
-  return `${signalLabel(catalog, selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
-}
+import { Metadata } from '@/ds/components/Metadata';
+import { Txt } from '@/ds/components/Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 
 function filterSummary({
   selections,
@@ -52,46 +49,52 @@ export function ThemeFilterBanner({
   onClear: () => void;
 }) {
   const { signalCatalog } = useTraceIntelligence();
-  const colors = selections.map(selection => nodeColor(getSignalHue(selection.signalName)));
+  const colors = selections.map(selection => getSignalColor(selection.signalName));
   const latestSelection = selections.at(-1);
-  const backgroundGradient = `linear-gradient(90deg, ${colors
-    .map(color => `color-mix(in srgb, ${color} 8%, transparent)`)
-    .join(', ')})`;
-  const borderGradient = `linear-gradient(90deg, ${colors
-    .map(color => `color-mix(in srgb, ${color} 35%, transparent)`)
-    .join(', ')})`;
+  const borderGradient = `linear-gradient(90deg, ${colors.length > 1 ? colors.join(', ') : `${colors[0]}, ${colors[0]}`})`;
 
   return (
     <section
       aria-label="Active theme drill-in"
       className="relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-transparent px-3 py-2"
-      style={{ backgroundImage: `${backgroundGradient}, ${borderGradient}`, backgroundClip: 'padding-box, border-box' }}
+      style={{
+        backgroundImage: `linear-gradient(var(--card), var(--card)), ${borderGradient}`,
+        backgroundClip: 'padding-box, border-box',
+      }}
     >
       {selections.map((selection, index) => {
         const color = colors[index];
+        const signalTitle = signalLabel(signalCatalog, selection.signalName);
+        const selectionName = selection.kind === 'theme' ? selection.label : 'Noise';
         return (
           <button
             key={selection.signalName}
             aria-label={
               selections.length === 1
                 ? `Clear ${selection.kind} filter`
-                : `Clear filter ${selectionLabel(signalCatalog, selection)}`
+                : `Clear filter ${signalTitle}: ${selectionName}`
             }
-            className="border-border1 bg-surface2 text-neutral6 hover:bg-surface4 flex items-center gap-1.5 rounded-full border py-1 pr-2 pl-2.5 text-xs font-medium transition-colors"
             onClick={() => onRemove(selection.signalName)}
             type="button"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-background state-layer py-1 pr-2 pl-2.5 text-foreground"
           >
-            <span aria-hidden="true" className="rounded-0.5 size-2" style={{ backgroundColor: color }} />
-            {selectionLabel(signalCatalog, selection)}
-            <X aria-hidden="true" className="size-3.5" />
+            <span aria-hidden="true" style={{ backgroundColor: color }} className="rounded-0.5 size-2" />
+            <Txt as="span" variant="column" className="block">
+              <Metadata>
+                <Metadata.Item>{signalTitle}</Metadata.Item>
+                <Metadata.Item>{selectionName}</Metadata.Item>
+              </Metadata>
+            </Txt>
+            <IconCrossMedium aria-hidden="true" className="size-icon-sm" />
           </button>
         );
       })}
-      <span className="text-neutral4 text-xs">
+      <Txt as="span" variant="caption" tone="muted">
         {filterSummary({ selections, filteredTraceCount, totalTraceCount, isUnavailable })}
-      </span>
+      </Txt>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (
         <Button
+          icon={<IconEyeOpen />}
           aria-label={
             latestSelection.kind === 'theme'
               ? `View theme details for ${latestSelection.label}`
@@ -106,7 +109,7 @@ export function ThemeFilterBanner({
         </Button>
       ) : null}
       {selections.length > 1 ? (
-        <Button onClick={onClear} size="sm" type="button" variant="ghost">
+        <Button icon={<IconCrossMedium />} onClick={onClear} size="sm" type="button" variant="ghost">
           Clear all
         </Button>
       ) : null}

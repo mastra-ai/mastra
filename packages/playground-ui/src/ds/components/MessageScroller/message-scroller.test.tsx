@@ -6,6 +6,7 @@ import { ThreadRail } from '../ThreadRail/thread-rail';
 import type { ThreadRailTurn } from '../ThreadRail/thread-rail-turns';
 
 import {
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -299,13 +300,14 @@ describe('MessageScroller', () => {
     }
   });
 
-  it('keeps one preview shell while animating enter, switch, and exit', async () => {
+  it('keeps one preview shell while it crossfades in, between turns, and out', async () => {
     mockPreviewSizerHeight();
     renderScroller();
 
     const firstTurn = screen.getByRole('button', { name: 'Jump to First turn' });
     const secondTurn = screen.getByRole('button', { name: 'Jump to Second turn' });
     const rail = screen.getByTestId('thread-rail');
+    const current = () => screen.getByTestId('thread-rail-preview-current');
 
     setTop(rail, 100);
     setTop(firstTurn, 120);
@@ -315,31 +317,20 @@ describe('MessageScroller', () => {
 
     const preview = screen.getByTestId('thread-rail-preview');
     const previewId = preview.getAttribute('id');
-    const viewport = screen.getByTestId('thread-rail-preview-viewport');
     expect(firstTurn.getAttribute('aria-describedby')).toBe(previewId);
-    expect(preview.className).toContain('overflow-hidden');
-    expect(preview.className).toContain('transition-[height,translate,opacity]');
-    expect(preview.className).toContain('duration-360');
-    expect(preview.className).toContain('ease-out-custom');
     expect(preview.className).toContain('opacity-0');
     expect(preview.style.translate).toBe('0 calc(40px - 50%)');
     expect(preview.style.height).toBe('96px');
-    expect(viewport.className).not.toContain('overflow-hidden');
     expect(within(screen.getByTestId('thread-rail-preview-sizer')).getByText('First turn')).toBeTruthy();
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-150');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('ease-in-out');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
-    expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('First turn')).toBeTruthy();
+    expect(current().className).toContain('opacity-0');
+    expect(within(current()).getByText('First turn')).toBeTruthy();
 
     await waitFor(() => {
       expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBe('true');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-none');
+      expect(current().className).toContain('opacity-100');
     });
 
-    const firstCurrentLayer = screen.getByTestId('thread-rail-preview-current');
+    const firstCurrentLayer = current();
 
     fireEvent.mouseEnter(secondTurn);
 
@@ -352,25 +343,16 @@ describe('MessageScroller', () => {
     expect(within(screen.getByTestId('thread-rail-preview-sizer')).queryByText('First turn')).toBeNull();
     expect(within(screen.getByTestId('thread-rail-preview-sizer')).getByText('Second turn')).toBeTruthy();
 
-    const switchCurrentLayer = screen.getByTestId('thread-rail-preview-current');
     const switchPreviousLayer = screen.getByTestId('thread-rail-preview-previous');
-    expect(switchCurrentLayer).not.toBe(firstCurrentLayer);
+    expect(current()).not.toBe(firstCurrentLayer);
     expect(switchPreviousLayer.className).toContain('opacity-100');
-    expect(switchPreviousLayer.className).toContain('scale-100');
-    expect(switchPreviousLayer.className).toContain('blur-none');
     expect(within(switchPreviousLayer).getByText('First turn')).toBeTruthy();
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
-    expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('Second turn')).toBeTruthy();
+    expect(current().className).toContain('opacity-0');
+    expect(within(current()).getByText('Second turn')).toBeTruthy();
 
     await waitFor(() => {
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-100');
-      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-none');
+      expect(current().className).toContain('opacity-100');
       expect(screen.getByTestId('thread-rail-preview-previous').className).toContain('opacity-0');
-      expect(screen.getByTestId('thread-rail-preview-previous').className).toContain('scale-95');
-      expect(screen.getByTestId('thread-rail-preview-previous').className).toContain('blur-xs');
     });
 
     fireEvent.mouseLeave(screen.getByTestId('thread-rail'));
@@ -378,9 +360,7 @@ describe('MessageScroller', () => {
     expect(screen.getByTestId('thread-rail-preview')).toBe(preview);
     expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBeNull();
     expect(preview.className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
+    expect(current().className).toContain('opacity-0');
 
     await waitFor(() => {
       expect(screen.queryByTestId('thread-rail-preview')).toBeNull();
@@ -529,6 +509,10 @@ const stubLayout = (tops: Record<string, number>) => {
     const top = this.dataset.messageId ? tops[this.dataset.messageId] : undefined;
     return createRect({ top: top ?? 0 });
   });
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function () {
+    const rect = this.getBoundingClientRect();
+    return Object.assign([rect], { item: (index: number) => (index === 0 ? rect : null) });
+  });
 };
 
 const getContent = (): HTMLElement => {
@@ -572,7 +556,7 @@ describe('MessageScroller older history', () => {
     });
   });
 
-  it('does not request older history before the transcript has settled at the end', () => {
+  it('does not request older history for a mount that lands at the top without the reader moving', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
 
@@ -586,7 +570,7 @@ describe('MessageScroller older history', () => {
     expect(onReachStart).not.toHaveBeenCalled();
   });
 
-  it('requests older history once the reader settles at the end and returns to the start', () => {
+  it('requests older history once the reader scrolls back from the end to the start', () => {
     const onReachStart = vi.fn();
     render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
 
@@ -603,6 +587,25 @@ describe('MessageScroller older history', () => {
 
     // Still at the start with the fetch in flight — no second request.
     fireEvent.scroll(viewport);
+    expect(onReachStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('requests older history from a transcript that opened above its bottom, with no trip to the end', () => {
+    const onReachStart = vi.fn();
+    render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+
+    // A last turn taller than the viewport parks the reader short of the bottom,
+    // so the end is never reached — scrolling up must still ask for older messages.
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 300 });
+    fireEvent.scroll(viewport);
+    expect(onReachStart).not.toHaveBeenCalled();
+
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    fireEvent.scroll(viewport);
+
     expect(onReachStart).toHaveBeenCalledTimes(1);
   });
 
@@ -793,6 +796,33 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
   });
 
+  it('follows the first reply of a fresh thread, which has nothing to scroll yet', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => frames.push(callback));
+    stubLayout({ 'message-1': 0 });
+    const { rerender } = render(<HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={[]} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 400, clientHeight: 400, scrollTop: 0 });
+    rerender(<HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1']} />);
+    act(() => frames.shift()?.(0));
+    act(() => frames.shift()?.(16));
+
+    scrollTo.mockClear();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+    rerender(
+      <HistoryHarness
+        autoScroll
+        defaultScrollPosition="last-anchor"
+        messageIds={['message-1']}
+        replyIds={['reply-1']}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 600, behavior: 'auto' });
+  });
+
   it('stays attached when a scroll lands behind a reply that is still growing', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     render(<HistoryHarness autoScroll messageIds={['message-1']} />);
@@ -823,6 +853,9 @@ describe('MessageScroller autoScroll', () => {
 
   it('leaves a reopened thread on the turn it restored instead of following the stream', () => {
     stubLayout({ 'message-1': 0, 'message-2': 300 });
+    // Sized before mount: jsdom's empty box would read as a fresh thread at its end.
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400);
     const { rerender } = render(
       <HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1', 'message-2']} />,
     );
@@ -1146,5 +1179,96 @@ describe('MessageScroller autoScroll', () => {
     });
 
     expect(scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+// A turn whose last step folded into the activity line above it: the step stays
+// registered with the scroller, but is drawn with `display: none`.
+const FoldedStepHarness = () => (
+  <MessageScrollerProvider autoScroll>
+    <MessageScrollerViewport data-testid="folded-step-viewport">
+      <MessageScrollerContent>
+        <MessageScrollerItem messageId="question" scrollAnchor>
+          <div>Read the config files</div>
+        </MessageScrollerItem>
+        <MessageScrollerItem messageId="activity">
+          <div>Read files</div>
+        </MessageScrollerItem>
+        <MessageScrollerItem messageId="folded-step" style={{ display: 'none' }} />
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+    <MessageScrollerButton behavior="auto" />
+  </MessageScrollerProvider>
+);
+
+type TurnLayout = { rows: Record<string, { top: number; height: number }>; contentHeight: number };
+
+// Lays the turn out as a browser would at the viewport's current scroll, read on every
+// call so a test can grow it. A row with `display: none` has no box: no client rects,
+// and a zero rect at the window origin.
+const stubTurnLayout = (viewport: HTMLElement, layout: TurnLayout) => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.style.display === 'none') return createRect({ height: 0, width: 0 });
+    const row = this.dataset.messageId ? layout.rows[this.dataset.messageId] : undefined;
+    if (row) return createRect({ top: row.top - viewport.scrollTop, height: row.height });
+    if (this.dataset.slot === 'message-scroller-content') {
+      return createRect({ top: -viewport.scrollTop, height: layout.contentHeight });
+    }
+    return createRect({ height: viewport.clientHeight });
+  });
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function () {
+    const rects: DOMRect[] = this.style.display === 'none' ? [] : [this.getBoundingClientRect()];
+    return Object.assign(rects, { item: (index: number) => rects[index] ?? null });
+  });
+};
+
+// The composer docks 100px under the content, so the last drawn row rests at the end of
+// the view at its bottom + 100 - 400, short of the end of the box.
+describe('MessageScroller with a folded last row', () => {
+  it('offers a reader who scrolled up the way back, and lands on the last row still drawn', () => {
+    render(<FoldedStepHarness />);
+
+    const viewport = screen.getByTestId('folded-step-viewport');
+    const scrollTo = installScrollTo(viewport);
+    stubTurnLayout(viewport, {
+      rows: { question: { top: 0, height: 760 }, activity: { top: 784, height: 76 } },
+      contentHeight: 900,
+    });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 560 });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 });
+
+    const jumpToLatest = screen.getByRole('button', { name: 'Scroll to end' });
+    expect(jumpToLatest.getAttribute('data-active')).toBe('true');
+
+    fireEvent.click(jumpToLatest);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 560, behavior: 'auto' });
+    expect(jumpToLatest.getAttribute('data-active')).toBe('false');
+  });
+
+  it('carries a following reader down as the activity line grows above the folded step', async () => {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    render(<FoldedStepHarness />);
+
+    const viewport = screen.getByTestId('folded-step-viewport');
+    installScrollTo(viewport);
+    const layout: TurnLayout = {
+      rows: { question: { top: 0, height: 760 }, activity: { top: 784, height: 76 } },
+      contentHeight: 900,
+    };
+    stubTurnLayout(viewport, layout);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 560 });
+
+    const { content, observer } = contentResizeObserver();
+    const scrollTo = installScrollTo(viewport);
+    layout.rows.activity = { top: 784, height: 476 };
+    layout.contentHeight = 1300;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+
+    await act(async () => {
+      observer.trigger([{ target: content }]);
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 960, behavior: 'auto' });
   });
 });

@@ -1,0 +1,17 @@
+{
+  "temperature": ["oathbreaker-glm-5.3", "oathbreaker-glm-5.3-flash"],
+  "reasoning": {
+    "oathbreaker-glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "oathbreaker-glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

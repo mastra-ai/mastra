@@ -1,119 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { AgentChat as SharedAgentChat } from '@mastra/playground-ui/domains/agents/chat/agent-chat';
+import type { AgentChatProps } from '@mastra/playground-ui/domains/agents/chat/agent-chat';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useAgentSettings } from '../context/agent-context';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
-import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
-import { Thread } from '@/lib/ai-ui/thread';
+import { StudioRuntimeFeatures } from '@/lib/ai-ui/chat/chat-provider';
+import { StudioComposerFeatures } from '@/lib/ai-ui/thread';
 
-import type { ChatProps } from '@/types';
-
-interface AvailableSuggestedPromptsOptions {
-  suggestedPrompts?: string[];
-  isNewThread?: boolean;
-  isMessagesLoading: boolean;
-}
-
-/**
- * Keeps existing-thread prompts hidden until message history has loaded, so
- * they do not briefly appear before the conversation replaces the welcome UI.
- */
-const getAvailableSuggestedPrompts = ({
-  suggestedPrompts,
-  isNewThread,
-  isMessagesLoading,
-}: AvailableSuggestedPromptsOptions) => {
-  if (isNewThread) return suggestedPrompts;
-  if (isMessagesLoading) return undefined;
-  return suggestedPrompts;
-};
-
-export const AgentChat = ({
-  agentId,
-  agentName,
-  threadId,
-  memory,
-  refreshThreadList,
-  modelVersion,
-  agentVersionId,
-  supportsMemory,
-  modelList,
-  messageId,
-  suggestedPrompts,
-  isNewThread,
-  hideModelSwitcher,
-  runOptionsSlot,
-}: Omit<ChatProps, 'initialMessages'> & {
-  memory?: boolean;
-  messageId?: string;
-  suggestedPrompts?: string[];
-  isNewThread?: boolean;
-  hideModelSwitcher?: boolean;
-  runOptionsSlot?: React.ReactNode;
-}) => {
+export function AgentChat(
+  props: Omit<AgentChatProps, 'requestContext' | 'settings' | 'RuntimeFeatures' | 'ComposerFeatures'>,
+) {
   const { settings } = useAgentSettings();
-  const requestContext = useMergedRequestContext();
-
-  const { data, isLoading: isMessagesLoading } = useAgentMessages({
-    agentId: agentId,
-    threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
-    memory: memory ?? false,
-  });
-
-  // Handle scrolling to message after navigation
-  useEffect(() => {
-    if (messageId && data && !isMessagesLoading) {
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (messageElement) {
-          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          messageElement.classList.add('bg-surface4');
-          setTimeout(() => {
-            messageElement.classList.remove('bg-surface4');
-          }, 2000);
-        }
-      }, 100);
-    }
-  }, [messageId, data, isMessagesLoading]);
-
-  // Stable empty array per thread: stays the same reference across re-renders
-  // (preventing useChat from wiping streamed messages), but changes when threadId
-  // changes (allowing useChat to reset when switching threads).
-  const emptyMessagesRef = useRef<{ threadId: string; messages: never[] }>({ threadId, messages: [] });
-  if (emptyMessagesRef.current.threadId !== threadId) {
-    emptyMessagesRef.current = { threadId, messages: [] };
-  }
-
-  const messages = data?.messages ?? emptyMessagesRef.current.messages;
-  const availableSuggestedPrompts = getAvailableSuggestedPrompts({
-    suggestedPrompts,
-    isNewThread,
-    isMessagesLoading,
-  });
+  const requestContext = useEntityRequestContext('agent', props.agentId)[0];
 
   return (
-    <ChatProvider
-      agentId={agentId}
-      agentName={agentName}
-      modelVersion={modelVersion}
-      agentVersionId={agentVersionId}
-      supportsMemory={supportsMemory}
-      threadId={threadId}
-      initialMessages={messages}
-      refreshThreadList={refreshThreadList}
+    <SharedAgentChat
+      {...props}
       settings={settings}
       requestContext={requestContext}
-    >
-      <Thread
-        agentName={agentName ?? ''}
-        agentId={agentId}
-        threadId={threadId}
-        suggestedPrompts={availableSuggestedPrompts}
-        hasModelList={Boolean(modelList)}
-        hideModelSwitcher={hideModelSwitcher}
-        refreshThreadList={refreshThreadList}
-        runOptionsSlot={runOptionsSlot}
-      />
-    </ChatProvider>
+      RuntimeFeatures={StudioRuntimeFeatures}
+      ComposerFeatures={StudioComposerFeatures}
+    />
   );
-};
+}

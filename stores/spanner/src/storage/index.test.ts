@@ -5,6 +5,7 @@ import {
   createSampleTask,
   createSampleThread,
   createSampleWorkflowSnapshot,
+  createSpan,
   createTestSuite,
   createConfigValidationTests,
   createDomainDirectTests,
@@ -89,7 +90,7 @@ const ENABLE_TESTS = process.env.ENABLE_TESTS === 'true';
 
 if (!ENABLE_TESTS) {
   console.log(
-    'Spanner integration tests are disabled by default. Run with ENABLE_TESTS=true and a running Spanner emulator.',
+    'Spanner integration tests are disabled by default. Run `pnpm test:integration` (needs docker) to start the emulator and run them.',
   );
 }
 
@@ -122,7 +123,75 @@ if (ENABLE_TESTS) {
     disableMetrics: false,
   };
 
-  createTestSuite(new SpannerStore(sharedConfig));
+  createTestSuite(new SpannerStore(sharedConfig), {
+    workflowResultsNoopWhenRunMissing: false,
+    skillsMetadataFilter: false,
+  });
+
+  describe('retention', () => {
+    it('prunes expired observability spans and metrics', async () => {
+      const retentionStore = new SpannerStore({
+        ...sharedConfig,
+        id: 'spanner-retention-test',
+        retention: {
+          observability: {
+            spans: { maxAge: '30d', batchSize: 1 },
+            metrics: { maxAge: '30d', batchSize: 1 },
+          },
+        },
+      });
+
+      try {
+        await retentionStore.init();
+        const observability = (await retentionStore.getStore('observability')) as ObservabilitySpanner | undefined;
+        expect(observability).toBeDefined();
+        await observability!.dangerouslyClearAll();
+        await observability!.createSpan({
+          span: createSpan({
+            traceId: 'expired',
+            spanId: 'expired',
+            startedAt: new Date(Date.now() - 31 * 86_400_000),
+          }),
+        });
+        await observability!.createSpan({
+          span: createSpan({
+            traceId: 'retained',
+            spanId: 'retained',
+            startedAt: new Date(Date.now() - 29 * 86_400_000),
+          }),
+        });
+        await observability!.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'expired',
+              name: 'expired',
+              value: 1,
+              timestamp: new Date(Date.now() - 31 * 86_400_000),
+              labels: {},
+            },
+            {
+              metricId: 'retained',
+              name: 'retained',
+              value: 1,
+              timestamp: new Date(Date.now() - 29 * 86_400_000),
+              labels: {},
+            },
+          ],
+        });
+
+        await expect(retentionStore.prune()).resolves.toEqual([
+          { domain: 'observability', table: 'mastra_ai_spans', deleted: 1, done: true },
+          { domain: 'observability', table: 'mastra_ai_metrics', deleted: 1, done: true },
+        ]);
+        await expect(observability!.getTrace({ traceId: 'expired' })).resolves.toBeNull();
+        await expect(observability!.getTrace({ traceId: 'retained' })).resolves.not.toBeNull();
+        const metrics = await observability!.listMetrics({ filters: {} });
+        expect(metrics.metrics.map(metric => metric.name)).toEqual(['retained']);
+      } finally {
+        await retentionStore.close();
+      }
+    });
+  });
 
   // Domain-level direct usage with a pre-configured Database handle.
   createDomainDirectTests({
@@ -735,6 +804,47 @@ if (ENABLE_TESTS) {
       expect(new Date(list.results[0]!.startedAt).getTime()).toBeLessThanOrEqual(
         new Date(list.results[1]!.startedAt).getTime(),
       );
+    });
+
+    it('listExperimentResults filters by tags (all must match)', async () => {
+      const exp = await experiments.createExperiment(baseExp());
+      const now = Date.now();
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'only-a', tags: ['a'], status: 'reviewed', startedAt: new Date(now) }),
+      );
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'a-and-b', tags: ['a', 'b'], startedAt: new Date(now + 1000) }),
+      );
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'only-b', tags: ['b'], startedAt: new Date(now + 2000) }),
+      );
+      await experiments.addExperimentResult(
+        baseResult(exp.id, { itemId: 'untagged', tags: null, startedAt: new Date(now + 3000) }),
+      );
+      const pagination = { page: 0, perPage: 10 };
+
+      const both = await experiments.listExperimentResults({ experimentId: exp.id, tags: ['a', 'b'], pagination });
+      expect(both.results.map(r => r.itemId)).toEqual(['a-and-b']);
+      expect(both.pagination.total).toBe(1);
+
+      const onlyA = await experiments.listExperimentResults({ experimentId: exp.id, tags: ['a'], pagination });
+      expect(onlyA.results.map(r => r.itemId)).toEqual(['only-a', 'a-and-b']);
+      expect(onlyA.pagination.total).toBe(2);
+
+      const withStatus = await experiments.listExperimentResults({
+        experimentId: exp.id,
+        tags: ['a'],
+        status: 'reviewed',
+        pagination,
+      });
+      expect(withStatus.results.map(r => r.itemId)).toEqual(['only-a']);
+
+      const empty = await experiments.listExperimentResults({ experimentId: exp.id, tags: [], pagination });
+      expect(empty.pagination.total).toBe(4);
+
+      const missing = await experiments.listExperimentResults({ experimentId: exp.id, tags: ['nope'], pagination });
+      expect(missing.results).toHaveLength(0);
+      expect(missing.pagination.total).toBe(0);
     });
 
     it('updateExperimentResult sets review status/tags/comment and is a no-op without changes', async () => {

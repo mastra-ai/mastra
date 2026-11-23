@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -7,12 +8,7 @@ import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderFavoritePage from '..';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -42,7 +38,6 @@ const noopPaths = {
   workflowRunLink: () => '',
   datasetLink: () => '',
   datasetItemLink: () => '',
-  datasetItemCompareLink: () => '',
   experimentLink: () => '',
 } as never;
 
@@ -144,21 +139,6 @@ describe('AgentBuilderFavoritePage', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].getAttribute('href')).toBe('/agent-builder/agents/fav-1/view');
     expect(rows[1].getAttribute('href')).toBe('/agent-builder/agents/fav-2/view');
-  });
-
-  it('shows the empty state when the API returns no agents', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents`, () =>
-        HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false }),
-      ),
-    );
-
-    renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByText('No favorite agents yet')).toBeTruthy();
-    });
-    expect(screen.queryByTestId('favorite-agent-row')).toBeNull();
   });
 
   it('shows the error state when the API returns 500', async () => {

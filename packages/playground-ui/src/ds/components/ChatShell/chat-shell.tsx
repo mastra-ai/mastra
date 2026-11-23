@@ -1,4 +1,5 @@
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentProps, ComponentPropsWithoutRef } from 'react';
+import { useState } from 'react';
 
 import {
   MessageScroller,
@@ -14,6 +15,13 @@ import type {
   MessageScrollerViewportProps,
 } from '../MessageScroller';
 
+import {
+  ChatShellComposerInputContext,
+  ChatShellRegionsContext,
+  createChatShellRegions,
+  useChatShellRegions,
+} from './chat-shell-context';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
@@ -25,24 +33,31 @@ export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
  * composer docks inside it, every region shares one column.
  *
  * Tuned through custom properties, all defaulted here: `--chat-column` (column
- * width), `--chat-surface` (page colour), `--chat-fade` (the band the veil ramps
- * in across, above the composer), `--chat-veil` (strongest it ever gets — the
- * transcript keeps showing through), `--chat-gutter` (room below the composer),
- * `--chat-inset-end` (room an overlay panel claims on the end edge).
+ * width), `--chat-surface` (the colour the composer veil ramps to — the shell
+ * paints no fill of its own and inherits whatever surface hosts it, so this has
+ * to name that same surface), `--chat-fade` (the band the veil ramps in
+ * across, above the composer), `--chat-veil` (strongest it gets, opaque by
+ * default so nothing reads under the composer), `--chat-gutter` (room below the
+ * composer), `--chat-edge` (room on both sides, so the scrollbar never overlaps
+ * the composer), `--chat-inset-end` (room an overlay panel claims on the end edge).
  */
 export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps) {
+  const [regions] = useState(createChatShellRegions);
+
   return (
     <MessageScrollerProvider {...scroller}>
-      <div
-        data-slot="chat-shell"
-        className={cn(
-          '@container relative isolate flex min-h-0 min-w-0 flex-col bg-(--chat-surface)',
-          '[--chat-column:48rem] [--chat-fade:1.5rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
-          '[--chat-surface:var(--color-surface2)] [--chat-veil:70%]',
-          className,
-        )}
-        {...props}
-      />
+      <ChatShellRegionsContext.Provider value={regions}>
+        <div
+          data-slot="chat-shell"
+          className={cn(
+            '@container relative isolate flex min-h-0 min-w-0 flex-col',
+            '[--chat-column:48rem] [--chat-edge:0.5rem] [--chat-fade:2rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
+            '[--chat-surface:var(--color-background)] [--chat-veil:100%]',
+            className,
+          )}
+          {...props}
+        />
+      </ChatShellRegionsContext.Provider>
     </MessageScrollerProvider>
   );
 }
@@ -62,13 +77,20 @@ export function ChatShellStage({ className, ...props }: ComponentPropsWithoutRef
 
 /**
  * The one scroll container. It takes the end inset itself — on an ancestor the
- * same room would drag the scrollbar inward, off the true edge.
+ * same room would drag the scrollbar inward, off the true edge. No overscroll
+ * bounce vertically: the dock is sticky inside this box, so the rubber band
+ * would carry the composer off its edge along with the transcript. Horizontal
+ * overscroll stays native so trackpad swipes can navigate browser history.
+ *
+ * The same edge room on both sides keeps the scrollbar clear of the composer and
+ * the column centred, with a matching gutter for classic scrollbars.
  */
 export function ChatShellViewport({ className, children, ...props }: MessageScrollerViewportProps) {
   return (
     <MessageScrollerViewport
       className={cn(
-        'h-auto min-h-0 flex-1 pe-(--chat-inset-end)',
+        'h-auto min-h-0 flex-1 overscroll-y-none ps-(--chat-edge) pe-[calc(var(--chat-edge)+var(--chat-inset-end))]',
+        '[scrollbar-gutter:stable_both-edges]',
         'transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none',
         className,
       )}
@@ -76,7 +98,7 @@ export function ChatShellViewport({ className, children, ...props }: MessageScro
     >
       {/* Sticky against the scroller itself is clamped to its box, not the
           scrolled height, and strands the dock mid-transcript. */}
-      <div data-slot="chat-shell-track" className="flex min-h-full min-w-0 flex-col">
+      <div data-slot="chat-shell-track" className="relative flex min-h-full min-w-0 flex-col">
         {children}
       </div>
     </MessageScrollerViewport>
@@ -89,11 +111,53 @@ export function ChatShellContent({ className, ...props }: MessageScrollerContent
 }
 
 /** The shared reading column. Every chat region must go through it. */
-export function ChatShellColumn({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
+export function ChatShellColumn({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-slot="chat-shell-column"
-      className={cn('mx-auto flex w-full max-w-(--chat-column) min-w-0 flex-col px-3 md:px-5', className)}
+      className={cn('mx-auto flex w-full max-w-(--chat-column) min-w-0 flex-col px-3 md:px-4', className)}
+      {...props}
+    />
+  );
+}
+
+/** The conversation's reading column. Positioned, so overlays such as `TranscriptAnnotations` travel with the text. */
+export function ChatShellTranscript({ className, ref, ...props }: ComponentProps<'div'>) {
+  const { transcriptRef } = useChatShellRegions();
+  return <ChatShellColumn ref={mergeRefs(transcriptRef, ref)} className={cn('relative', className)} {...props} />;
+}
+
+export interface ChatShellTurnProps extends ComponentPropsWithoutRef<'div'> {
+  /** Opened by a user message: the turn reserves room and releases it through a slow drift. */
+  opensTurn?: boolean;
+  /** Holds the reply's share of the screen open under the live turn while the run answers. */
+  holdsRoom?: boolean;
+  /** Restored mid-run: the room is already due, so it opens with no transition. */
+  restored?: boolean;
+}
+
+/**
+ * One user turn and the reply under it. The room is the answer's share of the
+ * screen: the scroller parks the sent message exactly one room above the end of
+ * the box, so wherever the composer ends the message rests with this much space
+ * under it, and the scroller has nothing to follow until the answer outgrows it.
+ * A full screen parked the message against the very top; 70 leaves it breathing.
+ * Opening must outrun the scroller's trip; closing is the conversation settling.
+ */
+export function ChatShellTurn({ opensTurn, holdsRoom, restored, className, ...props }: ChatShellTurnProps) {
+  return (
+    <div
+      data-slot="chat-shell-turn"
+      data-opens-turn={opensTurn ? 'true' : undefined}
+      data-holds-room={holdsRoom ? 'true' : undefined}
+      className={cn(
+        'flex flex-col',
+        opensTurn &&
+          'min-h-0 transition-[min-height] duration-[1500ms] ease-[cubic-bezier(0.3,0,0.2,1)] motion-reduce:transition-none',
+        holdsRoom && 'min-h-[70cqh] duration-[440ms] ease-[cubic-bezier(0.2,0,0.2,1)] starting:min-h-0',
+        holdsRoom && restored && 'transition-none',
+        className,
+      )}
       {...props}
     />
   );
@@ -104,23 +168,30 @@ export function ChatShellColumn({ className, ...props }: ComponentPropsWithoutRe
  * transcript scrolls behind, so nothing measures it and a composer growing under
  * the cursor resizes no box the scroller watches.
  *
- * Behind it, one sheet of the page masked in over `--chat-fade` of air and never
- * past `--chat-veil`, so the transcript dims as it slides under but stays
- * readable through the card's surroundings. The ramp runs three times the air, so
- * it tops out behind the card and its end never shows.
+ * Behind it, one sheet of the page masked in from the dock's top edge, reaching
+ * `--chat-veil` `--chat-fade` down. The transcript stays fully legible until it
+ * meets the composer, then nothing shows through around its corners or under it.
+ * `--chat-fade` is also the air between a resting transcript and the composer.
+ *
+ * Its `ComposerInput` is the conversation's composer, the one
+ * `TranscriptAnnotations` focuses.
  */
 export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
+  const { composerInputRef } = useChatShellRegions();
+
   return (
-    <div
-      data-slot="chat-shell-dock"
-      className={cn(
-        'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
-        'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
-        'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_calc(var(--chat-fade)*3))]',
-        className,
-      )}
-      {...props}
-    />
+    <ChatShellComposerInputContext.Provider value={composerInputRef}>
+      <div
+        data-slot="chat-shell-dock"
+        className={cn(
+          'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
+          'before:pointer-events-none before:absolute before:inset-0 before:-z-10',
+          'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
+          className,
+        )}
+        {...props}
+      />
+    </ChatShellComposerInputContext.Provider>
   );
 }
 

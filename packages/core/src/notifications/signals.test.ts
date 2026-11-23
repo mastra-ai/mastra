@@ -293,4 +293,35 @@ describe('summarizeNotifications', () => {
     expect(result.notificationIds).toEqual([]);
     expect(result.threadId).toBe('');
   });
+
+  it('counts a "__proto__" source as an own numeric property', () => {
+    const notifications = [
+      makeNotification({ id: '1', status: 'pending', source: '__proto__', priority: 'medium' }),
+      makeNotification({ id: '2', status: 'pending', source: '__proto__', priority: 'low' }),
+    ];
+    const result = summarizeNotifications(notifications);
+    expect(Object.prototype.hasOwnProperty.call(result.bySource, '__proto__')).toBe(true);
+    const value = Object.getOwnPropertyDescriptor(result.bySource, '__proto__')?.value;
+    expect(value).toBe(2);
+    expect(typeof value).toBe('number');
+  });
+
+  it('counts "constructor" and "toString" sources as numbers, not strings', () => {
+    const notifications = [
+      makeNotification({ id: '1', status: 'pending', source: 'constructor', priority: 'medium' }),
+      makeNotification({ id: '2', status: 'pending', source: 'toString', priority: 'low' }),
+    ];
+    const result = summarizeNotifications(notifications);
+    expect(result.bySource.constructor).toBe(1);
+    expect(typeof result.bySource.constructor).toBe('number');
+    expect(result.bySource.toString).toBe(1);
+    expect(typeof result.bySource.toString).toBe('number');
+  });
+
+  it('renders a "__proto__" source through the summary helpers', () => {
+    const notifications = [makeNotification({ id: '1', status: 'pending', source: '__proto__', priority: 'medium' })];
+    const summary = summarizeNotifications(notifications);
+    expect(notificationSummaryContents(summary)).toBe('__proto__: 1');
+    expect(notificationSummarySignalMetadata(summary).groups).toContainEqual({ source: '__proto__', count: 1 });
+  });
 });

@@ -1,0 +1,80 @@
+import type { ReactNode } from 'react';
+import { DataListTopCell } from './data-list-top-cell';
+import type { DataListTopCellProps } from './data-list-top-cell';
+import { Button } from '@/ds/components/Button';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowsUpDown } from '@/ds/icons/central/IconArrowsUpDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { cn } from '@/lib/utils';
+
+export type DataListSort = 'asc' | 'desc';
+
+const sortIcons = {
+  asc: IconArrowUp,
+  desc: IconArrowDown,
+  none: IconArrowsUpDown,
+};
+
+const sortLabels = {
+  asc: 'ascending',
+  desc: 'descending',
+};
+
+const sortAnimations = {
+  asc: 'animate-sort-arrow-up',
+  desc: 'animate-sort-arrow-down',
+};
+
+const sortTooltips = {
+  asc: 'Asc',
+  desc: 'Desc',
+  none: 'Sort',
+};
+
+export type DataListSortableTopCellProps<K extends string = string> = Omit<
+  DataListTopCellProps,
+  'aria-sort' | 'as' | 'children' | 'onClick'
+> & {
+  children: ReactNode;
+  sortKey: K;
+  sort?: DataListSort;
+  onSortChange: (sort: DataListSort, key: K) => void;
+  align?: 'start' | 'end';
+  /** Names the column in the sort button's accessible label. Defaults to `children` when it is a string, else `sortKey`. */
+  label?: string;
+};
+
+export function DataListSortableTopCell<K extends string = string>({
+  children,
+  sortKey,
+  sort,
+  onSortChange,
+  align = 'start',
+  label = typeof children === 'string' ? children : sortKey,
+  className,
+  ...props
+}: DataListSortableTopCellProps<K>) {
+  const next: DataListSort = sort === 'asc' ? 'desc' : 'asc';
+  const SortIcon = sortIcons[sort ?? 'none'];
+  const current = sort ? `sorted ${sortLabels[sort]}` : 'not sorted';
+
+  return (
+    <DataListTopCell
+      data-sort={sort ?? 'none'}
+      className={cn('gap-1 overflow-visible', align === 'end' && 'justify-end', className)}
+      {...props}
+    >
+      <span className="min-w-0 truncate">{children}</span>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`${label}, ${current}, sort ${sortLabels[next]}`}
+        tooltip={sortTooltips[sort ?? 'none']}
+        onClick={() => onSortChange(next, sortKey)}
+        className={cn('shrink-0', sort ? 'text-foreground' : 'text-muted-foreground')}
+      >
+        <SortIcon key={sort ?? 'none'} className={sort && sortAnimations[sort]} />
+      </Button>
+    </DataListTopCell>
+  );
+}

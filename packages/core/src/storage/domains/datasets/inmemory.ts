@@ -1,4 +1,4 @@
-import { calculatePagination, normalizePerPage } from '../../base';
+import { calculatePagination, compareByField, normalizePerPage, resolveListOrderBy } from '../../base';
 import type {
   DatasetRecord,
   DatasetItem,
@@ -9,6 +9,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -70,6 +71,10 @@ function toDatasetRecord(record: InternalDatasetRecord): DatasetRecord {
     inputSchema: record.inputSchema ?? undefined,
     groundTruthSchema: record.groundTruthSchema ?? undefined,
     requestContextSchema: record.requestContextSchema ?? undefined,
+    tags: record.tags ?? undefined,
+    targetType: record.targetType ?? undefined,
+    targetIds: record.targetIds ?? undefined,
+    scorerIds: record.scorerIds ?? undefined,
   };
 }
 
@@ -192,10 +197,13 @@ export class DatasetsInMemory extends DatasetsStorage {
     let datasets = Array.from(this.db.datasets.values());
 
     if (args.filters) {
-      const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+      const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, datasetIds, name } =
+        args.filters;
       const nameLower = name?.toLowerCase();
       const targetIdsSet = targetIds && targetIds.length > 0 ? new Set(targetIds) : undefined;
+      const datasetIdsSet = datasetIds ? new Set(datasetIds) : undefined;
       datasets = datasets.filter(d => {
+        if (datasetIdsSet && !datasetIdsSet.has(d.id)) return false;
         if (organizationId !== undefined && d.organizationId !== organizationId) return false;
         if (projectId !== undefined && d.projectId !== projectId) return false;
         if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;
@@ -209,8 +217,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       });
     }
 
-    // Sort by createdAt descending (newest first)
-    datasets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
+    datasets.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
@@ -285,6 +296,9 @@ export class DatasetsInMemory extends DatasetsStorage {
     }
     if (currentRow.datasetId !== args.datasetId) {
       throw new Error(`Item ${args.id} does not belong to dataset ${args.datasetId}`);
+    }
+    if (currentRow.metadata?.__purged === true) {
+      throw new Error(`Purged dataset item cannot be updated: ${args.id}`);
     }
 
     const dataset = this.db.datasets.get(args.datasetId);
@@ -394,6 +408,37 @@ export class DatasetsInMemory extends DatasetsStorage {
     await this.createDatasetVersion(datasetId, newVersion);
   }
 
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    const rows = this.db.datasetItems.get(id)?.filter(row => row.datasetId === datasetId);
+    if (!rows || rows.length === 0) return;
+
+    const purgedAt = new Date().toISOString();
+    for (const row of rows) {
+      row.input = null;
+      row.groundTruth = null;
+      row.expectedTrajectory = null;
+      row.toolMocks = null;
+      row.unmockedToolPolicy = null;
+      row.scorerIds = null;
+      row.requestContext = null;
+      row.metadata = { __purged: true, purgedAt };
+      row.source = null;
+    }
+
+    for (const result of this.db.experimentResults.values()) {
+      const experiment = this.db.experiments.get(result.experimentId);
+      if (result.itemId !== id || experiment?.datasetId !== datasetId) continue;
+      result.input = null;
+      result.output = null;
+      result.groundTruth = null;
+      result.error = null;
+      result.toolMockReport = null;
+      result.tags = null;
+      result.comment = null;
+      result.metadata = { __purged: true, purgedAt };
+    }
+  }
+
   // --- SCD-2 queries ---
 
   async getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null> {
@@ -484,8 +529,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       });
     }
 
-    // Sort by createdAt descending, then by id descending for stability
-    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
+    items.sort(compareByField(orderBy.field, orderBy.direction));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);

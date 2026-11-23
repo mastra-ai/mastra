@@ -10,11 +10,31 @@ export interface RedisClient {
   expire(key: string, seconds: number): Promise<number | boolean>;
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
+  /**
+   * Server-side Lua scripting. Optional: clients without it fall back to the
+   * two-round-trip `increment` + `listPush` path for `listPushIndexed`.
+   */
+  eval?(...args: unknown[]): Promise<unknown>;
 }
 
 export interface RedisServerCacheOptions {
   keyPrefix?: string;
+  /**
+   * Lifetime of cached values in seconds, refreshed on every write. Defaults to
+   * 300. `0` means no expiry.
+   *
+   * A cache list and its index counter always share this TTL: if the counter
+   * outlived the list, index allocation would restart at 0 while subscribers
+   * still expect the previous numbering, and every new frame would be dropped
+   * as a duplicate.
+   */
   ttlSeconds?: number;
+  /**
+   * Run a Lua script with the given KEYS and ARGV. Defaults to the ioredis
+   * calling convention (`eval(script, numKeys, ...keys, ...args)`); use
+   * `nodeRedisPreset` / `upstashPreset` for those clients.
+   */
+  evalScript?: (client: RedisClient, script: string, keys: string[], args: string[]) => Promise<unknown>;
   setWithExpiry?: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<unknown>;
   scanKeys?: (
     client: RedisClient,
@@ -52,6 +72,41 @@ const defaultGetListRange = (client: RedisClient, key: string, start: number, st
   return client.lrange(key, start, stop);
 };
 
+const defaultEvalScript = (client: RedisClient, script: string, keys: string[], args: string[]): Promise<unknown> => {
+  return client.eval!(script, keys.length, ...keys, ...args);
+};
+
+/**
+ * Atomic "allocate index + append + refresh TTL" used by `listPushIndexed`.
+ *
+ * KEYS[1] = list key, KEYS[2] = counter key
+ * ARGV[1] = JSON-serialized object WITHOUT an `index` property
+ * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
+
+ *
+ * The index is spliced into the JSON text as the first property rather than
+ * decoded/re-encoded with cjson, which would silently alter large integers
+ * and sparse arrays. `JSON.stringify` of an object always starts with `{`,
+ * so `{...}` → `{"index":N,...}` and `{}` → `{"index":N}`.
+ */
+export const LIST_PUSH_INDEXED_SCRIPT = `
+local i = redis.call('INCR', KEYS[2]) - 1
+local body = ARGV[1]
+local doc
+if #body <= 2 then
+  doc = '{"index":' .. i .. '}'
+else
+  doc = '{"index":' .. i .. ',' .. string.sub(body, 2)
+end
+redis.call('RPUSH', KEYS[1], doc)
+local ttl = tonumber(ARGV[2])
+if ttl > 0 then
+  redis.call('EXPIRE', KEYS[1], ttl)
+  redis.call('EXPIRE', KEYS[2], ttl)
+end
+return i
+`.trim();
+
 export class RedisServerCache extends MastraServerCache {
   private client: RedisClient;
   private keyPrefix: string;
@@ -66,6 +121,9 @@ export class RedisServerCache extends MastraServerCache {
   private getListLength: (client: RedisClient, key: string) => Promise<number>;
   private pushToList: (client: RedisClient, key: string, value: unknown) => Promise<number>;
   private getListRange: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
+  private evalScript: (client: RedisClient, script: string, keys: string[], args: string[]) => Promise<unknown>;
+  /** Set once scripting is known to be unusable (no `eval`, or Cluster CROSSSLOT). */
+  private scriptingDisabled: boolean;
 
   constructor(config: { client: RedisClient }, options: RedisServerCacheOptions = {}) {
     super({ name: 'RedisServerCache' });
@@ -78,6 +136,8 @@ export class RedisServerCache extends MastraServerCache {
     this.getListLength = options.getListLength ?? defaultGetListLength;
     this.pushToList = options.pushToList ?? defaultPushToList;
     this.getListRange = options.getListRange ?? defaultGetListRange;
+    this.evalScript = options.evalScript ?? defaultEvalScript;
+    this.scriptingDisabled = typeof this.client.eval !== 'function';
   }
 
   private getKey(key: string): string {
@@ -171,12 +231,74 @@ export class RedisServerCache extends MastraServerCache {
 
     return value;
   }
+
+  /**
+   * Single round-trip index allocation + list append + TTL refresh via Lua.
+   * This is the durable stream per-chunk hot path (issue #22477).
+   */
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    // A cache without expiry stays that way; otherwise `ttlMs` can only raise
+    // the default.
+    const ttlSeconds = this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0;
+    if (this.scriptingDisabled) {
+      return this.composedPushIndexed(listKey, counterKey, value, ttlSeconds);
+    }
+
+    const { index: _ignored, ...body } = value;
+    try {
+      const result = await this.evalScript(
+        this.client,
+        LIST_PUSH_INDEXED_SCRIPT,
+        [this.getKey(listKey), this.getKey(counterKey)],
+        [this.serialize(body), String(ttlSeconds)],
+      );
+      return Number(result);
+    } catch (error) {
+      // Untagged list and counter keys can still hit CROSSSLOT. Keep the
+      // fallback for callers that have not opted into tagged cache keys.
+      if (error instanceof Error && error.message.includes('CROSSSLOT')) {
+        this.scriptingDisabled = true;
+        this.logger.warn(
+          '[RedisServerCache] listPushIndexed script rejected with CROSSSLOT; falling back to increment + listPush',
+        );
+        return this.composedPushIndexed(listKey, counterKey, value, ttlSeconds);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * `INCR` then `RPUSH`, each followed by the same `EXPIRE` the script applies.
+   * Not atomic: concurrent writers can interleave, so a list position may not
+   * match its index (Redis Cluster atomicity is tracked in COR-1491).
+   */
+  private async composedPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlSeconds: number,
+  ): Promise<number> {
+    const fullCounterKey = this.getKey(counterKey);
+    const index = (await this.client.incr(fullCounterKey)) - 1;
+    if (ttlSeconds > 0) await this.client.expire(fullCounterKey, ttlSeconds);
+
+    const fullListKey = this.getKey(listKey);
+    await this.pushToList(this.client, fullListKey, this.serialize({ ...value, index }));
+    if (ttlSeconds > 0) await this.client.expire(fullListKey, ttlSeconds);
+    return index;
+  }
 }
 
-export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys'> = {
+export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys' | 'evalScript'> = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { ex: seconds } as any),
   scanKeys: (client, cursor, pattern, count) =>
     client.scan(cursor, { match: pattern, count } as any) as Promise<[string | number, string[]]>,
+  evalScript: (client, script, keys, args) => client.eval!(script, keys, args),
 };
 
 // node-redis v4+ exposes Redis multi-word commands as camelCase only
@@ -188,7 +310,7 @@ export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'sca
 // reshape arguments, not to alias method names.
 export const nodeRedisPreset: Pick<
   RedisServerCacheOptions,
-  'setWithExpiry' | 'scanKeys' | 'getListLength' | 'pushToList' | 'getListRange'
+  'setWithExpiry' | 'scanKeys' | 'getListLength' | 'pushToList' | 'getListRange' | 'evalScript'
 > = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { EX: seconds } as any),
   scanKeys: (client, cursor, pattern, count) =>
@@ -196,4 +318,5 @@ export const nodeRedisPreset: Pick<
   getListLength: (client, key) => (client as any).lLen(key),
   pushToList: (client, key, value) => (client as any).rPush(key, value),
   getListRange: (client, key, start, stop) => (client as any).lRange(key, start, stop),
+  evalScript: (client, script, keys, args) => client.eval!(script, { keys, arguments: args }),
 };

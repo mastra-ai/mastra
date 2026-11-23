@@ -1,5 +1,82 @@
 # @mastra/auth-cloud
 
+## 1.2.10-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/auth@1.2.1-alpha.0
+
+## 1.2.9
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+- Updated dependencies [[`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781)]:
+  - @mastra/auth@1.2.0
+
+## 1.2.9-alpha.0
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+- Updated dependencies [[`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781)]:
+  - @mastra/auth@1.2.0-alpha.0
+
+## 1.2.8
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/auth@1.1.5
+
+## 1.2.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/auth@1.1.5-alpha.0
+
+## 1.2.7
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4
+
+## 1.2.7-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4-alpha.0
+
+## 1.2.6
+
+### Patch Changes
+
+- Improved Cloud authentication portability by generating PKCE verifier and state values with Web Crypto while preserving synchronous login APIs. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 1.2.6-alpha.0
+
+### Patch Changes
+
+- Improved Cloud authentication portability by generating PKCE verifier and state values with Web Crypto while preserving synchronous login APIs. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
 ## 1.2.5
 
 ### Patch Changes

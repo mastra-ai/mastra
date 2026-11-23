@@ -20,8 +20,26 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
   StorageListScorerDefinitionsResolvedOutput,
   StorageResolvedScorerDefinitionType
 > {
+  /**
+   * IDs this namespace registered on Mastra. Version-specific reads hydrate and
+   * register without populating the value cache, so clear-all needs this set.
+   */
+  private _registeredStoredScorerIds = new Set<string>();
+
   protected override onCacheEvict(id: string): void {
-    this.mastra?.removeScorer(id);
+    this._registeredStoredScorerIds.delete(id);
+    // Only remove stored-owned registrations at this exact key, never ID/name matches.
+    if (this.mastra?.listScorers()?.[id]?.source === 'stored') {
+      this.mastra.removeScorer(id);
+    }
+  }
+
+  override clearCache(id?: string): void {
+    super.clearCache(id);
+    if (id) return;
+    for (const registeredId of Array.from(this._registeredStoredScorerIds)) {
+      this.onCacheEvict(registeredId);
+    }
   }
 
   /**
@@ -35,6 +53,7 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
     const scorer = this.resolve(storedScorer);
     if (scorer && this.mastra) {
       this.mastra.addScorer(scorer, storedScorer.id, { source: 'stored' });
+      this._registeredStoredScorerIds.add(storedScorer.id);
     }
     return storedScorer;
   }

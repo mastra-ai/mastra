@@ -46,4 +46,32 @@ describe('ValkeyServerCache', () => {
       ['DEL', 'mastra:cache:b'],
     ]);
   });
+
+  it('listPushIndexed runs a single EVAL carrying both keys, the index-less body and the TTL', async () => {
+    command.mockResolvedValueOnce(3);
+
+    const index = await cache.listPushIndexed('events', 'events:counter', { index: 99, type: 'chunk' });
+
+    expect(index).toBe(3);
+    expect(command).toHaveBeenCalledTimes(1);
+    const args = command.mock.calls[0]?.[0] as string[];
+    expect(args[0]).toBe('EVAL');
+    expect(args[1]).toContain("redis.call('INCR', KEYS[2])");
+    expect(args.slice(2)).toEqual([
+      '2',
+      'mastra:cache:events',
+      'mastra:cache:events:counter',
+      '{"type":"chunk"}',
+      '300',
+    ]);
+  });
+
+  it('listPushIndexed raises the TTL of both keys to a requested longer TTL', async () => {
+    command.mockResolvedValue(1);
+
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 24 * 60 * 60 * 1000);
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 1_000);
+
+    expect(command.mock.calls.map(call => (call[0] as string[]).at(-1))).toEqual(['86400', '300']);
+  });
 });

@@ -20,6 +20,7 @@ import type {
 } from './discovery';
 import type {
   BatchCreateFeedbackArgs,
+  DeleteFeedbackArgs,
   CreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
@@ -50,6 +51,7 @@ import type {
 } from './metrics';
 import type {
   BatchCreateScoresArgs,
+  DeleteScoresArgs,
   CreateScoreArgs,
   ListScoresArgs,
   ListScoresResponse,
@@ -63,11 +65,26 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
-import type { TraceQueryResponse, TrustedTraceQueryPlan } from './trace-query';
+import type { SpanAggregateResponse, TrustedSpanAggregatePlan } from './span-aggregate';
+import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
+import type { ThreadQueryResponse, TrustedThreadRowsQueryPlan } from './thread-query';
+import type { TraceAggregateResponse } from './trace-aggregate';
+import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
+import type {
+  GetTraceQueryValuesResponse,
+  QueryThreadsResult,
+  TraceQueryObservedFieldsResult,
+  TraceQueryResponse,
+  TrustedThreadQueryPlan,
+  TrustedTraceQueryObservedFieldsPlan,
+  TrustedTraceQueryPlan,
+  TrustedTraceQueryValuesPlan,
+} from './trace-query';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   GetBranchArgs,
   GetBranchResponse,
@@ -91,7 +108,91 @@ import type {
 import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
-export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' | 'trace-query';
+/**
+ * Optional observability APIs a store can declare via {@link ObservabilityStorage.getFeatures}.
+ *
+ * - `delta-polling`: cursor-based `mode: 'delta'` on list endpoints
+ * - `metrics`: metric list/aggregate/breakdown/timeseries/percentiles
+ * - `logs`: `listLogs`
+ * - `entity-type-discovery`, `entity-name-discovery`, `service-name-discovery`,
+ *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
+ * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
+ * - `span-query`: `querySpans` over completed spans
+ * - `span-query-duration-sort`: ordering completed spans by `durationMs`
+ * - `span-query-model-provider-sort`: ordering completed spans by their model/provider columns
+ * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
+ * - `span-query-token-search`: token matching in `querySpans`
+ * - `trace-query-token-search`: token matching across any span in `queryTraces`
+ * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
+ * - `trace-aggregate-token-search`: token matching across any span in `aggregateTraces`
+ * - `span-aggregate-token-search`: token matching in `aggregateSpans`
+ * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
+ * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
+ * - `trace-query`: `queryTraces`
+ * - `trace-aggregate`: `aggregateTraces`
+ * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
+ * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-context-fields`: `requestId`, `serviceName` and `experimentId` predicates in trace queries (trace scope and `spans.some`/`spans.none`)
+ * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
+ * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
+ * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
+ * - `trace-query-time-to-first-chunk-sort`: `orderBy` on `timeToFirstChunkMs` in trace and span queries
+ * - `trace-query-time-to-first-token`: `timeToFirstTokenMs` on trace, thread and span query results and predicates
+ * - `trace-query-time-to-first-token-sort`: `orderBy` on `timeToFirstTokenMs` in trace and span queries
+ * - `span-query-outcome-fields`: `outcome` and `stopReason` predicates in `querySpans` and `aggregateSpans`
+ *   (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows
+ * - `trace-query-outcome-fields`: the root span's `outcome` and `stopReason` in trace-scope predicates and
+ *   trace aggregate `groupBy`/`countDistinct`, both fields in `spans.some`/`spans.none` predicates, and the root
+ *   span's `outcome`, `stopReason` and `stopReasonContext` on trace rows
+ * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
+ * - `aggregate-time-to-first-measures`: `timeToFirstToken.*` and `timeToFirstChunk.*` measures in
+ *   `aggregateTraces` (root span value) and `aggregateSpans` (each span's value)
+ * - `thread-query`: `queryThreads`
+ * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
+ * - `feedback`: the feedback CRUD, review-status and analytics methods
+ * - `feedback-replacement`: full replacement and create-with-ignore-conflicts support
+ */
+export type ObservabilityStorageFeature =
+  | 'delta-polling'
+  | 'metrics'
+  | 'logs'
+  | 'entity-type-discovery'
+  | 'entity-name-discovery'
+  | 'service-name-discovery'
+  | 'environment-discovery'
+  | 'tag-discovery'
+  | 'metric-discovery'
+  | 'span-query'
+  | 'span-query-duration-sort'
+  | 'span-query-model-provider-sort'
+  | 'span-query-context-fields'
+  | 'span-query-token-search'
+  | 'trace-query-token-search'
+  | 'trace-aggregate-token-search'
+  | 'span-aggregate-token-search'
+  | 'span-query-model-fields'
+  | 'span-aggregate'
+  | 'span-aggregate-model-dimensions'
+  | 'trace-query'
+  | 'trace-aggregate'
+  | 'trace-query-root-duration'
+  | 'trace-query-discovery'
+  | 'thread-query'
+  | 'thread-query-rows'
+  | 'trace-query-tenant-scope'
+  | 'feedback'
+  | 'feedback-replacement'
+  | 'trace-query-context-ids'
+  | 'trace-query-context-fields'
+  | 'trace-query-time-to-first-chunk'
+  | 'trace-query-root-span-fields'
+  | 'trace-query-root-entity-id'
+  | 'trace-query-time-to-first-chunk-sort'
+  | 'trace-query-time-to-first-token'
+  | 'trace-query-time-to-first-token-sort'
+  | 'span-query-outcome-fields'
+  | 'trace-query-outcome-fields'
+  | 'aggregate-time-to-first-measures';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -99,6 +200,16 @@ export type ObservabilityStorageFeature = 'delta-polling' | 'metrics' | 'logs' |
  * Storage adapters override only the methods they support.
  */
 export class ObservabilityStorage extends StorageDomain {
+  /**
+   * Where this domain writes data. Local includes embedded files, in-memory
+   * databases, and local replicas that sync remotely. Remote stores write
+   * through a database service. Undefined means the adapter does not report it.
+   * Platform exporters use this capability to avoid local observability writes.
+   */
+  public get persistenceLocation(): 'local' | 'remote' | undefined {
+    return undefined;
+  }
+
   constructor() {
     super({
       component: 'STORAGE',
@@ -344,6 +455,16 @@ export class ObservabilityStorage extends StorageDomain {
     return { ...rest, spans: spans.map(toLightSpanRecord) };
   }
 
+  /** Executes a validated span-row query; unsupported stores fail explicitly. */
+  async querySpans(_plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support span queries',
+    });
+  }
+
   /**
    * Executes a validated advanced trace-query plan.
    */
@@ -353,6 +474,73 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support advanced trace queries',
+    });
+  }
+
+  /**
+   * Executes a validated trace-aggregate plan.
+   */
+  async aggregateTraces(_plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_TRACES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace aggregation',
+    });
+  }
+
+  /**
+   * Executes a validated span-aggregate plan.
+   */
+  async aggregateSpans(_plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support span aggregation',
+    });
+  }
+
+  /**
+   * Discovers observed metadata fields over a validated trace population.
+   */
+  async getTraceQueryObservedFields(
+    _plan: TrustedTraceQueryObservedFieldsPlan,
+  ): Promise<TraceQueryObservedFieldsResult> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace-query discovery',
+    });
+  }
+
+  /**
+   * Discovers values for an eligible field over a validated trace population.
+   */
+  async getTraceQueryValues(_plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_TRACE_QUERY_DISCOVERY_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace-query discovery',
+    });
+  }
+
+  /**
+   * Executes a validated thread-query plan.
+   * Keep the base return type compatible with identity-only adapters. The server
+   * checks `thread-query-rows` before sending a row plan; capable concrete adapters
+   * provide the more specific row overload.
+   */
+  async queryThreads(
+    _plan: TrustedThreadQueryPlan | TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | ThreadQueryResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support advanced thread queries',
     });
   }
 
@@ -395,6 +583,18 @@ export class ObservabilityStorage extends StorageDomain {
       text: 'This storage provider does not support batch updating spans',
     });
   }
+
+  /**
+   * Optional. Updates multiple spans, but only rows that already exist and haven't
+   * ended (`endedAt` is null). Never inserts. Returns the spans whose rows changed,
+   * so callers can tell which updates didn't apply.
+   *
+   * Lets an exporter end a span that a different process started (for example, a
+   * durable agent recovering after a crash) without reading the row first, while
+   * keeping ended spans immutable. Stores that don't implement it leave it
+   * undefined, so callers must check that it exists before calling it.
+   */
+  batchUpdateUnendedSpans?(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse>;
 
   /**
    * Deletes multiple traces, all their associated spans, and any trace-linked signal
@@ -681,6 +881,22 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
+  /**
+   * Deletes score records by id. Idempotent: deleting missing ids succeeds; an
+   * empty ids array is a no-op. When `organizationId`/`resourceId` are provided,
+   * only scores matching that tenant scope are deleted.
+   */
+  async deleteScores(args: DeleteScoresArgs): Promise<void> {
+    if (args.scoreIds.length === 0) return;
+
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_SCORES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting scores',
+    });
+  }
+
   // ============================================================================
   // Feedback
   // ============================================================================
@@ -697,9 +913,48 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
-  /**
-   * Creates multiple feedback observations in a single batch.
-   */
+  /** Replace a complete feedback record, preserving its identity. Missing records are created. */
+  async replaceFeedback(args: CreateFeedbackArgs): Promise<void> {
+    if (!this.getFeatures()?.includes('feedback-replacement')) {
+      throw new Error('This storage provider does not support feedback replacement');
+    }
+    const { feedback } = args;
+    if (!feedback.feedbackId?.trim() || !feedback.traceId?.trim() || !Number.isFinite(feedback.timestamp?.getTime())) {
+      throw new Error('Feedback replacement requires feedbackId, traceId, and the original timestamp');
+    }
+    await this.writeFeedbackReplacement({
+      ...args,
+      feedback: { ...feedback, feedbackUserId: feedback.feedbackUserId ?? null },
+    });
+  }
+
+  /** Adapters with atomic writes override this fallback; ClickHouse retains sequential protection. */
+  protected async writeFeedbackReplacement({ feedback }: CreateFeedbackArgs): Promise<void> {
+    this.assertFeedbackReplacementIdentity(feedback, await this.getFeedbackById(feedback.feedbackId!));
+    await this.createFeedback({ feedback, onConflict: 'replace' });
+  }
+
+  protected assertFeedbackReplacementIdentity(
+    feedback: CreateFeedbackArgs['feedback'],
+    existing: FeedbackRecord | null | undefined,
+  ): void {
+    if (
+      existing &&
+      (existing.traceId !== feedback.traceId ||
+        existing.timestamp.getTime() !== feedback.timestamp.getTime() ||
+        (existing.organizationId ?? null) !== (feedback.organizationId ?? null) ||
+        (existing.resourceId ?? null) !== (feedback.resourceId ?? null))
+    ) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback replacement must preserve its trace, timestamp, and tenant',
+      });
+    }
+  }
+
+  /** Creates multiple feedback observations in a single batch. */
   async batchCreateFeedback(_args: BatchCreateFeedbackArgs): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_FEEDBACK_NOT_IMPLEMENTED',
@@ -718,6 +973,16 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing feedback',
+    });
+  }
+
+  /** Retrieves one feedback record by ID, or null when it does not exist. */
+  async getFeedbackById(_feedbackId: string): Promise<FeedbackRecord | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support retrieving feedback by ID',
     });
   }
 
@@ -763,6 +1028,22 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support feedback percentiles',
+    });
+  }
+
+  /**
+   * Deletes feedback records by id. Idempotent: deleting missing ids succeeds;
+   * an empty ids array is a no-op. When `organizationId`/`resourceId` are
+   * provided, only feedback matching that tenant scope is deleted.
+   */
+  async deleteFeedback(args: DeleteFeedbackArgs): Promise<void> {
+    if (args.feedbackIds.length === 0) return;
+
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_DELETE_FEEDBACK_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support deleting feedback',
     });
   }
 }

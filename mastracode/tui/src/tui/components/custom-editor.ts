@@ -5,13 +5,25 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Editor, matchesKey } from '@earendil-works/pi-tui';
+import { CURSOR_MARKER, Editor, matchesKey, visibleWidth } from '@earendil-works/pi-tui';
 import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { getClipboardImage, getClipboardText } from '@mastra/code-sdk/clipboard/index';
 import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
 import chalk from 'chalk';
-import { mastra, theme } from '../theme.js';
-import type { GradientAnimator } from './obi-loader.js';
+import { markHoveredRows } from '../mouse/hover-marker.js';
+import {
+  before,
+  highlightColumns,
+  InputSelection,
+  rangeFits,
+  removeRange,
+  textInRange,
+} from '../mouse/input-selection.js';
+import type { TextPosition, TextRange } from '../mouse/input-selection.js';
+import { editorInternals } from '../mouse/pi-tui-internals.js';
+import type { EditorVisualLine } from '../mouse/pi-tui-internals.js';
+import { displayModeColor, mastra, theme } from '../theme.js';
+import { fadePanel } from './surface.js';
 import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
 
 // Mirrors pi-tui's SLASH_COMMAND_SELECT_LIST_LAYOUT so slash-command rows keep
@@ -60,6 +72,58 @@ const SPACE_HOLD_REPEAT_THRESHOLD = 3;
 // this long (comfortably above the ~80ms repeat cadence).
 const SPACE_RELEASE_IDLE_MS = 250;
 
+/** Typed characters or a bracketed paste (not keys like Enter, arrows or shortcuts). */
+function isTextInput(data: string): boolean {
+  return (
+    data.startsWith('\x1b[200~') ||
+    (data.length > 0 && !data.startsWith('\x1b') && [...data].every(ch => ch >= ' ' && ch !== '\x7f'))
+  );
+}
+
+const EDITING_KEYS = [
+  'left',
+  'right',
+  'up',
+  'down',
+  'home',
+  'end',
+  'backspace',
+  'delete',
+  'ctrl+left',
+  'ctrl+right',
+  'alt+left',
+  'alt+right',
+  'ctrl+backspace',
+  'alt+backspace',
+  'alt+delete',
+] as const;
+
+// Presses this close together, on the same cell, count as a double or triple click.
+const MULTI_CLICK_MS = 500;
+
+/** Shift+movement keys that select text, with the plain movement they extend. */
+const SELECT_KEYS: [
+  key: Parameters<typeof matchesKey>[1],
+  move: (editor: ReturnType<typeof editorInternals>) => void,
+][] = [
+  ['shift+left', e => e.moveCursor(0, -1)],
+  ['shift+right', e => e.moveCursor(0, 1)],
+  // At the top or bottom row, go to the start or end instead of browsing prompt history.
+  ['shift+up', e => (e.isOnFirstVisualLine() ? e.moveToLineStart() : e.moveCursor(-1, 0))],
+  ['shift+down', e => (e.isOnLastVisualLine() ? e.moveToLineEnd() : e.moveCursor(1, 0))],
+  ['shift+home', e => e.moveToLineStart()],
+  ['shift+end', e => e.moveToLineEnd()],
+  ['shift+alt+left', e => e.moveWordBackwards()],
+  ['shift+ctrl+left', e => e.moveWordBackwards()],
+  ['shift+alt+right', e => e.moveWordForwards()],
+  ['shift+ctrl+right', e => e.moveWordForwards()],
+];
+
+/** Text input or a key that moves through or deletes text — anything that means "working in the input box". */
+function isEditingInput(data: string): boolean {
+  return isTextInput(data) || [...EDITING_KEYS, ...SELECT_KEYS.map(([key]) => key)].some(key => matchesKey(data, key));
+}
+
 export type AppAction =
   | 'clear'
   | 'exit'
@@ -67,10 +131,13 @@ export type AppAction =
   | 'undo'
   | 'toggleThinking'
   | 'expandTools'
+  | 'openBackgroundActivityCenter'
+  | 'clearFinishedBackgroundActivities'
   | 'followUp'
   | 'queueFollowUp'
   | 'cycleMode'
-  | 'toggleYolo';
+  | 'toggleYolo'
+  | 'editInput';
 
 // Pre-compiled constant (avoid re-creation per render)
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
@@ -82,40 +149,20 @@ function parseHex(hex: string): [number, number, number] {
 // Vertical bar glyphs ordered low→high; cycled to animate a soundwave cell.
 const VOICE_WAVE_BARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
 
-const DEFAULT_PROMPT_ICON = '•';
-const PROMPT_ICON_CHOICES = [
-  '☯',
-  '✺',
-  '☻',
-  '✿',
-  '◒',
-  '◓',
-  '♞',
-  '☘',
-  '☸',
-  '❂',
-  '❁',
-  '✽',
-  '❉',
-  '✹',
-  '❨',
-  '❩',
-  '✚',
-  '⚉',
-  '❣',
-  '❥',
-  '♫',
-  '❤',
-] as const;
-
-function getRandomPromptIcon(currentIcon: string): string {
-  if (Math.random() < 0.99) {
-    return DEFAULT_PROMPT_ICON;
-  }
-
-  const nextChoices = PROMPT_ICON_CHOICES.filter(icon => icon !== currentIcon);
-  const choices = nextChoices.length > 0 ? nextChoices : PROMPT_ICON_CHOICES;
-  return choices[Math.floor(Math.random() * choices.length)]!;
+/** Where the last render drew the text, for mapping mouse positions back to text positions. */
+interface InputLayout {
+  /** Lines as they were laid out (a hidden `/`, `@` or `!` prompt marker removed). */
+  lines: string[];
+  visualLines: EditorVisualLine[];
+  scrollOffset: number;
+  /** Index of the hidden prompt marker in line 0, or -1. */
+  hiddenMarkerIndex: number;
+  /** Render row of the first visible text row. */
+  firstRow: number;
+  /** Number of visible text rows. */
+  rowCount: number;
+  /** 0-based screen column where text starts. */
+  firstCol: number;
 }
 
 export class CustomEditor extends Editor {
@@ -125,7 +172,6 @@ export class CustomEditor extends Editor {
   public escapeEnabled = true;
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
-  public getPromptAnimator?: () => GradientAnimator | undefined;
   public requestRender?: () => void;
   private pendingBracketedPaste: string | null = null;
 
@@ -162,10 +208,24 @@ export class CustomEditor extends Editor {
   // arrive after the user resumed typing are ignored rather than re-appended.
   private voiceDictationActive = false;
 
+  // Layout of the last render, used to map mouse clicks onto autocomplete rows.
+  // Row indexes are into the array returned by render().
+  private lastCursorRow = -1;
+  private lastRenderedRowCount = 0;
+  private lastAutocompleteStartRow = -1;
+  /** Autocomplete list row under the mouse pointer, so hover follows the pointer when the list scrolls. */
+  private hoveredAutocompleteRow: number | undefined;
+  private inputLayout: InputLayout | undefined;
+  private readonly selection = new InputSelection();
+  /** Screen row of the first visible text row, captured when a mouse-mode press starts a drag. */
+  private dragFirstScreenRow: number | undefined;
+  /** The last press, to recognise double and triple clicks. */
+  private lastPress: { time: number; row: number; col: number; count: number } | undefined;
+  /** After a double or triple click, the word or line it selected; dragging extends by whole words or lines. */
+  private selectionUnit: { kind: 'word' | 'line'; range: TextRange } | undefined;
+
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
-  private promptIcon = DEFAULT_PROMPT_ICON;
-  private lastPromptWasInvisible = false;
 
   private requestEditorRender(): void {
     if (this.requestRender) {
@@ -224,65 +284,8 @@ export class CustomEditor extends Editor {
     const isSlash = text.startsWith('/');
     const isAt = text.startsWith('@');
     const isBang = text.startsWith('!');
-    const color = this.getModeColor?.() || mastra.green;
-    const promptAnimator = this.getPromptAnimator?.();
-    const shouldAnimatePrompt = !isSlash && !isAt && !isBang;
-    const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
-    const fadeProgress = isPromptAnimated ? promptAnimator!.getFadeProgress() : 1;
-    const isTransitioningIn = isPromptAnimated && promptAnimator!.isFadingIn();
-    const isTransitioningOut = isPromptAnimated && promptAnimator!.isFadingOut();
-    const promptOffset = isPromptAnimated ? promptAnimator!.getOffset() : 0;
-    const pulseWave = isPromptAnimated ? (Math.sin(promptOffset * Math.PI * 2) + 1) / 2 : 0;
-    const transitionPhase = isTransitioningIn || isTransitioningOut ? 1 - fadeProgress : 1;
-    const chevronBrightness = isPromptAnimated
-      ? isTransitioningIn
-        ? transitionPhase < 0.5
-          ? Math.max(0, 1 - transitionPhase * 2)
-          : 0
-        : isTransitioningOut
-          ? transitionPhase <= 0.5
-            ? Math.max(0, 1 - transitionPhase * 2)
-            : 0
-          : 0
-      : 1;
-    const dotBrightness = isPromptAnimated
-      ? isTransitioningIn
-        ? transitionPhase <= 0.5
-          ? 0
-          : Math.max(0, (transitionPhase - 0.5) * 2)
-        : isTransitioningOut
-          ? transitionPhase < 0.5
-            ? 0
-            : Math.max(0, (transitionPhase - 0.5) * 2)
-          : pulseWave
-      : 0;
-
-    const isSteadyPulse = isPromptAnimated && !isTransitioningIn && !isTransitioningOut;
-    if (!isPromptAnimated) {
-      this.promptIcon = DEFAULT_PROMPT_ICON;
-      this.lastPromptWasInvisible = false;
-    } else if (!isSteadyPulse) {
-      this.lastPromptWasInvisible = false;
-    }
-
-    const promptIsInvisible = isSteadyPulse && dotBrightness <= 0.05;
-    if (promptIsInvisible && !this.lastPromptWasInvisible) {
-      this.promptIcon = getRandomPromptIcon(this.promptIcon);
-    }
-    this.lastPromptWasInvisible = promptIsInvisible;
-
-    const promptChar = isSlash
-      ? '/'
-      : isAt
-        ? '@'
-        : isBang
-          ? '!'
-          : chevronBrightness > 0.05
-            ? '›'
-            : dotBrightness > 0.05
-              ? this.promptIcon
-              : ' ';
-    const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
+    const color = displayModeColor(this.getModeColor?.() || mastra.green);
+    const promptChar = isSlash ? '/' : isAt ? '@' : isBang ? '!' : '→';
 
     // Cache colorFn and prompt — only recreate when color changes
     if (this._cachedModeColorHex !== color) {
@@ -306,17 +309,13 @@ export class CustomEditor extends Editor {
         Math.round(bValue * brightness),
       )(bar);
     } else {
-      prompt = chalk.bold.rgb(
-        Math.round(r * promptBrightness),
-        Math.round(g * promptBrightness),
-        Math.round(bValue * promptBrightness),
-      )(promptChar);
+      prompt = chalk.bold.rgb(r, g, bValue)(promptChar);
     }
 
-    // Box structure: "│ > content │" or "│   content │"
-    // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
-    const promptWidth = 4; // "│ > " or "│   "
-    const contentWidth = width - 6;
+    // Slim panel: " → content " on a shaded background, framed by half blocks (no border).
+    // Left: " → " (3), right padding (1) = 4 chars total
+    const promptWidth = 3;
+    const contentWidth = width - 4;
     // Slash, mention and shell markers are rendered in the prompt chrome, so remove them
     // from the editor's layout state before wrapping and restore the state after.
     const editorState = (
@@ -336,6 +335,7 @@ export class CustomEditor extends Editor {
       prompt = `\x1b[7m${prompt}\x1b[0m`;
     }
     let editorLines: string[];
+    let layout: Pick<InputLayout, 'lines' | 'visualLines' | 'scrollOffset'>;
     if (shouldHideDecorativePrompt) {
       editorState.lines[0] = firstLine.slice(0, markerIndex) + firstLine.slice(markerIndex + 1);
       if (cursorOnDecorativePrompt) {
@@ -345,6 +345,7 @@ export class CustomEditor extends Editor {
       }
       try {
         editorLines = super.render(contentWidth);
+        layout = this.captureLayout();
       } finally {
         editorState.lines[0] = firstLine;
         editorState.cursorLine = cursorLine;
@@ -352,6 +353,7 @@ export class CustomEditor extends Editor {
       }
     } else {
       editorLines = super.render(contentWidth);
+      layout = this.captureLayout();
     }
 
     // Extract content lines (skip editor's invisible borders)
@@ -374,26 +376,28 @@ export class CustomEditor extends Editor {
       contentLines.push(line);
     }
 
-    // Build rounded box
+    const autocompleteList = this.visibleAutocompleteList();
+    const paddingX = Math.min(this.getPaddingX(), Math.max(0, Math.floor((contentWidth - 1) / 2)));
+    this.inputLayout = {
+      ...layout,
+      hiddenMarkerIndex: shouldHideDecorativePrompt ? markerIndex : -1,
+      // fadePanel adds one edge row above the content.
+      firstRow: 1,
+      rowCount: contentLines.length - (autocompleteList?.renderedRowCount ?? 0),
+      firstCol: promptWidth + paddingX,
+    };
+    this.highlightSelection(contentLines, paddingX);
+
     const result: string[] = [];
-    const hBarLen = width - 2;
-
-    // Solid mode-color border
-    const top = b('╭') + b('─').repeat(hBarLen) + b('╮');
-    const leftBorder = b('│');
-    const rightBorder = b('│');
-    const bottom = b('╰') + b('─').repeat(hBarLen) + b('╯');
-
-    // Assemble box
     const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
     const textColorClose = '\x1b[39m';
-    result.push(top);
 
     // How many trailing characters are dictated and should render greyed-out.
     const fullText = this.getText();
     let greyRemaining =
       this.voiceTranscriptText.length > 0 && fullText.endsWith(this.voiceTranscriptText)
-        ? this.voiceTranscriptText.length
+        ? // Count code points to match greyifyTrailing, which consumes per code point.
+          [...this.voiceTranscriptText].length
         : 0;
     const greyOpen = `\x1b[38;2;${parseHex(theme.getTheme().muted).join(';')}m`;
 
@@ -405,23 +409,308 @@ export class CustomEditor extends Editor {
       }
     }
 
-    for (let i = 0; i < contentLines.length; i++) {
-      const line = `${textColorOpen}${contentLines[i]!}${textColorClose}`;
-      if (i === 0) {
-        result.push(`${leftBorder} ${prompt} ${line} ${rightBorder}`);
-      } else {
-        result.push(`${leftBorder}${' '.repeat(promptWidth - 1)}${line} ${rightBorder}`);
-      }
-    }
+    const rows = contentLines.map((content, i) => {
+      const line = `${textColorOpen}${content}${textColorClose}`;
+      return i === 0 ? ` ${prompt} ${line}` : `${' '.repeat(promptWidth)}${line}`;
+    });
+    // The shade fades to the terminal background on the right, starting a little darker than the
+    // sent-message panel (step 2).
+    result.push(...fadePanel(rows, width, 1.5));
 
-    result.push(bottom);
-
-    // Scroll indicators below the box
+    // Scroll indicators below the panel
     for (const ind of scrollIndicators) {
       result.push(ind);
     }
 
+    // fadePanel adds one edge row above the content; autocomplete rows trail the content.
+    this.lastAutocompleteStartRow = autocompleteList ? 1 + contentLines.length - autocompleteList.renderedRowCount : -1;
+    this.lastCursorRow = result.findIndex(line => line.includes(CURSOR_MARKER));
+    this.lastRenderedRowCount = result.length;
+
+    if (!autocompleteList) this.hoveredAutocompleteRow = undefined;
+    const hoveredIndex =
+      this.hoveredAutocompleteRow === undefined
+        ? undefined
+        : autocompleteList?.itemIndexAtRow(this.hoveredAutocompleteRow);
+    const hoveredRows = hoveredIndex === undefined ? undefined : autocompleteList?.rowsOfItem(hoveredIndex);
+    if (hoveredRows)
+      return markHoveredRows(result, this.lastAutocompleteStartRow + hoveredRows.first, hoveredRows.count);
     return result;
+  }
+
+  private visibleAutocompleteList(): WrappingAutocompleteList | undefined {
+    const list = (this as unknown as { autocompleteList?: unknown }).autocompleteList;
+    return this.isShowingAutocomplete() && list instanceof WrappingAutocompleteList ? list : undefined;
+  }
+
+  /**
+   * Resolves the autocomplete row `rowsFromCursor` rows below the hardware
+   * cursor (negative = above). A click applies that suggestion exactly as Tab
+   * would; a hover only marks it. Returns true when something changed.
+   */
+  pointAutocompleteRow(rowsFromCursor: number, action: 'click' | 'hover'): boolean {
+    const list = this.visibleAutocompleteList();
+    if (!list || this.lastCursorRow < 0 || this.lastAutocompleteStartRow < 0) return false;
+    const listRow = this.lastCursorRow + rowsFromCursor - this.lastAutocompleteStartRow;
+    const index = list.itemIndexAtRow(listRow);
+    if (action === 'hover') {
+      const next = index === undefined ? undefined : listRow;
+      if (next === this.hoveredAutocompleteRow) return false;
+      this.hoveredAutocompleteRow = next;
+      return true;
+    }
+    if (index === undefined) return false;
+    list.setSelectedIndex(index);
+    this.handleInput('\t');
+    return true;
+  }
+
+  clearAutocompleteHover(): boolean {
+    if (this.hoveredAutocompleteRow === undefined) return false;
+    this.hoveredAutocompleteRow = undefined;
+    return true;
+  }
+
+  private captureLayout(): Pick<InputLayout, 'lines' | 'visualLines' | 'scrollOffset'> {
+    const internals = editorInternals(this);
+    return {
+      lines: [...internals.state.lines],
+      visualLines: internals.buildVisualLineMap(internals.lastWidth),
+      scrollOffset: internals.scrollOffset,
+    };
+  }
+
+  /**
+   * Text position under the given row of visible text (0 = first visible row)
+   * and 1-based screen column, or undefined outside the text. With `clamp`,
+   * rows above/below the text resolve to its start/end, as a drag needs.
+   * With `cell`, the position is the start of the character under the pointer
+   * rather than the nearest gap between characters.
+   */
+  private positionAt(textRow: number, screenCol: number, clamp = false, cell = false): TextPosition | undefined {
+    const layout = this.inputLayout;
+    if (!layout || layout.rowCount <= 0) return undefined;
+    let row = textRow;
+    let x = screenCol - 1 - layout.firstCol;
+    if (row < 0 || row >= layout.rowCount) {
+      if (!clamp) return undefined;
+      row = row < 0 ? 0 : layout.rowCount - 1;
+      x = textRow < 0 ? -1 : Number.MAX_SAFE_INTEGER;
+    }
+    const index = layout.scrollOffset + row;
+    const visual = layout.visualLines[index];
+    if (!visual) return undefined;
+    const line = layout.lines[visual.logicalLine] ?? '';
+    const endCol = visual.startCol + visual.length;
+    let col = visual.startCol;
+    let width = 0;
+    // Paste markers segment as one unit, so a click never lands inside one.
+    for (const { segment } of editorInternals(this).segment(line.slice(visual.startCol, endCol), 'grapheme')) {
+      const segmentWidth = visibleWidth(segment);
+      if (x < width + (cell ? segmentWidth : segmentWidth / 2)) break;
+      width += segmentWidth;
+      col += segment.length;
+    }
+    // A wrapped row's end is the next row's start; keep the cursor on the row that was clicked.
+    const wrapsOnward = layout.visualLines[index + 1]?.logicalLine === visual.logicalLine;
+    if (wrapsOnward && col >= endCol && visual.length > 0) col = endCol - 1;
+    // A narrow box can split a paste marker across rows, and the clamp above can land inside an
+    // emoji, so snap into whole segments of the full line the way pi-tui does for ↑/↓.
+    for (const { segment, index } of editorInternals(this).segment(line, 'grapheme')) {
+      if (index >= col) break;
+      if (col < index + segment.length) {
+        col = index;
+        break;
+      }
+    }
+    // Positions after a hidden prompt marker are one further right in the real text.
+    if (visual.logicalLine === 0 && layout.hiddenMarkerIndex >= 0 && col >= layout.hiddenMarkerIndex) col += 1;
+    return { line: visual.logicalLine, col };
+  }
+
+  private moveCursorTo(position: TextPosition): void {
+    const internals = editorInternals(this);
+    internals.state.cursorLine = position.line;
+    internals.setCursorCol(position.col);
+    internals.lastAction = null;
+  }
+
+  /**
+   * Mouse mode: a left press at `screenRow`/`screenCol` (1-based) while the
+   * terminal reports the hardware cursor on `cursorRow`. On text it places the
+   * cursor there and starts a selection ('text'); elsewhere in the input box
+   * it does nothing ('box'); 'outside' means the press missed the input box.
+   */
+  pointerPress(cursorRow: number, screenRow: number, screenCol: number): 'text' | 'box' | 'outside' {
+    const layout = this.inputLayout;
+    if (!layout || this.lastCursorRow < 0) return 'outside';
+    const topScreenRow = cursorRow - this.lastCursorRow;
+    if (screenRow < topScreenRow || screenRow >= topScreenRow + this.lastRenderedRowCount) return 'outside';
+    const firstScreenRow = topScreenRow + layout.firstRow;
+    const position = this.positionAt(screenRow - firstScreenRow, screenCol);
+    if (!position) return 'box';
+    this.dragFirstScreenRow = firstScreenRow;
+
+    const now = Date.now();
+    const last = this.lastPress;
+    const repeat = last && now - last.time < MULTI_CLICK_MS && last.row === screenRow && last.col === screenCol;
+    const count = repeat ? (last.count % 3) + 1 : 1;
+    this.lastPress = { time: now, row: screenRow, col: screenCol, count };
+    this.selectionUnit = undefined;
+
+    if (count === 1) {
+      this.selection.start(position);
+      this.moveCursorTo(position);
+      return 'text';
+    }
+    const kind = count === 2 ? 'word' : 'line';
+    const range = this.unitRangeAt(kind, this.positionAt(screenRow - firstScreenRow, screenCol, false, true)!);
+    this.selectionUnit = { kind, range };
+    this.selection.set(range.start, range.end);
+    this.moveCursorTo(range.end);
+    return 'text';
+  }
+
+  /**
+   * The word (a run of letters, of spaces, or one other character; a paste marker counts as one)
+   * or logical line containing the character at `position`.
+   */
+  private unitRangeAt(kind: 'word' | 'line', position: TextPosition): TextRange {
+    const line = editorInternals(this).state.lines[position.line] ?? '';
+    if (kind === 'line')
+      return { start: { line: position.line, col: 0 }, end: { line: position.line, col: line.length } };
+    let found: { segment: string; index: number } | undefined;
+    for (const segment of editorInternals(this).segment(line, 'word')) {
+      found = segment;
+      if (position.col < segment.index + segment.segment.length) break;
+    }
+    if (!found) return { start: position, end: position };
+    return {
+      start: { line: position.line, col: found.index },
+      end: { line: position.line, col: found.index + found.segment.length },
+    };
+  }
+
+  /** Mouse mode: drag after pointerPress; extends the selection to the pointer. */
+  pointerDrag(screenRow: number, screenCol: number): boolean {
+    if (this.dragFirstScreenRow === undefined) return false;
+    // A press that moves is a drag, not a click, so it can't start a double click.
+    if (this.lastPress && (this.lastPress.row !== screenRow || this.lastPress.col !== screenCol))
+      this.lastPress = undefined;
+    const unit = this.selectionUnit;
+    const position = this.positionAt(screenRow - this.dragFirstScreenRow, screenCol, true, unit !== undefined);
+    if (!position) return false;
+    if (!unit) {
+      this.selection.extend(position);
+      this.moveCursorTo(position);
+      return true;
+    }
+    // After a double or triple click, grow by whole words or lines, keeping the first one selected.
+    const range = this.unitRangeAt(unit.kind, position);
+    const backwards = before(range.start, unit.range.start);
+    const head = backwards ? range.start : before(unit.range.end, range.end) ? range.end : unit.range.end;
+    this.selection.set(backwards ? unit.range.end : unit.range.start, head);
+    this.moveCursorTo(head);
+    return true;
+  }
+
+  /** Mouse mode: release after pointerPress. Returns the selected text (paste markers expanded), if any. */
+  pointerRelease(screenRow: number, screenCol: number): string | undefined {
+    this.pointerDrag(screenRow, screenCol);
+    this.dragFirstScreenRow = undefined;
+    const range = this.selection.range();
+    if (!range) {
+      this.selection.clear();
+      return undefined;
+    }
+    const internals = editorInternals(this);
+    return internals.expandPasteMarkers(textInRange(internals.state.lines, range));
+  }
+
+  clearInputSelection(): void {
+    this.dragFirstScreenRow = undefined;
+    this.selectionUnit = undefined;
+    this.selection.clear();
+  }
+
+  /**
+   * Shift+arrow, Shift+Home/End and Shift+Alt/Ctrl+arrow: moves the cursor like the plain key and
+   * selects from where the selection started (or the cursor) to the new position. Returns false for other keys.
+   */
+  private handleSelectKey(data: string): boolean {
+    const move = SELECT_KEYS.find(([key]) => matchesKey(data, key))?.[1];
+    if (!move || this.isShowingAutocomplete()) return false;
+    const internals = editorInternals(this);
+    const anchor = this.selection.anchorPosition() ?? {
+      line: internals.state.cursorLine,
+      col: internals.state.cursorCol,
+    };
+    move(internals);
+    internals.lastAction = null;
+    this.dragFirstScreenRow = undefined;
+    this.selectionUnit = undefined;
+    this.selection.set(anchor, { line: internals.state.cursorLine, col: internals.state.cursorCol });
+    return true;
+  }
+
+  private highlightSelection(contentLines: string[], paddingX: number): void {
+    const range = this.selection.range();
+    const layout = this.inputLayout;
+    if (!range || !layout) return;
+    if (!rangeFits(editorInternals(this).state.lines, range)) {
+      this.selection.clear();
+      return;
+    }
+    // Into laid-out coordinates (a hidden prompt marker shifts line 0 left by one).
+    const toLayout = ({ line, col }: TextPosition): TextPosition =>
+      line === 0 && layout.hiddenMarkerIndex >= 0 && col > layout.hiddenMarkerIndex
+        ? { line, col: col - 1 }
+        : { line, col };
+    const start = toLayout(range.start);
+    const end = toLayout(range.end);
+    for (let row = 0; row < layout.rowCount; row++) {
+      const visual = layout.visualLines[layout.scrollOffset + row];
+      if (!visual || visual.logicalLine < start.line || visual.logicalLine > end.line) continue;
+      const rowEnd = visual.startCol + visual.length;
+      const from = visual.logicalLine === start.line ? Math.max(start.col, visual.startCol) : visual.startCol;
+      const to = visual.logicalLine === end.line ? Math.min(end.col, rowEnd) : rowEnd;
+      if (to <= from) continue;
+      const line = layout.lines[visual.logicalLine] ?? '';
+      const startCol = paddingX + visibleWidth(line.slice(visual.startCol, from));
+      const endCol = paddingX + visibleWidth(line.slice(visual.startCol, to));
+      contentLines[row] = highlightColumns(contentLines[row]!, startCol, endCol);
+    }
+  }
+
+  /** Removes the selected text as one undoable edit. */
+  private deleteSelection(): void {
+    const range = this.selection.range();
+    this.selection.clear();
+    if (!range) return;
+    const internals = editorInternals(this);
+    if (!rangeFits(internals.state.lines, range)) return;
+    internals.pushUndoSnapshot();
+    internals.state.lines = removeRange(internals.state.lines, range);
+    this.moveCursorTo(range.start);
+    internals.onChange?.(this.getText());
+  }
+
+  /**
+   * Keys while a mouse selection exists. Backspace/Delete remove it, text or a
+   * paste replaces it, and any other key clears it and keeps its usual effect. Returns true when the key
+   * is fully handled.
+   */
+  private handleSelectionInput(data: string): boolean {
+    if (matchesKey(data, 'backspace') || matchesKey(data, 'delete')) {
+      this.deleteSelection();
+      return true;
+    }
+    if (isTextInput(data)) {
+      this.deleteSelection();
+      return false;
+    }
+    this.selection.clear();
+    return false;
   }
 
   private maybeHandleBracketedPaste(data: string): boolean {
@@ -614,7 +903,11 @@ export class CustomEditor extends Editor {
     return true;
   }
 
-  private completeAutocompleteSelection(): boolean {
+  /**
+   * Accept the highlighted autocomplete item, repairing the leading slash that
+   * pi-tui's applyCompletion drops for namespaced commands like `skill/<name>`.
+   */
+  private completeAutocompleteSelection({ appendTrailingSpace = false } = {}): boolean {
     if (!this.isShowingAutocomplete()) {
       return false;
     }
@@ -623,7 +916,12 @@ export class CustomEditor extends Editor {
     super.handleInput('\t');
     const completedText = this.getText();
     if (wasSlashCommand && !completedText.trimStart().startsWith('/')) {
-      this.setText(`/${completedText.trimStart()}`);
+      const repaired = completedText.trimStart();
+      // pi-tui's slash-command branch inserts "<command> " with a trailing space,
+      // but the file-path branch that namespaced commands fall into does not.
+      // Only the Tab path leaves the text in the editor for further typing.
+      const suffix = appendTrailingSpace && !repaired.includes(' ') ? ' ' : '';
+      this.setText(`/${repaired}${suffix}`);
     }
     return wasSlashCommand;
   }
@@ -888,6 +1186,23 @@ export class CustomEditor extends Editor {
   }
 
   handleInput(data: string): void {
+    if (isEditingInput(data)) this.actionHandlers.get('editInput')?.();
+
+    if (this.handleSelectKey(data)) {
+      this.requestEditorRender();
+      return;
+    }
+
+    if (this.selection.range()) {
+      if (this.handleSelectionInput(data)) {
+        this.requestEditorRender();
+        return;
+      }
+    } else {
+      // Drop an empty selection (e.g. Shift+← then Shift+→) so the next Shift+key starts from the cursor.
+      this.selection.clear();
+    }
+
     if (this.maybeHandleBracketedPaste(data)) {
       return;
     }
@@ -964,6 +1279,22 @@ export class CustomEditor extends Editor {
       }
     }
 
+    if (matchesKey(data, 'ctrl+g')) {
+      const handler = this.actionHandlers.get('openBackgroundActivityCenter');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
+    if (matchesKey(data, 'alt+g')) {
+      const handler = this.actionHandlers.get('clearFinishedBackgroundActivities');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+
     if (matchesKey(data, 'ctrl+f')) {
       const handler = this.actionHandlers.get('queueFollowUp');
       if (handler) {
@@ -1002,6 +1333,11 @@ export class CustomEditor extends Editor {
         handler();
         return;
       }
+    }
+
+    if (matchesKey(data, 'tab') && this.isShowingAutocomplete()) {
+      this.completeAutocompleteSelection({ appendTrailingSpace: true });
+      return;
     }
 
     if (matchesKey(data, 'ctrl+y')) {

@@ -122,7 +122,7 @@ export function createDurableScorerStep() {
 
         try {
           // Resolve the scorer from Mastra
-          const scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
+          const scorer = mastra?.getScorer?.(scorerName) as MastraScorer | undefined;
 
           if (!scorer) {
             logger?.warn?.(`Scorer ${scorerName} not found in Mastra, skipping`, { runId, scorerKey });

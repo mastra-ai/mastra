@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isFactorySandbox } from '@mastra/core/workspace';
+import type { FactorySandboxContext } from '@mastra/core/workspace';
 import type * as factoryModule from '@mastra/factory';
 
 const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
@@ -14,16 +16,15 @@ vi.mock('@mastra/factory', async importOriginal => {
 });
 
 /**
- * Sandbox selection lives inline in the entry's `sandbox` callback because
- * `src/mastra/index.ts` is copied verbatim into the create-factory template
- * (scripts/sync-template.mjs) — the entry must stay a single self-contained
- * file. These tests boot the real entry and exercise that callback directly.
+ * Sandbox selection lives inline in the entry, which hands the factory one
+ * host `FactorySandbox` chosen at boot. These tests boot the real entry and
+ * create session sandboxes from that host object directly.
  *
  * Provider precedence: Platform > E2B > Local. Template *definitions* are
  * covered by `@mastra/platform-workspace` repo-template tests; here we pin
  * which provider is selected and what session context is forwarded.
  */
-describe('entry sandbox callback (src/mastra/index.ts)', () => {
+describe('entry host sandbox (src/mastra/index.ts)', () => {
   beforeEach(() => {
     for (const name of [
       'MASTRACODE_AUTH_DISABLED',
@@ -48,7 +49,10 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
       'LINEAR_CLIENT_SECRET',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
+      'MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT',
       'E2B_API_KEY',
+      'SANDBOX_PROVIDER',
+      'FACTORY_SANDBOX_PROVIDER',
     ]) {
       vi.stubEnv(name, '');
     }
@@ -62,12 +66,18 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     vi.resetModules();
   });
 
+  /**
+   * Boots the entry and returns a session-sandbox constructor backed by the
+   * host `FactorySandbox` it configured, called the way factory calls it:
+   * with the session context and the provider's default (empty) settings.
+   */
   async function importSandboxCallback() {
     await import('./index.js');
     expect(factoryConfigs).toHaveLength(1);
-    const sandbox = factoryConfigs[0]?.sandbox;
-    if (typeof sandbox !== 'function') throw new Error('entry factory config has no sandbox callback');
-    return sandbox;
+    const host = factoryConfigs[0]?.sandbox;
+    if (!isFactorySandbox(host)) throw new Error('entry factory config has no FactorySandbox');
+    return (ctx: Partial<FactorySandboxContext> & { sessionId: string }) =>
+      host.create({ getRepositoryAccess: undefined, ...ctx }, {});
   }
 
   it('prefers PlatformSandbox over direct E2B and forwards session context', { timeout: 60_000 }, async () => {
@@ -95,20 +105,69 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     expect((sandbox as unknown as { _template?: unknown })._template).toBeDefined();
   });
 
-  it(
-    'does not select PlatformSandbox on MASTRA_PLATFORM_SECRET_KEY alone (integrations credential, not the sandbox one)',
+  it.each([
+    ['', 'sk_secret', 'sk_secret'],
+    ['jwt_platform', 'sk_secret', 'jwt_platform'],
+    ['  ', ' sk_secret ', 'sk_secret'],
+  ])(
+    'selects PlatformSandbox with access token %j and secret key %j',
     { timeout: 60_000 },
-    async () => {
-      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    async (token, key, expected) => {
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', token);
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', key);
       vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
       vi.stubEnv('E2B_API_KEY', 'direct-e2b');
       const callback = await importSandboxCallback();
 
       const sandbox = callback({ sessionId: 'session-sk', repoFullName: 'acme/widgets' });
 
-      expect(sandbox).toMatchObject({ provider: 'e2b' });
+      expect(sandbox).toMatchObject({ provider: 'platform', _client: { accessToken: expected } });
     },
   );
+
+  it('requires an environment ID even with a secret key', { timeout: 60_000 }, async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    const callback = await importSandboxCallback();
+
+    expect(callback({ sessionId: 'session-no-env' })).toMatchObject({ provider: 'local' });
+  });
+
+  it.each(['e2b', 'railway'])(
+    'preserves the PlatformSandbox %s backend selection',
+    { timeout: 60_000 },
+    async provider => {
+      vi.stubEnv('SANDBOX_PROVIDER', provider);
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+      vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+      const callback = await importSandboxCallback();
+
+      expect(callback({ sessionId: 'session-platform-backend' })).toMatchObject({
+        provider: 'platform',
+        _client: { sandboxProvider: provider },
+      });
+    },
+  );
+
+  it('honors the local override even with all cloud credentials configured', { timeout: 60_000 }, async () => {
+    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+    vi.stubEnv('E2B_API_KEY', 'direct-e2b');
+    const callback = await importSandboxCallback();
+
+    expect(callback({ sessionId: 'session-local' })).toMatchObject({ provider: 'local' });
+  });
+
+  it('honors the local override when only direct E2B is configured', { timeout: 60_000 }, async () => {
+    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+    vi.stubEnv('E2B_API_KEY', 'direct-e2b');
+    const callback = await importSandboxCallback();
+
+    expect(callback({ sessionId: 'session-local-e2b' })).toMatchObject({ provider: 'local' });
+  });
 
   it('selects direct E2BSandbox when only E2B_API_KEY is configured', { timeout: 60_000 }, async () => {
     vi.stubEnv('E2B_API_KEY', 'direct-e2b');

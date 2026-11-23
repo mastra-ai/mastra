@@ -1,0 +1,1015 @@
+[
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_list_incidents",
+    "method": "GET",
+    "path": "/v2/incidents",
+    "input": {},
+    "response": {
+      "incidents": [
+        {
+          "call_url": "https://zoom.us/foo",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "creator": {
+            "alert": {
+              "id": "01GW2G3V0S59R238FAHPDS1R66",
+              "title": "*errors.withMessage: PG::Error failed to connect"
+            },
+            "api_key": {
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "My test API key"
+            },
+            "user": {
+              "email": "lisa@incident.io",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "Lisa Karlin Curtis",
+              "role": "owner",
+              "slack_user_id": "U02AYNF2XJM"
+            },
+            "workflow": {
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "My little workflow"
+            }
+          },
+          "custom_field_entries": [
+            {
+              "custom_field": {
+                "description": "Which team is impacted by this issue",
+                "field_type": "single_select",
+                "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                "name": "Affected Team",
+                "options": [
+                  {
+                    "custom_field_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                    "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                    "sort_key": 10,
+                    "value": "Product"
+                  }
+                ]
+              },
+              "values": [
+                {
+                  "value_catalog_entry": {
+                    "aliases": ["lawrence@incident.io", "lawrence"],
+                    "external_id": "761722cd-d1d7-477b-ac7e-90f9e079dc33",
+                    "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                    "name": "Primary On-call"
+                  },
+                  "value_link": "https://google.com/",
+                  "value_numeric": "123.456",
+                  "value_option": {
+                    "custom_field_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                    "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                    "sort_key": 10,
+                    "value": "Product"
+                  },
+                  "value_text": "This is my text field, I hope you like it"
+                }
+              ]
+            }
+          ],
+          "duration_metrics": [
+            {
+              "duration_metric": {
+                "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+                "name": "Lasted"
+              },
+              "status": "success",
+              "value_seconds": 10800
+            }
+          ],
+          "external_issue_reference": {
+            "issue_name": "INC-123",
+            "issue_permalink": "https://linear.app/incident-io/issue/INC-1609/find-copywriter-to-write-up",
+            "provider": "asana"
+          },
+          "has_debrief": false,
+          "id": "01FDAG4SAP5TYPT98WGR2N7W91",
+          "incident_role_assignments": [
+            {
+              "assignee": {
+                "email": "lisa@incident.io",
+                "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                "name": "Lisa Karlin Curtis",
+                "role": "owner",
+                "slack_user_id": "U02AYNF2XJM"
+              },
+              "role": {
+                "created_at": "2021-08-17T13:28:57.801578Z",
+                "description": "The person currently coordinating the incident",
+                "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                "instructions": "Take point on the incident; Make sure people are clear on responsibilities",
+                "name": "Incident Lead",
+                "required": false,
+                "role_type": "lead",
+                "shortform": "lead",
+                "updated_at": "2021-08-17T13:28:57.801578Z"
+              }
+            }
+          ],
+          "incident_status": {
+            "category": "triage",
+            "created_at": "2021-08-17T13:28:57.801578Z",
+            "description": "Impact has been **fully mitigated**, and we're ready to learn from this incident.",
+            "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+            "name": "Closed",
+            "rank": 4,
+            "updated_at": "2021-08-17T13:28:57.801578Z"
+          },
+          "incident_timestamp_values": [
+            {
+              "incident_timestamp": {
+                "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+                "name": "Impact started",
+                "rank": 1
+              },
+              "value": {
+                "value": "2021-08-17T13:28:57.801578Z"
+              }
+            }
+          ],
+          "incident_type": {
+            "create_in_triage": "always",
+            "created_at": "2021-08-17T13:28:57.801578Z",
+            "description": "Customer facing production outages",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "is_default": false,
+            "name": "Production Outage",
+            "private_incidents_only": false,
+            "updated_at": "2021-08-17T13:28:57.801578Z"
+          },
+          "last_activity_at": "2021-08-17T13:28:57.801578Z",
+          "mode": "standard",
+          "ms_teams_channel_url": "https://teams.microsoft.com/l/channel/19%some-hex%40thread.tacv2/inc-123-title?groupId=some-uuid&tenantId=another-uuid",
+          "name": "Our database is sad",
+          "permalink": "https://app.incident.io/incidents/123",
+          "postmortem_document_ids": ["01FCNDV6P870EA6S7TK1DSYD5H"],
+          "postmortem_document_url": "https://docs.google.com/my_doc_id",
+          "reference": "INC-123",
+          "severity": {
+            "created_at": "2021-08-17T13:28:57.801578Z",
+            "description": "Issues with **low impact**.",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Minor",
+            "rank": 1,
+            "updated_at": "2021-08-17T13:28:57.801578Z"
+          },
+          "slack_channel_id": "C02AW36C1M5",
+          "slack_channel_name": "inc-165-green-parrot",
+          "slack_channel_url": "https://slack.com/app_redirect?team=T1234&channel=C5678",
+          "slack_team_id": "T02A1FSLE8J",
+          "summary": "Our database is really really sad, and we don't know why yet.",
+          "team_ids": ["01JPQA75EPNEES4479P16P4XAB"],
+          "updated_at": "2021-08-17T13:28:57.801578Z",
+          "visibility": "public",
+          "workload_minutes_late": 40.7,
+          "workload_minutes_sleeping": 0,
+          "workload_minutes_total": 60.7,
+          "workload_minutes_working": 20
+        }
+      ],
+      "pagination_meta": {
+        "after": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "page_size": 25,
+        "total_record_count": 238
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_get_incident",
+    "method": "GET",
+    "path": "/v2/incidents/{id}",
+    "input": {
+      "id": "01FDAG4SAP5TYPT98WGR2N7W91"
+    },
+    "response": {
+      "incident": {
+        "call_url": "https://zoom.us/foo",
+        "created_at": "2021-08-17T13:28:57.801578Z",
+        "creator": {
+          "alert": {
+            "id": "01GW2G3V0S59R238FAHPDS1R66",
+            "title": "*errors.withMessage: PG::Error failed to connect"
+          },
+          "api_key": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My test API key"
+          },
+          "user": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "workflow": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My little workflow"
+          }
+        },
+        "custom_field_entries": [
+          {
+            "custom_field": {
+              "description": "Which team is impacted by this issue",
+              "field_type": "single_select",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "Affected Team",
+              "options": [
+                {
+                  "custom_field_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "sort_key": 10,
+                  "value": "Product"
+                }
+              ]
+            },
+            "values": [
+              {
+                "value_catalog_entry": {
+                  "aliases": ["lawrence@incident.io", "lawrence"],
+                  "external_id": "761722cd-d1d7-477b-ac7e-90f9e079dc33",
+                  "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "name": "Primary On-call"
+                },
+                "value_link": "https://google.com/",
+                "value_numeric": "123.456",
+                "value_option": {
+                  "custom_field_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "sort_key": 10,
+                  "value": "Product"
+                },
+                "value_text": "This is my text field, I hope you like it"
+              }
+            ]
+          }
+        ],
+        "duration_metrics": [
+          {
+            "duration_metric": {
+              "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+              "name": "Lasted"
+            },
+            "status": "success",
+            "value_seconds": 10800
+          }
+        ],
+        "external_issue_reference": {
+          "issue_name": "INC-123",
+          "issue_permalink": "https://linear.app/incident-io/issue/INC-1609/find-copywriter-to-write-up",
+          "provider": "asana"
+        },
+        "has_debrief": false,
+        "id": "01FDAG4SAP5TYPT98WGR2N7W91",
+        "incident_role_assignments": [
+          {
+            "assignee": {
+              "email": "lisa@incident.io",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "Lisa Karlin Curtis",
+              "role": "owner",
+              "slack_user_id": "U02AYNF2XJM"
+            },
+            "role": {
+              "created_at": "2021-08-17T13:28:57.801578Z",
+              "description": "The person currently coordinating the incident",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "instructions": "Take point on the incident; Make sure people are clear on responsibilities",
+              "name": "Incident Lead",
+              "required": false,
+              "role_type": "lead",
+              "shortform": "lead",
+              "updated_at": "2021-08-17T13:28:57.801578Z"
+            }
+          }
+        ],
+        "incident_status": {
+          "category": "triage",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Impact has been **fully mitigated**, and we're ready to learn from this incident.",
+          "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+          "name": "Closed",
+          "rank": 4,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        },
+        "incident_timestamp_values": [
+          {
+            "incident_timestamp": {
+              "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+              "name": "Impact started",
+              "rank": 1
+            },
+            "value": {
+              "value": "2021-08-17T13:28:57.801578Z"
+            }
+          }
+        ],
+        "incident_type": {
+          "create_in_triage": "always",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Customer facing production outages",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "is_default": false,
+          "name": "Production Outage",
+          "private_incidents_only": false,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        },
+        "last_activity_at": "2021-08-17T13:28:57.801578Z",
+        "mode": "standard",
+        "ms_teams_channel_url": "https://teams.microsoft.com/l/channel/19%some-hex%40thread.tacv2/inc-123-title?groupId=some-uuid&tenantId=another-uuid",
+        "name": "Our database is sad",
+        "permalink": "https://app.incident.io/incidents/123",
+        "postmortem_document_ids": ["01FCNDV6P870EA6S7TK1DSYD5H"],
+        "postmortem_document_url": "https://docs.google.com/my_doc_id",
+        "reference": "INC-123",
+        "severity": {
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Issues with **low impact**.",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "name": "Minor",
+          "rank": 1,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        },
+        "slack_channel_id": "C02AW36C1M5",
+        "slack_channel_name": "inc-165-green-parrot",
+        "slack_channel_url": "https://slack.com/app_redirect?team=T1234&channel=C5678",
+        "slack_team_id": "T02A1FSLE8J",
+        "summary": "Our database is really really sad, and we don't know why yet.",
+        "team_ids": ["01JPQA75EPNEES4479P16P4XAB"],
+        "updated_at": "2021-08-17T13:28:57.801578Z",
+        "visibility": "public",
+        "workload_minutes_late": 40.7,
+        "workload_minutes_sleeping": 0,
+        "workload_minutes_total": 60.7,
+        "workload_minutes_working": 20
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_create_incident",
+    "method": "POST",
+    "path": "/v2/incidents",
+    "input": {
+      "body": {
+        "custom_field_entries": [
+          {
+            "custom_field_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "values": [
+              {
+                "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                "value_catalog_entry_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                "value_link": "https://google.com/",
+                "value_numeric": "123.456",
+                "value_option_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                "value_text": "This is my text field, I hope you like it",
+                "value_timestamp": ""
+              }
+            ]
+          }
+        ],
+        "idempotency_key": "alert-uuid",
+        "incident_role_assignments": [
+          {
+            "assignee": {
+              "email": "bob@example.com",
+              "id": "01G0J1EXE7AXZ2C93K61WBPYEH",
+              "slack_user_id": "USER123"
+            },
+            "incident_role_id": "01FH5TZRWMNAFB0DZ23FD1TV96"
+          }
+        ],
+        "incident_status_id": "01G0J1EXE7AXZ2C93K61WBPYEH",
+        "incident_timestamp_values": [
+          {
+            "incident_timestamp_id": "01FCNDV6P870EA6S7TK1DSYD5H",
+            "value": "2021-08-17T13:28:57.801578Z"
+          }
+        ],
+        "incident_type_id": "01FH5TZRWMNAFB0DZ23FD1TV96",
+        "mode": "standard",
+        "name": "Our database is sad",
+        "retrospective_incident_options": {
+          "external_id": 123,
+          "postmortem_document_url": "https://docs.google.com/my_doc_id",
+          "slack_channel_id": "abc123"
+        },
+        "severity_id": "01FH5TZRWMNAFB0DZ23FD1TV96",
+        "slack_channel_name_override": "inc-123-database-down",
+        "slack_team_id": "T02A1FSLE8J",
+        "summary": "Our database is really really sad, and we don't know why yet.",
+        "visibility": "public"
+      }
+    },
+    "response": {
+      "incident": {
+        "call_url": "https://zoom.us/foo",
+        "created_at": "2021-08-17T13:28:57.801578Z",
+        "creator": {
+          "alert": {
+            "id": "01GW2G3V0S59R238FAHPDS1R66",
+            "title": "*errors.withMessage: PG::Error failed to connect"
+          },
+          "api_key": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My test API key"
+          },
+          "user": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "workflow": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My little workflow"
+          }
+        },
+        "custom_field_entries": [
+          {
+            "custom_field": {
+              "description": "Which team is impacted by this issue",
+              "field_type": "single_select",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "Affected Team",
+              "options": [
+                {
+                  "custom_field_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "sort_key": 10,
+                  "value": "Product"
+                }
+              ]
+            },
+            "values": [
+              {
+                "value_catalog_entry": {
+                  "aliases": ["lawrence@incident.io", "lawrence"],
+                  "external_id": "761722cd-d1d7-477b-ac7e-90f9e079dc33",
+                  "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "name": "Primary On-call"
+                },
+                "value_link": "https://google.com/",
+                "value_numeric": "123.456",
+                "value_option": {
+                  "custom_field_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+                  "sort_key": 10,
+                  "value": "Product"
+                },
+                "value_text": "This is my text field, I hope you like it"
+              }
+            ]
+          }
+        ],
+        "duration_metrics": [
+          {
+            "duration_metric": {
+              "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+              "name": "Lasted"
+            },
+            "status": "success",
+            "value_seconds": 10800
+          }
+        ],
+        "external_issue_reference": {
+          "issue_name": "INC-123",
+          "issue_permalink": "https://linear.app/incident-io/issue/INC-1609/find-copywriter-to-write-up",
+          "provider": "asana"
+        },
+        "has_debrief": false,
+        "id": "01FDAG4SAP5TYPT98WGR2N7W91",
+        "incident_role_assignments": [
+          {
+            "assignee": {
+              "email": "lisa@incident.io",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "Lisa Karlin Curtis",
+              "role": "owner",
+              "slack_user_id": "U02AYNF2XJM"
+            },
+            "role": {
+              "created_at": "2021-08-17T13:28:57.801578Z",
+              "description": "The person currently coordinating the incident",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "instructions": "Take point on the incident; Make sure people are clear on responsibilities",
+              "name": "Incident Lead",
+              "required": false,
+              "role_type": "lead",
+              "shortform": "lead",
+              "updated_at": "2021-08-17T13:28:57.801578Z"
+            }
+          }
+        ],
+        "incident_status": {
+          "category": "triage",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Impact has been **fully mitigated**, and we're ready to learn from this incident.",
+          "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+          "name": "Closed",
+          "rank": 4,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        },
+        "incident_timestamp_values": [
+          {
+            "incident_timestamp": {
+              "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+              "name": "Impact started",
+              "rank": 1
+            },
+            "value": {
+              "value": "2021-08-17T13:28:57.801578Z"
+            }
+          }
+        ],
+        "incident_type": {
+          "create_in_triage": "always",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Customer facing production outages",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "is_default": false,
+          "name": "Production Outage",
+          "private_incidents_only": false,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        },
+        "last_activity_at": "2021-08-17T13:28:57.801578Z",
+        "mode": "standard",
+        "ms_teams_channel_url": "https://teams.microsoft.com/l/channel/19%some-hex%40thread.tacv2/inc-123-title?groupId=some-uuid&tenantId=another-uuid",
+        "name": "Our database is sad",
+        "permalink": "https://app.incident.io/incidents/123",
+        "postmortem_document_ids": ["01FCNDV6P870EA6S7TK1DSYD5H"],
+        "postmortem_document_url": "https://docs.google.com/my_doc_id",
+        "reference": "INC-123",
+        "severity": {
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Issues with **low impact**.",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "name": "Minor",
+          "rank": 1,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        },
+        "slack_channel_id": "C02AW36C1M5",
+        "slack_channel_name": "inc-165-green-parrot",
+        "slack_channel_url": "https://slack.com/app_redirect?team=T1234&channel=C5678",
+        "slack_team_id": "T02A1FSLE8J",
+        "summary": "Our database is really really sad, and we don't know why yet.",
+        "team_ids": ["01JPQA75EPNEES4479P16P4XAB"],
+        "updated_at": "2021-08-17T13:28:57.801578Z",
+        "visibility": "public",
+        "workload_minutes_late": 40.7,
+        "workload_minutes_sleeping": 0,
+        "workload_minutes_total": 60.7,
+        "workload_minutes_working": 20
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_list_follow_ups",
+    "method": "GET",
+    "path": "/v3/follow_ups",
+    "input": {},
+    "response": {
+      "follow_ups": [
+        {
+          "assignee": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "assignee_team": {
+            "id": "abc123",
+            "name": "abc123"
+          },
+          "category": {
+            "description": "Follow-ups related to infrastructure changes.",
+            "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+            "name": "Infrastructure",
+            "rank": 10
+          },
+          "completed_at": "2021-08-17T13:28:57.801578Z",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "creator": {
+            "alert": {
+              "id": "01GW2G3V0S59R238FAHPDS1R66",
+              "title": "*errors.withMessage: PG::Error failed to connect"
+            },
+            "api_key": {
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "My test API key"
+            },
+            "user": {
+              "email": "lisa@incident.io",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "Lisa Karlin Curtis",
+              "role": "owner",
+              "slack_user_id": "U02AYNF2XJM"
+            },
+            "workflow": {
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "My little workflow"
+            }
+          },
+          "description": "Call the fire brigade",
+          "external_issue_reference": {
+            "issue_name": "INC-123",
+            "issue_permalink": "https://linear.app/incident-io/issue/INC-1609/find-copywriter-to-write-up",
+            "provider": "asana"
+          },
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "incident_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "labels": ["bug", "urgent"],
+          "priority": {
+            "description": "A follow-up that requires immediate attention.",
+            "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+            "name": "Urgent",
+            "rank": 10
+          },
+          "status": "outstanding",
+          "title": "Cat is stuck in the tree",
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        }
+      ],
+      "pagination_meta": {
+        "after": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "page_size": 25
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_get_follow_up",
+    "method": "GET",
+    "path": "/v3/follow_ups/{id}",
+    "input": {
+      "id": "01FCNDV6P870EA6S7TK1DSYD5H"
+    },
+    "response": {
+      "follow_up": {
+        "assignee": {
+          "email": "lisa@incident.io",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "name": "Lisa Karlin Curtis",
+          "role": "owner",
+          "slack_user_id": "U02AYNF2XJM"
+        },
+        "assignee_team": {
+          "id": "abc123",
+          "name": "abc123"
+        },
+        "category": {
+          "description": "Follow-ups related to infrastructure changes.",
+          "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+          "name": "Infrastructure",
+          "rank": 10
+        },
+        "completed_at": "2021-08-17T13:28:57.801578Z",
+        "created_at": "2021-08-17T13:28:57.801578Z",
+        "creator": {
+          "alert": {
+            "id": "01GW2G3V0S59R238FAHPDS1R66",
+            "title": "*errors.withMessage: PG::Error failed to connect"
+          },
+          "api_key": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My test API key"
+          },
+          "user": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "workflow": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My little workflow"
+          }
+        },
+        "description": "Call the fire brigade",
+        "external_issue_reference": {
+          "issue_name": "INC-123",
+          "issue_permalink": "https://linear.app/incident-io/issue/INC-1609/find-copywriter-to-write-up",
+          "provider": "asana"
+        },
+        "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "incident_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "labels": ["bug", "urgent"],
+        "priority": {
+          "description": "A follow-up that requires immediate attention.",
+          "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+          "name": "Urgent",
+          "rank": 10
+        },
+        "status": "outstanding",
+        "title": "Cat is stuck in the tree",
+        "updated_at": "2021-08-17T13:28:57.801578Z"
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_create_follow_up",
+    "method": "POST",
+    "path": "/v3/follow_ups",
+    "input": {
+      "body": {
+        "assignee_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "assignee_team_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "description": "Call the fire brigade",
+        "external_issue_reference_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "follow_up_category_id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+        "follow_up_priority_option_id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+        "incident_id": "01FCNDV6P870EA6S7TK1DSYD5H",
+        "labels": ["bug", "urgent"],
+        "title": "Add alerting on replica lag"
+      }
+    },
+    "response": {
+      "follow_up": {
+        "assignee": {
+          "email": "lisa@incident.io",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "name": "Lisa Karlin Curtis",
+          "role": "owner",
+          "slack_user_id": "U02AYNF2XJM"
+        },
+        "assignee_team": {
+          "id": "abc123",
+          "name": "abc123"
+        },
+        "category": {
+          "description": "Follow-ups related to infrastructure changes.",
+          "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+          "name": "Infrastructure",
+          "rank": 10
+        },
+        "completed_at": "2021-08-17T13:28:57.801578Z",
+        "created_at": "2021-08-17T13:28:57.801578Z",
+        "creator": {
+          "alert": {
+            "id": "01GW2G3V0S59R238FAHPDS1R66",
+            "title": "*errors.withMessage: PG::Error failed to connect"
+          },
+          "api_key": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My test API key"
+          },
+          "user": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "workflow": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My little workflow"
+          }
+        },
+        "description": "Call the fire brigade",
+        "external_issue_reference": {
+          "issue_name": "INC-123",
+          "issue_permalink": "https://linear.app/incident-io/issue/INC-1609/find-copywriter-to-write-up",
+          "provider": "asana"
+        },
+        "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "incident_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "labels": ["bug", "urgent"],
+        "priority": {
+          "description": "A follow-up that requires immediate attention.",
+          "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+          "name": "Urgent",
+          "rank": 10
+        },
+        "status": "outstanding",
+        "title": "Cat is stuck in the tree",
+        "updated_at": "2021-08-17T13:28:57.801578Z"
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_update_follow_up",
+    "method": "PUT",
+    "path": "/v3/follow_ups/{id}",
+    "input": {
+      "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+      "body": {
+        "assignee_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "assignee_team_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "description": "Call the fire brigade",
+        "follow_up_category_id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+        "follow_up_priority_option_id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+        "labels": ["bug", "urgent"],
+        "status": "outstanding",
+        "title": "Add alerting on replica lag"
+      }
+    },
+    "response": {
+      "follow_up": {
+        "assignee": {
+          "email": "lisa@incident.io",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "name": "Lisa Karlin Curtis",
+          "role": "owner",
+          "slack_user_id": "U02AYNF2XJM"
+        },
+        "assignee_team": {
+          "id": "abc123",
+          "name": "abc123"
+        },
+        "category": {
+          "description": "Follow-ups related to infrastructure changes.",
+          "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+          "name": "Infrastructure",
+          "rank": 10
+        },
+        "completed_at": "2021-08-17T13:28:57.801578Z",
+        "created_at": "2021-08-17T13:28:57.801578Z",
+        "creator": {
+          "alert": {
+            "id": "01GW2G3V0S59R238FAHPDS1R66",
+            "title": "*errors.withMessage: PG::Error failed to connect"
+          },
+          "api_key": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My test API key"
+          },
+          "user": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "workflow": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My little workflow"
+          }
+        },
+        "description": "Call the fire brigade",
+        "external_issue_reference": {
+          "issue_name": "INC-123",
+          "issue_permalink": "https://linear.app/incident-io/issue/INC-1609/find-copywriter-to-write-up",
+          "provider": "asana"
+        },
+        "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "incident_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "labels": ["bug", "urgent"],
+        "priority": {
+          "description": "A follow-up that requires immediate attention.",
+          "id": "01GNW4BAQ7XRMFF6FHKNXDFPRW",
+          "name": "Urgent",
+          "rank": 10
+        },
+        "status": "outstanding",
+        "title": "Cat is stuck in the tree",
+        "updated_at": "2021-08-17T13:28:57.801578Z"
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_list_actions",
+    "method": "GET",
+    "path": "/v3/actions",
+    "input": {},
+    "response": {
+      "actions": [
+        {
+          "assignee": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "completed_at": "2021-08-17T13:28:57.801578Z",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "creator": {
+            "alert": {
+              "id": "01GW2G3V0S59R238FAHPDS1R66",
+              "title": "*errors.withMessage: PG::Error failed to connect"
+            },
+            "api_key": {
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "My test API key"
+            },
+            "user": {
+              "email": "lisa@incident.io",
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "Lisa Karlin Curtis",
+              "role": "owner",
+              "slack_user_id": "U02AYNF2XJM"
+            },
+            "workflow": {
+              "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+              "name": "My little workflow"
+            }
+          },
+          "description": "Call the fire brigade",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "incident_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "status": "outstanding",
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        }
+      ],
+      "pagination_meta": {
+        "after": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "page_size": 25
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_get_action",
+    "method": "GET",
+    "path": "/v3/actions/{id}",
+    "input": {
+      "id": "01FCNDV6P870EA6S7TK1DSYD5H"
+    },
+    "response": {
+      "action": {
+        "assignee": {
+          "email": "lisa@incident.io",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "name": "Lisa Karlin Curtis",
+          "role": "owner",
+          "slack_user_id": "U02AYNF2XJM"
+        },
+        "completed_at": "2021-08-17T13:28:57.801578Z",
+        "created_at": "2021-08-17T13:28:57.801578Z",
+        "creator": {
+          "alert": {
+            "id": "01GW2G3V0S59R238FAHPDS1R66",
+            "title": "*errors.withMessage: PG::Error failed to connect"
+          },
+          "api_key": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My test API key"
+          },
+          "user": {
+            "email": "lisa@incident.io",
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "Lisa Karlin Curtis",
+            "role": "owner",
+            "slack_user_id": "U02AYNF2XJM"
+          },
+          "workflow": {
+            "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+            "name": "My little workflow"
+          }
+        },
+        "description": "Call the fire brigade",
+        "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "incident_id": "01FCNDV6P870EA6S7TK1DSYDG0",
+        "status": "outstanding",
+        "updated_at": "2021-08-17T13:28:57.801578Z"
+      }
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_list_severities",
+    "method": "GET",
+    "path": "/v1/severities",
+    "input": {},
+    "response": {
+      "severities": [
+        {
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Issues with **low impact**.",
+          "id": "01FCNDV6P870EA6S7TK1DSYDG0",
+          "name": "Minor",
+          "rank": 1,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        }
+      ]
+    }
+  },
+  {
+    "provider": "incident-io",
+    "tool": "incident_io_list_incident_statuses",
+    "method": "GET",
+    "path": "/v1/incident_statuses",
+    "input": {},
+    "response": {
+      "incident_statuses": [
+        {
+          "category": "triage",
+          "created_at": "2021-08-17T13:28:57.801578Z",
+          "description": "Impact has been **fully mitigated**, and we're ready to learn from this incident.",
+          "id": "01FCNDV6P870EA6S7TK1DSYD5H",
+          "name": "Closed",
+          "rank": 4,
+          "updated_at": "2021-08-17T13:28:57.801578Z"
+        }
+      ]
+    }
+  }
+]

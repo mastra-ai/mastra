@@ -1,0 +1,4 @@
+{
+  "temperature": ["jamba-large", "jamba-mini"],
+  "structuredOutput": ["jamba-large", "jamba-mini"]
+}

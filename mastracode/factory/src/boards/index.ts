@@ -1,23 +1,75 @@
-import type { FactoryRuleBoard } from '../rules/types.js';
-import { isReviewBoardPhase, reviewBoard } from './review.js';
-import { isWorkBoardPhase, workBoard } from './work.js';
-
-export { BoardDefinitionError, defineBoard } from './define-board.js';
-export type { BoardDefinition, BoardPhaseDefinition, BoardTransition } from './define-board.js';
-export { reviewBoard } from './review.js';
-export type { ReviewBoardPhase } from './review.js';
+export {
+  BoardDefinitionError,
+  DEFAULT_PHASE_CONTEXT,
+  defineBoard,
+  FACTORY_AGENT_ID,
+  REVIEW_CONTEXT,
+} from './define-board.js';
+export { DEFAULT_BOARD_ID } from './default-board.js';
+export { cardRuleFacts } from './card-facts.js';
+export type {
+  BoardDefinition,
+  BoardEventIntegration,
+  BoardEventRules,
+  BoardPhase,
+  BoardPhaseDefinition,
+  BoardPhaseExitTool,
+  BoardPhaseKind,
+  BoardPhaseGoal,
+  BoardPhaseRunner,
+  FactoryPhaseTool,
+  BoardSourceClosed,
+  BoardToolResultRuleHandler,
+  BoardToolRule,
+  BoardToolRules,
+  BoardTransition,
+} from './define-board.js';
+export {
+  boardEventHandlers,
+  awaitsAcceptance,
+  boardFlow,
+  boardPhaseOutcomes,
+  boardForWorkItem,
+  cardBoardFlow,
+  boundChangeRequestNumber,
+  eventBoardId,
+  cardOwnsBranch,
+  hasPullRequest,
+  isPullRequestReviewPhase,
+  isTerminalWorkItem,
+  newestOwnedOpenPullRequestNumber,
+  resolveBoardClosure,
+  reviewedChangeRequest,
+  sourceExternalId,
+  reviewsPullRequest,
+  resolveBoardToolRule,
+  rulePhaseContext,
+  rulePhaseField,
+  resolvePhaseSemantics,
+  withBoardClosure,
+  withBoardFlow,
+  intakeTarget,
+  withIntakeTarget,
+  workItemPhaseSemantics,
+} from './semantics.js';
+export type { PhaseSemantics, ReviewedChangeRequest } from './semantics.js';
+export {
+  isOpenPullRequestSource,
+  isPullRequestCard,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  pullRequestTrustKey,
+  reviewedPullRequest,
+  trustedPullRequestSource,
+  UNTRUSTED_PULL_REQUESTS_KEY,
+  workingPullRequest,
+} from '../work-items/change-requests.js';
+export type {
+  BoardTransitionPolicy,
+  BoardTransitionPolicyContext,
+  BoardTransitionPolicyResult,
+} from './transition-policy.js';
+export { boardRegistryOf, createBoardRegistry, defaultBoards } from './registry.js';
+export type { BoardRegistry, InstalledBoard } from './registry.js';
 export { workBoard } from './work.js';
 export type { WorkBoardPhase } from './work.js';
-
-const builtInBoards = { work: workBoard, review: reviewBoard } as const;
-
-export function builtInBoard(board: FactoryRuleBoard) {
-  return builtInBoards[board];
-}
-
-export function allowsBuiltInBoardTransition(board: FactoryRuleBoard, from: string, to: string): boolean {
-  if (board === 'work') {
-    return isWorkBoardPhase(from) && isWorkBoardPhase(to) && workBoard.allowsTransition(from, to);
-  }
-  return isReviewBoardPhase(from) && isReviewBoardPhase(to) && reviewBoard.allowsTransition(from, to);
-}

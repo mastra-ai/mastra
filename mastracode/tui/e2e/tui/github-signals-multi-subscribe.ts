@@ -5,6 +5,7 @@ import {
   githubSignalsInProcessApp,
   prepareGithubSignalsMultiFixture,
 } from './github-signals-e2e-utils.js';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
 export const githubSignalsMultiSubscribeScenario = {
@@ -17,6 +18,7 @@ export const githubSignalsMultiSubscribeScenario = {
     mkdirSync(context.projectDir, { recursive: true });
     enableGithubSignals(context);
     prepareGithubSignalsMultiFixture(context);
+    enableMouseSettings(context.appDataDir, { dialogs: true, input: false });
   },
   env({ projectDir }) {
     return githubSignalsEnv(projectDir, process.env.PATH);
@@ -44,7 +46,8 @@ export const githubSignalsMultiSubscribeScenario = {
     terminal.write(' ');
     terminal.write('\x1b[B');
     terminal.write(' ');
-    terminal.write('\r');
+    // A click does what Enter does: confirm the toggled PRs.
+    await terminal.clickText?.('mastra-ai/mastra#17637');
 
     await runtime.waitForScreenText(
       /GitHub PR batch complete: .*#1763[78]: subscribed; .*#1763[78]: subscribed/i,

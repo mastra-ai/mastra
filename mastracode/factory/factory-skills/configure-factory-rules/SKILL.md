@@ -1,6 +1,6 @@
 ---
 name: configure-factory-rules
-description: Configure typed Mastra Factory rules and exact-leaf overrides in deployment code
+description: Configure board-owned lifecycle, policy, phase-semantics, and tool-result rules, plus integration event rules
 ---
 
 # Configure Factory Rules
@@ -9,33 +9,86 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 
 ## Find the configuration
 
-1. Search for `new MastraFactory`, `defaultFactoryRules`, and the `rules` property.
+1. Search for `new MastraFactory`, its `boards` option, `factory.upsertBoard` calls, `defineBoard`, `configVersion`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
-4. If the deployment doesn't configure `rules`, start with `defaultFactoryRules({ version, overrides })` and pass the result to `MastraFactory`.
+4. For custom-board handlers or phase semantics (`kind`, `role`), edit the installed `defineBoard()` definition. For tool-result rules, add `tools: { <toolName>: { onResult } }` to the installed `defineBoard()` definition of the board whose seat produces the result. For GitHub or Linear rules, configure the installed integration constructor directly.
 
 Do not guess a file path. Factory deployments can assemble `MastraFactory` from different entry points.
 
 ## Preserve the public shape
 
-Use one rules tree:
+A phase starts its work only through its stored `runner` (`skill`, `context`, `instructions`, `goal`); `onEnter`, `onExit` and `outcomes` in `defineBoard()` are ignored with a warning. Work installs automatically with preferred defaults. Custom boards are installed through `boards` or written into projects with `factory.upsertBoard()`. `includeDefaultBoards` is deprecated and ignored: Factory adds Work only to a project with no boards.
 
-- `work.<stage>.<source>.onEnter` or `onExit`
-- `review.<stage>.<source>.onEnter` or `onExit`
-- `tools.<toolName>.onResult`
-- `github.<event>.onEvent`
+Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, write a board under the `work` key with `factory.upsertBoard(board, { projects: 'all' })` at every startup, preferably starting from the exported `workBoard` phases; projects created later get it instead of Factory's Work. The Review board is retired: its pull requests live in Work's Review phase (`pr-review`), and `review` can't be used as a board ID. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares none, and custom boards inherit nothing.
+
+By default, every integration arrival stays in its routed board's initial phase (Intake for Work) without starting or suggesting a run. This applies to GitHub, GitLab, Linear, Jira, and incident.io; explicit trusted GitHub review requests without an existing card go directly to Review (`pr-review`). Do not restore default arrival automation on the built-in boards.
+
+`authorTrusted` and `autoStartCandidate` remain available as metadata for custom rules. A custom board can add guarded arrival triage on its initial phase by checking both `context.cause === 'linked_item_materialized'` and `context.item.metadata?.autoStartCandidate === true`, then returning an `invokeSkill` decision for `factory-triage`.
+
+Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegration` constructor, and Linear on `LinearIntegration` or `PlatformLinearIntegration`, instead:
+
+```typescript
+new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
+new PlatformLinearIntegration({ rules: { issueClosed: null } });
+```
+
+When Platform credentials are present the factory installs `PlatformGithubIntegration` itself, so forward the same options with `new MastraFactory({ platform: { github: { rules, slug } } })` rather than constructing the integration; an explicit `integrations` entry with id `github` still takes precedence and makes that key a no-op, and the factory warns instead of ignoring it silently.
+
+GitHub and Linear integrations exclusively own their event handlers; configure them through constructor `rules[event]`, not the global Factory rules tree. Move former `rules.linear[event].onEvent` values to the Linear constructor's `rules[event]`. Every built-in handler is enabled automatically; never import or spread defaults just to install an integration. A function replaces the default, `null` disables that event's handler, and omitted or `undefined` values retain defaults. Constructors validate names and handler values, then copy and freeze the effective map per instance. Disabling a handler does not disable authentication, ingestion, or reconciliation bookkeeping. Linear fetch, platform polling, and reconciliation all use the owning instance's handlers.
 
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.
 
-Work and Review cards move independently. Never mirror their stages or mark Work Done only because a pull request merged.
+A pull request's own card and the Work card that authored it move independently, whether the pull request card sits on Work or on the legacy Review board. Never mirror their stages or mark Work Done only because a pull request merged.
 
-## Apply exact-leaf overrides
+## Restrict where cards move
 
-An override replaces the exact handler leaf. It does not compose with the built-in handler at that leaf. Sibling leaves remain unchanged.
+Topology (`nextPhases`) declares the moves that exist, for everyone: people dragging cards, agents and board rules (lifecycle, tool-result and integration handlers). To keep a move from happening, leave it out of the source phase's `nextPhases`. Do not add restrictions to the generic transition service or global rules.
 
-Before replacing a built-in leaf:
+```typescript
+backlog: {
+  name: 'Backlog',
+  kind: 'resting',
+  // Cards are built before they ship; nobody closes a card straight from the backlog.
+  nextPhases: ['build', 'canceled'],
+},
+```
 
-1. Read the built-in handler in `src/web/factory/rules/defaults.ts`.
+Read `src/boards/work.ts` for Work's topology (no skipping Planning, Building only through an approved plan, Building opens the change request and moves the card to Review, keyed `pr-review`). Work has no self-review phase: a board that wants one adds a working phase in the `review` context granting only `factory_record_review_verdict`, which returns the card to its build phase or parks it in its first phase; a project stored before this change keeps the `review` self-review phase its Work row holds only if the project had self-review on, cards sit in that phase, or its build phase can't move straight to `pr-review`. Read the project's stored Work board before treating self-review as available. Whether work is finished is the agent's instructions, not the board's: say when to move a card to Done in the phase's skill or `runner.instructions`.
+
+A working phase with an `exitTool` holds the card until that tool succeeds (for `submit_plan`, with an approved plan) in the session working the card there: until then anyone but a person asking to move the card on to another working phase is rejected with `approval_required`. Once it succeeded, the agent moves the card with `factory_transition_work_item` (or a board tool rule for the tool moves it). `autoApprove`/`autoApproveWhen` only decide whether the tool approves itself or waits for a person. Work's Planning uses `submit_plan` with `autoApprove: false`, so every plan waits for a person. To approve plans without a person on your own board, set `exitTool.autoApprove` (optionally with `autoApproveWhen`); there is no project setting.
+
+`transitionPolicy` is deprecated: it still runs for boards that set it and logs one warning per board. Do not add new policies; express the flow with `nextPhases` and `exitTool`. Factory no longer records triage classification or acceptance: Work's triage agent sends open non-bugs back to Intake, and a person moving the card on is the approval. Custom boards inherit none of Work's rules through phase or role names.
+
+## Configure board phase semantics
+
+Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work's declaration, including its Review phase (`pr-review`), lives in `src/boards/work.ts`.
+
+Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and sweeps; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
+
+To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, or sweeps. Bound transition tools accept custom phase identifiers and validate live membership and topology on the item's installed board.
+
+## Execute a custom board
+
+Use the custom-board execution example in the Factory README as the configuration pattern. Board and phase identifiers are case-sensitive, 1–128 letters, digits, underscores, or hyphens, beginning with a letter or digit, without surrounding whitespace. Lifecycle, tool-result, and integration decisions may target installed custom phases. Validate membership on the target board, never against a union of installed phase names.
+
+A `transition` decision stays on the item's assigned board. An `upsertLinkedWorkItem` decision may target another installed board; materialization enters that board's declared initial phase before the requested destination. Neither decision can reassign an existing card. Targets are checked before acceptance and before uncommitted deferred effects execute. Committed replay returns its recorded result even if the installed configuration changes.
+
+Working roles identify bindings on the shared Code Agent, not separately configured agents. There is no per-role agent registration option. Declare `invokeSkill` decisions with the working role and a board-owned prompt (or an available skill); do not invent an `agents` configuration. For automatic session preparation, verify the deployment's GitHub integration, project connection and linked repository, sandbox, organization model credentials, and that the phase starts on its own (`autoStart`, optionally `autoStartWhen`); there is no project setting. Enter a working phase through the public transition route as an authorized human when approval is required.
+
+Verify the actual journey: initial entry, lifecycle kickoff, the declared role's phase signal and binding, a bound transition tool, role handoff, completed tool-result ingestion, deferred transition, and terminal cleanup. Polling and persisted-message ingestion resolve the single current phase through the installed board. Live binding, reassignment, revision, topology, approval, and external-author checks still apply. Custom roles named `triage` inherit nothing from Work. A tool-result handler receives normalized `result.status` and `result.value`; it does not receive raw tool arguments. Check the result payload the board's rules need rather than treating every completed tool call as business success.
+
+Any board runs the pull request loop by what its phases declare, never by their keys: a working phase in the `review` context granting `factory_review_source` reviews pull requests (verdicts, attach, re-review on push or review request); one in the `review` context granting only `factory_record_review_verdict` self-reviews the builder's branch; the last other working phase that can move into that review builds. A board with no `factory_review_source` phase has no pull request loop: pull requests are filed as their own cards elsewhere. Completion metrics count entries into the board's `sourceClosed.completed` phase (else its first terminal phase).
+
+Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles. Existing integration defaults do not automatically route events to a custom board.
+
+## Change a built-in handler
+
+Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace a board-owned handler, set `includeDefaultBoards: false` and install a same-ID board with the desired handler. Work declares no tool-result rules; to have a tool's result move a card on your replacement `work` board, declare `tools.<tool>.onResult` there.
+
+Before changing a built-in handler:
+
+1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, Work's tool-result handler in `src/boards/work-tool-rules.ts`, and Work lifecycle/policy defaults in `src/boards/work.ts` and `src/boards/pull-request-review.ts`. Custom handlers live in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.
@@ -43,7 +96,7 @@ Before replacing a built-in leaf:
 
 ## Version changes
 
-Set an explicit, deployment-owned `version`. Change it whenever rule behavior changes. The version identifies persisted evaluations and audit records; it must not be used as event identity or added to ingress deduplication keys.
+Set an explicit, deployment-owned `configVersion` on `MastraFactory`. Change it whenever rule behavior changes. It is recorded in transition audit event metadata and the session kickoff header; it must not be used as event identity or added to ingress deduplication keys.
 
 ## Safety rules
 

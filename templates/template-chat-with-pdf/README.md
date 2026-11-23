@@ -1,5 +1,3 @@
-![Chat with PDF](assets/header.png)
-
 # Chat with PDF
 
 An AI-powered PDF assistant that lets you chat with any PDF document. Ask questions about the content, get answers with page citations, and optionally generate quizzes to test your comprehension. Uses RAG (Retrieval-Augmented Generation) to find relevant passages and provide accurate, sourced answers. Built with [Mastra](https://mastra.ai).

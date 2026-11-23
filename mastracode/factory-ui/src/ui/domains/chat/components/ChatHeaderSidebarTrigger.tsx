@@ -1,13 +1,9 @@
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
-export function ChatHeaderSidebarTrigger({
-  isMobile,
-  sidebarCollapsed,
-}: {
-  isMobile: boolean;
-  sidebarCollapsed: boolean;
-}) {
-  if (isMobile) return <MainSidebar.MobileTrigger id="mobile-navigation-trigger" />;
-  if (sidebarCollapsed) return <MainSidebar.Trigger className="mx-0 shrink-0" />;
+/** Reopens the collapsed sidebar on desktop. */
+export function ChatHeaderSidebarTrigger({ className }: { className?: string }) {
+  const { isMobile, desktopState } = useSidebar();
+  if (!isMobile && desktopState === 'collapsed') return <Sidebar.Trigger className={cn('shrink-0', className)} />;
   return null;
 }

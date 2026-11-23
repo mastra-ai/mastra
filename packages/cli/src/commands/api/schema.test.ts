@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildCommandExamples, buildCommandUsage, getCommandSchema } from './schema.js';
+import { BUNDLED_ROUTE_SCHEMAS, buildCommandExamples, buildCommandUsage, getCommandSchema } from './schema.js';
 import { API_COMMANDS, registerApiCommand } from './index.js';
 
 const commands = (key: keyof typeof API_COMMANDS) =>
@@ -72,7 +72,7 @@ describe('buildCommandExamples', () => {
 
   it('uses observability score route shapes', () => {
     expect(commands('scoreCreate')).toEqual([
-      'mastra api score create \'{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}\'',
+      'mastra api score create \'{"score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}\'',
     ]);
     expect(commands('scoreList')).toEqual([
       'mastra api score list \'{"page":0,"perPage":50}\'',
@@ -86,11 +86,38 @@ describe('buildCommandExamples', () => {
     expect(commands('datasetCreate')).toEqual(['mastra api dataset create \'{"name":"weather-eval"}\'']);
     expect(commands('experimentRun')).toEqual(['mastra api experiment run dataset_123 \'{"name":"baseline"}\'']);
   });
+
+  it('includes required path IDs in generated list examples', () => {
+    expect(commands('workflowRunList')).toEqual([
+      'mastra api workflow run list workflowId_123 \'{"page":0,"perPage":50}\'',
+    ]);
+  });
 });
 
 describe('getCommandSchema', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('resolves bundled route schemas without fetching the target manifest', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const descriptor = API_COMMANDS.learningEntities;
+
+    expect(BUNDLED_ROUTE_SCHEMAS[`${descriptor.method} ${descriptor.path}`]).toBeDefined();
+    await expect(
+      getCommandSchema(descriptor, { baseUrl: 'https://example.com', headers: {}, timeoutMs: 1000 }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        path: '/learning/entities',
+        input: expect.objectContaining({
+          source: 'query',
+          schema: expect.objectContaining({ type: 'object' }),
+        }),
+      }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('fails clearly when the target returns an invalid manifest', async () => {

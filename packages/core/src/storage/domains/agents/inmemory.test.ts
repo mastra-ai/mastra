@@ -11,6 +11,65 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
     storage = new InMemoryAgentsStorage({ db });
   });
 
+  describe.each([false, true])('pagination (populated: %s)', populated => {
+    beforeEach(async () => {
+      if (!populated) return;
+      for (const id of ['a', 'b', 'c']) {
+        await storage.create({
+          agent: { id, name: id, instructions: 'Test', model: { provider: 'openai', name: 'gpt-4' } },
+        });
+      }
+      for (const versionNumber of [2, 3]) {
+        await storage.createVersion({
+          id: `a-v${versionNumber}`,
+          agentId: 'a',
+          versionNumber,
+          name: 'a',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+        });
+      }
+    });
+
+    it.each([NaN, Infinity, -Infinity, 1.5, -0.5, -1])('rejects invalid pagination %s', async value => {
+      await expect(storage.list({ perPage: value })).rejects.toThrow('perPage must be >= 0');
+      await expect(storage.listVersions({ agentId: 'a', perPage: value })).rejects.toThrow('perPage must be >= 0');
+      for (const perPage of [10, 0, false] as const) {
+        await expect(storage.list({ page: value, perPage })).rejects.toThrow();
+        await expect(storage.listVersions({ agentId: 'a', page: value, perPage })).rejects.toThrow();
+      }
+    });
+
+    it.each([NaN, 0.5])('rejects invalid page %s with an empty ID filter', async page => {
+      await expect(storage.list({ page, entityIds: [] })).rejects.toThrow('page must be >= 0');
+    });
+
+    it('preserves defaults, zero, fetch-all, and page slicing', async () => {
+      const total = populated ? 3 : 0;
+      expect(await storage.list()).toMatchObject({ total, page: 0, perPage: 100, hasMore: false });
+      expect(await storage.listVersions({ agentId: 'a' })).toMatchObject({ total, perPage: 20, hasMore: false });
+      expect(await storage.list({ perPage: 0 })).toMatchObject({ agents: [], total, perPage: 0, hasMore: populated });
+      expect(await storage.listVersions({ agentId: 'a', perPage: 0 })).toMatchObject({
+        versions: [],
+        total,
+        perPage: 0,
+        hasMore: populated,
+      });
+      const all = await storage.list({ perPage: false, orderBy: { field: 'createdAt', direction: 'ASC' } });
+      expect(all).toMatchObject({ total, perPage: false, hasMore: false });
+      expect(all.agents).toHaveLength(total);
+      const versions = await storage.listVersions({ agentId: 'a', perPage: false });
+      expect(versions).toMatchObject({ total, perPage: false, hasMore: false });
+      expect(versions.versions).toHaveLength(total);
+      const page = await storage.list({ page: 1, perPage: 1, orderBy: { field: 'createdAt', direction: 'ASC' } });
+      expect(page).toMatchObject({ total, page: 1, perPage: 1, hasMore: populated });
+      expect(page.agents.map(agent => agent.id)).toEqual(populated ? ['b'] : []);
+      const versionPage = await storage.listVersions({ agentId: 'a', page: 1, perPage: 1 });
+      expect(versionPage).toMatchObject({ total, page: 1, perPage: 1, hasMore: populated });
+      expect(versionPage.versions.map(version => version.versionNumber)).toEqual(populated ? [2] : []);
+    });
+  });
+
   describe('create', () => {
     it('should create agent with status=draft and activeVersionId=undefined', async () => {
       const agentId = 'test-agent-1';

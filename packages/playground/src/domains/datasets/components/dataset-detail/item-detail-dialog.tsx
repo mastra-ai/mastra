@@ -1,19 +1,27 @@
-import type { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem, UpdateDatasetItemParams } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
-import { Label } from '@mastra/playground-ui/components/Label';
-import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconEraser } from '@mastra/playground-ui/icons/central/IconEraser';
+import { IconFileArrowRightIn } from '@mastra/playground-ui/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@mastra/playground-ui/icons/central/IconFileArrowRightOut';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { format } from 'date-fns/format';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, BracesIcon, Pencil, Trash2 } from 'lucide-react';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useState, useEffect } from 'react';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
 export interface ItemDetailDialogProps {
   datasetId: string;
@@ -38,7 +46,7 @@ export function ItemDetailDialog({
   onItemChange,
   dialogLevel = 1,
 }: ItemDetailDialogProps) {
-  const { updateItem, deleteItem } = useDatasetMutations();
+  const { updateItem, deleteItem, purgeItem } = useDatasetMutations();
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -48,8 +56,9 @@ export function ItemDetailDialog({
   const [trajectoryValue, setTrajectoryValue] = useState('');
   const [requestContextValue, setRequestContextValue] = useState('');
 
-  // Delete confirmation state
+  // Destructive action confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
 
   // Reset form state when item changes (navigation or prop update)
   useEffect(() => {
@@ -60,7 +69,8 @@ export function ItemDetailDialog({
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
-      setShowDeleteConfirm(false); // Reset delete state on item change
+      setShowDeleteConfirm(false); // Reset destructive action state on item change
+      setShowPurgeConfirm(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id]);
@@ -118,7 +128,7 @@ export function ItemDetailDialog({
     }
 
     // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
-    let parsedTrajectory: unknown | null = null;
+    let parsedTrajectory: UpdateDatasetItemParams['expectedTrajectory'] = null;
     if (trajectoryValue.trim()) {
       try {
         parsedTrajectory = JSON.parse(trajectoryValue);
@@ -186,6 +196,17 @@ export function ItemDetailDialog({
     }
   };
 
+  const handlePurgeConfirm = async () => {
+    try {
+      await purgeItem.mutateAsync({ datasetId, itemId: item.id });
+      toast.success('Item data purged successfully');
+      setShowPurgeConfirm(false);
+      onClose();
+    } catch (error) {
+      toast.error(`Failed to purge item data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <SideDialog
       dialogTitle="Dataset Item"
@@ -196,23 +217,19 @@ export function ItemDetailDialog({
     >
       <SideDialog.Top>
         <TextAndIcon>
-          <HashIcon /> {getShortId(item.id)}
+          <IconHashtag /> {getShortId(item.id)}
         </TextAndIcon>
-        |
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleEdit}>
-              <Icon>
-                <Pencil />
-              </Icon>
+            <Button size="sm" onClick={handleEdit} icon={<IconPencil />}>
               Edit
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDelete}>
-              <Icon>
-                <Trash2 />
-              </Icon>
+            <Button size="sm" onClick={handleDelete} icon={<TrashIcon />}>
               Delete
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<IconEraser />}>
+              Purge data
             </Button>
           </div>
         )}
@@ -240,7 +257,6 @@ export function ItemDetailDialog({
         )}
       </SideDialog.Content>
 
-      {/* Delete confirmation - uses portal, renders above SideDialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialog.Content>
           <AlertDialog.Header>
@@ -252,8 +268,36 @@ export function ItemDetailDialog({
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Yes, Delete'}
+              {deleteItem.isPending ? 'Deleting...' : 'Yes, delete'}
             </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
+
+      <AlertDialog open={showPurgeConfirm} onOpenChange={setShowPurgeConfirm}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Purge Item Data</AlertDialog.Title>
+            <AlertDialog.Description>
+              Permanently scrub this item's data from every dataset version and linked experiment result? The item
+              history remains for reproducibility, but its stored data cannot be recovered.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            {/* Deliberately a Button rather than AlertDialog.Action: Action is a
+                Close that dismisses the dialog on click regardless of
+                preventDefault, which would hide the pending state and a failed
+                purge behind a toast. */}
+            <Button
+              icon={<TrashIcon />}
+              variant="primary"
+              size="lg"
+              onClick={() => void handlePurgeConfirm()}
+              disabled={purgeItem.isPending}
+            >
+              {purgeItem.isPending ? 'Purging...' : 'Purge data'}
+            </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
@@ -273,19 +317,19 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
     <>
       <SideDialog.Header>
         <SideDialog.Heading>
-          <FileInputIcon /> Dataset Item
+          <IconFileArrowRightIn /> Dataset Item
         </SideDialog.Heading>
         <TextAndIcon>
-          <HashIcon /> {item.id}
+          <IconHashtag /> {item.id}
         </TextAndIcon>
       </SideDialog.Header>
 
-      <Sections>
+      <div className="grid gap-6">
         <KeyValueList
           data={[
             {
               label: 'Created',
-              value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
+              value: formatDate(item.createdAt, 'date-time') ?? '',
               key: 'createdAt',
             },
             ...(item.datasetVersion != null
@@ -300,26 +344,30 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
           ]}
         />
 
-        <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
+        <SideDialog.CodeSection
+          title="Input"
+          icon={<IconFileArrowRightIn />}
+          codeStr={JSON.stringify(item.input, null, 2)}
+        />
 
         {item.groundTruth !== null && item.groundTruth !== undefined && (
           <SideDialog.CodeSection
             title="Ground Truth"
-            icon={<FileOutputIcon />}
+            icon={<IconFileArrowRightOut />}
             codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
         )}
 
         {trajectoryDisplay && (
-          <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
+          <SideDialog.CodeSection title="Expected Trajectory" icon={<IconDirection1 />} codeStr={trajectoryDisplay} />
         )}
 
         {requestContextDisplay && (
-          <SideDialog.CodeSection title="Request Context" icon={<BracesIcon />} codeStr={requestContextDisplay} />
+          <SideDialog.CodeSection title="Request Context" icon={<IconCodeBrackets />} codeStr={requestContextDisplay} />
         )}
 
-        {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
-      </Sections>
+        {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<IconTag />} codeStr={metadataDisplay} />}
+      </div>
     </>
   );
 }
@@ -362,62 +410,62 @@ function EditModeContent({
     <>
       <SideDialog.Header>
         <SideDialog.Heading>
-          <Pencil /> Edit Item
+          <IconPencil /> Edit Item
         </SideDialog.Heading>
       </SideDialog.Header>
 
       <div className="space-y-6">
-        <div className="space-y-2">
-          <Label>Input (JSON) *</Label>
+        <Field>
+          <FieldLabel required>Input (JSON)</FieldLabel>
           <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Ground Truth (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
           <CodeEditor
             value={groundTruthValue}
             onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Expected Trajectory (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
           <CodeEditor
             value={trajectoryValue}
             onChange={setTrajectoryValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Request Context (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Request Context (JSON, optional)</FieldLabel>
           <CodeEditor
             value={requestContextValue}
             onChange={setRequestContextValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-2">
-          <Label>Metadata (JSON, optional)</Label>
+        <Field>
+          <FieldLabel>Metadata (JSON, optional)</FieldLabel>
           <CodeEditor
             value={metadataValue}
             onChange={setMetadataValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />
-        </div>
+        </Field>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button onClick={onCancel} disabled={isSaving}>
+          <Button icon={<IconCrossMedium />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+          <Button icon={<IconCheckmark2Medium />} variant="primary" onClick={onSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </div>

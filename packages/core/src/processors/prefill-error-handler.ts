@@ -4,7 +4,11 @@ import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './in
 
 const PREFILL_ERROR_PATTERNS = [
   /does not support assistant message prefill/i,
+  // Anthropic under structured output, on every Claude version (including those before 4.6)
+  /pre-?filling the `?assistant`? response is not supported/i,
   /assistant response prefill is incompatible with enable[_\s-]?thinking/i,
+  // Gemini 3+ (direct, Vertex, and gateway-routed)
+  /requests ending with a model turn are not supported/i,
 ];
 
 function getErrorCandidates(error: APICallError | Error): string[] {
@@ -45,9 +49,11 @@ function isPrefillError(error: unknown): boolean {
  * a `continue` system reminder message and signals a retry.
  *
  * This is a reactive complement to {@link TrailingAssistantGuard}, which
- * proactively prevents the error only for the structured output case.
- * `PrefillErrorHandler` catches the error for all other cases (e.g., tool
- * continuations, multi-turn conversations).
+ * proactively appends a user turn for providers it can identify up front
+ * (Anthropic under native structured output, Gemini 3+). `PrefillErrorHandler`
+ * catches the rejection whenever that identification falls short, e.g. Anthropic
+ * outside structured output, Claude models before 4.6 under structured output
+ * (the guard keeps their prefill), or a gateway whose model id hides the provider.
  *
  * @see https://github.com/mastra-ai/mastra/issues/13969
  */

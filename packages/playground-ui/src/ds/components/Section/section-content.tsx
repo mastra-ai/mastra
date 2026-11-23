@@ -8,7 +8,8 @@ export function SectionContent({ className, ...props }: SectionContentProps) {
     <div
       data-slot="section-content"
       className={cn(
-        'group-data-[variant=factory]/section:overflow-hidden group-data-[variant=factory]/section:rounded-xl group-data-[variant=factory]/section:border group-data-[variant=factory]/section:border-border1 group-data-[variant=factory]/section:bg-surface3',
+        'group-data-[variant=factory]/section:overflow-hidden group-data-[variant=factory]/section:rounded-xl',
+        'group-data-[variant=factory]/section:bg-card group-data-[variant=factory]/section:shadow-raised',
         className,
       )}
       {...props}

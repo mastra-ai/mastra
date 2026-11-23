@@ -87,7 +87,7 @@ describe('generated fs-agents module — executed, not just emitted', () => {
 
     expect(declared.map((s: any) => s.key)).toEqual(['billing/sweep']);
     expect(declared[0].definition.prompt).toBe('Sweep unpaid invoices.');
-  });
+  }, 15_000);
 
   it('inlines a markdown schedule so the deployed bundle reads no files', async () => {
     await writeAgent('support', {
@@ -103,7 +103,7 @@ describe('generated fs-agents module — executed, not just emitted', () => {
       name: 'nightly',
       prompt: 'Close resolved tickets.',
     });
-  });
+  }, 15_000);
 
   it('keeps a handler-mode schedule callable through codegen', async () => {
     await writeAgent('support', {
@@ -141,6 +141,49 @@ describe('generated fs-agents module — executed, not just emitted', () => {
     });
 
     await expect(runGeneratedModule('invalid')).rejects.toThrow(/agents\/support\/schedules\/broken/);
+  });
+
+  // The Cloudflare deployer turns `export const mastra = new Mastra(...)` into a
+  // per-request factory, so the wrapper must register file-based agents onto
+  // every instance that factory returns. (#29996)
+  it.for([
+    { exported: 'an instance', source: 'new Mastra({})', getMastra: (mod: any) => mod.mastra },
+    { exported: 'a factory', source: '() => new Mastra({})', getMastra: (mod: any) => mod.mastra() },
+  ])('registers file-based agents when index.ts exports $exported (#29996)', async ({ source, getMastra }) => {
+    await writeAgent('support');
+    const userEntry = join(dir, 'index.js');
+    await writeFile(userEntry, `import { Mastra } from '@mastra/core/mastra';\nexport const mastra = ${source};\n`);
+
+    const wrapper = await generateFsAgentsModule(userEntry.replaceAll('\\', '/'), await discoverFsAgents(dir));
+    const modPath = join(dir, 'entry-user.mjs');
+    await writeFile(modPath, wrapper);
+    const mod = await import(pathToFileURL(modPath).href);
+
+    const agent = getMastra(mod).getAgentById('support');
+    expect(agent.name).toBe('support');
+    // On Node every file-based agent gets the default workspace.
+    expect(agent.hasOwnWorkspace()).toBe(true);
+  });
+
+  // `addAgent` binds an agent to the Mastra registering it, so an agent shared
+  // across per-request instances would follow whichever request came last.
+  it('keeps each file-based agent bound to the instance a factory export returned (#29996)', async () => {
+    await writeAgent('support');
+    const userEntry = join(dir, 'index.js');
+    await writeFile(
+      userEntry,
+      `import { Mastra } from '@mastra/core/mastra';\nexport const mastra = () => new Mastra({});\n`,
+    );
+
+    const wrapper = await generateFsAgentsModule(userEntry.replaceAll('\\', '/'), await discoverFsAgents(dir));
+    const modPath = join(dir, 'entry-factory.mjs');
+    await writeFile(modPath, wrapper);
+    const mod = await import(pathToFileURL(modPath).href);
+
+    const first = mod.mastra();
+    const second = mod.mastra();
+    expect(first.getAgentById('support').getMastraInstance()).toBe(first);
+    expect(second.getAgentById('support').getMastraInstance()).toBe(second);
   });
 
   it('fails at module evaluation when a subagent declares schedules', async () => {

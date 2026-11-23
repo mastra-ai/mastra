@@ -1,14 +1,13 @@
 ---
 title: "Reference: Completeness scorer | Evals"
-description: "The createCompletenessScorer() function evaluates how thoroughly an LLM's output covers the key elements present in the input."
+description: "The createCompletenessScorer() function evaluates how well an LLM's output covers the key elements present in the input."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
 # Completeness scorer
 
-The `createCompletenessScorer()` function evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
+The `createCompletenessScorer()` function evaluates how well an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
 ## Parameters
 
@@ -44,7 +43,7 @@ The `.run()` method returns a result in the following shape:
 ```typescript oxfmt:false
 {
   runId: string,
-  extractStepResult: {
+  preprocessStepResult: {
     inputElements: string[],
     outputElements: string[],
     missingElements: string[],
@@ -66,14 +65,13 @@ The scorer extracts and analyzes several types of elements:
 The extraction process includes:
 
 - Normalization of text (removing diacritics, converting to lowercase)
-- Splitting camelCase words
 - Handling of word boundaries
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
-### `extractStepResult`
+### `preprocessStepResult`
 
-From the `.run()` method, you can get the `extractStepResult` object with the following properties:
+From the `.run()` method, you can get the `preprocessStepResult` object with the following properties:
 
 - **inputElements**: Key elements found in the input (e.g., nouns, verbs, topics, terms).
 - **outputElements**: Key elements found in the output.
@@ -84,7 +82,7 @@ From the `.run()` method, you can get the `extractStepResult` object with the fo
 
 The scorer evaluates completeness through linguistic element coverage analysis.
 
-### Scoring Process
+### Scoring process
 
 1. Extracts key elements:
    - Nouns and entities such as names
@@ -95,15 +93,19 @@ The scorer evaluates completeness through linguistic element coverage analysis.
    - Exact matches for short terms (≤3 chars)
    - Substantial overlap (>60%) for longer terms
 
-Final score: `(covered_elements / total_input_elements) * scale`
+When the input yields no elements, the scorer returns `1` if the output also has no elements and `0` otherwise.
+
+Final score: `covered_elements / total_input_elements`
+
+The completeness scorer has no `scale` option. The score is always between 0 and 1.
 
 ### Score interpretation
 
 A completeness score between 0 and 1:
 
-- **1.0**: Thoroughly addresses all aspects of the query with detailed detail.
-- **0.7 to 0.9**: Covers most important aspects with good detail, minor gaps.
-- **0.4 to 0.6**: Addresses some key points but missing important aspects or lacking detail.
+- **1.0**: Addresses all aspects of the query in detail.
+- **0.7 to 0.9**: Covers most of the important points with good detail, minor gaps.
+- **0.4 to 0.6**: Addresses some key points but misses important points or lacks detail.
 - **0.1 to 0.3**: Only partially addresses the query with substantial gaps.
 - **0.0**: Fails to address the query or provides irrelevant information.
 

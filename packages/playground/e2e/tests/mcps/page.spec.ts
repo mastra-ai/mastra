@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
-import { expectCurrentBreadcrumb, expectRouteDocsLink } from '../__utils__/route-header';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('MCP servers list page', () => {
   test.afterEach(async () => {
@@ -8,12 +8,11 @@ test.describe('MCP servers list page', () => {
   });
 
   test.describe('when the MCP servers page is visited', () => {
-    test('shows the page header, docs link, and renders the server list', async ({ page }) => {
+    test('shows the page header and renders the server list', async ({ page }) => {
       await page.goto('/mcps');
 
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectCurrentBreadcrumb(page, 'MCP Servers');
-      await expectRouteDocsLink(page, 'MCP documentation', 'https://mastra.ai/en/docs/tools-mcp/mcp-overview');
 
       // Verify list renders
       await expect(page.locator('.data-list-row').first()).toBeVisible();

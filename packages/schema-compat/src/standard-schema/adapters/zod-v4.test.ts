@@ -76,8 +76,23 @@ describe('zod-v4 standard-schema adapter', () => {
       const inputJsonSchema = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' });
       const outputJsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
 
-      // For Zod schemas, input and output JSON schemas are the same
-      expect(inputJsonSchema).toEqual(outputJsonSchema);
+      expect(inputJsonSchema.properties).toEqual(outputJsonSchema.properties);
+      expect(inputJsonSchema.required).toEqual(outputJsonSchema.required);
+    });
+
+    it('documents defaulted and transformed fields differently for input and output (#30050)', () => {
+      const standardSchema = toStandardSchema(
+        z.object({ limit: z.string().transform(Number).default('10'), enabled: z.boolean().default(true) }),
+        { unrepresentable: 'any' },
+      );
+
+      const input = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
+      const output = standardSchemaToJSONSchema(standardSchema, { io: 'output' });
+
+      expect(input.properties?.limit).toMatchObject({ type: 'string' });
+      expect(input.required).toBeUndefined();
+      expect(output.properties?.limit).not.toHaveProperty('type');
+      expect(output.required).toEqual(['limit', 'enabled']);
     });
 
     it('should preserve original Zod v4 methods', () => {
@@ -247,7 +262,7 @@ describe('zod-v4 standard-schema adapter', () => {
       expect(serialized.task_write.properties.tasks.items.required).toEqual(['content', 'status', 'activeForm']);
       expect(serialized.task_check.properties).toEqual({});
       expect(serialized.submit_plan.required).toEqual(['plan']);
-      expect(serialized.submit_plan.properties.title).toEqual({ anyOf: [{ type: 'string' }, { type: 'null' }] });
+      expect(serialized.submit_plan.properties.title).toEqual({ type: ['string', 'null'] });
     });
 
     it('should pass adapter options to z.toJSONSchema', () => {

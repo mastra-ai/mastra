@@ -16,12 +16,14 @@ import {
   deltaCursorSchema,
   listModeSchema,
   normalizeObservabilityListArgs,
+  organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
   refineObservabilityListMode,
+  resourceIdField,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -47,7 +49,7 @@ function normalizeLegacyFeedbackActor<T>(input: T): T {
   }
 
   const record = { ...(input as Record<string, unknown>) };
-  if (typeof record.userId === 'string' && record.feedbackUserId == null) {
+  if (typeof record.userId === 'string' && record.feedbackUserId === undefined) {
     record.feedbackUserId = record.userId;
     delete record.userId;
   }
@@ -159,6 +161,7 @@ export type CreateFeedbackRecord = z.infer<typeof createFeedbackRecordSchema>;
 export const createFeedbackArgsSchema = z
   .object({
     feedback: z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema),
+    onConflict: z.enum(['ignore', 'replace']).optional(),
   })
   .describe('Arguments for creating feedback');
 
@@ -168,16 +171,45 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }),
+    contextMode: z
+      .enum(['resolve', 'provided'])
+      .optional()
+      .describe('Context handling; defaults to provided on OSS and resolve on Platform'),
+    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }).extend({
+      timestamp: z.iso
+        .datetime({ offset: true })
+        .optional()
+        .describe('Original record timestamp; preserve across retries and replacements'),
+      traceId: traceIdField.regex(/\S/, 'traceId must not be empty or whitespace-only'),
+    }),
   })
   .describe('Arguments for creating feedback');
+
+/** Full replacement retains the original feedback identity and creation timestamp. */
+export const replaceFeedbackBodySchema = createFeedbackBodySchema.extend({
+  feedback: createFeedbackBodySchema.shape.feedback.extend({
+    feedbackId: z.string().regex(/\S/, 'feedbackId must not be empty'),
+    timestamp: z.iso.datetime({ offset: true }),
+  }),
+});
+export type ReplaceFeedbackBody = z.infer<typeof replaceFeedbackBodySchema>;
 
 /** Body for creating feedback in client/server */
 export type CreateFeedbackBody = z.infer<typeof createFeedbackBodySchema>;
 
 /** Schema for createFeedback operation response */
 export const createFeedbackResponseSchema = z
-  .object({ success: z.boolean() })
+  .object({
+    success: z.boolean(),
+    data: z
+      .object({
+        feedbackId: z.string(),
+        traceId: z.string(),
+        spanId: z.string().nullable(),
+        timestamp: z.iso.datetime(),
+      })
+      .optional(),
+  })
   .describe('Response from creating feedback');
 
 /** Response from creating feedback */
@@ -187,6 +219,7 @@ export type CreateFeedbackResponse = z.infer<typeof createFeedbackResponseSchema
 export const batchCreateFeedbackArgsSchema = z
   .object({
     feedbacks: z.array(z.preprocess(normalizeLegacyFeedbackActor, createFeedbackRecordObjectSchema)),
+    onConflict: z.enum(['ignore', 'replace']).optional(),
   })
   .describe('Arguments for batch recording feedback');
 
@@ -203,6 +236,35 @@ export const updateFeedbackReviewStatusArgsSchema = z
 
 /** Arguments for updating a feedback record's review status */
 export type UpdateFeedbackReviewStatusArgs = z.infer<typeof updateFeedbackReviewStatusArgsSchema>;
+
+// ============================================================================
+// Delete Feedback Schemas
+// ============================================================================
+
+const DELETE_FEEDBACK_MAX_IDS = 1000;
+
+/** Schema for deleteFeedback operation arguments */
+export const deleteFeedbackArgsSchema = z
+  .object({
+    feedbackIds: z
+      .array(z.string())
+      .max(DELETE_FEEDBACK_MAX_IDS)
+      .describe(`IDs of the feedback events to delete (maximum ${DELETE_FEEDBACK_MAX_IDS})`),
+    organizationId: organizationIdField.optional().describe('Restrict deletion to feedback in this organization'),
+    resourceId: resourceIdField.optional().describe('Restrict deletion to feedback for this resource'),
+  })
+  .describe('Arguments for deleting feedback by id');
+
+/** Arguments for deleting feedback */
+export type DeleteFeedbackArgs = z.infer<typeof deleteFeedbackArgsSchema>;
+
+/** Schema for deleteFeedback operation response */
+export const deleteFeedbackResponseSchema = z
+  .object({ success: z.boolean() })
+  .describe('Response from deleting feedback');
+
+/** Response from deleting feedback */
+export type DeleteFeedbackResponse = z.infer<typeof deleteFeedbackResponseSchema>;
 
 // ============================================================================
 // Feedback Filter Schema

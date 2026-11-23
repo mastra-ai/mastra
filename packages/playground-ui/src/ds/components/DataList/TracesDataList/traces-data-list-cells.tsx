@@ -1,9 +1,21 @@
-import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
+import { Fragment } from 'react';
+import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
+import { IconArrowSplitUp } from '@/ds/icons/central/IconArrowSplitUp';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconDirection1 } from '@/ds/icons/central/IconDirection1';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { McpServerIcon } from '@/ds/icons/McpServerIcon';
+import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
+import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
 
@@ -22,15 +34,15 @@ export interface TracesDataListNameCellProps {
 
 export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }: TracesDataListNameCellProps) {
   const isRoot = parentSpanId == null;
-  const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
+  const Icon = isRoot ? IconCodeTree : IconArrowCornerDownRight;
   const label = isRoot ? 'Trace' : 'Subtrace';
   const icon = (
     <span aria-label={label} className="inline-flex shrink-0">
-      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-neutral3' : 'text-neutral2')} aria-hidden />
+      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-muted-foreground' : 'text-placeholder')} aria-hidden />
     </span>
   );
   return (
-    <DataListCell className="text-ui-smd text-neutral4 flex min-w-0 items-center gap-2">
+    <DataListCell className="flex min-w-0 items-center gap-2 text-body-sm text-muted-foreground">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -57,36 +69,71 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 }
 
 // ---------------------------------------------------------------------------
-// EntityCell
+// OutputCell
 // ---------------------------------------------------------------------------
 
-function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
-  const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
-  const normalizedEntityType = entityType.toLowerCase();
-
-  switch (normalizedEntityType) {
-    case 'agent':
-      return <AgentIcon className={iconClass} aria-hidden />;
-    case 'workflow':
-    case 'workflow_run':
-      return <WorkflowIcon className={iconClass} aria-hidden />;
-    default:
-      return null;
-  }
+export interface TracesDataListOutputCellProps {
+  output?: string;
+  /** Shown instead of `output`, in the error color, when `status` is `'error'`. */
+  error?: string;
+  status?: string | null;
 }
 
-export interface TracesDataListEntityCellProps {
+export function TracesDataListOutputCell({ output, error, status }: TracesDataListOutputCellProps) {
+  const failed = status === 'error';
+  const errorColor = failed ? 'text-destructive-foreground' : undefined;
+  return (
+    <DataListTextCell font="mono" className={errorColor}>
+      {(failed ? error : output) || '-'}
+    </DataListTextCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TypeCell
+// ---------------------------------------------------------------------------
+
+type EntityTypeDisplay = { label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
+
+// Keys are lowercase `EntityType` enum values (plus legacy `workflow`).
+const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
+  agent: { label: 'Agent', Icon: AgentIcon },
+  workflow: { label: 'Workflow', Icon: WorkflowIcon },
+  workflow_run: { label: 'Workflow', Icon: WorkflowIcon },
+  workflow_step: { label: 'Step', Icon: WorkflowIcon },
+  tool: { label: 'Tool', Icon: ToolsIcon },
+  scorer: { label: 'Scorer', Icon: ScorersIcon },
+  classifier: { label: 'Classifier', Icon: IconArrowSplitUp },
+  memory: { label: 'Memory', Icon: MemoryIcon },
+  mcp_server: { label: 'MCP Server', Icon: McpServerIcon },
+  input_processor: { label: 'Processor', Icon: ProcessorIcon },
+  input_step_processor: { label: 'Processor', Icon: ProcessorIcon },
+  output_processor: { label: 'Processor', Icon: ProcessorIcon },
+  output_step_processor: { label: 'Processor', Icon: ProcessorIcon },
+  tool_result_processor: { label: 'Processor', Icon: ProcessorIcon },
+  rag_ingestion: { label: 'RAG', Icon: IconServer1 },
+  trajectory: { label: 'Trajectory', Icon: IconDirection1 },
+};
+
+export interface TracesDataListTypeCellProps {
   entityType?: string | null;
-  entityName?: string | null;
 }
 
-export function TracesDataListEntityCell({ entityType, entityName }: TracesDataListEntityCellProps) {
-  const type = entityType ?? '';
+export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellProps) {
+  const display = entityType ? ENTITY_TYPE_DISPLAY[entityType.toLowerCase()] : undefined;
 
   return (
     <DataListCell className="flex min-w-0 items-center gap-2">
-      <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
+      {display ? (
+        <>
+          <display.Icon className="size-3.5 shrink-0 text-placeholder" aria-hidden />
+          <Txt as="span" variant="body-sm" className="min-w-0 truncate">
+            {display.label}
+          </Txt>
+        </>
+      ) : (
+        '-'
+      )}
     </DataListCell>
   );
 }
@@ -98,10 +145,10 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 const UNSET_STATUS_CONFIG: { label: string; variant: BadgeVariant } = { label: '-', variant: 'neutral' };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
-  completed: { label: 'OK', variant: 'green' },
-  ok: { label: 'OK', variant: 'green' },
-  success: { label: 'OK', variant: 'green' },
-  error: { label: 'ERR', variant: 'red' },
+  completed: { label: 'OK', variant: 'success' },
+  ok: { label: 'OK', variant: 'success' },
+  success: { label: 'OK', variant: 'success' },
+  error: { label: 'ERR', variant: 'destructive' },
   running: { label: 'RUN', variant: 'neutral' },
   unset: UNSET_STATUS_CONFIG,
 };
@@ -119,6 +166,107 @@ export function TracesDataListStatusCell({ status }: TracesDataListStatusCellPro
       <Badge size="xs" variant={config.variant}>
         {config.label}
       </Badge>
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OutcomeCell
+// ---------------------------------------------------------------------------
+
+const OUTCOME_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
+  success: { label: 'OK', variant: 'success' },
+  error: { label: 'ERR', variant: 'destructive' },
+  abort: { label: 'Abort', variant: 'warning' },
+  interrupted: { label: 'Interrupted', variant: 'warning' },
+  limit: { label: 'Limit', variant: 'orange' },
+  blocked: { label: 'Blocked', variant: 'orange' },
+  suspend: { label: 'Suspend', variant: 'info' },
+  unknown: { label: 'Unknown', variant: 'neutral' },
+};
+
+const formatContextValue = (value: unknown) => (typeof value === 'string' ? value : JSON.stringify(value));
+
+export interface TracesDataListOutcomeCellProps {
+  outcome?: string | null;
+  /** Error-based status, shown when no outcome was recorded. */
+  status?: string | null;
+}
+
+export function TracesDataListOutcomeCell({ outcome, status }: TracesDataListOutcomeCellProps) {
+  if (!outcome) {
+    const config = STATUS_CONFIG[(status ?? 'unset').toLowerCase()] ?? UNSET_STATUS_CONFIG;
+    const badge = (
+      <Badge size="xs" variant={config.variant}>
+        {config.label}
+      </Badge>
+    );
+    return (
+      <DataListCell>
+        {config === UNSET_STATUS_CONFIG ? (
+          badge
+        ) : (
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex" />}>{badge}</TooltipTrigger>
+            <TooltipContent>Outcome not recorded; status from error</TooltipContent>
+          </Tooltip>
+        )}
+      </DataListCell>
+    );
+  }
+
+  const config = OUTCOME_CONFIG[outcome.toLowerCase()] ?? { label: outcome, variant: 'neutral' };
+  return (
+    <DataListCell>
+      <Badge size="xs" variant={config.variant}>
+        {config.label}
+      </Badge>
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StopReasonCell
+// ---------------------------------------------------------------------------
+
+export interface TracesDataListStopReasonCellProps {
+  stopReason?: string | null;
+  /** Listed as key/value pairs when hovering the stop reason. */
+  stopReasonContext?: Record<string, unknown> | null;
+}
+
+export function TracesDataListStopReasonCell({ stopReason, stopReasonContext }: TracesDataListStopReasonCellProps) {
+  // Empty, so DataListCell shows its own placeholder.
+  if (!stopReason) return <DataListCell />;
+
+  const contextEntries = stopReasonContext ? Object.entries(stopReasonContext) : [];
+  if (contextEntries.length === 0) {
+    return <DataListTextCell font="mono">{stopReason}</DataListTextCell>;
+  }
+
+  return (
+    <DataListCell className="flex items-center">
+      <Tooltip>
+        <TooltipTrigger render={<span className="inline-flex min-w-0" />}>
+          <Txt as="span" variant="body-sm" tone="muted" font="mono" className="truncate">
+            {stopReason}
+          </Txt>
+        </TooltipTrigger>
+        <TooltipContent>
+          {/* The cell can truncate long reasons like `context_window_exceeded`, so name it here too. */}
+          <Txt as="p" variant="body-sm" font="mono" className="mb-1">
+            {stopReason}
+          </Txt>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            {contextEntries.map(([key, value]) => (
+              <Fragment key={key}>
+                <dt>{key}</dt>
+                <dd>{formatContextValue(value)}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </TooltipContent>
+      </Tooltip>
     </DataListCell>
   );
 }

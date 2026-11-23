@@ -1,39 +1,51 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
+import { IconCloudUpload } from '@mastra/playground-ui/icons/central/IconCloudUpload';
+import { IconEarth } from '@mastra/playground-ui/icons/central/IconEarth';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/resources')];
 
 const resources = [
   {
     title: 'Mastra APIs',
     description: 'Explore and test the available REST API endpoints with the interactive Swagger UI.',
-    icon: EarthIcon,
+    icon: IconEarth,
     href: '/swagger-ui',
     external: false,
   },
   {
     title: 'Documentation',
     description: 'Read the official Mastra documentation for guides, references, and tutorials.',
-    icon: BookIcon,
+    icon: IconBook,
     href: 'https://mastra.ai/en/docs',
     external: true,
   },
   {
     title: 'Github',
     description: 'Browse the source code, report issues, and contribute to the Mastra project.',
-    icon: ExternalLinkIcon,
+    icon: IconSquareArrowTopRight,
     href: 'https://github.com/mastra-ai/mastra',
     external: true,
   },
   {
     title: 'Community',
     description: 'Join the Mastra Discord community for help, discussion, and collaboration.',
-    icon: MessageSquareIcon,
-    href: 'https://discord.gg/BTYqqHKUrf',
+    icon: IconChatBubble7,
+    href: 'https://discord.gg/mastra-ai',
     external: true,
   },
   {
     title: 'Share with your team',
     description: 'Running Mastra Studio locally? Deploy to the cloud so your team can collaborate.',
-    icon: CloudUploadIcon,
+    icon: IconCloudUpload,
     href: 'https://mastra.ai/cloud',
     external: true,
   },
@@ -41,7 +53,7 @@ const resources = [
     title: 'Talk to our Sales team',
     description:
       'Get a custom demo, discuss on-prem deployments, and how we can help you accelerate getting agents into production.',
-    icon: BuildingIcon,
+    icon: IconBuildings,
     href: 'https://mastra.ai/contact?ref=studio',
     external: true,
   },
@@ -49,28 +61,38 @@ const resources = [
 
 export default function Resources() {
   return (
-    <PageLayout width="narrow">
-      <PageLayout.MainArea>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Resources</h1>
+      <div>
         <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
           {resources.map(resource => (
             <a
               key={resource.href}
               href={resource.href}
               {...(resource.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-              className="group border-border1 bg-surface2 hover:border-accent1 hover:bg-surface3 flex flex-col gap-3 rounded-lg border p-5 transition-colors"
+              className="group flex flex-col gap-3 rounded-lg border border-border bg-background state-layer p-5 hover:border-border-strong"
             >
               <div className="flex items-center gap-2.5">
-                <resource.icon className="text-icon3 group-hover:text-accent1 h-5 w-5 transition-colors" />
-                <span className="text-ui-md text-text1 font-medium">{resource.title}</span>
+                <resource.icon
+                  className={cn(
+                    'h-5 w-5 text-muted-foreground group-hover:text-info-indicator',
+                    controlStateColorTransition,
+                  )}
+                />
+                <Txt as="span" variant="subheading" tone="ink">
+                  {resource.title}
+                </Txt>
                 {resource.external && (
-                  <ExternalLinkIcon className="text-icon3 ml-auto h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                  <IconSquareArrowTopRight className="ml-auto size-icon-sm text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <p className="text-ui-sm text-text3 leading-relaxed">{resource.description}</p>
+              <Txt variant="caption" tone="muted">
+                {resource.description}
+              </Txt>
             </a>
           ))}
         </div>
-      </PageLayout.MainArea>
+      </div>
     </PageLayout>
   );
 }

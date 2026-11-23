@@ -1,4 +1,3 @@
-import type { IMastraLogger } from '../../logger';
 import { resolveAgentById } from '../../mastra/resolve-agent';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
 import { computeScheduleDefinitionHash } from '../../workflows/scheduler/definition-hash';
@@ -8,9 +7,9 @@ import { MastraWorker } from '../worker';
 import type { WorkerDeps } from '../worker';
 
 /**
- * Drives cron-based workflow schedules. On each tick it polls storage
- * for due schedules, computes next fire times, and publishes
- * workflow.start events. Does not consume events — only produces them.
+ * Drives cron-based workflow and agent schedules. On each tick it polls
+ * storage for due schedules, computes next fire times, and publishes fire
+ * events. Does not consume events — only produces them.
  *
  * This is the **single** scheduler code path. `Mastra.startWorkers()` adds it
  * when scheduling work exists or the scheduler is explicitly enabled.
@@ -106,7 +105,7 @@ export class SchedulerWorker extends MastraWorker {
       pubsub: deps.pubsub,
       config: { ...this.#config, isTargetReady, isTargetCurrent, canExecuteLocally },
     });
-    this.#scheduler.__setLogger(deps.logger as IMastraLogger);
+    this.#scheduler.__setLogger(deps.logger);
 
     // Register declarative schedules from workflow configs before starting
     // the tick loop. This syncs code-declared schedules to the DB.

@@ -1,9 +1,26 @@
-import { resolveFactoryLinearRule } from '../../rules/resolve.js';
-import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from '../../rules/types.js';
-import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  isTerminalWorkItem,
+  rulePhaseField,
+  withBoardClosure,
+  withIntakeTarget,
+} from '../../boards/index.js';
+import type { BoardRegistry } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
+import type { ProjectBoardSource } from '../../boards/project-boards.js';
+import { recordIntakeEvent } from '../../metrics/intake.js';
+import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
+import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import type { LinearEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
 
@@ -21,6 +38,8 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   }
 }
 
+const MAX_STALE_RULE_ATTEMPTS = 3;
+
 export interface LinearIssueIngress {
   id: string;
   identifier: string;
@@ -36,12 +55,18 @@ export interface LinearIssueIngress {
   labels: string[];
   createdAt: string;
   updatedAt: string;
+  /** Linear source the issue was read from (project or team). */
+  sourceId?: string | null;
+  projectId?: string | null;
 }
 
 export interface LinearRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
-  rules: FactoryRules;
+  configVersion: string;
+  /** The code boards, or the per-project source so a project's stored boards run its cards. */
+  boards: BoardRegistry | ProjectBoardSource;
+  linearRules: LinearEventRules;
 }
 
 export interface LinearRulesIngress {
@@ -53,18 +78,62 @@ export interface LinearRulesIngress {
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
 
+/**
+ * The status change a Linear sync reports: a issue seen for the first time is created, and a
+ * completed or canceled one is closed for that reason. Later sightings of an open issue report none.
+ */
+export function boardEventFor(context: Pick<FactoryLinearRuleContext, 'event' | 'issue' | 'item'>): BoardEventFacts | undefined {
+  if (context.event === 'issueClosed') {
+    return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
+  }
+  return context.item ? undefined : { type: 'work_item.opened' };
+}
+
 export class LinearRules {
   constructor(private readonly options: LinearRulesOptions) {}
 
+  /** The project's boards, loaded at the start of {@link ingest}. */
+  #boards(scope: StoredBoardScope): BoardRegistry {
+    return toBoardSource(this.options.boards).forProject(scope);
+  }
+
   async ingest(input: LinearRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
+    try {
+      const result = await this.#ingest(input);
+      recordIntakeEvent('linear', result.status);
+      return result;
+    } catch (error) {
+      recordIntakeEvent('linear', 'error');
+      throw error;
+    }
+  }
+
+  async #ingest(input: LinearRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
+    await toBoardSource(this.options.boards).load(input);
 
-    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    // A finished card may still be only in the legacy table; copy it so the issue finds it.
+    await this.options.storage.copyLegacyCards({
+      orgId: input.orgId,
+      factoryProjectId: input.factoryProjectId,
+      sources: input.issues.map(issue => ({ integrationId: 'linear', type: 'issue', externalId: `linear:${issue.identifier}` })),
+    });
+    // The shared list is the cache itself: only the card handed on to rules is cloned.
+    const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(`linear:${issue.identifier}`)));
+      // One card per Linear issue per project; other projects may file their own.
+      // The identifier finds the card filed under it; after Linear renamed the
+      // identifier, the stable issue id finds it, preferring a live card over
+      // finished ones, as the issue detail route does.
+      const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
+      const relatedItem =
+        itemsBySourceKey.get(`linear:${issue.identifier}`) ??
+        byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ??
+        byIssueId[0];
+      statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
@@ -74,7 +143,8 @@ export class LinearRules {
   async #ingestIssue(
     input: LinearRulesIngress,
     issue: LinearIssueIngress,
-    relatedItem: WorkItemRow | undefined,
+    relatedItem: Card | undefined,
+    attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `linear:${issue.id}:${issue.updatedAt}`;
     const actor = { type: 'human' as const, id: input.userId };
@@ -92,7 +162,7 @@ export class LinearRules {
       ingress: { type: 'linear', id: ingressId },
       cause: `linear.${event}`,
       causalChain: [],
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
       ...(relatedItem
         ? {
             item: {
@@ -103,19 +173,34 @@ export class LinearRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              workItem: relatedItem.workItem,
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
-            board: 'work' as const,
+            board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
+            ...withBoardClosure(this.#boards(input), relatedItem),
+            ...rulePhaseField(this.#boards(input), relatedItem),
           }
         : {}),
+      ...withIntakeTarget(this.#boards(input)),
       event,
       issue,
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
 
-    const rule = resolveFactoryLinearRule(this.options.rules, context.event);
-    let decision: FactoryRuleDecision | void;
+    const ownedByDeployment = deploymentOwnsEvent(
+      this.options.linearRules,
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'linear'),
+      context.event,
+    );
+    const rule = selectEventRule(
+      this.options.linearRules,
+      boardEventHandlers(this.#boards(input), eventBoardId(context), 'linear'),
+      context.event,
+    );
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -123,7 +208,14 @@ export class LinearRules {
       if (decision?.type === 'reject') {
         outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
       } else if (decision) {
-        decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
+        decisions = validateFactoryRuleDecisions([decision]).map(entry => {
+          assertFactoryDecisionTarget(
+            entry,
+            this.#boards(input),
+            relatedItem ? boardForWorkItem(relatedItem) : undefined,
+          );
+          return { ...entry };
+        });
       }
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
@@ -137,13 +229,20 @@ export class LinearRules {
             : 'Factory Linear rule failed.',
       };
     }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
+    if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
+      const routed = await routeEventDecision(context, this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+      });
+      if (routed) decisions = [{ ...routed }];
+    }
 
     const committed = await this.options.storage.commitRuleEvaluation({
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
       workItemId: relatedItem?.id ?? null,
-      ingress: { identity: ingressId, triggerType: 'linear.issueObserved' },
-      ruleSetVersion: this.options.rules.version,
+      ingress: { identity: ingressId },
       expectedRevision: relatedItem?.revision ?? null,
       actor,
       outcome,
@@ -151,18 +250,43 @@ export class LinearRules {
       causalChain: [],
       now: new Date(),
     });
+    if (committed.status === 'stale') {
+      // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
+      if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+        throw new Error(`Factory Linear rule evaluation for ${ingressId} kept losing revision races.`);
+      }
+      const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
+      if (relatedItem && !fresh) return 'missing';
+      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+    }
+    if (relatedItem && event === 'issueObserved' && outcome.status === 'accepted' && !ownedByDeployment) {
+      await commitObservedChange(this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+        item: relatedItem,
+        ingressId,
+        actor,
+        labels: issue.labels,
+        assignee: issue.assignee,
+        observedAt: issue.updatedAt,
+        metadata: { linearAssignee: issue.assignee },
+      });
+    }
     return committed.status;
   }
 }
 
 export function attachLinearRules(
+  linear: { readonly rules: LinearEventRules },
   context: IntegrationContext,
 ): ((input: LinearRulesIngress) => Promise<unknown>) | undefined {
-  if (!context.rules) return undefined;
+  if (!context.runtime) return undefined;
   const rules = new LinearRules({
     projects: context.storage.projects,
-    storage: context.rules.workItems,
-    rules: context.rules.config,
+    storage: context.runtime.workItems,
+    configVersion: context.runtime.configVersion,
+    boards: context.runtime.boards,
+    linearRules: linear.rules,
   });
   return input => rules.ingest(input);
 }

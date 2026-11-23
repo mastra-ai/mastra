@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect } from './expect.js';
+import { selectMenuRow } from './menu-navigation.js';
 import type { McE2eScenario } from './types.js';
 
 const connection = 'postgresql://user:pass@localhost:5432/e2e';
@@ -25,11 +26,9 @@ export const storageSettingsScenario: McE2eScenario = {
 
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Settings/i, terminal);
-    await runtime.waitForScreenText(/Storage backend/i, terminal);
     runtime.printScreen('after /settings', terminal);
 
-    terminal.write('\x1b[B'.repeat(7));
-    terminal.write('\r');
+    await selectMenuRow(terminal, /Storage backend/i);
     await runtime.waitForScreenText(/LibSQL/i, terminal);
     await runtime.waitForScreenText(/PostgreSQL/i, terminal);
     runtime.printScreen('after storage submenu', terminal);

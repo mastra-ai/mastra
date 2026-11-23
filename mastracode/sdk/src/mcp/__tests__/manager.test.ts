@@ -19,7 +19,42 @@ const mcpMocks = vi.hoisted(() => {
 
 // Mock @mastra/mcp before importing manager
 vi.mock('@mastra/mcp', () => {
-  return mcpMocks;
+  /**
+   * The real client calls `onServerSettled` once per server as discovery settles.
+   * Emulate that from whatever aggregate result a test's listing mock returns, and
+   * keep the mock reachable so tests can still re-stub it after construction.
+   */
+  const settling = (listing: any) =>
+    new Proxy(listing, {
+      apply(target, thisArg, args) {
+        const onServerSettled = args[0]?.onServerSettled;
+        const only: string[] | undefined = args[0]?.serverNames;
+        return Promise.resolve(Reflect.apply(target, thisArg, args)).then((result: any) => {
+          const names = new Set([...Object.keys(result?.toolsets ?? {}), ...Object.keys(result?.errors ?? {})]);
+          for (const name of names) {
+            if (only && !only.includes(name)) continue;
+            const error = result.errors?.[name];
+            onServerSettled?.(
+              name,
+              error ? { error: { message: error }, duration: 0 } : { value: result.toolsets[name], duration: 0 },
+            );
+          }
+          return result;
+        });
+      },
+    });
+
+  const MCPClient = function (this: any, ...args: any[]) {
+    mcpMocks.MCPClient.apply(this, args);
+    let listing = this.listToolsetsWithErrors && settling(this.listToolsetsWithErrors);
+    Object.defineProperty(this, 'listToolsetsWithErrors', {
+      get: () => listing,
+      set: value => {
+        listing = settling(value);
+      },
+    });
+  };
+  return { ...mcpMocks, MCPClient, MCP_DISCOVERY_TIMEOUT_CODE: 'MCP_DISCOVERY_TIMEOUT' };
 });
 
 // Mock config module to control what loadMcpConfig returns
@@ -90,7 +125,12 @@ describe('createMcpManager', () => {
 
   describe('init with server defs', () => {
     it('builds stdio server def correctly with stderr piped', async () => {
-      const stdioConfig: McpStdioServerConfig = { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' } };
+      const stdioConfig: McpStdioServerConfig = {
+        command: 'npx',
+        args: ['-y', 'mcp-fs'],
+        env: { HOME: '/tmp' },
+        cwd: '/session/directory',
+      };
       setupConfig({ mcpServers: { fs: stdioConfig } });
 
       MockedMCPClient.mockImplementation(function (this: any) {
@@ -104,7 +144,13 @@ describe('createMcpManager', () => {
       expect(MockedMCPClient).toHaveBeenCalledWith({
         id: 'mastra-code-mcp',
         servers: {
-          fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { HOME: '/tmp' }, stderr: 'pipe' },
+          fs: {
+            command: 'npx',
+            args: ['-y', 'mcp-fs'],
+            env: { HOME: '/tmp' },
+            cwd: '/session/directory',
+            stderr: 'pipe',
+          },
         },
         timeout: 7 * 24 * 60 * 60 * 1000,
       });
@@ -188,6 +234,7 @@ describe('createMcpManager', () => {
             client_id: 'client-id',
             client_secret: 'client-secret',
           },
+          clientMetadataUrl: undefined,
           storage: expect.anything(),
         }),
       );
@@ -300,6 +347,55 @@ describe('createMcpManager', () => {
       expect(call.id).toBe('mastra-code-mcp');
       expect(call.servers).toHaveProperty('fs');
       expect(call.servers).toHaveProperty('remote');
+    });
+
+    it('returns tools in config order even when a later server settles first', async () => {
+      setupConfig({
+        mcpServers: {
+          fs: { command: 'npx' },
+          remote: { url: 'https://example.com/mcp' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { remote: { context: {} }, fs: { read: {}, write: {} } },
+          errors: {},
+        });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(Object.keys(manager.getTools())).toEqual(['fs_read', 'fs_write', 'remote_context']);
+    });
+
+    it('keeps the tools of a server whose name starts with another server name', async () => {
+      setupConfig({
+        mcpServers: {
+          foo: { command: 'npx' },
+          foo_bar: { command: 'npx' },
+        },
+      });
+
+      // `foo_bar` settles first, so its tool is registered before `foo` settles.
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { foo_bar: { ping: {} }, foo: { ping: {} } },
+          errors: {},
+        });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(Object.keys(manager.getTools())).toEqual(['foo_ping', 'foo_bar_ping']);
+      expect(manager.getServerStatuses().find(s => s.name === 'foo_bar')).toMatchObject({
+        connected: true,
+        toolNames: ['foo_bar_ping'],
+      });
     });
   });
 
@@ -807,6 +903,9 @@ describe('createMcpManager', () => {
       const result = await manager.reconnectServer('fs');
 
       expect(mockReconnectServer).toHaveBeenCalledWith('fs');
+      expect(mockInstance.listToolsetsWithErrors).toHaveBeenLastCalledWith(
+        expect.objectContaining({ serverNames: ['fs'] }),
+      );
       expect(result.connected).toBe(true);
       expect(result.toolCount).toBe(3);
       expect(result.toolNames).toEqual(['fs_read', 'fs_write', 'fs_list']);
@@ -1147,7 +1246,11 @@ describe('createMcpManager', () => {
       const options = MockedMCPOAuthClientProvider.mock.calls[0]![0]!;
       expect(options.redirectUrl).toBe('http://127.0.0.1:1458/oauth/callback');
       expect(options.clientMetadata.redirect_uris).toEqual(['http://127.0.0.1:1458/oauth/callback']);
+      // No pre-registered client: the Client ID Metadata Document is the identity.
       expect(options.clientInformation).toBeUndefined();
+      expect(options.clientMetadataUrl).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadata.client_id).toBe('https://code.mastra.ai/.well-known/oauth-client/mastracode.json');
+      expect(options.clientMetadata.client_name).toBe('Mastra Code');
 
       // The provider is attached to the live server def so the client sees it
       const serverDef = (MockedMCPClient.mock.calls[0]![0]! as any).servers['api'];
@@ -1382,12 +1485,12 @@ describe('createMcpManager', () => {
   });
 
   describe('disable/enable servers', () => {
-    async function withTempAppData(fn: () => Promise<void>) {
+    async function withTempAppData(fn: (dataDir: string) => Promise<void>) {
       const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-disable-test-'));
       const prevDataDir = process.env.MASTRA_APP_DATA_DIR;
       process.env.MASTRA_APP_DATA_DIR = dataDir;
       try {
-        await fn();
+        await fn(dataDir);
       } finally {
         if (prevDataDir === undefined) {
           delete process.env.MASTRA_APP_DATA_DIR;
@@ -1599,6 +1702,8 @@ describe('createMcpManager', () => {
         const status = await projectA.setServerDisabled('fs', true, { global: true });
         expect(status.disabled).toBe(true);
         expect(status.disabledScope).toBe('global');
+        expect(status.globalDefault).toBe('disabled');
+        expect(status.globalKillSwitch).toBe(false);
         expect(Object.keys(projectA.getTools())).toEqual(['api_fetch']);
 
         // A different project sees the same server disabled with global scope.
@@ -1610,7 +1715,7 @@ describe('createMcpManager', () => {
       });
     });
 
-    it('project-level enable cannot undo a global disable', async () => {
+    it('project-level enable overrides a global per-server disable until the project inherits again', async () => {
       await withTempAppData(async () => {
         setupConfig({ mcpServers: { fs: { command: 'npx' } } });
         mockClientWithToolsets({ fs: { read: {} } });
@@ -1620,15 +1725,65 @@ describe('createMcpManager', () => {
         await manager.setServerDisabled('fs', true, { global: true });
 
         const status = await manager.setServerDisabled('fs', false);
-        expect(status.disabled).toBe(true);
-        expect(status.disabledScope).toBe('global');
-        expect(Object.keys(manager.getTools())).toEqual([]);
-
-        // Enabling in the global scope actually re-enables it.
-        const enabled = await manager.setServerDisabled('fs', false, { global: true });
-        expect(enabled.disabled).toBeUndefined();
-        expect(enabled.connected).toBe(true);
+        expect(status.disabled).toBeUndefined();
+        expect(status.connected).toBe(true);
+        expect(status.projectOverride).toBe('enabled');
+        expect(status.globalDefault).toBe('disabled');
+        expect(status.globalKillSwitch).toBe(false);
         expect(Object.keys(manager.getTools())).toEqual(['fs_read']);
+
+        const inherited = await manager.inheritServer('fs');
+        expect(inherited.disabled).toBe(true);
+        expect(inherited.disabledScope).toBe('global');
+        expect(inherited.projectOverride).toBeUndefined();
+        expect(inherited.globalDefault).toBe('disabled');
+        expect(inherited.globalKillSwitch).toBe(false);
+        expect(Object.keys(manager.getTools())).toEqual([]);
+      });
+    });
+
+    it('inheritAllServers clears project overrides and restores global defaults', async () => {
+      await withTempAppData(async () => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+        await manager.setServerDisabled('fs', true, { global: true });
+        await manager.setAllDisabled(false);
+
+        expect(Object.keys(manager.getTools()).sort()).toEqual(['api_fetch', 'fs_read']);
+        expect(manager.getServerStatuses().every(status => status.projectOverride === 'enabled')).toBe(true);
+
+        await manager.inheritAllServers();
+
+        expect(manager.getDisabledServers()).toEqual(['fs']);
+        expect(Object.keys(manager.getTools())).toEqual(['api_fetch']);
+        expect(manager.getServerStatuses().every(status => status.projectOverride === undefined)).toBe(true);
+      });
+    });
+
+    it('loads legacy project disabledServers entries as disabled overrides', async () => {
+      await withTempAppData(async dataDir => {
+        setupConfig({ mcpServers: { fs: { command: 'npx' }, api: { url: 'https://api.example.com/mcp' } } });
+        mockClientWithToolsets({ fs: { read: {} }, api: { fetch: {} } });
+        await fs.writeFile(
+          join(dataDir, 'mcp-state.json'),
+          JSON.stringify({ projects: { '/tmp/test': { disabledServers: ['fs'] } } }),
+          'utf-8',
+        );
+
+        const manager = createMcpManager('/tmp/test');
+        await manager.init();
+
+        expect(manager.getDisabledServers()).toEqual(['fs']);
+        expect(manager.getServerStatuses().find(status => status.name === 'fs')?.projectOverride).toBe('disabled');
+
+        await manager.setServerDisabled('api', false);
+        const persisted = JSON.parse(await fs.readFile(join(dataDir, 'mcp-state.json'), 'utf-8'));
+        expect(persisted.projects['/tmp/test']).toEqual({
+          serverOverrides: { api: 'enabled', fs: 'disabled' },
+        });
       });
     });
 
@@ -1662,7 +1817,17 @@ describe('createMcpManager', () => {
         expect(manager.isAllDisabledGlobally()).toBe(true);
         expect(manager.getDisabledServers()).toEqual(['api', 'fs']);
         expect(Object.keys(manager.getTools())).toEqual([]);
-        expect(manager.getServerStatuses().every(s => s.disabled && s.disabledScope === 'global')).toBe(true);
+        expect(
+          manager
+            .getServerStatuses()
+            .every(
+              status =>
+                status.disabled &&
+                status.disabledScope === 'global' &&
+                status.globalDefault === 'enabled' &&
+                status.globalKillSwitch,
+            ),
+        ).toBe(true);
 
         // Other projects are affected too.
         const other = createMcpManager('/tmp/project-b');

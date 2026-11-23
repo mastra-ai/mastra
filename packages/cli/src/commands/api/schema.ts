@@ -1,23 +1,44 @@
 import { fetchSchemaManifest } from './client.js';
 import { ApiCliError } from './errors.js';
+import { FACTORY_API_ROUTE_SCHEMAS } from './factory-route-metadata.generated.js';
+import { FEEDBACK_SCORE_SCHEMAS } from './feedback-score-schemas.generated.js';
 import { LEARNING_ROUTE_SCHEMAS } from './learning-route-metadata.js';
 import type { ResolvedTarget } from './target.js';
 import type { ApiCommandDescriptor, ApiCommandExample } from './types.js';
+
+type BundledRouteSchema = {
+  pathParamSchema?: unknown;
+  queryParamSchema?: unknown;
+  bodySchema?: unknown;
+  responseSchema?: unknown;
+};
+
+const FACTORY_BUNDLED_ROUTE_SCHEMAS = Object.fromEntries(
+  Object.entries(FACTORY_API_ROUTE_SCHEMAS).map(([routeKey, schemas]) => [
+    routeKey,
+    {
+      pathParamSchema: 'path' in schemas ? schemas.path : undefined,
+      queryParamSchema: 'query' in schemas ? schemas.query : undefined,
+      bodySchema: 'body' in schemas ? schemas.body : undefined,
+      responseSchema: schemas.response,
+    },
+  ]),
+);
+
+export const BUNDLED_ROUTE_SCHEMAS: Readonly<Record<string, BundledRouteSchema>> = {
+  ...FACTORY_BUNDLED_ROUTE_SCHEMAS,
+  ...FEEDBACK_SCORE_SCHEMAS,
+  ...LEARNING_ROUTE_SCHEMAS,
+};
 
 export async function getCommandSchema(descriptor: ApiCommandDescriptor, target: ResolvedTarget): Promise<unknown> {
   if (!descriptor.acceptsInput) {
     throw new ApiCliError('SCHEMA_UNAVAILABLE', 'This command does not accept JSON input');
   }
 
-  // Learning routes live on the Mastra platform learning endpoint, which does
-  // not expose a schema manifest; resolve their hand-authored schemas locally.
-  const learningSchema = (
-    LEARNING_ROUTE_SCHEMAS as Partial<
-      Record<string, (typeof LEARNING_ROUTE_SCHEMAS)[keyof typeof LEARNING_ROUTE_SCHEMAS]>
-    >
-  )[`${descriptor.method} ${descriptor.path}`];
-  if (learningSchema) {
-    return buildRouteSchema(descriptor, learningSchema);
+  const bundledSchema = BUNDLED_ROUTE_SCHEMAS[`${descriptor.method} ${descriptor.path}`];
+  if (bundledSchema) {
+    return buildRouteSchema(descriptor, bundledSchema);
   }
 
   const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs, target.apiPrefix);
@@ -117,10 +138,13 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): ApiComma
 
 function buildGenericExamples(descriptor: ApiCommandDescriptor, command: string): ApiCommandExample[] {
   if (descriptor.list) {
+    const positionalSamples = samplePositionals(descriptor);
     return [
       {
         description: descriptor.description,
-        command: descriptor.acceptsInput ? `${command} '{"page":0,"perPage":50}'` : command,
+        command: [command, ...positionalSamples, descriptor.acceptsInput ? `'{"page":0,"perPage":50}'` : undefined]
+          .filter(Boolean)
+          .join(' '),
       },
     ];
   }

@@ -1,5 +1,6 @@
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, CreatedAgentSignal } from '../agent/signals';
+import { stripNotificationRoutingRequirement } from './routing';
 import type {
   NotificationPriority,
   NotificationRecord,
@@ -77,7 +78,12 @@ export function createNotificationSignal(notification: NotificationRecord): Crea
     tagName: 'notification',
     contents: notification.summary,
     attributes: notificationSignalAttributes(notification),
-    metadata: { ...notification.metadata, notification: notificationSignalMetadata(notification) },
+    // The routing requirement is Core's own bookkeeping, not part of the signal
+    // the recipient reads.
+    metadata: {
+      ...stripNotificationRoutingRequirement(notification.metadata),
+      notification: notificationSignalMetadata(notification),
+    },
   });
 }
 
@@ -98,6 +104,11 @@ export function createNotificationSummarySignal(summary: NotificationSummary): C
 export function summarizeNotifications(notifications: NotificationRecord[]): NotificationSummary {
   const pendingNotifications = notifications.filter(notification => notification.status === 'pending');
   const first = pendingNotifications[0] ?? notifications[0];
+  // Seed the grouping maps with null-prototype objects so source names that collide with
+  // Object.prototype members (e.g. "__proto__", "constructor", "toString") are counted as
+  // plain own numeric properties instead of resolving inherited lookups.
+  const bySource: Record<string, number> = Object.create(null);
+  const byPriority: Partial<Record<NotificationPriority, number>> = Object.create(null);
   return pendingNotifications.reduce<NotificationSummary>(
     (summary, notification) => {
       summary.pending += 1;
@@ -111,8 +122,8 @@ export function summarizeNotifications(notifications: NotificationRecord[]): Not
       resourceId: first?.resourceId,
       agentId: first?.agentId,
       pending: 0,
-      bySource: {},
-      byPriority: {},
+      bySource,
+      byPriority,
       notificationIds: [],
     },
   );

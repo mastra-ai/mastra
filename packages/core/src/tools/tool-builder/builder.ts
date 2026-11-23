@@ -9,19 +9,24 @@ import {
   MetaSchemaCompatLayer,
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
+  isZodType,
   jsonSchema,
 } from '@mastra/schema-compat';
 import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
+import { verifyRunLease } from '../../agent/run-lease-fence';
 import { MastraFGAPermissions } from '../../auth/ee';
+import type { ActorSignal } from '../../auth/ee';
 import {
   backgroundOverrideJsonSchema,
   backgroundOverrideZodSchema,
   isToolBackgroundEligible,
 } from '../../background-tasks';
 import { MastraBase } from '../../base';
-import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
+import { ErrorCategory, MastraError, ErrorDomain, getErrorFromUnknown } from '../../error';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { eagerToolCallSuspensionIntent } from '../../loop/workflows/agentic-execution/eager-tool-execution';
 import type { Mastra } from '../../mastra';
 import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -29,7 +34,12 @@ import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
-import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
+import {
+  getNeedsApprovalFn,
+  isVercelTool,
+  isProviderDefinedTool,
+  markBuiltBeforeApproval,
+} from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
@@ -38,6 +48,9 @@ import { markBuilderValidatedInput } from '../builder-validation-context';
 import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
 import type {
+  BeforeApprovalContext,
+  BeforeApprovalFn,
+  BeforeApprovalRuntime,
   CoreTool,
   McpMetadata,
   MastraToolInvocationOptions,
@@ -46,7 +59,23 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
-import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
+import {
+  createStandardSchemaIssuesError,
+  getValidationIssuePaths,
+  isValidationError,
+  registerToolOutputValidationSchema,
+  validateToolInput,
+  validateToolOutput,
+  validateToolSuspendData,
+} from '../validation';
+
+// Built once: `.describe()` registers schemas in Zod's global registry, which is a
+// strong Map under zod@3.25.x's `zod/v4` shim, so per-build copies would leak.
+const resumeFieldsZodShape = {
+  suspendedToolCallId: z.string().describe('The toolCallId of the suspended tool to resume').nullable().optional(),
+  suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+  resumeData: z.any().describe('The resumeData object created from the resumeSchema of suspended tool').optional(),
+};
 
 /**
  * Merge two RequestContexts so non-serializable values survive the evented
@@ -246,10 +275,39 @@ function buildJsonOverrideSchema(
   } as StandardSchemaWithJSON;
 }
 
+/**
+ * A remote MCP tool's error text is written by the server and can echo the submitted arguments
+ * (Issue #29318). The model still receives it; the tracked exception records only its id.
+ * Covers every MCPClient tool failure (execution, task failure, cancellation, polling).
+ */
+function trackableToolError(mastraError: MastraError, err: unknown, model: string): MastraError {
+  const id = (err as { id?: unknown } | null)?.id;
+  if (typeof id !== 'string' || !id.startsWith('MCP_CLIENT_TOOL_')) return mastraError;
+  return new MastraError({
+    id: mastraError.id,
+    domain: mastraError.domain as ErrorDomain,
+    category: mastraError.category as ErrorCategory,
+    text: `Remote tool failed (${id})`,
+    details: { errorMessage: id, model },
+  });
+}
+
 export class CoreToolBuilder extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
   private logType?: LogType;
+  /**
+   * Builder-local copy of the user's input schema with the framework-injected
+   * keys (`_background`, `suspendedToolRunId`, `resumeData`) spliced in.
+   *
+   * It must NOT be written back onto `originalTool.inputSchema`: `createTool()`
+   * results are commonly module-level singletons shared across several agents,
+   * while background eligibility is resolved per agent — a write-back would
+   * leak one agent's injected keys into every other agent's model-facing
+   * parameters (issue #22843).
+   */
+  private injectedInputSchema?: StandardSchemaWithJSON;
+  private isResumableTool: boolean;
 
   constructor(input: {
     originalTool: ToolToConvert;
@@ -278,15 +336,16 @@ export class CoreToolBuilder extends MastraBase {
         toolConfig: this.options.backgroundConfig,
         agentConfig: this.options.agentBackgroundConfig,
       });
-    const isResumableTool =
+    this.isResumableTool = Boolean(
       input.autoResumeSuspendedTools ||
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
+      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'),
+    );
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
-      if (isBackgroundEligible || isResumableTool) {
+      if (isBackgroundEligible || this.isResumableTool) {
         let schema = this.originalTool.inputSchema;
-        if (typeof schema === 'function') {
+        if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
           schema = schema();
         }
         if (!schema) {
@@ -311,16 +370,10 @@ export class CoreToolBuilder extends MastraBase {
               _background: backgroundOverrideZodSchema,
             });
           }
-          if (isResumableTool) {
-            nextSchema = safeExtendZodObject(nextSchema, {
-              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
-            });
+          if (this.isResumableTool) {
+            nextSchema = safeExtendZodObject(nextSchema, resumeFieldsZodShape);
           }
-          this.originalTool.inputSchema = toStandardSchema(nextSchema);
+          this.injectedInputSchema = toStandardSchema(nextSchema);
         } else {
           // Normalize to Standard Schema, extract JSON Schema, splice overrides.
           const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
@@ -334,9 +387,11 @@ export class CoreToolBuilder extends MastraBase {
               properties._background = backgroundOverrideJsonSchema;
               injectedKeys.push('_background');
             }
-            if (isResumableTool) {
-              // Match the pre-PR JSON Schema shape so existing provider compat
-              // layers + LLM recordings collapse it identically.
+            if (this.isResumableTool) {
+              properties.suspendedToolCallId = {
+                type: ['string', 'null'],
+                description: 'The toolCallId of the suspended tool to resume',
+              };
               properties.suspendedToolRunId = {
                 type: ['string', 'null'],
                 description: 'The runId of the suspended tool',
@@ -344,18 +399,14 @@ export class CoreToolBuilder extends MastraBase {
               properties.resumeData = {
                 description: 'The resumeData object created from the resumeSchema of suspended tool',
               };
-              injectedKeys.push('suspendedToolRunId', 'resumeData');
+              injectedKeys.push('suspendedToolCallId', 'suspendedToolRunId', 'resumeData');
             }
 
             // Preserve the original schema's runtime validator (Zod v3
             // `.transform()` / `.default()` / `.refine()` etc.) while exposing
             // the spliced JSON Schema for provider serialization. See
             // https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282520408
-            this.originalTool.inputSchema = buildJsonOverrideSchema(
-              schema,
-              { ...jsonSchema, properties },
-              injectedKeys,
-            );
+            this.injectedInputSchema = buildJsonOverrideSchema(schema, { ...jsonSchema, properties }, injectedKeys);
           }
         }
       }
@@ -373,22 +424,24 @@ export class CoreToolBuilder extends MastraBase {
         z.object({});
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
       return schema;
     }
 
-    // For Mastra tools, inputSchema might also be a function
-    let schema = this.originalTool.inputSchema;
+    // For Mastra tools, inputSchema might also be a function. Prefer the
+    // builder-local injected schema (see `injectedInputSchema`) so per-agent
+    // injections never depend on mutation of the shared tool object.
+    let schema = this.injectedInputSchema ?? this.originalTool.inputSchema;
 
     if (isStandardSchemaWithJSON(schema)) {
       return schema;
     }
 
     // If schema is a function, call it to get the actual schema
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -405,7 +458,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     let schema = originalSchema;
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -430,7 +483,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -445,7 +498,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.resumeSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -459,7 +512,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.suspendSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -538,7 +591,7 @@ export class CoreToolBuilder extends MastraBase {
         }
       }
 
-      return {
+      const builtTool = {
         ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
@@ -560,7 +613,10 @@ export class CoreToolBuilder extends MastraBase {
         toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
         transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
         inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
-      } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
+      } as unknown as CoreTool & { id: `${string}.${string}` };
+
+      registerToolOutputValidationSchema(builtTool, outputSchema);
+      return builtTool;
     }
 
     return undefined;
@@ -573,6 +629,48 @@ export class CoreToolBuilder extends MastraBase {
       error: `Failed ${toolType} execution`,
       logData: { agent: agentName, tool: toolName },
     };
+  }
+
+  /** Enforces the TOOLS_EXECUTE FGA permission for this tool when an FGA provider is configured. */
+  private async requireToolExecuteFGA(
+    options: ToolOptions,
+    mcpMeta: McpMetadata | undefined,
+    requestContext: RequestContext | undefined,
+    actor: ActorSignal | undefined,
+  ) {
+    const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
+    if (!fgaProvider) return;
+    const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
+      await import('../../auth/ee/fga-check');
+    const user = requestContext?.get('user');
+    const resolved = await options.resolveExecuteFGA?.({ user, requestContext });
+    const toolResourceId = mcpMeta?.serverName
+      ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
+      : options.agentId
+        ? getAgentToolFGAResourceId(options.agentId, options.name)
+        : getStandaloneToolFGAResourceId(options.name);
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource: resolved?.resource ?? { type: 'tool', id: toolResourceId },
+      permission: resolved?.permission ?? MastraFGAPermissions.TOOLS_EXECUTE,
+      requestContext,
+      actor,
+      context: {
+        resourceId: options.resourceId,
+        ...resolved?.context,
+      },
+      metadata: {
+        toolName: options.name,
+        agentId: options.agentId,
+        agentName: options.agentName,
+        runId: options.runId,
+        threadId: options.threadId,
+        executionResourceId: options.resourceId,
+        mcpMetadata: mcpMeta,
+        ...resolved?.metadata,
+      },
+    });
   }
 
   private createExecute(
@@ -608,15 +706,25 @@ export class CoreToolBuilder extends MastraBase {
     const mcpMeta =
       !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
 
-    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
+    const execFunction = async (
+      args: unknown,
+      execOptions: MastraToolInvocationOptions,
+      toolSpan?: AnySpan,
+      inputValidated = false,
+    ) => {
+      // Without a tool span (skipToolSpan), nested work attaches to the caller's span instead.
+      const contextSpan = toolSpan ?? (execOptions?.tracingContext || options.tracingContext)?.currentSpan;
+      let suspensionRequested = false;
       try {
         let result;
         let suspendData = null;
 
+        await verifyRunLease(options.runId);
+
         if (isVercelTool(tool)) {
           // Handle Vercel tools (AI SDK tools)
           result = await executeWithContext({
-            span: toolSpan,
+            span: contextSpan,
             fn: async () => tool?.execute?.(args, execOptions as ToolExecutionOptions),
           });
         } else {
@@ -639,10 +747,24 @@ export class CoreToolBuilder extends MastraBase {
            * TODO: Consider providing full Mastra instance to more tool types for enhanced functionality
            */
           // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
-          const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
+          const wrappedMastra = options.mastra
+            ? wrapMastra(options.mastra, { currentSpan: contextSpan })
+            : options.mastra;
 
           const resumeSchema = this.getResumeSchema();
-          // Pass raw args as first parameter, context as second
+          let executionArgs = args;
+          if (this.isResumableTool && args && typeof args === 'object' && !Array.isArray(args)) {
+            const {
+              suspendedToolCallId: _modelAuthoredToolCallId,
+              suspendedToolRunId: _modelAuthoredRunId,
+              ...cleanedArgs
+            } = args as Record<string, unknown>;
+            executionArgs = execOptions.suspendedToolRunId
+              ? { ...cleanedArgs, suspendedToolRunId: execOptions.suspendedToolRunId }
+              : cleanedArgs;
+          }
+
+          // Pass sanitized args as first parameter, context as second
           // Properly structure context based on execution source
           const baseContext = {
             threadId: options.threadId,
@@ -657,7 +779,7 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
-            observe: execOptions.observe ?? createToolObserve(toolSpan),
+            observe: execOptions.observe ?? createToolObserve(contextSpan),
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -665,11 +787,17 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.outputWriter || execOptions.outputWriter,
+              // The execution-time writer is the step's own writer, which knows the
+              // current response message id. A tool built by a processor carries the
+              // run-level writer captured when the stream started, and that id goes
+              // stale once a signal or retry rotates the response id.
+              execOptions.outputWriter || options.outputWriter,
             ),
-            ...createObservabilityContext({ currentSpan: toolSpan }),
+            ...createObservabilityContext({ currentSpan: contextSpan }),
             abortSignal: execOptions.abortSignal,
+            background: execOptions.background,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
+              suspensionRequested = true;
               suspendData = args;
               const newSuspendOptions = {
                 ...(suspendOptions ?? {}),
@@ -682,6 +810,7 @@ export class CoreToolBuilder extends MastraBase {
               return execOptions.suspend?.(args, newSuspendOptions);
             },
             resumeData: execOptions.resumeData,
+            suspendPayload: execOptions.suspendPayload,
           };
 
           // Check if this is agent execution
@@ -703,7 +832,7 @@ export class CoreToolBuilder extends MastraBase {
             // (agents use workflows internally but tools should see agent context)
             // Preserve MCP context when the agent run originated from an MCP tools/call
             // so nested tools can use elicitation/log/progress.
-            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
@@ -711,28 +840,36 @@ export class CoreToolBuilder extends MastraBase {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
+                getMessages: execOptions.getMessages,
                 suspend,
                 resumeData,
+                suspendedToolRunId: execOptions.suspendedToolRunId,
+                suspendPayload,
                 threadId,
                 resourceId,
-                outputWriter: options.outputWriter || execOptions.outputWriter,
+                outputWriter: execOptions.outputWriter || options.outputWriter,
                 flushMessages: execOptions.flushMessages,
+                ...(execOptions.isBackgroundTask ? { isBackgroundTask: true } : {}),
               },
             };
           } else if (isWorkflowExecution) {
             // Nest workflow-specific properties under 'workflow' key
-            const { suspend, resumeData, ...restBaseContext } = baseContext;
+            const { suspend, resumeData, suspendPayload, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
               ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
-              workflow: options.workflow || {
-                runId: options.runId,
-                workflowId: options.workflowId,
-                state: options.state,
-                setState: options.setState,
-                suspend,
-                resumeData,
-              },
+              workflow: options.workflow
+                ? { ...options.workflow, suspendedToolRunId: execOptions.suspendedToolRunId }
+                : {
+                    runId: options.runId,
+                    workflowId: options.workflowId,
+                    state: options.state,
+                    setState: options.setState,
+                    suspend,
+                    resumeData,
+                    suspendedToolRunId: execOptions.suspendedToolRunId,
+                    suspendPayload,
+                  },
             };
           } else if (execOptions.mcp) {
             // MCP execution context
@@ -747,22 +884,35 @@ export class CoreToolBuilder extends MastraBase {
 
           const resumeData = execOptions.resumeData;
 
-          if (resumeData) {
+          if (resumeData != null) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
-              logger?.warn(resumeValidation.error.message);
-              toolSpan?.end({ output: resumeValidation.error, attributes: { success: false } });
+              logger?.warn('Tool resume data validation failed', {
+                ...logData,
+                issuePaths: getValidationIssuePaths(resumeValidation.error, resumeSchema),
+              });
+              toolSpan?.end({
+                output: resumeValidation.error,
+                ...executionFailureTermination(resumeValidation.error),
+                attributes: { success: false },
+              });
               return resumeValidation.error as any;
             }
           }
 
           result = await executeWithContext({
-            span: toolSpan,
+            span: contextSpan,
             fn: async () => {
-              if (inputValidationSchema) {
+              if (inputValidated || inputValidationSchema || this.injectedInputSchema) {
+                // Skip the second validation in `Tool.execute` once this builder
+                // has validated the args (they are now the schema's output) or a
+                // builder-local schema applies. A transforming schema (e.g.
+                // string -> URL) rejects its own output (#27259), and the user's
+                // original schema would strip the builder-injected keys (breaking
+                // sub-agent/workflow resume via `suspendedToolRunId`).
                 markBuilderValidatedInput(toolContext);
               }
-              return tool?.execute?.(args, toolContext);
+              return tool?.execute?.(executionArgs, toolContext);
             },
           });
         }
@@ -771,8 +921,15 @@ export class CoreToolBuilder extends MastraBase {
           const suspendSchema = this.getSuspendSchema();
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
-            logger?.warn(suspendValidation.error.message);
-            toolSpan?.end({ output: suspendValidation.error, attributes: { success: false } });
+            logger?.warn('Tool suspend data validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(suspendValidation.error, suspendSchema),
+            });
+            toolSpan?.end({
+              output: suspendValidation.error,
+              ...executionFailureTermination(suspendValidation.error),
+              attributes: { success: false },
+            });
             return suspendValidation.error as any;
           }
         }
@@ -780,7 +937,13 @@ export class CoreToolBuilder extends MastraBase {
         // Skip validation if suspend was called without a result
         const shouldSkipValidation = typeof result === 'undefined' && !!suspendData;
         if (shouldSkipValidation) {
-          toolSpan?.end({ output: result, attributes: { success: true } });
+          toolSpan?.end({
+            output: result,
+            outcome: suspensionRequested ? 'suspend' : 'success',
+            stopReason: null,
+            stopReasonContext: null,
+            attributes: { success: true },
+          });
           return result;
         }
 
@@ -791,18 +954,46 @@ export class CoreToolBuilder extends MastraBase {
           const outputSchema = this.getOutputSchema();
           const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
-            logger?.warn(outputValidation.error.message);
-            toolSpan?.end({ output: outputValidation.error, attributes: { success: false } });
+            logger?.warn('Tool output validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(outputValidation.error, outputSchema, 'output'),
+            });
+            toolSpan?.end({
+              output: outputValidation.error,
+              ...executionFailureTermination(outputValidation.error),
+              attributes: { success: false },
+            });
             return outputValidation.error;
           }
           result = outputValidation.data;
+        } else if (isValidationError(result)) {
+          // Mastra tools validate in Tool.execute() and return the error object instead of throwing
+          toolSpan?.end({ output: result, ...executionFailureTermination(result), attributes: { success: false } });
+          return result;
         }
 
         // Return result (validated for Vercel tools, already validated for Mastra tools)
-        toolSpan?.end({ output: result, attributes: { success: true } });
+        toolSpan?.end({
+          output: result,
+          outcome: suspensionRequested ? 'suspend' : 'success',
+          stopReason: null,
+          stopReasonContext: null,
+          attributes: { success: true },
+        });
         return result;
       } catch (error) {
-        toolSpan?.error({ error: error as Error, attributes: { success: false } });
+        if (suspensionRequested && eagerToolCallSuspensionIntent(error)) {
+          // Eager suspension deliberately unwinds; other errors must retain their details.
+          toolSpan?.end({ outcome: 'suspend', stopReason: null, stopReasonContext: null });
+        } else {
+          const failure = getErrorFromUnknown(error, { supportSerialization: false });
+          toolSpan?.error({
+            error: failure,
+            ...executionFailureTermination(error),
+            attributes: { success: false },
+          });
+          throw failure;
+        }
         throw error;
       }
     };
@@ -815,74 +1006,54 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions?.tracingContext || options.tracingContext;
       const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
-      const toolSpan = getOrCreateSpan({
-        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
-        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
-        input: args,
-        entityType: EntityType.TOOL,
-        entityId: options.name,
-        entityName: options.name,
-        attributes: mcpMeta
-          ? {
-              mcpServer: mcpMeta.serverName,
-              serverVersion: mcpMeta.serverVersion,
-              toolDescription: options.description,
-              toolCallId: execOptions?.toolCallId,
-            }
-          : {
-              toolDescription: options.description,
-              toolType: logType || 'tool',
-              toolCallId: execOptions?.toolCallId,
-            },
-        tracingPolicy: options.tracingPolicy,
-        tracingContext: tracingContext,
-        requestContext: toolRequestContext,
-        mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
-      });
+      const toolSpan = execOptions?.skipToolSpan
+        ? undefined
+        : getOrCreateSpan({
+            type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+            outcome: null,
+            name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
+            input: args,
+            entityType: EntityType.TOOL,
+            entityId: options.name,
+            entityName: options.name,
+            attributes: mcpMeta
+              ? {
+                  mcpServer: mcpMeta.serverName,
+                  serverVersion: mcpMeta.serverVersion,
+                  toolType: logType || 'tool',
+                  toolDescription: options.description,
+                  toolCallId: execOptions?.toolCallId,
+                }
+              : {
+                  toolDescription: options.description,
+                  toolType: logType || 'tool',
+                  toolCallId: execOptions?.toolCallId,
+                },
+            tracingPolicy: options.tracingPolicy,
+            tracingContext: tracingContext,
+            requestContext: toolRequestContext,
+            mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
+          });
 
-      const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
-      const user = toolRequestContext?.get('user');
-      if (fgaProvider) {
-        const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
-          await import('../../auth/ee/fga-check');
-        const toolResourceId = mcpMeta?.serverName
-          ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
-          : options.agentId
-            ? getAgentToolFGAResourceId(options.agentId, options.name)
-            : getStandaloneToolFGAResourceId(options.name);
-        await requireFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'tool', id: toolResourceId },
-          permission: MastraFGAPermissions.TOOLS_EXECUTE,
-          requestContext: toolRequestContext,
-          actor: execOptions?.actor,
-          context: {
-            resourceId: options.resourceId,
-          },
-          metadata: {
-            toolName: options.name,
-            agentId: options.agentId,
-            agentName: options.agentName,
-            runId: options.runId,
-            threadId: options.threadId,
-            executionResourceId: options.resourceId,
-            mcpMetadata: mcpMeta,
-          },
-        });
+      try {
+        await this.requireToolExecuteFGA(options, mcpMeta, toolRequestContext, execOptions?.actor);
+      } catch (error) {
+        toolSpan?.error({ error: error as Error, ...executionFailureTermination(error) });
+        throw error;
       }
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject });
 
         // When a tool is being resumed (resumeData present in execOptions), skip input
-        // validation. The original args were already validated during the initial
-        // execution, and during resume the tool's execute function checks resumeData
-        // and returns early without using the input args.
-        const isResuming = !!execOptions?.resumeData;
+        // validation unless the builder injected additional fields. The original args
+        // were already validated during the initial execution, but builder-local fields
+        // still need validation before Tool.execute skips its own validation.
+        const isResuming = execOptions?.resumeData != null;
 
         const parameters = inputValidationSchema ?? this.getParameters();
-        if (!isResuming) {
+        let inputValidated = false;
+        if (!isResuming || this.injectedInputSchema) {
           const { data, error } = validateToolInput(
             parameters as StandardSchemaWithJSON | undefined,
             args,
@@ -892,12 +1063,16 @@ export class CoreToolBuilder extends MastraBase {
           const suspendedToolRunIdErrToIgnore =
             error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
           if (error && !suspendedToolRunIdErrToIgnore) {
-            logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
-            toolSpan?.end({ output: error, attributes: { success: false } });
+            logger.warn('Tool input validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(error, parameters),
+            });
+            toolSpan?.end({ output: error, ...executionFailureTermination(error), attributes: { success: false } });
             return error;
           }
-          if (data !== undefined) {
+          if (!error) {
             args = data;
+            inputValidated = true;
           }
         }
 
@@ -905,7 +1080,7 @@ export class CoreToolBuilder extends MastraBase {
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!, toolSpan);
+              const result = await execFunction(args, execOptions!, toolSpan, inputValidated);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -927,8 +1102,16 @@ export class CoreToolBuilder extends MastraBase {
           },
           err,
         );
-        toolSpan?.error({ error: mastraError, attributes: { success: false } });
-        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
+        toolSpan?.error({
+          error: mastraError,
+          ...executionFailureTermination(mastraError),
+          attributes: { success: false },
+        });
+        logger.trackException(trackableToolError(mastraError, err, model?.modelId ?? ''), {
+          ...logData,
+          ...rest,
+          model: logModelObject,
+        });
         throw mastraError;
       }
     };
@@ -1007,7 +1190,13 @@ export class CoreToolBuilder extends MastraBase {
       );
     }
 
-    const originalSchema = this.getParameters();
+    const parameters = this.getParameters();
+    // JSON Schema (client tools, AI SDK `jsonSchema()`) must not round-trip through Zod: that
+    // conversion turns unions into intersections the compat layers collapse to `{}`.
+    const originalSchema =
+      parameters && !isZodType(parameters) && !isStandardSchemaWithJSON(parameters)
+        ? toStandardSchema(parameters)
+        : parameters;
     const inputValidationSchema = this.buildCompatValidationSchema(originalSchema, schemaCompatLayers);
     let processedInputSchema: Schema | undefined;
 
@@ -1036,7 +1225,7 @@ export class CoreToolBuilder extends MastraBase {
                   if ('issues' in r && r.issues) {
                     return {
                       success: false as const,
-                      error: new Error(r.issues.map((i: any) => i.message).join(', ')),
+                      error: createStandardSchemaIssuesError(r.issues),
                     };
                   }
                   return { success: true as const, value: (r as { value: unknown }).value };
@@ -1047,7 +1236,7 @@ export class CoreToolBuilder extends MastraBase {
               if ('issues' in result && result.issues) {
                 return {
                   success: false as const,
-                  error: new Error(result.issues.map((i: any) => i.message).join(', ')),
+                  error: createStandardSchemaIssuesError(result.issues),
                 };
               }
               return { success: true as const, value: (result as { value: unknown }).value };
@@ -1117,11 +1306,53 @@ export class CoreToolBuilder extends MastraBase {
       requireApproval = true;
     }
 
+    const originalBeforeApproval =
+      'beforeApproval' in this.originalTool && typeof this.originalTool.beforeApproval === 'function'
+        ? (this.originalTool.beforeApproval as BeforeApprovalFn)
+        : undefined;
+    const mcpMeta =
+      !isVercelTool(this.originalTool) && 'mcpMetadata' in this.originalTool
+        ? (this.originalTool as { mcpMetadata?: McpMetadata }).mcpMetadata
+        : undefined;
+    // The hook can return data to the model, so it must pass the same TOOLS_EXECUTE check as
+    // execute before it runs; a denial propagates exactly as it would from execute.
+    // The agent runtime validates input with `validateInput` before calling the hook, so the hook
+    // receives parsed input and never runs for invalid calls.
+    const beforeApproval: BeforeApprovalFn | undefined = originalBeforeApproval
+      ? markBuiltBeforeApproval(
+          async (input: unknown, context: BeforeApprovalContext, runtime?: BeforeApprovalRuntime) => {
+            await this.requireToolExecuteFGA(
+              this.options,
+              mcpMeta,
+              runtime?.requestContext ?? this.options.requestContext,
+              runtime?.actor,
+            );
+            return originalBeforeApproval(input, context);
+          },
+        )
+      : undefined;
+
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
       requireApproval,
       needsApprovalFn,
+      beforeApproval,
+      validateInput: (input: unknown) => {
+        const validation = validateToolInput(
+          (inputValidationSchema ?? originalSchema) as StandardSchemaWithJSON | undefined,
+          input,
+          this.options.name,
+        );
+        // suspendedToolRunId is only required when resumeData is provided (matches execute).
+        if (
+          validation.error?.message?.includes('suspendedToolRunId: Required') &&
+          !(input as Record<string, unknown> | undefined)?.resumeData
+        ) {
+          return { data: input };
+        }
+        return validation;
+      },
       hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
@@ -1133,9 +1364,10 @@ export class CoreToolBuilder extends MastraBase {
         : undefined,
     };
 
-    return {
+    const builtTool = {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
+      title: 'title' in this.originalTool ? this.originalTool.title : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
       strict: 'strict' in this.originalTool ? this.originalTool.strict : undefined,
@@ -1152,5 +1384,8 @@ export class CoreToolBuilder extends MastraBase {
       // from the converted CoreTool at dispatch time.
       backgroundConfig: this.options.backgroundConfig,
     } as unknown as CoreTool;
+
+    registerToolOutputValidationSchema(builtTool, outputSchema);
+    return builtTool;
   }
 }

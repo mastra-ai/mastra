@@ -120,7 +120,8 @@ export abstract class CrudEditorNamespace<
     }
 
     // Only use the cache for default version requests (no specific version or status override)
-    const isVersionRequest = options?.versionId || options?.versionNumber || options?.status;
+    const isVersionRequest =
+      options?.versionId !== undefined || options?.versionNumber !== undefined || options?.status !== undefined;
     if (!isVersionRequest) {
       const cached = this._cache.get(id);
       if (cached) {

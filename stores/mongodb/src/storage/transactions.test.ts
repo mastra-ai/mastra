@@ -1,5 +1,7 @@
+import { TABLE_DATASETS, TABLE_DATASET_ITEMS } from '@mastra/core/storage';
 import { Collection, MongoClient } from 'mongodb';
 import { describe, expect, test, vi } from 'vitest';
+
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { MongoDBStore } from './index';
 
@@ -49,12 +51,113 @@ describe('MongoDB storage — topology-aware transactions', () => {
     }
   });
 
+  test('dataset item purge fails before mutation on standalone MongoDB', async () => {
+    const store = new MongoDBStore({ id: 'tx-purge-standalone', uri: STANDALONE_URI, dbName: DB });
+    try {
+      await store.init();
+      const datasets = await store.getStore('datasets');
+      const experiments = await store.getStore('experiments');
+      if (!datasets || !experiments) throw new Error('Dataset and experiment storage required');
+      await datasets.dangerouslyClearAll();
+      await experiments.dangerouslyClearAll();
+      const dataset = await datasets.createDataset({ name: 'purge-standalone' });
+      const item = await datasets.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+      const experiment = await experiments.createExperiment({
+        name: 'purge-standalone',
+        datasetId: dataset.id,
+        datasetVersion: item.datasetVersion,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+      const result = await experiments.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'secret' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      await expect(datasets.purgeItem({ id: item.id, datasetId: dataset.id })).rejects.toMatchObject({
+        id: 'MONGODB_DATASET_ITEM_PURGE_REQUIRES_TRANSACTIONS',
+      });
+
+      await expect(datasets.getItemById({ id: item.id })).resolves.toMatchObject({ input: { patient: 'Alice' } });
+      await expect(experiments.getExperimentResultById({ id: result.id })).resolves.toMatchObject({
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'secret' },
+      });
+    } finally {
+      await store.close();
+    }
+  });
+
   test('supportsTransactions() returns true on a replica set', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-rs', url: REPLICA_SET_URI, dbName: DB });
     try {
       expect(await connector.supportsTransactions()).toBe(true);
     } finally {
       await connector.close();
+    }
+  });
+
+  test('experiment-result writes coordinate on their item instead of the shared dataset', async () => {
+    const store = new MongoDBStore({ id: 'tx-item-purge-barrier', uri: REPLICA_SET_URI, dbName: DB });
+    const client = new MongoClient(REPLICA_SET_URI);
+    try {
+      await store.init();
+      await client.connect();
+      const datasets = await store.getStore('datasets');
+      const experiments = await store.getStore('experiments');
+      if (!datasets || !experiments) throw new Error('Dataset and experiment storage required');
+      await datasets.dangerouslyClearAll();
+      await experiments.dangerouslyClearAll();
+      const dataset = await datasets.createDataset({ name: 'item-scoped-purge-barrier' });
+      const firstItem = await datasets.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+      const secondItem = await datasets.addItem({ datasetId: dataset.id, input: { patient: 'Bob' } });
+      const experiment = await experiments.createExperiment({
+        name: 'item-scoped-purge-barrier',
+        datasetId: dataset.id,
+        datasetVersion: secondItem.datasetVersion,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 2,
+      });
+
+      await Promise.all(
+        [firstItem, secondItem].map(item =>
+          experiments.addExperimentResult({
+            experimentId: experiment.id,
+            itemId: item.id,
+            itemDatasetVersion: item.datasetVersion,
+            input: item.input,
+            output: null,
+            groundTruth: null,
+            error: null,
+            startedAt: new Date(),
+            completedAt: new Date(),
+            retryCount: 0,
+          }),
+        ),
+      );
+
+      const database = client.db(DB);
+      const datasetDocument = await database.collection(TABLE_DATASETS).findOne({ id: dataset.id });
+      const itemDocuments = await database
+        .collection(TABLE_DATASET_ITEMS)
+        .find({ id: { $in: [firstItem.id, secondItem.id] }, validTo: null })
+        .toArray();
+      expect(datasetDocument?.purgeBarrierRevision).toBeUndefined();
+      expect(itemDocuments).toHaveLength(2);
+      expect(itemDocuments.every(item => item.purgeBarrierRevision === 1)).toBe(true);
+    } finally {
+      await client.close();
+      await store.close();
     }
   });
 

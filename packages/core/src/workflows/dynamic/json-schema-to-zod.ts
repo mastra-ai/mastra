@@ -32,7 +32,7 @@ export interface JsonSchemaToZodOptions {
  * Inline converter sufficient for the static subset Zod typically emits when
  * round-tripped through `standardSchemaToJSONSchema`. Handles:
  *
- *  - `object` with `properties` + `required`
+ *  - `object` with `properties` + `required` + `additionalProperties`
  *  - `string` / `number` / `integer` / `boolean` / `null`
  *  - `array` with `items`
  *  - `enum`
@@ -118,7 +118,7 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
     } else {
       // Mixed/non-string enums (e.g. [1, 2, 3] or ['a', 1]): preserve the
       // original member types via literal union instead of coercing to string.
-      const literals: z.ZodTypeAny[] = values.map(v => z.literal(v as string | number | boolean | null));
+      const literals: z.ZodTypeAny[] = values.map(v => z.literal(v));
       out = literals.length === 1 ? literals[0]! : z.union(literals as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
     }
   } else if (Array.isArray(schema.type)) {
@@ -139,7 +139,15 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
           shape[key] = required.has(key) ? childSchema : childSchema.optional();
         }
         const obj = z.object(shape);
-        out = schema.additionalProperties === true ? obj.passthrough() : obj;
+        const additional = schema.additionalProperties;
+        if (additional === false) {
+          out = obj;
+        } else if (additional && typeof additional === 'object' && Object.keys(additional).length > 0) {
+          out = obj.catchall(walk(additional as JsonSchema, opts));
+        } else {
+          // JSON Schema allows extra keys when additionalProperties is missing, true, or {}.
+          out = obj.passthrough();
+        }
         break;
       }
       case 'array':

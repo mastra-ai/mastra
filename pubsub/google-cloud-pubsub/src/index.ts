@@ -27,6 +27,15 @@ export class GoogleCloudPubSub extends PubSub {
     this.instanceId = crypto.randomUUID();
   }
 
+  /**
+   * A message a subscriber neither acks nor nacks is delivered again once its
+   * ack deadline passes. The client library extends the deadline while this
+   * process lives, so only a dead subscriber's messages come back.
+   */
+  override get redeliversUnacked(): boolean {
+    return true;
+  }
+
   getSubscriptionName(topic: string, group?: string) {
     if (group) {
       return `${topic}-${group}`;
@@ -196,7 +205,7 @@ export class GoogleCloudPubSub extends PubSub {
       try {
         const activeCbs = this.activeCbs[subscriptionKey] ?? [];
         for (const cb of activeCbs) {
-          cb(
+          void cb(
             event,
             async () => {
               try {
@@ -294,7 +303,7 @@ export class GoogleCloudPubSub extends PubSub {
 
     for (const cb of [...callbacks]) {
       try {
-        cb(
+        void cb(
           localEvent,
           async () => {},
           async () => {},

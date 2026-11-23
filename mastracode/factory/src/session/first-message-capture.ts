@@ -3,7 +3,7 @@ import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 
 export interface FirstMessageCaptureSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
 
@@ -43,7 +43,7 @@ export function observeSessionFirstMessage(
     seen = true;
     unsubscribe();
     void sourceControl.sessions
-      .markFirstMessage({ sessionId: session.identity.getResourceId() })
+      .markFirstMessage({ sessionId: session.identity.getId() })
       .catch(error => console.warn('[Factory first-message capture] Unable to persist first message time.', error));
   });
   return unsubscribe;

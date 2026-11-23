@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
-import { createMCPTransportTestSuite } from '@internal/server-adapter-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
+import { createMCPTransportTestSuite } from '@mastra/server-adapters-test-suite';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
 import { describe } from 'vitest';

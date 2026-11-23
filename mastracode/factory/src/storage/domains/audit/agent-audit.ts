@@ -1,17 +1,16 @@
 /**
- * Agent-level audit event detection (Audit v1.1).
- *
- * Git actions performed by agents inside runs never touch web routes, so this
- * observer detects externally-visible git side effects and delegates recording
- * to the factory-owned audit domain.
+ * Git and GitHub actions performed by agents inside runs never touch web routes,
+ * so this observer detects their externally-visible side effects in the command
+ * and delegates recording to the factory-owned audit domain.
  */
 
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { executableCommand, runsPullRequestCreate } from '../../../session/shell-commands.js';
 import type { AuditAgentEmitter } from './domain.js';
 
-type FactorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
+type FactorySessionState = { factoryProjectId?: string; projectRepositoryId?: string; projectPath?: string };
 
 interface ToolObserverContext {
   toolName: string;
@@ -24,23 +23,18 @@ interface ToolObserverContext {
 /** Match command-start positions while ignoring command text embedded in heredoc bodies. */
 const GIT_COMMIT_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+commit(?:\s|$)/;
 const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+push(?:\s|$)/;
+/** `gh pr create` prints the new pull request URL alone on the last line, and nothing else does. */
+const CREATED_PULL_REQUEST_URL_RE = /^https:\/\/\S+\/pull\/\d+$/;
 
-function stripHeredocBodies(command: string): string {
-  const lines = command.split('\n');
-  const executableLines: string[] = [];
-  let delimiter: string | undefined;
-
-  for (const line of lines) {
-    if (delimiter) {
-      if (line.trim() === delimiter) delimiter = undefined;
-      continue;
-    }
-    executableLines.push(line);
-    const heredoc = line.match(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    delimiter = heredoc?.[2];
-  }
-
-  return executableLines.join('\n');
+/**
+ * The pull request `gh pr create` actually opened, or nothing. A command that
+ * printed no URL created no pull request: `--dry-run` prints a preview, `--web`
+ * prints a `/compare/` link, and a failure prints its exit code last.
+ */
+function createdPullRequestUrl(output: unknown): string | undefined {
+  if (typeof output !== 'string') return undefined;
+  const lastLine = output.trimEnd().split('\n').at(-1)?.trim();
+  return lastLine !== undefined && CREATED_PULL_REQUEST_URL_RE.test(lastLine) ? lastLine : undefined;
 }
 
 /** Parse the branch from a plain `git push <remote> <branch>` invocation. */
@@ -51,36 +45,46 @@ function parsePushedBranch(command: string): string | undefined {
   return match?.[2];
 }
 
+/** The `owner/repo` a pull request URL names, as GitHub prints it. */
+function pullRequestRepository(url: string): string | undefined {
+  return url.match(/^https:\/\/[^/]+\/([^/]+\/[^/]+)\/pull\/\d+$/)?.[1];
+}
+
 /**
- * Detect externally-visible git side effects in a completed tool call and
- * record `factory.agent.*` audit events for them. One command can emit
+ * Detect externally-visible git and GitHub side effects in a completed tool
+ * call and record `factory.agent.*` audit events for them. One command can emit
  * multiple events (`git commit && git push` emits both). Never throws.
+ *
+ * `resolveRepositorySlugs` names the repositories the session may target so a
+ * pull request can be attributed to one of them; a URL elsewhere is still
+ * audited, with a warning and no `repository`.
  */
 export async function observeAgentGitAction({
   audit,
   toolContext,
+  resolveRepositorySlugs,
 }: {
   audit: AuditAgentEmitter;
   toolContext: ToolObserverContext;
+  resolveRepositorySlugs?: (sessionId: string) => Promise<string[]>;
 }): Promise<void> {
   try {
     if (toolContext.toolName !== 'execute_command' || toolContext.error) return;
     const rawCommand = (toolContext.input as { command?: unknown } | undefined)?.command;
     if (typeof rawCommand !== 'string') return;
-    const command = stripHeredocBodies(rawCommand);
+    const command = executableCommand(rawCommand);
 
     const controller = toolContext.context.get('controller') as
       | AgentControllerRequestContext<FactorySessionState>
       | undefined;
-    const worktreePath = controller?.scope;
+    // The workspace sets `projectPath` to the session's checkout.
+    const worktreePath = controller?.getState().projectPath || undefined;
+    const targets = worktreePath ? [{ type: 'worktree', id: worktreePath }] : [];
 
     if (GIT_COMMIT_RE.test(command)) {
       await audit.emitAgent({
         requestContext: toolContext.context,
-        input: {
-          action: 'factory.agent.commit',
-          targets: worktreePath ? [{ type: 'worktree', id: worktreePath }] : [],
-        },
+        input: { action: 'factory.agent.commit', targets },
       });
     }
 
@@ -88,10 +92,25 @@ export async function observeAgentGitAction({
       const branch = parsePushedBranch(command);
       await audit.emitAgent({
         requestContext: toolContext.context,
+        input: { action: 'factory.agent.push', targets, ...(branch ? { metadata: { branch } } : {}) },
+      });
+    }
+
+    const pullRequestUrl = runsPullRequestCreate(rawCommand) ? createdPullRequestUrl(toolContext.output) : undefined;
+    if (pullRequestUrl) {
+      const slug = pullRequestRepository(pullRequestUrl);
+      const slugs =
+        resolveRepositorySlugs && controller?.sessionId ? await resolveRepositorySlugs(controller.sessionId) : [];
+      const repository = slug && slugs.find(candidate => candidate.toLowerCase() === slug.toLowerCase());
+      if (slugs.length > 0 && !repository) {
+        console.warn("[Audit] Pull request URL is not in this Factory's environment", { url: pullRequestUrl });
+      }
+      await audit.emitAgent({
+        requestContext: toolContext.context,
         input: {
-          action: 'factory.agent.push',
-          targets: worktreePath ? [{ type: 'worktree', id: worktreePath }] : [],
-          ...(branch ? { metadata: { branch } } : {}),
+          action: 'factory.agent.pr_opened',
+          targets: [{ type: 'pull_request', id: pullRequestUrl }, ...targets],
+          metadata: { url: pullRequestUrl, ...(repository ? { repository } : {}) },
         },
       });
     }

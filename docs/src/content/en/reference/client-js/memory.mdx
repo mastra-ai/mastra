@@ -45,7 +45,7 @@ const thread = mastraClient.getMemoryThread({ threadId: 'thread-id', agentId: 'a
 
 ## Thread methods
 
-### Get Thread Details
+### Get thread details
 
 Retrieve details about a specific thread:
 
@@ -53,7 +53,7 @@ Retrieve details about a specific thread:
 const details = await thread.get()
 ```
 
-### Update Thread
+### Update thread
 
 Update thread properties:
 
@@ -65,7 +65,7 @@ const updated = await thread.update({
 })
 ```
 
-### Delete Thread
+### Delete thread
 
 Delete a thread and its messages:
 
@@ -73,7 +73,7 @@ Delete a thread and its messages:
 await thread.delete()
 ```
 
-### Clone Thread
+### Clone thread
 
 Create a copy of a thread with all its messages:
 
@@ -114,7 +114,7 @@ The clone response includes:
 
 ## Message operations
 
-### Save Messages
+### Save messages
 
 Save messages to memory:
 
@@ -138,7 +138,7 @@ const result = await mastraClient.saveMessageToMemory({
 console.log(result.messages)
 ```
 
-### Retrieve Thread Messages
+### Retrieve thread messages
 
 Get messages associated with a memory thread:
 
@@ -175,7 +175,7 @@ const result = await thread.listMessages({
 
 Metadata filters match shallow scalar values only: `string`, finite `number`, `boolean`, and `null`. Every key-value pair must match with AND semantics. `null` matches only keys explicitly set to `null`. Metadata keys must start with a letter or underscore and contain only alphanumeric or underscore characters. The limit is 128 characters. Reserved prototype keys such as `__proto__`, `constructor`, and `prototype` aren't allowed. Performance depends on the server storage backend, and arbitrary metadata filters may scan candidate messages.
 
-### Delete Messages
+### Delete messages
 
 Delete one or more messages from a thread:
 
@@ -193,7 +193,7 @@ const result = await thread.deleteMessages(['message-1', 'message-2', 'message-3
 
 Working memory allows agents to maintain persistent information about users across interactions. It can be scoped to either a specific thread or across all threads for a resource (user).
 
-### Get Working Memory
+### Get working Memory
 
 Retrieve the current working memory for a thread:
 
@@ -207,12 +207,12 @@ const workingMemory = await mastraClient.getWorkingMemory({
 
 The response includes:
 
-- `workingMemory`: The current working memory content (string or null)
+- `workingMemory`: The current working memory content (a string or `null`). When using a JSON or schema-based working memory template, the content is a JSON-encoded string
 - `source`: Whether the memory is from `"thread"` or `"resource"` scope
 - `workingMemoryTemplate`: The template used for working memory (if configured)
 - `threadExists`: Whether the thread exists
 
-### Update Working Memory
+### Update working Memory
 
 Update the working memory content for a thread:
 
@@ -233,7 +233,19 @@ await mastraClient.updateWorkingMemory({
 
 For resource-scoped working memory, you must provide the `resourceId` parameter. It allows the memory to persist across all conversation threads for that user.
 
-### Get Memory Status
+By default the call replaces the whole record. For schema-based, resource-scoped working memory, pass `mode: 'merge'` with a JSON object string to deep-merge only the provided fields atomically. The server returns `400` if the storage adapter doesn't support atomic merges (currently only `@mastra/pg` does).
+
+```typescript
+await mastraClient.updateWorkingMemory({
+  agentId: 'agent-1',
+  threadId: 'thread-1',
+  resourceId: 'user-123',
+  workingMemory: JSON.stringify({ city: 'Berlin' }),
+  mode: 'merge',
+})
+```
+
+### Get Memory status
 
 Check the status of the memory system:
 

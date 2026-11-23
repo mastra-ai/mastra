@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
+import { Agent } from '../../../agent';
 import { createScorer, ScorerRunError } from '../../../evals/base';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
@@ -13,6 +14,7 @@ import { ScoresInMemory } from '../../../storage/domains/scores/inmemory';
 import { createStep, createWorkflow } from '../../../workflows';
 import type { ExperimentEvent } from '../index';
 import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
+import { scriptedModel } from './scenarios/scenario-helpers';
 
 // Mock agent that returns predictable output
 // Note: specificationVersion must be 'v2' or 'v3' for isSupportedLanguageModel to return true
@@ -102,6 +104,48 @@ describe('runExperiment', () => {
   });
 
   describe('basic execution', () => {
+    it('resolves dynamic models with item-over-global context and scores generated output', async () => {
+      const model = scriptedModel([{ text: 'Context-selected response' }]);
+      const resolveModel = vi.fn(({ requestContext }: { requestContext: RequestContext }) => {
+        if (requestContext.get('selection') !== 'item' || requestContext.get('tenant') !== 'clinic') {
+          throw new Error('Missing model selection context');
+        }
+        return model;
+      });
+      const agent = new Agent({
+        id: 'dynamic-agent',
+        name: 'Dynamic agent',
+        instructions: 'Reply.',
+        model: resolveModel,
+      });
+      vi.mocked(mastra.getAgentById).mockReturnValue(agent);
+      vi.mocked(mastra.getAgent).mockReturnValue(agent);
+      const scorer = createMockScorer('output-scorer', 'Output scorer');
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'Hello', requestContext: { selection: 'item' } }],
+        targetType: 'agent',
+        targetId: agent.id,
+        requestContext: { selection: 'global', tenant: 'clinic' },
+        scorers: [scorer],
+      });
+
+      expect(result.succeededCount).toBe(1);
+      expect(result.failedCount).toBe(0);
+      expect(resolveModel.mock.calls[0]![0].requestContext.all).toEqual({ selection: 'item', tenant: 'clinic' });
+      expect(scorer.run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'assistant',
+              content: expect.objectContaining({ content: 'Context-selected response' }),
+            }),
+          ]),
+        }),
+      );
+      expect(result.results[0]!.scores).toEqual([expect.objectContaining({ score: 1 })]);
+    });
+
     it('executes all items and returns summary', async () => {
       const result = await runExperiment(mastra, {
         datasetId,
@@ -994,6 +1038,16 @@ describe('runExperiment', () => {
       expect(workflowScorer.run).toHaveBeenCalledTimes(1);
       expect(stepScorer.run).toHaveBeenCalledTimes(1);
       expect(lowerScorer.run).not.toHaveBeenCalled();
+
+      // Regression for #29787: the step score must actually reach the scores store.
+      // The schema only accepts the 'STEP' entityType that runEvals uses; emitting
+      // 'WORKFLOW_STEP' failed validation and the score was silently dropped.
+      const { scores: persistedStepScores } = await scoresStorage.listScoresByScorerId({
+        scorerId: 'workflow-step',
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedStepScores).toHaveLength(1);
+      expect(persistedStepScores[0]?.entityType).toBe('STEP');
     });
   });
 
@@ -1055,6 +1109,18 @@ describe('runExperiment', () => {
       // Meta-scorer should have been applied
       expect(runResult.results[0].scores).toHaveLength(1);
       expect(runResult.results[0].scores[0].scorerId).toBe('meta-scorer');
+
+      // Regression for #29787: the score must actually reach the scores store.
+      // Before the fix, `entityType: 'SCORER'` failed `saveScorePayloadSchema`
+      // validation, so the write was swallowed by a best-effort catch and the
+      // score was silently dropped.
+      const { scores: persistedScores } = await scoresStorage.listScoresByScorerId({
+        scorerId: 'meta-scorer',
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(persistedScores).toHaveLength(1);
+      expect(persistedScores[0]!.score).toBe(0.95);
+      expect(persistedScores[0]!.entityType).toBe('SCORER');
     });
   });
 

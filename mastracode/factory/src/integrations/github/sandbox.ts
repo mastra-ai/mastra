@@ -6,19 +6,22 @@
  * operate entirely against the remote checkout.
  *
  * - `materializeRepo(row, token)` clones the repo inside the sandbox when no
- *   checkout exists yet (a base-image boot, a wiped disk), using a short-lived
- *   installation token that is scrubbed from the git remote afterwards so it
- *   never persists in the VM. A checkout that is already there, from a repo
- *   template image or an earlier start, is left exactly as it is.
+ *   checkout exists yet (a base-image boot, a wiped disk), supplying the
+ *   short-lived token only in that Git process's environment. A checkout that
+ *   is already there, from a repo template image or an earlier start, is left
+ *   exactly as it is.
  *
  * This module owns everything git/GitHub: clone, commit/push, setup/teardown commands,
  * and `gh pr create`. Workdir layout lives in `../sandbox/workdir`.
  */
 
-import { repoCloneCommand } from '@internal/workspace';
+import type { RepositoryAccess } from '../../capabilities/version-control.js';
+import { recordSandboxCommand } from '../../metrics/sandbox.js';
+import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import { timedPhase } from '../../timing.js';
+import { bootDiagnosticsEnabled, timedPhase } from '../../timing.js';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
@@ -57,8 +60,14 @@ interface ShOptions {
   phase?: string;
 }
 
+interface CommandOptions extends ShOptions {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+}
+
 /**
  * A thrown transport-level failure that is worth retrying: remote sandbox
+
  * providers (e.g. the platform workspace proxy) surface transient 5xx errors
  * as exceptions carrying an HTTP `status` — typically while a freshly
  * provisioned VM is still coming up. Command failures are NOT exceptions
@@ -74,37 +83,54 @@ const SH_RETRIES = 2;
 const SH_RETRY_DELAY_MS = 2000;
 
 /**
- * Run a shell script in the sandbox via `sh -c`, bounded by a hang guard.
- * Transient transport-level 5xx failures (proxy hiccups while the VM boots)
- * are retried with a short backoff; every script routed through here is safe
- * to re-run. Hang-guard timeouts are NOT retried — the budget applies to the
- * command as a whole.
+ * Run a shell script in the sandbox via `sh -c`. This is reserved for the
+ * explicitly configured repository lifecycle hooks; programmatic commands use
+ * {@link execute} with an argv array.
  */
 export async function sh(
   sandbox: ExecutableSandbox,
   script: string,
-  options: ShOptions = {},
+  options: ShOptions & Pick<CommandOptions, 'env'> = {},
 ): Promise<SandboxCommandResult> {
-  // One budget for the command as a whole: each attempt only gets the time
-  // remaining, so transport retries can never multiply the hang guard.
+  return execute(sandbox, 'sh', ['-c', script], options);
+}
+
+/**
+ * Execute one program with an argv array, bounded by a hang guard. Transient
+ * sandbox transport failures are retried without ever interpolating arguments
+ * into a shell command.
+ */
+async function execute(
+  sandbox: ExecutableSandbox,
+  command: string,
+  args: string[],
+  options: CommandOptions = {},
+): Promise<SandboxCommandResult> {
   const deadlineMs = Date.now() + (options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
   for (let attempt = 0; ; attempt++) {
     const started = performance.now();
     try {
-      const result = await shOnce(sandbox, script, { ...options, timeoutMs: Math.max(deadlineMs - Date.now(), 1) });
-      // Phased commands are the session start path; report each so a slow
-      // start names the command that took the time rather than the phase.
+      const result = await executeOnce(sandbox, command, args, {
+        ...options,
+        timeoutMs: Math.max(deadlineMs - Date.now(), 1),
+      });
       if (options.phase) {
-        process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(performance.now() - started)}ms\n`,
-        );
+        const elapsed = performance.now() - started;
+        if (bootDiagnosticsEnabled) {
+          process.stderr.write(
+            `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(elapsed)}ms\n`,
+          );
+        }
+        recordSandboxCommand(options.phase, elapsed, result.exitCode === 0 ? 'ok' : 'exit');
       }
       return result;
     } catch (error) {
       if (options.phase) {
+        const elapsed = performance.now() - started;
         process.stderr.write(
-          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(performance.now() - started)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+          `[factory:timing] ${options.phase} attempt=${attempt + 1} threw after ${Math.round(elapsed)}ms: ${error instanceof Error ? error.message : String(error)}\n`,
         );
+        recordSandboxCommand(options.phase, elapsed, 'threw');
       }
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
       const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
@@ -114,11 +140,12 @@ export async function sh(
   }
 }
 
-/** Single `sh -c` execution attempt, bounded by the hang guard. */
-async function shOnce(
+/** Single structured command execution attempt, bounded by the hang guard. */
+async function executeOnce(
   sandbox: ExecutableSandbox,
-  script: string,
-  options: ShOptions,
+  command: string,
+  args: string[],
+  options: CommandOptions,
 ): Promise<SandboxCommandResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -130,9 +157,14 @@ async function shOnce(
     timer.unref?.();
   });
   try {
-    // Forward the budget to the provider too so it can terminate the wedged
-    // process; the race stays as the outer guard for providers that ignore it.
-    return await Promise.race([sandbox.executeCommand('sh', ['-c', script], { timeout: timeoutMs }), hangGuard]);
+    return await Promise.race([
+      sandbox.executeCommand(command, args, {
+        timeout: timeoutMs,
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options.env !== undefined ? { env: options.env } : {}),
+      }),
+      hangGuard,
+    ]);
   } finally {
     clearTimeout(timer);
   }
@@ -173,18 +205,20 @@ function isTransientGitFailure(result: SandboxCommandResult): boolean {
  */
 async function gitTransfer(
   sandbox: ExecutableSandbox,
-  script: string,
-  options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
+  args: string[],
+  options: CommandOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
 ): Promise<SandboxCommandResult> {
-  const { beforeRetry, ...shOptions } = options;
-  const deadlineMs = Date.now() + (shOptions.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+  const { beforeRetry, ...commandOptions } = options;
+  const deadlineMs = Date.now() + (commandOptions.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
   for (let attempt = 0; ; attempt++) {
-    const result = await sh(sandbox, script, {
-      ...shOptions,
+    const result = await execute(sandbox, 'git', args, {
+      ...commandOptions,
       timeoutMs: Math.max(deadlineMs - Date.now(), 1),
     });
     if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
-    process.stderr.write(`[factory:timing] git ${shOptions.phase ?? 'transfer'} retrying after attempt ${attempt + 1}\n`);
+    process.stderr.write(
+      `[factory:timing] git ${commandOptions.phase ?? 'transfer'} retrying after attempt ${attempt + 1}\n`,
+    );
     const delayMs = GIT_TRANSFER_RETRY_DELAY_MS * (attempt + 1);
     if (deadlineMs - Date.now() <= delayMs) return result;
     await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -198,6 +232,7 @@ export class MaterializeError extends Error {
     message: string,
     readonly code:
       | 'git-missing'
+      | 'sandbox-unresponsive'
       | 'egress-blocked'
       | 'clone-failed'
       | 'pull-failed'
@@ -211,22 +246,120 @@ export class MaterializeError extends Error {
   }
 }
 
-/**
- * Build the token-auth clone/pull URL for a repo. The token lives only inside
- * this URL and is scrubbed from the remote after the operation.
- */
-function tokenUrl(repoFullName: string, token: string): string {
-  return `https://x-access-token:${token}@github.com/${repoFullName}.git`;
-}
-
 function cleanUrl(repoFullName: string): string {
   return `https://github.com/${repoFullName}.git`;
+}
+
+/**
+ * True when a repository name or clone URL contains a `.` or `..` path segment.
+ * `new URL` and git both collapse those, and `new URL` also treats `\` as `/`,
+ * so `owner/../other` names a different repository than the row. Checked on the
+ * raw text, before that collapse. A backslash is refused on its own: the origin
+ * strip below would otherwise treat it as part of the host.
+ */
+function pathHasDotSegment(value: string): boolean {
+  if (value.includes('\\')) return true;
+  const withoutOrigin = value.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i, '');
+  const path = withoutOrigin.split(/[?#]/)[0] ?? '';
+  return path.split('/').some(part => {
+    let decoded = part;
+    try {
+      decoded = decodeURIComponent(part);
+    } catch {
+      return true;
+    }
+    return decoded === '.' || decoded === '..' || decoded.includes('\\');
+  });
+}
+
+function assertRepositoryLocator(
+  repoFullName: string | undefined,
+  cloneUrl: string | undefined,
+  code: 'clone-failed' | 'pull-failed' | 'push-failed',
+): void {
+  if (
+    repoFullName !== undefined &&
+    (!/^[\w.-]+(?:\/[\w.-]+)+$/.test(repoFullName) || pathHasDotSegment(repoFullName))
+  ) {
+    throw new MaterializeError(`Refusing to use an invalid repo full name '${repoFullName}'.`, code);
+  }
+  if (cloneUrl && pathHasDotSegment(cloneUrl)) {
+    throw new MaterializeError('Refusing to use a clone URL whose path rewrites to another repository.', code);
+  }
+}
+
+function credentialScope(
+  cloneUrl: string,
+  code: 'clone-failed' | 'pull-failed' | 'push-failed' = 'clone-failed',
+): string {
+  let url: URL;
+  try {
+    url = new URL(cloneUrl);
+  } catch {
+    throw new MaterializeError('Refusing to configure credentials for an invalid repository clone URL.', code);
+  }
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.search || url.hash) {
+    throw new MaterializeError('Refusing to configure credentials for an invalid repository clone URL.', code);
+  }
+  const repositoryPath = url.pathname.replace(/\/+$/, '');
+  if (!repositoryPath || repositoryPath === '/') {
+    throw new MaterializeError('Refusing to configure credentials for an invalid repository clone URL.', code);
+  }
+  return url.origin + repositoryPath;
+}
+
+/**
+ * Provide HTTP Basic credentials to one Git process without putting a secret
+ * in argv, a remote URL, or persistent git config. Git reads the URL-scoped
+ * extra header from its process environment and discards it on exit.
+ */
+function gitAuthenticationEnvironment(
+  cloneUrl: string,
+  token: string,
+  username: string,
+  code: 'clone-failed' | 'pull-failed' | 'push-failed' = 'clone-failed',
+): Record<string, string> {
+  const scope = credentialScope(cloneUrl, code);
+  if (!token || !username) {
+    throw new MaterializeError('Repository access did not include usable credentials.', code);
+  }
+  const authorization = Buffer.from(`${username}:${token}`, 'utf8').toString('base64');
+  // Git applies `http.<url>.*` only when the config URL matches the remote at
+  // a path boundary, and `origin` may spell the repository either way: Factory
+  // clones with `.git`, a sandbox template clones from the normalized URL
+  // without it. Scope the header to both so neither checkout prompts.
+  const alternate = scope.endsWith('.git') ? scope.slice(0, -4) : `${scope}.git`;
+  return {
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: `http.${scope}.extraHeader`,
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${authorization}`,
+    GIT_CONFIG_KEY_1: `http.${alternate}.extraHeader`,
+    GIT_CONFIG_VALUE_1: `Authorization: Basic ${authorization}`,
+    GIT_TERMINAL_PROMPT: '0',
+  };
+}
+
+function normalizedRemoteUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' || !url.hostname || url.search || url.hash) return null;
+  const pathname = url.pathname.replace(/\/+$/, '').replace(/\.git$/i, '');
+  const repositoryPath = url.hostname.toLowerCase() === 'github.com' ? pathname.toLowerCase() : pathname;
+  return 'https://' + url.host.toLowerCase() + repositoryPath;
 }
 
 /** Repo metadata needed to materialize, read from the org-owned project row. */
 export interface RepoMaterializeInfo {
   repoFullName: string;
   defaultBranch: string;
+  /** Provider-supplied, credential-free HTTPS clone URL. */
+  cloneUrl?: string;
+  /** Username paired with the bearer token for git-over-HTTPS. */
+  authUsername?: string;
 }
 
 /** Options for {@link materializeRepo}. */
@@ -242,11 +375,29 @@ export interface MaterializeRepoOptions {
   storage: MaterializationStore;
 }
 
+async function clearWorkdir(sandbox: ExecutableSandbox, workdir: string): Promise<void> {
+  const mkdir = await execute(sandbox, 'mkdir', ['-p', workdir]);
+  if (mkdir.exitCode !== 0) throw classifyGitFailure(mkdir, 'clone-failed');
+  const clear = await execute(sandbox, 'find', [
+    workdir,
+    '-mindepth',
+    '1',
+    '-maxdepth',
+    '1',
+    '-exec',
+    'rm',
+    '-rf',
+    '--',
+    '{}',
+    '+',
+  ]);
+  if (clear.exitCode !== 0) throw classifyGitFailure(clear, 'clone-failed');
+}
 /**
  * Materialize the repo inside the user's sandbox: clone when no checkout of
- * this repo exists, otherwise nothing. Scrubs the install token from the
- * remote after a clone and sets `materialized_at` on the per-user sandbox
- * binding row.
+ * this repo exists, otherwise nothing. Credentials are process-scoped and the
+ * stored remote remains credential-free. Sets `materialized_at` on the
+ * per-user sandbox binding row.
  */
 export async function materializeRepo(options: MaterializeRepoOptions): Promise<void> {
   return timedPhase('workspace.materialize', () => materializeRepoImpl(options));
@@ -259,22 +410,31 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
 
   // 0. Defense in depth: never build a git command from values that aren't
   // strictly shaped, even if a malformed row reached the DB. Inputs are also
-  // validated at the route boundary before storage.
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-    throw new MaterializeError(`Refusing to materialize: invalid repo full name '${repo}'.`, 'clone-failed');
-  }
-  if (!/^[A-Za-z0-9_./-]+$/.test(repoInfo.defaultBranch)) {
+  // validated at the route boundary before storage. `..` in a repository path
+  // collapses to a different repository, and a branch git can read as an option
+  // is rejected by the same ref rules the checkout path uses.
+  assertRepositoryLocator(repo, repoInfo.cloneUrl, 'clone-failed');
+  if (!isValidGitRef(repoInfo.defaultBranch)) {
     throw new MaterializeError(
       `Refusing to materialize: invalid default branch '${repoInfo.defaultBranch}'.`,
       'clone-failed',
     );
   }
 
-  // 1. Preflight: git must be installed in the sandbox template.
-  const gitVersion = await sh(sandbox, 'git --version');
-  if (gitVersion.exitCode !== 0) {
+  // 1. Preflight: git must be installed in the sandbox template. Exit 124 is
+  // the provider's timeout code: the VM stopped answering, which says nothing
+  // about git, so it must not be reported as a missing binary.
+  const gitVersion = await execute(sandbox, 'git', ['--version']);
+  if (gitVersion.exitCode === 124) {
     throw new MaterializeError(
-      'git is not installed in the sandbox. The sandbox template must include git.',
+      'The sandbox stopped responding: `git --version` timed out (exit 124). Recreate the sandbox.',
+      'sandbox-unresponsive',
+    );
+  }
+  if (gitVersion.exitCode !== 0) {
+    const detail = (gitVersion.stderr || gitVersion.stdout).trim().slice(-500) || '(no output)';
+    throw new MaterializeError(
+      `git is not installed in the sandbox: \`git --version\` exited ${gitVersion.exitCode}: ${detail}. The sandbox template must include git.`,
       'git-missing',
     );
   }
@@ -290,12 +450,13 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // image sits detached at its pinned commit, a resumed session on its
   // branch. Syncing with the remote is the session's business; the branch
   // checkout that follows fetches the base branch it needs.
-  const existing = await existingCheckoutRemote(sandbox, workdir, repo);
+  const cleanCloneUrl = repoInfo.cloneUrl ?? cleanUrl(repo);
+  const existing = await existingCheckoutRemote(sandbox, workdir, cleanCloneUrl);
   if (existing !== null) {
     // A token an earlier start failed to scrub must not outlive it; the
     // remote already carries the plain URL otherwise, so this costs nothing
     // on the common path.
-    if (/\/\/[^/]*@/.test(existing)) await scrubRemote(sandbox, workdir, repo, true);
+    if (/\/\/[^/]*@/.test(existing)) await scrubRemote(sandbox, workdir, repo, cleanCloneUrl);
   } else {
     // 2. First open: shallow-clone the default branch into the workdir, the
     // same clone a repo template bakes into its image. The workdir holds no
@@ -305,145 +466,432 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // destination with a non-retryable fatal. Nothing here is recoverable,
     // the probe above already ruled out a checkout of this repo, so
     // clear its contents before cloning, exactly as the retry path does. Keep
-    // the workdir itself because LocalSandbox runs commands with this
-    // directory as the child process cwd.
-    await sh(
-      sandbox,
-      `mkdir -p ${shellQuote(workdir)} && find ${shellQuote(workdir)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
+    // the workdir itself because Factory's own commands use it as their cwd
+    // (`gh pr create`, and the `cd` each lifecycle command starts with), so it
+    // has to exist as a directory.
+    const authEnv = gitAuthenticationEnvironment(
+      cleanCloneUrl,
+      token,
+      repoInfo.authUsername ?? 'x-access-token',
+      'clone-failed',
     );
-    let tokenInRemote = false;
-    try {
-      const clone = await gitTransfer(
-        sandbox,
-        repoCloneCommand({ cloneUrl: tokenUrl(repo, token), destination: workdir, branch: repoInfo.defaultBranch }),
-        {
-          phase: 'repository clone',
-          beforeRetry: async () => {
-            // A clone that died partway leaves the destination non-empty, which
-            // git refuses to clone into. Clear its contents so the retry starts
-            // clean without removing LocalSandbox's process cwd.
-            await sh(
-              sandbox,
-              `mkdir -p ${shellQuote(workdir)} && find ${shellQuote(workdir)} -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +`,
-            );
-          },
+    await clearWorkdir(sandbox, workdir);
+    const clone = await gitTransfer(
+      sandbox,
+      ['clone', '--depth=1', '--single-branch', '--branch', repoInfo.defaultBranch, '--', cleanCloneUrl, workdir],
+      {
+        env: authEnv,
+        phase: 'repository clone',
+        beforeRetry: async () => {
+          // A clone that died partway leaves the destination non-empty, which
+          // git refuses to clone into. Clear its contents so the retry starts
+          // clean, leaving a directory Factory's commands still use as cwd.
+          await clearWorkdir(sandbox, workdir);
         },
-      );
-      if (clone.exitCode !== 0) {
-        // git can fail after creating the checkout ("Clone succeeded, but
-        // checkout failed") with the tokenized origin persisted: probe the
-        // disk instead of assuming the failed clone left nothing behind.
-        tokenInRemote = await hasGitDir(sandbox, workdir);
-        throw classifyGitFailure(clone, 'clone-failed');
-      }
-      tokenInRemote = true;
-    } catch (primary) {
-      // 3a. The clone failed: still scrub the token from the VM's git config.
-      // The scrub must never hide the actionable failure, but once the token
-      // reached the remote its own failure can't stay silent either: report
-      // both, primary cause and classification first.
-      throw await scrubbedFailure(sandbox, workdir, repo, tokenInRemote, primary, 'clone-failed');
-    }
-
-    // 3b. Success: the token is in the remote and the workdir has a `.git`, so
-    // a failed scrub means the token may still be persisted: surface it.
-    await scrubRemote(sandbox, workdir, repo, tokenInRemote);
+      },
+    );
+    if (clone.exitCode !== 0) throw classifyGitFailure(clone, 'clone-failed');
   }
 
   // 4. Mark materialized.
   await storage.markMaterialized({ id: sandboxRow.id });
 }
 
+export interface SessionBranchOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
+  branch: string;
+  baseBranch: string;
+  token: string;
+  repoFullName: string;
+  cloneUrl?: string;
+  authUsername?: string;
+  /** A pull-request card's session starts on the PR head instead of the base tip. */
+  pullRequestNumber?: number;
+  /** A GitLab merge-request card's session starts on the MR head instead of the base tip. */
+  mergeRequestNumber?: number;
+}
+
+/**
+ * Past file contents of a blob-less history load on demand; git asks gh, which
+ * answers from the session's `GH_TOKEN`, so no credential is ever written.
+ */
+const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
+
+/**
+ * The git credential helper for a GitHub checkout whose repository is covered
+ * by a numbered group token (`GH_TOKEN_2`, ...) instead of `GH_TOKEN`. It
+ * falls back to `GH_TOKEN` while the group token is unset, as it is when an
+ * org PAT is installed.
+ */
+export function githubCredentialHelper(tokenEnvName = 'GH_TOKEN'): string {
+  if (tokenEnvName === 'GH_TOKEN') return GH_CREDENTIAL_HELPER;
+  if (!/^GH_TOKEN_\d+$/.test(tokenEnvName)) throw new Error(`Invalid GitHub token variable: ${tokenEnvName}`);
+  return `!f() { GH_TOKEN="\${${tokenEnvName}:-$GH_TOKEN}" gh auth git-credential "$@"; }; f`;
+}
+
+async function fetchStartPoint(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  {
+    baseBranch,
+    pullRequestNumber,
+    mergeRequestNumber,
+  }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber' | 'mergeRequestNumber'>,
+  shallowClone: boolean,
+  env: Record<string, string>,
+): Promise<SandboxCommandResult> {
+  const changeRequestRef =
+    pullRequestNumber !== undefined
+      ? `refs/pull/${pullRequestNumber}/head`
+      : mergeRequestNumber !== undefined
+        ? `refs/merge-requests/${mergeRequestNumber}/head`
+        : undefined;
+  const baseArgs = [
+    '-C',
+    workdir,
+    'fetch',
+    ...(changeRequestRef && shallowClone ? ['--unshallow'] : []),
+    ...(pullRequestNumber !== undefined ? ['--filter=blob:none'] : []),
+    'origin',
+    baseBranch,
+  ];
+  const base = await gitTransfer(sandbox, baseArgs, {
+    env,
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'branch checkout fetch',
+  });
+  if (base.exitCode !== 0 || !changeRequestRef) return base;
+  return gitTransfer(
+    sandbox,
+    [
+      '-C',
+      workdir,
+      'fetch',
+      ...(pullRequestNumber !== undefined ? ['--filter=blob:none'] : []),
+      'origin',
+      changeRequestRef,
+    ],
+    {
+      env,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'change request head fetch',
+    },
+  );
+}
+
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
   sandbox: ExecutableSandbox,
   workdir: string,
-  options: { branch: string; baseBranch: string; token: string; repoFullName: string },
+  options: SessionBranchOptions,
 ): Promise<void> {
   return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
+}
+
+export interface SyncEnvironmentRepositoryOptions {
+  /** Repository-local authorship configured before setup commands or agent access. */
+  identity?: GitIdentity;
+  /** The session branch to resume when the remote already carries it. */
+  branch: string;
+  /** The repository's default branch; new session branches start at its remote tip. */
+  defaultBranch: string;
+  token: string;
+  repoFullName: string;
+  cloneUrl?: string;
+  authUsername?: string;
+  /**
+   * The sandbox variable carrying this GitHub repository's token; the checkout
+   * gets a credential helper reading it. Ignored when `authUsername` is set.
+   */
+  tokenEnvName?: string;
+}
+
+export interface EnvironmentSyncResult {
+  outcome: 'resumed' | 'created' | 'kept';
+  /** The branch the checkout ends on; `null` when it stays detached. */
+  branch: string | null;
+}
+
+/**
+ * Bring a secondary environment repository onto the session branch at
+ * session start. The primary repository keeps {@link checkoutSessionBranch};
+ * every other repository follows a conservative rule: resume the session
+ * branch when the remote or the local clone has it, otherwise create it from
+ * the default branch tip (a detached HEAD, the template image pinned at its
+ * build commit, is moved there first). A checkout that sits on any other
+ * branch is left alone: it may carry local-only commits.
+ */
+export async function syncEnvironmentRepository(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  options: SyncEnvironmentRepositoryOptions,
+): Promise<EnvironmentSyncResult> {
+  const { branch, defaultBranch, token, repoFullName, cloneUrl, authUsername } = options;
+  if (!isValidGitRef(branch) || !isValidGitRef(defaultBranch)) {
+    throw new MaterializeError('Refusing to sync a repository from an invalid branch name.', 'pull-failed');
+  }
+  assertRepositoryLocator(repoFullName, cloneUrl, 'pull-failed');
+  const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
+  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  // Raw git in this checkout (push, fetch) authenticates through gh with the
+  // token that covers this repository, like the session repository does.
+  if (!authUsername) {
+    const configured = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'config',
+      'credential.helper',
+      githubCredentialHelper(options.tokenEnvName),
+    ]);
+    if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
+  }
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
+
+  const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
+  if (current.exitCode !== 0) throw classifyGitFailure(current, 'pull-failed');
+  const currentBranch = current.stdout.trim();
+  const kept = { outcome: 'kept' as const, branch: currentBranch || null };
+  if (currentBranch === branch) return kept;
+
+  // A local session branch may hold commits the remote never saw; switch
+  // to it instead of resetting it onto the remote tip.
+  const local = await execute(sandbox, 'git', [
+    '-C',
+    workdir,
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    `refs/heads/${branch}`,
+  ]);
+  if (local.exitCode === 0) {
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], {
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch checkout',
+    });
+    if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+    if (isBlockedByLocalWork(checkout)) return kept;
+    throw classifyGitFailure(checkout, 'pull-failed');
+  }
+
+  const remoteHeads = await gitTransfer(
+    sandbox,
+    ['-C', workdir, 'ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+    { env: authEnv, timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'environment branch probe' },
+  );
+  if (remoteHeads.exitCode !== 0) throw classifyGitFailure(remoteHeads, 'pull-failed');
+  if (remoteHeads.stdout.trim()) {
+    const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', branch], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch fetch',
+    });
+    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', branch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch checkout',
+    });
+    if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+    if (isBlockedByLocalWork(checkout)) return kept;
+    throw classifyGitFailure(checkout, 'pull-failed');
+  }
+
+  // A checkout on any other branch stays where it is: it may hold work the
+  // remote never saw. The default branch and a detached HEAD (the template
+  // image pinned at its build commit) become the session branch.
+  if (currentBranch && currentBranch !== defaultBranch) return kept;
+  if (currentBranch) {
+    const status = await execute(sandbox, 'git', ['-C', workdir, 'status', '--porcelain']);
+    if (status.exitCode !== 0) throw classifyGitFailure(status, 'pull-failed');
+    if (status.stdout.trim()) return kept;
+  }
+  const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', defaultBranch], {
+    env: authEnv,
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'environment default fetch',
+  });
+  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+  if (currentBranch) {
+    // Do not discard local-only commits on the default branch. A shallow
+    // checkout whose ancestry cannot be established is also left untouched.
+    const ancestor = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'merge-base',
+      '--is-ancestor',
+      'HEAD',
+      'FETCH_HEAD',
+    ]);
+    if (ancestor.exitCode === 1) return kept;
+    if (ancestor.exitCode !== 0) throw classifyGitFailure(ancestor, 'pull-failed');
+  } else {
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', defaultBranch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment default checkout',
+    });
+    if (checkout.exitCode !== 0) {
+      if (isBlockedByLocalWork(checkout)) return kept;
+      throw classifyGitFailure(checkout, 'pull-failed');
+    }
+  }
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'environment branch create',
+  });
+  if (created.exitCode === 0) return { outcome: 'created', branch };
+  throw classifyGitFailure(created, 'pull-failed');
+}
+
+/** Refresh an existing GitLab review checkout without exposing its credential to the agent. */
+export async function refreshMergeRequestCheckout(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  input: { branch: string; mergeRequestNumber: number; expectedHeadSha: string; access: RepositoryAccess },
+): Promise<{ headSha: string; changed: boolean }> {
+  const { branch, mergeRequestNumber, expectedHeadSha, access } = input;
+  assertRepositoryLocator(undefined, access.cloneUrl, 'pull-failed');
+  if (
+    !isValidGitRef(branch) ||
+    !Number.isSafeInteger(mergeRequestNumber) ||
+    mergeRequestNumber <= 0 ||
+    !/^[0-9a-f]{40}$/i.test(expectedHeadSha)
+  ) {
+    throw new Error('Refusing to refresh a GitLab review with invalid session or head metadata.');
+  }
+  const token = access.authorization?.token;
+  if (!token) throw new Error('GitLab repository access did not include a bearer token.');
+  const env = gitAuthenticationEnvironment(
+    access.cloneUrl,
+    token,
+    access.authorization?.username ?? 'oauth2',
+    'pull-failed',
+  );
+  const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
+  if (current.exitCode !== 0 || current.stdout.trim() !== branch) {
+    throw new Error('The active checkout is not on its bound review branch.');
+  }
+  const status = await execute(sandbox, 'git', ['-C', workdir, 'status', '--porcelain', '--untracked-files=all']);
+  if (status.exitCode !== 0 || status.stdout.trim()) {
+    throw new Error('The review checkout has local changes; refusing to replace them.');
+  }
+  const before = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'HEAD']);
+  if (before.exitCode !== 0) throw new Error('Could not read the current review checkout head.');
+  const fetch = await gitTransfer(
+    sandbox,
+    ['-C', workdir, 'fetch', 'origin', `refs/merge-requests/${mergeRequestNumber}/head`],
+    {
+      env,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'GitLab review head refresh',
+    },
+  );
+  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+  const fetched = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'FETCH_HEAD']);
+  if (fetched.exitCode !== 0 || fetched.stdout.trim().toLowerCase() !== expectedHeadSha.toLowerCase()) {
+    throw new Error('The fetched GitLab review head differs from the provider-reported head; retry after it settles.');
+  }
+  if (before.stdout.trim().toLowerCase() === expectedHeadSha.toLowerCase()) {
+    return { headSha: expectedHeadSha, changed: false };
+  }
+  const updated = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', branch, 'FETCH_HEAD'], { env });
+  if (updated.exitCode !== 0) throw classifyGitFailure(updated, 'pull-failed');
+  return { headSha: expectedHeadSha, changed: true };
 }
 
 async function checkoutSessionBranchImpl(
   sandbox: ExecutableSandbox,
   workdir: string,
-  {
-    branch,
-    baseBranch,
-    token,
-    repoFullName,
-  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
+  options: SessionBranchOptions,
 ): Promise<void> {
-  if (!isValidGitRef(branch) || !isValidGitRef(baseBranch)) {
+  const { branch, baseBranch, token, repoFullName, pullRequestNumber, mergeRequestNumber, cloneUrl, authUsername } =
+    options;
+  if (
+    !isValidGitRef(branch) ||
+    !isValidGitRef(baseBranch) ||
+    (pullRequestNumber !== undefined && mergeRequestNumber !== undefined) ||
+    (mergeRequestNumber !== undefined && (!Number.isSafeInteger(mergeRequestNumber) || mergeRequestNumber <= 0))
+  ) {
     throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
   }
+  assertRepositoryLocator(repoFullName, cloneUrl, 'clone-failed');
 
-  const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
+  const changeRequestSession = pullRequestNumber !== undefined || mergeRequestNumber !== undefined;
+  // GitHub delegates later authenticated operations to `gh`. Other providers
+  // deliberately receive no persistent credential helper. Remove the legacy
+  // helper when reopening an older checkout so a stale sandbox cannot retain
+  // credentials injected by an earlier implementation.
+  const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
+  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+  const credentialKey = authUsername ? 'credential.' + credentialScope(cleanCloneUrl) + '.helper' : 'credential.helper';
+  if (authUsername) {
+    await execute(sandbox, 'git', ['-C', workdir, 'config', '--unset-all', credentialKey]);
+  } else {
+    const configured = await execute(sandbox, 'git', ['-C', workdir, 'config', credentialKey, GH_CREDENTIAL_HELPER]);
+    if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
+  }
+
+  await configureGitIdentity(sandbox, workdir, options.identity ?? {});
+
+  const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode === 0 && current.stdout.trim() === branch) return;
 
-  const local = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} show-ref --verify --quiet refs/heads/${shellQuote(branch)}`,
-  );
+  const local = await execute(sandbox, 'git', [
+    '-C',
+    workdir,
+    'show-ref',
+    '--verify',
+    '--quiet',
+    `refs/heads/${branch}`,
+  ]);
   if (local.exitCode === 0) {
-    const checkout = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], { env: authEnv });
     if (checkout.exitCode !== 0) {
-      // The session's agent may have switched branches itself (e.g. `gh pr
-      // checkout`) and left uncommitted work in the tree. Git refuses to
-      // switch back over those files — that work must win. The checkout is
-      // intact and usable on its current branch; keep it as-is rather than
-      // fail the workspace open, and never reset or stash to force the
-      // switch through.
       if (isBlockedByLocalWork(checkout)) return;
       throw classifyGitFailure(checkout, 'clone-failed');
     }
     return;
   }
 
-  const authUrl = tokenUrl(repoFullName, token);
-  try {
-    const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`, {
-      phase: 'branch checkout remote',
-    });
-    if (setUrl.exitCode !== 0) throw classifyGitFailure(setUrl, 'pull-failed');
-    const fetch = await sh(
-      sandbox,
-      `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
-      { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
-    );
-    if (fetch.exitCode !== 0) {
-      // Same rule as above: uncommitted work in the tree blocks the switch
-      // to the new branch. Leave the checkout on its current branch.
-      if (isBlockedByLocalWork(fetch)) return;
-      if (!isBranchCollision(fetch)) throw classifyGitFailure(fetch, 'clone-failed');
-      // The branch exists even though the show-ref probe missed it: either a
-      // concurrent materialization of this session created it between the
-      // probe and `checkout -b` (adopt it), or a reused sandbox carries a
-      // broken loose ref the probe cannot resolve (replace it and retry —
-      // "already exists" means the fetch half succeeded, so FETCH_HEAD is
-      // set).
-      const adopt = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
-      if (adopt.exitCode === 0 || isBlockedByLocalWork(adopt)) return;
-      const drop = await sh(
-        sandbox,
-        // `--no-deref` so a broken symref is deleted itself instead of git
-        // following it to some other branch. `update-ref -d` can still refuse
-        // a broken ref; fall back to removing the loose ref file (branch
-        // passed isValidGitRef, so the interpolation inside the double quotes
-        // is inert).
-        `git -C ${shellQuote(workdir)} update-ref --no-deref -d refs/heads/${shellQuote(branch)} || rm -f -- "$(git -C ${shellQuote(workdir)} rev-parse --absolute-git-dir)/refs/heads/${branch}"`,
-      );
-      if (drop.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
-      const retry = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`, {
-        timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
-        phase: 'branch checkout retry',
-      });
-      if (retry.exitCode !== 0) {
-        if (isBlockedByLocalWork(retry)) return;
-        throw classifyGitFailure(retry, 'clone-failed');
-      }
-    }
-  } finally {
-    await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
+  const shallowClone =
+    changeRequestSession &&
+    (await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--is-shallow-repository'])).stdout.trim() === 'true';
+  const fetch = await fetchStartPoint(sandbox, workdir, options, shallowClone, authEnv);
+  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+
+  const create = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+    env: authEnv,
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'branch checkout',
+  });
+  if (create.exitCode === 0 || isBlockedByLocalWork(create)) return;
+  if (!isBranchCollision(create)) throw classifyGitFailure(create, 'clone-failed');
+
+  // The branch exists even though the show-ref probe missed it: either another
+  // materialization created it concurrently (adopt it), or the sandbox carries
+  // a broken loose ref (remove it and retry).
+  const adopt = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], { env: authEnv });
+  if (adopt.exitCode === 0 || isBlockedByLocalWork(adopt)) return;
+
+  let drop = await execute(sandbox, 'git', ['-C', workdir, 'update-ref', '--no-deref', '-d', `refs/heads/${branch}`]);
+  if (drop.exitCode !== 0) {
+    const gitDir = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--absolute-git-dir']);
+    if (gitDir.exitCode !== 0 || !gitDir.stdout.trim()) throw classifyGitFailure(create, 'clone-failed');
+    drop = await execute(sandbox, 'rm', ['-f', '--', `${gitDir.stdout.trim()}/refs/heads/${branch}`]);
+  }
+  if (drop.exitCode !== 0) throw classifyGitFailure(create, 'clone-failed');
+
+  const retry = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+    env: authEnv,
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'branch checkout retry',
+  });
+  if (retry.exitCode !== 0) {
+    if (isBlockedByLocalWork(retry)) return;
+    throw classifyGitFailure(retry, 'clone-failed');
   }
 }
 
@@ -471,96 +919,38 @@ function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
 }
 
 /**
- * The `origin` URL of a checkout of this exact repo in the workdir, or null
- * when there is none. Matches both the clean and token-auth URL forms; any
- * other remote (or no git dir at all) sends materialize down the clone path.
+ * Return the origin URL when the workdir contains this repository, including a
+ * legacy checkout whose remote still embeds credentials.
  */
 async function existingCheckoutRemote(
   sandbox: ExecutableSandbox,
   workdir: string,
-  repoFullName: string,
+  cloneUrl: string,
 ): Promise<string | null> {
-  const result = await sh(sandbox, `git -C ${shellQuote(workdir)} remote get-url origin`);
+  const result = await execute(sandbox, 'git', ['-C', workdir, 'remote', 'get-url', 'origin']);
   if (result.exitCode !== 0) return null;
   const url = result.stdout.trim();
-  return isRemoteForRepo(url, repoFullName) ? url : null;
+  const actual = normalizedRemoteUrl(url);
+  const expected = normalizedRemoteUrl(cloneUrl);
+  return actual !== null && expected !== null && actual === expected ? url : null;
 }
 
-/** True only for `https://github.com/<repo>[.git]`, with or without embedded credentials. */
-function isRemoteForRepo(url: string, repoFullName: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
-  if (parsed.port !== '' || parsed.search !== '' || parsed.hash !== '') return false;
-  return parsed.pathname.replace(/\.git$/, '').toLowerCase() === `/${repoFullName.toLowerCase()}`;
-}
-
-/** Probed without `git -C` so a missing workdir returns false instead of throwing. */
-async function hasGitDir(sandbox: ExecutableSandbox, workdir: string): Promise<boolean> {
-  const probe = await sh(sandbox, `test -d ${shellQuote(`${workdir}/.git`)}`).catch(() => null);
-  return probe?.exitCode === 0;
-}
-
-/**
- * Reset the git remote back to the tokenless URL. Strict when the token
- * reached the remote: any failure — a non-zero exit or a provider throw —
- * means the token may still be persisted, so it is thrown for the caller to
- * surface. Best-effort when it never did: the workdir may not exist (e.g. a
- * failed clone), which makes providers that spawn with `cwd` throw rather
- * than return a non-zero exit code; both outcomes are tolerated so neither
- * masks the primary failure.
- */
+/** Remove credentials persisted by an older implementation from origin. */
 async function scrubRemote(
   sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
-  tokenInRemote: boolean,
+  cloneUrl: string = cleanUrl(repoFullName),
 ): Promise<void> {
-  const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`;
-  if (!tokenInRemote) {
-    await sh(sandbox, scrub).catch(() => undefined);
-    return;
-  }
   let failure: string;
   try {
-    const result = await sh(sandbox, scrub);
+    const result = await execute(sandbox, 'git', ['-C', workdir, 'remote', 'set-url', 'origin', cloneUrl]);
     if (result.exitCode === 0) return;
     failure = result.stderr.trim() || result.stdout.trim();
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   }
   throw new MaterializeError(`Failed to scrub installation token from git remote: ${failure}`, 'pull-failed');
-}
-
-/**
- * Scrub after `primary` already failed and return the error to throw. A failed
- * scrub is appended to `primary` rather than replacing it, so the caller gets
- * the error it would have had without the scrub — same class, same `code` —
- * carrying the leaked-token warning in its message.
- */
-async function scrubbedFailure(
-  sandbox: ExecutableSandbox,
-  workdir: string,
-  repoFullName: string,
-  tokenInRemote: boolean,
-  primary: unknown,
-  fallback: MaterializeError['code'],
-): Promise<unknown> {
-  try {
-    await scrubRemote(sandbox, workdir, repoFullName, tokenInRemote);
-    return primary;
-  } catch (scrubError) {
-    const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
-    if (!(primary instanceof Error)) {
-      return new MaterializeError(`${String(primary)} — additionally: ${scrubMessage}`, fallback);
-    }
-    primary.message = `${primary.message} — additionally: ${scrubMessage}`;
-    return primary;
-  }
 }
 
 /**
@@ -586,27 +976,12 @@ function classifyGitFailure(
 // Phase 1 — git identity + token-scoped push primitive
 //
 // These helpers let the sandbox author and push commits safely. The install
-// token is short-lived, minted per-operation server-side, injected only into
-// the temporary remote URL inside the sandbox, and always scrubbed afterwards
-// so it never persists in `.git/config`.
+// token is short-lived, minted per-operation server-side, and supplied only to
+// the Git process through its environment. It never enters argv or persistent
+// repository configuration.
 // ---------------------------------------------------------------------------
 
-/**
- * Validate a git ref (branch) name. Server-side defense-in-depth: only allow a
- * conservative character set so a branch can never be built into a shell
- * command in a way that escapes quoting. Mirrors the route-layer check.
- */
-export function isValidGitRef(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= 255 &&
-    // Reject leading-dash refs (e.g. `--mirror`) so the value can never be
-    // parsed as a git option when interpolated into a command.
-    !value.startsWith('-') &&
-    /^[A-Za-z0-9_./-]+$/.test(value)
-  );
-}
+export { isValidGitRef };
 
 /** Identity used to author commits inside the sandbox. */
 export interface GitIdentity {
@@ -630,76 +1005,113 @@ export function resolveGitIdentity(identity: GitIdentity): { name: string; email
   return { name, email };
 }
 
-/**
- * Configure `user.name` / `user.email` for the given repo working tree inside
- * the sandbox so commits are authored correctly. Values are shell-quoted.
- */
+/** Configure repository-local commit identity through direct Git argv calls. */
 export async function configureGitIdentity(
   sandbox: ExecutableSandbox,
   workdir: string,
   identity: GitIdentity,
 ): Promise<void> {
   const { name, email } = resolveGitIdentity(identity);
-  const setName = await sh(sandbox, `git -C ${shellQuote(workdir)} config user.name ${shellQuote(name)}`);
+  const setName = await execute(sandbox, 'git', ['-C', workdir, 'config', 'user.name', name]);
   if (setName.exitCode !== 0) {
     throw new MaterializeError(`Failed to set git user.name: ${setName.stderr.trim()}`, 'commit-failed');
   }
-  const setEmail = await sh(sandbox, `git -C ${shellQuote(workdir)} config user.email ${shellQuote(email)}`);
+  const setEmail = await execute(sandbox, 'git', ['-C', workdir, 'config', 'user.email', email]);
   if (setEmail.exitCode !== 0) {
     throw new MaterializeError(`Failed to set git user.email: ${setEmail.stderr.trim()}`, 'commit-failed');
   }
 }
 
-/**
- * Temporarily rewrite `origin` to a tokenized URL, run `fn` (e.g. a push), and
- * **always** scrub the remote back to the tokenless URL afterwards. The token
- * therefore only ever lives in the remote URL for the duration of the
- * operation and is never left in the VM's git config.
- *
- * Once the tokenized URL is installed a failed scrub may leave the token
- * persisted, so it is always surfaced: on its own after a successful `fn`,
- * appended to `fn`'s own error otherwise — `fn`'s error is never replaced.
- * Only a failed set-url (the token never reached the remote) downgrades the
- * scrub to best-effort.
- */
-export async function withInstallToken<T>(
+export interface PushedBranch {
+  /** The local branch tip that was pushed. */
+  commit: string;
+  /** True when the remote already had this commit, so the push sent nothing new. */
+  upToDate: boolean;
+}
+
+async function pushAuthenticatedBranch(
   sandbox: ExecutableSandbox,
   workdir: string,
-  repoFullName: string,
+  branch: string,
+  cloneUrl: string,
   token: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repoFullName)) {
-    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
-  }
+  username: string,
+): Promise<PushedBranch> {
+  const tip = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', `refs/heads/${branch}`]);
+  if (tip.exitCode !== 0) throw classifyGitFailure(tip, 'push-failed');
+  const env = gitAuthenticationEnvironment(cloneUrl, token, username, 'push-failed');
+  const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '--porcelain', '-u', 'origin', branch], { env });
+  if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
+  // Porcelain lines read `<flag>\t<src>:<dst>\t<summary>`; `=` marks a ref the remote already had.
+  const upToDate = push.stdout
+    .split('\n')
+    .some(line => line.startsWith('=\t') && line.split('\t')[1]?.startsWith(`refs/heads/${branch}:`));
+  return { commit: tip.stdout.trim(), upToDate };
+}
 
-  const setUrl = await sh(
-    sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(tokenUrl(repoFullName, token))}`,
-  );
-  if (setUrl.exitCode !== 0) {
-    // Best-effort scrub even though set-url failed, then surface the failure.
-    await scrubRemote(sandbox, workdir, repoFullName, false);
-    throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
-  }
-
-  let result: T;
-  try {
-    result = await fn();
-  } catch (primary) {
-    throw await scrubbedFailure(sandbox, workdir, repoFullName, true, primary, 'push-failed');
-  }
-  // Restore the tokenless remote. The workdir has a `.git` (we just rewrote
-  // its remote) so a scrub failure means the token may still persist — surface it.
-  await scrubRemote(sandbox, workdir, repoFullName, true);
-  return result;
+/** Whether the checkout has a local `refs/heads/<branch>`. */
+export async function hasLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<boolean> {
+  const ref = await execute(sandbox, 'git', ['-C', workdir, 'show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);
+  if (ref.exitCode === 0) return true;
+  if (ref.exitCode === 1) return false;
+  throw classifyGitFailure(ref, 'push-failed');
 }
 
 /**
- * Push a branch back to GitHub from inside the sandbox using a short-lived
- * installation token. The branch is ref-validated, the token is injected only
- * into the remote URL via `withInstallToken`, and egress failures are
- * classified into actionable errors.
+ * Advance the session branch to HEAD and switch to it, carrying over local work.
+ * Leave an already-ahead branch and its checkout unchanged; never discard its commits.
+ */
+export async function ensureLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to materialize: invalid branch name '${branch}'.`, 'push-failed');
+  }
+  const exists = await hasLocalBranch(sandbox, workdir, branch);
+  if (exists) {
+    const ref = `refs/heads/${branch}`;
+    const tip = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', ref]);
+    if (tip.exitCode !== 0) throw classifyGitFailure(tip, 'push-failed');
+    const head = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', 'HEAD']);
+    if (head.exitCode !== 0) throw classifyGitFailure(head, 'push-failed');
+    const oldOid = tip.stdout.trim();
+    const headOid = head.stdout.trim();
+    const ancestor = await execute(sandbox, 'git', ['-C', workdir, 'merge-base', '--is-ancestor', oldOid, headOid]);
+    if (ancestor.exitCode === 1) {
+      const ahead = await execute(sandbox, 'git', ['-C', workdir, 'merge-base', '--is-ancestor', headOid, oldOid]);
+      if (ahead.exitCode === 0) return;
+      if (ahead.exitCode !== 1) throw classifyGitFailure(ahead, 'push-failed');
+      throw new MaterializeError(
+        `Refusing to move session branch '${branch}': it has diverged from the active HEAD. Check out or merge the session branch before pushing.`,
+        'push-failed',
+      );
+    }
+    if (ancestor.exitCode !== 0) throw classifyGitFailure(ancestor, 'push-failed');
+    const current = await execute(sandbox, 'git', ['-C', workdir, 'symbolic-ref', '--quiet', 'HEAD']);
+    if (current.exitCode !== 0 && current.exitCode !== 1) throw classifyGitFailure(current, 'push-failed');
+    if (current.stdout.trim() === ref) return;
+    // update-ref does not enforce worktree ownership, unlike branch -f.
+    const worktrees = await execute(sandbox, 'git', ['-C', workdir, 'worktree', 'list', '--porcelain', '-z']);
+    if (worktrees.exitCode !== 0) throw classifyGitFailure(worktrees, 'push-failed');
+    if (worktrees.stdout.split('\0').includes(`branch ${ref}`)) {
+      throw new MaterializeError(
+        `Refusing to move session branch '${branch}': it is checked out in another worktree.`,
+        'push-failed',
+      );
+    }
+    const advanced = await execute(sandbox, 'git', ['-C', workdir, 'update-ref', ref, headOid, oldOid]);
+    if (advanced.exitCode !== 0) throw classifyGitFailure(advanced, 'push-failed');
+  }
+  const switched = await execute(sandbox, 'git', ['-C', workdir, 'switch', ...(exists ? [] : ['-c']), branch]);
+  if (switched.exitCode !== 0) throw classifyGitFailure(switched, 'push-failed');
+}
+
+/** Whether `workdir` is a checkout of the repository at `cloneUrl`. */
+export async function isCheckoutOf(sandbox: ExecutableSandbox, workdir: string, cloneUrl: string): Promise<boolean> {
+  return (await existingCheckoutRemote(sandbox, workdir, cloneUrl)) !== null;
+}
+
+/**
+ * Push a branch back to GitHub with credentials scoped to the Git process.
+ * The token never enters argv, a repository URL, or persistent configuration.
  */
 export async function pushBranch(
   sandbox: ExecutableSandbox,
@@ -711,13 +1123,37 @@ export async function pushBranch(
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
   }
+  assertRepositoryLocator(repoFullName, undefined, 'push-failed');
+  await pushAuthenticatedBranch(sandbox, workdir, branch, cleanUrl(repoFullName), token, 'x-access-token');
+}
 
-  await withInstallToken(sandbox, workdir, repoFullName, token, async () => {
-    const push = await sh(sandbox, `git -C ${shellQuote(workdir)} push -u origin ${shellQuote(branch)}`);
-    if (push.exitCode !== 0) {
-      throw classifyGitFailure(push, 'push-failed');
-    }
-  });
+/**
+ * Push the active session branch through the provider-neutral repository
+ * access contract without persisting or exposing provider credentials.
+ */
+export async function pushRepositoryBranch(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  branch: string,
+  access: RepositoryAccess,
+  repoFullName: string,
+): Promise<PushedBranch> {
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
+  }
+  assertRepositoryLocator(repoFullName, access.cloneUrl, 'push-failed');
+  const authorization = access.authorization;
+  if (!authorization?.token) {
+    throw new MaterializeError('Repository access did not include push credentials.', 'push-failed');
+  }
+  return pushAuthenticatedBranch(
+    sandbox,
+    workdir,
+    branch,
+    access.cloneUrl,
+    authorization.token,
+    authorization.username ?? 'x-access-token',
+  );
 }
 
 export interface CommitResult {
@@ -733,7 +1169,7 @@ export interface CommitResult {
  *
  * @param sandbox  the live sandbox containing the checkout
  * @param workdir  the session workdir to commit in
- * @param message  the commit message (quoted; arbitrary text is safe)
+ * @param message  the commit message (passed as one argv value)
  * @param identity authorship identity for the commit
  */
 export async function commitAll(
@@ -744,19 +1180,19 @@ export async function commitAll(
 ): Promise<CommitResult> {
   await configureGitIdentity(sandbox, workdir, identity);
 
-  const add = await sh(sandbox, `git -C ${shellQuote(workdir)} add -A`);
+  const add = await execute(sandbox, 'git', ['-C', workdir, 'add', '-A']);
   if (add.exitCode !== 0) {
     throw new MaterializeError(`git add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'commit-failed');
   }
 
   // Nothing staged → nothing to commit. `git diff --cached --quiet` exits 1 when
   // there are staged changes, 0 when the index is clean.
-  const staged = await sh(sandbox, `git -C ${shellQuote(workdir)} diff --cached --quiet`);
+  const staged = await execute(sandbox, 'git', ['-C', workdir, 'diff', '--cached', '--quiet']);
   if (staged.exitCode === 0) {
     return { committed: false };
   }
 
-  const commit = await sh(sandbox, `git -C ${shellQuote(workdir)} commit -m ${shellQuote(message)}`);
+  const commit = await execute(sandbox, 'git', ['-C', workdir, 'commit', '-m', message]);
   if (commit.exitCode !== 0) {
     throw new MaterializeError(`git commit failed: ${commit.stderr.trim() || commit.stdout.trim()}`, 'commit-failed');
   }
@@ -808,14 +1244,29 @@ async function runLifecycleCommand(
   sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
-  options: { phase: 'setup' | 'teardown'; timeoutMs?: number },
+  options: {
+    phase: 'setup' | 'teardown';
+    timeoutMs?: number;
+    env?: Record<string, string>;
+    /** Values to mask in a failure message, beyond `env`; a function is read once the command has run. */
+    mask?: Record<string, string> | (() => Record<string, string>);
+  },
 ): Promise<void> {
   const result = await sh(sandbox, `cd ${shellQuote(workdir)} && { ${command}\n}`, {
     phase: `${options.phase} command`,
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    // Per-call only: build values must never enter the sandbox's runtime env.
+    ...(options.env && Object.keys(options.env).length > 0 ? { env: options.env } : {}),
   });
   if (result.exitCode !== 0) {
-    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-1800);
+    // The message is stored as build status and shown in the UI, so mask any
+    // Factory value (Build or Runtime) the command printed.
+    // Mask before trimming: a value with an edge newline or space would no longer match once trimmed.
+    const output = result.stderr.trim() ? result.stderr : result.stdout;
+    const mask = typeof options.mask === 'function' ? options.mask() : options.mask;
+    const detail = maskSandboxEnvValues(output, { ...mask, ...options.env })
+      .trim()
+      .slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,
@@ -824,12 +1275,22 @@ async function runLifecycleCommand(
   }
 }
 
+/**
+ * @param buildEnv the Factory's Build variables, passed to this command only
+ * @param runtimeEnv the Factory's Runtime variables the command can also see; masked in a failure message
+ */
 export async function runSetupCommand(
   sandbox: ExecutableSandbox,
   workdir: string,
   command: string,
+  buildEnv?: Record<string, string>,
+  runtimeEnv?: Record<string, string>,
 ): Promise<void> {
-  return runLifecycleCommand(sandbox, workdir, command, { phase: 'setup' });
+  return runLifecycleCommand(sandbox, workdir, command, {
+    phase: 'setup',
+    ...(buildEnv ? { env: buildEnv } : {}),
+    ...(runtimeEnv ? { mask: runtimeEnv } : {}),
+  });
 }
 
 /**
@@ -846,6 +1307,8 @@ export async function runTeardownCommand(
 ): Promise<void> {
   return runLifecycleCommand(sandbox, workdir, command, {
     phase: 'teardown',
+    // The command sees the Factory runtime values applied to this sandbox, so a failure is masked with them.
+    mask: () => appliedSandboxEnv(sandbox),
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
   });
 }
@@ -874,7 +1337,7 @@ export interface CreatePullRequestResult {
  * the sandbox template requirement.
  */
 async function assertGhAvailable(sandbox: ExecutableSandbox): Promise<void> {
-  const version = await sh(sandbox, 'gh --version');
+  const version = await execute(sandbox, 'gh', ['--version']);
   if (version.exitCode !== 0) {
     throw new MaterializeError(
       'The GitHub CLI (gh) is not installed in the sandbox. The sandbox template must include gh to open pull requests.',
@@ -892,8 +1355,8 @@ function parsePullRequestUrl(stdout: string): string | undefined {
 /**
  * Open a pull request from inside the sandbox via `gh pr create`. The token is
  * passed only through a per-invocation `GH_TOKEN` env scoped to the single `gh`
- * process (never persisted), all arguments are shell-quoted, and the resulting
- * PR URL is parsed from stdout.
+ * process (never persisted), all arguments are passed as structured argv, and
+ * the resulting PR URL is parsed from stdout.
  *
  * @param sandbox live sandbox containing the checkout
  * @param workdir the worktree (or repo) path the PR head branch is checked out in
@@ -912,19 +1375,12 @@ export async function createPullRequest(
 
   await assertGhAvailable(sandbox);
 
-  // GH_TOKEN is prefixed inline so it is exported only to the single `gh`
-  // process and never to the wider shell session, git config, or VM env. `gh`
-  // is run from inside the checkout so it targets the correct repo/head branch.
-  const ghCommand = [
-    `GH_TOKEN=${shellQuote(token)} gh pr create`,
-    `--base ${shellQuote(base)}`,
-    `--head ${shellQuote(head)}`,
-    `--title ${shellQuote(title)}`,
-    `--body ${shellQuote(body ?? '')}`,
-  ].join(' ');
-  const script = `cd ${shellQuote(workdir)} && ${ghCommand}`;
-
-  const result = await sh(sandbox, script);
+  const result = await execute(
+    sandbox,
+    'gh',
+    ['pr', 'create', '--base', base, '--head', head, '--title', title, '--body', body ?? ''],
+    { cwd: workdir, env: { GH_TOKEN: token } },
+  );
   if (result.exitCode !== 0) {
     const classified = classifyGitFailure(result, 'push-failed');
     if (classified.code === 'egress-blocked') {

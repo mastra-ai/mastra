@@ -1,56 +1,44 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, InfoIcon } from 'lucide-react';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Link, useParams } from 'react-router';
 
-import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { SettingsCard } from './SettingsCard';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { ConnectionManagementButton } from './common/ConnectionManagementButton';
+import { IntegrationItem } from './IntegrationItem';
+import { RetryRow } from './common/ConnectionStateRows';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 
-/**
- * Shown when Slack isn't available on this server, instead of a Connect button
- * that would 404. Deliberately says nothing about how to enable it: naming the
- * env vars would be a half-truth, since they only turn Slack on in deployments
- * whose entry actually registers `SlackIntegration`, and the server can't see
- * whether this one does. Link a setup guide here once factory Slack docs exist
- * — the published channels page documents the raw adapter, not this.
- */
+const slack = { provider: 'slack', name: 'Slack' } as const;
+const SLACK_SETUP_DOCS_URL = 'https://factory.mastra.ai/configure/slack#create-your-own-slack-app';
+
+// Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
   return (
-    <SettingsCard>
-      <SettingsRow
-        variant="factory"
-        label={
-          <span className="flex items-center gap-3">
-            <SlackIcon className="size-7 shrink-0 opacity-50" />
-            <span className="flex flex-col gap-0.5">
-              <Txt as="span" variant="ui-md">
-                Slack
-              </Txt>
-              <Txt as="span" variant="ui-sm" className="text-icon3 whitespace-nowrap">
-                Not configured
-              </Txt>
-            </span>
-          </span>
-        }
-      >
-        <Txt
-          as="span"
-          variant="ui-sm"
-          className="text-icon3 flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
-        >
-          <InfoIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 lg:hidden" />
-          Slack is not set up for this factory.
-        </Txt>
-      </SettingsRow>
-    </SettingsCard>
+    <SettingsContainer>
+      <SlackUnavailableRow />
+    </SettingsContainer>
   );
 }
 
-/** Connected-account overview for the active factory settings surface. */
+// Each factory uses its own Slack app, so point to the guide for creating one.
+function SlackUnavailableRow() {
+  return (
+    <IntegrationItem {...slack} description="Slack is not set up for this factory.">
+      <Button
+        size="sm"
+        render={<a href={SLACK_SETUP_DOCS_URL} target="_blank" rel="noopener noreferrer" />}
+        iconEnd={<IconSquareArrowTopRight aria-hidden />}
+      >
+        Set up Slack
+      </Button>
+    </IntegrationItem>
+  );
+}
+
 export function ConnectedAccountsSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
@@ -63,68 +51,55 @@ export function ConnectedAccountsSection() {
   };
 
   if (accountsQuery.isPending) {
-    return <SkeletonRows label="Loading connected accounts" rows={1} rowClassName="h-16 w-full" />;
+    return <SettingsSkeleton variant="item" label="Loading connected accounts" rows={1} />;
   }
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
-        {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
-      </Txt>
+      <RetryRow
+        label={slack.name}
+        provider={slack.provider}
+        errorMsg={
+          accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'
+        }
+        onRetry={() => void accountsQuery.refetch()}
+      />
     );
   }
 
   if (accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable) {
-    return <SlackNotConfigured />;
+    return <SlackUnavailableRow />;
   }
 
-  const slackLabel = (
-    <span className="flex items-center gap-3">
-      <SlackIcon className="size-7 shrink-0" />
-      <span className="flex flex-col gap-0.5">
-        <Txt as="span" variant="ui-md">
-          Slack
-        </Txt>
-        <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
-          {slackAccounts.length > 1
-            ? `${slackAccounts.length} connected`
-            : slackAccounts.length === 1
-              ? 'Connected'
-              : 'Not connected'}
-        </Txt>
-      </span>
-    </span>
-  );
+  if (slackAccounts.length === 0) {
+    return (
+      <IntegrationItem
+        {...slack}
+        description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
+      >
+        <Button size="sm" icon={<IconChainLink3 />} disabled={!canConnect} onClick={connectSlack}>
+          Connect Slack
+        </Button>
+      </IntegrationItem>
+    );
+  }
 
-  return (
-    <SettingsCard>
-      {slackAccounts.length > 0 && factoryId ? (
-        <Link
-          to={`/factories/${factoryId}/settings/connections/slack`}
-          className="group hover:bg-surface4 focus-visible:ring-accent1 block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
-        >
-          <SettingsRow variant="factory" label={slackLabel}>
-            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
-              Configure
-              <ChevronRight aria-hidden="true" />
-            </span>
-          </SettingsRow>
-        </Link>
-      ) : (
-        <button
-          type="button"
-          disabled={!canConnect}
-          onClick={connectSlack}
-          className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <SettingsRow variant="factory" label={slackLabel}>
-            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
-              Connect
-              <ChevronRight aria-hidden="true" />
-            </span>
-          </SettingsRow>
-        </button>
+  return slackAccounts.map((account, index) => (
+    <IntegrationItem
+      key={`${account.externalTeamId}:${account.externalUserId}`}
+      {...slack}
+      description={
+        <Metadata>
+          <Metadata.Item>{account.externalUserName || account.externalUserId}</Metadata.Item>
+          <Metadata.Item>{account.externalTeamName || account.externalTeamId}</Metadata.Item>
+        </Metadata>
+      }
+    >
+      {index === 0 && factoryId && (
+        <ConnectionManagementButton render={<Link to={`/factories/${factoryId}/settings/connections/slack`} />}>
+          Configure Slack
+        </ConnectionManagementButton>
       )}
-    </SettingsCard>
-  );
+    </IntegrationItem>
+  ));
 }

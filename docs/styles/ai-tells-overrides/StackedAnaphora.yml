@@ -1,0 +1,13 @@
+extends: existence
+message: "Consider replacing the slogan-like repetition in '%s' with a direct explanation."
+level: suggestion
+nonword: true
+scope: paragraph
+# Require three short clauses; allow parallel explanations of distinct API cases.
+tokens:
+  - '\bNo [\w-]+(?: [\w-]+)?\. No [\w-]+(?: [\w-]+)?\. No [\w-]+(?: [\w-]+)?[.!]'
+  - '\bNo [\w-]+(?: [\w-]+)?, no [\w-]+(?: [\w-]+)?, no [\w-]+(?: [\w-]+)?[.!]'
+  - '\bNot [\w-]+(?: [\w-]+)?\. Not [\w-]+(?: [\w-]+)?\. Not [\w-]+(?: [\w-]+)?[.!]'
+  - '\bZero [\w-]+(?: [\w-]+)?\. Zero [\w-]+(?: [\w-]+)?\. Zero [\w-]+(?: [\w-]+)?[.!]'
+  - '\bOne [\w-]+(?: [\w-]+)?\. One [\w-]+(?: [\w-]+)?\. One [\w-]+(?: [\w-]+)?[.!]'
+  - '\bThis is [\w-]+(?: [\w-]+)?\. This is [\w-]+(?: [\w-]+)?\. This is [\w-]+(?: [\w-]+)?[.!]'

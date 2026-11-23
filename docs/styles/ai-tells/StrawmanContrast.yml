@@ -1,0 +1,65 @@
+---
+extends: existence
+message: "AI strawman contrast: '%s'. State what it does and stop. Drop the alternative nobody proposed."
+level: error
+nonword: true
+ignorecase: true
+# The strawman contrast tail: the "not X" half of the "not X, it's Y"
+# formula moved to the end of the clause, where it refutes an alternative
+# nobody proposed ("the reader walks the index, rather than walking the
+# whole tree"; "it reads the offsets directly, instead of re-reading every
+# file"; "the join goes from chunk to blob, not the other way around";
+# "the lookup is one read, rather than a scan"; "it keeps one copy, not
+# one per caller"). ContrastiveFormulas and ContrastiveNegation catch the
+# spelled-out and telegraphic versions, so the contrast moved to the tail
+# and put a comma in front of itself, and this is where a
+# documentation-corpus audit (2026-09) found it.
+#
+# The plain form states what it does and stops: "The reader walks the
+# index." "It keeps one copy."
+#
+# "Rather than" and "instead of" are ordinary English, so the bare phrases
+# stay out: across the Go and Python standard libraries "instead of"
+# measures about 1,200 and "rather than" about 540. The comma alone is
+# not enough either, at 71 and 79. The gates are the comma and the construction
+# after it, held to the end of the sentence: a gerund ("rather than
+# walking," "instead of re-reading") or a determiner and its noun phrase
+# ("rather than a scan," "instead of the whole tree"). The corpus lines
+# are broken mid-sentence, so both tokens undercount there: the gerund
+# tail measures about twenty ("rather than being anonymous," "instead of
+# using tables," "rather than querying the kernel") and the determiner
+# tail about fifteen ("rather than a global lock," "instead of the
+# obj.Prog"), and Vale over the same lines reports seventeen and seven.
+# Each is the construction itself in human hands and fires by design;
+# this is the loudest token in the family, and a project that writes the
+# comma-gated tail on purpose disables the rule per file. The
+# gerund gate refuses the nouns that end in "ing" ("nothing," "string,"
+# "during"), which cost nothing on the corpora once refused.
+#
+# The reversal tails ("not the other way around," "not the reverse," "not
+# vice versa") measure zero behind a comma; the human spelling is "but
+# not the reverse" (two hits) and stays out. "Not once per call" is the
+# one corpus hit for the per-unit tail. The totality tail ("not the whole
+# tree," "not the entire path") matches five, each the construction. The
+# sentence-adverb ", not all X are" (twelve, "Usually, not all arguments
+# are present") is a different construction and stays out, and the bare
+# appositive "a Y, not a Z" stays in ContrastiveFormulas.
+tokens:
+  # --- The gerund tail, comma to sentence end ("rather than walking the
+  # whole tree," "instead of re-reading every file," "instead of failing").
+  # The lookahead refuses nouns that end in "ing."
+  - ", (?:rather than|instead of) (?:[a-z-]+ ){0,2}(?!(?:no|some|any|every)?things?\\b|strings?\\b|during\\b|bring\\b|rings?\\b|springs?\\b|siblings?\\b|ceiling\\b|evening\\b|morning\\b|kings?\\b|wings?\\b|swing\\b|sling\\b)[a-z]+(?:-[a-z]+)*ing\\b[^.!?;:,\\n]*[.!?]"
+
+  # --- The determiner tail, comma to sentence end ("rather than a scan,"
+  # "instead of the first lookup," "rather than one per caller").
+  - ", (?:rather than|instead of) (?:a|an|the|one|every|each|its|their|this|that) [^.!?;:,\\n]*[.!?]"
+
+  # --- The reversal tail ("not the other way around," "not the reverse,"
+  # "not vice versa").
+  - ", not (?:the other way(?: around| round)?|the reverse|the inverse|the opposite|vice versa)\\b"
+
+  # --- The per-unit tail ("not one per caller," "not once per request").
+  - ", not (?:one|once) (?:per|for each|for every)\\b"
+
+  # --- The totality tail ("not the whole tree," "not the entire path").
+  - ", not the (?:whole|entire|full) [a-z-]+\\b"

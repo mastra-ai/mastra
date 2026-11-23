@@ -2,7 +2,9 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { OmModelExecutionError } from '../error';
 import { ReflectorRunner } from '../reflector-runner';
+import { RETRY_CONFIG } from '../retry';
 
 /**
  * A reflector model whose per-attempt output is scripted. The last entry repeats
@@ -15,6 +17,43 @@ function createScriptedModel(outputs: string[]) {
     doStream: async () => {
       const text = outputs[Math.min(calls, outputs.length - 1)]!;
       calls++;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-start', id: '1' });
+            controller.enqueue({ type: 'text-delta', id: '1', delta: text });
+            controller.enqueue({ type: 'text-end', id: '1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+        warnings: [],
+      };
+    },
+  });
+  return {
+    model,
+    get callCount() {
+      return calls;
+    },
+  };
+}
+
+function createFailingModel(failuresBeforeSuccess = Number.POSITIVE_INFINITY) {
+  let calls = 0;
+  const model = new MockLanguageModelV2({
+    modelId: 'mock-failing-reflector',
+    doStream: async () => {
+      calls++;
+      if (calls <= failuresBeforeSuccess) {
+        throw new TypeError('terminated');
+      }
+      const text = observationsPayload('recovered summary');
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         stream: new ReadableStream({
@@ -67,6 +106,8 @@ function createReflectorRunner(
     getThreadById: vi.fn(async () => null),
     ...overrides?.storage,
   };
+  const emitDebugEvent = vi.fn();
+  const persistMarkerToStorage = vi.fn();
   const runner = new ReflectorRunner({
     reflectionConfig: {
       model: 'mock/model',
@@ -88,13 +129,13 @@ function createReflectorRunner(
       isAsyncReflectionEnabled: () => false,
       ...overrides?.buffering,
     } as any,
-    emitDebugEvent: vi.fn(),
-    persistMarkerToStorage: vi.fn(),
+    emitDebugEvent,
+    persistMarkerToStorage,
     persistMarkerToMessage: vi.fn(),
     getCompressionStartLevel: async () => 0,
     resolveModel: () => ({ model: model as any }),
   });
-  return { runner, storage, createReflectionGeneration };
+  return { runner, storage, createReflectionGeneration, emitDebugEvent, persistMarkerToStorage };
 }
 
 const SOURCE_OBSERVATIONS = `* original observation that must be compressed ${'x'.repeat(500)}`;
@@ -133,17 +174,20 @@ describe('reflector empty-output guard', () => {
     await expect(runner.call(SOURCE_OBSERVATIONS)).rejects.toThrow(/empty/i);
   });
 
-  it('never commits an empty reflection generation from the sync path', async () => {
+  it('keeps degenerate sync reflection failures fatal without committing a generation', async () => {
     const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
-    const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model);
-
-    await runner.maybeReflect({
-      record: makeRecord(),
-      observationTokens: SOURCE_OBSERVATIONS.length,
-      threadId: 'thread-1',
+    const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model, {
+      reflectionConfig: { failurePolicy: 'continue' },
     });
 
-    // Reflection failed (degenerate everywhere) — activeObservations must survive.
+    await expect(
+      runner.maybeReflect({
+        record: makeRecord(),
+        observationTokens: SOURCE_OBSERVATIONS.length,
+        threadId: 'thread-1',
+      }),
+    ).rejects.toThrow(/empty|degenerate/i);
+
     expect(createReflectionGeneration).not.toHaveBeenCalled();
   });
 
@@ -205,6 +249,135 @@ describe('reflector empty-output guard', () => {
   });
 });
 
+describe('reflector retry budget and terminal policy', () => {
+  async function withFastRetries<T>(run: () => Promise<T>): Promise<T> {
+    const initialDelayMs = RETRY_CONFIG.initialDelayMs;
+    const jitter = RETRY_CONFIG.jitter;
+    RETRY_CONFIG.initialDelayMs = 1;
+    RETRY_CONFIG.jitter = 0;
+    try {
+      return await run();
+    } finally {
+      RETRY_CONFIG.initialDelayMs = initialDelayMs;
+      RETRY_CONFIG.jitter = jitter;
+    }
+  }
+
+  it.each([
+    { maxRetries: 0, expectedCalls: 1 },
+    { maxRetries: 1, expectedCalls: 2 },
+  ])('uses $maxRetries retries as $expectedCalls total model calls', async ({ maxRetries, expectedCalls }) => {
+    const failing = createFailingModel();
+    const { runner } = createReflectorRunner(failing.model, {
+      reflectionConfig: { maxRetries },
+    });
+
+    await withFastRetries(async () => {
+      await expect(runner.call(SOURCE_OBSERVATIONS)).rejects.toBeInstanceOf(OmModelExecutionError);
+    });
+    expect(failing.callCount).toBe(expectedCalls);
+  });
+
+  it('uses the omitted default budget of eight retries for nine total model calls', async () => {
+    const failing = createFailingModel();
+    const { runner } = createReflectorRunner(failing.model);
+
+    await withFastRetries(async () => {
+      await expect(runner.call(SOURCE_OBSERVATIONS)).rejects.toBeInstanceOf(OmModelExecutionError);
+    });
+    expect(failing.callCount).toBe(9);
+  });
+
+  it('succeeds on the configured retry without advancing the semantic ladder', async () => {
+    const failing = createFailingModel(1);
+    const { runner } = createReflectorRunner(failing.model, {
+      reflectionConfig: { maxRetries: 1 },
+    });
+
+    const result = await withFastRetries(() => runner.call(SOURCE_OBSERVATIONS));
+
+    expect(result.observations).toContain('recovered summary');
+    expect(failing.callCount).toBe(2);
+  });
+
+  it('continues only an exhausted reflector-model failure when explicitly configured', async () => {
+    const failing = createFailingModel();
+    const { runner, createReflectionGeneration } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+    });
+
+    await runner.maybeReflect({
+      record: makeRecord(),
+      observationTokens: SOURCE_OBSERVATIONS.length,
+      threadId: 'thread-1',
+    });
+
+    expect(failing.callCount).toBe(1);
+    expect(createReflectionGeneration).not.toHaveBeenCalled();
+  });
+
+  it('preserves committed observation state after continue and commits reflection once after recovery', async () => {
+    const failing = createFailingModel(1);
+    const { runner, createReflectionGeneration, persistMarkerToStorage } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+    });
+    const record = makeRecord();
+    const stateBeforeFailure = {
+      activeObservations: record.activeObservations,
+      observationTokenCount: record.observationTokenCount,
+      generationCount: record.generationCount,
+    };
+
+    await runner.maybeReflect({
+      record,
+      observationTokens: SOURCE_OBSERVATIONS.length,
+      threadId: 'thread-1',
+    });
+
+    expect(record).toMatchObject(stateBeforeFailure);
+    expect(createReflectionGeneration).not.toHaveBeenCalled();
+    expect(persistMarkerToStorage).toHaveBeenCalledTimes(1);
+    expect(persistMarkerToStorage.mock.calls[0]![0]).toMatchObject({
+      type: 'data-om-observation-failed',
+      data: {
+        operationType: 'reflection',
+        failurePolicy: 'continue',
+        failureKind: 'reflector-model',
+      },
+    });
+
+    await runner.maybeReflect({
+      record,
+      observationTokens: SOURCE_OBSERVATIONS.length + 1,
+      threadId: 'thread-1',
+    });
+
+    expect(failing.callCount).toBe(2);
+    expect(createReflectionGeneration).toHaveBeenCalledTimes(1);
+    expect(createReflectionGeneration.mock.calls[0]![0]).toMatchObject({
+      currentRecord: record,
+      reflection: expect.stringContaining('recovered summary'),
+    });
+    expect(record).toMatchObject(stateBeforeFailure);
+  });
+
+  it('keeps the exhausted reflector-model failure fatal under abort policy', async () => {
+    const failing = createFailingModel();
+    const { runner } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'abort', maxRetries: 0 },
+    });
+
+    await expect(
+      runner.maybeReflect({
+        record: makeRecord(),
+        observationTokens: SOURCE_OBSERVATIONS.length,
+        threadId: 'thread-1',
+      }),
+    ).rejects.toBeInstanceOf(OmModelExecutionError);
+    expect(failing.callCount).toBe(1);
+  });
+});
+
 describe('sync reflection suppression (unchanged input)', () => {
   const OVER_THRESHOLD_BODY = `still far too long to pass the 100-char threshold ${'y'.repeat(200)}`;
 
@@ -257,9 +430,11 @@ describe('sync reflection suppression (unchanged input)', () => {
     expect(scripted.callCount).toBeGreaterThan(callsAfterFirst);
   });
 
-  it('suppresses after a failed (degenerate) reflection while the input is unchanged', async () => {
-    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
-    const { runner, createReflectionGeneration } = createReflectorRunner(scripted.model);
+  it('suppresses after a continued model failure while the input is unchanged', async () => {
+    const failing = createFailingModel();
+    const { runner, createReflectionGeneration } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+    });
 
     await runner.maybeReflect({
       record: makeRecord(),
@@ -267,8 +442,8 @@ describe('sync reflection suppression (unchanged input)', () => {
       threadId: 'thread-1',
     });
     expect(createReflectionGeneration).not.toHaveBeenCalled();
-    const callsAfterFirst = scripted.callCount;
-    expect(callsAfterFirst).toBeGreaterThan(0);
+    const callsAfterFirst = failing.callCount;
+    expect(callsAfterFirst).toBe(1);
 
     // Same observation count → same input → suppressed.
     await runner.maybeReflect({
@@ -276,39 +451,43 @@ describe('sync reflection suppression (unchanged input)', () => {
       observationTokens: SOURCE_OBSERVATIONS.length,
       threadId: 'thread-1',
     });
-    expect(scripted.callCount).toBe(callsAfterFirst);
+    expect(failing.callCount).toBe(callsAfterFirst);
     expect(createReflectionGeneration).not.toHaveBeenCalled();
   });
 
-  it('retries after a failure as soon as observations change', async () => {
-    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
-    const { runner } = createReflectorRunner(scripted.model);
+  it('retries a continued model failure as soon as observations change', async () => {
+    const failing = createFailingModel();
+    const { runner } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+    });
 
     await runner.maybeReflect({
       record: makeRecord(),
       observationTokens: SOURCE_OBSERVATIONS.length,
       threadId: 'thread-1',
     });
-    const callsAfterFirst = scripted.callCount;
+    const callsAfterFirst = failing.callCount;
 
     await runner.maybeReflect({
       record: makeRecord(),
       observationTokens: SOURCE_OBSERVATIONS.length + 10,
       threadId: 'thread-1',
     });
-    expect(scripted.callCount).toBeGreaterThan(callsAfterFirst);
+    expect(failing.callCount).toBeGreaterThan(callsAfterFirst);
   });
 
-  it('does not suppress a different thread/resource lock key', async () => {
-    const scripted = createScriptedModel([DEGENERATE_OUTPUT]);
-    const { runner } = createReflectorRunner(scripted.model);
+  it('does not suppress a continued model failure for a different thread/resource lock key', async () => {
+    const failing = createFailingModel();
+    const { runner } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+    });
 
     await runner.maybeReflect({
       record: makeRecord(),
       observationTokens: SOURCE_OBSERVATIONS.length,
       threadId: 'thread-1',
     });
-    const callsAfterFirst = scripted.callCount;
+    const callsAfterFirst = failing.callCount;
 
     // Identical observation count, but a different thread — its input was
     // never attempted, so it must not inherit thread-1's suppression.
@@ -317,7 +496,7 @@ describe('sync reflection suppression (unchanged input)', () => {
       observationTokens: SOURCE_OBSERVATIONS.length,
       threadId: 'thread-2',
     });
-    expect(scripted.callCount).toBeGreaterThan(callsAfterFirst);
+    expect(failing.callCount).toBeGreaterThan(callsAfterFirst);
   });
 
   it('clears the suppression after a successful under-threshold reflection', async () => {
@@ -356,5 +535,52 @@ describe('sync reflection suppression (unchanged input)', () => {
       threadId: 'thread-1',
     });
     expect(createReflectionGeneration).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('reflector failure marker handling', () => {
+  it('surfaces the original sync reflector error when failed-marker storage also fails', async () => {
+    const failing = createFailingModel();
+    const { runner, emitDebugEvent, persistMarkerToStorage } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'abort', maxRetries: 0 },
+    });
+    persistMarkerToStorage.mockImplementation(async (marker: { type: string }) => {
+      if (marker.type === 'data-om-observation-failed') throw new Error('storage down');
+    });
+    const onReflectionEnd = vi.fn();
+
+    await expect(
+      runner.maybeReflect({
+        record: makeRecord(),
+        observationTokens: SOURCE_OBSERVATIONS.length,
+        threadId: 'thread-1',
+        reflectionHooks: { onReflectionEnd },
+      } as any),
+    ).rejects.toThrow(/terminated/);
+
+    expect(emitDebugEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'reflection_failed' }));
+    expect(onReflectionEnd).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(Error) }));
+  });
+
+  it('records the configured failure policy on async buffered reflection failure markers', async () => {
+    const failing = createFailingModel();
+    const { runner, persistMarkerToStorage } = createReflectorRunner(failing.model, {
+      reflectionConfig: { failurePolicy: 'continue', maxRetries: 0 },
+      storage: { setBufferingReflectionFlag: vi.fn(async () => {}) },
+      buffering: { getReflectionBufferKey: (k: string) => `reflect:${k}`, isAsyncBufferingInProgress: () => false },
+    });
+    vi.spyOn(runner as any, 'doAsyncBufferedReflection').mockRejectedValue(
+      new OmModelExecutionError('reflector-model', new TypeError('terminated')),
+    );
+
+    (runner as any).startAsyncBufferedReflection(makeRecord(), 100, 'thread-1:resource-1', {
+      custom: vi.fn(async () => {}),
+    });
+    await BufferingCoordinator.asyncBufferingOps.get('reflect:thread-1:resource-1');
+
+    const failedMarker = persistMarkerToStorage.mock.calls
+      .map(call => call[0] as { type: string; data: Record<string, unknown> })
+      .find(marker => marker.type === 'data-om-buffering-failed');
+    expect(failedMarker?.data.failurePolicy).toBe('continue');
   });
 });

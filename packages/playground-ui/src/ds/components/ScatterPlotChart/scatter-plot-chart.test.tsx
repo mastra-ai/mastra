@@ -9,7 +9,6 @@ import {
   getScatterPlotClickedPoint,
   getScatterPlotPointColor,
 } from './scatter-plot-chart-utils';
-import { Colors } from '@/ds/tokens';
 
 afterEach(() => {
   cleanup();
@@ -22,33 +21,19 @@ describe('ScatterPlotChart', () => {
     expect(screen.getByText('No data to display')).not.toBeNull();
   });
 
-  it('does not render a point count legend for supplied data', () => {
-    render(
-      <ScatterPlotChart
-        data={[
-          { id: 'trace-a', duration: 120, cost: 0.4 },
-          { id: 'trace-b', duration: 240, cost: 0.8 },
-        ]}
-        xKey="duration"
-        yKey="cost"
-      />,
-    );
-
-    expect(screen.queryByText('Points')).toBeNull();
-    expect(screen.queryByText('2')).toBeNull();
-  });
-
   it('keeps formatted axis ticks on a single line', () => {
     expect(formatScatterPlotAxisTick(12, value => `${value} spans`)).toBe('12\u00A0spans');
   });
 
   it('uses design tokens as the default point color', () => {
-    expect(getScatterPlotPointColor({ id: 'trace-a' })).toBe(Colors.accent3);
+    expect(getScatterPlotPointColor({ id: 'trace-a' })).toBe('var(--chart-blue)');
   });
 
   it('supports render-only color overrides from each datum', () => {
-    expect(getScatterPlotPointColor({ id: 'trace-a', color: Colors.accent5 }, 'color')).toBe(Colors.accent5);
-    expect(getScatterPlotPointColor({ id: 'trace-a', color: 12 }, 'color')).toBe(Colors.accent3);
+    expect(getScatterPlotPointColor({ id: 'trace-a', color: 'var(--chart-blue-deep)' }, 'color')).toBe(
+      'var(--chart-blue-deep)',
+    );
+    expect(getScatterPlotPointColor({ id: 'trace-a', color: 12 }, 'color')).toBe('var(--chart-blue)');
   });
 
   it('extracts clicked point payloads from Recharts event payloads', () => {

@@ -221,3 +221,34 @@ describe('WorkflowsConvex atomic workflow updates', () => {
     ]);
   });
 });
+
+describe('WorkflowsConvex.updateWorkflowState', () => {
+  function clientRejectingWith(message: string) {
+    const client = new ConvexAdminClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+    (client as unknown as { callStorage: () => Promise<never> }).callStorage = vi.fn(async () => {
+      throw new Error(message);
+    });
+    return client;
+  }
+
+  it('resolves to undefined when the run has no persisted snapshot', async () => {
+    const workflows = new WorkflowsConvex({
+      client: clientRejectingWith('Workflow snapshot not found for runId run-1'),
+    });
+
+    await expect(
+      workflows.updateWorkflowState({ workflowName: 'wf', runId: 'run-1', opts: { status: 'success' } }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('still rethrows other storage errors', async () => {
+    const workflows = new WorkflowsConvex({ client: clientRejectingWith('Convex is down') });
+
+    await expect(
+      workflows.updateWorkflowState({ workflowName: 'wf', runId: 'run-1', opts: { status: 'success' } }),
+    ).rejects.toThrow('Convex is down');
+  });
+});

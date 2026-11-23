@@ -168,6 +168,20 @@ const summarizeTool = createTool({
   execute: async () => ({ summary: 'A brief summary.' }),
 });
 
+/**
+ * A tool that throws. Core persists the invocation in `content.parts` as
+ * `state: 'output-error'` carrying `errorText`, with no `result` and no entry in
+ * the legacy `content.toolInvocations` array.
+ */
+const failingTool = createTool({
+  id: 'save_result',
+  description: 'Persist a result',
+  inputSchema: z.object({ value: z.string() }),
+  execute: async () => {
+    throw new Error('Save failed');
+  },
+});
+
 // ─── Scenarios ──────────────────────────────────────────────────────────────────
 
 describe('Quick Checks — scenario tests via runEvals + AIMock', () => {
@@ -328,6 +342,53 @@ describe('Quick Checks — scenario tests via runEvals + AIMock', () => {
       });
 
       expect(result.scores['check-max-tool-calls']).toBe(0);
+    });
+
+    it('treats a natively thrown tool call as a real call and as an error', async () => {
+      const agent = toolCallingAgent(
+        { save_result: failingTool },
+        [{ name: 'save_result', id: 'call-fail', input: { value: 'x' } }],
+        'Sorry, saving failed.',
+      );
+
+      const result = await runEvals({
+        data: [{ input: 'Save this value' }],
+        scorers: [
+          checks.calledTool('save_result'),
+          checks.didNotCall('save_result'),
+          checks.usedNoTools(),
+          checks.noToolErrors(),
+        ],
+        target: agent,
+      });
+
+      // The tool ran and threw, so it was called — but the run is not error-free.
+      expect(result.scores['check-called-tool']).toBe(1);
+      expect(result.scores['check-did-not-call']).toBe(0);
+      expect(result.scores['check-used-no-tools']).toBe(0);
+      expect(result.scores['check-no-tool-errors']).toBe(0);
+    });
+
+    it('counts a thrown call alongside a successful one in the same run', async () => {
+      const agent = multiToolCallingAgent(
+        { search: searchTool, save_result: failingTool },
+        [
+          { name: 'search', id: 'call-ok', input: { query: 'AI trends' } },
+          { name: 'save_result', id: 'call-fail', input: { value: 'result' } },
+        ],
+        'Search worked but saving failed.',
+      );
+
+      const result = await runEvals({
+        data: [{ input: 'Research and save' }],
+        scorers: [checks.calledTool('save_result'), checks.maxToolCalls(1), checks.noToolErrors()],
+        target: agent,
+      });
+
+      // Both calls are real: the cap of 1 is exceeded and the run has an error.
+      expect(result.scores['check-called-tool']).toBe(1);
+      expect(result.scores['check-max-tool-calls']).toBe(0);
+      expect(result.scores['check-no-tool-errors']).toBe(0);
     });
   });
 

@@ -17,6 +17,9 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { gateIfLocalFile } from '../shared/file-transaction-gate';
+import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
+import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -81,13 +84,18 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     const isLocalDb = (url.startsWith('file:') || this.isMemoryDb) && !syncUrl;
     const cwd = process.cwd();
 
-    this.turso = createClient({
+    const client = createClient({
       url,
       syncUrl,
       authToken,
       syncInterval,
       ...(isLocalDb ? { timeout: 5000 } : {}),
     });
+    this.turso = isSingleConnectionDatabase({ url, syncUrl })
+      ? gateSingleConnectionClient(client)
+      : isLocalDb
+        ? gateIfLocalFile(resetConnectionsAfterBusy(client, { maxWaitMs: 5000 }), url, { maxWaitMs: 5000 })
+        : client;
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;
     if (!Number.isInteger(vectorTopKOverFetchMultiplier) || vectorTopKOverFetchMultiplier < 1) {
@@ -311,14 +319,13 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
-      filterValues.push(minScore);
-      filterValues.push(topK);
 
+      // Bind the query vector as vector32(?) so libSQL parses it once, not once per scanned row.
       const query = `
       WITH vector_scores AS (
         SELECT
           vector_id as id,
-          (1-vector_distance_cos(embedding, '${vectorStr}')) as score,
+          (1-vector_distance_cos(embedding, vector32(?))) as score,
           metadata
           ${includeVector ? ', vector_extract(embedding) as embedding' : ''}
         FROM ${parsedIndexName}
@@ -332,7 +339,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
 
       const result = await this.turso.execute({
         sql: query,
-        args: filterValues,
+        args: [vectorStr, ...filterValues, minScore, topK],
       });
 
       return result.rows.map(({ id, score, metadata, embedding }) => ({
@@ -891,8 +898,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async _doTruncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     await this.turso.execute({
-      sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
+      sql: `DELETE FROM ${parsedIndexName} WHERE rowid IS NOT NULL`,
       args: [],
     });
   }

@@ -4,6 +4,7 @@ import type { ModelItem } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { requireLocal } from '../runtime.js';
 import type { SlashCommandContext } from './types.js';
 
 const BUILT_IN_SUBAGENT_TYPES: Array<{ id: string; label: string; description: string }> = [
@@ -37,7 +38,7 @@ async function showSubagentModelListForScope(
     return;
   }
 
-  const currentSubagentModel = ctx.state.session.subagents.model.get({ agentType });
+  const currentSubagentModel = requireLocal(ctx.state, '/subagents').session.subagents.model.get({ agentType });
   const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
   return new Promise(resolve => {
@@ -50,7 +51,7 @@ async function showSubagentModelListForScope(
         ctx.state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         try {
-          await ctx.state.session.subagents.model.set({ modelId: model.id, agentType });
+          await requireLocal(ctx.state, '/subagents').session.subagents.model.set({ modelId: model.id, agentType });
           if (scope === 'global') {
             const settings = loadSettings();
             settings.models.subagentModels[agentType] = model.id;
@@ -128,21 +129,53 @@ function getConfiguredSubagentTypes(
     : BUILT_IN_SUBAGENT_TYPES;
 }
 
-export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
+async function configureSubagentModels(ctx: SlashCommandContext): Promise<void> {
   const agentTypes = getConfiguredSubagentTypes(ctx);
-
   const answer = await askModalQuestion(ctx.state.ui, {
     question: 'Select subagent type',
+    allowCustomResponse: false,
     options: agentTypes.map(t => ({
       label: t.label,
       description: t.description,
     })),
   });
 
+  const selected = agentTypes.find(t => t.label === answer);
+  if (selected) {
+    await showSubagentScopeThenList(ctx, selected.id, selected.label);
+  }
+}
+
+function setSubagentsEnabled(ctx: SlashCommandContext, enabled: boolean): void {
+  const settings = loadSettings();
+  settings.preferences.subagentsEnabled = enabled;
+  saveSettings(settings);
+  ctx.showInfo(`Subagents ${enabled ? 'enabled' : 'disabled'}. Restart MastraCode for this to take effect.`);
+}
+
+export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
+  const settings = loadSettings();
+  const toggleLabel = settings.preferences.subagentsEnabled ? 'Disable subagents' : 'Enable subagents';
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: 'Manage subagents',
+    allowCustomResponse: false,
+    options: [
+      {
+        label: toggleLabel,
+        description: `${toggleLabel} for future MastraCode sessions`,
+      },
+      {
+        label: 'Configure models',
+        description: 'Choose the default model for each subagent type',
+      },
+    ],
+  });
+
   try {
-    const selected = agentTypes.find(t => t.label === answer);
-    if (selected) {
-      await showSubagentScopeThenList(ctx, selected.id, selected.label);
+    if (answer === toggleLabel) {
+      setSubagentsEnabled(ctx, !settings.preferences.subagentsEnabled);
+    } else if (answer === 'Configure models') {
+      await configureSubagentModels(ctx);
     }
   } catch (err) {
     ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);

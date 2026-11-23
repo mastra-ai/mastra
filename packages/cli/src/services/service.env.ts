@@ -73,6 +73,7 @@ export class FileEnvService extends EnvService {
       await this.updateEnvData({ key, value, data });
     } catch (err) {
       console.error(`Error writing ENV value: ${err}`);
+      throw err;
     }
   }
 }

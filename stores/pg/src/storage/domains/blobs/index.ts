@@ -13,8 +13,8 @@ export class BlobsPG extends BlobStore {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
   }
 
@@ -50,14 +50,14 @@ export class BlobsPG extends BlobStore {
 
   async get(hash: string): Promise<StorageBlobEntry | null> {
     const tableName = getTableName({ indexName: TABLE_SKILL_BLOBS, schemaName: getSchemaName(this.#schema) });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "hash" = $1`, [hash]);
+    const row = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE "hash" = $1`, [hash]);
     if (!row) return null;
     return this.#parseRow(row);
   }
 
   async has(hash: string): Promise<boolean> {
     const tableName = getTableName({ indexName: TABLE_SKILL_BLOBS, schemaName: getSchemaName(this.#schema) });
-    const row = await this.#db.client.oneOrNone(`SELECT 1 FROM ${tableName} WHERE "hash" = $1 LIMIT 1`, [hash]);
+    const row = await this.#db.readClient.oneOrNone(`SELECT 1 FROM ${tableName} WHERE "hash" = $1 LIMIT 1`, [hash]);
     return row !== null;
   }
 
@@ -80,7 +80,7 @@ export class BlobsPG extends BlobStore {
 
     const tableName = getTableName({ indexName: TABLE_SKILL_BLOBS, schemaName: getSchemaName(this.#schema) });
     const placeholders = hashes.map((_, i) => `$${i + 1}`).join(', ');
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} WHERE "hash" IN (${placeholders})`,
       hashes,
     );

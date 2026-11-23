@@ -47,6 +47,47 @@ describe('Mastra workers option (merge semantics)', () => {
     expect(orchestrators).toEqual([custom]);
   });
 
+  it('reports the active worker configuration for the Mastra instance', async () => {
+    const orchestration = new FakeWorker('orchestration');
+    const scheduler = new FakeWorker('scheduler');
+    const backgroundTasks = new FakeWorker('backgroundTasks');
+    const cleanup = new FakeWorker('cleanup-jobs');
+    const mastra = new Mastra({
+      logger: false,
+      workers: [orchestration, scheduler, backgroundTasks, cleanup],
+      scheduler: {
+        enabled: true,
+        tickIntervalMs: 5_000,
+        batchSize: 25,
+        onError: vi.fn(),
+      },
+      backgroundTasks: {
+        enabled: true,
+        mode: 'worker',
+        globalConcurrency: 20,
+        defaultRetries: { maxRetries: 3, retryableErrors: vi.fn() },
+        onTaskComplete: vi.fn(),
+      },
+    });
+
+    await orchestration.start();
+    await backgroundTasks.start();
+    await cleanup.start();
+
+    expect(mastra.getWorkerConfig()).toEqual({
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { tickIntervalMs: 5_000, batchSize: 25, enabled: false },
+      backgroundTasks: {
+        mode: 'worker',
+        globalConcurrency: 20,
+        defaultRetries: { maxRetries: 3 },
+        enabled: true,
+      },
+      custom: ['cleanup-jobs'],
+    });
+  });
+
   it('throws on duplicate names within the custom workers array', () => {
     expect(() => new Mastra({ logger: false, workers: [new FakeWorker('dup'), new FakeWorker('dup')] })).toThrow(
       /Duplicate worker name "dup"/,

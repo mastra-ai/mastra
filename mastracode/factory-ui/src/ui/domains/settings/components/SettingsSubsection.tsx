@@ -1,11 +1,14 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { ReactNode } from 'react';
-import { useId } from 'react';
+import { SettingsGroup, SettingsHeader, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import type { ReactNode, Ref } from 'react';
+import { ScopeBadge } from './SettingsScope';
+import type { SettingsScope } from './SettingsScope';
 
-import { ScopeBadge, ScopeSwitch } from './SettingsScope';
-import type { ScopeControl, SettingsScope } from './SettingsScope';
-
+/**
+ * One section of a settings page: its title (with the description in a tooltip) above its card. A list's action
+ * goes in its card (`SettingsListHeader`), so `action` is only for controls that change the whole section.
+ */
 export function SettingsSubsection({
+  ref,
   id,
   title,
   description,
@@ -13,41 +16,24 @@ export function SettingsSubsection({
   action,
   children,
 }: {
-  /** Anchor id so other surfaces can deep-link to this subsection. */
+  ref?: Ref<HTMLElement>;
   id?: string;
   title: string;
   description?: string;
-  scope: SettingsScope | ScopeControl;
+  scope?: SettingsScope;
   action?: ReactNode;
   children?: ReactNode;
 }) {
-  const titleId = useId();
+  const heading = (
+    <SettingsTitle info={description || undefined} accessory={scope && <ScopeBadge scope={scope} />}>
+      {title}
+    </SettingsTitle>
+  );
 
   return (
-    <section id={id} aria-labelledby={titleId} className="flex min-w-0 scroll-mt-4 flex-col gap-2">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Txt as="h2" id={titleId} variant="ui-sm" className="text-icon6 leading-ui-md font-semibold">
-              {title}
-            </Txt>
-            <ScopeIndicator scope={scope} />
-          </div>
-          {description && (
-            <Txt as="p" variant="ui-sm" className="text-icon3">
-              {description}
-            </Txt>
-          )}
-        </div>
-        {action && <div className="shrink-0">{action}</div>}
-      </div>
+    <SettingsGroup ref={ref} id={id}>
+      {action ? <SettingsHeader action={action}>{heading}</SettingsHeader> : heading}
       {children}
-    </section>
+    </SettingsGroup>
   );
-}
-
-function ScopeIndicator({ scope }: { scope: SettingsScope | ScopeControl }) {
-  if (typeof scope === 'string') return <ScopeBadge scope={scope} />;
-  if (scope.options.length > 1) return <ScopeSwitch {...scope} />;
-  return <ScopeBadge scope={scope.value} />;
 }

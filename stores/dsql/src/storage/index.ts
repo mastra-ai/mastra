@@ -31,7 +31,7 @@ export class DSQLStore extends MastraStorage {
   constructor(config: DSQLStoreConfig) {
     try {
       validateConfig(config);
-      super({ id: config.id, name: 'DSQLStore', disableInit: config.disableInit });
+      super({ id: config.id, name: 'DSQLStore', disableInit: config.disableInit, retention: config.retention });
       this.schema = config.schemaName || 'public';
 
       // Create or use provided pool
@@ -43,7 +43,7 @@ export class DSQLStore extends MastraStorage {
         this.#ownsPool = true;
       }
 
-      this.#db = new PoolAdapter(this.#pool);
+      this.#db = new PoolAdapter(this.#pool, error => this.logger?.error?.('Transaction rollback failed', { error }));
 
       const domainConfig: DsqlDomainClientConfig = {
         client: this.#db,

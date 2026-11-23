@@ -2,6 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -35,6 +36,52 @@ type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   source?: string | null;
   userId?: string | null;
 };
+
+const FEEDBACK_UPSERT_COLUMNS = [
+  'timestamp',
+  'cursorId',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'feedbackUserId',
+  'sourceId',
+  'reviewStatus',
+  'feedbackSource',
+  'feedbackType',
+  'value',
+  'valueString',
+  'valueNumber',
+  'comment',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
+
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT (feedbackId) DO UPDATE SET ${FEEDBACK_UPSERT_COLUMNS.map(
+  column => `${column} = excluded.${column}`,
+).join(', ')}`;
 
 const FEEDBACK_GROUP_BY_COLUMNS = new Set([
   'timestamp',
@@ -71,7 +118,7 @@ const FEEDBACK_GROUP_BY_COLUMNS = new Set([
   'comment',
 ]);
 
-function getAggregationSql(aggregation: AggregationType, measure = 'TRY_CAST(value AS DOUBLE)'): string {
+function getAggregationSql(aggregation: AggregationType, measure = 'valueNumber'): string {
   switch (aggregation) {
     case 'sum':
       return `SUM(${measure})`;
@@ -143,7 +190,7 @@ function buildFeedbackWhereClause(
   }
 
   if (includeNumericGuard) {
-    conditions.push('TRY_CAST(value AS DOUBLE) IS NOT NULL');
+    conditions.push('valueNumber IS NOT NULL');
   }
 
   return { clause: `WHERE ${conditions.join(' AND ')}`, params };
@@ -169,12 +216,20 @@ function toSeriesName(values: unknown[]): string {
   return values.map(value => (value === null || value === undefined ? '' : String(value))).join('|');
 }
 
-function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
-  const rawValue = row.value;
-  let value: number | string = rawValue as string;
-  const numValue = Number(rawValue);
-  if (!isNaN(numValue)) value = numValue;
+function readFeedbackValue(row: Record<string, unknown>): FeedbackRecord['value'] {
+  if (row.valueNumber != null) {
+    return Number(row.valueNumber);
+  }
 
+  if (row.valueString != null) {
+    return String(row.valueString);
+  }
+
+  // Legacy rows have neither typed column populated.
+  return String(row.value);
+}
+
+function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
   return feedbackRecordSchema.parse({
     feedbackId: row.feedbackId as string,
     timestamp: toDate(row.timestamp),
@@ -209,7 +264,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): FeedbackRecord {
     source: row.feedbackSource as string,
     feedbackSource: row.feedbackSource as string,
     feedbackType: row.feedbackType as string,
-    value,
+    value: readFeedbackValue(row),
     comment: (row.comment as string) ?? null,
     tags: parseJsonArray(row.tags) as string[] | null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
@@ -250,16 +305,19 @@ function getComparisonDateRange(
 }
 
 /** Insert a single feedback event. */
-export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackArgs): Promise<void> {
+export async function createFeedback(
+  db: DuckDBConnection,
+  args: CreateFeedbackArgs,
+  preserveIdentity = false,
+): Promise<void> {
   const f = args.feedback as LegacyFeedbackRecord;
   const feedbackSource = f.feedbackSource ?? f.source ?? '';
-  const feedbackUserId = f.feedbackUserId ?? f.userId ?? null;
-  await db.execute(
-    `INSERT INTO feedback_events (
+  const feedbackUserId = f.feedbackUserId !== undefined ? f.feedbackUserId : (f.userId ?? null);
+  const sql = `INSERT INTO feedback_events (
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
-      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
+      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, valueString, valueNumber, comment, tags, metadata, scope
     )
      VALUES (${[
        v(f.feedbackId),
@@ -296,23 +354,49 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        v(feedbackSource),
        v(f.feedbackType),
        v(String(f.value)),
+       v(typeof f.value === 'string' ? f.value : null),
+       v(typeof f.value === 'number' ? f.value : null),
        v(f.comment ?? null),
        jsonV(f.tags ?? null),
        jsonV(f.metadata),
        jsonV(f.scope ?? null),
      ].join(', ')})
-     ON CONFLICT DO NOTHING`,
-  );
+     ${args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE}`;
+  if (preserveIdentity) {
+    // The primary-key conflict and identity guard run in the same statement.
+    const rows = await db.query(`${sql}
+      WHERE feedback_events.traceId IS NOT DISTINCT FROM excluded.traceId
+        AND feedback_events.timestamp IS NOT DISTINCT FROM excluded.timestamp
+        AND feedback_events.organizationId IS NOT DISTINCT FROM excluded.organizationId
+        AND feedback_events.resourceId IS NOT DISTINCT FROM excluded.resourceId
+      RETURNING feedbackId`);
+    if (!rows.length)
+      throw new MastraError({
+        id: 'OBSERVABILITY_FEEDBACK_IDENTITY_CONFLICT',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback replacement must preserve its trace, timestamp, and tenant',
+      });
+  } else {
+    await db.execute(sql);
+  }
 }
 
 /** Insert multiple feedback events in a single statement. */
 export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
-  const tuples = args.feedbacks.map(f => {
+  const currentFeedback = new Map(
+    (args.onConflict === 'ignore' ? [...args.feedbacks].reverse() : args.feedbacks).map(feedback => [
+      feedback.feedbackId,
+      feedback,
+    ]),
+  );
+  const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
-    const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
+    const feedbackUserId =
+      legacyFeedback.feedbackUserId !== undefined ? legacyFeedback.feedbackUserId : (legacyFeedback.userId ?? null);
     return `(${[
       v(legacyFeedback.feedbackId),
       v(legacyFeedback.timestamp),
@@ -348,6 +432,8 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       v(feedbackSource),
       v(legacyFeedback.feedbackType),
       v(String(legacyFeedback.value)),
+      v(typeof legacyFeedback.value === 'string' ? legacyFeedback.value : null),
+      v(typeof legacyFeedback.value === 'number' ? legacyFeedback.value : null),
       v(legacyFeedback.comment ?? null),
       jsonV(legacyFeedback.tags ?? null),
       jsonV(legacyFeedback.metadata),
@@ -360,11 +446,41 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
-      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, comment, tags, metadata, scope
+      feedbackUserId, sourceId, reviewStatus, feedbackSource, feedbackType, value, valueString, valueNumber, comment, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
-     ON CONFLICT DO NOTHING`,
+     ${args.onConflict === 'ignore' ? 'ON CONFLICT DO NOTHING' : FEEDBACK_UPSERT_CLAUSE}`,
   );
+}
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const placeholders = args.feedbackIds.map(() => '?').join(', ');
+  const conditions = [`feedbackId IN (${placeholders})`];
+  const params: unknown[] = [...args.feedbackIds];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = ?');
+    params.push(args.resourceId);
+  }
+  await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
+}
+
+/** Retrieves the latest feedback record with this ID, or null when missing. */
+export async function getFeedbackById(db: DuckDBConnection, feedbackId: string): Promise<FeedbackRecord | null> {
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT * FROM feedback_events WHERE feedbackId = ? ORDER BY timestamp DESC LIMIT 1`,
+    [feedbackId],
+  );
+  return rows[0] ? rowToFeedbackRecord(rows[0]) : null;
 }
 
 /** Update the review workflow status of a single feedback event. */
@@ -614,7 +730,7 @@ export async function getFeedbackPercentiles(
     const rows = await db.query<Record<string, unknown>>(
       `
         SELECT time_bucket(INTERVAL '${intervalSql}', timestamp) AS bucket,
-               percentile_cont(${percentile}) WITHIN GROUP (ORDER BY TRY_CAST(value AS DOUBLE)) AS pvalue
+               percentile_cont(${percentile}) WITHIN GROUP (ORDER BY valueNumber) AS pvalue
         FROM feedback_events ${clause}
         GROUP BY bucket
         ORDER BY bucket

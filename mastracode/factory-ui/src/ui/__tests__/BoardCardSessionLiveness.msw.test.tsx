@@ -1,20 +1,14 @@
-/**
- * A card advertises its bound session with a live indicator while that session
- * still exists. Deleting the session from the sidebar has to drop it straight
- * away — otherwise the details dialog offers a thread destroyed with its
- * workspace.
- */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import { createQueryClient } from '../../query-client';
-import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -68,41 +62,23 @@ const workItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
-/**
- * Board + sidebar wired to one work item bound to one live session. The session
- * list is served from mutable state so the DELETE genuinely removes it, the way
- * the server does.
- */
 function stubFactoryWithBoundSession() {
   let sessions = [boundSession];
   let items = [{ ...workItem, sessions: { ...workItemSessions } }];
   const deleted: string[] = [];
-  // Held open after the delete so the test proves the card stops advertising a
-  // dead thread on its own, rather than riding on the reconciling refetch.
   const refetchGate = deferred();
-  let sessionListRequests = 0;
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -121,18 +97,13 @@ function stubFactoryWithBoundSession() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, async () => {
-      sessionListRequests += 1;
-      if (sessionListRequests > 1) await refetchGate.promise;
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, async () => {
+      if (deleted.length > 0) await refetchGate.promise;
       return HttpResponse.json({ sessions });
     }),
     http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       deleted.push(String(params.sessionId));
       sessions = sessions.filter(session => session.sessionId !== params.sessionId);
-      // The server strips the deleted session's work-item refs with the row.
       items = items.map(item => ({
         ...item,
         sessions: Object.fromEntries(
@@ -146,11 +117,6 @@ function stubFactoryWithBoundSession() {
   return { deleted, refetchGate };
 }
 
-/**
- * Renders through the app's real query client. The default test client uses
- * `staleTime: 0`, which papers over cache-freshness bugs by refetching on
- * every mount; the shipped client caches for 30s.
- */
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
   return renderWithProviders(<RouterProvider router={router} />, createQueryClient());
@@ -158,31 +124,31 @@ function renderWorkBoard() {
 
 describe('Board card session liveness', () => {
   it('advertises a bound session the workspaces list does not know about', async () => {
-    // Dispatcher-minted sessions appear on the work item before any sidebar
-    // refetch sees them: the card must trust its own ref, not the intersection.
     stubFactoryWithBoundSession();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
     );
-    const user = userEvent.setup();
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    // Bound but idle: no marker runs — the Open session button on the card is
-    // the advertisement, and only session-bound cards carry one.
-    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(await within(card).findByText('Session')).toBeInTheDocument();
+    expect(within(card).getByRole('link', { name: /Fix login bug$/ })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`,
+    );
     expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
-
-    // The details panel keeps its own way in beside the card's.
-    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
-    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Open session' })).toHaveLength(2));
   });
 
-  it('shows the initializing dot while a bound session is still materializing', async () => {
+  it('shows the initializing dot while a run waits on its bound session setting up', async () => {
     stubFactoryWithBoundSession();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [{ ...boundSession, materializedAt: null }] }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
       ),
     );
     renderWorkBoard();
@@ -192,8 +158,6 @@ describe('Board card session liveness', () => {
   });
 
   it('lights the working dot when any bound session runs, not just the newest ref', async () => {
-    // Each role keeps its own session; a role re-run rewrites an existing key,
-    // so the running session is not necessarily the last ref on the item.
     stubFactoryWithBoundSession();
     const reviewSession = {
       sessionId: 'session-2',
@@ -217,9 +181,82 @@ describe('Board card session liveness', () => {
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
   });
 
+  it('keeps the working dot while a second session of the card is still materializing', async () => {
+    stubFactoryWithBoundSession();
+    const reviewSession = { sessionId: 'session-2', branch: 'factory/issue-2', threadId: 'session-2' };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            { ...workItem, sessions: { ...workItemSessions, review: { ...reviewSession, startedBy: 'user-1' } } },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({
+          sessions: [
+            boundSession,
+            {
+              ...boundSession,
+              id: 'session-row-2',
+              sessionId: 'session-2',
+              branch: 'factory/issue-2',
+              materializedAt: null,
+            },
+          ],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    await waitForMutationsIdle(client);
+    expect(card.querySelector('[data-live-session-indicator="initializing"]')).toBeNull();
+  });
+
+  it('hides Retry while the bound session runs, and marks the failure as waiting on you', async () => {
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-1',
+              evaluationId: 'evaluation-1',
+              workItemId: ITEM_ID,
+              type: 'invokeSkill',
+              status: 'failed',
+              attempts: 5,
+              failureOccurrence: 1,
+              source: null,
+              failureCode: 'repository_clone_failed',
+              canRetry: true,
+              lastError: 'Command failed with ENOENT',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
+    await waitForMutationsIdle(client);
+    expect(within(card).queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
   it('walks idle → working → idle as a run starts and finishes', async () => {
-    const { refetchGate } = stubFactoryWithBoundSession();
-    refetchGate.resolve();
+    stubFactoryWithBoundSession();
     const active = new Set<string>();
     server.use(
       http.get('*/api/agent-controller/:controllerId/active-runs', () =>
@@ -229,32 +266,30 @@ describe('Board card session liveness', () => {
       ),
     );
     const { client } = renderWorkBoard();
-    const activityKey = queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL);
+    const activityKey = queryKeys.sessionActivity(FACTORY_ID);
 
     const card = await screen.findByTestId('work-item-card');
-    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(await within(card).findByText('Session')).toBeInTheDocument();
     expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
 
     active.add(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
-    // A running card's one button is the way into its session; the wick is its marker, so the pill stays quiet.
-    expect(screen.getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
+    expect(within(card).getByText('Session')).toBeInTheDocument();
 
     active.delete(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
-    // A finished run is an idle session: the wick goes dark and the button returns, unlit.
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).toBeNull());
-    expect(await screen.findByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
+    expect(within(card).getByText('Session')).toBeInTheDocument();
   });
 
-  it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {
+  it('drops the session mark as soon as its session is deleted from the sidebar', async () => {
     const { deleted, refetchGate } = stubFactoryWithBoundSession();
     const user = userEvent.setup();
     renderWorkBoard();
 
-    await screen.findByTestId('work-item-card');
-    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    const card = await screen.findByTestId('work-item-card');
+    expect(await within(card).findByText('Session')).toBeInTheDocument();
 
     await user.click(await screen.findByRole('button', { name: 'Session actions for factory/issue-1' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -262,11 +297,13 @@ describe('Board card session liveness', () => {
 
     await waitFor(() => expect(deleted).toEqual([SESSION_ID]));
 
-    // The reconciling refetch is still in flight. The card must already have
-    // stopped advertising a thread it can no longer open.
-    await waitFor(() => expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull());
+    await waitFor(() => expect(within(card).queryByText('Session')).toBeNull());
+    expect(within(card).getByRole('link', { name: /Fix login bug$/ })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/cards/${ITEM_ID}`,
+    );
 
     refetchGate.resolve();
-    await waitFor(() => expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull());
+    await waitFor(() => expect(within(card).queryByText('Session')).toBeNull());
   });
 });

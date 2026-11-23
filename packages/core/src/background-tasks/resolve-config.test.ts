@@ -35,6 +35,78 @@ describe('resolveBackgroundConfig', () => {
     expect(resolved.runInBackground).toBe(false);
   });
 
+  it('defers an eligible tool by default when the call has no override', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'research',
+      toolConfig: { enabled: true },
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: true, disposition: 'deferred' });
+  });
+
+  it('defers an agent-eligible tool by default when the call has no override', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'research',
+      toolConfig: undefined,
+      agentConfig: { tools: { research: true } },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: true, disposition: 'deferred' });
+  });
+
+  it('keeps an eligible tool foreground by default when `defaultDisposition: "foreground"` is configured', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'research',
+      toolConfig: { enabled: true, defaultDisposition: 'foreground' },
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
+  });
+
+  it('keeps an agent-eligible tool foreground by default when the agent config sets `defaultDisposition: "foreground"`', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'research',
+      toolConfig: undefined,
+      agentConfig: { tools: { research: { enabled: true, defaultDisposition: 'foreground' } } },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
+  });
+
+  it('lets a per-call disposition opt an eligible foreground-default tool into background', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'deferred' },
+      toolName: 'research',
+      toolConfig: { enabled: true, defaultDisposition: 'foreground' },
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: true, disposition: 'deferred' });
+  });
+
+  it('lets the agent-level defaultDisposition override the tool-level one', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'research',
+      toolConfig: { enabled: true, defaultDisposition: 'foreground' },
+      agentConfig: { tools: { research: { enabled: true, defaultDisposition: 'deferred' } } },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: true, disposition: 'deferred' });
+  });
+
   it('honors LLM override when the tool itself opted in', () => {
     const resolved = resolveBackgroundConfig({
       llmBgOverrides: { enabled: true },
@@ -80,7 +152,34 @@ describe('resolveBackgroundConfig', () => {
       managerConfig: { enabled: true },
     });
 
-    expect(resolved.runInBackground).toBe(false);
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
+  });
+
+  it.each(['foreground', 'deferred', 'awaited'] as const)('resolves the %s per-call disposition', disposition => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition },
+      toolName: 'research',
+      toolConfig: { enabled: true },
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({
+      runInBackground: disposition !== 'foreground',
+      disposition,
+    });
+  });
+
+  it('ignores a disposition override when the tool has not opted in', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'awaited' },
+      toolName: 'calculator',
+      toolConfig: undefined,
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
   });
 });
 

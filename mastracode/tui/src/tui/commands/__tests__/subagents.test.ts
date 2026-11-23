@@ -1,111 +1,114 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleSubagentsCommand } from '../subagents.js';
-import type { SlashCommandContext } from '../types.js';
 
-const askQuestionMock = vi.fn();
-
-vi.mock('../../modal-question.js', () => ({
-  askModalQuestion: vi.fn(async (_ui, props) => {
-    askQuestionMock(props);
-    return null;
-  }),
+const { askModalQuestion, loadSettings, saveSettings } = vi.hoisted(() => ({
+  askModalQuestion: vi.fn(),
+  loadSettings: vi.fn(),
+  saveSettings: vi.fn(),
 }));
 
-function createContext(subagents?: Array<{ id: string; name: string; description: string }>) {
-  const chatContainer = {
-    addChild: vi.fn(),
-    invalidate: vi.fn(),
-  };
+vi.mock('@mariozechner/pi-tui', () => ({
+  matchesKey: vi.fn(() => false),
+  Key: {},
+}));
 
-  const ctx = {
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
+  loadSettings,
+  saveSettings,
+}));
+
+vi.mock('../../modal-question.js', () => ({ askModalQuestion }));
+
+import { handleSubagentsCommand } from '../subagents.js';
+
+function createCtx(subagents: unknown[] = []) {
+  return {
     state: {
-      controller: {
-        config: {
-          subagents,
-        },
-      },
-      ui: {
-        requestRender: vi.fn(),
-      },
-      chatContainer,
-      activeInlineQuestion: undefined,
+      session: { subagents: { model: {} } },
+      controller: { config: { subagents } },
+      ui: { requestRender: vi.fn() },
     },
-    authStorage: {},
-    showError: vi.fn(),
     showInfo: vi.fn(),
-  } as unknown as SlashCommandContext;
+    showError: vi.fn(),
+  } as any;
+}
 
-  return { ctx, chatContainer };
+function createSettings(subagentsEnabled = false) {
+  return {
+    preferences: { subagentsEnabled },
+    models: { subagentModels: {} },
+  } as any;
 }
 
 describe('handleSubagentsCommand', () => {
   beforeEach(() => {
-    askQuestionMock.mockReset();
+    vi.clearAllMocks();
+    loadSettings.mockReturnValue(createSettings());
   });
 
-  it('falls back to built-in subagent types when no custom subagents are configured', async () => {
-    const { ctx, chatContainer } = createContext();
+  it('enables subagents globally and asks for a restart', async () => {
+    const settings = createSettings(false);
+    loadSettings.mockReturnValue(settings);
+    askModalQuestion.mockResolvedValue('Enable subagents');
+    const ctx = createCtx();
 
     await handleSubagentsCommand(ctx);
 
-    expect(askQuestionMock).toHaveBeenCalledTimes(1);
-    const question = askQuestionMock.mock.calls[0]?.[0];
-    expect(question.question).toBe('Select subagent type');
-    expect(question.options).toEqual([
-      { label: 'Explore', description: 'Read-only codebase exploration' },
-      { label: 'Plan', description: 'Read-only analysis and planning' },
-      { label: 'Execute', description: 'Task execution with write access' },
-    ]);
-    expect(chatContainer.addChild).not.toHaveBeenCalled();
+    expect(askModalQuestion).toHaveBeenCalledWith(
+      ctx.state.ui,
+      expect.objectContaining({ allowCustomResponse: false }),
+    );
+    expect(settings.preferences.subagentsEnabled).toBe(true);
+    expect(saveSettings).toHaveBeenCalledWith(settings);
+    expect(ctx.showInfo).toHaveBeenCalledWith('Subagents enabled. Restart MastraCode for this to take effect.');
   });
 
-  it('falls back to built-in subagent types when subagents is an empty array', async () => {
-    const { ctx } = createContext([]);
+  it('disables subagents globally and asks for a restart', async () => {
+    const settings = createSettings(true);
+    loadSettings.mockReturnValue(settings);
+    askModalQuestion.mockResolvedValue('Disable subagents');
+    const ctx = createCtx();
 
     await handleSubagentsCommand(ctx);
 
-    expect(askQuestionMock).toHaveBeenCalledTimes(1);
-    const question = askQuestionMock.mock.calls[0]?.[0];
-    expect(question.options).toEqual([
-      { label: 'Explore', description: 'Read-only codebase exploration' },
-      { label: 'Plan', description: 'Read-only analysis and planning' },
-      { label: 'Execute', description: 'Task execution with write access' },
-    ]);
+    expect(settings.preferences.subagentsEnabled).toBe(false);
+    expect(saveSettings).toHaveBeenCalledWith(settings);
+    expect(ctx.showInfo).toHaveBeenCalledWith('Subagents disabled. Restart MastraCode for this to take effect.');
   });
 
-  it('renders configured subagents from the controller config', async () => {
-    const { ctx } = createContext([
-      {
-        id: 'explore',
-        name: 'Explore',
-        description: 'Read-only codebase exploration',
-      },
-      {
-        id: 'plan',
-        name: 'Plan',
-        description: 'Read-only analysis and planning',
-      },
-      {
-        id: 'execute',
-        name: 'Execute',
-        description: 'Task execution with write access',
-      },
-      {
-        id: 'test-writer',
-        name: 'Test Writer',
-        description: 'Write tests for the specified module',
-      },
-    ]);
+  it('uses built-in types when configuring models without explicit subagents', async () => {
+    askModalQuestion.mockResolvedValueOnce('Configure models').mockResolvedValueOnce(null);
+    const ctx = createCtx();
 
     await handleSubagentsCommand(ctx);
 
-    expect(askQuestionMock).toHaveBeenCalledTimes(1);
-    const question = askQuestionMock.mock.calls[0]?.[0];
-    expect(question.options).toEqual([
-      { label: 'Explore', description: 'Read-only codebase exploration' },
-      { label: 'Plan', description: 'Read-only analysis and planning' },
-      { label: 'Execute', description: 'Task execution with write access' },
-      { label: 'Test Writer', description: 'Write tests for the specified module' },
-    ]);
+    expect(askModalQuestion).toHaveBeenNthCalledWith(
+      2,
+      ctx.state.ui,
+      expect.objectContaining({
+        question: 'Select subagent type',
+        allowCustomResponse: false,
+        options: expect.arrayContaining([
+          expect.objectContaining({ label: 'Explore' }),
+          expect.objectContaining({ label: 'Plan' }),
+          expect.objectContaining({ label: 'Execute' }),
+        ]),
+      }),
+    );
+  });
+
+  it('uses configured subagent types when configuring models', async () => {
+    askModalQuestion.mockResolvedValueOnce('Configure models').mockResolvedValueOnce(null);
+    const ctx = createCtx([{ id: 'custom', name: 'Custom agent', description: 'Custom desc' }]);
+
+    await handleSubagentsCommand(ctx);
+
+    expect(askModalQuestion).toHaveBeenNthCalledWith(
+      2,
+      ctx.state.ui,
+      expect.objectContaining({
+        allowCustomResponse: false,
+        options: [expect.objectContaining({ label: 'Custom agent', description: 'Custom desc' })],
+      }),
+    );
   });
 });

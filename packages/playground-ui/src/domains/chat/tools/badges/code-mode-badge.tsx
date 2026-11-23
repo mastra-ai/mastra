@@ -1,0 +1,120 @@
+import { useEffect, useState } from 'react';
+import { SectionLabel } from '../../components/section-label';
+import type { MessageMetadata } from '../../messages/message-metadata';
+import type { CodeModeResult } from '../code-mode';
+import type { ToolApprovalRequest } from './tool-approval-badge';
+import { ToolApprovalBadge } from './tool-approval-badge';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
+import { Code } from '@/ds/components/Code';
+import { CodeBlock } from '@/ds/components/CodeBlock';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { formatTypeScript } from '@/utils/formatting';
+
+const CodeToolIcon = agentGlyph('inspecting');
+
+export interface CodeModeBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
+  toolName: string;
+  code: string;
+  result?: CodeModeResult;
+  metadata?: MessageMetadata;
+  toolCalled?: boolean;
+}
+
+export const CodeModeBadge = ({
+  toolName,
+  code,
+  result,
+  metadata,
+  toolCallId,
+  toolApprovalMetadata,
+  isNetwork,
+  toolCalled: toolCalledProp,
+}: CodeModeBadgeProps) => {
+  const logs = result?.logs ?? [];
+  const error = result?.error;
+  const resultValue = result?.result;
+  const hasResultValue = resultValue !== undefined;
+
+  const toolCalled = toolCalledProp ?? result !== undefined;
+
+  // The model usually emits the program as a single line; pretty-print it so the
+  // highlighted block is readable. Falls back to the raw code if formatting fails
+  // (e.g. the program is still streaming and not yet syntactically valid).
+  const [formattedCode, setFormattedCode] = useState(code);
+  useEffect(() => {
+    let cancelled = false;
+    formatTypeScript(code)
+      .then(pretty => {
+        if (!cancelled) setFormattedCode(pretty);
+      })
+      .catch(() => {
+        if (!cancelled) setFormattedCode(code);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
+  return (
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
+      data-testid="code-mode-badge"
+      icon={<CodeToolIcon className="text-span-tool" />}
+      title={toolName}
+      initialCollapsed={!toolApprovalMetadata}
+    >
+      <div className="space-y-4">
+        <div>
+          <SectionLabel>Program</SectionLabel>
+          <div data-testid="code-mode-program">
+            <CodeBlock code={formattedCode} lang="typescript" />
+          </div>
+        </div>
+
+        {error && (
+          <div>
+            <SectionLabel>Error</SectionLabel>
+            <Code
+              data-testid="code-mode-error"
+              className="rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap text-destructive-foreground"
+              code={`${error.name ? `${error.name}: ` : ''}${error.message}${typeof error.line === 'number' ? ` (line ${error.line})` : ''}`}
+            />
+          </div>
+        )}
+
+        {hasResultValue && (
+          <div>
+            <SectionLabel>Result</SectionLabel>
+            {typeof resultValue === 'string' ? (
+              <Code
+                className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
+                data-testid="code-mode-result"
+                code={resultValue}
+              />
+            ) : (
+              <CodeEditor data={resultValue as Record<string, unknown>} data-testid="code-mode-result" />
+            )}
+          </div>
+        )}
+
+        {logs.length > 0 && (
+          <div>
+            <SectionLabel>Logs</SectionLabel>
+            <Code
+              data-testid="code-mode-logs"
+              className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
+              code={logs.join('\n')}
+            />
+          </div>
+        )}
+      </div>
+    </ToolApprovalBadge>
+  );
+};

@@ -1,0 +1,84 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { CoreUserMessage } from '@mastra/core/llm';
+import type { TaskItem } from '@mastra/core/signals';
+import { createContext, useContext } from 'react';
+
+/**
+ * Plain-prop chat context for the main agent chat, replacing the assistant-ui
+ * `useExternalStoreRuntime` runtime and the `ToolCallProvider`.
+ *
+ * The context is split into focused slices so that high-churn message updates
+ * don't force the composer / running consumers to re-render and vice versa.
+ */
+
+export interface ChatSendArgs {
+  /** Plain user text. */
+  message: string;
+  /** Attachments already converted to core user messages (images / files). */
+  attachments?: CoreUserMessage[];
+  /** Entries added to this turn's request context, on top of the agent's own, e.g. an interface's state. */
+  requestContext?: Record<string, unknown>;
+}
+
+export interface MessagesContextValue {
+  /** Live `useChat` messages merged with persisted-surviving stream errors. */
+  messages: MastraDBMessage[];
+}
+
+export interface RunningContextValue {
+  /** True while streaming OR awaiting a tool approval. Gates composer send/cancel state. */
+  isRunning: boolean;
+  /** Matches the runId on streamed message metadata; absent before execution starts. */
+  activeRunId?: string;
+  /** Cancels the in-flight run (abort + OM reset + cancelRun). */
+  cancelRun: () => void | Promise<void>;
+  /** Whether the composer may send a new message mid-stream (thread signals). */
+  canSendWhileStreaming: boolean;
+}
+
+export interface SendContextValue {
+  /**
+   * Resolves to `false` when the server can't have stored the message (no response, or a refusal such
+   * as a body too large), so the composer can put it back.
+   */
+  send: (args: ChatSendArgs) => void | Promise<boolean>;
+  /**
+   * Holds context for the agent's next turn, keyed by where it comes from (such as an MCP App's tool
+   * call). On the next send, each source's latest value goes out once in the user turn, inside an
+   * `<mcp-app-context trust="untrusted">` block marked as data rather than instructions, then is
+   * cleared. Keep it out of the system prompt: apps are third parties. `undefined` or an empty string
+   * drops a source's context. Absent when the chat can't carry it.
+   */
+  setModelContext?: (sourceId: string, context: string | undefined) => void;
+}
+
+export interface TasksContextValue {
+  tasks: TaskItem[];
+}
+
+export interface AgentContextValue {
+  agentId: string;
+  agentVersionId?: string;
+  requestContext?: Record<string, unknown>;
+}
+
+// NOTE: Tool/network approvals are NOT exposed here. They live in a separate
+// slice (`./tool-call-context`) for the same churn reasons, and the badge
+// approval buttons read it via `useToolCall()`.
+
+export const ChatMessagesContext = createContext<MessagesContextValue>({ messages: [] });
+export const ChatRunningContext = createContext<RunningContextValue>({
+  isRunning: false,
+  cancelRun: () => {},
+  canSendWhileStreaming: false,
+});
+export const ChatSendContext = createContext<SendContextValue>({ send: () => {} });
+export const ChatTasksContext = createContext<TasksContextValue>({ tasks: [] });
+export const ChatAgentContext = createContext<AgentContextValue | undefined>(undefined);
+
+export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesContext).messages;
+export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
+export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
+export const useChatModelContext = (): SendContextValue['setModelContext'] =>
+  useContext(ChatSendContext).setModelContext;
+export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;

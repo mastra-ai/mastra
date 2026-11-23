@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+const searchConfig = vi.hoisted(() => ({ parallel: false, tavily: false }));
+
 // Keep prompt tests independent from optional web-search package artifacts.
 vi.mock('../../tools/index.js', () => ({
-  hasParallelKey: () => false,
-  hasTavilyKey: () => false,
+  hasParallelKey: () => searchConfig.parallel,
+  hasTavilyKey: () => searchConfig.tavily,
 }));
 
 const mocks = vi.hoisted(() => ({ home: '' }));
@@ -207,5 +209,133 @@ describe('buildFullPrompt operator-machine instructions', () => {
     });
     expect(prompt).not.toContain('OPERATOR: answer in prose, never use headings');
     expect(prompt).toContain('PROJECT: run the unit tests before pushing');
+  });
+});
+
+describe('buildFullPrompt instruction roots', () => {
+  // A host that boots several checkouts under one working directory names
+  // them, so each repository's own AGENTS.md reaches the prompt.
+  const workspace = mkdtempSync(join(tmpdir(), 'prompt-roots-'));
+  const git = (dir: string, ...args: string[]) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
+  for (const [name, text] of [
+    ['api', 'API: run pnpm test in api'],
+    ['web', 'WEB: never edit generated files'],
+  ] as const) {
+    const dir = join(workspace, name);
+    mkdirSync(dir);
+    git(dir, 'init', '-b', 'main');
+    git(dir, 'config', 'user.email', 'test@example.com');
+    git(dir, 'config', 'user.name', 'Test');
+    writeFileSync(join(dir, 'AGENTS.md'), `${text} (trusted)`);
+    git(dir, 'add', 'AGENTS.md');
+    git(dir, 'commit', '-m', 'instructions');
+    writeFileSync(join(dir, 'AGENTS.md'), `${text} (working tree)`);
+  }
+
+  afterAll(() => {
+    rmSync(workspace, { recursive: true, force: true });
+  });
+
+  const baseCtx = {
+    projectPath: workspace,
+    projectName: 'acme/api',
+    gitBranch: 'main',
+    platform: 'darwin' as const,
+    date: '2026-03-23',
+    mode: 'build',
+    activePlan: null,
+    modeId: 'build',
+    currentDate: '2026-03-23',
+    workingDir: workspace,
+  };
+
+  it('finds no project instructions at a workspace root that holds the checkouts', () => {
+    const prompt = buildFullPrompt({ ...baseCtx, state: { permissionRules: { tools: {} } } });
+    expect(prompt).not.toContain('API: run pnpm test');
+  });
+
+  it('loads every root, the session checkout first, with operator files skipped once', () => {
+    const prompt = buildFullPrompt({
+      ...baseCtx,
+      state: { permissionRules: { tools: {} }, skipGlobalInstructions: true, instructionRoots: ['api', 'web'] },
+    });
+    expect(prompt).toContain('API: run pnpm test in api (working tree)');
+    expect(prompt).toContain('WEB: never edit generated files (working tree)');
+    expect(prompt.indexOf('API:')).toBeLessThan(prompt.indexOf('WEB:'));
+    expect(prompt).toContain(join(workspace, 'web', 'AGENTS.md'));
+    expect(prompt).not.toContain('OPERATOR: answer in prose');
+  });
+
+  it('serves only the session checkout from its base ref on an untrusted checkout', () => {
+    const prompt = buildFullPrompt({
+      ...baseCtx,
+      state: {
+        permissionRules: { tools: {} },
+        untrustedCheckout: true,
+        baseRef: 'main',
+        instructionRoots: ['api', 'web'],
+      },
+    });
+    expect(prompt).toContain('API: run pnpm test in api (trusted)');
+    expect(prompt).not.toContain('(working tree)');
+    expect(prompt).not.toContain('WEB:');
+  });
+});
+
+describe('web search guidance for model aliases', () => {
+  const context = {
+    projectPath: '/tmp/project',
+    projectName: 'test-project',
+    modeId: 'build',
+    currentDate: '2026-03-23',
+    workingDir: '/tmp/project',
+    platform: 'linux',
+    date: '2026-03-23',
+    mode: 'build',
+  };
+
+  it.each(['openai/gpt-5.5', 'anthropic/claude-sonnet-4-5'])(
+    'advertises provider search for %s and its gateway alias',
+    modelId => {
+      for (const id of [modelId, `mastra/${modelId}`]) {
+        const prompt = buildFullPrompt({ ...context, modelId: id });
+        expect(prompt).toContain('**web_search** — Search the web');
+        // Provider search registers no extract tool, so none is advertised.
+        expect(prompt).not.toContain('**web_extract**');
+        expect(
+          buildFullPrompt({ ...context, modelId: id, state: { permissionRules: { tools: { web_search: 'deny' } } } }),
+        ).not.toContain('**web_search**');
+      }
+    },
+  );
+
+  it.each(['parallel', 'tavily'] as const)('advertises configured %s search for other providers', backend => {
+    searchConfig[backend] = true;
+    try {
+      expect(buildFullPrompt({ ...context, modelId: 'mastra/google/gemini-2.5-flash' })).toContain(
+        '**web_search** / **web_extract** — Search the web / extract page content',
+      );
+    } finally {
+      searchConfig[backend] = false;
+    }
+  });
+
+  it('omits web tool guidance for tools removed via disabledTools', () => {
+    expect(
+      buildFullPrompt({ ...context, modelId: 'mastra/openai/gpt-5.5', disabledTools: ['web_search'] }),
+    ).not.toContain('**web_search**');
+
+    searchConfig.parallel = true;
+    try {
+      const prompt = buildFullPrompt({ ...context, modelId: 'openai/gpt-5.5', disabledTools: ['web_extract'] });
+      expect(prompt).toContain('**web_search** — Search the web');
+      expect(prompt).not.toContain('**web_extract**');
+    } finally {
+      searchConfig.parallel = false;
+    }
+  });
+
+  it('does not advertise absent search for other providers', () => {
+    expect(buildFullPrompt({ ...context, modelId: 'mastra/google/gemini-2.5-flash' })).not.toContain('**web_search**');
   });
 });

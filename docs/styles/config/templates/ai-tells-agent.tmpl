@@ -1,0 +1,29 @@
+{{- /*
+  Output optimized for LLM coding agents: one self-contained line per
+  finding, carrying the exact matched text and the replacement parameter
+  (when the rule's action defines one), so the consumer can fix findings
+  without re-reading context via separate commands. Matches and messages
+  print %q-quoted to stay machine-parseable when they contain spaces or
+  quotes. Zero findings render nothing; the exit code carries the result.
+*/ -}}
+{{- $total := 0 -}}
+{{- $errors := 0 -}}
+{{- $warnings := 0 -}}
+{{- $suggestions := 0 -}}
+{{- $files := 0 -}}
+{{- range .Files -}}
+{{- if .Alerts -}}
+{{- $files = add1 $files -}}
+FILE: {{ .Path }}
+{{ range .Alerts -}}
+{{- $total = add1 $total -}}
+{{- if eq .Severity "error" }}{{ $errors = add1 $errors }}{{ end -}}
+{{- if eq .Severity "warning" }}{{ $warnings = add1 $warnings }}{{ end -}}
+{{- if eq .Severity "suggestion" }}{{ $suggestions = add1 $suggestions }}{{ end -}}
+{{ .Line }}:{{ index .Span 0 }}-{{ index .Span 1 }} [{{ .Severity }}] {{ .Check }} match={{ printf "%q" .Match }}{{ if and (eq .Action.Name "replace") .Action.Params }} replace_with={{ printf "%q" (index .Action.Params 0) }}{{ end }} msg={{ printf "%q" .Message }}
+{{ end }}
+{{- end -}}
+{{- end -}}
+{{- if $total -}}
+TOTAL: {{ $total }} finding(s) ({{ $errors }} error, {{ $warnings }} warning, {{ $suggestions }} suggestion) in {{ $files }} file(s)
+{{ end -}}

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ApiCommandDescriptor } from './types';
 import { API_COMMANDS, executeDescriptor, registerApiCommand } from './index';
 
 const fetchMock = vi.fn();
@@ -46,22 +47,124 @@ describe('api command registration', () => {
     expect(agentGet?.helpInformation()).not.toContain('--schema');
   });
 
-  it('exposes verbose trace and span trace commands', () => {
+  it('exposes trace list, get, span, and query commands', () => {
     const program = new Command();
     registerApiCommand(program);
 
     const api = program.commands.find(command => command.name() === 'api');
     const trace = api?.commands.find(command => command.name() === 'trace');
     const traceGet = trace?.commands.find(command => command.name() === 'get');
+    const traceQuery = trace?.commands.find(command => command.name() === 'query');
 
     expect(trace?.commands.find(command => command.name() === 'list')?.helpInformation()).toContain('--verbose');
     expect(traceGet?.helpInformation()).toContain('--verbose');
     expect(trace?.commands.find(command => command.name() === 'span')?.description()).toBe('Get a trace span');
+    expect(traceQuery?.helpInformation()).toContain('--schema');
+    expect(traceQuery?.helpInformation()).not.toContain('--verbose');
     expect(API_COMMANDS.traceList).toMatchObject({ method: 'GET', path: '/observability/traces/light' });
     expect(API_COMMANDS.traceGet).toMatchObject({ method: 'GET', path: '/observability/traces/:traceId/light' });
     expect(API_COMMANDS.traceSpan).toMatchObject({
       method: 'GET',
       path: '/observability/traces/:traceId/spans/:spanId',
+    });
+    expect(API_COMMANDS.traceQuery).toMatchObject({
+      method: 'POST',
+      path: '/observability/traces/query',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
+    });
+  });
+
+  it('exposes the trace aggregate command with schema discovery and examples', () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    const api = program.commands.find(command => command.name() === 'api');
+    const trace = api?.commands.find(command => command.name() === 'trace');
+    const traceAggregate = trace?.commands.find(command => command.name() === 'aggregate');
+    let help = '';
+    traceAggregate?.configureOutput({ writeOut: chunk => (help += chunk) });
+    traceAggregate?.outputHelp();
+
+    expect(traceAggregate?.description()).toBe('Aggregate observability traces into grouped measures');
+    expect(help).toContain('--schema');
+    expect(help).toContain('"groupBy":["entityName"],"measures":["count","errorRate"]');
+    expect(help).toContain('"orderBy":{"field":"cost.sum","direction":"desc"},"limit":10');
+    expect(help).toContain('"interval":"1d","measures":["count","duration.p95"]');
+    expect(API_COMMANDS.traceAggregate).toMatchObject({
+      method: 'POST',
+      path: '/observability/traces/aggregate',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
+    });
+  });
+
+  it('exposes span query and aggregate commands with schema discovery and examples', () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    const api = program.commands.find(command => command.name() === 'api');
+    const span = api?.commands.find(command => command.name() === 'span');
+    const spanQuery = span?.commands.find(command => command.name() === 'query');
+    const spanAggregate = span?.commands.find(command => command.name() === 'aggregate');
+    let queryHelp = '';
+    spanQuery?.configureOutput({ writeOut: chunk => (queryHelp += chunk) });
+    spanQuery?.outputHelp();
+    let aggregateHelp = '';
+    spanAggregate?.configureOutput({ writeOut: chunk => (aggregateHelp += chunk) });
+    spanAggregate?.outputHelp();
+
+    expect(span?.description()).toBe('Query and aggregate observability spans');
+    expect(spanQuery?.description()).toBe('Query observability spans with advanced predicates');
+    expect(queryHelp).toContain('--schema');
+    expect(queryHelp).not.toContain('--verbose');
+    expect(queryHelp).toContain('{"op":"eq","left":{"path":"status"},"right":{"literal":"error"}}');
+    expect(queryHelp).toContain('{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}');
+    expect(queryHelp).toContain('"page":{"limit":50,"after":"NEXT_CURSOR"}');
+    expect(spanAggregate?.description()).toBe('Aggregate observability spans into grouped measures');
+    expect(aggregateHelp).toContain('--schema');
+    expect(aggregateHelp).toContain('"groupBy":["status"],"interval":"1d","measures":["count"]');
+    expect(aggregateHelp).toContain(
+      '"groupBy":["entityName"],"measures":["count","errorRate","duration.p95"],"orderBy":{"field":"errorRate","direction":"desc"},"limit":10',
+    );
+    expect(aggregateHelp).toContain('"groupBy":["rootEntityName"],"measures":["tokens.total.sum","cost.sum"]');
+    expect(API_COMMANDS.spanQuery).toMatchObject({
+      method: 'POST',
+      path: '/observability/spans/query',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
+    });
+    expect(API_COMMANDS.spanAggregate).toMatchObject({
+      method: 'POST',
+      path: '/observability/spans/aggregate',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
+    });
+  });
+
+  it('exposes score and feedback deletion commands', () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    const api = program.commands.find(command => command.name() === 'api');
+    const score = api?.commands.find(command => command.name() === 'score');
+    const feedback = api?.commands.find(command => command.name() === 'feedback');
+
+    expect(score?.commands.find(command => command.name() === 'delete')?.helpInformation()).toContain('[input]');
+    expect(feedback?.commands.find(command => command.name() === 'delete')?.helpInformation()).toContain('[input]');
+    expect(API_COMMANDS.scoreDelete).toMatchObject({
+      method: 'DELETE',
+      path: '/observability/scores',
+      inputRequired: true,
+    });
+    expect(API_COMMANDS.feedbackDelete).toMatchObject({
+      method: 'DELETE',
+      path: '/observability/feedback',
+      inputRequired: true,
     });
   });
 });
@@ -135,6 +238,284 @@ describe('api command executor', () => {
     });
   });
 
+  it('routes origin descriptors outside the API prefix while preserving shared options', async () => {
+    const descriptor: ApiCommandDescriptor = {
+      key: 'rootItemList',
+      name: 'root-item list',
+      description: 'List root-level items',
+      method: 'GET',
+      path: '/web/items',
+      positionals: [],
+      acceptsInput: true,
+      inputRequired: false,
+      list: true,
+      responseShape: { kind: 'array' },
+      queryParams: ['status'],
+      bodyParams: [],
+      routePlacement: 'origin',
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id: 'item-1' }]));
+
+    await executeDescriptor(descriptor, [], '{"status":"open"}', {
+      url: 'https://example.com',
+      serverApiPrefix: '/custom-api',
+      header: ['X-Test-Run: root-route'],
+      timeout: '2500',
+      pretty: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/web/items?status=open', {
+      method: 'GET',
+      headers: { 'X-Test-Run': 'root-route' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(stdout).toBe(
+      `${JSON.stringify(
+        {
+          data: [{ id: 'item-1' }],
+          page: { total: 1, page: 0, perPage: 1, hasMore: false },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it('runs Factory project list through the shared flags and normalizes the generated projects shape', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ projects: [{ id: 'project-1', name: 'Factory One' }] }));
+
+    const program = new Command();
+    registerApiCommand(program);
+    await program.parseAsync([
+      'node',
+      'mastra',
+      'api',
+      '--url',
+      'https://example.com',
+      '--server-api-prefix',
+      '/custom-api',
+      '--header',
+      'Authorization: Bearer factory-token',
+      '--header',
+      'X-Test-Run: factory-list',
+      '--timeout',
+      '2500',
+      '--pretty',
+      'factory',
+      'project',
+      'list',
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/web/factory/projects', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer factory-token', 'X-Test-Run': 'factory-list' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(stdout).toBe(
+      `${JSON.stringify(
+        {
+          data: [{ id: 'project-1', name: 'Factory One' }],
+          page: { total: 1, page: 0, perPage: 1, hasMore: false },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it('splits Factory project updates and governed transitions into root-level path and body fields', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ id: 'project-1', name: 'Renamed Factory' }))
+      .mockResolvedValueOnce(jsonResponse({ workItem: { id: 'work-item-1', stage: 'planning', revision: 2 } }));
+
+    await executeDescriptor(API_COMMANDS.factoryProjectUpdate, ['project-1'], '{"name":"Renamed Factory"}', {
+      url: 'https://example.com',
+      serverApiPrefix: '/custom-api',
+      header: [],
+      pretty: false,
+    });
+    stdout = '';
+    await executeDescriptor(
+      API_COMMANDS['factoryWork-itemTransition'],
+      ['project-1', 'work-item-1'],
+      '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.com/web/factory/projects/project-1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ name: 'Renamed Factory' }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/web/factory/projects/project-1/work-items/work-item-1/transition',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal: expect.any(AbortSignal),
+        body: JSON.stringify({
+          board: 'work',
+          stage: 'planning',
+          requestId: '00000000-0000-4000-8000-000000000000',
+          cause: 'manual',
+          expectedRevision: 1,
+        }),
+      },
+    );
+  });
+
+  it('preserves companion fields in Factory work-item, decision, and attention list responses', async () => {
+    const workItems = { workItems: [{ id: 'work-item-1' }], runningSessionIds: ['session-1'] };
+    const decisions = { decisions: [{ id: 'decision-1' }], nextCursor: 'decision-cursor' };
+    const attention = {
+      items: [{ kind: 'automation-failed', sourceId: 'decision-1' }],
+      unreadCount: 1,
+      nextCursor: 'attention-cursor',
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(workItems))
+      .mockResolvedValueOnce(jsonResponse(decisions))
+      .mockResolvedValueOnce(jsonResponse(attention));
+
+    await executeDescriptor(API_COMMANDS['factoryWork-itemList'], ['project-1'], undefined, {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: workItems });
+    stdout = '';
+    await executeDescriptor(API_COMMANDS.factoryDecisionList, ['project-1'], '{"limit":10}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: decisions });
+    stdout = '';
+    await executeDescriptor(API_COMMANDS.factoryAttentionList, ['project-1'], '{"view":"unread","limit":20}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: attention });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/web/factory/projects/project-1/decisions?limit=10',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'https://example.com/web/factory/projects/project-1/attention?view=unread&limit=20',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('sends the filters of Factory work-item list in the request URL', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ workItems: [{ id: 'work-item-1' }], runningSessionIds: [] }));
+
+    await executeDescriptor(
+      API_COMMANDS['factoryWork-itemList'],
+      ['project-1'],
+      '{"started":"false","q":"login flow","limit":10}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/web/factory/projects/project-1/work-items?started=false&q=login+flow&limit=10',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('sends a list filter of Factory list commands as one query parameter per value', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ workItems: [{ id: 'work-item-1' }], runningSessionIds: [] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [], unreadCount: 0 }));
+
+    await executeDescriptor(API_COMMANDS['factoryWork-itemList'], ['project-1'], '{"source":["a","b"]}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+    await executeDescriptor(
+      API_COMMANDS.factoryAttentionList,
+      ['project-1'],
+      '{"view":"unread","kind":["automation-failed","agent-waiting"]}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://example.com/web/factory/projects/project-1/work-items?source=a&source=b',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/web/factory/projects/project-1/attention?view=unread&kind=automation-failed&kind=agent-waiting',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('executes Factory decision actions at the resolved origin', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    await executeDescriptor(API_COMMANDS.factoryDecisionApprove, ['project-1', 'decision-1'], undefined, {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.com/web/factory/projects/project-1/decisions/decision-1/approve',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('uses the configured API prefix for implicit localhost probing but not for Factory requests', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ routes: [] }))
+      .mockResolvedValueOnce(jsonResponse({ workItem: { id: 'work-item-1', revision: 2 } }));
+
+    await executeDescriptor(
+      API_COMMANDS['factoryWork-itemTransition'],
+      ['project-1', 'work-item-1'],
+      '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}',
+      { serverApiPrefix: '/custom-api', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:4111/custom-api/system/api-schema', {
+      method: 'GET',
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:4111/web/factory/projects/project-1/work-items/work-item-1/transition',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('prints generated Factory schemas without requesting the target schema manifest', async () => {
+    await executeDescriptor(API_COMMANDS['factoryWork-itemTransition'], [], undefined, {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+      schema: true,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout)).toMatchObject({
+      command: 'mastra api factory work-item transition <id> <workItemId> <input>',
+      method: 'POST',
+      path: '/web/factory/projects/:id/work-items/:workItemId/transition',
+      input: { required: true, source: 'body' },
+      schemas: {
+        pathParams: { type: 'object' },
+        body: { type: 'object' },
+      },
+    });
+  });
+
   it('runs an agent with JSON body and writes concise normalized output', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -159,6 +540,40 @@ describe('api command executor', () => {
       body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
     });
     expect(JSON.parse(stdout)).toEqual({ data: { text: 'hello', usage: { totalTokens: 12 }, spanId: 'span-1' } });
+  });
+
+  it('sends score and feedback deletion filters in request bodies', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }));
+
+    await executeDescriptor(
+      API_COMMANDS.scoreDelete,
+      [],
+      '{"scoreIds":["score_123"],"organizationId":"org_123","resourceId":"resource_123"}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+    await executeDescriptor(
+      API_COMMANDS.feedbackDelete,
+      [],
+      '{"feedbackIds":["feedback_123"],"organizationId":"org_123"}',
+      { url: 'https://example.com', header: [], pretty: false },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://example.com/api/observability/scores', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({
+        scoreIds: ['score_123'],
+        organizationId: 'org_123',
+        resourceId: 'resource_123',
+      }),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://example.com/api/observability/feedback', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify({ feedbackIds: ['feedback_123'], organizationId: 'org_123' }),
+    });
   });
 
   it('does not treat JSON input as an identity argument', async () => {
@@ -325,6 +740,332 @@ describe('api command executor', () => {
       data: [{ traceId: 'trace-1', spanId: 'span-1', input: { value: 'hello' } }],
       page: { total: 1, page: 0, perPage: 1, hasMore: false },
     });
+  });
+
+  it('queries traces with a JSON body and preserves cursor pagination', async () => {
+    const input = {
+      timeRange: {
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-08-08T00:00:00.000Z',
+      },
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+              { op: 'exists', path: 'error' },
+            ],
+          },
+        },
+      },
+      page: { limit: 25, after: 'previous-cursor' },
+    };
+    const response = {
+      traces: [
+        {
+          traceId: 'trace-1',
+          rootSpanId: 'span-1',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          startedAt: '2026-08-02T00:00:00.000Z',
+          endedAt: '2026-08-02T00:00:01.000Z',
+          entityName: 'weather-agent',
+          entityType: 'agent',
+          environment: 'production',
+          status: 'error',
+        },
+      ],
+      page: { next: 'next-cursor' },
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.traceQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/traces/query', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+  });
+
+  it.each([
+    [
+      { pagination: { page: 0, perPage: 25 } },
+      { pagination: { total: 0, page: 0, perPage: 25, hasMore: false }, deltaCursor: 'bootstrap' },
+    ],
+    [
+      { mode: 'delta', after: 'bootstrap', limit: 25 },
+      { delta: { limit: 25, hasMore: true }, deltaCursor: 'continuation' },
+    ],
+  ])('preserves numbered-to-delta query inputs and polling metadata', async (paginationInput, metadata) => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+      ...paginationInput,
+    };
+    const response = { traces: [], ...metadata };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+    await executeDescriptor(API_COMMANDS.traceQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://observability.mastra.ai/api/observability/traces/query',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    );
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+  });
+
+  it('posts trace aggregate requests and preserves rows and truncation', async () => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'errorRate', 'cost.sum'],
+      orderBy: { field: 'count', direction: 'desc' },
+      limit: 1,
+    };
+    const response = {
+      rows: [
+        {
+          dimensions: { entityName: 'weather-agent' },
+          bucket: '2026-08-01T00:00:00.000Z',
+          measures: { count: 42, errorRate: 0.05, 'cost.sum': 1.25 },
+          cost: { coverage: 1, unit: 'usd' },
+        },
+      ],
+      truncated: true,
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.traceAggregate, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/traces/aggregate', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+    expect(stderr).toBe('');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('prints trace aggregate capability errors as HTTP errors with the server body', async () => {
+    const body = {
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Trace aggregation is not supported by the configured observability store',
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(body, { status: 501 }));
+
+    await executeDescriptor(
+      API_COMMANDS.traceAggregate,
+      [],
+      '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"measures":["count"]}',
+      {
+        url: 'https://observability.mastra.ai',
+        header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+        pretty: false,
+      },
+    );
+
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr)).toEqual({
+      error: { code: 'HTTP_ERROR', message: 'Request failed with status 501', details: { status: 501, body } },
+    });
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('queries spans with a JSON body and preserves cursor pagination', async () => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+          { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+        ],
+      },
+      orderBy: [{ field: 'startedAt', direction: 'desc' }],
+      page: { limit: 25, after: 'previous-cursor' },
+    };
+    const response = {
+      spans: [
+        {
+          traceId: 'trace-1',
+          spanId: 'span-2',
+          parentSpanId: 'span-1',
+          name: "tool: 'get-weather'",
+          spanType: 'tool_call',
+          status: 'error',
+          startedAt: '2026-08-01T12:00:00.000Z',
+          endedAt: '2026-08-01T12:00:01.000Z',
+          durationMs: 1000,
+          entityType: 'tool',
+          entityId: 'get-weather',
+          entityName: 'get-weather',
+          rootEntityName: 'weather-agent',
+          model: null,
+          provider: null,
+          inputPreview: { text: '{"city":"Paris"}', truncated: false },
+          outputPreview: null,
+          errorPreview: { text: 'Upstream timeout', truncated: false },
+        },
+      ],
+      page: { next: 'next-cursor' },
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.spanQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/spans/query', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+    expect(stderr).toBe('');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it.each([
+    [
+      501,
+      {
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: 'Span queries are not supported by the configured observability store',
+      },
+    ],
+    [
+      422,
+      {
+        code: 'TRACE_QUERY_INVALID',
+        message: 'The span query is invalid',
+        issues: [
+          {
+            code: 'field_not_allowed',
+            path: ['where'],
+            message: 'Filtering by threadId requires an updated storage adapter with span query context-field support.',
+          },
+        ],
+      },
+    ],
+  ])('prints span query capability errors (%i) as HTTP errors with the server body', async (status, body) => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(body, { status }));
+
+    await executeDescriptor(
+      API_COMMANDS.spanQuery,
+      [],
+      '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-02T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"threadId"},"right":{"literal":"thread-1"}}}',
+      {
+        url: 'https://observability.mastra.ai',
+        header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+        pretty: false,
+      },
+    );
+
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr)).toEqual({
+      error: { code: 'HTTP_ERROR', message: `Request failed with status ${status}`, details: { status, body } },
+    });
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('posts span aggregate requests and preserves rows and truncation', async () => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+      groupBy: ['entityName'],
+      measures: ['count', 'errorRate', 'duration.p95'],
+      orderBy: { field: 'errorRate', direction: 'desc' },
+      limit: 1,
+    };
+    const response = {
+      rows: [
+        {
+          dimensions: { entityName: 'get-weather' },
+          measures: { count: 120, errorRate: 0.1, 'duration.p95': 850 },
+        },
+      ],
+      truncated: true,
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.spanAggregate, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/spans/aggregate', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+    expect(stderr).toBe('');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('prints span aggregate capability errors as HTTP errors with the server body', async () => {
+    const body = {
+      code: 'SPAN_AGGREGATE_UNSUPPORTED',
+      message: 'Span aggregation is not supported by the configured observability store',
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(body, { status: 501 }));
+
+    await executeDescriptor(
+      API_COMMANDS.spanAggregate,
+      [],
+      '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"measures":["count"]}',
+      {
+        url: 'https://observability.mastra.ai',
+        header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+        pretty: false,
+      },
+    );
+
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr)).toEqual({
+      error: { code: 'HTTP_ERROR', message: 'Request failed with status 501', details: { status: 501, body } },
+    });
+    expect(process.exitCode).toBe(1);
   });
 
   it('gets lightweight trace details by default, full trace details with --verbose, and a specific trace span', async () => {

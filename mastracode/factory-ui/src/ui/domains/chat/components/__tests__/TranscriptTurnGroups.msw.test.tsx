@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { createInitialTranscript, transcriptReducer } from '../../services/transcript';
@@ -8,37 +8,14 @@ import type { TimelineEntry } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
-const ROOM_CLASS = 'turn-room-open';
-const ROOM_SELECTOR = `.${ROOM_CLASS}`;
+const ROOM_SELECTOR = '[data-holds-room]';
 
-function textEntry(id: string, role: 'user' | 'assistant', text: string): TimelineEntry {
+function textEntry(id: string, role: 'user' | 'assistant', text: string, createdAt = CREATED_AT): TimelineEntry {
   const message: MastraDBMessage = {
     id,
     role,
-    createdAt: CREATED_AT,
+    createdAt,
     content: { format: 2, parts: [{ type: 'text', text }] },
-  };
-  return { kind: 'message', id, message };
-}
-
-function gapEntry(id: string): TimelineEntry {
-  const message: MastraDBMessage = {
-    id,
-    role: 'signal',
-    createdAt: CREATED_AT,
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: '24 minutes later — 07/15/2026, 10:00 AM GMT+2' }],
-      metadata: {
-        signal: {
-          id,
-          type: 'reactive',
-          tagName: 'system-reminder',
-          createdAt: CREATED_AT.toISOString(),
-          attributes: { type: 'temporal-gap' },
-        },
-      },
-    },
   };
   return { kind: 'message', id, message };
 }
@@ -90,12 +67,12 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
     const liveGroup = screen.getByTestId('tail').parentElement;
-    expect(liveGroup).toHaveClass(ROOM_CLASS);
+    expect(liveGroup).toHaveAttribute('data-holds-room', 'true');
     expect(liveGroup).toBeInstanceOf(HTMLElement);
     if (liveGroup) expect(within(liveGroup).getByText('second question')).toBeInTheDocument();
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBeNull();
@@ -110,14 +87,14 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
-    expect(screen.getByTestId('tail').parentElement).toHaveClass(ROOM_CLASS);
+    expect(screen.getByTestId('tail').parentElement).toHaveAttribute('data-holds-room', 'true');
     // Closes as the new turn opens instead of vanishing under the reader.
-    const handedOver = screen.getByText('second question').closest('.turn-room');
+    const handedOver = screen.getByText('second question').closest('[data-opens-turn]');
     expect(handedOver).not.toBeNull();
-    expect(handedOver).not.toHaveClass(ROOM_CLASS);
+    expect(handedOver).not.toHaveAttribute('data-holds-room');
     // One room, whatever the turn count: two would stack into a double gap.
     expect(document.querySelectorAll(ROOM_SELECTOR)).toHaveLength(1);
   });
@@ -129,7 +106,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
@@ -138,14 +115,14 @@ describe('TranscriptEntries turn groups', () => {
         entries={entries}
         onApprove={() => {}}
         onRespond={() => {}}
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
     const liveGroup = screen.getByTestId('tail').parentElement;
-    expect(liveGroup).not.toHaveClass(ROOM_CLASS);
+    expect(liveGroup).not.toHaveAttribute('data-holds-room');
     // Kept: it carries the transition the room closes on.
-    expect(liveGroup).toHaveClass('turn-room');
+    expect(liveGroup).toHaveAttribute('data-opens-turn', 'true');
   });
 
   it('keeps the room on the message you sent when the run echoes it back undrawn', () => {
@@ -179,7 +156,7 @@ describe('TranscriptEntries turn groups', () => {
 
     // It opens at the top already: room under it would only put empty scroll below.
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBeNull();
-    expect(screen.getByText('first question').closest('.turn-room')).not.toBeNull();
+    expect(screen.getByText('first question').closest('[data-opens-turn]')).not.toBeNull();
   });
 
   it('keeps the same room node when a pending steer is confirmed', () => {
@@ -195,7 +172,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="steering-tail" />}
+        tail={() => <div data-testid="steering-tail" />}
       />,
     );
     const room = screen.getByTestId('steering-tail').parentElement;
@@ -211,7 +188,7 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="steering-tail" />}
+        tail={() => <div data-testid="steering-tail" />}
       />,
     );
 
@@ -230,18 +207,19 @@ describe('TranscriptEntries turn groups', () => {
         onApprove={() => {}}
         onRespond={() => {}}
         running
-        tail={<div data-testid="tail" />}
+        tail={() => <div data-testid="tail" />}
       />,
     );
 
     expect(screen.getByText('change direction')).toBeInTheDocument();
-    expect(screen.getByTestId('tail').parentElement).not.toHaveClass(ROOM_CLASS);
+    expect(screen.getByTestId('tail').parentElement).not.toHaveAttribute('data-holds-room');
   });
 
-  it('takes the gap that introduces a turn into that turn, where the room absorbs it', () => {
+  it('opens a turn sent after a pause with how long it was, inside the room', () => {
+    const later = new Date(CREATED_AT.getTime() + (17 * 60 + 17) * 60_000);
     renderWithProviders(
       <TranscriptEntries
-        entries={[entries[0], entries[1], gapEntry('gap-1'), entries[2]]}
+        entries={[entries[0], entries[1], textEntry('user-2', 'user', 'second question', later)]}
         onApprove={() => {}}
         onRespond={() => {}}
         running
@@ -250,7 +228,24 @@ describe('TranscriptEntries turn groups', () => {
 
     const room = screen.getByText('second question').closest<HTMLElement>(ROOM_SELECTOR);
     expect(room).toBeInstanceOf(HTMLElement);
-    if (room) expect(within(room).getByRole('separator')).toBeInTheDocument();
+    if (room) expect(within(room).getByRole('separator')).toHaveTextContent('17 hours 17 minutes later');
+    expect(screen.getAllByRole('separator')).toHaveLength(1);
+  });
+
+  it('shows the pause the moment a message is sent, before the run answers', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(CREATED_AT.getTime() + 51 * 60_000));
+    const sent = transcriptReducer(
+      { ...createInitialTranscript({ messages: [], threadId: 'thread-1' }), entries: [entries[0], entries[1]] },
+      { type: 'localUser', text: 'again please' },
+    );
+    vi.useRealTimers();
+
+    renderWithProviders(<TranscriptEntries entries={sent.entries} onApprove={() => {}} onRespond={() => {}} running />);
+
+    const room = screen.getByText('again please').closest<HTMLElement>(ROOM_SELECTOR);
+    expect(room).toBeInstanceOf(HTMLElement);
+    if (room) expect(within(room).getByRole('separator')).toHaveTextContent('51 minutes later');
   });
 
   it('gives no room to a group no user turn opens', () => {
@@ -268,7 +263,12 @@ describe('TranscriptEntries turn groups', () => {
 
   it('still shows the tail while the transcript is empty', () => {
     renderWithProviders(
-      <TranscriptEntries entries={[]} onApprove={() => {}} onRespond={() => {}} tail={<div data-testid="tail" />} />,
+      <TranscriptEntries
+        entries={[]}
+        onApprove={() => {}}
+        onRespond={() => {}}
+        tail={() => <div data-testid="tail" />}
+      />,
     );
 
     expect(screen.getByTestId('tail')).toBeInTheDocument();

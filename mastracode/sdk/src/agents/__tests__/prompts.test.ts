@@ -133,12 +133,12 @@ describe('buildFullPrompt', () => {
 
     expect(prompt).toContain('## Goal Mode Awareness');
     expect(prompt).toContain('A goal is a persistent objective');
-    expect(prompt).toContain('submit_plan tool may also be started as a goal');
+    expect(prompt).toContain('approving a plan submitted with the submit_plan tool starts it as a goal');
     expect(prompt).toContain('make them goal-ready');
     expect(prompt).toContain('concrete, outcome-focused, verifiable, and bounded');
   });
 
-  it('includes goal mode as a submit_plan approval option in plan mode', () => {
+  it('tells plan mode that approving a plan starts it as a goal', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',
       projectName: 'test-project',
@@ -156,11 +156,36 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).toContain('## Goal-Ready Plans');
-    expect(prompt).toContain(
-      'The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal',
-    );
-    expect(prompt).toContain('**Start as goal**');
+    expect(prompt).toContain('Approving a plan in the submit_plan approval UI starts it as a persistent goal');
+    expect(prompt).not.toContain('**Start as goal**');
     expect(prompt).toContain('goal judge can tell when the work is done');
+  });
+
+  it('does not promise a goal on plan approval when the host disables it', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'plan',
+      activePlan: null,
+      modeId: 'plan',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      planApprovalStartsGoal: false,
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).not.toContain('starts it as a goal');
+    expect(prompt).not.toContain('starts the plan as a goal');
+    expect(prompt).not.toContain('/goal <objective>');
+    expect(prompt).not.toContain('## Goal-Ready Plans');
+    expect(prompt).toContain('switches to Build mode for implementation; it does not start a goal');
+    expect(prompt).toContain('**Approve** — switches to Build mode for implementation');
+    expect(prompt).toContain('Include concrete verification criteria');
   });
 
   it('uses Factory artifact paths consistently throughout the plan prompt', () => {
@@ -206,11 +231,11 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).toContain(
-      'Include `Co-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>` in the message body.',
+      'Include `Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>` in the message body.',
     );
   });
 
-  it('uses the model-less commit co-author fallback when no model id is available', () => {
+  it('uses the platform bot commit co-author when no model id is available', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',
       projectName: 'test-project',
@@ -227,8 +252,38 @@ describe('buildFullPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('Include `Co-Authored-By: Mastra Code <noreply@mastra.ai>` in the message body.');
-    expect(prompt).not.toContain('Co-Authored-By: Mastra Code ()');
+    expect(prompt).toContain(
+      'Include `Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>` in the message body.',
+    );
+    expect(prompt).not.toContain('Co-Authored-By: mastra-platform[bot] ()');
+  });
+
+  it.each([
+    [
+      { name: 'mastracode', email: undefined },
+      'Co-Authored-By: mastracode <284800079+mastra-platform[bot]@users.noreply.github.com>',
+    ],
+    [{ name: undefined, email: 'custom@example.test' }, 'Co-Authored-By: mastra-platform[bot] <custom@example.test>'],
+    [{ name: 'custom', email: 'custom@example.test' }, 'Co-Authored-By: custom <custom@example.test>'],
+  ])('uses configured co-author fields with defaults for omitted fields', (coAuthor, trailer) => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      coAuthorName: coAuthor.name,
+      coAuthorEmail: coAuthor.email,
+      state: { permissionRules: { tools: {} } },
+    });
+
+    expect(prompt).toContain(trailer);
+    expect(prompt).not.toContain('(openai/');
   });
 
   it('includes common binary availability in environment details', () => {
