@@ -257,7 +257,7 @@ Returns `{ from?, changes, more?, cursor? }`. Each change is `{ at, action, page
 - `page` is `{ ref, name }` with the page's current name, plus `deleted: true` when it has since been deleted.
 - `note`, on a note change, is `{ ref, text, current: true }` with the note's **current** text, not its text when the change happened. A note that has since been removed shows `{ ref, removed: true }` and no text.
 
-A change to a page or note the run can no longer read is left out. A result stops at `limit` changes or at the read cap, whichever comes first, and always holds at least one change when any are left. When it stops early, `more` is `true` and `cursor` continues after the last change it returned. A single note too large for the cap comes back cut short with `truncated: true`.
+A change to a page or note the run can no longer read is left out. A result stops at `limit` changes, at the read cap, or after scanning eight batches, whichever comes first. The read cap never excludes the first readable change in those batches. When it stops early, `more` is `true` and `cursor` continues after the last change it consumed, including changes left out because they became unreadable. A result can contain no changes and still have `more: true` when it reaches the scan cap. Continue with its cursor to read older changes. A single note too large for the read cap comes back cut short with `truncated: true`.
 
 The tool needs a store that filters activity by date: the in-memory store, LibSQL and PostgreSQL. On other stores it refuses rather than return the whole history.
 
