@@ -244,6 +244,7 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import type { DurableExecutionEngine } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
 import {
+  assertExecutionOwned,
   EXECUTION_ABANDONED_ERROR_ID,
   DurableExecutionFenceError,
   EXECUTION_UNVERIFIED_ERROR_ID,
@@ -14353,8 +14354,58 @@ export class Agent<
     return applyResolvedAgentScopes(options, resolved, requestContext);
   }
 
+  /** Runs whose restartable start row this process wrote and may still discard. */
+  #restartableStarts = new Set<string>();
+
   async #persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    await persistDurableRunInput(runId, workflowInput, this.#mastra);
+    // A crash after the input is saved but before the workflow's first checkpoint would strand a
+    // stored user message that no run answers, so make the run recoverable first (#30791).
+    try {
+      await persistDurableRunInput(runId, workflowInput, this.#mastra, async () => {
+        await this.getWorkflow().__persistRestartableStart({
+          runId,
+          resourceId: workflowInput.state?.resourceId,
+          input: workflowInput,
+          requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+          // A write that rejects may still have committed, so the row counts as ours from here.
+          onWrite: () => this.#restartableStarts.add(runId),
+        });
+      });
+    } catch (error) {
+      await this.#discardRestartableStart(runId, workflowInput.agentId);
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes the run's restartable start row if the workflow never wrote over it. A start that
+   * failed before its first checkpoint was reported to the caller, so recovery must not redo it.
+   */
+  async #discardRestartableStart(runId: string, agentId: string): Promise<void> {
+    // Only the execution that wrote the row, and only while it still owns the run: a recoverer
+    // that took over restarts from this same row until its first checkpoint.
+    if (!this.#restartableStarts.delete(runId)) return;
+    try {
+      await assertExecutionOwned({
+        runId,
+        agentId,
+        mastra: this.#mastra,
+        requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
+      });
+      const snapshot = await this.executionEngine.loadRunSnapshot(runId);
+      const context = snapshot?.context as Record<string, unknown> | undefined;
+      if (
+        snapshot?.status === 'running' &&
+        snapshot.activePaths?.length === 0 &&
+        context &&
+        Object.keys(context).length === 1 &&
+        Object.hasOwn(context, 'input')
+      ) {
+        await this.deleteRunSnapshots(runId);
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to delete the start snapshot of failed run ${runId}`, { runId, error });
+    }
   }
 
   /**
@@ -14466,7 +14517,10 @@ export class Agent<
         )
         .then(
           result => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { result }),
-          error => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error }),
+          async error => {
+            await this.#discardRestartableStart(runId, workflowInput.agentId);
+            return this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error });
+          },
         )
         .then(outcome => {
           if (outcome.owner === 'agent') return this.settleExecution(runId, executionFence, outcome);
@@ -14477,6 +14531,7 @@ export class Agent<
           }
         });
     } catch (error) {
+      await this.#discardRestartableStart(runId, workflowInput.agentId);
       await this.settleExecution(runId, executionFence, {
         error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
       });
@@ -14861,7 +14916,12 @@ export class Agent<
           try {
             await this.#persistInitialInput(runId, workflowInput);
             result = await this.executeWorkflow(runId, workflowInput);
+          } catch (error) {
+            await this.#discardRestartableStart(runId, workflowInput.agentId);
+            throw error;
           } finally {
+            // Past this point the workflow owns the row; a later failure must not delete it.
+            this.#restartableStarts.delete(runId);
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
           }
           if (closeOnPersistedSuspend && result?.status === 'suspended') {
