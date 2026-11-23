@@ -7,7 +7,7 @@ Improved InputNumber steppers: the minus and plus buttons are now the same inset
 ```tsx
 <InputNumber>
   <InputNumberGroup>
-    <InputNumberInput />
+    <InputNumberInput aria-label="Token limit" />
     <InputGroupAddon align="inline-end">
       <InputGroupText>tokens</InputGroupText>
       <InputNumberDecrement />
