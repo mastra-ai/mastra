@@ -59,25 +59,35 @@ async function evaluateStopWhen({
   // shapes differ slightly (rawFinishReason, finishReason format) but are
   // compatible at runtime for stop condition evaluation.
   const stepsForConditions = steps as any;
-  const settled = await Promise.allSettled(conditions.map(async condition => condition({ steps: stepsForConditions })));
-  const matchedAt = (index: number) => {
-    const result = settled[index];
-    return result?.status === 'fulfilled' && Boolean(result.value);
-  };
-  const budgetSpent =
-    !underMaxSteps || conditions.some((condition, index) => stepBudgetConditions.has(condition) && matchedAt(index));
+  const budgetConditions = conditions.filter(condition => stepBudgetConditions.has(condition));
+  const callerConditions = conditions.filter(condition => !stepBudgetConditions.has(condition));
+  const budgetMatched = (
+    await Promise.all(budgetConditions.map(async condition => Boolean(await condition({ steps: stepsForConditions }))))
+  ).some(Boolean);
+  const budgetSpent = !underMaxSteps || budgetMatched;
+  if (!budgetSpent) {
+    // Under budget, preserve Promise.all fail-fast semantics so a rejecting predicate
+    // surfaces immediately without waiting for pending sibling predicates.
+    const callerConditionMatched = (
+      await Promise.all(
+        callerConditions.map(async condition => Boolean(await condition({ steps: stepsForConditions }))),
+      )
+    ).some(Boolean);
+    return { matched: callerConditionMatched, callerConditionMatched };
+  }
+  const settled = await Promise.allSettled(
+    callerConditions.map(async condition => Boolean(await condition({ steps: stepsForConditions }))),
+  );
   const rejection = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (rejection) {
-    if (!budgetSpent) throw rejection.reason;
     logger?.warn('A stopWhen condition failed after the step budget ran out; the run stops on maxSteps', {
       error: rejection.reason,
     });
   }
+  const callerConditionMatched = settled.some(result => result.status === 'fulfilled' && result.value);
   return {
-    matched: conditions.some((_, index) => matchedAt(index)),
-    callerConditionMatched: conditions.some(
-      (condition, index) => matchedAt(index) && !stepBudgetConditions.has(condition),
-    ),
+    matched: budgetMatched || callerConditionMatched,
+    callerConditionMatched,
   };
 }
 

@@ -185,7 +185,7 @@ describeForAllEngines('AIMock scenario: the finish chunk says why the run stoppe
       tools: { lookup },
       maxSteps: 2,
       collectChunks: true,
-      onIterationComplete: ({ iteration }) =>
+      onIterationComplete: ({ iteration }: { iteration: number }) =>
         iteration === 1 ? { continue: false, feedback: 'Wait for the user to pick a style.' } : undefined,
       fixtures: toolCallEveryTurn(2),
     });

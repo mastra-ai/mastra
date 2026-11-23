@@ -1,3 +1,4 @@
+import { setTimeout as wait } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
@@ -105,5 +106,60 @@ describeForAllEngines('AIMock loop scenario: throwing stopWhen', engine => {
     expect(finish?.payload.stepResult.reason).toBe('tool-calls');
     expect(finish?.payload.stopCause).toBe('max_steps');
     expect(chunks!.some(chunk => chunk.type === 'error')).toBe(false);
+  });
+
+  // Technical: when the step budget is not spent yet, stopWhen predicates must keep Promise.all
+  // fail-fast behavior so a rejecting predicate surfaces immediately instead of hanging behind a
+  // slow or pending sibling predicate. (#29612)
+  it('reports an under-budget predicate failure while another predicate is still pending', async () => {
+    let resolveEntered!: () => void;
+    const enteredPromise = new Promise<void>(resolve => {
+      resolveEntered = resolve;
+    });
+    let resolvePending!: (value: boolean) => void;
+    const pendingPromise = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    const step = createTool({
+      id: 'step',
+      description: 'Advance one step.',
+      inputSchema: z.object({ n: z.number() }),
+      execute: async ({ n }) => ({ done: n }),
+    });
+    const run = runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Go.',
+      tools: { step },
+      collectChunks: true,
+      expectStreamError: true,
+      maxSteps: 10,
+      stopWhen: [
+        async () => {
+          throw new Error('stopWhen exploded');
+        },
+        () => {
+          resolveEntered();
+          return pendingPromise;
+        },
+      ],
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call-1', name: 'step', arguments: { n: 1 } }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
+      },
+    });
+    const result = run.then(({ streamError }) => (streamError instanceof Error ? streamError.message : streamError));
+    await Promise.race([enteredPromise, result]);
+    let beforeRelease: unknown;
+    try {
+      beforeRelease = await Promise.race([result, wait(1500, 'stream still open')]);
+    } finally {
+      resolvePending(false);
+    }
+    expect(await result).toBe('stopWhen exploded');
+    expect(beforeRelease).toBe('stopWhen exploded');
   });
 });
