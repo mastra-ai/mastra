@@ -3,7 +3,6 @@
     "deepseek-ai/deepseek-v4.1-flash",
     "deepseek-ai/deepseek-v4.1-flash-1017",
     "google/gemma-4-31b-it",
-    "moonshotai/kimi-k3",
     "moonshotai/kimi-k3.1-pro",
     "qwen/qwen3.8-27b",
     "zai-org/glm-5.3-flash"
@@ -23,22 +22,10 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "moonshotai/kimi-k3": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "zai-org/glm-5.3": [
@@ -53,10 +40,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "nvidia/nemotron-3-ultra-550b-a55b": [
+    "zai-org/glm-5.2": [
       {
         "type": "effort",
-        "values": ["none", "medium", "high"]
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "minimaxai/minimax-m3.1-flash": [
@@ -65,27 +58,10 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "deepseek-ai/deepseek-v4-pro-0813": [
+    "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
+        "values": ["none", "medium", "high"]
       }
     ],
     "qwen/qwen3.8-27b": [
@@ -100,10 +76,27 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "openai/gpt-oss-120b": [
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

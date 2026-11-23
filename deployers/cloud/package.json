@@ -1,10 +1,11 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "1.86.0-alpha.3",
+  "version": "1.86.0-alpha.5",
   "description": "",
   "type": "module",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "versions.json"
   ],
   "main": "dist/index.js",

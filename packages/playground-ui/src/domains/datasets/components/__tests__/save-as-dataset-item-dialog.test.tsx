@@ -282,6 +282,9 @@ describe('SaveAsDatasetItemDialog', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Go to dataset' }));
 
       expect(navigate).toHaveBeenCalledWith('/datasets/dataset-1/items/item-42');
+      // The action closes the toast, and sonner unmounts it on a 200ms timer. Wait for it here so the
+      // timer can't fire after jsdom is torn down and fail the shard with `window is not defined`.
+      await waitFor(() => expect(screen.queryByText('Added to "Dataset 1"')).toBeNull());
     });
 
     it('omits the Go to dataset action when the app has no dataset item route', async () => {

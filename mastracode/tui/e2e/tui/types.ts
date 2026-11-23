@@ -172,6 +172,8 @@ export type ScenarioName =
   | 'om-auto-preview-google-api-key'
   | 'om-auto-preview-stored-google-key'
   | 'om-auto-preview-anthropic-only'
+  | 'missing-embedder-headless'
+  | 'missing-embedder-tui'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'

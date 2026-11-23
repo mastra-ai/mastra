@@ -2222,7 +2222,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
@@ -2302,6 +2302,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.5
   },
   {
+    "model": "nano-gpt/google/gemini-4-neon",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 983040,
+    "maxOutput": 65536,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
     "model": "nano-gpt/google/gemini-flash-latest",
     "imageInput": true,
     "audioInput": true,
@@ -2370,8 +2382,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 131072,
-    "inputCost": 0.07,
-    "outputCost": 0.24
+    "inputCost": 0.0675,
+    "outputCost": 0.225
   },
   {
     "model": "nano-gpt/google/gemma-4-31b-it",
@@ -2806,18 +2818,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.7
   },
   {
-    "model": "nano-gpt/liquid/lfm-3-1.7b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 8192,
-    "inputCost": 0.1,
-    "outputCost": 0.25
-  },
-  {
     "model": "nano-gpt/longcat-2.0",
     "imageInput": false,
     "audioInput": false,
@@ -3174,8 +3174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.33,
+    "outputCost": 1.32
   },
   {
     "model": "nano-gpt/minimax/minimax-m2.5",
@@ -3186,7 +3186,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 0.295,
+    "inputCost": 0.3,
     "outputCost": 1.2
   },
   {
@@ -3198,8 +3198,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 0.21,
-    "outputCost": 0.84
+    "inputCost": 0.6543,
+    "outputCost": 2.7625
   },
   {
     "model": "nano-gpt/minimax/minimax-m2.7-turbo",
@@ -3616,7 +3616,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 262144,
+    "contextWindow": 256000,
     "maxOutput": 65536,
     "inputCost": 0.557,
     "outputCost": 2.832
@@ -3628,7 +3628,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 256000,
     "maxOutput": 65536,
     "inputCost": 0.6265,
     "outputCost": 3.2187
@@ -3870,8 +3870,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.05,
-    "outputCost": 0.2
+    "inputCost": 0.06,
+    "outputCost": 0.24
   },
   {
     "model": "nano-gpt/nvidia/nemotron-3-super-120b-a12b",
@@ -4810,6 +4810,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
+    "model": "nano-gpt/paperinstruments/ultramarine-1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
     "model": "nano-gpt/particle-ai/particle-1",
     "imageInput": true,
     "audioInput": false,
@@ -5236,7 +5248,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 262144,
+    "contextWindow": 258048,
     "maxOutput": 65536,
     "inputCost": 0.45,
     "outputCost": 3
@@ -5248,7 +5260,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 258048,
     "maxOutput": 65536,
     "inputCost": 0.45,
     "outputCost": 3
@@ -6094,18 +6106,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.493
   },
   {
-    "model": "nano-gpt/stepfun-ai/step-3.5-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.1,
-    "outputCost": 0.3
-  },
-  {
     "model": "nano-gpt/stepfun/step-3.7-flash:thinking",
     "imageInput": true,
     "audioInput": false,
@@ -6450,8 +6450,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 64000,
-    "inputCost": 0.7506,
-    "outputCost": 2.2509
+    "inputCost": 0.834,
+    "outputCost": 2.501
   },
   {
     "model": "nano-gpt/TheDrummer/artemis-31b-v1.2",
@@ -7180,10 +7180,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 0.966,
-    "outputCost": 3.036
+    "inputCost": 1.4,
+    "outputCost": 4.4
   },
   {
     "model": "nano-gpt/z-ai/glm-5.1:thinking",
@@ -7192,10 +7192,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
+    "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 0.966,
-    "outputCost": 3.036
+    "inputCost": 1.4,
+    "outputCost": 4.4
   },
   {
     "model": "nano-gpt/z-ai/glm-5.2",

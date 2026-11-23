@@ -48,7 +48,8 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

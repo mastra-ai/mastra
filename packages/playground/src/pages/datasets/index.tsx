@@ -97,7 +97,7 @@ export default function Datasets() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Datasets</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -106,7 +106,7 @@ export default function Datasets() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Datasets</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
@@ -115,7 +115,7 @@ export default function Datasets() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Datasets</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load datasets" descriptionSlot={error.message} />
       </PageLayout>
@@ -125,7 +125,7 @@ export default function Datasets() {
   // With a target filter active, keep the toolbar so the user can remove it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Datasets</h1>
         <NoDatasetsInfo onCreateClick={openCreateDialog} />
         {createDialog}
@@ -135,6 +135,7 @@ export default function Datasets() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={headerCreateAction}
       actionRow={
