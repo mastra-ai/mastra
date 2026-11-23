@@ -172,7 +172,7 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
             toolMocks: isAgent ? item.toolMocks : undefined,
             unmockedToolPolicy: isAgent ? (item.unmockedToolPolicy ?? args.unmockedToolPolicy ?? 'allow') : undefined,
           }),
-        { maxRetries: args.maxRetries ?? 0 },
+        { maxRetries: args.maxRetries ?? 0, timeoutSignal: signal },
       );
 
   const completedAt = new Date();
@@ -217,6 +217,7 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
     input: item.input,
     output: execResult.output,
     groundTruth: item.groundTruth ?? null,
+    metadata: item.metadata ?? null,
     error: execResult.error,
     startedAt,
     completedAt,

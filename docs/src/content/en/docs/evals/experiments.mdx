@@ -515,7 +515,7 @@ The workflow's run ID is the experiment ID. Each item's result is upserted on `(
 
 Durable runs need [workers](/docs/deployment/workers) and a pubsub that redelivers unacknowledged events, such as Redis Streams, Valkey Streams, or Google Cloud Pub/Sub. A process that only handles pushed events through `mastra.handleWorkflowEvent()` can run the steps too, without starting workers. On the default in-memory pubsub, the run works but stays in one process, so it isn't durable.
 
-Everything in a durable run must be serializable, so `durable: true` accepts registered targets, scorer IDs, `version`, `maxConcurrency`, `itemTimeout`, `maxRetries`, `agentModel` as a `provider/modelId` string, `requestContext`, `unmockedToolPolicy`, and `versions`. It throws a `MastraError` with the `id` `EXPERIMENT_NOT_DURABLE` before creating anything when the config uses an inline `task`, lifecycle hooks, `onEvent`, `signal`, scorer objects or step scorers, or `persistence` set to `'none'`.
+Everything in a durable run must be serializable, so `durable: true` accepts registered targets, scorer IDs, `version`, `maxConcurrency`, `itemTimeout`, `maxRetries`, `agentModel` as a `provider/modelId` string, `requestContext` with plain JSON values, `unmockedToolPolicy`, and `versions`. It throws a `MastraError` with the `id` `EXPERIMENT_NOT_DURABLE` before creating anything when the config uses an inline `task`, lifecycle hooks, `onEvent`, `signal`, scorer objects or step scorers, `persistence` set to `'none'`, or `requestContext` values that aren't plain JSON, such as functions or dates.
 
 Keep these limits in mind:
 

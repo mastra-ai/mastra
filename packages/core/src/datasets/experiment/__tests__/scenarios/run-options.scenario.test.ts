@@ -82,4 +82,20 @@ describe.each(EXPERIMENT_PATHS)('Experiment scenario: run options (%s)', path =>
     expect(item.error?.message).toMatch(/timeout/i);
     expect(item.retryCount).toBe(0);
   });
+
+  it('stops waiting to retry once itemTimeout expires', async () => {
+    const startedAt = Date.now();
+    const { summary, item } = await runToolMockScenario({
+      path,
+      tools: {},
+      turns: [{ throws: 'provider overloaded' }, { text: 'too late' }],
+      itemTimeout: 50,
+      maxRetries: 1,
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(800);
+    expect(summary.failedCount).toBe(1);
+    expect(item.error?.message).toMatch(/timeout/i);
+    expect(item.retryCount).toBe(0);
+  });
 });

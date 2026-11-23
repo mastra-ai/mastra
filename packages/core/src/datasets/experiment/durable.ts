@@ -19,6 +19,16 @@ function notDurable(option: string, reason: string): MastraError {
   });
 }
 
+/** Strings, finite numbers, booleans, null, arrays and plain objects survive a JSON broker unchanged. */
+function isPlainJson(value: unknown): boolean {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isPlainJson);
+  if (typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return (proto === Object.prototype || proto === null) && Object.values(value).every(isPlainJson);
+}
+
 /**
  * Check a `durable: true` config and return the run options the experiment
  * workflow carries, plus the scorer ids to pin on the experiment. A durable run may continue in another process, so every
@@ -49,6 +59,9 @@ export function durableRunOptions<I, O, E>(
   }
   if (config.persistence?.experiments === 'none' || config.persistence?.scores === 'none') {
     throw notDurable('persistence', 'a durable run is tracked through stored experiments and scores');
+  }
+  if (config.requestContext !== undefined && !isPlainJson(config.requestContext)) {
+    throw notDurable('requestContext', 'values must be plain JSON (no functions, class instances, undefined or NaN)');
   }
   if (config.agentModel !== undefined && typeof config.agentModel !== 'string') {
     throw notDurable('agentModel', 'pass a "provider/model" string, not a model object');

@@ -43,26 +43,6 @@ export type ExperimentWorkflowInput = z.infer<typeof experimentWorkflowInputSche
 const itemRefSchema = z.object({ itemId: z.string() });
 const itemOutcomeSchema = z.object({ itemId: z.string(), failed: z.boolean() });
 
-/**
- * Marks the experiment `failed` when a step throws, then rethrows so the run
- * fails too. Item target errors never get here: they're recorded on the item's
- * row. This covers setup errors and items that couldn't be run or saved.
- */
-async function failExperimentOnError<T>(mastra: Mastra, experimentId: string, body: () => Promise<T>): Promise<T> {
-  try {
-    return await body();
-  } catch (error) {
-    const experimentsStore = await mastra.getStorage()?.getStore('experiments');
-    await experimentsStore
-      ?.updateExperiment({ id: experimentId, status: 'failed', completedAt: new Date() })
-      .catch(() => {});
-    mastra
-      .getLogger()
-      ?.error(`Experiment ${experimentId} failed: ${error instanceof Error ? error.message : String(error)}`);
-    throw error;
-  }
-}
-
 function datasetHandle(mastra: Mastra, input: ExperimentWorkflowInput) {
   return mastra.datasets.get({
     id: input.datasetId,
@@ -71,12 +51,43 @@ function datasetHandle(mastra: Mastra, input: ExperimentWorkflowInput) {
   });
 }
 
+/**
+ * Marks the experiment `failed` when a step throws, then rethrows so the run
+ * fails too. Item target errors never get here: they're recorded on the item's
+ * row. This covers setup errors and items that couldn't be run or saved.
+ *
+ * The experiment is only touched when the run's dataset, scope and experiment
+ * belong together, so a run naming another project's experiment can't change it.
+ */
+async function failExperimentOnError<T>(
+  mastra: Mastra,
+  input: ExperimentWorkflowInput,
+  body: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await body();
+  } catch (error) {
+    const logger = mastra.getLogger();
+    logger?.error(`Experiment ${input.experimentId} failed: ${error instanceof Error ? error.message : String(error)}`);
+    const owned = await datasetHandle(mastra, input)
+      .then(dataset => dataset.getExperiment({ experimentId: input.experimentId }))
+      .catch(() => null);
+    if (owned) {
+      const experimentsStore = await mastra.getStorage()?.getStore('experiments');
+      await experimentsStore
+        ?.updateExperiment({ id: owned.id, status: 'failed', completedAt: new Date() })
+        .catch(() => {});
+    }
+    throw error;
+  }
+}
+
 const prepareStep = createStep({
   id: 'prepare',
   inputSchema: experimentWorkflowInputSchema,
   outputSchema: z.array(itemRefSchema),
   execute: async ({ inputData, mastra }) =>
-    failExperimentOnError(mastra, inputData.experimentId, async () => {
+    failExperimentOnError(mastra, inputData, async () => {
       const experimentsStore = await mastra.getStorage()?.getStore('experiments');
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
       if (!experimentsStore || !datasetsStore) {
@@ -88,7 +99,8 @@ const prepareStep = createStep({
         });
       }
 
-      const experiment = await experimentsStore.getExperimentById({ id: inputData.experimentId });
+      const dataset = await datasetHandle(mastra, inputData);
+      const experiment = await dataset.getExperiment({ experimentId: inputData.experimentId });
       if (!experiment) {
         throw new MastraError({
           id: 'EXPERIMENT_NOT_FOUND',
@@ -123,7 +135,7 @@ const prepareStep = createStep({
       }
 
       const items = await datasetsStore.getItemsByVersion({
-        datasetId: inputData.datasetId,
+        datasetId: dataset.id,
         version: experiment.datasetVersion ?? 0,
       });
 
@@ -141,7 +153,7 @@ const runItemStep = createStep({
   outputSchema: itemOutcomeSchema,
   execute: async ({ inputData, getInitData, mastra }) => {
     const input = getInitData<ExperimentWorkflowInput>();
-    return failExperimentOnError(mastra, input.experimentId, async () => {
+    return failExperimentOnError(mastra, input, async () => {
       const dataset = await datasetHandle(mastra, input);
       const { result } = await dataset.runExperimentItem({
         experimentId: input.experimentId,
@@ -170,7 +182,7 @@ const finalizeStep = createStep({
   }),
   execute: async ({ getInitData, mastra }) => {
     const input = getInitData<ExperimentWorkflowInput>();
-    return failExperimentOnError(mastra, input.experimentId, async () => {
+    return failExperimentOnError(mastra, input, async () => {
       const dataset = await datasetHandle(mastra, input);
       const experiment = await dataset.finalizeExperiment({ experimentId: input.experimentId });
       return {

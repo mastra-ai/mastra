@@ -535,11 +535,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           }
 
           // Compose per-item signal (timeout + run-level abort)
-          let itemSignal: AbortSignal | undefined = executionSignal;
-          if (itemTimeout) {
-            const timeoutSignal = AbortSignal.timeout(itemTimeout);
-            itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
-          }
+          const timeoutSignal = itemTimeout ? AbortSignal.timeout(itemTimeout) : undefined;
+          const itemSignal =
+            executionSignal && timeoutSignal
+              ? AbortSignal.any([executionSignal, timeoutSignal])
+              : (timeoutSignal ?? executionSignal);
 
           // Per-item setup runs once (not per retry attempt) inside this
           // concurrency slot. A failing setup is deterministic from the
@@ -573,6 +573,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             : await executeWithRetries(() => execFn(itemWithMetadataSnapshot(), itemSignal), {
                 maxRetries,
                 cancelSignal: executionSignal,
+                timeoutSignal,
               });
 
           const itemCompletedAt = new Date();
