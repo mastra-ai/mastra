@@ -179,7 +179,7 @@ describe('Observational Memory token counts for stored history', () => {
     expect(textPart).toMatchObject({ type: 'text', text: 'OK.' });
     expect(trustedEntries(textPart)).toHaveLength(1);
   });
-  it('does not copy a count onto a tool result that was edited after OM counted it', async () => {
+  it('matches stored parts to counted parts by position and type only, accepting a stale count after a same-slot edit', async () => {
     const { memory } = open(join(dbDir, 'tool-edit.db'));
     const threadId = randomUUID();
     await memory.saveThread({
@@ -209,7 +209,8 @@ describe('Observational Memory token counts for stored history', () => {
     engine.getTokenCounter().countMessages([live!]);
     expect(trustedEntries(live!.content.parts[0]).length).toBeGreaterThan(0);
 
-    // The result is edited in storage before the write-back runs. Same message, same tool call ID.
+    // The result is edited in storage before the write-back runs. The slot and type still match,
+    // so the count is copied: the accepted write-back race.
     await memory.updateMessages({
       messages: [{ id, content: { format: 2, parts: [toolPart('a much longer edited result '.repeat(20))] } } as any],
     });
@@ -218,6 +219,40 @@ describe('Observational Memory token counts for stored history', () => {
 
     const [stored] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
     expect((stored!.content.parts[0] as any).toolInvocation.result).toContain('edited result');
+    expect(trustedEntries(stored!.content.parts[0]).length).toBeGreaterThan(0);
+  });
+
+  it('does not copy a count onto a stored part of a different type at the same position', async () => {
+    const { memory } = open(join(dbDir, 'type-mismatch.db'));
+    const threadId = randomUUID();
+    await memory.saveThread({
+      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const id = `${threadId}-mismatch`;
+    await memory.saveMessages({
+      messages: [
+        {
+          id,
+          threadId,
+          resourceId: RESOURCE,
+          role: 'assistant',
+          createdAt: new Date(Date.UTC(2026, 10, 1)),
+          content: { format: 2, parts: [{ type: 'text', text: 'hello '.repeat(50) }] },
+        },
+      ],
+    });
+    const engine = (await memory.omEngine)!;
+    const [live] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
+    engine.getTokenCounter().countMessages([live!]);
+    expect(trustedEntries(live!.content.parts[0]).length).toBeGreaterThan(0);
+
+    await memory.updateMessages({
+      messages: [{ id, content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'x', details: [] }] } } as any],
+    });
+    await engine.persistTokenEstimates([live!], threadId);
+
+    const [stored] = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages;
+    expect(stored!.content.parts[0]!.type).toBe('reasoning');
     expect(trustedEntries(stored!.content.parts[0])).toEqual([]);
   });
 

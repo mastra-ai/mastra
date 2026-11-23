@@ -381,12 +381,6 @@ type InvocationModelResolution<TModel> = {
   routingThresholds?: string;
 };
 
-/** A part's content without its metadata, for checking that a stored part is the part OM counted. */
-function partContent(part: Record<string, unknown>): string {
-  const { providerMetadata: _providerMetadata, ...content } = part;
-  return JSON.stringify(content);
-}
-
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
@@ -1781,11 +1775,11 @@ export class ObservationalMemory {
    * @internal Write the token counts OM made for stored messages back to storage, so the next
    * request reads them instead of counting the same parts again. Only messages of `threadId` are
    * written: saving another thread's messages would bump that thread's `updatedAt` and reorder
-   * the recent-thread list. Each stored part takes the count
-   * of the in-memory part at the same position when that part's content is unchanged.
+   * the recent-thread list. Each stored part takes the count of the in-memory part at the same
+   * position when the two have the same type.
    *
    * This re-saves each message whole, so an edit or marker written to the same message between
-   * the read and the write here is overwritten. That risk is accepted for now.
+   * the read and the write here is overwritten, and a part edited in place in that window keeps a stale count. That risk is accepted for now.
    */
   async persistTokenEstimates(messages: MastraDBMessage[], threadId: string): Promise<void> {
     const counted = messages.filter(message => message.threadId === threadId).filter(takeNewTokenEstimates);
@@ -1799,8 +1793,7 @@ export class ObservationalMemory {
       const parts = row.content.parts.map((part, index) => {
         const livePart = liveParts[index] as any;
         const tokenEstimate = livePart?.providerMetadata?.mastra?.tokenEstimate;
-        const samePart = livePart?.type === part.type && partContent(livePart) === partContent(part);
-        if (!tokenEstimate || !samePart) return part;
+        if (!tokenEstimate || livePart?.type !== part.type) return part;
         changed = true;
         const providerMetadata = (part as any).providerMetadata ?? {};
         return {

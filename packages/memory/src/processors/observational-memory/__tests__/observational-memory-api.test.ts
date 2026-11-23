@@ -903,7 +903,7 @@ name: Tyler
       await transformOm.observe({ threadId, resourceId: 'res-1', messages });
 
       expect(beforeObservation).toHaveBeenCalledOnce();
-      // The hook gets detached copies of the messages, without OM's token counts.
+      // The hook gets the messages, without OM's stored token counts.
       expect(beforeObservation).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId,
@@ -918,7 +918,6 @@ name: Tyler
       const withoutMetadata = (list: MastraDBMessage[]) =>
         list.map(m => m.content.parts.map(({ providerMetadata: _, ...part }: any) => part));
       expect(withoutMetadata(received)).toEqual(withoutMetadata(messages));
-      expect(received[0]).not.toBe(messages[0]);
       expect(prompts()).toContain('Message 0');
       expect(prompts()).not.toContain('SECRET-TOKEN');
       // Filtered messages are still marked as observed.

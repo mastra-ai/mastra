@@ -34,7 +34,7 @@ describe('beforeObservation and trusted token counts', () => {
     expect(hasTrusted(msg.content.parts[0])).toBe(true);
   });
 
-  it('an in-place edit with no return is counted fresh and leaves the original as it was', async () => {
+  it('an in-place edit with no return is counted fresh', async () => {
     const msg = counted();
     const result = await applyBeforeObservation(
       {
@@ -45,7 +45,6 @@ describe('beforeObservation and trusted token counts', () => {
       [msg],
       context,
     );
-    expect((msg.content.parts[0] as { text: string }).text).toBe(longText);
     expect(new TokenCounter().countMessage(result[0]!)).toBe(freshCount('redacted'));
   });
 
@@ -66,54 +65,25 @@ describe('beforeObservation and trusted token counts', () => {
     expect(new TokenCounter().countMessage(result[0]!)).toBe(freshCount('short'));
   });
 
-  it('the hook gets plain copies, and Buffers stay Buffers', async () => {
-    const bytes = Buffer.from('secret image bytes');
-    const msg = message([
-      { type: 'file', data: bytes, mimeType: 'image/png' },
-      { type: 'text', text: longText },
-    ]);
+  it('the hook gets the original messages, as before, and edits to them are recounted', async () => {
+    const msg = counted();
     let seen: MastraDBMessage[] = [];
-    await applyBeforeObservation(
+    const result = await applyBeforeObservation(
       {
         beforeObservation: ({ messages }) => {
           seen = messages;
-          const file = messages[0]!.content.parts[0] as { data: Buffer };
-          expect(Buffer.isBuffer(file.data)).toBe(true);
-          file.data[0] = 0;
-          expect(() => structuredClone(messages)).not.toThrow();
         },
       },
       [msg],
       context,
     );
-    expect(seen[0]).not.toBe(msg);
-    expect((msg.content.parts[0] as { data: Buffer }).data.toString()).toBe('secret image bytes');
+    expect(seen[0]).toBe(msg);
+    expect(hasTrusted(result[0]!.content.parts[0])).toBe(false);
   });
 
   it('a hook that only reads leaves the originals with no trusted count', async () => {
     const msg = counted();
     await applyBeforeObservation({ beforeObservation: () => undefined }, [msg], context);
     expect(hasTrusted(msg.content.parts[0])).toBe(false);
-  });
-
-  it('a value it cannot copy is passed by reference without throwing', async () => {
-    const map = new Map([['k', 1]]);
-    const msg = message([
-      {
-        type: 'tool-invocation',
-        toolInvocation: { state: 'result', toolCallId: 'c', toolName: 't', args: {}, result: { map } },
-      },
-    ]);
-    let received: unknown;
-    await applyBeforeObservation(
-      {
-        beforeObservation: ({ messages }) => {
-          received = (messages[0]!.content.parts[0] as any).toolInvocation.result.map;
-        },
-      },
-      [msg],
-      context,
-    );
-    expect(received).toBe(map);
   });
 });
