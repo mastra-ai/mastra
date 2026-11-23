@@ -157,6 +157,57 @@ async function titlePromptFor(options: Parameters<typeof runTurn>[0]) {
 }
 
 describe('thread title with an OM continuation reminder', () => {
+  it.each(['modern', 'legacy'] as const)('%s preserves the response when title-only recall fails', async engine => {
+    const { titleModel, titleCalls } = createModels(0);
+    const agentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text', text: 'It is sunny in Lisbon.' }],
+        warnings: [],
+      }),
+    });
+    const memory = new MockMemory();
+    memory.getMergedThreadConfig = () => ({ generateTitle: { model: titleModel } });
+    const recall = memory.recall.bind(memory);
+    const titleRecall = vi.fn(() => Promise.reject(new Error('title history unavailable')));
+    vi.spyOn(memory, 'recall').mockImplementation(options =>
+      options.perPage === 40 && options.orderBy?.direction === 'DESC' ? titleRecall() : recall(options),
+    );
+    const agent = new Agent({
+      id: `title-recall-failure-${engine}`,
+      name: 'Title Recall Failure',
+      instructions: 'Answer briefly.',
+      model:
+        engine === 'modern'
+          ? agentModel
+          : new MockLanguageModelV1({
+              doGenerate: async () => ({
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 5 },
+                text: 'It is sunny in Lisbon.',
+              }),
+            }),
+      memory,
+      inputProcessors: [omLikeProcessor({ dropRequest: true, memory, fromStep: 0 })],
+    });
+    const warn = vi.spyOn(agent.__getLogger(), 'warn').mockImplementation(() => {});
+    const threadId = `thread-${randomUUID()}`;
+    const options = { memory: { resource: 'user-1', thread: { id: threadId, title: '' } } };
+    const result =
+      engine === 'modern' ? await agent.generate(QUESTION, options) : await agent.generateLegacy(QUESTION, options);
+    expect(result.text).toBe('It is sunny in Lisbon.');
+    expect(titleRecall).toHaveBeenCalledTimes(1);
+    expect(titleCalls).toHaveLength(0);
+    expect((await memory.getThreadById({ threadId }))?.title).toBe('');
+    expect(warn).toHaveBeenCalledWith('Failed to load stored messages for thread title', {
+      agent: agent.name,
+      error: expect.objectContaining({ message: 'title history unavailable' }),
+    });
+    warn.mockRestore();
+  });
   it('ignores the reminder when the request is still in the run', async () => {
     const titlePrompt = await titlePromptFor({ dropRequest: false });
     expect(titlePrompt).toContain(QUESTION);

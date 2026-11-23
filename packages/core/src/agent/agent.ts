@@ -5065,7 +5065,12 @@ export class Agent<
   async getTitleUiMessages(memory: MastraMemory, messageList: MessageList, threadId: string, resourceId: string) {
     const uiMessages = this.titleUiMessages(messageList, threadId);
     if (uiMessages.some(message => message.role === 'user')) return uiMessages;
-    return this.titleUiMessages(await this.loadStoredTitleMessages(memory, threadId, resourceId), threadId);
+    try {
+      return this.titleUiMessages(await this.loadStoredTitleMessages(memory, threadId, resourceId), threadId);
+    } catch (error) {
+      this.logger.warn('Failed to load stored messages for thread title', { agent: this.name, error });
+      return [];
+    }
   }
 
   /**
