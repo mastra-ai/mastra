@@ -521,10 +521,10 @@ export interface DurableAgent<
    * `suspendPayload` will be populated. Use {@link DurableAgent.resumeGenerate}
    * to continue.
    *
-   * Note on suspend persistence: both `DurableAgent` and `EventedAgent` track
-   * the workflow engine's `run.start()` through snapshot persistence, so
-   * awaiting `workflowExecution` on suspend is sufficient for a subsequent
-   * `resumeGenerate()` to find the snapshot.
+   * Note on suspend persistence: `DurableAgent` reports a suspension only
+   * after the suspended snapshot is saved. `EventedAgent` can report it before
+   * the snapshot is readable from another process, so a `resumeGenerate()`
+   * issued elsewhere immediately afterwards may not find it yet.
    */
   generate(messages: MessageListInput, options?: DurableAgentStreamOptions<TOutput>): Promise<FullOutput<TOutput>>;
 
