@@ -9,7 +9,8 @@
     "create-mastra": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",

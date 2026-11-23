@@ -9,7 +9,8 @@
     "mastra-mcp": "dist/cli/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

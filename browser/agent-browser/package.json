@@ -4,7 +4,8 @@
   "description": "Browser automation for Mastra agents using Playwright",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

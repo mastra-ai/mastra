@@ -73,6 +73,11 @@ function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: S
 // In-memory cache for dynamic loading mode
 let registryData: RegistryData | null = null;
 
+// Static mode: the bundled registry never changes, so its filtered view only depends on which
+// gateways are enabled. That set is recomputed on every read because gateway enablement can
+// depend on env vars and custom gateways can be registered at any time.
+let filteredStaticRegistry: { enabledGatewayKey: string; data: RegistryData } | null = null;
+
 // Cache file helpers (dev mode only)
 // Use functions so we don't call os.homedir() at top level, which
 // causes an error in sandboxed environments when you merely
@@ -255,7 +260,14 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
 
   // Production: use static import (bundled at build time)
   if (!useDynamicLoading) {
-    return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
+    const enabledGatewayKey = JSON.stringify([...enabledGatewayIds].sort());
+    if (filteredStaticRegistry?.enabledGatewayKey !== enabledGatewayKey) {
+      filteredStaticRegistry = {
+        enabledGatewayKey,
+        data: sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds),
+      };
+    }
+    return filteredStaticRegistry.data;
   }
 
   // Dynamic loading mode: check in-memory cache first. The registry proxy calls this on every
