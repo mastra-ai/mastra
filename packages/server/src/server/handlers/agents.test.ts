@@ -3323,6 +3323,58 @@ describe('Agent Routes Authorization', () => {
       vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({});
     });
 
+    it('observes an adapter proxy (Inngest) through its own pubsub, not the wrapped agent', async () => {
+      const inner = new Agent({
+        id: 'adapter-inner',
+        name: 'adapter-inner',
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+      });
+      const adapterPubsub = new EventEmitterPubSub();
+      // Shaped like createInngestAgent: own durable surface, everything else forwarded to the wrapped agent.
+      const target = {
+        id: 'adapter-agent',
+        name: 'adapter-agent',
+        agent: inner,
+        pubsub: adapterPubsub,
+        stream: vi.fn(),
+        recover: vi.fn(),
+        recoverActiveRuns: vi.fn(),
+        getDurableWorkflows: () => [],
+        __getRunOwner: () => ({}),
+      };
+      const adapter = new Proxy(target, {
+        get(t, prop, receiver) {
+          if (prop in t) return Reflect.get(t, prop, receiver);
+          const value = (inner as any)[prop];
+          return typeof value === 'function' ? value.bind(inner) : value;
+        },
+        has: (t, prop) => prop in t || prop in inner,
+      });
+      mastra = new Mastra({ agents: { 'adapter-agent': adapter as any }, storage, logger: false });
+      const runId = 'observe-adapter';
+      const subscribed = vi.spyOn(adapterPubsub, 'subscribeWithReplay');
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'adapter-agent',
+        runId,
+        requestContext: new RequestContext(),
+      } as any)) as ReadableStream<any>;
+      await vi.waitFor(() => expect(subscribed).toHaveBeenCalled());
+      await adapterPubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'chunk',
+        data: { type: 'text-delta', payload: { text: 'from adapter' } },
+      } as any);
+      await adapterPubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'finish', data: {} } as any);
+
+      expect((await collectWithDeadline(stream)).map((event: any) => event.payload?.text ?? event.type)).toEqual([
+        'from adapter',
+        'finish',
+      ]);
+    });
+
     describe.each(['default', 'evented'] as const)('native Agent on the %s execution engine', executionEngine => {
       let nativeAgent: Agent<any, any, any, any>;
 
