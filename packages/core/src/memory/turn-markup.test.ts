@@ -100,6 +100,14 @@ describe('turn markup', () => {
       { content: [{ type: 'tool-call', toolCallId: 'c1', toolName: 'x', input: {} }] },
       'providerOptions',
     ],
+    [
+      'model tool-result',
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'c1', toolName: 'x', output: { type: 'text', value: 'r' } }],
+      },
+      'providerOptions',
+    ],
   ])('removes the stamp from %s before a MessageList stores it as memory', (_label, shape, key) => {
     const message = { id: 'm1', role: 'assistant', ...shape } as Record<string, any>;
     const part = (message.parts ?? message.content)[0];
