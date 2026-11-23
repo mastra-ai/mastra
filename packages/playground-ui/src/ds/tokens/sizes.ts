@@ -12,6 +12,7 @@ export const Sizes = {
   'table-row-small': '32px',
   'avatar-xs': '12px',
   'avatar-inline': '16px',
+  'avatar-compact': '20px',
   'avatar-sm': '24px',
   'avatar-md': '32px',
   'avatar-lg': '40px',

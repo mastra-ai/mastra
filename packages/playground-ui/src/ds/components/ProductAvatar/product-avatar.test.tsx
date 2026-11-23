@@ -52,6 +52,19 @@ describe('ProductAvatar', () => {
     expect(screen.getByRole('img', { name: 'Studio' }).classList.contains('size-avatar-inline')).toBe(true);
   });
 
+  it('keeps its default icon at the compact size', () => {
+    render(
+      <>
+        <ProductAvatar product="server" />
+        <ProductAvatar product="studio" size="compact" />
+      </>,
+    );
+    const iconClasses = (name: string) =>
+      Array.from(screen.getByRole('img', { name }).classList).filter(token => token.startsWith('[&>svg]'));
+    expect(iconClasses('Studio')).toEqual(iconClasses('Server'));
+    expect(screen.getByRole('img', { name: 'Studio' }).classList.contains('size-avatar-compact')).toBe(true);
+  });
+
   it('opens a tooltip on hover inside a group', async () => {
     render(
       <TooltipProvider delay={0}>

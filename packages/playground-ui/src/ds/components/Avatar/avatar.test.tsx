@@ -74,6 +74,24 @@ describe('Avatar', () => {
       expect(screen.getByText('+3').getAttribute('data-size')).toBe('lg');
     });
 
+    it('overlaps compact avatars by the compact size', () => {
+      render(
+        <Avatar.Group size="compact" aria-label="Reviewers">
+          <Avatar>
+            <Avatar.Fallback>JL</Avatar.Fallback>
+          </Avatar>
+          <Avatar name="Abhi" />
+          <Avatar.GroupCount>+3</Avatar.GroupCount>
+        </Avatar.Group>,
+      );
+      const group = screen.getByLabelText('Reviewers');
+      const avatars = Array.from(group.querySelectorAll('[data-slot=avatar]'));
+      expect(avatars.map(avatar => avatar.getAttribute('data-size'))).toEqual(['compact', 'compact']);
+      expect(avatars.every(avatar => avatar.classList.contains('size-avatar-compact'))).toBe(true);
+      expect(screen.getByText('+3').classList.contains('size-avatar-compact')).toBe(true);
+      expect(group.classList.contains('[--avatar-group-size:var(--spacing-avatar-compact)]')).toBe(true);
+    });
+
     it('stacks the first avatar on top and scales the overlap with the size', () => {
       render(
         <Avatar.Group size="lg" aria-label="Reviewers">
