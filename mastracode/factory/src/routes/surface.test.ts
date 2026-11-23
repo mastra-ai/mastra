@@ -8,6 +8,7 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { resolveDeploymentModelProviders } from './config.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
 async function seedFactoryWithRepository(options?: {
@@ -239,7 +240,7 @@ describe('prepareFactoryRuleBinding', () => {
   describe('who owns a new phase session', () => {
     type Seed = Awaited<ReturnType<typeof seedFactoryWithRepository>>;
 
-    function start(seed: Seed, approvedBy: string | undefined) {
+    function start(seed: Seed, approvedBy: string | undefined, serverHasMastraGatewayKey = false) {
       const prepare = vi.fn(async () => ({}) as never);
       const input = bindingInput(seed.project.id);
       if (approvedBy) (input.record as { approvedBy?: string | null }).approvedBy = approvedBy;
@@ -254,6 +255,7 @@ describe('prepareFactoryRuleBinding', () => {
           workItems: seed.seeded.workItems,
           modelCredentials: seed.seeded.credentials,
           customProviders: seed.seeded.customProviders,
+          deploymentModelProviders: resolveDeploymentModelProviders(undefined, serverHasMastraGatewayKey),
         },
       );
       return { prepare, started };
@@ -378,6 +380,23 @@ describe('prepareFactoryRuleBinding', () => {
         const { seed, factory } = await seedWithKey();
 
         await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe(factory);
+      });
+
+      it('starts the phase when the deployment provides Mastra Gateway and the organization stores no key', async () => {
+        const seed = await seedFactoryWithRepository({
+          modelScope,
+          defaultModelId: 'mastra/anthropic/claude-opus-5.5',
+        });
+        const { prepare, started } = start(seed, 'approver-1', true);
+
+        await started;
+
+        expect(prepare).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: `factory-project:${seed.project.id}`,
+            defaultModelId: 'mastra/anthropic/claude-opus-5.5',
+          }),
+        );
       });
 
       it('starts the phase as the Factory when the organization runs on its own provider and stores no key', async () => {
