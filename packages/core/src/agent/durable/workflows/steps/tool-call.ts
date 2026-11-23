@@ -960,13 +960,17 @@ export function createDurableToolCallStep() {
       };
       // A background task records its start and suspension on the retained tool call message long
       // after this step read it, so each of those writes starts from the saved copy (see onExecution).
+      // An unsaved response holds writes storage has not seen yet; any other copy can be stale.
+      const mayBeStale = (list: MessageList) => !list.get.response.db().some(hasInvocation);
+      // Returns whether the retained copy was replaced.
       const refreshRetainedInvocation = async (list: MessageList) => {
-        // An unsaved response holds writes storage has not seen yet.
-        if (!memory || !state?.threadId || !state.resourceId || list.get.response.db().some(hasInvocation)) return;
+        if (!memory || !state?.threadId || !state.resourceId) return false;
         const retained = [...list.get.all.db()].reverse().find(hasInvocation);
-        if (!retained) return;
+        if (!retained) return false;
         const recalled = await recallSaved(memory, state.threadId, state.resourceId, retained.id);
-        if (recalled?.saved) retained.content = recalled.saved.content;
+        if (!recalled?.saved) return false;
+        retained.content = recalled.saved.content;
+        return true;
       };
       const recoverInvocation = async () => {
         if (recoveryAttempted) return;
@@ -2302,21 +2306,25 @@ export function createDurableToolCallStep() {
             // A superseded execution skips the write. The hook runs outside this
             // step (the background-task manager calls it), so the error is not
             // rethrown: that would fail the task instead of stopping the step.
+            // Applied now as well as before the save: copies of this list taken before the save
+            // runs (the run's finish save included) must already hold the update. Applying makes
+            // the message a response, so staleness is judged first.
             const threadId = state?.threadId;
-            if (!saveQueueManager || !threadId || state?.memoryConfig?.readOnly) {
-              await apply();
-              return;
-            }
+            const saves = !!saveQueueManager && !!threadId && !state?.memoryConfig?.readOnly;
+            const stale = saves && mayBeStale(list);
+            await apply();
+            if (!saves) return;
             try {
               await runFencedToClaim(claimFenceArgs, () =>
                 saveQueueManager.flushMessages(list, threadId, state.memoryConfig, {
-                  // The update starts from the saved copy, read inside the save queue so this thread's
-                  // earlier saves (another background task's included) have landed first.
+                  // The saved update starts from the saved copy, read inside the save queue so this
+                  // thread's earlier saves (another background task's included) have landed first.
                   beforePersist: skipUnverified(list, async () => {
                     await assertNotSuperseded();
-                    await refreshRetainedInvocation(list);
+                    const refreshed = stale && (await refreshRetainedInvocation(list));
                     if (invocationUnverified) throw new UnverifiedToolCallMessageError();
-                    await apply();
+                    // The update is idempotent, so it is applied again on top of the saved copy.
+                    if (refreshed) await apply();
                   }),
                 }),
               );

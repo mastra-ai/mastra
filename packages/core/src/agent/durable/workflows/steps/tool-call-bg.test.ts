@@ -73,6 +73,7 @@ function makeMessageList() {
     add: vi.fn(),
     get: {
       all: { db: vi.fn().mockReturnValue([]) },
+      response: { db: vi.fn().mockReturnValue([]) },
       input: { aiV5: { model: vi.fn().mockReturnValue([]) } },
     },
   };
