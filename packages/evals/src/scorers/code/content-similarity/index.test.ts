@@ -100,4 +100,27 @@ describe('ContentSimilarityMetric', () => {
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(0);
   });
+
+  it('should lower the score for whitespace differences when ignoreWhitespace is false', async () => {
+    const whitespaceSensitiveMetric = createContentSimilarityScorer({ ignoreCase: true, ignoreWhitespace: false });
+    const inputMessages = [createTestMessage({ content: 'New York', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'NewYork', role: 'assistant', id: 'test-output' })];
+    const result = await whitespaceSensitiveMetric.run(createAgentTestRun({ inputMessages, output }));
+    expect(result.score).toBeLessThan(1);
+
+    const newlineInput = [createTestMessage({ content: 'The quick\nbrown fox', role: 'user', id: 'test-input' })];
+    const spaceOutput = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
+    const newlineResult = await whitespaceSensitiveMetric.run(
+      createAgentTestRun({ inputMessages: newlineInput, output: spaceOutput }),
+    );
+    expect(newlineResult.score).toBeLessThan(1);
+  });
+
+  it('should keep ignoring whitespace when only ignoreCase is passed', async () => {
+    const caseOnlyMetric = createContentSimilarityScorer({ ignoreCase: false });
+    const inputMessages = [createTestMessage({ content: 'New York', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'NewYork', role: 'assistant', id: 'test-output' })];
+    const result = await caseOnlyMetric.run(createAgentTestRun({ inputMessages, output }));
+    expect(result.score).toBe(1);
+  });
 });
