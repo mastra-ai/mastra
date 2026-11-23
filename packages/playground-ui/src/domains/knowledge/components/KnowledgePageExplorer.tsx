@@ -1404,11 +1404,7 @@ export function KnowledgePageExplorer({
                   floatingToolbar ? 'max-w-full min-w-0 overflow-visible rounded-full bg-background' : undefined
                 }
               >
-                <TabList
-                  variant={floatingToolbar ? 'pill' : 'pill-ghost'}
-                  size="sm"
-                  overflow={floatingToolbar ? 'visible' : 'scroll'}
-                >
+                <TabList variant={floatingToolbar ? 'pill' : 'pill-ghost'} size="sm">
                   {views.map(option => (
                     <Tab
                       key={option.value}
@@ -1507,7 +1503,12 @@ export function KnowledgePageExplorer({
             >
               {graphShown && !pageOverGraph ? (
                 <div className="absolute top-[calc(var(--knowledge-toolbar-inset)+0.75rem)] right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
-                  <ButtonsGroup orientation="vertical" size="sm" aria-label="Graph options">
+                  <ButtonsGroup
+                    orientation="vertical"
+                    size="sm"
+                    aria-label="Graph options"
+                    className="*:aria-pressed:[--control-icon-rest:var(--foreground)] *:aria-pressed:[--surface-tint:var(--fill-hover)]"
+                  >
                     <Button
                       data-testid="knowledge-graph-back"
                       aria-label="Back"
@@ -1526,7 +1527,6 @@ export function KnowledgePageExplorer({
                       tooltip={allLinks ? 'Show only the selected page’s links' : 'Show every link between pages'}
                       tooltipPosition="left"
                       size="icon-sm"
-                      variant={allLinks ? 'subtle' : 'default'}
                       onClick={() => setAllLinks(current => !current)}
                     >
                       <IconChainLink3 />
@@ -1538,7 +1538,6 @@ export function KnowledgePageExplorer({
                       tooltip={dotCounts ? 'Hide link counts' : 'Show link counts on each dot'}
                       tooltipPosition="left"
                       size="icon-sm"
-                      variant={dotCounts ? 'subtle' : 'default'}
                       onClick={() => setDotCounts(current => !current)}
                     >
                       <IconHashtag />

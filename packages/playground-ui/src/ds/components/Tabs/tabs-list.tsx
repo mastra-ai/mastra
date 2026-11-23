@@ -39,10 +39,10 @@ export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   variant?: TabListVariant | null;
   style?: React.CSSProperties;
   /**
-   * `scroll` (default) scrolls the list. `menu` folds tabs that don't fit into a "+N" menu.
-   * `visible` lets a short tab list render without clipping its controls. Contained tabs always fold.
+   * What happens to tabs that don't fit: `scroll` (default) scrolls the list; `menu` folds them into a
+   * "+N" menu after the last tab that fits, keeping the open one in the row. Contained tabs always fold.
    */
-  overflow?: 'scroll' | 'menu' | 'visible';
+  overflow?: 'scroll' | 'menu';
 };
 
 /** The active pill sits inside the track's inset: 2px on the rung-sized track, 4px when contained. */
@@ -197,9 +197,7 @@ export const TabList = ({
           className={cn(
             'relative w-full',
             // Outside contained tabs, the "+N" menu follows the list in the row.
-            folds && !contained
-              ? 'flex items-center gap-1'
-              : (contained || overflow !== 'visible') && 'overflow-x-auto',
+            folds && !contained ? 'flex items-center gap-1' : 'overflow-x-auto',
             sticky && 'sticky top-0 z-10 bg-background',
           )}
         >
