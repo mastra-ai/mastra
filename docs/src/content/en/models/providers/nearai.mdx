@@ -7,7 +7,7 @@ description: "Browse NEAR AI Cloud model IDs, capabilities, context windows, and
 
 # <img src="https://models.dev/logos/nearai.svg" alt="NEAR AI Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NEAR AI Cloud
 
-Access 59 NEAR AI Cloud models through Mastra's model router. Authentication is handled automatically using the `NEARAI_API_KEY` environment variable.
+Access 61 NEAR AI Cloud models through Mastra's model router. Authentication is handled automatically using the `NEARAI_API_KEY` environment variable.
 
 Learn more in the [NEAR AI Cloud documentation](https://docs.near.ai/).
 
@@ -575,6 +575,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "nearai/openai/gpt-6.1-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "nearai/openai/gpt-6.2-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 8,
+    "outputCost": 40
+  },
+  {
+    "model": "nearai/openai/gpt-6.2-sol",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,

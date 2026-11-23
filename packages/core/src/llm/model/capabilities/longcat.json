@@ -1,12 +1,12 @@
 {
   "attachment": ["LongCat-2.5-Preview"],
   "reasoning": {
-    "LongCat-2.5-Preview": [
+    "LongCat-2.0": [
       {
         "type": "toggle"
       }
     ],
-    "LongCat-2.0": [
+    "LongCat-2.5-Preview": [
       {
         "type": "toggle"
       }

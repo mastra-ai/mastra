@@ -69,6 +69,20 @@ describe('ModelPicker', () => {
     vi.unstubAllGlobals();
   });
 
+  it('given trigger children, names the trigger by them rather than by the model', () => {
+    render(
+      <ModelPicker
+        providers={[anthropic]}
+        value={{ provider: 'anthropic', model: 'claude-sonnet-4-6' }}
+        onValueChange={() => {}}
+      >
+        Change model
+      </ModelPicker>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Change model' })).toBeTruthy();
+  });
+
   it('given one provider, lists its models with no provider filter or heading, and keeps connect beside search', () => {
     const list = openPicker([anthropic]);
 

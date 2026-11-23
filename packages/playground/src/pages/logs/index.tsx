@@ -51,7 +51,7 @@ export default function LogsPage() {
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
-    entityType: url.selectedEntityOption?.entityType as EntityType | undefined,
+    entityType: url.selectedEntityOption?.entityType,
     rootOnly: true,
   });
   const { data: discoveredEnvironments = [], isPending: isEnvironmentsLoading } = useEnvironments();
@@ -172,7 +172,7 @@ export default function LogsPage() {
 
   if (logsError) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
         <h1 className="sr-only">Logs</h1>
         <div className="flex h-full items-center justify-center">
           <LogsErrorContent error={logsError} resource="logs" errorTitle="Failed to load logs" />
@@ -185,7 +185,7 @@ export default function LogsPage() {
 
   if (logs.length === 0 && !isLoadingLogs && !contentFiltersApplied) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
         <h1 className="sr-only">Logs</h1>
         <NoLogsInfo datePreset={url.datePreset} dateFrom={url.selectedDateFrom} dateTo={url.selectedDateTo} />
       </PageLayout>
@@ -193,7 +193,7 @@ export default function LogsPage() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
       <h1 className="sr-only">Logs</h1>
       <LogsListView
         logs={logs}

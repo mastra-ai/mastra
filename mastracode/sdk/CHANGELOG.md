@@ -1,5 +1,41 @@
 # @mastra/code-sdk
 
+## 1.21.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`8bc3a19`](https://github.com/mastra-ai/mastra/commit/8bc3a19a73e6e683a29d8c8cf8ab1f0bf4343a26), [`3b6d29c`](https://github.com/mastra-ai/mastra/commit/3b6d29c8ae20172a0d2be883686f3e9aec86ce25)]:
+  - @mastra/core@1.86.0-alpha.5
+  - @mastra/memory@1.41.3-alpha.1
+  - @mastra/client-js@1.61.2-alpha.5
+
+## 1.21.0-alpha.5
+
+### Patch Changes
+
+- Fixed Anthropic models not using prompt caching when they run through the Mastra Gateway with an organization key. Supported gateway routes can now reuse cached input on later steps of a conversation. ([#30972](https://github.com/mastra-ai/mastra/pull/30972))
+
+## 1.21.0-alpha.4
+
+### Patch Changes
+
+- Stopped logging an error each time the Mastra Code workspace is created for a new project. Requires a `@mastra/core` version that supports `getWorkspaceById(id, { optional: true })`; with older cores the error is still logged. ([#31071](https://github.com/mastra-ai/mastra/pull/31071))
+
+- Updated dependencies [[`004f350`](https://github.com/mastra-ai/mastra/commit/004f35031e7419a16263f8641d43c9cd19275ae0), [`79a30b6`](https://github.com/mastra-ai/mastra/commit/79a30b6d5c758bf46f0633059eded42bffbeb443), [`fa2ea6d`](https://github.com/mastra-ai/mastra/commit/fa2ea6dfb5c13a5f9b4bdc99f332959f7b0f4209), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018)]:
+  - @mastra/core@1.86.0-alpha.4
+  - @mastra/client-js@1.61.2-alpha.4
+
+## 1.21.0-alpha.3
+
+### Patch Changes
+
+- Updated experimental agent validation to use the shared Agent workflow API, keeping durable and evented engine checks compatible with the orchestration refactor. ([#30560](https://github.com/mastra-ai/mastra/pull/30560))
+
+- Updated dependencies [[`2265273`](https://github.com/mastra-ai/mastra/commit/22652730c44dc9aee38dd4979903d044490510ea), [`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18)]:
+  - @mastra/agent-browser@0.7.0-alpha.0
+  - @mastra/core@1.86.0-alpha.3
+  - @mastra/client-js@1.61.2-alpha.3
+
 ## 1.21.0-alpha.2
 
 ### Patch Changes
