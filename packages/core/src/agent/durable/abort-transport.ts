@@ -64,25 +64,44 @@ export async function ensureRemoteAbortListener(
   // on a warm worker carries a new deadline.
   syncRunDeadline(entry, deadline);
 
-  if (entry.remoteAbortListenerInstalled) return;
+  if (entry.remoteAbortListener) return;
 
-  // Claim before awaiting: two steps starting concurrently in this process
+  // Set before awaiting: two steps starting concurrently in this process
   // would otherwise both pass the check and install duplicate subscriptions.
-  entry.remoteAbortListenerInstalled = true;
-
-  const publisher = getRunStreamPublisher(runId, entry, mastra);
-  const listener = publisher.listenForAbort(pubsub, () => {
+  const listener = getRunStreamPublisher(runId, entry, mastra).listenForAbort(pubsub, () => {
     const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
     if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
   });
+  entry.remoteAbortListener = listener;
   try {
     await listener.ready;
   } catch (error) {
+    // Clear it so the next step retries a transient subscription failure.
+    if (entry.remoteAbortListener === listener) entry.remoteAbortListener = undefined;
     await listener.detach();
-    // Release the claim so the next step retries a transient subscription failure.
-    entry.remoteAbortListenerInstalled = false;
     throw error;
   }
+}
+
+/**
+ * Stop listening for remote abort requests for `runId` in this process once the
+ * run has reached a final status (success, failed, canceled). Nothing is left to
+ * stop, and a listener left in place would keep its subscription (a dedicated
+ * connection on Redis Streams) until the registry entry is cleaned up, and would
+ * acknowledge aborts of the finished run as if it had stopped it. Removing it
+ * makes an abort of a finished durable run report `false`, like one of a
+ * finished plain run.
+ *
+ * Only the listener is released: the registry entry, the run's stream history
+ * and its run record stay until cleanupTimeoutMs. Must not be called for a
+ * suspended run, which still needs to hear aborts once resumed. See #30479.
+ */
+export async function releaseRemoteAbortListener(runId: string, mastra?: Mastra): Promise<void> {
+  const entry = getRunRegistryEntry(runId, mastra);
+  const listener = entry?.remoteAbortListener;
+  if (!entry || !listener) return;
+  entry.remoteAbortListener = undefined;
+  await listener.detach();
 }
 
 /** Controllers this module created for a worker that had none, as opposed to an owner's controller wired to its `abort()`. */

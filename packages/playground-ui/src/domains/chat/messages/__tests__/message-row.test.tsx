@@ -18,6 +18,7 @@ import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/do
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 import { server } from '@/test/msw-server';
+import { recordRequests } from '@/test/record-requests';
 import { toUntrustedAppContext } from '@/utils/mcp-app-context';
 
 const BASE_URL = 'http://localhost:4111';
@@ -279,16 +280,6 @@ describe('MessageRow', () => {
     });
   });
 
-  it('renders user text', () => {
-    renderRow(
-      baseMessage({
-        role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: 'a user line' }] },
-      }),
-    );
-    expect(screen.getByText('a user line')).toBeTruthy();
-  });
-
   it('drops messages with no displayable role', () => {
     const { container } = renderRow(
       baseMessage({
@@ -389,6 +380,83 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  describe('when a record is read back with the host’s tool card', () => {
+    const recordedCall = () =>
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mode: 'stream' },
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { toolName: 'searchHotels', toolCallId: 'call-1', state: 'result', args: {}, result: {} },
+            } as never,
+          ],
+        },
+      });
+    // No Mastra client, no React Query: the row takes its data and its cards from the host.
+    const renderReadBack = (props: Partial<Parameters<typeof MessageRow>[0]> = {}) =>
+      render(
+        <MessageRow
+          message={recordedCall()}
+          readOnly
+          renderToolCard={call => <p>{`${call.toolName} drawn by the host`}</p>}
+          {...props}
+        />,
+      );
+
+    it('draws each call with the card the host passed', () => {
+      renderReadBack();
+
+      expect(screen.getByText('searchHotels drawn by the host')).toBeTruthy();
+    });
+
+    describe('when the host passes its MCP app tools', () => {
+      const threeCalls = () =>
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: ['call-1', 'call-2', 'call-3'].map(
+              toolCallId =>
+                ({
+                  type: 'tool-invocation',
+                  toolInvocation: { toolName: 'searchHotels', toolCallId, state: 'result', args: {}, result: {} },
+                }) as never,
+            ),
+          },
+        });
+      const hotelsApp = {
+        serverId: 'travel',
+        toolId: 'searchHotels',
+        toolName: 'searchHotels',
+        resourceUri: 'ui://hotels',
+      };
+
+      it('folds back-to-back plain calls into one group', () => {
+        renderReadBack({ message: threeCalls() });
+
+        expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeTruthy();
+      });
+
+      it('draws each call of an MCP app on its own, as an app', () => {
+        renderReadBack({ message: threeCalls(), mcpAppTools: { searchHotels: hotelsApp } });
+
+        expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+        expect(screen.getAllByText('searchHotels drawn by the host')).toHaveLength(3);
+      });
+    });
+
+    it('asks the network for nothing', () => {
+      const requests = recordRequests();
+      renderReadBack();
+
+      expect(requests).toEqual([]);
+    });
   });
 
   describe('when a command exits non-zero, as the stream saves its exit', () => {

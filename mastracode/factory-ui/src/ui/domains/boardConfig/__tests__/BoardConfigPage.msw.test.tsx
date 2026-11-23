@@ -384,6 +384,8 @@ describe('Board configuration', () => {
 
     await user.click(configNav().getByRole('link', { name: 'Triage' }));
     expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
+    expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.queryByLabelText('Triage: start only when JSON')).not.toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Edit as JSON' })[0]);
     expect(screen.getByLabelText('Triage: start only when JSON')).toHaveValue(JSON.stringify(bugs, null, 2));
@@ -551,7 +553,7 @@ describe('Board configuration', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
-  it("opens a phase's skill on its own page, and Back returns to the phase showing the edit saved there", async () => {
+  it("opens a phase's skill on its own page, and browser back returns to the phase showing the edit saved there", async () => {
     stubFactory();
     serveBoard(storedWorkBoard());
     let plan: FactorySkillInfo = {
@@ -596,7 +598,11 @@ describe('Board configuration', () => {
     expect(writes[0]).toContain('description: "Plans small work"');
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/skills/factory-plan`);
 
-    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('link', { name: 'Back to Skills' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/work/skills`,
+    );
+    await router.navigate(-1);
     await waitFor(() => expect(router.state.location.pathname).toBe(phasePath));
     expect(await screen.findByText('Plans small work')).toBeInTheDocument();
     expect(screen.getByText('Edited')).toBeInTheDocument();

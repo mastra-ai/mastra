@@ -8,6 +8,7 @@ import type { TableVariant } from './table-context';
 import { TablePagination } from './table-pagination';
 import { TableRowButton } from './table-row-button';
 import { TableRowLink } from './table-row-link';
+import { forwardRowClick, isForwardedRowClick } from './table-row-target';
 import { TableSortButton } from './table-sort-button';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRingInset } from '@/ds/primitives/transitions';
@@ -147,12 +148,7 @@ const tableBodyStyles = [
   '[&>tr+tr>td]:border-t',
   '[&>tr:first-child>td:first-child]:rounded-tl-lg',
   '[&>tr:first-child>td:last-child]:rounded-tr-lg',
-  '[&>tr:first-child_[data-row-target]]:after:rounded-t-lg',
   '[thead[data-placement=inside]+&>tr:first-child>td]:rounded-none',
-  '[thead[data-placement=inside]+&>tr:first-child_[data-row-target]]:after:rounded-none',
-  '[&>tr:last-child_[data-row-target]]:after:rounded-b-lg',
-  '[&_:is(a,button,input,select,textarea):not([data-row-target])]:relative',
-  '[&_:is(a,button,input,select,textarea):not([data-row-target])]:z-1',
 ];
 
 export interface TbodyProps extends ComponentProps<'tbody'> {
@@ -200,6 +196,17 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
       }
     }, [isActive]);
 
+    const handleInsetClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
+      // The click handed to the row target bubbles back here; the original click already ran onClick
+      // and already reached the row's ancestors, so this copy stops at the row.
+      if (isForwardedRowClick(event)) {
+        event.stopPropagation();
+        return;
+      }
+      forwardRowClick(event);
+      onClick?.();
+    };
+
     const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
       if (event.key === 'Enter' && onClick) {
         onClick();
@@ -216,9 +223,11 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
           variant === 'default' && 'focus:bg-fill-subtle',
           variant === 'default' && focusRingInset,
           variant === 'inset' && [
-            'has-[[data-row-target]]:relative',
+            'has-[[data-row-target]]:cursor-pointer',
             'has-[[data-row-target]]:hover:*:bg-surface-panel',
             'has-[[data-row-target]:focus-visible]:*:bg-surface-panel',
+            'has-[[data-row-target]:focus-visible]:outline-1 has-[[data-row-target]:focus-visible]:-outline-offset-1',
+            'has-[[data-row-target]:focus-visible]:outline-border-focus has-[[data-row-target]:focus-visible]:outline-solid',
           ],
           selected && 'bg-fill-hover',
           onClick && 'cursor-pointer',
@@ -226,7 +235,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
         )}
         data-slot={insetSlot(variant, 'table-row')}
         style={style}
-        onClick={onClick}
+        onClick={variant === 'inset' ? handleInsetClick : onClick}
         ref={internalRef}
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}

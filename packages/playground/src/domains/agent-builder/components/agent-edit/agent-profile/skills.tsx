@@ -1,7 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { StoredSkillsPicker } from '@mastra/playground-ui/domains/skills/stored-skills-picker';
 import { useFormContext } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 
@@ -20,61 +18,12 @@ export const Skills = ({ editable = true, availableSkills = [] }: SkillsProps) =
   };
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto py-2">
-      {availableSkills.length === 0 ? (
-        <SkillEmptyState />
-      ) : (
-        <ul className="flex flex-col">
-          {availableSkills.map(skill => {
-            const isChecked = Boolean(selected[skill.id]);
-
-            return (
-              <li key={skill.id}>
-                <SkillItem skill={skill} editable={editable} onToggle={toggle} isChecked={isChecked} />
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-};
-
-interface SkillItemProps {
-  skill: StoredSkillResponse;
-  editable: boolean;
-  onToggle: (id: string, next: boolean) => void;
-  isChecked: boolean;
-}
-
-const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
-  return (
-    <Field disabled={!editable}>
-      <FieldLabel className="flex shrink items-start gap-3 px-4 py-4 hover:bg-fill-subtle">
-        <span className="mt-0.5 flex">
-          <Checkbox checked={isChecked} onCheckedChange={next => onToggle(skill.id, next === true)} />
-        </span>
-        <span className="flex min-w-0 flex-col">
-          <Txt as="span" variant="column" tone="ink">
-            {skill.name}
-          </Txt>
-          {skill.description && (
-            <Txt as="span" variant="meta" tone="muted" className="mt-0.5 truncate" title={skill.description}>
-              {skill.description}
-            </Txt>
-          )}
-        </span>
-      </FieldLabel>
-    </Field>
-  );
-};
-
-const SkillEmptyState = () => {
-  return (
-    <div className="flex items-center justify-center py-8">
-      <Txt variant="caption" tone="muted">
-        No skills available in this project.
-      </Txt>
-    </div>
+    <StoredSkillsPicker
+      availableSkills={availableSkills}
+      selectedSkillIds={Object.keys(selected).filter(id => selected[id])}
+      disabled={!editable}
+      onAttach={id => toggle(id, true)}
+      onRemove={id => toggle(id, false)}
+    />
   );
 };

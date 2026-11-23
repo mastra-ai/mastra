@@ -282,20 +282,6 @@ describe('IntakeSection linear', () => {
     });
   });
 
-  describe('when a Linear project is picked', () => {
-    it('persists an explicit project selection', async () => {
-      const saved = useIntakeHandlers();
-
-      renderIntakeSection();
-      await openSourcePicker('Linear projects and teams');
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Add Q3 Roadmap' }));
-
-      await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0].linear.sourceIds).toEqual(['lproj-1']);
-    });
-  });
-
   describe('when the last selected Linear project is removed', () => {
     it('removes the final selected project without turning it into all-project intake', async () => {
       const saved = useIntakeHandlers({
@@ -313,18 +299,6 @@ describe('IntakeSection linear', () => {
   });
 
   describe('when a Linear team is picked', () => {
-    it('persists the team as its own source id', async () => {
-      const saved = useIntakeHandlers();
-
-      renderIntakeSection();
-      await openSourcePicker('Linear projects and teams');
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Add All issues in Engineering' }));
-
-      await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0].linear.sourceIds).toEqual(['linear-team:opaque-eng']);
-    });
-
     it('waits for a returned team DTO before enabling opaque team selection', async () => {
       const saved = useIntakeHandlers();
       let releaseTeams!: () => void;

@@ -38,6 +38,7 @@ import type {
   ResponseMessagesCursor,
 } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
+import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { isMastraTimeoutError, MastraTimeoutError } from '@mastra/core/loop';
@@ -191,6 +192,25 @@ export const setLoopStatus = (
     runId,
     opts: { status, expectedStatus },
   });
+
+/**
+ * The agent span this execution reports under: live in this process, else rebuilt. A loop step's own
+ * span is internal with no live parent, so spans and scores made in the step take this one instead.
+ */
+function segmentAgentSpan(
+  requestContext: RequestContext,
+  state: Parameters<typeof segmentSpanData>[2] & { runId: string },
+  registry: ReturnType<typeof getRunRegistryEntry>,
+  mastra: Mastra | undefined,
+) {
+  const { agentSpanData } = segmentSpanData(requestContext, state.runId, state, registry);
+  return (
+    liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
+    (agentSpanData
+      ? mastra?.observability?.getSelectedInstance({ requestContext })?.rebuildSpan(agentSpanData)
+      : undefined)
+  );
+}
 
 /**
  * Ends a resumed segment Inngest failed or cancelled, which never reaches the finalize step that
@@ -599,6 +619,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           const state = inputData as IterationState;
           const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
+          const agentSpan = segmentAgentSpan(requestContext, state, tracingRegistry, mastra);
 
           // Access pubsub via symbol to emit finish event
           const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -637,7 +658,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             messageListState: state.messageListState,
             mastra,
             requestContext,
-            tracingContext,
+            tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
             logger: mastra?.getLogger?.(),
             messageId: state.messageId,
             outputResult: {
@@ -721,7 +742,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           // Same shape as the core durable agent: `text` and the run's `toolCalls` are the output,
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
-          const observability = mastra?.observability?.getSelectedInstance({});
+          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           // Resumed segments carry their own clocks beside their fresh spans.
           const registry = getRunRegistryEntry(state.runId, mastra);
           // A tripwire keeps its own classification; otherwise a deadline-stopped run ends its spans as
@@ -829,13 +850,13 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
           const initData = getInitData() as DurableAgenticWorkflowInput;
-          // This step's span is internal and has no live parent, so a score read from it
-          // would name a span that is never stored.
-          const registry = getRunRegistryEntry(initData.runId, mastra);
-          const { agentSpanData } = segmentSpanData(requestContext, initData.runId, initData, registry);
-          const agentSpan =
-            liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
-            (agentSpanData ? mastra?.observability?.getSelectedInstance({})?.rebuildSpan(agentSpanData) : undefined);
+          // A score read from this step's own span would name a span that is never stored.
+          const agentSpan = segmentAgentSpan(
+            requestContext,
+            initData,
+            getRunRegistryEntry(initData.runId, mastra),
+            mastra,
+          );
           void executeDurableAgentScorers({
             initData,
             finalOutput: inputData,

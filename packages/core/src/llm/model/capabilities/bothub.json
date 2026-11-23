@@ -20,16 +20,21 @@
     "muse-spark-1.3-contributor"
   ],
   "reasoning": {
+    "muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-pro-0813": [
+    "gemma-4-31b-it:free": [
       {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "type": "toggle"
       }
     ],
     "gpt-5.6-luna": [
@@ -44,27 +49,22 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "gemma-4-31b-it:free": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
+    "deepseek-v4-pro-0813": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "muse-spark-1.3-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "high", "max"]
       }
     ],
     "nemotron-3-ultra-550b-a55b:free": [
       {
         "type": "effort",
         "values": ["none", "medium", "high"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

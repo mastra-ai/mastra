@@ -25,6 +25,7 @@ import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import type { MemoryEmbedder } from '@mastra/code-sdk/agents/memory';
 import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { BuiltinToolId } from '@mastra/core/agent-controller';
@@ -41,7 +42,7 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
-import type { MastraVector } from '@mastra/core/vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 import type { MastraWorker } from '@mastra/core/worker';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
@@ -120,6 +121,7 @@ import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource }
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { resolveFactoryEmbedder } from './memory-embedder.js';
 import {
   FactoryMetrics,
   installFactoryMetrics,
@@ -310,6 +312,16 @@ export interface MastraFactoryConfig {
    * store resolution applies.
    */
   vector?: MastraVector;
+  /**
+   * Embedder for recall vectors, shared by every agent's memory in this deployment: a
+   * `provider/model` string (e.g. `'openai/text-embedding-3-small'`), a Mastra gateway id or an AI
+   * SDK embedding model. Requires `vector`. Built once at construction on the operator's key,
+   * so a missing provider key throws here. Omitted → local `fastembed.small` (bge-small, 384
+   * dimensions) on this host. See "Recall embedder" in the README.
+   */
+  embedder?: MemoryEmbedder;
+  /** Options passed to every embedding call, e.g. provider options or headers. */
+  embedderOptions?: MastraEmbeddingOptions;
   /**
    * Host-owned Knowledge runtime. Factory registers this exact instance under its `id` and uses that
    * key for its read surfaces; pass `{ key, instance }` to register it under another key. Omitted,
@@ -669,6 +681,8 @@ export class MastraFactory {
     | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
+  /** Recall embedder, built once from `config.embedder`. Undefined → the SDK's local fastembed. */
+  readonly #embedder: MastraEmbeddingModel<string> | undefined;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
@@ -727,6 +741,7 @@ export class MastraFactory {
       console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
+    this.#embedder = resolveFactoryEmbedder(config);
     // Knowledge pages and sessions both read `scopes`, checked above; a copy keeps a caller's later edits out.
     this.#config = { ...config, ...(config.scopes && { scopes: [...config.scopes] }) };
     this.#metrics = new FactoryMetrics(resolveMetricsConfig(config.metrics), metricsService());
@@ -878,6 +893,9 @@ export class MastraFactory {
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
     const storage = instrumentAsyncMethods(this.#config.storage, 'storage');
     const vector = this.#config.vector;
+    // Every Memory over these vectors must embed with the same model, or recall would compare
+    // vectors from different models.
+    const embedding = { embedder: this.#embedder, embedderOptions: this.#config.embedderOptions };
     const pubsub = this.#config.pubsub;
     // One bus for board events: a second fallback instance would leave SSE
     // subscribers and producers on different emitters in single-process runs.
@@ -1337,7 +1355,7 @@ export class MastraFactory {
           const memory = await mastraStorage.getStore('memory');
           if (!memory) return false;
           // The sessions' own Memory, so a moved thread takes its observation vectors along.
-          const sessionMemory = getDynamicMemory(mastraStorage, vector);
+          const sessionMemory = getDynamicMemory(mastraStorage, vector, undefined, embedding);
           const report = await migrateSessionResources({
             sessions: sourceControlStorage,
             workItems: workItemsStorage,
@@ -2100,7 +2118,7 @@ export class MastraFactory {
           ...integrations.flatMap(integration => integration.processors?.output ?? []),
           new FactoryReplyCredentialProcessor(),
         ],
-        ...(vector ? { vector } : {}),
+        ...(vector ? { vector, ...embedding } : {}),
         extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
           const tools: IntegrationTools = {};
           const toolOwners = new Map<string, string>();
@@ -2329,7 +2347,7 @@ export class MastraFactory {
             sessionRetirement,
             moveThread: async ({ threadId, resourceId }) => {
               // The sessions' own Memory, so a moved thread takes its observation vectors along.
-              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector, undefined, embedding);
               await sessionMemory({ requestContext: new RequestContext() }).updateThreadResourceId({
                 threadId,
                 resourceId,
@@ -2337,7 +2355,7 @@ export class MastraFactory {
               await sessionMemory.settled();
             },
             renameThread: async ({ threadId, title }) => {
-              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector, undefined, embedding);
               await sessionMemory({ requestContext: new RequestContext() }).updateThread({
                 id: threadId,
                 title,
