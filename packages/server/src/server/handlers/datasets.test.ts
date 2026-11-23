@@ -1,4 +1,6 @@
 import { Agent } from '@mastra/core/agent';
+import { EventEmitterPubSub } from '@mastra/core/events';
+import type { Event } from '@mastra/core/events';
 import { coreFeatures } from '@mastra/core/features';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
@@ -262,6 +264,123 @@ describe('Datasets Handlers', () => {
       expect(startExperimentAsync).toHaveBeenCalledWith(
         expect.objectContaining({ targetType: 'agent', targetId: 'my-agent', agentModel: 'openai/gpt-5-mini' }),
       );
+    });
+
+    describe('durable', () => {
+      let generate: ReturnType<typeof vi.fn>;
+      let events: Event[];
+
+      beforeEach(async () => {
+        const agent = new Agent({ id: 'durable-agent', name: 'durable-agent', instructions: 'test', model: {} as any });
+        generate = vi.fn().mockResolvedValue({ text: 'answer' });
+        vi.spyOn(agent, 'getModel').mockResolvedValue({ specificationVersion: 'v2' } as any);
+        vi.spyOn(agent, 'generate').mockImplementation(generate as any);
+        mastra = new Mastra({
+          logger: false,
+          storage: mockStorage,
+          pubsub: new EventEmitterPubSub(),
+          agents: { 'durable-agent': agent },
+        });
+        events = [];
+        await mastra.pubsub.subscribe('workflows', event => {
+          events.push(event);
+        });
+      });
+
+      async function trigger(body: Record<string, unknown>, requestContext?: RequestContext) {
+        const dataset = await mastra.datasets.create({ name: 'Durable DS' });
+        await dataset.addItem({ input: { prompt: 'hello' } });
+        const parsedBody = TRIGGER_EXPERIMENT_ROUTE.bodySchema.parse({
+          targetType: 'agent',
+          targetId: 'durable-agent',
+          ...body,
+        });
+        const triggered = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...parsedBody,
+          ...(requestContext ? { requestContext } : {}),
+        } as any)) as any;
+        return { dataset, triggered };
+      }
+
+      it('starts the experiment workflow and leaves running it to whatever handles its events', async () => {
+        const { dataset, triggered } = await trigger({
+          durable: true,
+          maxConcurrency: 2,
+          itemTimeout: 5000,
+          maxRetries: 1,
+        });
+
+        expect(triggered).toMatchObject({ status: 'pending', totalItems: 1, startedAt: null });
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        expect(events[0]).toMatchObject({
+          type: 'workflow.start',
+          runId: triggered.experimentId,
+          data: {
+            workflowId: '__mastra-experiment',
+            prevResult: {
+              output: {
+                datasetId: dataset.id,
+                experimentId: triggered.experimentId,
+                maxConcurrency: 2,
+                itemTimeout: 5000,
+                maxRetries: 1,
+              },
+            },
+          },
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const experiment = (await GET_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: triggered.experimentId,
+        } as any)) as any;
+        expect(experiment).toMatchObject({ status: 'pending', startedAt: null });
+        expect(generate).not.toHaveBeenCalled();
+      });
+
+      it('carries a live RequestContext into the start event as plain JSON', async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('projectId', 'project-1');
+        const { triggered } = await trigger({ durable: true }, requestContext);
+
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        expect(events[0]?.data.prevResult.output).toMatchObject({
+          experimentId: triggered.experimentId,
+          requestContext: { projectId: 'project-1' },
+        });
+      });
+
+      it('returns 400 for a config a durable run cannot store', async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('callback', () => 1);
+
+        await expect(trigger({ durable: true }, requestContext)).rejects.toMatchObject({ status: 400 });
+        expect(events).toEqual([]);
+      });
+
+      it('rejects invalid durable, itemTimeout and maxRetries before the handler', () => {
+        const base = { targetType: 'agent', targetId: 'durable-agent' };
+        const parse = (body: Record<string, unknown>) =>
+          TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...base, ...body }).success;
+
+        expect(parse({ durable: 'yes' })).toBe(false);
+        expect(parse({ itemTimeout: 0 })).toBe(false);
+        expect(parse({ itemTimeout: 1.5 })).toBe(false);
+        expect(parse({ maxRetries: -1 })).toBe(false);
+        expect(parse({ maxRetries: 0.5 })).toBe(false);
+        expect(parse({ durable: true, itemTimeout: 1000, maxRetries: 0 })).toBe(true);
+      });
+
+      it('still runs in-process without durable', async () => {
+        const { triggered } = await trigger({});
+
+        expect(triggered.startedAt).toBeInstanceOf(Date);
+        await vi.waitFor(() => expect(generate).toHaveBeenCalled());
+        expect(events).toEqual([]);
+      });
     });
 
     describe('agentModel validation', () => {
