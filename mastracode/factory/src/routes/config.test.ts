@@ -395,10 +395,6 @@ describe('buildProviderAccess', () => {
 });
 
 describe('resolveDeploymentModelProviders', () => {
-  it('uses a deployment-provided Mastra Gateway without requiring an organization key', () => {
-    expect([...resolveDeploymentModelProviders(undefined, true)]).toEqual(['mastra-gateway']);
-  });
-
   it('keeps supported providers and warns about the rest', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect([...resolveDeploymentModelProviders([' amazon-bedrock', ' google-vertex ', 'openai', ''])]).toEqual([

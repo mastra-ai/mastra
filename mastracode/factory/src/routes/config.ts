@@ -523,9 +523,6 @@ const CUSTOM_PROVIDER_REFUSALS = {
  * Bedrock uses the AWS credential chain, while Google Vertex uses Application
  * Default Credentials. In tenant mode they are usable only when the operator
  * lists them in `MastraFactoryConfig.deploymentModelProviders`.
- *
- * Mastra Gateway is also deployment-provided when the server has a gateway
- * key, but it is detected automatically rather than configured in that list.
  */
 export const DEPLOYMENT_MODEL_PROVIDERS: readonly string[] = [AMAZON_BEDROCK_GATEWAY_ID, GOOGLE_VERTEX_GATEWAY_ID];
 
@@ -537,12 +534,8 @@ export function isDeploymentModelProvider(provider: string): boolean {
  * Normalize the operator's `deploymentModelProviders` list. Unsupported ids are
  * ignored with a warning rather than failing boot.
  */
-export function resolveDeploymentModelProviders(
-  providers: readonly string[] | undefined,
-  serverHasMastraGatewayKey = Boolean(MastraCodeGateway.getMastraGatewayApiKey()),
-): ReadonlySet<string> {
+export function resolveDeploymentModelProviders(providers: readonly string[] | undefined): ReadonlySet<string> {
   const resolved = new Set<string>();
-  if (serverHasMastraGatewayKey) resolved.add(MASTRA_GATEWAY_PROVIDER);
   for (const raw of providers ?? []) {
     const provider = raw.trim();
     if (!provider) continue;
