@@ -27,6 +27,10 @@ export const MODEL_TOKENS: Record<string, string> = {
 
   // Google
   __GATEWAY_GOOGLE_MODEL_FLASH__: 'google/gemini-3.8-flash',
+  __GATEWAY_GOOGLE_VIDEO_MODEL__: 'google/veo-3.1',
+
+  // Cohere
+  __GATEWAY_COHERE_RERANK_MODEL__: 'cohere/rerank-v5-fast',
 
   // TypeSafe AI
   __AI_SDK_TYPESAFE_DECISION_MODEL__: 'jev-latest',

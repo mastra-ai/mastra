@@ -1,5 +1,92 @@
 # @mastra/core
 
+## 1.86.0-alpha.5
+
+### Minor Changes
+
+- Added an optional `recommended` flag to `ask_user` options. The flag reaches the host in the suspend payload, so a UI can highlight the choice the agent suggests. It is a display hint only: nothing is selected until the user answers. ([#31146](https://github.com/mastra-ai/mastra/pull/31146))
+
+  ```ts
+  // suspendPayload.options from a suspended ask_user call
+  [{ label: 'staging', recommended: true }, { label: 'production' }];
+  ```
+
+## 1.86.0-alpha.4
+
+### Minor Changes
+
+- Added `principals` and `author` options to `knowledge.createTools()`, and `knowledge.getPinnedContext({ principals })`. A host can now run the Knowledge tools and read pinned pages outside an agent run, for example from an MCP server acting for an external agent. Every call reads and writes under those fixed principals, following the same scope rules as an agent, and writes are recorded under `author`. Principals must match a declared scope type and must come from the host, never from the request. ([#30996](https://github.com/mastra-ai/mastra/pull/30996))
+
+  ```ts
+  const tools = knowledge.createTools({
+    read: true,
+    write: true,
+    principals: ['agent:claude-code'],
+   via mcp:claude-code',
+  });
+  ```
+
+- `Knowledge.upsertPage` takes an optional `expected: { id, version }`, the page as you read it. With it, the call finds the page at `scope#path`, refuses unless it is that page at that version, and then updates that page by id, only while it is still at that version. If the page was edited, moved, removed or replaced by a new page at the same path since, the call throws `KnowledgeConflictError` and writes nothing: no page, parent page or scope is created. The path is checked when the page is looked up; if a parent page is moved between that lookup and the write, the write follows the page to its new place. A sync that reads a page and writes it later no longer replaces an edit someone made in between. ([#31099](https://github.com/mastra-ai/mastra/pull/31099))
+
+  ```ts
+  const { page } = await knowledge.upsertPage({ scope: 'docs:acme', path: 'faq', name: 'FAQ', body: 'placeholder' });
+  // ...later, only if nobody has written the page since:
+  await knowledge.upsertPage({
+    scope: 'docs:acme',
+    path: 'faq',
+    name: 'FAQ',
+    body,
+    expected: { id: page.id, version: page.version },
+  });
+  ```
+
+- Added an `optional` flag to `mastra.getWorkspaceById()`. With `{ optional: true }` it returns `undefined` for an unknown ID instead of logging and throwing an error, so you can check whether a workspace exists before creating it. ([#31071](https://github.com/mastra-ai/mastra/pull/31071))
+
+  ```typescript
+  const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
+  ```
+
+### Patch Changes
+
+- Fixed skill search failing when two skills share a name. Searching no longer throws "multiple local skills found"; each matching skill is returned with its own path, and `skill_search` results now show that path next to the skill name so agents can load the right copy. Getting a skill by an ambiguous name still errors. ([#31069](https://github.com/mastra-ai/mastra/pull/31069))
+
+## 1.86.0-alpha.3
+
+### Minor Changes
+
+- Added execution-engine configuration with `Agent.durable.executionEngine` and `Mastra.durable` defaults. Explicit agent settings take precedence over registered defaults, the engine selection locks at registration or first execution, and editor forks preserve the selected policy without changing a wrapped agent's engine. ([#30393](https://github.com/mastra-ai/mastra/pull/30393))
+
+  ```typescript
+  const mastra = new Mastra({
+    durable: { executionEngine: 'durable' },
+    agents: { support: agent },
+  });
+  ```
+
+  This change provides configuration and policy resolution; native engine dispatch is supplied by the companion execution change. Release the two changes together.
+
+### Patch Changes
+
+- Fixed live scores from `createDurableAgent` and `createEventedAgent` agents. A score now names the agent as its entity, as on a regular `Agent`, so tools that group scores by agent find them. Evented agents that run on separate workers now export their scores too. ([#31029](https://github.com/mastra-ai/mastra/pull/31029))
+
+- Fixed DurableAgent and EventedAgent method overrides and super calls without changing execution behavior. ([#31074](https://github.com/mastra-ai/mastra/pull/31074))
+
+- Unified invocation orchestration for plain, durable, and evented agents while preserving their existing streaming and lifecycle APIs. Shared execution machinery now handles active-run discovery and recovery facts without duplicating agent orchestration. ([#30560](https://github.com/mastra-ai/mastra/pull/30560))
+
+- Fixed evented workflows running the steps after a parallel or branch block twice when a run was restarted while the block was finishing. When `restart()` found one branch already done and another still running, both the restarted run and the original worker could go on past the block, so later steps ran twice. Now only one of them continues. ([#30901](https://github.com/mastra-ai/mastra/pull/30901))
+
+- Added `traceId` and `spanId` to the result of `stream()`, `resume()`, `observe()`, and `recover()` on durable agents, so you no longer need to read them from `result.output`. A recovered run's result and stream chunks now also carry the trace ID of the run. ([#31013](https://github.com/mastra-ai/mastra/pull/31013))
+
+## 1.86.0-alpha.2
+
+### Patch Changes
+
+- The `knowledge_note` tool no longer requires `scope` when adding a note. A note added without `scope` is stamped with the page's own scope, so everyone who can read the page sees it. Pass narrower scopes to keep a note private. Restamping a note still requires `scope`. ([#30989](https://github.com/mastra-ai/mastra/pull/30989))
+
+- Refactored agent version-override composition to share precedence handling between plain calls and durable preparation while retaining their existing merge behavior. ([#30998](https://github.com/mastra-ai/mastra/pull/30998))
+
+- Restored Agent request-context validation and output completion timing after helper extraction. Fixed durable recovery and saved request-context reads to check the agent's current identity after storage returns. ([#30997](https://github.com/mastra-ai/mastra/pull/30997))
+
 ## 1.86.0-alpha.1
 
 ### Minor Changes

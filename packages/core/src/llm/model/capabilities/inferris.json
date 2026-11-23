@@ -7,6 +7,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "kimi-k3": [
       {
         "type": "effort",
@@ -14,12 +20,6 @@
       }
     ],
     "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

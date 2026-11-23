@@ -68,6 +68,7 @@ export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
   'elevenlabs',
   'gitlab',
   'google-analytics',
+  'sendgrid',
   'stripe',
   'twitter-v2',
 ]);

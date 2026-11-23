@@ -99,9 +99,9 @@ interface UseChatSendHandlerArgs {
   signalTimelineRefresh: () => void;
 }
 
-const buildRequestContext = (deps: SendDeps) => {
+const buildRequestContext = (deps: SendDeps, turnContext?: Record<string, unknown>) => {
   const requestContextInstance = new RequestContext();
-  Object.entries(deps.requestContext ?? {}).forEach(([key, value]) => {
+  Object.entries({ ...deps.requestContext, ...turnContext }).forEach(([key, value]) => {
     requestContextInstance.set(key, value);
   });
   if (deps.agentVersionId) {
@@ -272,14 +272,14 @@ export const useChatSendHandler = ({
   );
 
   const send = useCallback(
-    async ({ message, attachments = [] }: ChatSendArgs): Promise<boolean> => {
+    async ({ message, attachments = [], requestContext: turnContext }: ChatSendArgs): Promise<boolean> => {
       const deps = sendDepsRef.current;
       if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return false;
 
       setStreamErrors([]);
       const controller = new AbortController();
       abortControllerRef.current = controller;
-      const requestContextInstance = buildRequestContext(deps);
+      const requestContextInstance = buildRequestContext(deps, turnContext);
       const heldContext = new Map(modelContextRef.current);
       modelContextRef.current.clear();
       // MCP App context is third-party content: it goes in the user turn as delimited data, never in the system prompt.

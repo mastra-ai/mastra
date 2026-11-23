@@ -48,6 +48,10 @@ export interface KnowledgePageToolHost {
   warn?: (message: string) => void;
   /** Most estimated tokens one read, match or list result returns; defaults to {@link KNOWLEDGE_READ_BODY_TOKENS}. */
   maxTokens?: number;
+  /** Host-supplied principals that replace the call's run scopes (see `createTools({ principals })`). */
+  principals?: readonly string[];
+  /** Author recorded on writes; overrides the run's agent id. */
+  author?: string;
 }
 
 function maxTokensOf(host: KnowledgePageToolHost): number {
@@ -115,6 +119,8 @@ function limitOf(limit: number | undefined): number {
 async function start(host: KnowledgePageToolHost, context: unknown, write = false): Promise<KnowledgeRun> {
   return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined, {
     write,
+    principals: host.principals,
+    author: host.author,
   });
 }
 
@@ -1075,7 +1081,8 @@ function listTool(host: KnowledgePageToolHost) {
   });
 }
 
-const NUMBERED_LINE = /^\s*\d+│/;
+// U+2502, the bar knowledge_read writes after each line number; escaped to keep published JS ASCII.
+const NUMBERED_LINE = /^\s*\d+\u2502/;
 
 /**
  * The body a write stores. With `range`, its text spliced into the body read at `expectedVersion`.

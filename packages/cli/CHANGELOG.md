@@ -1,5 +1,51 @@
 # mastra
 
+## 1.40.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`8bc3a19`](https://github.com/mastra-ai/mastra/commit/8bc3a19a73e6e683a29d8c8cf8ab1f0bf4343a26)]:
+  - @mastra/core@1.86.0-alpha.5
+  - @mastra/deployer@1.86.0-alpha.5
+
+## 1.40.2-alpha.4
+
+### Patch Changes
+
+- Studio's pages now line up with each other. The MCP server, Templates and Connections pages use the full page width, and list and detail pages stop at 1536px on very wide screens. Agent chat, workflows, datasets and the editors still fill the window. ([#30956](https://github.com/mastra-ai/mastra/pull/30956))
+
+- Updated dependencies [[`004f350`](https://github.com/mastra-ai/mastra/commit/004f35031e7419a16263f8641d43c9cd19275ae0), [`79a30b6`](https://github.com/mastra-ai/mastra/commit/79a30b6d5c758bf46f0633059eded42bffbeb443), [`fa2ea6d`](https://github.com/mastra-ai/mastra/commit/fa2ea6dfb5c13a5f9b4bdc99f332959f7b0f4209), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018)]:
+  - @mastra/core@1.86.0-alpha.4
+  - @mastra/deployer@1.86.0-alpha.4
+
+## 1.40.2-alpha.3
+
+### Patch Changes
+
+- Share dataset edit, duplicate, schema and version-compare views from `@mastra/playground-ui/domains/datasets` (`EditDatasetForm`, `DuplicateDatasetDialog`, `DatasetSchemaDialog`, `DatasetCompareVersionToolbar`, `DatasetCompareVersionsList`, `ScorerSelector`), so apps other than Studio can render them. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Shared the dataset detail views (items list, item panel, add/import/export dialogs, version history) and experiment comparison components from `@mastra/playground-ui`, so apps other than Studio can render a dataset's items. These components take URL state (`searchParams`, `setSearchParams`, `currentItemId`) as props and navigate through the app's `paths.datasetLink`/`paths.datasetItemLink`. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Added `DatasetPage` to `@mastra/playground-ui/domains/datasets`: the full dataset detail page (dataset and version switcher crumbs, Schema and Edit/Duplicate/Delete actions, items list, dialogs). Studio now renders it, so other apps get the same page. `DatasetCombobox` and `DatasetVersions` also moved to playground-ui. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Share the dataset edit page, version compare pages and item side panel from `@mastra/playground-ui/domains/datasets`, so every app shows the same dataset screens. Item and version links now use the app's `paths.datasetItemLink` instead of hardcoded `/datasets` URLs. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Updated dependencies [[`4d43c97`](https://github.com/mastra-ai/mastra/commit/4d43c970244262267277295cc4bde3561bd298fe), [`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18)]:
+  - @mastra/deployer@1.86.0-alpha.3
+  - @mastra/core@1.86.0-alpha.3
+
+## 1.40.2-alpha.2
+
+### Patch Changes
+
+- `mastra env vars pull`, `mastra server env pull`/`list`, and `mastra deploy` now handle write-only secrets. When an environment stores its secrets encrypted, the platform returns a placeholder in place of each value. Pull now lists these secrets as name-only comments instead of writing the placeholder into your env file, and `mastra server env list` labels them as write-only secrets. The deploy overwrite prompt and preflight checks no longer treat the placeholder as a real value. A deploy with workers enabled is no longer blocked when `REDIS_URL` is stored as a secret. ([#30618](https://github.com/mastra-ai/mastra/pull/30618))
+
+- In Studio, unsent messages are cleared when you sign out, so the next person to sign in no longer sees them. Unsent messages from a signed-out session also stay in that browser session. ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+- Updated dependencies [[`3baa66d`](https://github.com/mastra-ai/mastra/commit/3baa66dfc785c222bb727a6da6012a0f28480b4a), [`d1f0a92`](https://github.com/mastra-ai/mastra/commit/d1f0a92ca41e1b725ed296abeb540908d09b5c64), [`4c71c2e`](https://github.com/mastra-ai/mastra/commit/4c71c2e776563852ef2301d674a1b8c70f511039)]:
+  - @mastra/core@1.86.0-alpha.2
+  - @mastra/deployer@1.86.0-alpha.2
+
 ## 1.40.2-alpha.1
 
 ### Patch Changes

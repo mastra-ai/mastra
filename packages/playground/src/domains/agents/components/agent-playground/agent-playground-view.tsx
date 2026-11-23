@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import { SidebarPanel } from '@mastra/playground-ui/domains/agents/chat/sidebar-panel';
 import { AgentLayout } from '../agent-layout';
-import { SidebarPanel } from '../sidebar-panel';
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';

@@ -15,7 +15,7 @@ export function TableWidget(props: WidgetKindProps<TableOptions>) {
       <ChartCard
         title={props.widget.title ?? ''}
         dragHandle={props.dragHandle}
-        // Renameable while loading too: the loaded card's views are tabs under its title, not a title menu.
+        // Renameable while loading too, like the loaded card.
         onTitleChange={props.onTitleChange}
         actions={props.actions}
         bodyHeight="fit"
