@@ -13,7 +13,7 @@ describe('built MCP package', () => {
     const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     expect(manifest.bin).toEqual({ 'mastra-mcp': 'dist/cli/index.js' });
     // Only `mastra-mcp generate` uses these, so library users must not install them (M3 package size).
-    for (const helper of ['tsx', 'json-schema-to-typescript']) {
+    for (const helper of ['tsx', 'json-schema-to-typescript-lite']) {
       expect(manifest.dependencies[helper]).toBeUndefined();
       expect(manifest.peerDependencies[helper]).toBeTruthy();
       expect(manifest.peerDependenciesMeta[helper]).toEqual({ optional: true });
@@ -41,7 +41,7 @@ describe('built MCP package', () => {
     expect(output.trim()).toBe('isolated');
     // Confirm the blocker itself is active, rather than trusting a source grep.
     expect(() =>
-      execFileSync(process.execPath, ['--import', blocker, '-e', "require('json-schema-to-typescript')"], {
+      execFileSync(process.execPath, ['--import', blocker, '-e', "require('json-schema-to-typescript-lite')"], {
         cwd: root,
         stdio: 'pipe',
       }),
@@ -82,11 +82,11 @@ describe('built MCP package', () => {
         { cwd: directory, encoding: 'utf8', env: { ...process.env, TSX_TSCONFIG_PATH: '', NODE_OPTIONS: '' } },
       );
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain('mastra-mcp generate requires tsx and json-schema-to-typescript');
-      expect(result.stderr).toContain('npm install --save-dev tsx@4 json-schema-to-typescript@16');
-      expect(result.stderr).toContain('pnpm add --save-dev tsx@4 json-schema-to-typescript@16');
-      expect(result.stderr).toContain('yarn add --dev tsx@4 json-schema-to-typescript@16');
-      expect(result.stderr).toContain('bun add --dev tsx@4 json-schema-to-typescript@16');
+      expect(result.stderr).toContain('mastra-mcp generate requires tsx and json-schema-to-typescript-lite');
+      expect(result.stderr).toContain('npm install --save-dev tsx@4 json-schema-to-typescript-lite@15');
+      expect(result.stderr).toContain('pnpm add --save-dev tsx@4 json-schema-to-typescript-lite@15');
+      expect(result.stderr).toContain('yarn add --dev tsx@4 json-schema-to-typescript-lite@15');
+      expect(result.stderr).toContain('bun add --dev tsx@4 json-schema-to-typescript-lite@15');
       // Fails before importing client modules or writing output.
       expect(await readdir(directory)).toEqual(['client.mjs']);
     } finally {
@@ -124,10 +124,10 @@ describe('built MCP package', () => {
       expect(files).toContain('package/dist/index.d.ts');
       const manifest = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8' }));
       expect(manifest.dependencies.tsx).toBeUndefined();
-      expect(manifest.dependencies['json-schema-to-typescript']).toBeUndefined();
+      expect(manifest.dependencies['json-schema-to-typescript-lite']).toBeUndefined();
       expect(manifest.peerDependenciesMeta).toMatchObject({
         tsx: { optional: true },
-        'json-schema-to-typescript': { optional: true },
+        'json-schema-to-typescript-lite': { optional: true },
       });
       expect(files).not.toContain('package/src/');
     } finally {

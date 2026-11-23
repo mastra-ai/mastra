@@ -6,54 +6,12 @@ settings:
 
 catalogs:
   default:
-    '@chat-adapter/discord':
-      specifier: ^4.44.0
-      version: 4.44.0
-    '@chat-adapter/slack':
-      specifier: ^4.44.0
-      version: 4.44.0
-    '@chat-adapter/teams':
-      specifier: ^4.44.0
-      version: 4.44.0
-    '@chat-adapter/telegram':
-      specifier: ^4.44.0
-      version: 4.44.0
-    '@microsoft/api-extractor':
-      specifier: ^7.59.4
-      version: 7.60.1
-    '@stryker-mutator/core':
-      specifier: 10.0.0
-      version: 10.0.0
-    '@stryker-mutator/vitest-runner':
-      specifier: 10.0.0
-      version: 10.0.0
     '@vitest/coverage-v8':
       specifier: 5.1.0
       version: 5.1.0
     '@vitest/ui':
       specifier: 5.1.0
       version: 5.1.0
-    chat:
-      specifier: ^4.44.0
-      version: 4.44.0
-    date-fns:
-      specifier: 4.4.0
-      version: 4.4.0
-    lucide-react:
-      specifier: ^1.61.0
-      version: 1.67.0
-    oxfmt:
-      specifier: 0.59.0
-      version: 0.59.0
-    react:
-      specifier: ^19.3.1
-      version: 19.3.1
-    react-dom:
-      specifier: ^19.3.1
-      version: 19.3.1
-    sonner:
-      specifier: 2.0.7
-      version: 2.0.7
     tsx:
       specifier: ^4.23.15
       version: 4.23.15
@@ -66,10 +24,6 @@ catalogs:
     zod:
       specifier: ^4.6.7
       version: 4.6.7
-  ts6:
-    typescript:
-      specifier: ^6.0.3
-      version: 6.0.3
 
 overrides:
   hono@<4.13.18: 4.13.18
@@ -5455,9 +5409,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
-      json-schema-to-typescript:
-        specifier: 16.0.0
-        version: 16.0.0
+      json-schema-to-typescript-lite:
+        specifier: 15.0.0
+        version: 15.0.0
       semver:
         specifier: ^7.8.5
         version: 7.8.6
@@ -11337,9 +11291,11 @@ packages:
     engines: {node: '>= 10'}
     deprecated: This package has been archived. Please use the official and updated "huggingface/tokenizers" package.
 
-  '@apidevtools/json-schema-ref-parser@11.9.3':
-    resolution: {integrity: sha512-60vepv88RwcJtSHrD6MjIL6Ta3SOYbgfnkHb+ppAVK+o9mXprRtulx7VlRl3lN3bbvysAfCS7WMVfhUYemB0IQ==}
-    engines: {node: '>= 16'}
+  '@apidevtools/json-schema-ref-parser@14.2.1':
+    resolution: {integrity: sha512-HmdFw9CDYqM6B25pqGBpNeLCKvGPlIx1EbLrVL0zPvj50CJQUHyBNBw45Muk0kEIkogo1VZvOKHajdMuAzSxRg==}
+    engines: {node: '>= 20'}
+    peerDependencies:
+      '@types/json-schema': ^7.0.15
 
   '@arcadeai/arcadejs@2.4.1':
     resolution: {integrity: sha512-DLpvvDBvRNjzVmFYJ+upPrUJ8YRBoGWqPfzhuFp2+lh5Shxm0l9qLwe1Ah4pKvuCatU7TLOOTkFpICitTuuJeQ==}
@@ -21680,9 +21636,6 @@ packages:
   '@types/koa@3.0.3':
     resolution: {integrity: sha512-TdtNEJ7sYSrFQcVuS2ySsVqnq5EyE3oJbnfFJvkC9UtGP4Kpem5KE7r+ivHIbIAQAofSqnlB5D3vkfYO69TQpg==}
 
-  '@types/lodash@4.17.27':
-    resolution: {integrity: sha512-VenMRv/eKNrspX9v3H4dbmjsrnCOYdYBG3kxXKk3dG6X+urBGcj2Prww3xw1U5K4FV/mE4h5GbWd0szEKf+9ew==}
-
   '@types/mdast@4.0.4':
     resolution: {integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==}
 
@@ -26723,10 +26676,8 @@ packages:
     resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
     engines: {node: '>=16'}
 
-  json-schema-to-typescript@16.0.0:
-    resolution: {integrity: sha512-Ah6kK4q6SjlMzWBH1eNOQkdRh5Qhr5T/RCFwfjQqWZA7UDW+N47A8wfyoiN0L884s4L4bAEI54IjIuN3/u0B/A==}
-    engines: {node: '>=16.0.0'}
-    hasBin: true
+  json-schema-to-typescript-lite@15.0.0:
+    resolution: {integrity: sha512-5mMORSQm9oTLyjM4mWnyNBi2T042Fhg1/0gCIB6X8U/LVpM2A+Nmj2yEyArqVouDmFThDxpEXcnTgSrjkGJRFA==}
 
   json-schema-to-zod@2.8.1:
     resolution: {integrity: sha512-fRr1mHgZ7hboLKBUdR428gd9dIHUFGivUqOeiDcSmyXkNZCtB1uGaZLvsjZ4GaN5pwBIs+TGIOf6s+Rp5/R/zA==}
@@ -33180,9 +33131,8 @@ snapshots:
       '@anush008/tokenizers-linux-x64-musl': 0.6.0
       '@anush008/tokenizers-win32-x64-msvc': 0.6.0
 
-  '@apidevtools/json-schema-ref-parser@11.9.3':
+  '@apidevtools/json-schema-ref-parser@14.2.1(@types/json-schema@7.0.15)':
     dependencies:
-      '@jsdevtools/ono': 7.1.3
       '@types/json-schema': 7.0.15
       js-yaml: 4.3.2
 
@@ -44108,7 +44058,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.6
       tslib: 2.8.1
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@supabase/auth-js@2.118.0':
     dependencies:
@@ -45201,8 +45151,6 @@ snapshots:
       '@types/keygrip': 1.0.6
       '@types/koa-compose': 3.2.9
       '@types/node': 22.19.15
-
-  '@types/lodash@4.17.27': {}
 
   '@types/mdast@4.0.4':
     dependencies:
@@ -50925,16 +50873,10 @@ snapshots:
       '@babel/runtime': 7.29.10
       ts-algebra: 2.0.0
 
-  json-schema-to-typescript@16.0.0:
+  json-schema-to-typescript-lite@15.0.0:
     dependencies:
-      '@apidevtools/json-schema-ref-parser': 11.9.3
+      '@apidevtools/json-schema-ref-parser': 14.2.1(@types/json-schema@7.0.15)
       '@types/json-schema': 7.0.15
-      '@types/lodash': 4.17.27
-      js-yaml: 5.5.0
-      lodash: 4.18.1
-      minimist: 1.2.8
-      prettier: 3.9.10
-      tinyglobby: 0.2.17
 
   json-schema-to-zod@2.8.1: {}
 

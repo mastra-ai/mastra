@@ -54,12 +54,12 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.83.0-0 <2.0.0-0",
-    "zod": "^4.2.0",
-    "json-schema-to-typescript": "^16.0.0",
-    "tsx": "^4.9.0"
+    "json-schema-to-typescript-lite": "^15.0.0",
+    "tsx": "^4.9.0",
+    "zod": "^4.2.0"
   },
   "peerDependenciesMeta": {
-    "json-schema-to-typescript": {
+    "json-schema-to-typescript-lite": {
       "optional": true
     },
     "tsx": {
@@ -84,7 +84,7 @@
     "@types/semver": "^7.8.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "json-schema-to-typescript": "16.0.0",
+    "json-schema-to-typescript-lite": "15.0.0",
     "semver": "^7.8.5",
     "tsdown": "0.23.1",
     "tsx": "catalog:",

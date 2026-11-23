@@ -22,14 +22,14 @@ export class GenerationError extends Error {
 /**
  * Optional peer dependencies of `@mastra/mcp`: only `generate` needs them, so the library does not
  * install them for every user. `tsx` loads the supplied TypeScript client modules and
- * `json-schema-to-typescript` converts the discovered schemas.
+ * `json-schema-to-typescript-lite` converts the discovered schemas.
  */
 const HELPERS = [
   { name: 'tsx', specifier: 'tsx/esm/api', install: 'tsx@4' },
   {
-    name: 'json-schema-to-typescript',
-    specifier: 'json-schema-to-typescript',
-    install: 'json-schema-to-typescript@16',
+    name: 'json-schema-to-typescript-lite',
+    specifier: 'json-schema-to-typescript-lite',
+    install: 'json-schema-to-typescript-lite@15',
   },
 ] as const;
 

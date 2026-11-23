@@ -27,7 +27,7 @@ export default defineConfig([
     clean: false,
     dts: false,
     sourcemap: true,
-    deps: { neverBundle: ['@mastra/mcp', '@mastra/core/logger', 'tsx/esm/api', 'json-schema-to-typescript'] },
+    deps: { neverBundle: ['@mastra/mcp', '@mastra/core/logger', 'tsx/esm/api', 'json-schema-to-typescript-lite'] },
     onSuccess: async () => {
       await chmod('dist/cli/index.js', 0o755);
     },
