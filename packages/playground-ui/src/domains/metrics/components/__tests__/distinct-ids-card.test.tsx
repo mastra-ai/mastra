@@ -35,6 +35,10 @@ const LEGEND = { ignore: 'script, style, .sr-only' };
 /** A legend entry's text: its label alone, e.g. `Resources`. */
 const legendEntry = (label: string) => screen.getByText(label, LEGEND).parentElement?.textContent;
 
+/** A card header total for one series, e.g. `Resources5`: its label is screen-reader only. */
+const headerTotal = (label: string) =>
+  screen.getByText(label, { selector: '.sr-only' }).parentElement?.textContent?.replace(/\s+/g, '');
+
 type Served = { empty?: boolean; totals?: typeof distinctIdsTotalsFixture };
 
 function respond(request: TraceAggregateRequest, { empty = false, totals = distinctIdsTotalsFixture }: Served = {}) {
@@ -208,13 +212,11 @@ describe('when the server answers aggregateTraces()', () => {
   });
 
   it('loads after Retry when both requests failed', async () => {
-<<<<<<< HEAD
     const outage = failUntilRecovered();
     const { queryClient } = render(<DistinctIdsCard />);
 
     expect(await screen.findByText(ERROR, undefined, { timeout: 5000 })).toBeDefined();
-    // The error shows as soon as one request fails; the other may still be in the client's own
-    // retries. Wait until both have failed, so Retry has to send both again.
+    // The card reports the error once both requests have failed, so Retry has to send both again.
     await waitFor(() => expect(queryClient.isFetching()).toBe(0), { timeout: 5000 });
     expect([...outage.failed].sort()).toEqual(['series', 'totals']);
     outage.recover();
@@ -246,9 +248,9 @@ describe('when the server answers aggregateTraces()', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
+    expect(await screen.findByText('Resources', LEGEND, { timeout: 5000 })).toBeDefined();
     expect(card.totalsCalls()).toBe(2);
-    expect(legendEntry('Resources')).toBe('Resources5');
+    expect(headerTotal('Resources')).toBe('Resources5');
   }, 15_000);
 
   it('keeps the loaded card on a new scope until that scope’s requests settle', async () => {
@@ -257,7 +259,7 @@ describe('when the server answers aggregateTraces()', () => {
     // the failure now would leave Retry unable to recover the card.
     const card = failTotalsOfNextScope();
     const { rerender, queryClient } = renderWithProviders(atPreset('24h'));
-    await screen.findByText('Resources');
+    await screen.findByText('Resources', LEGEND);
 
     // The buckets must finish before the scope changes: the retained answer is what makes the
     // next totals failure land while the buckets are fetching instead of loading.
@@ -284,7 +286,7 @@ describe('when the server answers aggregateTraces()', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
     // The totals are in error, so they carry no data to show; without the error gate that would
     // read as an empty range and claim the range sets no ids, which is not known yet.
-    expect(screen.queryByText(/No traces in this range/)).toBeNull();
+    expect(screen.queryByText(/No data in this range/)).toBeNull();
 
     card.release();
     expect(await screen.findByText(ERROR, undefined, { timeout: 5000 })).toBeDefined();
