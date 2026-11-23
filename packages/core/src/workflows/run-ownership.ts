@@ -330,9 +330,9 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
    * so the body never starts on a claim another process may have replaced. A failed renewal is
    * retried rather than taken as a loss, so a storage blip delays the body instead of ending the run.
    *
-   * With `renew`, renews once even while the lease looks fresh: a forced takeover (a second
-   * `start()` elsewhere) replaces the claim without waiting for the lease to lapse. A failed
-   * renewal then only blocks the body once the lease may have lapsed.
+   * With `renew`, renews even while the lease looks fresh: a forced takeover (a second `start()`
+   * elsewhere) replaces the claim without waiting for the lease to lapse. The lease looking fresh
+   * proves nothing then, so a renewal that fails (no reply) is retried until storage answers.
    */
   async ensureOwned({ renew = false }: { renew?: boolean } = {}): Promise<void> {
     this.throwIfLost();
@@ -352,8 +352,9 @@ export class WorkflowRunClaim implements WorkflowRunOwnership {
         this.markLost(result.record);
       } catch (error) {
         this.#logger?.warn('Failed to renew workflow run ownership lease before a step', { runId: this.runId, error });
-        if (!this.#leaseMayHaveLapsed()) break;
+        if (!renew && !this.#leaseMayHaveLapsed()) break;
         await new Promise(resolve => setTimeout(resolve, WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS));
+        renewNow = renew;
       }
       this.throwIfLost();
     }

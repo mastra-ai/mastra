@@ -717,6 +717,45 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       expect(ran).toEqual(['a']);
     });
 
+    // The renewal before the next step reaches storage, but its reply is lost. Without an answer the
+    // claim can't be trusted, so the step waits and asks again: a taken-over run stops, a healthy run
+    // goes on.
+    it.each([
+      { takenOver: true, ran: ['a'], status: 'waiting' },
+      { takenOver: false, ran: ['a', 'b'], status: 'success' },
+    ] as const)(
+      'asks storage again when the renewal before a step gets no reply (taken over: $takenOver)',
+      async ({ takenOver, ran: expectedRan, status }) => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const ran: string[] = [];
+        const stalled = gate();
+        const { store, workflow } = await setup(stalledThenNext(ran, stalled), {
+          shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) => workflowStatus === 'waiting',
+        });
+
+        const run = await workflow.createRun();
+        const done = run.start({ inputData: {} });
+        await vi.waitFor(() => expect(ran).toEqual(['a']));
+        if (takenOver) await takeOver(store, run.runId);
+        const renew = store.renewRunOwnership.bind(store);
+        let dropped = false;
+        vi.spyOn(store, 'renewRunOwnership').mockImplementation(async args => {
+          const result = await renew(args);
+          if (dropped) return result;
+          dropped = true;
+          throw new Error('connection reset');
+        });
+        stalled.open();
+        await vi.waitFor(() => expect(dropped).toBe(true));
+        expect(ran).toEqual(['a']);
+        await vi.advanceTimersByTimeAsync(WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS + 100);
+        const result = await done;
+
+        expect(result.status).toBe(status);
+        expect(ran).toEqual(expectedRan);
+      },
+    );
+
     // A nested run resumed on its own flips its suspended parent to running and holds the parent's
     // lease. When it loses that lease, the parent belongs to another process: the child must not set
     // it back to suspended.
