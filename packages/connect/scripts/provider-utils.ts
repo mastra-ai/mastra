@@ -107,7 +107,7 @@ export function updateProviderIndex(): void {
  */
 export function listHandwrittenFiles(directory: string, manifest: ProviderManifest | undefined): string[] {
   if (!manifest) return [];
-  return Object.keys(calculateFileChecksums(directory)).filter(file => !(file in manifest.files));
+  return Object.keys(calculateFileChecksums(directory)).filter(file => !Object.hasOwn(manifest.files, file));
 }
 
 export function readManifest(localId: string): ProviderManifest | undefined {

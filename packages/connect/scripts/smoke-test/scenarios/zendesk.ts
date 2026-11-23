@@ -23,7 +23,7 @@ import { errorMessage, makeStep, probeTool, refusedByPlatform, requireTools, run
  *
  * Zendesk's API archives articles rather than deleting them, so each run
  * leaves its archived draft in the Help Center archive; the run logs its id
- * so it can be deleted there.
+ * so it can be deleted there, and records the missing delete as a skip.
  *
  * The Help Center locale is `MASTRA_SMOKE_ZENDESK_LOCALE` when set, otherwise
  * `en-us`; it must be one of the Help Center's enabled locales. When Help
@@ -467,8 +467,17 @@ async function runHelpCenterLifecycle(
           await call('zendesk_archive_article', { article_id: article });
         });
         if (archived) {
-          log.warn(
-            `zendesk: article ${article} (${runId}) is in the Help Center archive; the API cannot delete it, so delete it there`,
+          // Zendesk's API archives articles but has no way to delete one.
+          steps.push(
+            makeStep(
+              'delete article',
+              'zendesk_archive_article',
+              'skip',
+              `the API cannot delete articles; article ${article} is in the Help Center archive`,
+            ),
+          );
+          log.error(
+            `zendesk: left article ${article} (${runId}) in the Help Center archive; the API cannot delete articles, so delete it in Guide > Arrange content > Archive`,
           );
         } else {
           log.error(`zendesk: leaked article ${article} (${runId}); delete it manually`);

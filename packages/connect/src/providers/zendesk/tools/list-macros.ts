@@ -107,11 +107,10 @@ export function listMacrosTool(proxy: PlatformProxy) {
       if (input.only_viewable !== undefined) {
         params['only_viewable'] = String(input.only_viewable);
       }
-      if (input.sort_by !== undefined) {
-        params['sort_by'] = input.sort_by;
-      }
-      if (input.sort_order !== undefined) {
-        params['sort_order'] = input.sort_order;
+      if (input.sort_by !== undefined || input.sort_order !== undefined) {
+        const sortBy = input.sort_by ?? 'alphabetical';
+        const sortOrder = input.sort_order ?? (sortBy === 'alphabetical' ? 'asc' : 'desc');
+        params['sort'] = `${sortOrder === 'desc' ? '-' : ''}${sortBy}`;
       }
 
       const response = await platformProxy.get({

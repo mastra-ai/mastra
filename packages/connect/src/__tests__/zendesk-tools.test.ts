@@ -498,6 +498,31 @@ describe('Zendesk tools', () => {
       expect(requests[0]?.target).toBe('/api/v2/macros.json?page%5Bafter%5D=m1&page%5Bsize%5D=100');
       expect(result.next_cursor).toBeUndefined();
     });
+
+    it.each([
+      [{ sort_by: 'alphabetical' }, 'alphabetical'],
+      [{ sort_by: 'alphabetical', sort_order: 'desc' }, '-alphabetical'],
+      [{ sort_by: 'created_at' }, '-created_at'],
+      [{ sort_by: 'updated_at', sort_order: 'asc' }, 'updated_at'],
+      [{ sort_order: 'desc' }, '-alphabetical'],
+    ])('sends macro sort %o as the cursor sort %s', async (input, sort) => {
+      answer = () => ({ status: 200, body: { macros: [], meta: { has_more: false } } });
+
+      await run('zendesk_list_macros', input);
+
+      const params = new URLSearchParams(requests[0]!.target.split('?')[1]);
+      expect(params.get('sort')).toBe(sort);
+      expect(params.has('sort_by')).toBe(false);
+      expect(params.has('sort_order')).toBe(false);
+    });
+
+    it('leaves the macro sort to Zendesk when none is asked for', async () => {
+      answer = () => ({ status: 200, body: { macros: [], meta: { has_more: false } } });
+
+      await run('zendesk_list_macros', {});
+
+      expect(new URLSearchParams(requests[0]!.target.split('?')[1]).has('sort')).toBe(false);
+    });
   });
 
   describe('article listings', () => {

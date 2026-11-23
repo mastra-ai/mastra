@@ -1360,6 +1360,20 @@ const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
     exec: [
       ZENDESK_ALWAYS_CURSOR_PAGES,
       {
+        // Cursor pages take one `sort` value (`-` for descending) instead of
+        // sort_by/sort_order. Zendesk's defaults: alphabetical, ascending for
+        // alphabetical and descending for the date sorts.
+        pattern:
+          /if \(input\.sort_by !== undefined\) \{\s*params\['sort_by'\] = input\.sort_by;\s*\}\s*if \(input\.sort_order !== undefined\) \{\s*params\['sort_order'\] = input\.sort_order;\s*\}/,
+        replacement: `if (input.sort_by !== undefined || input.sort_order !== undefined) {
+        const sortBy = input.sort_by ?? 'alphabetical';
+        const sortOrder = input.sort_order ?? (sortBy === 'alphabetical' ? 'asc' : 'desc');
+        params['sort'] = \`\${sortOrder === 'desc' ? '-' : ''}\${sortBy}\`;
+      }`,
+        count: 1,
+        what: 'cursor sort parameter',
+      },
+      {
         pattern: /const next_cursor = extractCursorFromUrl\(providerData\.next_page\);/,
         replacement:
           'const next_cursor = providerData.meta?.has_more && providerData.meta.after_cursor ? providerData.meta.after_cursor : undefined;',
@@ -2050,7 +2064,9 @@ export async function writeProvider({
     writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
     // A file added while this ran would be deleted with the old directory.
-    const current = listHandwrittenFiles(outputDir, readManifestIn(outputDir));
+    // Without a readable manifest every file there is someone else's.
+    const latest = readManifestIn(outputDir);
+    const current = latest ? listHandwrittenFiles(outputDir, latest) : Object.keys(calculateFileChecksums(outputDir));
     const added = current.filter(file => !handwrittenFiles.includes(file));
     if (added.length > 0) {
       throw new Error(

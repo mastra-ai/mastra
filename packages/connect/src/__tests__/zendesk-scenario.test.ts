@@ -103,6 +103,7 @@ describe('Zendesk smoke scenario', () => {
   let baseUrl: string;
   let requests: Array<{ method: string | undefined; target: string; body: string }>;
   let warnings: string[];
+  let errors: string[];
   let projects = 0;
 
   beforeAll(async () => {
@@ -137,12 +138,15 @@ describe('Zendesk smoke scenario', () => {
   beforeEach(() => {
     requests = [];
     warnings = [];
+    errors = [];
     platformRefusesTicket = false;
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', baseUrl);
     vi.stubEnv('MASTRA_SMOKE_ZENDESK_LOCALE', undefined);
     vi.stubEnv('MASTRA_SMOKE_ZENDESK_ALLOW_TICKETS', undefined);
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
     vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
       warnings.push(args.map(String).join(' '));
     });
@@ -193,14 +197,19 @@ describe('Zendesk smoke scenario', () => {
     );
   });
 
-  it('reports the archived article it leaves behind', async () => {
-    await runScenario();
+  it('reports the archived article it leaves behind as a skipped delete and an error', async () => {
+    const outcome = await runScenario();
 
     expect(requests).toContainEqual(
       expect.objectContaining({ method: 'DELETE', target: `/api/v2/help_center/articles/${IDS.article}` }),
     );
-    expect(warnings.some(warning => warning.includes(`article ${IDS.article}`) && warning.includes('archive'))).toBe(
-      true,
+    expect(outcome.steps).toContainEqual(
+      expect.objectContaining({
+        name: 'delete article',
+        status: 'skip',
+        detail: expect.stringContaining(`${IDS.article}`),
+      }),
     );
+    expect(errors.some(error => error.includes(`article ${IDS.article}`) && error.includes('Archive'))).toBe(true);
   });
 });

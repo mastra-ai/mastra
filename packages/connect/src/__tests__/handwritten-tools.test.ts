@@ -167,6 +167,31 @@ describe('regenerating a provider with hand-written files', () => {
     expect(readFileSync(resolve(outputDir, 'tools/archive-item.ts'), 'utf8')).toContain('archiveItemTool');
   });
 
+  it('keeps hand-written files whose names are Object built-ins', async () => {
+    setUp();
+    await generate();
+    write('constructor', 'kept\n');
+    write('toString', 'kept\n');
+
+    await generate();
+
+    expect(readFileSync(resolve(outputDir, 'constructor'), 'utf8')).toBe('kept\n');
+    expect(readFileSync(resolve(outputDir, 'toString'), 'utf8')).toBe('kept\n');
+    expect(readManifestIn(outputDir)?.handwrittenFiles).toEqual(['constructor', 'toString']);
+  });
+
+  it('refuses to finish a first generation when files appeared in the provider while it ran', async () => {
+    setUp();
+    // writeProvider plans before its first await, so this lands after the plan.
+    const run = generate();
+    write('tools/archive-item.ts', 'export function archiveItemTool(_proxy: unknown) {\n  return {};\n}\n');
+
+    await expect(run).rejects.toThrow(
+      /gained hand-written files while it was being regenerated \(tools\/archive-item\.ts\)/,
+    );
+    expect(readFileSync(resolve(outputDir, 'tools/archive-item.ts'), 'utf8')).toContain('archiveItemTool');
+  });
+
   it('generates a provider that does not exist yet', async () => {
     setUp();
 
