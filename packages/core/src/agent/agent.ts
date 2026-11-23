@@ -555,23 +555,56 @@ export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
  * durable); this bound only guards against a write that never completes so
  * `approveToolCall()` cannot hang forever.
  */
+/** When a workflow step, or one iteration of a foreach step, last suspended and resumed. */
+type SuspensionTiming = { readonly suspendedAt?: unknown; readonly resumedAt?: unknown };
+
+/** A tool call a suspended run waits on, as read from its workflow snapshot. */
+type SuspendedToolCall = {
+  readonly call: AgentRunToolCall;
+  /**
+   * - `approval-gate`: the durable tool-call step stopped one of this agent's own approval-gated
+   *   tools before running it, so `call.toolName` names a tool of this agent.
+   * - `approval-in-execution`: a running tool asked for approval. For a delegated sub-agent or
+   *   workflow, `call.toolName` names the delegate's tool, not one this agent holds.
+   * - `resume-data`: the tool called `suspend()` and waits for resume data.
+   */
+  readonly waitsFor: 'approval-gate' | 'approval-in-execution' | 'resume-data';
+  /**
+   * Which suspension of the call this is. A resumed call that suspends again keeps its tool call
+   * ID but gets a new instance.
+   */
+  readonly instance: string;
+};
+
+/** One suspension of one tool call, which a resume bound to it must still find waiting. */
+type SuspendedCallInstance = { readonly toolCallId: string; readonly instance: string };
+
 /**
  * The suspension a durable resume answers. It is read before the resume waits on anything that
  * lets another resume move the run on (a pinned-version lookup, rebuilding the run, authorization),
- * and every call it names must still be suspended once the resume holds the run.
+ * and every call it names must still wait on the same suspension once the resume holds the run.
  */
 type ResumeSuspension =
   /** The one call the resume answers: the call the caller named, or the only call suspended. */
-  | { readonly kind: 'call'; readonly toolCallId: string }
+  | { readonly kind: 'call'; readonly call: SuspendedCallInstance }
   /**
    * An unlabeled resume that began while several calls were suspended. If another resume answers
    * any of them meanwhile, this one must not answer whichever call remains.
    */
-  | { readonly kind: 'several'; readonly toolCallIds: readonly [string, string, ...string[]] };
+  | {
+      readonly kind: 'several';
+      readonly calls: readonly [SuspendedCallInstance, SuspendedCallInstance, ...SuspendedCallInstance[]];
+    };
 
-/** The suspended tool call IDs a resume of `suspension` requires to still be suspended. */
-function resumeSuspensionToolCallIds(suspension: ResumeSuspension): readonly string[] {
-  return suspension.kind === 'call' ? [suspension.toolCallId] : suspension.toolCallIds;
+/** The suspensions a resume of `suspension` requires to still be waiting. */
+function resumeSuspensionCalls(suspension: ResumeSuspension): readonly SuspendedCallInstance[] {
+  return suspension.kind === 'call' ? [suspension.call] : suspension.calls;
+}
+
+/** The call instance a resume answering `suspended` binds to, when the call has a tool call ID. */
+function suspendedCallInstance(suspended: SuspendedToolCall | undefined): SuspendedCallInstance | undefined {
+  const toolCallId = suspended?.call.toolCallId;
+  return toolCallId ? { toolCallId, instance: suspended.instance } : undefined;
 }
 
 /**
@@ -583,7 +616,7 @@ type MissingResumeTools =
    * The execution tools are the full set the run executes from (a cold resume's rebuilt entry). A
    * call its tool suspended proves the starting request had that tool, so a missing one was
    * withheld from this caller, and the tool-call step would report it not found and consume the
-   * suspension. Approval suspensions are not checked this way (see the validation).
+   * suspension. Approvals a running tool asked for are not checked this way (see the validation).
    */
   | { readonly kind: 'complete' }
   /** Only the tools the starting request built that this caller's build leaves out are known. */
@@ -8710,30 +8743,50 @@ export class Agent<
   }
 
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
-    const toolCalls: AgentRunToolCall[] = [];
+    return this.#collectSuspendedToolCalls(existingSnapshot).map(suspended => suspended.call);
+  }
 
-    const collectFromPayload = (payload: Record<string, any>, stepKey: string) => {
+  /** The suspended tool calls in `existingSnapshot`, with what each waits for and which suspension of it this is. */
+  #collectSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): SuspendedToolCall[] {
+    const toolCalls: SuspendedToolCall[] = [];
+
+    const collectFromPayload = (payload: Record<string, any>, stepKey: string, timing: SuspensionTiming) => {
+      // Workflow engines stamp these when the step (or its foreach iteration) suspends and resumes,
+      // so they change when a resumed call suspends again under the same tool call ID.
+      const instance = JSON.stringify([stepKey, timing.suspendedAt ?? null, timing.resumedAt ?? null]);
       if (payload.requireToolApproval) {
         toolCalls.push({
-          toolCallId: payload.requireToolApproval.toolCallId,
-          toolName: payload.requireToolApproval.toolName,
-          args: payload.requireToolApproval.args,
-          requiresApproval: true,
+          call: {
+            toolCallId: payload.requireToolApproval.toolCallId,
+            toolName: payload.requireToolApproval.toolName,
+            args: payload.requireToolApproval.args,
+            requiresApproval: true,
+          },
+          waitsFor: 'approval-in-execution',
+          instance,
         });
       } else if (payload.type === 'approval' && payload.toolCallId) {
         // Durable tool-call step suspending a directly approval-gated tool.
         toolCalls.push({
-          toolCallId: payload.toolCallId,
-          toolName: payload.toolName,
-          args: payload.args,
-          requiresApproval: true,
+          call: {
+            toolCallId: payload.toolCallId,
+            toolName: payload.toolName,
+            args: payload.args,
+            requiresApproval: true,
+          },
+          waitsFor: 'approval-gate',
+          instance,
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
-          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, stepKey),
-          toolName: payload.toolName,
-          requiresApproval: false,
-          suspendPayload: payload.toolCallSuspended,
+          call: {
+            toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, stepKey),
+            toolName: payload.toolName,
+            requiresApproval: false,
+            suspendPayload: payload.toolCallSuspended,
+          },
+          waitsFor: 'resume-data',
+          instance,
         });
       }
     };
@@ -8752,10 +8805,10 @@ export class Agent<
       const suspendedIterations = this.#getSuspendedForeachIterations(payload);
       if (suspendedIterations.length > 0) {
         for (const iteration of suspendedIterations) {
-          collectFromPayload(iteration.suspendPayload, key);
+          collectFromPayload(iteration.suspendPayload, key, iteration);
         }
       } else {
-        collectFromPayload(payload, key);
+        collectFromPayload(payload, key, step);
       }
     }
 
@@ -8764,7 +8817,7 @@ export class Agent<
 
   #getSuspendedForeachIterations(
     payload: Record<string, any>,
-  ): { status: 'suspended'; suspendPayload: Record<string, any> }[] {
+  ): ({ status: 'suspended'; suspendPayload: Record<string, any> } & SuspensionTiming)[] {
     // The default engine persists foreach aggregation as an array; the evented
     // engine persists it as an object keyed by iteration index.
     const foreachOutput = payload.__workflow_meta?.foreachOutput;
@@ -8774,7 +8827,7 @@ export class Agent<
         ? Object.values(foreachOutput)
         : [];
     return entries.filter(
-      (entry: any): entry is { status: 'suspended'; suspendPayload: Record<string, any> } =>
+      (entry: any): entry is { status: 'suspended'; suspendPayload: Record<string, any> } & SuspensionTiming =>
         entry?.status === 'suspended' && !!entry.suspendPayload,
     );
   }
@@ -8955,9 +9008,9 @@ export class Agent<
   }
 
   /** The suspended call a resume addresses. Without a toolCallId it is only certain when exactly one is suspended. */
-  #findResumeTarget(snapshot: WorkflowRunState, toolCallId: string | undefined) {
-    const suspended = this.#getSuspendedToolCalls(snapshot);
-    if (toolCallId !== undefined) return suspended.find(call => call.toolCallId === toolCallId);
+  #findResumeTarget(snapshot: WorkflowRunState, toolCallId: string | undefined): SuspendedToolCall | undefined {
+    const suspended = this.#collectSuspendedToolCalls(snapshot);
+    if (toolCallId !== undefined) return suspended.find(({ call }) => call.toolCallId === toolCallId);
     return suspended.length === 1 ? suspended[0] : undefined;
   }
 
@@ -8967,14 +9020,15 @@ export class Agent<
    * the snapshot holds no such call, so the resume goes on as it would without a binding.
    */
   #bindResumeSuspension(snapshot: WorkflowRunState, toolCallId: string | undefined): ResumeSuspension | undefined {
-    const target = this.#findResumeTarget(snapshot, toolCallId);
-    if (target?.toolCallId) return { kind: 'call', toolCallId: target.toolCallId };
+    const target = suspendedCallInstance(this.#findResumeTarget(snapshot, toolCallId));
+    if (target) return { kind: 'call', call: target };
     if (toolCallId !== undefined) return undefined;
-    const [first, second, ...rest] = this.#getSuspendedToolCalls(snapshot).flatMap(call =>
-      call.toolCallId ? [call.toolCallId] : [],
-    );
+    const [first, second, ...rest] = this.#collectSuspendedToolCalls(snapshot).flatMap(suspended => {
+      const call = suspendedCallInstance(suspended);
+      return call ? [call] : [];
+    });
     return first !== undefined && second !== undefined
-      ? { kind: 'several', toolCallIds: [first, second, ...rest] }
+      ? { kind: 'several', calls: [first, second, ...rest] }
       : undefined;
   }
 
@@ -8985,8 +9039,8 @@ export class Agent<
    * first call, tool names formatTools() sanitized, a tool a processor kept in place of a rebuilt
    * one, and a run pinned to a stored version, whose entry holds that version's tools.
    *
-   * Returns the suspended tool call it checked, which the resume must still find suspended once it
-   * holds the run.
+   * Returns the suspension of the tool call it checked, which the resume must still find waiting once
+   * it holds the run.
    */
   #validateDurableResumeData({
     snapshot,
@@ -9004,22 +9058,23 @@ export class Agent<
     missingTools: MissingResumeTools;
     runId: string;
   }): ResumeSuspension | undefined {
-    const target = this.#findResumeTarget(snapshot, toolCallId);
-    const suspension: ResumeSuspension | undefined = target?.toolCallId
-      ? { kind: 'call', toolCallId: target.toolCallId }
-      : undefined;
-    if (!target?.toolName) return suspension;
+    const suspended = this.#findResumeTarget(snapshot, toolCallId);
+    const bound = suspendedCallInstance(suspended);
+    const suspension: ResumeSuspension | undefined = bound ? { kind: 'call', call: bound } : undefined;
+    const target = suspended?.call;
+    if (!suspended || !target?.toolName) return suspension;
 
     const tool = findExecutionTool(tools, target.toolName);
     // The suspended tool was built for the caller that started the run, and this caller's tools leave
     // it out. Running it would act with the starting caller's identity, and the tool-call step would
     // consume the suspension reporting it not found, so the run stays suspended instead.
-    // A rebuilt set settles it only for a call its own tool suspended: an approval names the tool it
-    // approves, which for a delegated approval is the sub-agent's tool, not one this agent holds.
+    // A rebuilt set settles it for a call this agent's own tool suspended, or one its approval gate
+    // stopped before running it. An approval a running tool asked for names the tool it approves,
+    // which for a delegated sub-agent or workflow is the delegate's tool, not one this agent holds.
     const unavailable =
       !tool &&
       (missingTools.kind === 'complete'
-        ? !target.requiresApproval
+        ? suspended.waitsFor !== 'approval-in-execution'
         : findExecutionTool(missingTools.tools, target.toolName) !== undefined);
     if (unavailable) {
       throw new MastraError({
@@ -15755,15 +15810,16 @@ export class Agent<
       if (resumeSnapshot && coldAddressed?.kind !== 'several') {
         suspension = this.#validateDurableResumeData({
           snapshot: resumeSnapshot,
-          toolCallId: resolvedOptions.toolCallId ?? coldAddressed?.toolCallId,
+          toolCallId: resolvedOptions.toolCallId ?? coldAddressed?.call.toolCallId,
           resumeData,
           tools: executionTools,
           missingTools,
           runId,
         });
       }
-      // The bound suspension wins over what storage holds now: a call it names that is no longer
-      // waiting is refused once this resume holds the run.
+      // The bound suspension wins over what storage holds now: a call it names that no longer waits on
+      // that suspension (answered, or answered and suspended again) is refused once this resume holds
+      // the run.
       suspension = coldAddressed ?? suspension;
     }
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
@@ -15856,10 +15912,15 @@ export class Agent<
       // The data was validated against one suspension. Another resume may have answered it and
       // run on to a later one while this resume waited for the claim; resuming now would hand
       // the later suspension data meant for the earlier one, even when no toolCallId was given.
+      // The later one can be the same tool call suspending again, so compare suspensions, not IDs.
       let answeredElsewhere: string | undefined;
       if (suspension && current?.status === 'suspended') {
-        const stillSuspended = new Set(this.#getSuspendedToolCalls(current).map(call => call.toolCallId));
-        answeredElsewhere = resumeSuspensionToolCallIds(suspension).find(id => !stillSuspended.has(id));
+        const waiting = new Map(
+          this.#collectSuspendedToolCalls(current).map(({ call, instance }) => [call.toolCallId, instance]),
+        );
+        answeredElsewhere = resumeSuspensionCalls(suspension).find(
+          ({ toolCallId, instance }) => waiting.get(toolCallId) !== instance,
+        )?.toolCallId;
       }
       if (answeredElsewhere !== undefined) {
         throw new MastraError({
