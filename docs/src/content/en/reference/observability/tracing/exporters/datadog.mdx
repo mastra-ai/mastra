@@ -200,6 +200,7 @@ await mastra.observability.addFeedback({
     value: 'down',
     comment: 'Wrong answer',
     feedbackUserId: 'user-123',
+    metadata: { datadog: { assessment: 'fail' } },
   },
 })
 ```
@@ -215,6 +216,9 @@ The Datadog LLM Observability trace ID is the Mastra trace ID, and each Datadog 
 | `comment` | `reasoning` |
 | `feedbackUserId` (or `metadata.userId`) | `submitter.id`, or `anonymous` when neither is set or `feedbackUserId` is `null` |
 | `feedbackSource` | `feedback_source` tag |
+| `metadata.datadog.assessment` | `assessment`, when the value is `pass` or `fail` |
+
+The `assessment` is optional. Your app decides which feedback passes or fails, and Mastra doesn't derive it from the value. Set it on the feedback, not on the run, because feedback can inherit the metadata of the run it rates. To find failed feedback with the `thumbs` label in Datadog, search for `@feedback.thumbs.assessment:fail`.
 
 Feedback without a `traceId` is dropped. Feedback without a `spanId` can't reach a run that joined another LLM Observability trace, such as a run inside your own `llmobs.trace()` call or one continued from an upstream service. Those runs keep the Datadog trace ID that `dd-trace` gives them.
 
