@@ -98,12 +98,3 @@ export const AllVariants: Story = {
     </div>
   ),
 };
-
-export const Fill: Story = {
-  parameters: { layout: 'fullscreen' },
-  render: () => (
-    <div className="h-120 border border-dashed border-border">
-      <Spinner fill size="lg" />
-    </div>
-  ),
-};

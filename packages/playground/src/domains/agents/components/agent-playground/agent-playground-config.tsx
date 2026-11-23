@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -615,11 +616,7 @@ function ReadOnlyConfigWithDiff({
   ) : null;
 
   if (isLoadingCompare) {
-    return (
-      <div className="flex items-center justify-center py-5">
-        <Spinner className="h-5 w-5" />
-      </div>
-    );
+    return <BrandLoader fill size="sm" />;
   }
 
   return (

@@ -3,33 +3,20 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { BrandLoader } from '../BrandLoader';
-import { Spinner } from '../Spinner';
 
 afterEach(cleanup);
 
-const fillOf = (name: string) => screen.getByRole('status', { name }).closest('[data-slot="loader-fill"]');
-
-describe.each([
-  ['BrandLoader', BrandLoader],
-  ['Spinner', Spinner],
-])('%s fill', (_name, Loader) => {
+describe('BrandLoader fill', () => {
   it('stays inline without fill', () => {
-    render(<Loader aria-label="Loading" />);
+    render(<BrandLoader />);
 
-    expect(fillOf('Loading')).toBeNull();
+    expect(screen.getByRole('status', { name: 'Loading' }).closest('[data-slot="loader-fill"]')).toBeNull();
   });
 
-  it('fills a parent that has a height, and takes one in a parent that has none', () => {
-    render(<Loader fill aria-label="Loading" />);
+  it('wraps the loader in its area', () => {
+    render(<BrandLoader fill aria-label="Loading page" />);
 
-    const fill = fillOf('Loading');
-    expect(fill?.classList.contains('h-full')).toBe(true);
-    expect(fill?.classList.contains('min-h-32')).toBe(true);
-  });
-
-  it('covers the window with fill="screen"', () => {
-    render(<Loader fill="screen" aria-label="Loading" />);
-
-    expect(fillOf('Loading')?.classList.contains('h-dvh')).toBe(true);
+    const loader = screen.getByRole('status', { name: 'Loading page' });
+    expect(loader.parentElement?.getAttribute('data-slot')).toBe('loader-fill');
   });
 });

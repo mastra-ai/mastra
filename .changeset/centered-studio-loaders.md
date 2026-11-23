@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fixed Studio loaders that were off center or jumped as a page loaded: prompt and scorer edit pages, experiment comparison, Review Queue, Workspaces, Metrics, Spans, Threads, side panels and the Add skill dialog.
+Fixed Studio loaders: every page and panel now shows the Mastra loader in the center of its area, in the same spot from sign-in check to page, instead of a ring that was sometimes off center or jumped.

@@ -1,4 +1,5 @@
 import type { BuilderRegistrySkillSummary } from '@mastra/client-js';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import {
   Dialog,
   DialogAction,
@@ -15,7 +16,6 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
@@ -202,7 +202,7 @@ export function BuilderAddSkillDialog({
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 <ScrollAreaViewport contentClassName={isLoadingPopular || isSearching ? 'h-full' : undefined}>
                   {isLoadingPopular || isSearching ? (
-                    <Spinner fill className="text-muted-foreground" />
+                    <BrandLoader fill size="sm" />
                   ) : displaySkills.length === 0 ? (
                     <EmptyState
                       iconSlot={<IconPackage />}
@@ -305,7 +305,7 @@ export function BuilderAddSkillDialog({
                   </div>
 
                   {isLoadingPreview ? (
-                    <Spinner fill className="text-muted-foreground" />
+                    <BrandLoader fill size="sm" />
                   ) : previewContent ? (
                     <ScrollArea className="flex-1">
                       <div className="p-4">

@@ -7,6 +7,7 @@ import {
 import type { SkillsShSkill } from '@mastra/react/hooks/workspace';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
+import { BrandLoader } from '@/ds/components/BrandLoader';
 import {
   Dialog,
   DialogAction,
@@ -24,7 +25,6 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
@@ -226,7 +226,7 @@ export function WorkspaceAddSkillDialog({
                   }
                 >
                   {isLoadingPopular || isSearching ? (
-                    <Spinner fill className="text-muted-foreground" />
+                    <BrandLoader fill size="sm" />
                   ) : displaySkills.length === 0 ? (
                     <EmptyState
                       className="flex-1"
@@ -336,7 +336,7 @@ export function WorkspaceAddSkillDialog({
                     </div>
 
                     {isLoadingPreview ? (
-                      <Spinner fill className="text-muted-foreground" />
+                      <BrandLoader fill size="sm" />
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
                         <div className="p-4">

@@ -3,9 +3,7 @@ import { lazy, Suspense, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 
 export function PageLoader() {
-  return (
-    <BrandLoader fill size="lg" aria-label="Loading page" className="transition-opacity delay-150 starting:opacity-0" />
-  );
+  return <BrandLoader fill aria-label="Loading page" className="transition-opacity delay-150 starting:opacity-0" />;
 }
 
 export type LazyPageComponent = ComponentType & { preload: () => Promise<unknown> };

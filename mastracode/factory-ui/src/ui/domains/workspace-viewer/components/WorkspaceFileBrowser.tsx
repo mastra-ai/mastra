@@ -1,3 +1,4 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -219,7 +220,7 @@ export function WorkspaceFileBrowser({
 
   let content: ReactNode;
   if (root.isLoading) {
-    content = <Spinner size="sm" />;
+    content = <BrandLoader size="sm" />;
   } else if (root.error) {
     content = <TreeMessage tone="error">{root.error.message}</TreeMessage>;
   } else if (root.data && !root.data.available) {

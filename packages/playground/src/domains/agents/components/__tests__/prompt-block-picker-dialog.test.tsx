@@ -44,10 +44,10 @@ describe('PromptBlockPickerDialog', () => {
 
       renderDialog();
 
-      expect(await screen.findByText('Loading prompt blocks...')).not.toBeNull();
+      expect(await screen.findByRole('status', { name: 'Loading prompt blocks' })).not.toBeNull();
 
       resolveList();
-      await waitFor(() => expect(screen.queryByText('Loading prompt blocks...')).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading prompt blocks' })).toBeNull());
     });
   });
 

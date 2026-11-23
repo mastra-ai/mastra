@@ -8,7 +8,6 @@ import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
 import { Input } from '../Input';
-import { Spinner } from '../Spinner';
 import { Txt } from '../Txt';
 import { PageLayout } from './index';
 import type { PageLayoutPageProps } from './index';
@@ -241,7 +240,7 @@ export const PageLoading: Story = {
   args: {
     header: pageHeader,
     actionRow: <Input placeholder="Filter resources" className="max-w-120" />,
-    children: <Spinner fill />,
+    children: <BrandLoader fill />,
   },
   parameters: {
     docs: {
@@ -255,12 +254,12 @@ export const PageLoading: Story = {
 };
 
 export const PageRouteLoading: Story = {
-  args: { breadcrumbs: undefined, headerActions: undefined, children: <BrandLoader fill size="lg" /> },
+  args: { breadcrumbs: undefined, headerActions: undefined, children: <BrandLoader fill /> },
   play: expectLoaderInPageCenter,
 };
 
 export const FixedPageLoading: Story = {
-  args: { body: 'fixed', children: <BrandLoader fill size="lg" /> },
+  args: { body: 'fixed', children: <BrandLoader fill /> },
   play: expectLoaderInPageCenter,
 };
 

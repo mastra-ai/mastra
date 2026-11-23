@@ -1,5 +1,6 @@
 import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
@@ -547,7 +548,7 @@ export function DatasetReview({
     return (
       <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={toolbar}>
         <h1 className="sr-only">Review Queue</h1>
-        <Spinner fill />
+        <BrandLoader fill />
       </PageLayout>
     );
   }
@@ -689,7 +690,7 @@ export function DatasetReview({
       <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay || (displayItems.length === 0 && displayQuery.hasNextPage) ? (
-            <Spinner fill />
+            <BrandLoader fill />
           ) : displayItems.length === 0 ? (
             <EmptyState
               titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}

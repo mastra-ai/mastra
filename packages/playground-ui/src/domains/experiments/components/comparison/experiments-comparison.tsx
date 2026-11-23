@@ -13,8 +13,8 @@ import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideSummary, ComparisonSideTitle } from './comparison-side-header';
 import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
 import { columnLabel } from './constants';
+import { BrandLoader } from '@/ds/components/BrandLoader';
 import { Notice } from '@/ds/components/Notice';
-import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/utils/cn';
@@ -171,7 +171,7 @@ export function ExperimentsComparison({
     [rows, experimentIds, usageById],
   );
 
-  if (isLoading) return <Spinner fill />;
+  if (isLoading) return <BrandLoader fill />;
 
   if (error) {
     return (

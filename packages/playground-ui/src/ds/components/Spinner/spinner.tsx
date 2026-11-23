@@ -31,8 +31,8 @@ export type SpinnerSize = NonNullable<SpinnerVariantsProps['size']>;
 
 export type SpinnerProps = Omit<ComponentPropsWithoutRef<'svg'>, 'color' | 'size' | 'fill'> &
   SpinnerVariantsProps & {
-    /** Center the spinner in its parent, or in the window with `screen`. See `LoaderFill`. */
-    fill?: boolean | 'screen';
+    /** @deprecated Pages and panels load with `<BrandLoader fill />`; a spinner is for buttons, rows and inputs. */
+    fill?: boolean;
   };
 
 function Spinner({
@@ -69,7 +69,7 @@ function Spinner({
     </svg>
   );
 
-  if (fill) return <LoaderFill area={fill === 'screen' ? 'screen' : 'parent'}>{svg}</LoaderFill>;
+  if (fill) return <LoaderFill>{svg}</LoaderFill>;
 
   return svg;
 }

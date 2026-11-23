@@ -1,5 +1,6 @@
 import { useStoredPromptBlocks } from '@mastra/react/hooks/prompt-blocks';
 import { useState } from 'react';
+import { BrandLoader } from '@/ds/components/BrandLoader';
 import { DataList } from '@/ds/components/DataList';
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
 } from '@/ds/components/Dialog';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { SearchInput } from '@/ds/components/SearchInput';
-import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 
 import { IconFileText } from '@/ds/icons/central/IconFileText';
@@ -87,10 +87,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         </DialogHeader>
         <DialogBody>
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-5 text-muted-foreground">
-              <Spinner />
-              <Txt variant="caption">Loading prompt blocks...</Txt>
-            </div>
+            <BrandLoader fill size="sm" aria-label="Loading prompt blocks" />
           ) : filtered.length === 0 ? (
             <EmptyState
               iconSlot={<IconFileText />}

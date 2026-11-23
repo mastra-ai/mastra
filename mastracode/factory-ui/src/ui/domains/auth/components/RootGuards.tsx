@@ -99,7 +99,7 @@ function FactoriesUnavailableScreen({ retrying, onRetry }: { retrying: boolean; 
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
     <div className="bg-sidebar">
-      <BrandLoader fill="screen" size="lg" aria-label={label} />
+      <BrandLoader fill="screen" aria-label={label} />
     </div>
   );
 }

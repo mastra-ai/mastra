@@ -1,6 +1,6 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { usePermissionPatterns } from '@mastra/react/hooks/auth';
@@ -43,7 +43,7 @@ export function RoutePermissionsGate({ children, baseUrl }: RoutePermissionsGate
   const { patterns, isLoading, error } = usePermissionPatterns();
 
   if (isLoading) {
-    return <Spinner fill="screen" />;
+    return <BrandLoader fill="screen" />;
   }
 
   if (error) {

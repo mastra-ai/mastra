@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import { expect } from 'storybook/test';
 
-import { Spinner } from '../Spinner';
+import { BrandLoader } from '../BrandLoader';
 import { Txt } from '../Txt';
 import { LoaderFill } from './loader-fill';
 
@@ -25,7 +25,7 @@ function Area({ className, children }: { className?: string; children: ReactNode
 
 const loader = (
   <LoaderFill>
-    <Spinner />
+    <BrandLoader size="sm" />
   </LoaderFill>
 );
 
@@ -33,16 +33,16 @@ export const WithText: Story = {
   render: () => (
     <Area className="h-64">
       <LoaderFill>
-        <Spinner size="sm" aria-hidden />
+        <BrandLoader size="sm" />
         <Txt as="span" variant="caption" tone="muted">
-          Loading storage capabilities
+          Loading trace
         </Txt>
       </LoaderFill>
     </Area>
   ),
 };
 
-/** Block, flex column, flex row and grid parents, with a set height and without one. */
+/** Block, flex column, flex row and grid parents, with a set height, without one, and shorter than the fallback. */
 export const Parents: Story = {
   render: () => (
     <div className="grid grid-cols-2 gap-4">
@@ -52,15 +52,20 @@ export const Parents: Story = {
       <Area className="grid h-64">{loader}</Area>
       <Area>{loader}</Area>
       <Area className="flex flex-col">{loader}</Area>
+      <Area className="h-16">{loader}</Area>
+      <Area className="flex h-16 flex-col">{loader}</Area>
+      <Area className="flex h-16">{loader}</Area>
+      <Area className="grid h-16">{loader}</Area>
     </div>
   ),
   play: async ({ canvasElement }) => {
     for (const area of canvasElement.querySelectorAll('[data-testid=area]')) {
       const box = area.getBoundingClientRect();
-      const fill = area.querySelector('[data-slot=loader-fill]')?.getBoundingClientRect();
-      if (!fill) throw new Error('Missing the loader');
-      await expect(fill.top + fill.height / 2).toBeCloseTo(box.top + box.height / 2, 0);
-      await expect(fill.left + fill.width / 2).toBeCloseTo(box.left + box.width / 2, 0);
+      const mark = area.querySelector('[role=status]')?.getBoundingClientRect();
+      if (!mark) throw new Error('Missing the loader');
+      await expect(mark.top + mark.height / 2).toBeCloseTo(box.top + box.height / 2, 0);
+      await expect(area.scrollHeight).toBeLessThanOrEqual(area.clientHeight);
+      await expect(mark.left + mark.width / 2).toBeCloseTo(box.left + box.width / 2, 0);
     }
   },
 };

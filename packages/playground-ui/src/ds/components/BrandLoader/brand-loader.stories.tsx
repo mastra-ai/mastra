@@ -98,7 +98,7 @@ export const Fill: Story = {
   parameters: { layout: 'fullscreen' },
   render: () => (
     <div className="h-120 border border-dashed border-border">
-      <BrandLoader fill size="lg" />
+      <BrandLoader fill />
     </div>
   ),
 };
@@ -112,7 +112,7 @@ export const FullHeightPage: Story = {
   },
   render: () => (
     <div className="bg-sidebar">
-      <BrandLoader fill="screen" size="lg" aria-label="Loading app" />
+      <BrandLoader fill="screen" aria-label="Loading app" />
     </div>
   ),
 };

@@ -1,5 +1,5 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
@@ -143,7 +143,7 @@ function AgentPlayground() {
   }
 
   if (isLoading) {
-    return <Spinner fill />;
+    return <BrandLoader fill />;
   }
 
   // A 404 is authoritative even if a previous fetch left stale data in the cache.

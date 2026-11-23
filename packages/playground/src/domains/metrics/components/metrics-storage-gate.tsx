@@ -1,9 +1,7 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { LoaderFill } from '@mastra/playground-ui/components/LoaderFill';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { createMetricsFilterBarFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import type { ReactNode } from 'react';
@@ -27,12 +25,7 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   if (isLoading) {
     return (
       <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery}>
-        <LoaderFill>
-          <Spinner aria-label="Loading storage capabilities" />
-          <Txt as="span" variant="caption" tone="muted">
-            Loading storage capabilities
-          </Txt>
-        </LoaderFill>
+        <BrandLoader fill aria-label="Loading storage capabilities" />
       </MetricsPageLayout>
     );
   }

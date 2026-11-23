@@ -7,8 +7,9 @@ import './brand-loader.css';
 
 export type BrandLoaderProps = {
   className?: string;
+  /** Defaults to `lg` with `fill`, for pages. Panels and dialogs use `sm`. */
   size?: 'sm' | 'md' | 'lg';
-  /** Center the loader in its parent, or in the window with `screen`. See `LoaderFill`. */
+  /** Center the loader in its page or panel, or in the window with `screen`. See `LoaderFill`. */
   fill?: boolean | 'screen';
   'aria-label'?: string;
 };
@@ -33,7 +34,12 @@ const bubbleBySize = {
   lg: 4.498,
 };
 
-function BrandLoader({ className, size = 'md', fill = false, 'aria-label': ariaLabel = 'Loading' }: BrandLoaderProps) {
+function BrandLoader({
+  className,
+  fill = false,
+  size = fill ? 'lg' : 'md',
+  'aria-label': ariaLabel = 'Loading',
+}: BrandLoaderProps) {
   const reactId = useId();
   const filterId = `brand-loader-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const r = bubbleBySize[size];

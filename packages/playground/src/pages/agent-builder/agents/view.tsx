@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import type { StoredAgent } from '@mastra/react/hooks/agents';
 import { useStoredAgent } from '@mastra/react/hooks/agents';
@@ -111,4 +111,4 @@ const ViewTopBarSlot = () => {
   );
 };
 
-const AgentBuilderAgentViewSkeleton = () => <Spinner fill />;
+const AgentBuilderAgentViewSkeleton = () => <BrandLoader fill />;
