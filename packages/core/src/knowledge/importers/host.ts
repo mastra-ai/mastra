@@ -82,7 +82,12 @@ export interface KnowledgeImporterRunBinding {
 export interface KnowledgeImporterHost {
   startRun(bindingId: string, options?: KnowledgeImporterStartRunOptions): Promise<KnowledgeImporterRunStart>;
   flush(flush: KnowledgeImporterFlush): Promise<KnowledgeImporterFlushReceipt>;
-  /** Keeps the run alive; `cancel: true` tells the runner to stop without saving more state. */
+  /**
+   * Keeps the run alive; `cancel: true` tells the runner to stop without saving more state. A host
+   * that enforces a lease may instead refuse a heartbeat for a run it no longer holds, with
+   * `KnowledgeImporterHostConflictError` (`stale_generation` or `run_not_active`). The runner
+   * ignores a failed heartbeat; its next flush or finish gets the same refusal and ends the run.
+   */
   heartbeat(runId: string, generation: number): Promise<{ cancel: boolean }>;
   finishRun(request: KnowledgeImporterFinishRequest): Promise<KnowledgeImporterRunReceipt>;
 }
