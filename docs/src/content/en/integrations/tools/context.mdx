@@ -1,0 +1,116 @@
+---
+title: "Context.dev | Tools"
+description: "Add Context.dev web search and Markdown scraping tools to Mastra agents with typed schemas and structured source results."
+packages:
+  - "@mastra/core"
+  - "@mastra/context"
+---
+
+# Context.dev
+
+The `@mastra/context` package wraps the [Context.dev](https://context.dev) API as Mastra tools for web search and Markdown scraping. Register both tools with an agent or use each tool independently.
+
+## Before you begin
+
+Use Node.js `v22.13.0` or later and an existing [Mastra project](/docs). You need a Context.dev account and API key. API requests use your Context.dev account's quota.
+
+## Installation
+
+```sh npm2yarn
+npm install @mastra/context @mastra/core zod
+```
+
+Set the API key in the environment where your Mastra server runs:
+
+```bash title=".env"
+CONTEXT_DEV_API_KEY=your-context-dev-api-key
+```
+
+Keep this key server-side and out of source control. Don't expose it in browser code.
+
+## Add tools to an agent
+
+`createContextTools()` returns `{ contextSearch, contextScrape }`. Each tool has Zod input and output schemas.
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createContextTools } from '@mastra/context'
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  instructions: 'Search for relevant pages, scrape primary sources, and cite their URLs.',
+  tools: createContextTools(),
+})
+```
+
+To register a single tool, import `createContextSearchTool()` or `createContextScrapeTool()` instead.
+
+### Client configuration
+
+All factories accept `ContextClientOptions`, the official `context.dev` SDK client options. Pass `apiKey` to override `CONTEXT_DEV_API_KEY`, `timeout` to set the per-request timeout in milliseconds, or `maxRetries` to control retries. Tools initialize their clients on first execution. Missing credentials cause an error at that point rather than during registration.
+
+```typescript title="src/mastra/tools/context.ts"
+import { createContextTools } from '@mastra/context'
+
+export const contextTools = createContextTools({
+  timeout: 30_000,
+  maxRetries: 1,
+})
+```
+
+## Search the web
+
+`createContextSearchTool()` creates a tool with ID `context-search`. It accepts:
+
+| Parameter | Type | Description |
+| - | - | - |
+| `query` | `string` | Required, non-empty search query. Supports operators such as `site:`. |
+| `numResults` | `number` | Integer from 1 to 100. Defaults to 10 in the Context.dev API. |
+| `includeDomains` | `string[]` | Restrict results to these domains, up to 100 entries. |
+| `excludeDomains` | `string[]` | Exclude these domains, up to 100 entries. |
+| `freshness` | `string` | `last_24_hours`, `last_week`, `last_month`, or `last_year`. |
+
+The output contains `query`, `results`, `requestId`, `cacheMetadata`, and an optional `partial` flag. Each result has `title`, `url`, `description`, and a `relevance` label (`high`, `medium`, or `low`). `cacheMetadata` contains `status` (`hit`, `miss`, or `zdr`) and `ageMs`. An empty results array means no sources were returned.
+
+## Scrape a page
+
+`createContextScrapeTool()` creates a tool with ID `context-scrape`. It accepts:
+
+| Parameter | Type | Description |
+| - | - | - |
+| `url` | `string` | Required HTTP or HTTPS URL. |
+| `mainContentOnly` | `boolean` | Exclude navigation, headers, and footers. Defaults to `true`. |
+| `maxAgeMs` | `number` | Maximum cache age in milliseconds, from 0 to 31,536,000,000 (one year). Omit to use Context.dev's default of three days. Set to `0` to fetch fresh content. |
+
+The output contains `url`, `markdown`, `requestId`, and `cacheMetadata`. The tool checks the Markdown output's success flag before returning content. Failed, missing, or empty Markdown causes an error even if the API returned HTTP 200.
+
+## Test the integration
+
+With `CONTEXT_DEV_API_KEY` loaded in your environment, run the tools directly from a server-side script:
+
+```typescript title="src/test-context.ts"
+import { createContextTools } from '@mastra/context'
+
+const { contextSearch, contextScrape } = createContextTools()
+
+const sources = await contextSearch.execute!(
+  { query: 'site:mastra.ai/docs agents', numResults: 3 },
+  {},
+)
+console.log(sources)
+
+const page = await contextScrape.execute!({ url: 'https://mastra.ai/docs', maxAgeMs: 0 }, {})
+console.log(page)
+```
+
+```sh
+npx tsx --env-file=.env src/test-context.ts
+```
+
+The search output should include source URLs and descriptions. The scrape output should include the page URL and Markdown. Both include a request ID and cache metadata. HTTP failures, including authentication and quota errors, propagate from the Context.dev SDK. Both tools forward Mastra's execution abort signal to the SDK.
+
+## Scope
+
+Search and Markdown scraping are the only API operations exposed by `@mastra/context`. Mastra Code's built-in web providers remain unchanged. For other capabilities, see the [Context.dev documentation](https://docs.context.dev/sdks/typescript.md).

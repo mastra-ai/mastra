@@ -2221,6 +2221,34 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
+  integrations/context:
+    dependencies:
+      context.dev:
+        specifier: ^3.30.0
+        version: 3.30.0
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      tsdown:
+        specifier: 0.23.1
+        version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+
   integrations/json-render:
     devDependencies:
       '@internal/ai-sdk-v5':
@@ -24010,6 +24038,9 @@ packages:
   content-type@3.1.1:
     resolution: {integrity: sha512-GW4qUsfFo59d0HbUibDlWv5wPz+vAAcaTWbKIuKCf0JkC7wWkSyf8f13IpXn5JkeMlB2P8iTSSIjwXljorg2vA==}
     engines: {node: '>=22'}
+
+  context.dev@3.30.0:
+    resolution: {integrity: sha512-y087ksymu/PXgEUPcXMjSudJQx71qaXLVsFtNRoVYD7HvzzipM2ZZ3kfgaDKO8Ct6IyNvoyZaB/udC4bM5iGlg==}
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -48067,6 +48098,8 @@ snapshots:
   content-type@2.1.0: {}
 
   content-type@3.1.1: {}
+
+  context.dev@3.30.0: {}
 
   convert-source-map@2.0.0: {}
 
