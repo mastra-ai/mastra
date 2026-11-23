@@ -15,11 +15,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   expectedBufferExtendedWithUnreflectedTail,
+  expectedCrossProcessClearAllowsRecreatedGen0Buffering,
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
   expectedStaleTurnPreservesNewerGenerationBuffer,
   runBufferExtendedWithUnreflectedTail,
+  runCrossProcessClearAllowsRecreatedGen0Buffering,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
@@ -80,5 +82,11 @@ describe('buffered reflection extracted values (LibSQL file database)', () => {
     const outcome = await runStaleTurnPreservesNewerGenerationBuffer(env);
     expect(outcome).toEqual(expectedStaleTurnPreservesNewerGenerationBuffer(outcome));
     expect(outcome.newerCycleId).toEqual(expect.any(String));
+  });
+
+  it('buffers for a recreated generation-0 record after another process clears memory', async () => {
+    expect(await runCrossProcessClearAllowsRecreatedGen0Buffering(env)).toEqual(
+      expectedCrossProcessClearAllowsRecreatedGen0Buffering,
+    );
   });
 });

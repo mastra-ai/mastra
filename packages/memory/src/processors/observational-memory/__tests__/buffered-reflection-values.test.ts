@@ -8,6 +8,7 @@ import { ObservationalMemory } from '../observational-memory';
 import {
   createFixtureMemory,
   expectedBufferExtendedWithUnreflectedTail,
+  expectedCrossProcessClearAllowsRecreatedGen0Buffering,
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredWhileReflectionEndHookHeld,
@@ -17,6 +18,7 @@ import {
   recordingWriter,
   reflection,
   runBufferExtendedWithUnreflectedTail,
+  runCrossProcessClearAllowsRecreatedGen0Buffering,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredWhileReflectionEndHookHeld,
@@ -473,6 +475,12 @@ describe('buffered reflection extracted thread values (#27262)', () => {
       const outcome = await runStaleTurnPreservesNewerGenerationBuffer(env);
       expect(outcome).toEqual(expectedStaleTurnPreservesNewerGenerationBuffer(outcome));
       expect(outcome.newerCycleId).toEqual(expect.any(String));
+    });
+
+    it('buffers for a recreated generation-0 record after another process clears memory', async () => {
+      expect(await runCrossProcessClearAllowsRecreatedGen0Buffering(env)).toEqual(
+        expectedCrossProcessClearAllowsRecreatedGen0Buffering,
+      );
     });
 
     it('publishes values and shows the activation on an adapter without newRecordId support', async () => {

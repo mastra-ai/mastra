@@ -1137,7 +1137,9 @@ export class ReflectorRunner {
     );
 
     if (freshRecord) {
-      BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, freshRecord);
+      await BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, freshRecord, () =>
+        this.storage.getObservationalMemory(record.threadId, record.resourceId),
+      );
     }
 
     if (!freshRecord?.bufferedReflection) {
@@ -1373,7 +1375,7 @@ export class ReflectorRunner {
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
     // ════════════════════════════════════════════════════════════════════════
     if (this.buffering.isAsyncReflectionEnabled() && observationTokens < reflectThreshold) {
-      const shouldTrigger = (() => {
+      const shouldTrigger = await (async () => {
         if (!this.buffering.isAsyncReflectionEnabled()) return false;
         if (record.isBufferingReflection) {
           if (isOpActiveInProcess(record.id, 'bufferingReflection')) return false;
@@ -1381,7 +1383,9 @@ export class ReflectorRunner {
           this.storage.setBufferingReflectionFlag(record.id, false).catch(() => {});
         }
         const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
-        BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, record);
+        await BufferingCoordinator.reconcileReflectionBufferHead(bufferKey, record, () =>
+          this.storage.getObservationalMemory(record.threadId, record.resourceId),
+        );
         if (this.buffering.isAsyncBufferingInProgress(bufferKey)) return false;
         if (BufferingCoordinator.lastBufferedBoundary.has(bufferKey)) return false;
         if (record.bufferedReflection) return false;

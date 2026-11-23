@@ -130,22 +130,42 @@ export class BufferingCoordinator {
 
   /**
    * Reconcile this process's reflection buffer state against an observed head record.
-   * Only a strictly newer generation (`head.generationCount > owner.generationCount`) proves
-   * `owner`'s generation was retired; a stale snapshot from an older generation is ignored so it
-   * never clears a newer generation's boundary or cycle.
+   *
+   * - If `head` has a strictly higher `generationCount` than `owner`, `owner` is definitely retired.
+   * - If `head` has a different id with `generationCount <= owner.generationCount`, it is either a
+   *   stale snapshot from before `owner` started OR a fresh generation-0 record after another
+   *   process cleared memory. Confirm against a fresh storage read started after `owner` existed:
+   *   only retire/clear when storage's live head is no longer `owner.recordId`.
    */
-  static reconcileReflectionBufferHead(
+  static async reconcileReflectionBufferHead(
     bufferKey: string,
-    head: Pick<ObservationalMemoryRecord, 'id' | 'generationCount'>,
-  ): void {
+    head: Pick<ObservationalMemoryRecord, 'id' | 'generationCount' | 'threadId' | 'resourceId'>,
+    readLiveHead: () => Promise<ObservationalMemoryRecord | null>,
+  ): Promise<void> {
     const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
     if (!owner || owner.recordId === head.id) return;
-    if ((head.generationCount ?? 0) <= owner.generationCount) return;
-    if (BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
-      owner.retired = true;
+
+    const retireOrClear = () => {
+      if (BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+        owner.retired = true;
+        return;
+      }
+      BufferingCoordinator.clearReflectionBuffer(bufferKey);
+    };
+
+    if ((head.generationCount ?? 0) > owner.generationCount) {
+      retireOrClear();
       return;
     }
-    BufferingCoordinator.clearReflectionBuffer(bufferKey);
+
+    const ownerRecordId = owner.recordId;
+    const live = await readLiveHead();
+    // Re-check ownership after awaiting: a newer op may have replaced `owner` meanwhile.
+    if (BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner || owner.recordId !== ownerRecordId) {
+      return;
+    }
+    if (live?.id === ownerRecordId) return;
+    retireOrClear();
   }
 
   /** Called when the op that started as `owner` finishes; completes a deferred retirement. */

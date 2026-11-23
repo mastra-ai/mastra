@@ -689,3 +689,57 @@ export function expectedStaleTurnPreservesNewerGenerationBuffer(outcome: { newer
     values: { priority: 'newer' },
   };
 }
+
+/**
+ * Another process clears storage and recreates a fresh generation-0 record (without touching this
+ * process's static `BufferingCoordinator` maps). When this process later runs a turn on the new
+ * generation-0 record, it must reconcile against live storage, clear the old boundary, and buffer
+ * for the recreated record.
+ */
+export async function runCrossProcessClearAllowsRecreatedGen0Buffering(env: BufferedReflectionEnv) {
+  let reply = 'before-clear';
+  const f = await setup(env, () => reflection(reply), 800, {
+    activateAfterIdle: IDLE_TTL_MS,
+    onReflectionEnd: async () => {},
+  });
+  // Buffer once on the initial generation-0 record so this process caches its boundary & owner.
+  await f.turn();
+  const initial = await f.om.getRecord(f.threadId, f.resourceId);
+  if (!initial) throw new Error('Missing initial record');
+
+  // Simulate another process clearing storage directly (so our static maps are untouched) and
+  // creating a fresh generation-0 record at 800 tokens.
+  await f.store.clearObservationalMemory(f.threadId, f.resourceId);
+  const recreated = await f.store.initializeObservationalMemory({
+    threadId: f.threadId,
+    resourceId: f.resourceId,
+    scope: 'thread',
+    config: {
+      observation: observationOptions(),
+      reflection: { observationTokens: 1000, bufferActivation: 0.5 },
+    },
+  });
+  await f.store.updateActiveObservations({
+    id: recreated.id,
+    observations: factLines(100, 40),
+    tokenCount: 800,
+    lastObservedAt: new Date(),
+  });
+
+  reply = 'after-clear';
+  await f.turn();
+  const after = await f.om.getRecord(f.threadId, f.resourceId);
+  return {
+    initialBuffered: initial.bufferedReflection?.includes('condensed before-clear') ?? false,
+    recreatedGenerationCount: after?.generationCount,
+    recreatedIsDifferentRecord: after?.id !== initial.id && after?.id === recreated.id,
+    recreatedBuffersNext: after?.bufferedReflection?.includes('condensed after-clear') ?? false,
+  };
+}
+
+export const expectedCrossProcessClearAllowsRecreatedGen0Buffering = {
+  initialBuffered: true,
+  recreatedGenerationCount: 0,
+  recreatedIsDifferentRecord: true,
+  recreatedBuffersNext: true,
+};
