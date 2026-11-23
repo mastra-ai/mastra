@@ -15,6 +15,8 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   tone?: 'default' | 'destructive';
   viewOnly?: boolean;
   required?: boolean;
+  /** What the setting is for, shown in a tooltip on a muted info icon after the label. */
+  info?: ReactNode;
   errorMsg?: ReactNode;
   /**
    * `side` (default): the control sits on the right. Text fields take one shared width (13.75rem), selects hug
@@ -79,6 +81,7 @@ export function SettingsRow({
   tone = 'default',
   viewOnly = false,
   required = false,
+  info,
   errorMsg,
   disabled,
   controlPlacement = 'side',
@@ -96,7 +99,12 @@ export function SettingsRow({
       {...props}
     >
       <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
-        <FieldLabel {...(htmlFor ? { htmlFor } : {})} required={required} className={settingsRowLabelClassName(tone)}>
+        <FieldLabel
+          {...(htmlFor ? { htmlFor } : {})}
+          required={required}
+          info={info}
+          className={settingsRowLabelClassName(tone)}
+        >
           {label}
         </FieldLabel>
         {description != null && (

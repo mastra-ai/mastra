@@ -18,6 +18,7 @@ export function EnvironmentVariablesEditorRow({
   keyPlaceholder = 'e.g: OPEN_AI_KEY',
   valuePlaceholder = 'e.g: sk-xxxxxxxx',
   duplicateKeyMessage = DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE,
+  required = false,
   className,
   ...props
 }: EnvironmentVariablesEditorRowProps) {
@@ -41,7 +42,7 @@ export function EnvironmentVariablesEditorRow({
   return (
     <div className={cn('flex flex-col items-stretch gap-2 sm:flex-row sm:items-start', className)} {...props}>
       <Field invalid={Boolean(keyError)} className="flex-1">
-        <FieldLabel>{keyLabel}</FieldLabel>
+        <FieldLabel required={required}>{keyLabel}</FieldLabel>
         <InputGroup className="w-full">
           <InputGroupInput
             placeholder={keyPlaceholder}

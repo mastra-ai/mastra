@@ -90,9 +90,8 @@ export const RequiredFields: Story = {
 export const OptionalField: Story = {
   render: () => (
     <Field>
-      <FieldLabel optional>Monthly limit</FieldLabel>
-      <Input inputMode="decimal" placeholder="100" />
-      <FieldDescription>Top-ups pause for the rest of the month once they reach it.</FieldDescription>
+      <FieldLabel optional>Change message</FieldLabel>
+      <Input placeholder="Describe what changed" />
     </Field>
   ),
 };

@@ -61,6 +61,8 @@ export interface EnvironmentVariablesEditorRowProps
   row: EnvironmentVariableEntry;
   index: number;
   rowErrors?: EnvironmentVariablesEditorRowErrors;
+  /** The form can't be submitted without this row's variable. */
+  required?: boolean;
 }
 
 export type EnvironmentVariablesEditorAddButtonProps = ComponentPropsWithoutRef<'div'>;
