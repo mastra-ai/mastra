@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 
 import type { Scenario, ScenarioContext, ScenarioStep } from '../scenario.js';
-import { errorMessage, makeStep, probeTool, requireTools, runReadBatch } from '../scenario.js';
+import { errorMessage, makeStep, probeTool, refusedByPlatform, requireTools, runReadBatch } from '../scenario.js';
 
 /**
  * Zendesk scenario: reads the account's groups, fields, forms, views, macros,
@@ -243,7 +243,7 @@ async function runTicketProbes(context: ScenarioContext, steps: ScenarioStep[]):
     } catch (error) {
       const msg = errorMessage(error);
       steps.push(
-        /status=422/.test(msg)
+        /status=422/.test(msg) && !refusedByPlatform(msg)
           ? makeStep('refused ticket', 'zendesk_create_ticket', 'pass', `expected error: ${msg.slice(0, 120)}`)
           : makeStep('refused ticket', 'zendesk_create_ticket', 'fail', msg),
       );

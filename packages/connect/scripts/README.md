@@ -59,7 +59,9 @@ Actions that need runtime helpers the platform proxy context doesn't implement, 
 
 ### Hand-written tools
 
-To add a tool no template covers, put it in `src/providers/<localId>/tools/<slug>.ts` and export `<camelSlug>Tool(proxy)`. Any file the generator did not write survives regeneration and is listed under `handwrittenFiles` in the manifest; each hand-written `tools/<slug>.ts` is registered as `<localId>_<snake_slug>`. Files in `tools/` that start with `_` are helpers and are not registered. A hand-written tool with the same slug as a generated one is an error.
+Generate the provider before adding hand-written files: the generator tells its own files from yours by the manifest it writes, so it refuses to regenerate a provider directory that has no readable `.manifest.json`. Then add a tool no template covers as `src/providers/<localId>/tools/<slug>.ts`, exporting `<camelSlug>Tool(proxy)` (declared there or re-exported), and regenerate to register it.
+
+Any file the generator did not write survives regeneration and is listed under `handwrittenFiles` in the manifest. Each hand-written `tools/<slug>.ts` is registered as `<localId>_<snake_slug>`, where hyphens in the slug become underscores, so `delete-ticket.ts` becomes `zendesk_delete_ticket`. Files in `tools/` that start with `_` are helpers and are not registered. A hand-written tool whose key or factory name matches a generated tool is an error, as is a hand-written file that appears while regeneration runs. `pnpm remove-provider` lists the hand-written files it would delete before asking.
 
 Treat generated source as untrusted vendored code. Every template SHA update and generated diff requires security review before commit; passing automated checks is not sufficient.
 

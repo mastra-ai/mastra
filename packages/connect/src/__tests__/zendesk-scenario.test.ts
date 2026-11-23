@@ -40,7 +40,10 @@ const integration = {
 
 const PROXY_PREFIX = `/v2/connections/${connection.id}/proxy`;
 
-type Answer = { status: number; body?: unknown };
+type Answer = { status: number; body?: unknown; problem?: boolean };
+
+/** Set when the Platform proxy, not Zendesk, should refuse the blank ticket. */
+let platformRefusesTicket = false;
 
 const IDS: Record<string, number> = { ticket: 55, category: 66, section: 77, article: 901, user: 88, organization: 99 };
 
@@ -57,7 +60,15 @@ function answer(method: string | undefined, target: string, body: string): Answe
   if (method !== 'POST') return { status: 404, body: { error: 'RecordNotFound', description: 'Not found' } };
 
   const [key, sent] = Object.entries(JSON.parse(body) as Record<string, Record<string, unknown>>)[0]!;
-  if (key === 'ticket' && !sent.subject) return { status: 422, body: { error: 'RecordInvalid' } };
+  if (key === 'ticket' && !sent.subject) {
+    return platformRefusesTicket
+      ? {
+          status: 422,
+          problem: true,
+          body: { type: 'about:blank', title: 'Unprocessable', detail: 'proxy refused the request' },
+        }
+      : { status: 422, body: { error: 'RecordInvalid' } };
+  }
   const id = IDS[key]!;
   return {
     status: 201,
@@ -100,8 +111,8 @@ describe('Zendesk smoke scenario', () => {
       let body = '';
       request.on('data', chunk => (body += chunk));
       request.on('end', () => {
-        const send = ({ status, body: payload }: Answer) => {
-          response.writeHead(status, { 'content-type': 'application/json' });
+        const send = ({ status, body: payload, problem }: Answer) => {
+          response.writeHead(status, { 'content-type': problem ? 'application/problem+json' : 'application/json' });
           response.end(payload === undefined ? '' : JSON.stringify(payload));
         };
         if (target.endsWith('/connections')) return send({ status: 200, body: { connections: [connection] } });
@@ -126,6 +137,7 @@ describe('Zendesk smoke scenario', () => {
   beforeEach(() => {
     requests = [];
     warnings = [];
+    platformRefusesTicket = false;
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', baseUrl);
     vi.stubEnv('MASTRA_SMOKE_ZENDESK_LOCALE', undefined);
     vi.stubEnv('MASTRA_SMOKE_ZENDESK_ALLOW_TICKETS', undefined);
@@ -156,6 +168,16 @@ describe('Zendesk smoke scenario', () => {
     ]);
     expect(outcome.steps).toContainEqual(expect.objectContaining({ toolId: 'zendesk_create_ticket', status: 'pass' }));
     expect(warnings.some(warning => warning.includes('MASTRA_SMOKE_ZENDESK_ALLOW_TICKETS'))).toBe(true);
+  });
+
+  it('fails the refused-ticket check when the Platform, not Zendesk, refused it', async () => {
+    platformRefusesTicket = true;
+
+    const outcome = await runScenario();
+
+    expect(outcome.steps).toContainEqual(
+      expect.objectContaining({ name: 'refused ticket', toolId: 'zendesk_create_ticket', status: 'fail' }),
+    );
   });
 
   it('creates and deletes a real ticket when MASTRA_SMOKE_ZENDESK_ALLOW_TICKETS=1', async () => {

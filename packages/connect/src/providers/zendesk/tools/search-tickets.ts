@@ -9,7 +9,7 @@ export const searchTicketsInputSchema = z.object({
     .string()
     .min(1)
     .refine(
-      query => !/(^|\s)-?type:(?!ticket(\s|$))/i.test(query),
+      query => !/(^|\s)-?type:(?!ticket(\s|$))/i.test(query.replace(/"[^"]*("|$)/g, ' ')),
       'Only tickets can be searched; remove the other type: filter.',
     )
     .describe(
@@ -115,7 +115,9 @@ export function searchTicketsTool(proxy: PlatformProxy) {
       const response = await platformProxy.get({
         endpoint: '/api/v2/search.json',
         params: {
-          query: /(^|\s)type:ticket(\s|$)/i.test(input.query) ? input.query : `type:ticket ${input.query}`,
+          query: /(^|\s)type:ticket(\s|$)/i.test(input.query.replace(/"[^"]*("|$)/g, ' '))
+            ? input.query
+            : `type:ticket ${input.query}`,
           ...(input.sort_by !== undefined && { sort_by: input.sort_by }),
           ...(input.sort_order !== undefined && { sort_order: input.sort_order }),
           ...(input.page !== undefined && { page: String(input.page) }),

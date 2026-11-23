@@ -105,13 +105,17 @@ export function updateProviderIndex(): void {
  * The files in an installed provider that its manifest says the generator did
  * not write: the ones it recorded as hand-written, plus any added since.
  */
-export function listHandwrittenFiles(localId: string, manifest: ProviderManifest | undefined): string[] {
+export function listHandwrittenFiles(directory: string, manifest: ProviderManifest | undefined): string[] {
   if (!manifest) return [];
-  return Object.keys(calculateFileChecksums(providerDir(localId))).filter(file => !(file in manifest.files));
+  return Object.keys(calculateFileChecksums(directory)).filter(file => !(file in manifest.files));
 }
 
 export function readManifest(localId: string): ProviderManifest | undefined {
-  const path = resolve(providerDir(localId), '.manifest.json');
+  return readManifestIn(providerDir(localId));
+}
+
+export function readManifestIn(directory: string): ProviderManifest | undefined {
+  const path = resolve(directory, '.manifest.json');
   if (!existsSync(path)) return undefined;
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as ProviderManifest;
@@ -129,7 +133,8 @@ function listFilesRecursive(root: string, current = root): string[] {
   for (const entry of readdirSync(current, { withFileTypes: true })) {
     const path = resolve(current, entry.name);
     if (entry.isDirectory()) files.push(...listFilesRecursive(root, path));
-    else if (entry.isFile() && entry.name !== '.manifest.json') files.push(relative(root, path));
+    // Manifest keys always use `/`, whatever the platform's separator.
+    else if (entry.isFile() && entry.name !== '.manifest.json') files.push(relative(root, path).split(sep).join('/'));
   }
   return files.sort();
 }

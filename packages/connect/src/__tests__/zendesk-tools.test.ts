@@ -464,6 +464,13 @@ describe('Zendesk tools', () => {
       expect(result).toMatchObject({ next_cursor: 'c2' });
     });
 
+    it.each(['usage_1h', 'usage_24h', 'usage_7d', 'usage_30d'])(
+      'refuses a %s macro sort, which Zendesk cannot cursor-page',
+      async sort_by => {
+        await expectRefused('zendesk_list_macros', { sort_by });
+      },
+    );
+
     it.each([{}, { per_page: 5 }])('pages macros with the cursor Zendesk answers (%o)', async input => {
       answer = () => ({
         status: 200,
@@ -589,5 +596,18 @@ describe('Zendesk tools', () => {
     it('refuses a search for another record type', async () => {
       await expectRefused('zendesk_search_tickets', { query: 'type:user ada' });
     });
+
+    it.each(['"example type:user note"', '"example type:ticket note"'])(
+      'treats type: inside quoted text as text, not a filter (%s)',
+      async query => {
+        answer = () => ({ status: 200, body: { count: 0, results: [] } });
+
+        await run('zendesk_search_tickets', { query });
+
+        expect(new URL(requests[0]!.target, 'https://zendesk.test').searchParams.get('query')).toBe(
+          `type:ticket ${query}`,
+        );
+      },
+    );
   });
 });

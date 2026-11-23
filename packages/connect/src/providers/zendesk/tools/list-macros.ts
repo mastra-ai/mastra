@@ -13,7 +13,7 @@ export const listMacrosInputSchema = z.object({
   group_id: z.number().int().optional().describe('Filter macros by group ID'),
   only_viewable: z.boolean().optional().describe('If true, returns only macros that can be applied to tickets'),
   sort_by: z
-    .enum(['alphabetical', 'created_at', 'updated_at', 'usage_1h', 'usage_24h', 'usage_7d', 'usage_30d'])
+    .enum(['alphabetical', 'created_at', 'updated_at'])
     .optional()
     .describe('Sort field. Defaults to alphabetical'),
   sort_order: z

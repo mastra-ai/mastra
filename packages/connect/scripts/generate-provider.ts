@@ -32,8 +32,7 @@ import {
   providerConnectionEnvVar,
   providerDir,
   providerRegistrationName,
-  providersDir,
-  readManifest,
+  readManifestIn,
   templatePath,
   validateProviderId,
 } from './provider-utils.js';
@@ -1336,6 +1335,15 @@ const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
   'list-macros': {
     statements: [
       {
+        // Zendesk only cursor-pages alphabetical and date sorts, and every
+        // macro listing is cursor-paged so the caller can continue it.
+        pattern:
+          /\.enum\(\['alphabetical', 'created_at', 'updated_at', 'usage_1h', 'usage_24h', 'usage_7d', 'usage_30d'\]\)/,
+        replacement: ".enum(['alphabetical', 'created_at', 'updated_at'])",
+        count: 1,
+        what: 'cursor-compatible sorts',
+      },
+      {
         pattern: /(const ProviderResponseSchema = z\.object\(\{\s*macros: z\.array\(ProviderMacroSchema\),)/,
         replacement:
           '$1\n    meta: z.object({ has_more: z.boolean().optional(), after_cursor: z.string().nullish() }).optional(),',
@@ -1366,7 +1374,7 @@ const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
         pattern:
           /query: z\s*\.string\(\)\s*\.describe\(\s*'Zendesk search query\. Should include "type:ticket" and any additional filters like status, tags, dates\. Example: "type:ticket status:open"'\s*\)/,
         replacement:
-          "query: z.string().min(1).refine(query => !/(^|\\s)-?type:(?!ticket(\\s|$))/i.test(query), 'Only tickets can be searched; remove the other type: filter.').describe('Zendesk search query; results are limited to tickets. Add filters like status, tags, and dates. Example: \"status:open tags:vip\"')",
+          "query: z.string().min(1).refine(query => !/(^|\\s)-?type:(?!ticket(\\s|$))/i.test(query.replace(/\"[^\"]*(\"|$)/g, ' ')), 'Only tickets can be searched; remove the other type: filter.').describe('Zendesk search query; results are limited to tickets. Add filters like status, tags, and dates. Example: \"status:open tags:vip\"')",
         count: 1,
         what: 'ticket-only query',
       },
@@ -1375,7 +1383,7 @@ const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
       {
         pattern: /query: input\.query,/,
         replacement:
-          'query: /(^|\\s)type:ticket(\\s|$)/i.test(input.query) ? input.query : `type:ticket ${input.query}`,',
+          'query: /(^|\\s)type:ticket(\\s|$)/i.test(input.query.replace(/"[^"]*("|$)/g, \' \')) ? input.query : `type:ticket ${input.query}`,',
         count: 1,
         what: 'ticket-only query',
       },
@@ -1932,27 +1940,131 @@ ${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
  * helpers) survive regeneration; every hand-written `tools/<slug>.ts` is
  * registered alongside the generated tools, except `_`-prefixed helpers.
  */
+/**
+ * Finds the hand-written files in an installed provider and the tools among
+ * them, so regeneration keeps both. Every hand-written `tools/<slug>.ts` is
+ * registered alongside the generated tools, except `_`-prefixed helpers.
+ */
 export function planHandwrittenTools(
+  outputDir: string,
   localId: string,
-  generatedSlugs: readonly string[],
+  generated: readonly ToolRegistration[],
 ): { handwrittenFiles: string[]; handwrittenTools: ToolRegistration[] } {
-  const outputDir = providerDir(localId);
-  const generated = new Set(generatedSlugs);
-  const handwrittenFiles = listHandwrittenFiles(localId, readManifest(localId));
+  const manifest = readManifestIn(outputDir);
+  if (!manifest && Object.keys(calculateFileChecksums(outputDir)).length > 0) {
+    // Without a manifest every file looks generated, so regenerating would
+    // delete the hand-written ones.
+    throw new Error(
+      `${localId} has no readable .manifest.json, so its hand-written files cannot be told apart from generated ones. Restore the manifest, or remove the provider before regenerating it.`,
+    );
+  }
+  const handwrittenFiles = listHandwrittenFiles(outputDir, manifest);
+  const keys = new Map(generated.map(tool => [tool.key, tool.slug]));
+  const factories = new Map(generated.map(tool => [tool.factoryName, tool.slug]));
+  const project = new Project({ skipAddingFilesFromTsConfig: true });
   const handwrittenTools = handwrittenFiles.flatMap(file => {
-    // `tools/_helper.ts` files are shared helpers, not tools.
     const slug = /^tools\/([^/_][^/]*)\.ts$/.exec(file)?.[1];
     if (!slug) return [];
-    if (generated.has(slug)) {
-      throw new Error(`Hand-written ${localId}/${file} collides with a generated tool; rename or remove it.`);
+    const tool = { slug, key: `${localId.replace(/-/g, '_')}_${toSnake(slug)}`, factoryName: `${toCamel(slug)}Tool` };
+    const clash = keys.get(tool.key) ?? factories.get(tool.factoryName);
+    if (clash !== undefined) {
+      throw new Error(
+        `Hand-written ${localId}/${file} collides with tool '${clash}' (key ${tool.key}, factory ${tool.factoryName}); rename or remove it.`,
+      );
     }
-    const factoryName = `${toCamel(slug)}Tool`;
-    if (!readFileSync(resolve(outputDir, file), 'utf8').includes(`export function ${factoryName}(`)) {
-      throw new Error(`Hand-written ${localId}/${file} must export ${factoryName}.`);
+    const source = project.addSourceFileAtPath(resolve(outputDir, file));
+    project.resolveSourceFileDependencies();
+    const exported = source.getExportedDeclarations().get(tool.factoryName) ?? [];
+    if (
+      !exported.some(declaration => Node.isFunctionDeclaration(declaration) || Node.isVariableDeclaration(declaration))
+    ) {
+      throw new Error(`Hand-written ${localId}/${file} must export ${tool.factoryName}.`);
     }
-    return [{ slug, key: `${localId.replace(/-/g, '_')}_${toSnake(slug)}`, factoryName }];
+    keys.set(tool.key, slug);
+    factories.set(tool.factoryName, slug);
+    return [tool];
   });
   return { handwrittenFiles, handwrittenTools };
+}
+
+export interface GeneratedTool extends ToolRegistration {
+  /** The emitted module for the tool, before formatting. */
+  source: string;
+}
+
+/**
+ * Replaces a provider directory with freshly generated files, keeping the
+ * hand-written files and tools found in it. The new directory is built aside
+ * and swapped in, so a failure leaves the installed provider untouched.
+ */
+export async function writeProvider({
+  outputDir,
+  providerId,
+  localId,
+  templateSha,
+  pin,
+  tools,
+  skippedActions,
+}: {
+  outputDir: string;
+  providerId: string;
+  localId: string;
+  templateSha: string;
+  pin: TemplatePin;
+  tools: readonly GeneratedTool[];
+  skippedActions: ProviderManifest['skippedActions'];
+}): Promise<{ toolCount: number }> {
+  const { handwrittenFiles, handwrittenTools } = planHandwrittenTools(outputDir, localId, tools);
+  const temporaryDir = resolve(dirname(outputDir), `.${localId}.generate-${process.pid}`);
+  rmSync(temporaryDir, { recursive: true, force: true });
+  mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
+
+  try {
+    for (const tool of tools) {
+      writeFileSync(resolve(temporaryDir, 'tools', `${tool.slug}.ts`), tool.source);
+    }
+    const registrations = [
+      ...tools.map(({ slug, key, factoryName }) => ({ slug, key, factoryName })),
+      ...handwrittenTools,
+    ];
+    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, registrations, pin));
+    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
+    await formatGeneratedFiles(temporaryDir);
+    const generatedFiles = calculateFileChecksums(temporaryDir);
+    for (const file of handwrittenFiles) {
+      mkdirSync(dirname(resolve(temporaryDir, file)), { recursive: true });
+      copyFileSync(resolve(outputDir, file), resolve(temporaryDir, file));
+    }
+
+    const manifest: ProviderManifest = {
+      providerId,
+      localId,
+      templateSha,
+      templateRepo: pin.repo,
+      generatedAt: new Date().toISOString(),
+      toolCount: registrations.length,
+      skippedActions,
+      files: generatedFiles,
+      ...(handwrittenFiles.length > 0 ? { handwrittenFiles } : {}),
+    };
+    writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+    // A file added while this ran would be deleted with the old directory.
+    const current = listHandwrittenFiles(outputDir, readManifestIn(outputDir));
+    const added = current.filter(file => !handwrittenFiles.includes(file));
+    if (added.length > 0) {
+      throw new Error(
+        `${localId} gained hand-written files while it was being regenerated (${added.join(', ')}); run it again.`,
+      );
+    }
+
+    rmSync(outputDir, { recursive: true, force: true });
+    renameSync(temporaryDir, outputDir);
+  } catch (error) {
+    rmSync(temporaryDir, { recursive: true, force: true });
+    throw error;
+  }
+  return { toolCount: handwrittenTools.length + tools.length };
 }
 
 export interface ToolRegistration {
@@ -2089,60 +2201,25 @@ export async function generateProvider({
     throw new Error(`No usable actions found for '${providerId}'. ${reasons}`);
   }
 
-  const outputDir = providerDir(localId);
-  const { handwrittenFiles, handwrittenTools } = planHandwrittenTools(
+  const { toolCount } = await writeProvider({
+    outputDir: providerDir(localId),
+    providerId,
     localId,
-    extracted.map(action => action.candidate.actionSlug),
-  );
-  const temporaryDir = resolve(providersDir, `.${localId}.generate-${process.pid}`);
-  rmSync(temporaryDir, { recursive: true, force: true });
-  mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
-
-  try {
-    for (const action of extracted) {
-      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action, pin));
-    }
-    const registrations = [
-      ...extracted.map(action => ({
-        slug: action.candidate.actionSlug,
-        key: action.candidate.toolKey,
-        factoryName: action.toolFactoryName,
-      })),
-      ...handwrittenTools,
-    ];
-    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, registrations, pin));
-    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
-    await formatGeneratedFiles(temporaryDir);
-    const generatedFiles = calculateFileChecksums(temporaryDir);
-    for (const file of handwrittenFiles) {
-      mkdirSync(dirname(resolve(temporaryDir, file)), { recursive: true });
-      copyFileSync(resolve(outputDir, file), resolve(temporaryDir, file));
-    }
-
-    const manifest: ProviderManifest = {
-      providerId,
-      localId,
-      templateSha,
-      templateRepo: pin.repo,
-      generatedAt: new Date().toISOString(),
-      toolCount: extracted.length + handwrittenTools.length,
-      skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
-      files: generatedFiles,
-      ...(handwrittenFiles.length > 0 ? { handwrittenFiles } : {}),
-    };
-    writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-
-    rmSync(outputDir, { recursive: true, force: true });
-    renameSync(temporaryDir, outputDir);
-  } catch (error) {
-    rmSync(temporaryDir, { recursive: true, force: true });
-    throw error;
-  }
+    templateSha,
+    pin,
+    tools: extracted.map(action => ({
+      slug: action.candidate.actionSlug,
+      key: action.candidate.toolKey,
+      factoryName: action.toolFactoryName,
+      source: emitActionFile(action, pin),
+    })),
+    skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
+  });
 
   return {
     providerId,
     localId,
-    toolCount: extracted.length + handwrittenTools.length,
+    toolCount,
     skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
   };
 }
