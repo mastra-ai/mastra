@@ -74,7 +74,7 @@ const SPECS: Record<Variant, VariantSpec> = {
   'provider-metadata': { callMetadata: T34_PROVIDER_METADATA, resultMetadata: T34_PROVIDER_METADATA },
   'to-model-output': {
     toModelOutput: output => ({ type: 'text', value: `mapped:${(output as { n: number }).n}` }),
-    resultMetadata: { mastra: { modelOutput: { type: 'text', value: 'mapped:1' } } },
+    resultMetadata: { mastra: { modelOutput: { type: 'text', value: 'mapped:1' }, modelOutputOrigin: 'server' } },
   },
 };
 

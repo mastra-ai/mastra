@@ -85,7 +85,7 @@ describe('computeModelOutputProviderMetadata workflow tool marker', () => {
 
     await expect(
       computeModelOutputProviderMetadata({ tool: workflowTool, toolName: 'workflow-weather', result: { ok: true } }),
-    ).resolves.toEqual({ mastra: { modelOutput: 'mapped', workflowTool: true } });
+    ).resolves.toEqual({ mastra: { modelOutput: 'mapped', modelOutputOrigin: 'server', workflowTool: true } });
   });
 
   it('adds no marker for another tool', async () => {
