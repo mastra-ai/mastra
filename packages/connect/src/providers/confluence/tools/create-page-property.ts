@@ -106,7 +106,7 @@ export function createPagePropertyTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-content-properties/#api-pages-page-id-properties-post
       const response = await platformProxy.post({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${input.page_id}/properties`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${encodeURIComponent(input.page_id)}/properties`,
         data: {
           key: input.key,
           value: input.value,

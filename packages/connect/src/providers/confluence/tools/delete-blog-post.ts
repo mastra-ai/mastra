@@ -88,7 +88,7 @@ export function deleteBlogPostTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/#api-wiki-api-v2-blogposts-id-delete
       await platformProxy.delete({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/blogposts/${input.id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/blogposts/${encodeURIComponent(input.id)}`,
         params,
         retries: 1,
       });

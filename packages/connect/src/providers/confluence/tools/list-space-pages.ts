@@ -133,7 +133,7 @@ export function listSpacePagesTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-space-pages/#api-wiki-api-v2-spaces-id-pages-get
       const response = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/spaces/${input.space_id}/pages`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/spaces/${encodeURIComponent(input.space_id)}/pages`,
         params: params,
         retries: 3,
       });

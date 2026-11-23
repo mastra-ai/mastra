@@ -169,7 +169,7 @@ export function updateInlineCommentTool(proxy: PlatformProxy) {
       const cloudId = await resolveCloudId(platformProxy);
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-inline-comments-comment-id-get
       const getResponse = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${input.commentId}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${encodeURIComponent(input.commentId)}`,
         params: {
           'body-format': 'storage',
         },
@@ -207,7 +207,7 @@ export function updateInlineCommentTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-inline-comments-comment-id-put
       const updateResponse = await platformProxy.put({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${input.commentId}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${encodeURIComponent(input.commentId)}`,
         data: putBody,
         retries: 1,
       });

@@ -117,7 +117,7 @@ export function updatePagePropertyTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-content-properties/#api-pages-page-id-properties-property-id-put
       const response = await platformProxy.put({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${input.page_id}/properties/${input.property_id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${encodeURIComponent(input.page_id)}/properties/${encodeURIComponent(input.property_id)}`,
         data: requestBody,
         retries: 10,
       });

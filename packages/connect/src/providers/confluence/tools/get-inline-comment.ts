@@ -196,7 +196,7 @@ export function getInlineCommentTool(proxy: PlatformProxy) {
       try {
         // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-inline-comments-commentid-get
         const response = await platformProxy.get({
-          endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${input.commentId}`,
+          endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${encodeURIComponent(input.commentId)}`,
           params,
           retries: 3,
         });

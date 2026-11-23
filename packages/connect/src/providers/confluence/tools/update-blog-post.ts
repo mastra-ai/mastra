@@ -100,7 +100,7 @@ export function updateBlogPostTool(proxy: PlatformProxy) {
       }
       const getResponse = await platformProxy.get({
         // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/#api-blogposts-id-get
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/blogposts/${input.id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/blogposts/${encodeURIComponent(input.id)}`,
         params: {
           'body-format': 'storage',
         },
@@ -137,7 +137,7 @@ export function updateBlogPostTool(proxy: PlatformProxy) {
 
       const putResponse = await platformProxy.put({
         // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/#api-blogposts-id-put
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/blogposts/${input.id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/blogposts/${encodeURIComponent(input.id)}`,
         data: updateBody,
         retries: 1,
       });

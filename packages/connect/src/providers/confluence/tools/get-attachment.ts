@@ -156,7 +156,7 @@ export function getAttachmentTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-attachment/#api-attachments-id-get
       const response = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/attachments/${input.id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/attachments/${encodeURIComponent(input.id)}`,
         params: {
           ...(input.includeLabels !== undefined && { 'include-labels': String(input.includeLabels) }),
           ...(input.includeProperties !== undefined && { 'include-properties': String(input.includeProperties) }),

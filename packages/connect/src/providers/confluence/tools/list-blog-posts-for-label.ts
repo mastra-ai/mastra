@@ -145,7 +145,7 @@ export function listBlogPostsForLabelTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/#api-blog-post-get-blog-posts-for-label
       const response = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/labels/${input.label_id}/blogposts`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/labels/${encodeURIComponent(input.label_id)}/blogposts`,
         params,
         retries: 3,
       });

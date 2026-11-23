@@ -1752,6 +1752,12 @@ function routeConfluenceThroughProviderBase(action: ExtractedAction): ExtractedA
       'single accessible site',
     );
   }
+  // Most templates put ids into the path as-is, so an id carrying `?`, `#`,
+  // `/` or `\` could add query options (such as purge=true) or reach another
+  // resource. Encoding keeps every input value inside its own path segment.
+  execBody = execBody.replace(/endpoint: `[^`]*`/g, endpoint =>
+    endpoint.replace(/\$\{(input\.\w+)\}/g, '${encodeURIComponent($1)}'),
+  );
   return {
     ...action,
     execBody,

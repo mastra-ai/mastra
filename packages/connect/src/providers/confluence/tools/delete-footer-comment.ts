@@ -69,7 +69,7 @@ export function deleteFooterCommentTool(proxy: PlatformProxy) {
       }
       await platformProxy.delete({
         // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-wiki-api-v2-footer-comments-comment-id-delete
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/footer-comments/${input.comment_id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/footer-comments/${encodeURIComponent(input.comment_id)}`,
         retries: 1,
       });
 

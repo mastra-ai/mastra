@@ -166,7 +166,7 @@ export function listSpaceBlogPostsTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-post/#api-spaces-id-blogposts-get
       const response = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/spaces/${input.spaceId}/blogposts`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/spaces/${encodeURIComponent(input.spaceId)}/blogposts`,
         params,
         retries: 3,
       });

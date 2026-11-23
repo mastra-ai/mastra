@@ -90,7 +90,7 @@ export function updatePageTool(proxy: PlatformProxy) {
       }
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get
       const getResponse = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${input.id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${encodeURIComponent(input.id)}`,
         params: {
           'body-format': 'storage',
         },
@@ -102,7 +102,7 @@ export function updatePageTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-put
       const updateResponse = await platformProxy.put({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${input.id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${encodeURIComponent(input.id)}`,
         data: {
           id: input.id,
           status: input.status,

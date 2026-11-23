@@ -135,7 +135,7 @@ export function listPageFooterCommentsTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-pages-id-footer-comments-get
       const response = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${input.pageId}/footer-comments`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${encodeURIComponent(input.pageId)}/footer-comments`,
         params,
         retries: 3,
       });

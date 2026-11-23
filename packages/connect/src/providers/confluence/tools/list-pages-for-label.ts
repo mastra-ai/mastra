@@ -155,7 +155,7 @@ export function listPagesForLabelTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-wiki-api-v2-labels-id-pages-get
       const response = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/labels/${input.label_id}/pages`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/labels/${encodeURIComponent(input.label_id)}/pages`,
         params: {
           'body-format': 'storage',
           limit: input.limit ?? 25,

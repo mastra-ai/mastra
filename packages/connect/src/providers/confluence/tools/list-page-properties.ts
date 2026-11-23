@@ -111,7 +111,7 @@ export function listPagePropertiesTool(proxy: PlatformProxy) {
 
       const response = await platformProxy.get({
         // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-content-properties/#api-pages-page-id-properties-get
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${input.pageId}/properties`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${encodeURIComponent(input.pageId)}/properties`,
         params,
         retries: 3,
       });

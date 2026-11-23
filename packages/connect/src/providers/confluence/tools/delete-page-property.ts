@@ -66,7 +66,7 @@ export function deletePagePropertyTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-content-properties/#api-pages-page-id-properties-property-id-delete
       const response = await platformProxy.delete({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${input.pageId}/properties/${input.propertyId}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/pages/${encodeURIComponent(input.pageId)}/properties/${encodeURIComponent(input.propertyId)}`,
         retries: 1,
       });
 

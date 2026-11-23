@@ -225,7 +225,7 @@ export function getSpaceTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-space/
       const response = await platformProxy.get({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/spaces/${input.id}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/spaces/${encodeURIComponent(input.id)}`,
         params: {
           ...(input.includeIcon !== undefined && { 'include-icon': String(input.includeIcon) }),
           ...(input.includeLabels !== undefined && { 'include-labels': String(input.includeLabels) }),

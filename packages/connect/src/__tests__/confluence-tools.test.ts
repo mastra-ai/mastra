@@ -173,6 +173,28 @@ describe('generated Confluence tools', () => {
     });
   });
 
+  it.each([
+    ['confluence_delete_blog_post', { id: '123?purge=true' }, '/blogposts/123%3Fpurge%3Dtrue'],
+    ['confluence_delete_page', { id: '123?purge=true' }, '/pages/123%3Fpurge%3Dtrue'],
+    ['confluence_delete_footer_comment', { comment_id: '..\\pages/123' }, '/footer-comments/..%5Cpages%2F123'],
+    ['confluence_delete_inline_comment', { commentId: '9#x' }, '/inline-comments/9%23x'],
+  ])('%s keeps an id inside its own path segment', async (toolId, input, path) => {
+    await run(toolId, input).catch(() => undefined);
+
+    expect(requests.map(request => `${request.method} ${request.target}`)).toEqual([
+      `DELETE /ex/confluence/${CLOUD_ID}/wiki/api/v2${path}`,
+    ]);
+  });
+
+  it('never puts a raw input value into a generated endpoint path', () => {
+    const dir = resolve(import.meta.dirname, '../providers/confluence/tools');
+    for (const file of readdirSync(dir)) {
+      for (const endpoint of readFileSync(resolve(dir, file), 'utf8').match(/endpoint: `[^`]*`/g) ?? []) {
+        expect(endpoint, file).not.toMatch(/\$\{input\./);
+      }
+    }
+  });
+
   it('lists spaces', async () => {
     answer = () => ({ status: 200, body: { results: [space], _links: {} } });
 

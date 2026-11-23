@@ -73,7 +73,7 @@ export function deleteInlineCommentTool(proxy: PlatformProxy) {
 
       // https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comment/#api-inline-comments-comment-id-delete
       await platformProxy.delete({
-        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${input.commentId}`,
+        endpoint: `/ex/confluence/${cloudId}/wiki/api/v2/inline-comments/${encodeURIComponent(input.commentId)}`,
         retries: 1,
       });
 
