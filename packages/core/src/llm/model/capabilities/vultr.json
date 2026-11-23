@@ -39,12 +39,6 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "deepseek-v4-flash-0731": [
       {
         "type": "toggle"
@@ -54,21 +48,23 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "laguna-s-2.1": [
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
       {
         "type": "toggle"
       }
@@ -82,25 +78,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax-m3": [
+    "laguna-s-2.1": [
       {
         "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-pro-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "qwen3.8-flash-next": [
@@ -109,9 +89,30 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ],
     "glm-5.3": [
@@ -120,13 +121,12 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "mimo-v2.6-pro-rl": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }

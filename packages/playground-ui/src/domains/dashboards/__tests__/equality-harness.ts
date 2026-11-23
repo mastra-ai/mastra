@@ -23,7 +23,6 @@ import { emptyBreakdownFixture } from '../../metrics/components/__tests__/fixtur
 import { aggregateCapabilities } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
 import { serveCapabilities } from '../../metrics/components/__tests__/metrics-msw';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
-import { shortViewLabels } from '../lib/view-labels';
 import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -159,20 +158,41 @@ export function expectSame(card: Rendered, widget: Rendered) {
 }
 
 /**
- * Picks a view: a tab, for a card that lists its views under its title (named by its short name,
+ * The tab or folded menu item showing `view`: by its label, else by its label without the words the
+ * card's views share, as `shortViewLabels` names it ("Breakdown by tool" → "Tools", "Workflow latency" → "Workflow").
+ */
+function showing(view: string, options: HTMLElement[]) {
+  const words = view.toLowerCase().split(/\s+/);
+  const forms = (w: string) => [w, `${w}s`, `${w}es`, `${w.slice(0, -1)}ies`];
+  const short = (shown: string) =>
+    shown
+      .toLowerCase()
+      .split(/\s+/)
+      .every(word => words.some(w => forms(w).includes(word)));
+  return options.find(o => o.textContent === view) ?? options.find(o => short(o.textContent ?? ''));
+}
+
+/**
+ * Picks a view: a tab, for a widget that lists its views under its title (by its short name,
  * "Breakdown by agent" → "Agents"), else from the card's title menu. The menu portals out, but only
  * one is open at a time.
  */
 export function pickIn(root: HTMLElement, view: string) {
   if (within(root).queryAllByRole('tab', { hidden: true }).length) {
-    const [name] = shortViewLabels([view, 'Breakdown by view']);
-    const tab = within(root).queryByRole('tab', { name });
-    if (tab) fireEvent.click(tab);
-    else {
-      // Folded into the "+N" menu.
-      fireEvent.click(within(root).getByRole('button', { name: /more tabs$/ }));
-      fireEvent.click(screen.getByRole('menuitem', { name }));
+    const tabs = within(root).queryAllByRole('tab');
+    const more = within(root).queryByRole('button', { name: /more tabs$/ });
+    const exact = tabs.find(tab => tab.textContent === view);
+    if (exact || !more) {
+      const tab = exact ?? showing(view, tabs);
+      if (!tab) throw new Error(`No tab shows ${view}`);
+      fireEvent.click(tab);
+      return;
     }
+    // Maybe folded into the "+N" menu.
+    fireEvent.click(more);
+    const option = showing(view, [...tabs, ...screen.getAllByRole('menuitem')]);
+    if (!option) throw new Error(`No tab shows ${view}`);
+    fireEvent.click(option);
     return;
   }
   const trigger = within(root)

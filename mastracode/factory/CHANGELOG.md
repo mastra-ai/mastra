@@ -1,5 +1,72 @@
 # @mastra/factory
 
+## 0.31.0-alpha.7
+
+### Patch Changes
+
+- Factory sessions now start a card when someone asks for the work to be done now ("fix it", "go for it"), instead of filing it and leaving it in the backlog. A card is left unstarted only when the person asked for it to be filed or tracked for later. Afterwards the session reports only what it can confirm: the stage the card moved to, the side session it started, or the refusal or approval the move is waiting on. ([#31107](https://github.com/mastra-ai/mastra/pull/31107))
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- When a memory-model failure stops a run, Slack threads now get the run error card (with its "Change memory model" link) instead of silence, and the run is reported to its followers and the session that started it as failed, quoting the failure. Runs a person stopped still say nothing. ([#31179](https://github.com/mastra-ai/mastra/pull/31179))
+
+- Factory review no longer requests changes just because a review bot or CI check is still pending once the 10-minute wait runs out. The reviewer now forms its verdict from the evidence it collected and notes the missing signal as a non-blocking heads-up. Ordinary CI, build and scan checks are not treated as review bots and are not waited on, so branch protection stays in charge of whether they block a merge. ([#31175](https://github.com/mastra-ai/mastra/pull/31175))
+
+- Fixed self-review not recording its verdict when the builder's own move started it. The Self-review kickoff was delivered into the builder's still-running turn, which only had the builder's tools, so `factory_record_review_verdict` was missing and the pull request never opened. A phase that starts after the previous agent's move now waits for that agent's run to end and starts in a fresh run with its own tools. A run still going when its card moves on is told its part is done, instead of being shown a role whose tools it does not have. ([#31104](https://github.com/mastra-ai/mastra/pull/31104))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`172e932`](https://github.com/mastra-ai/mastra/commit/172e9325f1608dc9fac053ec9d8ab4fa104f365b), [`fb7c65b`](https://github.com/mastra-ai/mastra/commit/fb7c65b9b9f9dcefca1983fa4749d98f3c069788), [`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`8bbaab6`](https://github.com/mastra-ai/mastra/commit/8bbaab64784fac9426f5b2bd0e35f1bd6ae4640a), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`d5546d6`](https://github.com/mastra-ai/mastra/commit/d5546d686498ddb3981f4e1e05c322eba9777e07), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`4db2889`](https://github.com/mastra-ai/mastra/commit/4db2889ec46b0443a1e11812220666579b44c79d), [`7388601`](https://github.com/mastra-ai/mastra/commit/73886018497772a47154f67ce512081d8f3e9818), [`45320c3`](https://github.com/mastra-ai/mastra/commit/45320c334035c969dcef98a91de6ad2a6610c8c0), [`182a01f`](https://github.com/mastra-ai/mastra/commit/182a01f0d684de865c42cb9a1c0cdd61d9009d12), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`8fab5e2`](https://github.com/mastra-ai/mastra/commit/8fab5e2fda43beca4be00e43d4f231cdd87fd7fd), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`89fb271`](https://github.com/mastra-ai/mastra/commit/89fb27175fd7036b8600241da8a6d288a7f2bae4), [`4aeb6ce`](https://github.com/mastra-ai/mastra/commit/4aeb6ce414105e45b1c36d174258f9165738ecef), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4), [`55a2249`](https://github.com/mastra-ai/mastra/commit/55a2249be2f5505e3022856d477628e6ca2fd9a9)]:
+  - @mastra/code-sdk@1.21.0-alpha.7
+  - @mastra/connect@1.5.0-alpha.1
+  - @mastra/auth-studio@1.4.2-alpha.0
+  - @mastra/auth-workos@1.7.0-alpha.1
+  - @mastra/core@1.86.0-alpha.6
+  - @mastra/mcp@2.11.0-alpha.1
+  - @mastra/platform-workspace@1.13.2-alpha.0
+  - @mastra/slack@1.9.1-alpha.0
+
+## 0.31.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`8bc3a19`](https://github.com/mastra-ai/mastra/commit/8bc3a19a73e6e683a29d8c8cf8ab1f0bf4343a26)]:
+  - @mastra/core@1.86.0-alpha.5
+  - @mastra/code-sdk@1.21.0-alpha.6
+
+## 0.31.0-alpha.5
+
+### Patch Changes
+
+- Factory sessions are now prompted to check a side session's claims before repeating or acting on them. The side-sessions notice says reports can be wrong and asks the session to check specific claims (files changed, pushes, CI, review findings) against the pull request first, or to say that a relayed report is unchecked. The notice stays while any side session's reports can still be read, even after those sessions age out of the list. The review tool says to submit only findings checked against the current diff. ([#31109](https://github.com/mastra-ai/mastra/pull/31109))
+
+- Updated dependencies [[`791f12f`](https://github.com/mastra-ai/mastra/commit/791f12f4ca378c4a6a7a6324631178a57bd0a16f)]:
+  - @mastra/code-sdk@1.21.0-alpha.5
+
+## 0.31.0-alpha.4
+
+### Minor Changes
+
+- Exported shared environment handlers so other servers can serve Factory's environment and sandbox env routes for their own projects. Import `EnvironmentHandlers` and `SandboxEnvHandlers` from `@mastra/factory/environment/handlers`, the request schemas from `@mastra/factory/routes/environment-contracts`, and `resolveProjectEnvironment` from `@mastra/factory/environment/session-environment` without loading the rest of Factory. ([#31132](https://github.com/mastra-ai/mastra/pull/31132))
+
+### Patch Changes
+
+- The chat composer stays one line until you focus it or start writing, so more of the conversation fits on screen, with the model still in view. Below it, a status footer shows who is steering the session on the left and token speed and memory on the right. The footer gives its row back while it has nothing to show, and opening the composer never moves "+" or Send. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+  Teammates steering someone else's session no longer see the provider icon twice next to the model: the locked model's tooltip now names whose credential their messages use.
+
+- Stopped logging an error each time a session workspace is created for the first time. ([#31071](https://github.com/mastra-ai/mastra/pull/31071))
+
+- The jump-to-latest button is easier to hit, quieter, and draws a moving pen stroke in place of its arrow while the agent is still replying below. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+- Factory's board settings pages (Rules, Routing, Skills and each phase) now sit in a 640px settings column, with their titles lined up with their sections. New board, New Factory and the skill editor are forms with a back link. On phones, Factory has a top bar with the menu button and search, like Studio. ([#30956](https://github.com/mastra-ai/mastra/pull/30956))
+
+- Offered the merge-request checkout refresh tool only in GitLab merge-request review sessions, so GitHub review sessions no longer call a tool that always fails. ([#31070](https://github.com/mastra-ai/mastra/pull/31070))
+
+- Updated dependencies [[`004f350`](https://github.com/mastra-ai/mastra/commit/004f35031e7419a16263f8641d43c9cd19275ae0), [`79a30b6`](https://github.com/mastra-ai/mastra/commit/79a30b6d5c758bf46f0633059eded42bffbeb443), [`fa2ea6d`](https://github.com/mastra-ai/mastra/commit/fa2ea6dfb5c13a5f9b4bdc99f332959f7b0f4209), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018)]:
+  - @mastra/core@1.86.0-alpha.4
+  - @mastra/code-sdk@1.21.0-alpha.4
+
 ## 0.31.0-alpha.3
 
 ### Patch Changes

@@ -1332,6 +1332,12 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   if (action.candidate.providerId === 'posthog' && action.candidate.actionSlug === 'run-query') {
     return adaptPosthogRunQuery(action);
   }
+  if (action.candidate.providerId === 'anthropic' && action.candidate.actionSlug === 'cancel-message-batch') {
+    return acceptNullBatchTimestamps(action);
+  }
+  if (action.candidate.providerId === 'google-analytics' && action.candidate.actionSlug === 'run-pivot-report') {
+    return acceptPrefixedPivotProperty(action);
+  }
   if (DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) && action.candidate.actionSlug === 'get-user-drive') {
     return adaptDelegatedGetUserDrive(action);
   }
@@ -1355,6 +1361,62 @@ function bypassSharedLockOnDelete(action: ExtractedAction): ExtractedAction {
     );
   }
   return { ...action, execBody };
+}
+
+// Anthropic answers a cancel with null for the timestamps and results URL a
+// batch doesn't have yet, and the template only accepts a string or an absent
+// field, so a cancel that succeeded failed validation. Accept null and leave
+// the field out of the result, as get/list/create already do. Drop this once
+// the upstream template accepts null.
+function acceptNullBatchTimestamps(action: ExtractedAction): ExtractedAction {
+  const fields = ['archived_at', 'cancel_initiated_at', 'ended_at', 'results_url'];
+  let rewrites = 0;
+  const moduleStatements = action.moduleStatements.map(statement => {
+    if (!statement.startsWith('const ProviderMessageBatchSchema')) return statement;
+    return fields.reduce((text, field) => {
+      const next = text.replace(`${field}: z.string().optional(),`, `${field}: z.string().nullish(),`);
+      if (next !== text) rewrites++;
+      return next;
+    }, statement);
+  });
+  let execBody = action.execBody;
+  for (const field of fields) {
+    const next = execBody.replace(`batch.${field} !== undefined`, `batch.${field} != null`);
+    if (next !== execBody) rewrites++;
+    execBody = next;
+  }
+  if (rewrites !== fields.length * 2) {
+    throw new Error(
+      `Unable to accept null batch fields in ${action.candidate.providerId}/${action.candidate.actionSlug}; the upstream template shape changed.`,
+    );
+  }
+  return { ...action, moduleStatements, execBody };
+}
+
+// The pivot template puts `property` into the path as given, so "properties/123" (the form
+// run_report and batch_run_reports accept) became properties/properties%2F123 and Google
+// answered 404. Strip the prefix as those tools do.
+function acceptPrefixedPivotProperty(action: ExtractedAction): ExtractedAction {
+  let schemaUpdated = false;
+  const moduleStatements = action.moduleStatements.map(statement => {
+    if (!statement.includes(`const ${action.inputSchemaName}`)) return statement;
+    const updated = statement.replace(
+      "property: z.string().describe('Google Analytics property numeric ID. Example: 535258304'),",
+      'property: z.string().describe(\'GA4 property ID. Example: "properties/123456789" or "123456789"\'),',
+    );
+    schemaUpdated ||= updated !== statement;
+    return updated;
+  });
+  const execBody = action.execBody.replace(
+    '`/v1beta/properties/${encodeURIComponent(property)}:runPivotReport`',
+    "`/v1beta/properties/${encodeURIComponent(property.replace(/^properties\\//, ''))}:runPivotReport`",
+  );
+  if (!schemaUpdated || execBody === action.execBody) {
+    throw new Error(
+      `Unable to accept a prefixed property in ${action.candidate.providerId}/${action.candidate.actionSlug}; the upstream template shape changed.`,
+    );
+  }
+  return { ...action, moduleStatements, execBody };
 }
 
 // Nango shares these actions with client-credentials templates. Adapt only the

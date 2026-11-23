@@ -1,6 +1,6 @@
 import type { AgentStreamsConfig } from './types';
 
-export type ExecutionEngine = 'durable' | 'evented' | false;
+export type ExecutionEngine = 'default' | 'evented' | false;
 export type ExecutionEngineDefaults = Omit<AgentStreamsConfig, 'pubsub' | 'cache'>;
 type DurableOption = boolean | AgentStreamsConfig | undefined;
 
