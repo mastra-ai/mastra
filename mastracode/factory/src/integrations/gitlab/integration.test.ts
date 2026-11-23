@@ -786,10 +786,46 @@ describe('PlatformGitLabIntegration', () => {
         await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject({ status: 409 });
       }
       const sources = await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
-      expect(sources.map(source => decodeSourceId(source.id).host)).toEqual(['gitlab.com', 'gitlab.other.com']);
+      expect(sources.map(source => decodeSourceId(source.id).host)).toEqual(['gitlab.com']);
+
+      // Moving it back to the instance it was first used for works again.
+      hostname = 'gitlab.example.com';
+      token = 'returned-token';
+      await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toMatchObject({
+        cloneUrl: 'https://gitlab.example.com/ops/infra.git',
+      });
     });
 
-    it('lists a reconnected self-hosted connection under its new instance once the connection list refreshes', async () => {
+    it('refuses to re-register a connection on another instance, even after a restart', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const storage = new SourceControlStorageInMemory('gitlab');
+      const register = (gitlab: PlatformGitLabIntegration) =>
+        gitlab.versionControl.registerInstallation({
+          orgId: 'org-1',
+          userId: 'user-1',
+          installation: {
+            externalId: 'a1b_selfhosted',
+            accountName: 'ops',
+            accountType: 'GitLab',
+            metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+          },
+        });
+      const first = discovering();
+      first.versionControl.initialize({ storage });
+      const installation = await register(first);
+
+      // A fresh process has no memory of the instance; the stored link does.
+      hostname = 'gitlab.other.com';
+      const restarted = discovering();
+      restarted.versionControl.initialize({ storage });
+
+      await expect(register(restarted)).rejects.toMatchObject({ status: 409 });
+      const stored = await storage.installations.get({ orgId: 'org-1', id: installation.id });
+      expect(stored?.providerMetadata.host).toBe('gitlab.example.com');
+    });
+
+    it('stops using a self-hosted connection that moved to another instance once the connection list refreshes', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       try {
         let hostname = 'gitlab.example.com';
@@ -807,7 +843,21 @@ describe('PlatformGitLabIntegration', () => {
         hostname = 'gitlab.other.com';
         vi.advanceTimersByTime(DEFAULT_CONNECTION_CACHE_TTL_MS);
 
-        expect(await hosts()).toEqual(['gitlab.com', 'gitlab.other.com']);
+        expect(await hosts()).toEqual(['gitlab.com']);
+        await expect(
+          gitlab.intake.resolveIntakeDispatch?.({
+            orgId: 'org-1',
+            externalSource: {
+              type: 'issue',
+              externalId: encodeIssueReference({
+                connectionId: 'a1b_selfhosted',
+                projectId: '7',
+                projectPath: 'ops/infra',
+                issueIid: 3,
+              }),
+            },
+          }),
+        ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('connect gitlab.other.com as a new connection') });
         expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/credentials'))).toBe(false);
       } finally {
         vi.useRealTimers();

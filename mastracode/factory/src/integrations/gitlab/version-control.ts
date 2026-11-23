@@ -471,6 +471,13 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         throw new GitLabApiError('GitLab installation metadata must include a valid connection.', 400);
       }
       const context = await deps.contextForConnection(requestedConnection);
+      // Re-registering must not move repositories already linked on one
+      // instance over to another; the same-instance checks rely on this host.
+      const existing = await sourceControlStorage().installations.findByExternalId({
+        orgId,
+        externalId: installation.externalId,
+      });
+      assertSameInstance(existing?.providerMetadata.host, context.host);
       return sourceControlStorage().installations.upsert({
         orgId,
         connectedByUserId: userId,
@@ -916,7 +923,7 @@ function parseConnection(value: unknown): IntegrationConnection | null {
   return null;
 }
 
-/** A linked repository belongs to the instance it was linked on; refuse to reach it through a connection that now points elsewhere. */
+/** Repositories belong to the instance they were linked on; refuse to reach or re-register them through a connection that now points elsewhere. */
 function assertSameInstance(linkedHost: unknown, connectionHost: string): void {
   if (typeof linkedHost !== 'string' || normalizeHost(linkedHost) === normalizeHost(connectionHost)) return;
   throw new GitLabApiError(

@@ -69,6 +69,10 @@ export class PlatformGitLabIntegration
   // Keyed by the connection record, so a self-hosted instance is re-read
   // whenever the binding re-reads the connection list, e.g. after a reconnect.
   readonly #hosts = new WeakMap<PlatformConnection, Promise<string>>();
+  // The first instance each self-hosted connection was seen on. A connection
+  // stays on that instance: anything already built from it (source ids, linked
+  // repositories, cached contexts) would otherwise reach a different server.
+  readonly #instances = new Map<string, string>();
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
@@ -207,6 +211,10 @@ export class PlatformGitLabIntegration
       repositoryAccessToken: async () => {
         // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
         // Never persist or log the returned credential.
+        const selfHosted = connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID;
+        // Read the instance fresh on both sides of the credential fetch; either
+        // read refuses if the connection has left the instance it was first seen on.
+        if (selfHosted) await this.#freshHost(connection);
         const credential = await this.binding.connect.getCredential(connection.id).catch((error: unknown) => {
           if (error instanceof MastraConnectError && error.code === 'unsupported_credential_type') return null;
           throw error;
@@ -220,28 +228,23 @@ export class PlatformGitLabIntegration
         if (typeof token !== 'string' || !token.trim()) {
           throw new GitLabApiError('GitLab connection did not provide a repository credential.', 502);
         }
-        if (connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID) {
-          // Reconnecting can move a self-hosted connection to another instance.
-          // Re-read the instance after fetching the credential, so a new token
-          // is never paired with the host this context was built for.
-          this.#hosts.delete(connection);
-          const current = await this.#host(connection);
-          if (current !== host) {
-            // Drop the stale connection list so the retry builds its context
-            // from the connection's current instance.
-            this.binding.invalidateConnections();
-            throw new GitLabApiError(
-              `Self-hosted GitLab connection ${connection.id} now points at ${current} instead of ${host}. Retry the operation.`,
-              409,
-            );
-          }
-        }
+        if (selfHosted) await this.#freshHost(connection);
         return token;
       },
     };
   }
 
-  /** gitlab.com for OAuth connections; a self-hosted connection's instance comes from its context, re-read for each fresh connection listing and whenever a credential is fetched. */
+  #freshHost(connection: PlatformConnection): Promise<string> {
+    this.#hosts.delete(connection);
+    return this.#host(connection);
+  }
+
+  /**
+   * gitlab.com for OAuth connections; a self-hosted connection's instance comes
+   * from its context, re-read for each fresh connection listing and around every
+   * credential fetch. Once seen, a connection's instance is fixed: a later read
+   * that names another instance is refused instead of followed.
+   */
   #host(connection: PlatformConnection): Promise<string> {
     if (connection.integrationId !== GITLAB_SELF_HOSTED_INTEGRATION_ID) return Promise.resolve('gitlab.com');
     let host = this.#hosts.get(connection);
@@ -254,6 +257,14 @@ export class PlatformGitLabIntegration
             502,
           );
         }
+        const first = this.#instances.get(connection.id);
+        if (first && first !== hostname) {
+          throw new GitLabApiError(
+            `Self-hosted GitLab connection ${connection.id} now points at ${hostname}, but it was first used for ${first}. A connection stays on one instance: connect ${hostname} as a new connection in Mastra Platform.`,
+            409,
+          );
+        }
+        this.#instances.set(connection.id, hostname);
         return hostname;
       });
       host.catch(() => this.#hosts.delete(connection));
