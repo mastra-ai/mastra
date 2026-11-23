@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { LibSQLStore } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 import { createClient } from 'redis';
 import { describe, expect, it } from 'vitest';
@@ -186,22 +189,33 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
   );
 });
 
+// Runs on every store with workflow step guards (libSQL since COR-1596). Without guards,
+// orchestration events stay local and a dead worker's step can't be reclaimed. libSQL runs only
+// the SIGKILL cases: the store-specific part is the same for both signals, and each case takes
+// over a minute.
 describe('durable agent worker takeover with a surviving API (COR-1469)', () => {
   it.each([
-    ['SIGTERM', false],
-    ['SIGKILL', false],
-    ['SIGTERM', true],
-    ['SIGKILL', true],
+    ['pg', 'SIGTERM', false],
+    ['pg', 'SIGKILL', false],
+    ['pg', 'SIGTERM', true],
+    ['pg', 'SIGKILL', true],
+    ['libsql', 'SIGKILL', false],
+    ['libsql', 'SIGKILL', true],
   ] as const)(
-    'finishes the original caller after %s, already-running survivor: %s',
-    async (signal, warmSurvivor) => {
+    'on %s, finishes the original caller after %s, already-running survivor: %s',
+    async (store, signal, warmSurvivor) => {
       const suffix = randomUUID().replaceAll('-', '');
       const schemaName = `takeover_${suffix}`;
       const prefix = `takeover-${suffix}`;
       const url = process.env.REDIS_URL ?? 'redis://localhost:6381';
       const connectionString =
         process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres';
-      const storage = new PostgresStore({ id: suffix, connectionString, schemaName });
+      // Every role process shares one libSQL file per case.
+      const libsqlDir = store === 'libsql' ? await mkdtemp(join(tmpdir(), 'mastra-takeover-')) : undefined;
+      const libsqlUrl = libsqlDir ? `file:${join(libsqlDir, 'mastra.db')}` : undefined;
+      const storage = libsqlUrl
+        ? new LibSQLStore({ id: suffix, url: libsqlUrl })
+        : new PostgresStore({ id: suffix, connectionString, schemaName });
       const redis = createClient({ url });
       const processes: ManagedProcess[] = [];
       const launch = (role: string) => {
@@ -212,8 +226,10 @@ describe('durable agent worker takeover with a surviving API (COR-1469)', () => 
           env: {
             NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import tsx`,
             TAKEOVER_ROLE: role,
+            TAKEOVER_STORE: store,
             TAKEOVER_SCHEMA: schemaName,
             TAKEOVER_PREFIX: prefix,
+            ...(libsqlUrl ? { TAKEOVER_LIBSQL_URL: libsqlUrl } : {}),
             POSTGRES_CONNECTION_STRING: connectionString,
             REDIS_URL: url,
             MASTRA_WORKERS: role === 'api' ? 'false' : 'orchestration',
@@ -250,8 +266,12 @@ describe('durable agent worker takeover with a surviving API (COR-1469)', () => 
         });
       } finally {
         await Promise.all(processes.map(child => killProcess(child, 'SIGKILL')));
-        await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        if (storage instanceof PostgresStore) {
+          await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+        }
         await storage.close();
+        // Windows can return EBUSY right after SIGKILL.
+        if (libsqlDir) await rm(libsqlDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
         const keys = await redis.keys(`${prefix}:*`);
         if (keys.length) await redis.del(keys);
         await redis.quit();

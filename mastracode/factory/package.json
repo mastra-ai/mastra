@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.31.0-alpha.5",
+  "version": "0.31.0-alpha.6",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "factory-skills"
   ],
   "main": "dist/index.js",

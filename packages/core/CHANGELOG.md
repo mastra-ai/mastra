@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 1.86.0-alpha.5
+
+### Minor Changes
+
+- Added an optional `recommended` flag to `ask_user` options. The flag reaches the host in the suspend payload, so a UI can highlight the choice the agent suggests. It is a display hint only: nothing is selected until the user answers. ([#31146](https://github.com/mastra-ai/mastra/pull/31146))
+
+  ```ts
+  // suspendPayload.options from a suspended ask_user call
+  [{ label: 'staging', recommended: true }, { label: 'production' }];
+  ```
+
 ## 1.86.0-alpha.4
 
 ### Minor Changes

@@ -385,6 +385,16 @@ describe('runChecks', () => {
     await fs.rm(rootDir, { recursive: true, force: true })
   })
 
+  it('keeps MDX parse errors on generated Gateway API pages', async () => {
+    const file = path.join(rootDir, 'src/content/en/docs/mastra-platform/gateway/api/broken.api.mdx')
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, `${VALID_FRONTMATTER}\n\n# Broken\n\n<Unclosed>\n`)
+    const report = await runChecks({ rootDir, categories: ['prose'], skipVale: true })
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({ ruleId: 'mastra/remark-mdx-parse', file: expect.stringContaining('broken.api.mdx') }),
+    )
+  })
+
   it('fails when Vale is not installed unless --no-vale is passed', async () => {
     // The temp root has no scripts/vale/bin/vale; an empty PATH hides any global vale.
     vi.stubEnv('PATH', '')

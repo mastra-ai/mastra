@@ -31,22 +31,34 @@
         "values": ["low", "high"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
+    "openai/gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["low", "high"]
-      }
-    ],
-    "google/gemini-3.5-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "google/gemini-3.8-flash": [
@@ -61,25 +73,19 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-6.1-terra": [
+    "google/gemini-3.5-flash-lite": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "openai/gpt-6.1-sol": [
+    "google/gemini-3.1-flash-lite": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "openai/gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-6-astra": [
+    "anthropic/claude-opus-5.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -91,25 +97,19 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "anthropic/claude-haiku-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-opus-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "anthropic/claude-fable-5.1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "anthropic/claude-haiku-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high"]

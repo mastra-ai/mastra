@@ -4,10 +4,19 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useTargetFilterFields } from '@mastra/playground-ui/domains/datasets';
+import {
+  ExperimentsList,
+  ExperimentsToolbar,
+  getExperimentDatasetOptions,
+  MAX_COMPARED_EXPERIMENTS,
+  NoExperimentsInfo,
+} from '@mastra/playground-ui/domains/experiments';
+import type { ExperimentsFilters } from '@mastra/playground-ui/domains/experiments';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useDatasets, useDatasetsByIds } from '@mastra/react/hooks/datasets';
+import { useDatasetMutations, useDatasets, useDatasetsByIds } from '@mastra/react/hooks/datasets';
 import { useExperimentsListMetrics, useInfiniteExperiments } from '@mastra/react/hooks/experiments';
 import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
 import { useReviewSummary } from '@mastra/react/hooks/review';
@@ -16,14 +25,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
-import {
-  ExperimentsList,
-  ExperimentsToolbar,
-  getExperimentDatasetOptions,
-  NoExperimentsInfo,
-} from '@/domains/experiments';
-import { MAX_COMPARED_EXPERIMENTS } from '@/domains/experiments/components/comparison/constants';
-import type { ExperimentsFilters } from '@/domains/experiments/components/experiments-filter-bar';
+import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 import {
@@ -54,6 +56,7 @@ export default function Experiments() {
 
   const datasetFilter = searchParams.get('dataset') ?? 'all';
   const { targetType, targetId } = useTargetFilterParams();
+  const targetFields = useTargetFilterFields(targetType);
 
   const handleFiltersChange = (next: ExperimentsFilters) => {
     setSearch(next.search);
@@ -90,6 +93,11 @@ export default function Experiments() {
     orderBy: orderBy,
   });
   const { data: reviewSummary } = useReviewSummary();
+  const targetRegistries = useTargetRegistries();
+  const { deleteExperiment } = useDatasetMutations();
+  const handleDeleteExperiment = async (experimentId: string) => {
+    await deleteExperiment.mutateAsync(experimentId);
+  };
   const { supportsMetrics } = useObservabilityStorageCapabilities();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
@@ -249,12 +257,14 @@ export default function Experiments() {
           datasetOptions={experimentDatasetOptions}
           targetType={targetType}
           targetId={targetId}
+          targetFields={targetFields}
           onFiltersChange={handleFiltersChange}
           selection={{
             selectedIds,
             onClearSelection: () => setSelectedExperimentIds([]),
             onCompare: executeCompare,
             compareDisabledReason,
+            onDeleteExperiment: handleDeleteExperiment,
           }}
           comparableDataset={comparableDataset}
         />
@@ -275,6 +285,8 @@ export default function Experiments() {
         setEndOfListElement={setEndOfListElement}
         sort={sort}
         onSortChange={onSortChange}
+        targetRegistries={targetRegistries}
+        onDeleteExperiment={handleDeleteExperiment}
         selection={{
           selectedExperimentIds: selectedIds,
           onToggleSelection: toggleExperimentSelection,

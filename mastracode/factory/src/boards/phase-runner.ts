@@ -28,8 +28,8 @@ function workItemReference(item: FactoryStageRuleContext['item']): string {
  *
  * Card detail reaches the agent through the `factory-work-item` state signal, so the run only
  * names the work item and adds the runner's instructions. Entering from another phase starts
- * the skill even when that phase's agent shares the context and made the move: the skill is
- * queued onto its run. Re-entering the same phase supersedes the run in flight and resumes the
+ * the skill even when that phase's agent shares the context and made the move: the skill starts
+ * once that agent's run ends. Re-entering the same phase supersedes the run in flight and resumes the
  * skill with the fresh arguments.
  */
 export function phaseRunDecision(

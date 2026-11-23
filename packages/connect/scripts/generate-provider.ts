@@ -1332,6 +1332,9 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   if (action.candidate.providerId === 'posthog' && action.candidate.actionSlug === 'run-query') {
     return adaptPosthogRunQuery(action);
   }
+  if (action.candidate.providerId === 'anthropic' && action.candidate.actionSlug === 'cancel-message-batch') {
+    return acceptNullBatchTimestamps(action);
+  }
   if (DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) && action.candidate.actionSlug === 'get-user-drive') {
     return adaptDelegatedGetUserDrive(action);
   }
@@ -1355,6 +1358,36 @@ function bypassSharedLockOnDelete(action: ExtractedAction): ExtractedAction {
     );
   }
   return { ...action, execBody };
+}
+
+// Anthropic answers a cancel with null for the timestamps and results URL a
+// batch doesn't have yet, and the template only accepts a string or an absent
+// field, so a cancel that succeeded failed validation. Accept null and leave
+// the field out of the result, as get/list/create already do. Drop this once
+// the upstream template accepts null.
+function acceptNullBatchTimestamps(action: ExtractedAction): ExtractedAction {
+  const fields = ['archived_at', 'cancel_initiated_at', 'ended_at', 'results_url'];
+  let rewrites = 0;
+  const moduleStatements = action.moduleStatements.map(statement => {
+    if (!statement.startsWith('const ProviderMessageBatchSchema')) return statement;
+    return fields.reduce((text, field) => {
+      const next = text.replace(`${field}: z.string().optional(),`, `${field}: z.string().nullish(),`);
+      if (next !== text) rewrites++;
+      return next;
+    }, statement);
+  });
+  let execBody = action.execBody;
+  for (const field of fields) {
+    const next = execBody.replace(`batch.${field} !== undefined`, `batch.${field} != null`);
+    if (next !== execBody) rewrites++;
+    execBody = next;
+  }
+  if (rewrites !== fields.length * 2) {
+    throw new Error(
+      `Unable to accept null batch fields in ${action.candidate.providerId}/${action.candidate.actionSlug}; the upstream template shape changed.`,
+    );
+  }
+  return { ...action, moduleStatements, execBody };
 }
 
 // Nango shares these actions with client-credentials templates. Adapt only the

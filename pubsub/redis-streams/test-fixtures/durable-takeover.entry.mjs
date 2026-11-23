@@ -1,15 +1,22 @@
 import { Agent } from '@mastra/core/agent';
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { PostgresStore } from '@mastra/pg';
 import { RedisStreamsPubSub } from '../src/index.ts';
 
 const role = process.env.TAKEOVER_ROLE;
-const storage = new PostgresStore({
-  id: `takeover-${role}`,
-  connectionString: process.env.POSTGRES_CONNECTION_STRING,
-  schemaName: process.env.TAKEOVER_SCHEMA,
-});
+// Dynamic imports so the libsql run never loads @mastra/pg.
+let storage;
+if (process.env.TAKEOVER_STORE === 'libsql') {
+  const { LibSQLStore } = await import('@mastra/libsql');
+  storage = new LibSQLStore({ id: `takeover-${role}`, url: process.env.TAKEOVER_LIBSQL_URL });
+} else {
+  const { PostgresStore } = await import('@mastra/pg');
+  storage = new PostgresStore({
+    id: `takeover-${role}`,
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+    schemaName: process.env.TAKEOVER_SCHEMA,
+  });
+}
 const pubsub = new RedisStreamsPubSub({
   url: process.env.REDIS_URL,
   keyPrefix: process.env.TAKEOVER_PREFIX,

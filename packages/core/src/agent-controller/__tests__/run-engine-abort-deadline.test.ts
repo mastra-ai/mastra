@@ -157,6 +157,33 @@ describe('SessionRunEngine — abort deadline', () => {
     ]);
   });
 
+  it('Given a subscribed run stopped by a memory failure, Then its end names the memory failure and the next run ends plainly', async () => {
+    const { engine, events, session } = createHarness();
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
+        yield chunk({
+          type: 'data-om-observation-failed',
+          data: { cycleId: 'c1', operationType: 'observation', error: 'insufficient_quota', durationMs: 5 },
+          runId: 'run-1',
+        } as unknown as StreamChunk);
+        yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-2' });
+        session.run.requestAbort();
+        yield chunk({ type: 'abort', payload: {}, runId: 'run-2' });
+      })(),
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' },
+      { type: 'agent_end', reason: 'aborted' },
+    ]);
+  });
+
   it('Given an aborted subscribed run that finishes within the grace period, Then the stale deadline does not kill a follow-up run', async () => {
     vi.useFakeTimers();
     const { engine, events, session } = createHarness();
