@@ -72,21 +72,21 @@ describe.skipIf(process.platform === 'win32').each([1, 2] as const)(
           await workflows.writeWorkflowRunCheckpoint({ workflowName, runId, header, steps: context, state: value });
         }
         const load = () => workflows.loadWorkflowSnapshot({ workflowName, runId, storageVersion });
-        // Storage v2 appends one entry per accepted write.
-        const countEntries = async () => {
+        // A storage v2 append moves the run's `lastSeq` on by its entry count; a rejected one leaves it.
+        const lastSeq = async () => {
           const client = createClient({ url: env.dbUrl });
           try {
             const { rows } = await client.execute({
-              sql: 'SELECT count(*) AS n FROM mastra_workflow_run_entries WHERE run_id = ?',
-              args: [runId],
+              sql: 'SELECT lastSeq FROM mastra_workflow_runs WHERE workflow_name = ? AND run_id = ?',
+              args: [workflowName, runId],
             });
-            return Number(rows[0]!.n);
+            return Number(rows[0]!.lastSeq);
           } finally {
             client.close();
           }
         };
         const before = (await load())!;
-        const entriesBefore = await countEntries();
+        const lastSeqBefore = storageVersion === 2 ? await lastSeq() : undefined;
 
         const eventIds = ['second-a', 'second-b'];
         const peers = await Promise.all(
@@ -141,7 +141,8 @@ describe.skipIf(process.platform === 'win32').each([1, 2] as const)(
             step: { status: 'running', startedAt: 1, payload: {}, metadata: { startedBy: winner } },
           },
         });
-        if (storageVersion === 2) expect(await countEntries()).toBe(entriesBefore + 1);
+        // Only the winner's one-entry append landed.
+        if (storageVersion === 2) expect(await lastSeq()).toBe(lastSeqBefore! + 1);
       },
       PEER_TIMEOUT_MS + 15_000,
     );
