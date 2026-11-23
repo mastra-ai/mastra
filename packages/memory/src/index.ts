@@ -388,6 +388,19 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
   );
 }
 
+const DEFAULT_WORKING_MEMORY_TEMPLATE = `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`;
+
 /**
  * True when the installed `@mastra/core` builds its WorkingMemory processor with the memory instance as the
  * instruction provider. Cores from before `MastraMemory.getWorkingMemoryInstruction` existed (up to and
@@ -2362,18 +2375,7 @@ ${workingMemory}`;
     });
   }
 
-  public defaultWorkingMemoryTemplate = `
-# User Information
-- **First Name**: 
-- **Last Name**: 
-- **Location**: 
-- **Occupation**: 
-- **Interests**: 
-- **Goals**: 
-- **Events**: 
-- **Facts**: 
-- **Projects**: 
-`;
+  public defaultWorkingMemoryTemplate = DEFAULT_WORKING_MEMORY_TEMPLATE;
 
   private builtInWorkingMemoryToolInstruction({
     template,
@@ -2459,7 +2461,7 @@ ${data || 'No working memory data available.'}
 Notes:
 - Update memory whenever referenced information changes
 ${
-  templateContent !== this.defaultWorkingMemoryTemplate
+  templateContent !== DEFAULT_WORKING_MEMORY_TEMPLATE
     ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
     : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 `
@@ -4052,7 +4054,7 @@ Notes:
       useVNext: workingMemory !== undefined && 'version' in workingMemory && workingMemory.version === 'vnext',
       readOnly: effectiveConfig.readOnly,
       agentManaged: workingMemory?.agentManaged,
-      defaultTemplate: this.defaultWorkingMemoryTemplate,
+      defaultTemplate: DEFAULT_WORKING_MEMORY_TEMPLATE,
       fallbackProcessor,
       getWorkingMemoryTemplate: args => this.getWorkingMemoryTemplate(args),
       getWorkingMemoryInstruction: args => this.getWorkingMemoryInstruction(args),

@@ -375,9 +375,11 @@ describe.each(['current core', 'older core without an instruction provider'] as 
 
       await createAgent(memory).generate('hello', { memory: { thread: 'thread-vnext-default', resource: RESOURCE } });
 
+      const fromMemory = await memory.getSystemMessage({ threadId: 'thread-vnext-default', resourceId: RESOURCE });
       const system = systemPromptSentToModel();
-      expect(system).toContain("Only store information if it's in the working memory template");
-      expect(system).not.toContain("If you're unsure whether to store something, store it");
+      expect(fromMemory).toContain("Only store information if it's in the working memory template");
+      expect(fromMemory).not.toContain("If you're unsure whether to store something, store it");
+      expect(system).toContain(fromMemory!);
     });
 
     it('preserves object-valued thread workingMemory metadata consistently with core', async () => {
