@@ -507,6 +507,40 @@ describe('ConnectGithubTransport', () => {
       ]);
     });
 
+    it('finds a reinstalled app at its new installation and mints there', async () => {
+      const { platform, tokens } = await harness();
+      await tokens.installationToken('conn-github');
+      tokens.invalidateInstallation('conn-github');
+      platform.contexts.set('conn-github', { connection_config: { installation_id: '950' }, metadata: null });
+
+      expect(await tokens.installationToken('conn-github')).toBeTruthy();
+      expect(platform.count('GET', '/v2/connections/conn-github/context')).toBe(2);
+      expect(platform.requests.filter(request => request.method === 'POST').map(request => request.path)).toEqual([
+        '/v2/connections/conn-github/github/app/installations/900/access_tokens',
+        '/v2/connections/conn-github/github/app/installations/900/access_tokens',
+        '/v2/connections/conn-github/github/app/installations/950/access_tokens',
+      ]);
+      // And keeps the new one.
+      tokens.invalidateInstallation('conn-github');
+      await tokens.installationToken('conn-github');
+      expect(platform.count('GET', '/v2/connections/conn-github/context')).toBe(2);
+    });
+
+    it('does not retry a refused mint when the installation has not moved', async () => {
+      const { platform, tokens } = await harness();
+      await tokens.installationToken('conn-github');
+      tokens.invalidateInstallation('conn-github');
+      platform.contexts.set('conn-github', { connection_config: { installation_id: '950' }, metadata: null });
+      await tokens.installationToken('conn-github');
+      tokens.invalidateInstallation('conn-github');
+      // The mint is refused, but the connection still names installation 950.
+      platform.credentials.delete('conn-github');
+
+      await expect(tokens.installationToken('conn-github')).rejects.toBeInstanceOf(Error);
+      expect(platform.count('GET', '/v2/connections/conn-github/context')).toBe(3);
+      expect(platform.requests.filter(request => request.method === 'POST')).toHaveLength(4);
+    });
+
     it('refuses to mint for a connection that does not name its installation', async () => {
       const { platform, tokens } = await harness();
       platform.contexts.set('conn-github', { connection_config: {}, metadata: null });

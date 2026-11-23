@@ -1,3 +1,4 @@
+import { MastraConnectError } from '@mastra/connect';
 import type { ConnectClient, ConnectionCredential } from '@mastra/connect';
 
 import { FACTORY_GITHUB_PROVIDER_KEY } from './connect-events.js';
@@ -60,7 +61,7 @@ export class GithubConnectTokens {
   readonly #now: () => number;
   readonly #userPat: GithubUserPatSource;
   readonly #installations = new Map<string, Cached<string>>();
-  /** A connection's GitHub App installation id; it never changes for a connection. */
+  /** A connection's GitHub App installation id, until a mint refuses it (the app was reinstalled). */
   readonly #installationIds = new Map<string, number>();
   readonly #users = new Map<string, Cached<GithubUserToken | null>>();
   readonly #inflight = new Map<string, Promise<unknown>>();
@@ -84,7 +85,7 @@ export class GithubConnectTokens {
     return this.#mint(connectionId, key, { repositories, permissions });
   }
 
-  /** Drops every cached token of the connection, scoped or not. */
+  /** Drops every cached token of the connection, scoped or not. A moved installation is found by the next mint. */
   invalidateInstallation(connectionId: string): void {
     for (const key of this.#installations.keys()) {
       if (key === connectionId || key.startsWith(`${connectionId}\u0000`)) this.#installations.delete(key);
@@ -95,16 +96,37 @@ export class GithubConnectTokens {
     const cached = this.#installations.get(key);
     if (cached && cached.expiresAt > this.#now()) return Promise.resolve(cached.value);
     return this.#once(`installation:${key}`, async () => {
-      const installationId = await this.#installationId(connectionId);
-      // GitHub's own endpoint, served under the connection: the platform signs it with the app's key.
-      const minted = await this.#connect.request<MintedInstallationToken>(
-        'POST',
-        `/v2/connections/${encodeURIComponent(connectionId)}/github/app/installations/${installationId}/access_tokens`,
-        { body },
-      );
+      const cachedId = this.#installationIds.get(connectionId);
+      let minted: MintedInstallationToken;
+      try {
+        minted = await this.#request(connectionId, await this.#installationId(connectionId), body);
+      } catch (error) {
+        // A reinstalled app has a new installation behind the same connection,
+        // so the platform refuses the old one (404) or GitHub no longer has it
+        // (410). Read the connection's installation again, and retry once if it moved.
+        if (!isGone(error)) throw error;
+        this.#installationIds.delete(connectionId);
+        if (cachedId === undefined) throw error;
+        const installationId = await this.#installationId(connectionId);
+        if (installationId === cachedId) throw error;
+        minted = await this.#request(connectionId, installationId, body);
+      }
       this.#installations.set(key, { value: minted.token, expiresAt: this.#expiry(minted.expires_at) });
       return minted.token;
     });
+  }
+
+  #request(
+    connectionId: string,
+    installationId: number,
+    body: Partial<GithubTokenScope>,
+  ): Promise<MintedInstallationToken> {
+    // GitHub's own endpoint, served under the connection: the platform signs it with the app's key.
+    return this.#connect.request<MintedInstallationToken>(
+      'POST',
+      `/v2/connections/${encodeURIComponent(connectionId)}/github/app/installations/${installationId}/access_tokens`,
+      { body },
+    );
   }
 
   async #installationId(connectionId: string): Promise<number> {
@@ -164,6 +186,12 @@ export class GithubConnectTokens {
     this.#inflight.set(key, promise);
     return promise;
   }
+}
+
+function isGone(error: unknown): boolean {
+  return (
+    error instanceof MastraConnectError && error.source === 'platform' && (error.status === 404 || error.status === 410)
+  );
 }
 
 function userKey(orgId: string, userId: string): string {
