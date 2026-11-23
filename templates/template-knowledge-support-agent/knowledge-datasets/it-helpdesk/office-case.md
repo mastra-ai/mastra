@@ -1,5 +1,5 @@
-# Caso fictício TI-104 da unidade Escritório
+# Fictional office case IT-104
 
-Registro fictício de 2026-11-15, técnica Ana. Sintoma: conexão indisponível após selecionar um adaptador que não era o utilizado. Observação: uma consulta local de configuração ajudou o operador a identificar o adaptador ativo, sem registrar a saída completa. Com autorização, o operador selecionou o adaptador previsto no aplicativo do exemplo. Resultado confirmado: três verificações locais autorizadas conseguiram acesso. Aplica-se somente à seleção incorreta confirmada; não conclua que toda falha tem a mesma causa.
+On 2026-11-15, technician Ana recorded that the connection became unavailable after the operator selected the wrong adapter. A local configuration check helped the operator identify the active adapter. The operator kept the full output out of the record and, with authorization, selected the intended adapter in the example application. Three authorized local checks confirmed access. This outcome applies only when the wrong adapter has been confirmed.
 
-Marcador privado sintético: HELPDESK_OFFICE_VIOLET.
+The synthetic private marker is `HELPDESK_OFFICE_VIOLET`.

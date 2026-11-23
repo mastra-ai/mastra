@@ -118,15 +118,14 @@ export const examples: Record<string, RuntimeExample> = {
     ...defaults,
     id: 'it-helpdesk',
     initialDataset: 'it-helpdesk',
-    locale: 'pt-BR',
     policy: { kind: 'tenant', path: 'policies/helpdesk-safety', pageKey: 'helpdesk-policy' },
     profiles: helpdeskProfiles,
     reviewers: helpdeskReviewers,
     topicTerms: {
-      connectivity: ['conectividade', 'conexão', 'conexões', 'configuração', 'rede', 'adaptador', 'tcp', 'ipconfig'],
+      connectivity: ['connection', 'connections', 'configuration', 'network', 'adapter', 'adapters', 'tcp', 'ipconfig'],
     },
     instructions:
-      'Atenda em português do Brasil. Ajude a equipe de TI a investigar conectividade do Windows usando a referência pública e o histórico autorizado. Pergunte qual adaptador está ativo e quais sintomas foram observados. ipconfig /all exibe a configuração TCP/IP; isso não comprova conectividade nem uma solução. Oriente apenas; não execute comandos, não altere a rede e não solicite saídas completas com identificadores privados. Separe observações confirmadas de hipóteses.',
+      'Help IT technicians investigate Windows connectivity using the public reference and the case history they can access. Ask which adapter is active and what symptoms they observed. Use ipconfig /all as evidence of TCP/IP configuration. Ask for additional evidence before concluding that the connection works or a fix succeeded. Provide guidance only. Leave command execution and network changes to the authorized operator. Ask only for relevant observations that omit private identifiers. Distinguish confirmed observations from hypotheses.',
     datasets: [
       {
         id: 'it-helpdesk',

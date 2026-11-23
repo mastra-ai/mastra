@@ -1,7 +1,7 @@
-# Consulta inicial da configuração de rede no Windows
+# Check network configuration on Windows
 
-Resumo original da referência pública Microsoft Learn, verificada em 2026-11-20: `ipconfig /all` exibe a configuração TCP/IP completa dos adaptadores. Essa consulta fornece observações; por si só não identifica a causa de uma falha nem confirma uma correção.
+The `ipconfig /all` command shows the full TCP/IP configuration for all adapters. Use that information as one observation in the investigation. You need additional evidence to identify the cause of a failure or verify a fix.
 
-No exemplo, pergunte qual adaptador está em uso e peça somente a descrição necessária, sem copiar a saída completa nem identificadores privados. Compare observações com a política autorizada e trate resultados anteriores como evidência limitada ao cenário descrito. Alterações de configuração exigem autorização; este guia não prescreve reinicializações nem comandos de alteração.
+Ask which adapter is in use and request only the details needed for the case. Keep full command output and private identifiers out of the conversation. Compare the observations with the approved policy and check whether prior cases apply to the current symptoms. Get authorization before changing settings.
 
-Fonte: https://learn.microsoft.com/pt-br/windows-server/administration/windows-commands/ipconfig
+[Microsoft Learn reference for `ipconfig`](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ipconfig)

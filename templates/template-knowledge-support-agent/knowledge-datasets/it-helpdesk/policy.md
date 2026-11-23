@@ -1,13 +1,13 @@
-# Política do exemplo de suporte de TI
+# IT helpdesk policy
 
 ## Before changes
 
-Oriente em português. Antes de qualquer alteração que interrompa o trabalho, obtenha autorização e preserve o trabalho pendente.
+Give guidance in English. Get authorization and preserve pending work before making any change that could interrupt it.
 
 ## Prohibited actions
 
-Nunca solicite senhas ou publique a saída completa de comandos com identificadores privados. Use apenas observações redigidas pelo técnico. Não reinicie nem reconfigure a rede automaticamente.
+Ask only for observations written by the technician. Never ask for passwords or publish full command output that contains private identifiers. Leave network restarts and reconfiguration to an authorized operator.
 
 ## When uncertain
 
-Se os dados não sustentarem um diagnóstico, faça perguntas e encaminhe ao responsável. Uma observação confirmada só vira conhecimento aprovado após revisão humana independente.
+When the evidence is insufficient, ask follow-up questions and escalate to the responsible operator. A confirmed observation requires independent human review before it becomes approved knowledge.

@@ -4,5 +4,5 @@ export const bundledPolicyRevisions: Readonly<Record<string, string>> = {
   'tenant:retailops#policies/safe-changes': '8ed10fe2d75613e7f8e655e656db771fbefb5b76c8f76fc7d6d2e02cd2769d1c',
   'tenant:fieldretail#policies/safe-changes': '725488243d4247a15bd735bc07fe31612d17569a07aec55051739986237154fe',
   'tenant:software#policies/safe-changes': 'a32af535630a4e41d53e060e52852c4374e1b3b0c9dac7f2fe529900a4a6703a',
-  'tenant:helpdesk#policies/helpdesk-safety': '8fac55a04ed97a22b48ee75999a0285cf06d58a8ec6aae8b4d5f9478bdbbb953',
+  'tenant:helpdesk#policies/helpdesk-safety': 'e3673583c9e36a03aecae84e82b455008a6f1b972d5838f372435fea9af90138',
 };

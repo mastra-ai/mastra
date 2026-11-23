@@ -2,13 +2,13 @@
 
 The default retail support example uses Square Terminal reference summaries and an example team policy. Run `npm run knowledge:seed` to load the initial dataset for the selected example. Load the retail history separately when you want fictional cases in customer history.
 
-| Dataset                | Contents                                                                                                               |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `retail-pos-docs`      | Network, payment and printer guides, plus the standing safety policy. This is the retail default.                      |
-| `retail-pos-history`   | Fictional case history and follow-up notes for two customers and a second tenant.                                      |
-| `software-integration` | An HTTP authentication guide, an integration policy and one fictional case. This is the software integration default.  |
-| `it-helpdesk`          | Portuguese Windows configuration guide, its own standing policy, and approved fictional history for two access groups. |
-| `retail-pos`           | Earlier retail example with the `north-*` and `south-store` profiles.                                                  |
+| Dataset                | Contents                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `retail-pos-docs`      | Network, payment and printer guides, plus the standing safety policy. This is the retail default.                        |
+| `retail-pos-history`   | Fictional case history and follow-up notes for two customers and a second tenant.                                        |
+| `software-integration` | An HTTP authentication guide, an integration policy and one fictional case. This is the software integration default.    |
+| `it-helpdesk`          | A Windows network configuration guide, a standing helpdesk policy, and approved fictional history for two access groups. |
+| `retail-pos`           | Earlier retail example with the `north-*` and `south-store` profiles.                                                    |
 
 Each rendered page body can contain up to 1,000,000 UTF-16 code units, including expanded wiki links and generated attribution. The combined rendered page bodies and notes in one dataset can contain up to 32,000,000 code units.
 
@@ -76,9 +76,9 @@ npm run dev
 
 Use the `integration-team` token. In **Support**, ask “Our HTTP integration returned 401. What evidence should I check?” Look for a citation to the RFC 9110 guide, a question about the authentication challenge, and the applicability of the fictional case. To exercise review, submit a structured fictional confirmation as `integration-team` and use the `integration-reviewer` token for **Review** with its returned reference. Follow the [confirmation and review steps](studio-walkthrough.md#2-confirm-and-review-a-private-finding).
 
-## Try the Portuguese IT helpdesk example
+## Try the IT helpdesk example
 
-Stop the running server, then select the use case and an isolated local database in the same shell used for both commands.
+Stop the running server. Use the same shell to select the example, seed its local database, and start Studio.
 
 ```sh
 export SUPPORT_EXAMPLE=it-helpdesk
@@ -88,7 +88,9 @@ npm run knowledge:seed
 npm run dev
 ```
 
-Use `helpdesk-office` in **Support** and ask “Preciso investigar uma conexão e sua configuração.” Expect Portuguese guidance grounded in the Microsoft Learn summary, the `tenant:helpdesk#policies/helpdesk-safety` policy, and the approved fictional office history. `ipconfig /all` displays TCP/IP configuration; a configuration observation alone does not prove a cause or resolution.
+If you've already seeded the Portuguese version, use the same helpdesk database URL and run the seed again before starting Studio to update its pages to English.
+
+Use `helpdesk-office` in **Support** and ask “I need to investigate a Windows network connection. What should I check?” Look for guidance grounded in the Microsoft Learn summary, the `tenant:helpdesk#policies/helpdesk-safety` policy, and the approved fictional office history. `ipconfig /all` displays TCP/IP configuration. Establishing a cause or verifying a fix requires additional evidence.
 
 | Profile                    | Actor   | Customer scope             | Access                                                          |
 | -------------------------- | ------- | -------------------------- | --------------------------------------------------------------- |
@@ -100,13 +102,13 @@ Use `helpdesk-office` in **Support** and ask “Preciso investigar uma conexão 
 
 Both groups read the same helpdesk guide and policy; neither reads the other's private cases or conversations. In **Knowledge**, inspect `customer:helpdesk:office#cases/network-check` with the office token and check that the branch token cannot open it. The branch has its own fictional case at the same path under its own scope.
 
-Follow the [structured confirmation steps](studio-walkthrough.md#2-confirm-and-review-a-private-finding), using the `helpdesk-office` token and its Studio thread. For example:
+Submit a fictional confirmation using the `helpdesk-office` token and its Studio thread. Replace `<guide version>` with the version listed for `network-guide` in the seed output, then follow the [structured confirmation steps](studio-walkthrough.md#2-confirm-and-review-a-private-finding).
 
 ```json
 {
   "threadId": "<office technician thread from Studio URL>",
-  "observation": "O operador identificou o adaptador ativo na consulta local sem copiar identificadores privados.",
-  "outcome": "Com autorização, a seleção incorreta foi corrigida e três verificações tiveram sucesso. Referência pública docs:helpdesk#guides/network-configuration, versão 1."
+  "observation": "The operator identified the active adapter in a local configuration check without copying private identifiers.",
+  "outcome": "The operator corrected the adapter selection with authorization, and three checks succeeded. Public reference docs:helpdesk#guides/network-configuration, version <guide version>."
 }
 ```
 

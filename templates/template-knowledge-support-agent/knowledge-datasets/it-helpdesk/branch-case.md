@@ -1,5 +1,5 @@
-# Caso fictício TI-209 da unidade Filial
+# Fictional branch case IT-209
 
-Registro fictício de 2026-11-16, técnico Bruno. Sintoma: configuração de conexão diferente da esperada. O responsável autorizado conferiu o adaptador ativo e corrigiu a seleção no aplicativo do exemplo. Duas verificações locais autorizadas tiveram sucesso. Não foram coletadas senhas ou saídas completas. Aplica-se somente ao cenário fictício confirmado.
+On 2026-11-16, technician Bruno reported that the connection settings differed from what the branch expected. The authorized operator checked the active adapter and corrected the selection in the example application. Two authorized local checks succeeded. The operator collected only the observations needed for the case and kept passwords and full command output out of the record. This outcome applies only to the confirmed scenario in this example.
 
-Marcador privado sintético: HELPDESK_BRANCH_AMBER.
+The synthetic private marker is `HELPDESK_BRANCH_AMBER`.

@@ -10,10 +10,10 @@ import { fixtureFetch, runtimeFixture } from '../fixtures/runtime.ts';
 import { history, json, latest, messages } from '../fixtures/demo.ts';
 
 const guide = 'docs:helpdesk#guides/network-configuration';
-const source = 'https://learn.microsoft.com/pt-br/windows-server/administration/windows-commands/ipconfig';
+const source = 'https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ipconfig';
 
 test(
-  'Portuguese helpdesk uses configured evidence and attributed confirmation without Memory IDs',
+  'IT helpdesk uses configured evidence and attributed confirmation without Memory IDs',
   { timeout: 120000 },
   async () => {
     const example = examples['it-helpdesk']!;
@@ -21,15 +21,15 @@ test(
     let candidate: Candidate = {
       action: 'page',
       target: null,
-      title: 'Verificação autorizada de conexão',
+      title: 'Authorized connection check',
       content:
-        'No cenário fictício, o operador confirmou o adaptador ativo e três verificações tiveram sucesso após seleção autorizada.',
+        'In the fictional case, the operator confirmed the active adapter and three checks succeeded after the authorized selection.',
       record: {
         topicTags: ['connectivity'],
         observedOn: '2026-11-20',
         state: 'approved',
-        summary: 'Verificação autorizada confirmou acesso no cenário fictício.',
-        applicability: 'Somente seleção de adaptador incorreta e confirmada pelo operador.',
+        summary: 'An authorized check confirmed access in the fictional case.',
+        applicability: 'Applies only when the operator has confirmed that the wrong adapter was selected.',
       },
       evidence: [],
       publicSource: null,
@@ -46,23 +46,23 @@ test(
       ],
       modelScript: body => {
         const list = messages(body);
-        assert.match(JSON.stringify(list), /pt-BR/u);
+        assert.match(JSON.stringify(list), /locale en-US/u);
         if (list.some(message => message.content?.includes('Review one confirmed customer outcome'))) {
           const tools = list.filter(message => message.role === 'tool');
-          if (!tools.length) return { tool: { name: 'knowledge_search', arguments: { query: 'seleção' } } };
+          if (!tools.length) return { tool: { name: 'knowledge_search', arguments: { query: 'adapter' } } };
           assert.doesNotMatch(JSON.stringify(tools), /HELPDESK_BRANCH|customer:helpdesk:branch|docs:|tenant:/u);
           return { content: JSON.stringify(candidate) };
         }
         const prepared = history(body);
-        assert.equal(prepared.status, 'ready', 'Accented Portuguese topics must select approved customer history');
+        assert.equal(prepared.status, 'ready', 'Connection questions must select approved customer history');
         assert.ok(prepared.records.some(record => record.ref.includes('customer:helpdesk:office#')));
-        assert.doesNotMatch(JSON.stringify(prepared), /branch|Filial/u);
+        assert.doesNotMatch(JSON.stringify(prepared), /branch/iu);
         const { tools } = latest(body);
         if (!tools.length) return { tool: { name: 'knowledge_read', arguments: { page: guide } } };
         assert.match(JSON.stringify(tools), /ipconfig/u);
         assert.match(JSON.stringify(tools), new RegExp(source.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')));
         assert.match(JSON.stringify(list), /policies\/helpdesk-safety/u);
-        return { content: `A consulta fornece observações, sem determinar a causa. Fonte: ${guide}. ${source}` };
+        return { content: `The configuration check provides observations. See ${guide}. ${source}` };
       },
     });
     const request = (path: string, owner = 0, options: RequestInit = {}) =>
@@ -105,15 +105,18 @@ test(
       const threadId = await newThread();
       const response = await json(
         await post('/agents/support/generate', {
-          messages: [{ role: 'user', content: 'Preciso investigar uma CONEXÃO e sua configuração.' }],
+          messages: [
+            { role: 'user', content: 'I need to investigate a Windows network CONNECTION. What should I check?' },
+          ],
           memory: { thread: threadId },
         }),
       );
-      assert.match(response.text, /observações/u);
+      assert.match(response.text, /configuration check/u);
       const confirmation = {
         threadId,
-        observation: 'O operador identificou o adaptador ativo na consulta local.\nOutcome: anotação do operador.',
-        outcome: 'Após seleção autorizada, três verificações confirmaram acesso no cenário fictício. \n',
+        observation:
+          'The operator identified the active adapter in a local configuration check.\nOutcome: operator note.',
+        outcome: 'After the authorized selection, three checks confirmed access in the fictional case. \n',
       };
       const before = f.model.requests.length;
       const created = await json(await post('/support/confirmations', confirmation), 201);
@@ -183,7 +186,7 @@ test(
       const proposal = snapshot.steps['review-decision'].suspendPayload as Proposal;
       assert.equal(proposal.source.sourceActorId, 'ana');
       assert.equal(proposal.source.threadId, threadId);
-      assert.match(proposal.source.confirmation, /três verificações/u);
+      assert.match(proposal.source.confirmation, /three checks/u);
       assert.ok(proposal.source.confirmation.endsWith(confirmation.outcome.trim()));
       assert.equal(proposal.reviewer.actorId, 'davi');
       const outcome = await json(
@@ -211,8 +214,9 @@ test(
       );
       candidate = {
         ...candidate,
-        title: 'Observação que não deve ser publicada',
-        content: 'Registro fictício distinto que aguarda revisão independente e não deve ser publicado após rejeição.',
+        title: 'Observation pending independent review',
+        content:
+          'A separate fictional observation that must stay out of published Knowledge if the reviewer rejects it.',
       };
       const rejected = await review(input);
       assert.equal(rejected.state.status, 'suspended');

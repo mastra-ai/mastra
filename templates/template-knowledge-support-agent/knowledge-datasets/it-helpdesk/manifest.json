@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "it-helpdesk",
-  "version": "2026-11-20.1",
+  "version": "2026-11-23.1",
   "pages": [
     {
       "key": "helpdesk-policy",
       "path": "policies/helpdesk-safety",
-      "title": "Política do suporte de TI",
+      "title": "IT helpdesk policy",
       "file": "policy.md",
       "scope": {
         "kind": "tenant",
@@ -21,7 +21,7 @@
     {
       "key": "network-guide",
       "path": "guides/network-configuration",
-      "title": "Consulta de configuração TCP/IP",
+      "title": "Windows TCP/IP configuration",
       "file": "network.md",
       "scope": {
         "kind": "docs",
@@ -30,15 +30,15 @@
       "kind": "reference",
       "source": {
         "kind": "original summary of public Microsoft documentation",
-        "url": "https://learn.microsoft.com/pt-br/windows-server/administration/windows-commands/ipconfig",
-        "verifiedOn": "2026-11-20"
+        "url": "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ipconfig",
+        "verifiedOn": "2026-11-23"
       },
       "links": ["helpdesk-policy"]
     },
     {
       "key": "office-case",
       "path": "cases/network-check",
-      "title": "Caso fictício de conexão: office",
+      "title": "Fictional office connectivity case",
       "file": "office-case.md",
       "scope": {
         "kind": "customer",
@@ -49,8 +49,8 @@
         "topicTags": ["connectivity"],
         "observedOn": "2026-11-15",
         "state": "approved",
-        "summary": "Registro fictício office: seleção incorreta de adaptador foi corrigida com autorização e verificações tiveram sucesso.",
-        "applicability": "Somente seleção incorreta confirmada; uma consulta de configuração não determina a causa."
+        "summary": "In the fictional office case, the operator corrected the adapter selection with authorization and three local checks confirmed access.",
+        "applicability": "Applies only when the wrong adapter has been confirmed. A configuration check provides one observation in the investigation."
       },
       "source": {
         "kind": "fictional service record",
@@ -60,7 +60,7 @@
     {
       "key": "branch-case",
       "path": "cases/network-check",
-      "title": "Caso fictício de conexão: branch",
+      "title": "Fictional branch connectivity case",
       "file": "branch-case.md",
       "scope": {
         "kind": "customer",
@@ -71,8 +71,8 @@
         "topicTags": ["connectivity"],
         "observedOn": "2026-11-16",
         "state": "approved",
-        "summary": "Registro fictício branch: seleção incorreta de adaptador foi corrigida com autorização e verificações tiveram sucesso.",
-        "applicability": "Somente seleção incorreta confirmada; uma consulta de configuração não determina a causa."
+        "summary": "In the fictional branch case, the operator corrected the adapter selection with authorization and two local checks succeeded.",
+        "applicability": "Applies only when the wrong adapter has been confirmed. A configuration check provides one observation in the investigation."
       },
       "source": {
         "kind": "fictional service record",
