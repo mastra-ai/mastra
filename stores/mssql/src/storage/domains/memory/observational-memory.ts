@@ -6,6 +6,7 @@ import {
   isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -659,7 +660,15 @@ export class MssqlObservationalMemory {
           input.tokenCount +
           Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
 
-        return this.#rollOver(transaction, stored.id, newObservations, tokenCount, input.newRecordId, true);
+        const successor = await this.#rollOver(
+          transaction,
+          stored.id,
+          newObservations,
+          tokenCount,
+          input.newRecordId,
+          true,
+        );
+        return withBufferedReflectionVerified(successor, currentRecord);
       }, 'swapBufferedReflectionToActive');
     } catch (error) {
       rethrowOrWrap(error, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', { id: currentRecord.id });

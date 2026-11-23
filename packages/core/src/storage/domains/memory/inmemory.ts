@@ -1,3 +1,4 @@
+import { withBufferedReflectionVerified } from '@internal/core/memory';
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
@@ -1361,7 +1362,7 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedReflectionInputTokens = undefined;
     record.reflectedObservationLineCount = undefined;
 
-    return newRecord;
+    return withBufferedReflectionVerified(newRecord, currentRecord);
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {

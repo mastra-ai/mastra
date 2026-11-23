@@ -708,7 +708,10 @@ export async function handleObservationalMemoryOperation(
         now,
         clearBufferedReflection: true,
       });
-      return { ok: true, result: newRecord };
+      // Tell the caller this generation consumed exactly the buffer it read; the flag is only on
+      // the returned record, never stored.
+      const verified = currentRecord.bufferedReflection !== undefined && currentRecord.bufferedReflection !== null;
+      return { ok: true, result: verified ? { ...newRecord, bufferedReflectionVerified: true } : newRecord };
     }
 
     case 'omUpdateConfig': {

@@ -3,6 +3,7 @@ import {
   isBufferedChunkCoveredByCursor,
   isBufferedReflectionUnchangedSince,
   maxObservationCursor,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
@@ -282,7 +283,7 @@ export async function swapBufferedReflectionToActive(
         { id: stored.id },
       );
       assertRowsAffected(updateResult.rowsAffected, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', stored.id);
-      return newRecord;
+      return withBufferedReflectionVerified(newRecord, currentRecord);
     });
   } catch (error) {
     if (error instanceof MastraError) throw error;

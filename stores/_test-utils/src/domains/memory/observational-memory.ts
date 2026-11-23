@@ -1957,6 +1957,9 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         });
 
         expect(next.id).toBe(newRecordId);
+        // The swap checked the snapshot's buffer in the same atomic step and says so.
+        expect(next.bufferedReflectionVerified).toBe(true);
+        expect((await head(input)).bufferedReflectionVerified).toBeUndefined();
         expect(next.activeObservations).toContain('- condensed');
         expect(next.activeObservations).toContain('- activated');
         expect(next.activeObservations).not.toContain('- L1');
@@ -1966,6 +1969,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
 
         const again = await memoryStorage.swapBufferedReflectionToActive({ currentRecord: stale, tokenCount: 7 });
         expect(again.id).toBe(newRecordId);
+        expect(again.bufferedReflectionVerified).toBeUndefined();
         expect(await rows(input)).toHaveLength(2);
       });
 
@@ -2005,6 +2009,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         });
 
         expect(returned.id).toBe(record.id);
+        expect(returned.bufferedReflectionVerified).toBeUndefined();
         expect(await rows(input)).toHaveLength(1);
         expect(await head(input)).toMatchObject({
           id: record.id,
@@ -2021,6 +2026,7 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
           newRecordId,
         });
         expect(next.id).toBe(newRecordId);
+        expect(next.bufferedReflectionVerified).toBe(true);
         expect(next.activeObservations).toBe('- condensed\n\n- L2');
       });
 

@@ -6,6 +6,7 @@ import {
   maxObservationCursor,
   planReflectionGenerationText,
   withObservationalMemoryLifecycleColumns,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { MessageList } from '@mastra/core/agent';
@@ -3850,7 +3851,7 @@ export class MemoryPG extends MemoryStorage {
           WHERE id = $3`,
             [nowStr, nowStr, stored.id],
           );
-          return newRecord;
+          return withBufferedReflectionVerified(newRecord, currentRecord);
         },
         'swapBufferedReflectionToActive',
       );

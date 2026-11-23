@@ -16,6 +16,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   expectedBufferExtendedWithUnreflectedTail,
   expectedCrossProcessClearAllowsRecreatedGen0Buffering,
+  expectedEmptyAfterReflectionRetries,
+  expectedLegacyAdapterExtendedBufferFailsClosed,
+  expectedLocalClearDuringReflectionStart,
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredBeforeRebaseKeepsNewCycleId,
@@ -26,6 +29,9 @@ import {
   expectedSuccessfulActivationPreservesNextGenerationCycle,
   runBufferExtendedWithUnreflectedTail,
   runCrossProcessClearAllowsRecreatedGen0Buffering,
+  runEmptyAfterReflectionRetries,
+  runLegacyAdapterExtendedBufferFailsClosed,
+  runLocalClearDuringReflectionStart,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredBeforeRebaseKeepsNewCycleId,
@@ -40,15 +46,19 @@ import type { BufferedReflectionEnv } from '../../src/processors/observational-m
 describe('buffered reflection extracted values (LibSQL file database)', () => {
   let dbDir: string;
   let env: BufferedReflectionEnv;
+  let stores: LibSQLStore[];
 
   beforeEach(async () => {
     dbDir = await mkdtemp(join(tmpdir(), 'om-buffered-reflection-'));
+    stores = [];
     env = {
       Memory,
       ObservationalMemory,
       Extractor,
       createStorage: async () => {
         const store = new LibSQLStore({ id: randomUUID(), url: `file:${join(dbDir, `${randomUUID()}.db`)}` });
+        // Tracked before init so a store whose init fails is still closed.
+        stores.push(store);
         await store.init();
         return store;
       },
@@ -56,7 +66,11 @@ describe('buffered reflection extracted values (LibSQL file database)', () => {
   });
 
   afterEach(async () => {
+    // Close every database before deleting its directory; one failed close must not leave the rest open.
+    const closed = await Promise.allSettled(stores.map(store => store.close()));
     await rm(dbDir, { recursive: true, force: true });
+    const failure = closed.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failure) throw failure.reason;
   });
 
   // Technical: another process extends the buffer between the activation's head check and its
@@ -65,6 +79,21 @@ describe('buffered reflection extracted values (LibSQL file database)', () => {
   it('does not publish staged values when the extension repeats the unreflected tail', async () => {
     const outcome = await runBufferExtendedWithUnreflectedTail(env);
     expect(outcome).toEqual(expectedBufferExtendedWithUnreflectedTail(outcome));
+  });
+
+  // Technical: the same race on an adapter that predates the buffer check. The swap activates the
+  // extended buffer, but the values staged for the shorter buffer are never published.
+  it('does not publish staged values when an adapter without the buffer check swaps in an extended buffer', async () => {
+    const outcome = await runLegacyAdapterExtendedBufferFailsClosed(env);
+    expect(outcome).toEqual(expectedLegacyAdapterExtendedBufferFailsClosed(outcome));
+  });
+
+  it('does not buffer a reflection for recreated memory after a local clear during onReflectionStart', async () => {
+    expect(await runLocalClearDuringReflectionStart(env)).toEqual(expectedLocalClearDuringReflectionStart);
+  });
+
+  it('buffers again after afterReflection empties a buffered reflection', async () => {
+    expect(await runEmptyAfterReflectionRetries(env)).toEqual(expectedEmptyAfterReflectionRetries);
   });
 
   it('buffers for the generation that won after a held onReflectionEnd hook resolves', async () => {

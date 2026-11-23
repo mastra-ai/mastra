@@ -59,6 +59,10 @@ export interface StandaloneOptions {
   onReflectionEnd?: () => Promise<void>;
   /** Reflection `activateAfterIdle`; idle turns then activate a buffer below the threshold. */
   activateAfterIdle?: number;
+  /** Reflection `blockAfter` (absolute tokens); above it a turn reflects synchronously. */
+  blockAfter?: number;
+  /** Config-level `afterReflection` transform hook. */
+  afterReflection?: (input: { observations: string }) => void | { observations: string };
   onReflectorCall?: () => void;
 }
 
@@ -193,11 +197,13 @@ export async function setup(
         hooks: {
           ...(standalone.onReflectionStart ? { onReflectionStart: standalone.onReflectionStart } : {}),
           ...(standalone.onReflectionEnd ? { onReflectionEnd: standalone.onReflectionEnd } : {}),
+          ...(standalone.afterReflection ? { afterReflection: standalone.afterReflection } : {}),
         },
         observation: observationOptions(),
         reflection: {
           ...reflectionOptions(env, reply, standalone.onReflectorCall),
           ...(standalone.activateAfterIdle !== undefined ? { activateAfterIdle: standalone.activateAfterIdle } : {}),
+          ...(standalone.blockAfter !== undefined ? { blockAfter: standalone.blockAfter } : {}),
         },
       })
     : await engine(memory);
@@ -258,24 +264,39 @@ export function recordingWriter() {
 }
 
 /**
+ * How the store's `swapBufferedReflectionToActive` behaves:
+ * - `current`: the adapter as built.
+ * - `without-new-record-id`: ignores `newRecordId` and never reports `supersededBy`, but still
+ *   checks the caller's buffer and reports `bufferedReflectionVerified`.
+ * - `legacy`: also skips the buffer check and never reports `bufferedReflectionVerified`, like an
+ *   adapter that predates both. It swaps in whatever buffer is stored.
+ */
+export type SwapAdapter = 'current' | 'without-new-record-id' | 'legacy';
+
+/**
  * Runs `write` as another writer whose storage write lands after the activation's head check but
- * before its swap reads storage. Only real storage calls run, so the adapter's swap logic is used.
- * With `legacy`, the adapter behaves like one that predates `newRecordId`: it ignores the id and
- * never reports `supersededBy`. Applies to the next swap only.
+ * before its swap reads storage. Only real storage calls run, so the adapter's swap logic is used,
+ * shaped by `adapter`. Applies to the next swap only.
  */
 export function writeDuringSwap(
   f: Fixture,
   write: (snapshot: ObservationalMemoryRecord) => Promise<unknown>,
-  { legacy = false }: { legacy?: boolean } = {},
+  { adapter = 'current' }: { adapter?: SwapAdapter } = {},
 ) {
   const store: MemoryStorage = f.store;
   const swap = store.swapBufferedReflectionToActive;
   store.swapBufferedReflectionToActive = async input => {
     store.swapBufferedReflectionToActive = swap;
     await write(input.currentRecord);
-    if (!legacy) return swap.call(store, input);
-    const result = { ...(await swap.call(store, { ...input, newRecordId: undefined })) };
+    if (adapter === 'current') return swap.call(store, input);
+    // A snapshot without a buffered reflection is not checked against the stored one.
+    const currentRecord =
+      adapter === 'legacy'
+        ? { ...input.currentRecord, bufferedReflection: undefined, reflectedObservationLineCount: undefined }
+        : input.currentRecord;
+    const result = { ...(await swap.call(store, { ...input, currentRecord, newRecordId: undefined })) };
     delete result.supersededBy;
+    if (adapter === 'legacy') delete result.bufferedReflectionVerified;
     return result;
   };
 }
@@ -378,6 +399,54 @@ export function expectedBufferExtendedWithUnreflectedTail(outcome: { preparedBuf
     },
     // The extended buffer activates, without the values staged for the shorter one.
     next: { activations: 1, generationCount: 1, activeObservations: extended, values: { priority: 'original' } },
+  };
+}
+
+/**
+ * The same race on an adapter that predates the buffer check: its swap activates the extended
+ * buffer, and the result reads exactly like the snapshot's buffer. The activation goes ahead, but
+ * the adapter cannot prove which buffer it consumed, so the staged values stay unpublished.
+ */
+export async function runLegacyAdapterExtendedBufferFailsClosed(env: BufferedReflectionEnv) {
+  const f = await setup(env, () => reflection('stale'), 500);
+  await prepare(f.memory, f.threadId, f.resourceId);
+  const prepared = await f.om.getRecord(f.threadId, f.resourceId);
+  // Copy it now: some stores return live records, which the swap clears.
+  const preparedBuffer = prepared?.bufferedReflection;
+  const tail = '* later fact';
+  writeDuringSwap(
+    f,
+    snapshot =>
+      f.store.updateBufferedReflection({
+        id: snapshot.id,
+        reflection: tail,
+        tokenCount: 5,
+        inputTokenCount: 10,
+        reflectedObservationLineCount: (snapshot.reflectedObservationLineCount ?? 0) + 1,
+      }),
+    { adapter: 'legacy' },
+  );
+  const { writer, reflectionActivations } = recordingWriter();
+  await reachActivation(f, f.memory, { tail: `\n${tail}`, writer });
+  const head = await f.om.getRecord(f.threadId, f.resourceId);
+  return {
+    preparedBuffer,
+    tail,
+    activations: reflectionActivations().length,
+    generationCount: head?.generationCount,
+    activeObservations: head?.activeObservations,
+    values: (await values(f.memory, f.threadId))?.extracted,
+  };
+}
+
+export function expectedLegacyAdapterExtendedBufferFailsClosed(outcome: { preparedBuffer?: string; tail: string }) {
+  return {
+    preparedBuffer: outcome.preparedBuffer,
+    tail: outcome.tail,
+    activations: 1,
+    generationCount: 1,
+    activeObservations: `${outcome.preparedBuffer}\n\n${outcome.tail}`,
+    values: { priority: 'original' },
   };
 }
 
@@ -995,10 +1064,12 @@ export async function runSuccessfulActivationPreservesNextGenerationCycle(env: B
 
     gateAfterCommit.release();
     await firstActivation;
+    const firstValues = (await values(f.memory, f.threadId))?.extracted;
     await reachActivation(f, undefined, { writer: next.writer });
     return {
       firstCycleId,
       nextCycleId,
+      firstValues,
       firstActivationCycleIds: first.reflectionActivations().map(marker => marker.cycleId),
       nextActivationCycleIds: next.reflectionActivations().map(marker => marker.cycleId),
       values: (await values(f.memory, f.threadId))?.extracted,
@@ -1019,6 +1090,8 @@ export function expectedSuccessfulActivationPreservesNextGenerationCycle(outcome
   return {
     firstCycleId: outcome.firstCycleId,
     nextCycleId: outcome.nextCycleId,
+    // The first activation publishes its own values before the next generation activates.
+    firstValues: { priority: 'first' },
     firstActivationCycleIds: [outcome.firstCycleId],
     nextActivationCycleIds: [outcome.nextCycleId],
     values: { priority: 'next' },
@@ -1085,3 +1158,138 @@ export function expectedRetiredBeforeRebaseKeepsNewCycleId(outcome: { startCycle
     values: { priority: 'winner' },
   };
 }
+
+/**
+ * A buffered reflection pauses in `onReflectionStart`. Meanwhile this process clears the memory
+ * (`om.clear()`) and a fresh generation-0 record is created. When the paused op resumes it must
+ * stop: no reflector call, no buffer or staged values on the recreated record, and no buffering
+ * marker. The next turn then buffers for the recreated record and activation publishes its values.
+ */
+export async function runLocalClearDuringReflectionStart(env: BufferedReflectionEnv) {
+  const startHook = gate();
+  let holdStart = true;
+  let reply = 'stale';
+  let reflectorCalls = 0;
+  const f = await setup(env, () => reflection(reply), 800, {
+    onReflectorCall: () => {
+      reflectorCalls++;
+    },
+    onReflectionStart: async () => {
+      if (!holdStart) return;
+      holdStart = false;
+      startHook.entered();
+      await startHook.released;
+    },
+  });
+  const { writer, reflectionActivations, reflectionBufferingStarts } = recordingWriter();
+  await f.turn(writer, { settle: false });
+  await startHook.reached;
+
+  try {
+    await f.om.clear(f.threadId, f.resourceId);
+    const recreated = await f.om.getOrCreateRecord(f.threadId, f.resourceId);
+    await f.store.updateActiveObservations({
+      id: recreated.id,
+      observations: factLines(500, 40),
+      tokenCount: 800,
+      lastObservedAt: new Date(),
+    });
+
+    startHook.release();
+    await f.om.settled();
+    const afterStale = await f.om.getRecord(f.threadId, f.resourceId);
+    const staleOp = {
+      reflectorCalls,
+      bufferingStarts: reflectionBufferingStarts().length,
+      headIsRecreated: afterStale?.id === recreated.id,
+      bufferedReflection: afterStale?.bufferedReflection ?? null,
+      values: (await values(f.memory, f.threadId))?.extracted,
+    };
+
+    reply = 'fresh';
+    await f.turn(writer);
+    // Read now: some stores return live records, which the activation clears.
+    const freshBuffered =
+      (await f.om.getRecord(f.threadId, f.resourceId))?.bufferedReflection?.includes('condensed fresh') ?? false;
+    await reachActivation(f, undefined, { writer, tail: '' });
+    return {
+      staleOp,
+      freshBuffered,
+      activations: reflectionActivations().length,
+      values: (await values(f.memory, f.threadId))?.extracted,
+    };
+  } finally {
+    startHook.release();
+    await f.om.settled();
+  }
+}
+
+export const expectedLocalClearDuringReflectionStart = {
+  staleOp: {
+    reflectorCalls: 0,
+    bufferingStarts: 0,
+    headIsRecreated: true,
+    bufferedReflection: null,
+    values: { priority: 'original' },
+  },
+  freshBuffered: true,
+  activations: 1,
+  values: { priority: 'fresh' },
+};
+
+/**
+ * An `afterReflection` hook empties one buffered reflection. Nothing can activate from an empty
+ * buffer, so the op must give up its buffering boundary: once observations pass the reflection
+ * threshold (but stay below `blockAfter`), the next turn buffers again, and the turn after
+ * activates that buffer and publishes its values.
+ */
+export async function runEmptyAfterReflectionRetries(env: BufferedReflectionEnv) {
+  let reply = 'emptied';
+  // One per buffered reflection; only the first is emptied.
+  let reflections = 0;
+  const f = await setup(env, () => reflection(reply), 800, {
+    blockAfter: 1200,
+    afterReflection: () => {
+      reflections++;
+      if (reflections === 1) return { observations: '' };
+    },
+  });
+  const { writer, reflectionActivations } = recordingWriter();
+  await f.turn(writer);
+  const afterEmpty = await f.om.getRecord(f.threadId, f.resourceId);
+  const emptied = {
+    reflections,
+    bufferedReflection: afterEmpty?.bufferedReflection || null,
+    values: (await values(f.memory, f.threadId))?.extracted,
+  };
+
+  reply = 'retry';
+  // 1100 tokens: past the 1000-token reflection threshold, below the 1200-token blockAfter.
+  await reachActivation(f, undefined, { writer });
+  const afterRetry = await f.om.getRecord(f.threadId, f.resourceId);
+  const retried = {
+    reflections,
+    generationCount: afterRetry?.generationCount,
+    buffered: afterRetry?.bufferedReflection?.includes('condensed retry') ?? false,
+  };
+
+  await f.turn(writer);
+  const activated = await f.om.getRecord(f.threadId, f.resourceId);
+  return {
+    emptied,
+    retried,
+    activations: reflectionActivations().length,
+    generationCount: activated?.generationCount,
+    activatedRetry: activated?.activeObservations.includes('condensed retry') ?? false,
+    values: (await values(f.memory, f.threadId))?.extracted,
+  };
+}
+
+export const expectedEmptyAfterReflectionRetries = {
+  emptied: { reflections: 1, bufferedReflection: null, values: { priority: 'original' } },
+  retried: { reflections: 2, generationCount: 0, buffered: true },
+  activations: 1,
+  generationCount: 1,
+  activatedRetry: true,
+  values: { priority: 'retry' },
+};

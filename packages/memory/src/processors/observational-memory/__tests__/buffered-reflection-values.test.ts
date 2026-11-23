@@ -9,6 +9,9 @@ import {
   createFixtureMemory,
   expectedBufferExtendedWithUnreflectedTail,
   expectedCrossProcessClearAllowsRecreatedGen0Buffering,
+  expectedEmptyAfterReflectionRetries,
+  expectedLegacyAdapterExtendedBufferFailsClosed,
+  expectedLocalClearDuringReflectionStart,
   expectedNewerReflectionBufferSurvivesRetiredHook,
   expectedRetiredBeforeIdleActivationReadsWinner,
   expectedRetiredBeforeRebaseKeepsNewCycleId,
@@ -23,6 +26,9 @@ import {
   reflection,
   runBufferExtendedWithUnreflectedTail,
   runCrossProcessClearAllowsRecreatedGen0Buffering,
+  runEmptyAfterReflectionRetries,
+  runLegacyAdapterExtendedBufferFailsClosed,
+  runLocalClearDuringReflectionStart,
   runNewerReflectionBufferSurvivesRetiredHook,
   runRetiredBeforeIdleActivationReadsWinner,
   runRetiredBeforeRebaseKeepsNewCycleId,
@@ -35,7 +41,7 @@ import {
   values,
   writeDuringSwap,
 } from './buffered-reflection-fixture';
-import type { BufferedReflectionEnv } from './buffered-reflection-fixture';
+import type { BufferedReflectionEnv, SwapAdapter } from './buffered-reflection-fixture';
 
 const env: BufferedReflectionEnv = {
   Memory,
@@ -386,9 +392,9 @@ describe('buffered reflection extracted thread values (#27262)', () => {
       expect(outcome).toEqual(expectedBufferExtendedWithUnreflectedTail(outcome));
     });
 
-    it.each([false, true])(
-      'shows no activation and keeps values when the generation is replaced (legacy adapter=%s)',
-      async legacy => {
+    it.each<SwapAdapter>(['current', 'legacy'])(
+      'shows no activation and keeps values when the generation is replaced (%s adapter)',
+      async adapter => {
         const f = await setup(() => reflection('losing'));
         await prepare(f.memory, f.threadId, f.resourceId);
         writeDuringSwap(
@@ -399,7 +405,7 @@ describe('buffered reflection extracted thread values (#27262)', () => {
               reflection: '* winning fact',
               tokenCount: 100,
             }),
-          { legacy },
+          { adapter },
         );
         const { writer, reflectionActivations } = recordingWriter();
         await reachActivation(f, f.memory, { writer, tail: '' });
@@ -414,9 +420,9 @@ describe('buffered reflection extracted thread values (#27262)', () => {
 
     // Technical: the losing activation must drop this process's reflection buffering boundary for
     // the retired generation, or the boundary blocks buffering for the generation that won.
-    it.each([false, true])(
-      'buffers the next reflection for the generation that won (legacy adapter=%s)',
-      async legacy => {
+    it.each<SwapAdapter>(['current', 'legacy'])(
+      'buffers the next reflection for the generation that won (%s adapter)',
+      async adapter => {
         let reply = 'losing';
         const f = await setup(() => reflection(reply));
         await prepare(f.memory, f.threadId, f.resourceId);
@@ -433,7 +439,7 @@ describe('buffered reflection extracted thread values (#27262)', () => {
               })
             ).id;
           },
-          { legacy },
+          { adapter },
         );
         const { writer, reflectionActivations } = recordingWriter();
         await reachActivation(f, f.memory, { writer });
@@ -522,11 +528,102 @@ describe('buffered reflection extracted thread values (#27262)', () => {
     it('publishes values and shows the activation on an adapter without newRecordId support', async () => {
       const f = await setup(() => reflection('prepared'));
       await prepare(f.memory, f.threadId, f.resourceId);
-      writeDuringSwap(f, async () => {}, { legacy: true });
+      writeDuringSwap(f, async () => {}, { adapter: 'without-new-record-id' });
       const { writer, reflectionActivations } = recordingWriter();
       await reachActivation(f, f.memory, { writer });
       expect(reflectionActivations()).toHaveLength(1);
       expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'prepared' } });
+    });
+
+    // Technical: an adapter that predates the buffer check cannot prove which buffer it swapped
+    // in, so its activations never publish staged values, even without a race. (#27262)
+    it('shows the activation but keeps values on an adapter without the buffer check', async () => {
+      const f = await setup(() => reflection('prepared'));
+      await prepare(f.memory, f.threadId, f.resourceId);
+      writeDuringSwap(f, async () => {}, { adapter: 'legacy' });
+      const { writer, reflectionActivations } = recordingWriter();
+      await reachActivation(f, f.memory, { writer });
+      expect(reflectionActivations()).toHaveLength(1);
+      expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+        generationCount: 1,
+        activeObservations: expect.stringContaining('condensed prepared'),
+      });
+      expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'original' } });
+    });
+
+    // Technical: on an adapter without the buffer check, another process extends the buffer with
+    // the unreflected tail, so the swap activates the extended buffer and reads exactly like the
+    // snapshot's. The values staged for the shorter buffer must not be published. (#27262)
+    it('does not publish staged values when an adapter without the buffer check swaps in an extended buffer', async () => {
+      const outcome = await runLegacyAdapterExtendedBufferFailsClosed(env);
+      expect(outcome).toEqual(expectedLegacyAdapterExtendedBufferFailsClosed(outcome));
+    });
+
+    // Technical: an adapter that hands out its stored record shows an observation appended to the
+    // new generation after the swap. Activation must judge the text the swap produced, not what
+    // the record holds once the retired generation has been read. (#27262)
+    it('publishes values when an observation is appended to the new generation during activation', async () => {
+      const f = await setup(() => reflection('prepared'));
+      await prepare(f.memory, f.threadId, f.resourceId);
+      const store = f.store;
+      const swap = store.swapBufferedReflectionToActive;
+      const getHistory = store.getObservationalMemoryHistory;
+      let swapped = false;
+      store.swapBufferedReflectionToActive = async input => {
+        store.swapBufferedReflectionToActive = swap;
+        const created = await swap.call(store, input);
+        swapped = true;
+        // InMemoryStore returns its stored head object; wrap it so the returned record keeps the
+        // swap's verification flag while every other field reads through to storage.
+        const live = await store.getObservationalMemory(created.threadId, created.resourceId);
+        if (!live) throw new Error('Missing head');
+        return new Proxy(live, {
+          get: (target, key, receiver) =>
+            key === 'bufferedReflectionVerified'
+              ? created.bufferedReflectionVerified
+              : Reflect.get(target, key, receiver),
+        });
+      };
+      store.getObservationalMemoryHistory = async (...args) => {
+        if (swapped) {
+          store.getObservationalMemoryHistory = getHistory;
+          const head = await store.getObservationalMemory(f.threadId, f.resourceId);
+          if (!head) throw new Error('Missing head');
+          await store.updateActiveObservations({
+            id: head.id,
+            observations: `${head.activeObservations}\n* appended after the swap`,
+            tokenCount: (head.observationTokenCount ?? 0) + 10,
+            lastObservedAt: new Date(),
+          });
+        }
+        return getHistory.apply(store, args);
+      };
+      const { writer, reflectionActivations } = recordingWriter();
+      try {
+        await reachActivation(f, f.memory, { writer });
+      } finally {
+        store.swapBufferedReflectionToActive = swap;
+        store.getObservationalMemoryHistory = getHistory;
+      }
+      expect(swapped).toBe(true);
+      expect(reflectionActivations()).toHaveLength(1);
+      expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+        generationCount: 1,
+        activeObservations: expect.stringContaining('appended after the swap'),
+      });
+      expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'prepared' } });
+    });
+
+    // Technical: `om.clear()` drops this process's reflection owner while the op waits in
+    // `onReflectionStart`; the op must not rebase onto the recreated record or save for it.
+    it('does not buffer a reflection for recreated memory after a local clear during onReflectionStart', async () => {
+      expect(await runLocalClearDuringReflectionStart(env)).toEqual(expectedLocalClearDuringReflectionStart);
+    });
+
+    // Technical: an empty buffered reflection must release this op's buffering boundary, or every
+    // turn below blockAfter skips buffering and the memory never reflects until blockAfter.
+    it('buffers again after afterReflection empties a buffered reflection', async () => {
+      expect(await runEmptyAfterReflectionRetries(env)).toEqual(expectedEmptyAfterReflectionRetries);
     });
 
     it('publishes activated values when a history adapter ignores the fourth options argument', async () => {

@@ -6,6 +6,7 @@ import {
   maxObservationCursor,
   planReflectionGenerationText,
   withObservationalMemoryLifecycleColumns,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
@@ -3166,7 +3167,14 @@ export class MemoryLibSQL extends MemoryStorage {
             Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
 
           // The rollover also clears the buffered reflection on the retired record.
-          return this.#rollOverObservationalMemory(row, newObservations, tokenCount, input.newRecordId);
+          const successor = await this.#rollOverObservationalMemory(
+            row,
+            newObservations,
+            tokenCount,
+            input.newRecordId,
+          );
+          if (successor === OM_CAS_CONFLICT) return successor;
+          return withBufferedReflectionVerified(successor, currentRecord);
         },
         'swapBufferedReflectionToActive',
       );

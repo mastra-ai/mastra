@@ -188,3 +188,18 @@ export function isBufferedReflectionUnchangedSince(
   }
   return (stored.reflectedObservationLineCount ?? 0) === snapshot.reflectedObservationLineCount;
 }
+
+/**
+ * The generation a buffered-reflection swap just created, marked with
+ * `bufferedReflectionVerified: true` when the swap checked the caller's buffered reflection with
+ * `isBufferedReflectionUnchangedSince` in the same atomic step. A snapshot without a buffered
+ * reflection was not checked, so its successor is returned unmarked. Always returns a new object,
+ * so a store's own record is never handed out or mutated.
+ */
+export function withBufferedReflectionVerified<T extends object>(
+  successor: T,
+  snapshot: BufferedReflectionState,
+): T & { bufferedReflectionVerified?: true } {
+  if (snapshot.bufferedReflection === undefined || snapshot.bufferedReflection === null) return { ...successor };
+  return { ...successor, bufferedReflectionVerified: true };
+}

@@ -206,8 +206,9 @@ type TryActivateResult =
  * - `not-applied`: this invocation created no generation. `headId` is the head it observed, which
  *   tells the caller whether the snapshot's generation is still current.
  * - `applied`: this invocation's swap created a new generation. `snapshotBufferActivated` says
- *   whether that generation holds exactly the snapshot's buffered reflection; it is false when
- *   another writer extended the buffer between the head check and the swap.
+ *   whether the adapter proved that generation holds exactly the snapshot's buffered reflection;
+ *   it is false when another writer extended the buffer between the head check and the swap, or
+ *   when the adapter cannot prove it did not (`bufferedReflectionVerified` missing).
  */
 type BufferedReflectionCommit =
   | { kind: 'not-applied'; headId: string }
@@ -874,6 +875,13 @@ export class ReflectorRunner {
     | undefined
   > {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    // This process cleared the memory (`clear()` drops the owner) while the op waited, e.g. in
+    // `onReflectionStart`. Whatever is stored now belongs to the recreated memory, so this op must
+    // not rebase onto it, take over its cycle id, or run the reflector for it.
+    if (BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner) {
+      omDebug(`[OM:reflect] doAsyncBufferedReflection: ${bufferKey} was cleared while the op waited; stopping`);
+      return undefined;
+    }
     const currentRecord = freshRecord ?? record;
     if (freshRecord?.bufferedReflection) {
       omDebug(
@@ -977,6 +985,16 @@ export class ReflectorRunner {
       reflectResult.observations,
       hookContext,
     );
+    if (!reflectResult.observations.trim()) {
+      // An empty buffer could never activate, and keeping this op's boundary would stop the
+      // next turn from buffering again until `blockAfter` forces a synchronous reflection.
+      // Retiring releases only this op's boundary when it finishes.
+      omDebug(
+        `[OM:reflect] doAsyncBufferedReflection: reflection for ${currentRecord.id} is empty after afterReflection; discarding it`,
+      );
+      owner.retired = true;
+      return { usage: reflectResult.usage, providerMetadata: reflectResult.providerMetadata };
+    }
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
     omDebug(
@@ -989,7 +1007,11 @@ export class ReflectorRunner {
       this.buffering.getLockKey(currentRecord.threadId, currentRecord.resourceId),
       async () => {
         const head = await this.storage.getObservationalMemory(currentRecord.threadId, currentRecord.resourceId);
-        if (head?.id !== currentRecord.id) return false;
+        // A local `clear()` while the model ran drops the owner; the buffer must not be saved
+        // even if the stored head happens to have the same id.
+        if (head?.id !== currentRecord.id || BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner) {
+          return false;
+        }
         await this.storage.updateBufferedReflection({
           id: currentRecord.id,
           reflection: reflectResult.observations,
@@ -1041,12 +1063,16 @@ export class ReflectorRunner {
 
   /**
    * Decide what a buffered-reflection swap did. Built-in adapters only swap the buffer and line
-   * count in the snapshot, and return the stored record (no new generation) when another writer
-   * extended them after the head check. Adapters without that check build the new generation from
-   * whatever is stored, so the swap counts as activating the snapshot's buffer only if its result
-   * equals what that buffer and line count produce from the text the swap retired. Retired records
-   * are never written again, so that text is exactly what the swap read. For those adapters an
-   * extension that repeats the unreflected tail cannot be told apart from the snapshot's buffer.
+   * count in the snapshot, return the stored record (no new generation) when another writer
+   * extended them after the head check, and mark a generation they created after that check with
+   * `bufferedReflectionVerified`. Adapters without that check build the new generation from
+   * whatever is stored. Either way the swap must also produce what the snapshot's buffer and line
+   * count give from the text the swap retired (retired records are never written again, so that
+   * text is exactly what the swap read).
+   *
+   * Staged values are published only with the adapter's proof. Without it an extension that
+   * repeats the unreflected tail produces the same text as the snapshot's buffer, so the values
+   * fail closed: the activation still applies, but the staged values stay unpublished.
    */
   private async classifyBufferedReflectionSwap({
     result,
@@ -1067,25 +1093,30 @@ export class ReflectorRunner {
     // Adapters that honour `newRecordId` report `supersededBy`; another id means another writer.
     if (!createdByThisSwap && result.supersededBy !== undefined) return { kind: 'not-applied', headId: result.id };
 
-    let snapshotBufferActivated = false;
+    // Read before awaiting: adapters that hand out their stored record would show writes made
+    // after the swap (an observation appended to the new generation) by the time history returns.
+    const swapActiveObservations = result.activeObservations;
+    const bufferedReflectionVerified = result.bufferedReflectionVerified === true;
+    let matchesSnapshotBuffer = false;
     try {
       const history = await this.storage.getObservationalMemoryHistory(snapshot.threadId, snapshot.resourceId, 5, {
         recordId: snapshot.id,
       });
       const retired = history.find(candidate => candidate.id === snapshot.id);
-      snapshotBufferActivated =
+      matchesSnapshotBuffer =
         retired !== undefined &&
-        result.activeObservations ===
+        swapActiveObservations ===
           bufferedActivationText({ bufferedReflection, observations: retired.activeObservations, reflectedLineCount });
     } catch (error) {
       omError('[OM] Failed to read the generation retired by buffered reflection activation', error);
     }
+    const snapshotBufferActivated = matchesSnapshotBuffer && bufferedReflectionVerified;
 
     if (createdByThisSwap) return { kind: 'applied', record: result, snapshotBufferActivated };
     // Adapters that ignore `newRecordId` return the successor both when this swap created it and
     // when another writer retired the snapshot first. Only a successor holding exactly this
     // snapshot's activation is treated as this invocation's.
-    return snapshotBufferActivated
+    return matchesSnapshotBuffer
       ? { kind: 'applied', record: result, snapshotBufferActivated }
       : { kind: 'not-applied', headId: result.id };
   }
