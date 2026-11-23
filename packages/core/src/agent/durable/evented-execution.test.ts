@@ -30,7 +30,7 @@ import {
   stopAbandonedDurableExecution,
   stopDurableExecutionParticipants,
 } from './evented-execution';
-import { EventedExecutionEngine as DurableEventedExecutionEngine } from './evented-execution-engine';
+import { EventedExecutionEngine as DurableEventedExecutionEngine } from './execution-engine';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,

@@ -242,7 +242,7 @@ import type {
   DurableAgentStreamResult,
 } from './durable/durable-agent';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable/durable-stream-until-idle';
-import type { DurableExecutionEngine } from './durable/execution-engine';
+import { DurableExecutionEngine, EventedExecutionEngine } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
 import {
   assertExecutionOwned,
@@ -1269,11 +1269,7 @@ export class Agent<
     const engine = this.#executionEnginePolicy.engine;
     if (!engine) return undefined;
     this.#beginExecutionPolicy();
-    // The workflow builder extends the plain loop builder, so importing it while
-    // Agent's module is still evaluating creates an import-order-dependent cycle.
     return (this.#executionEngineInitialization ??= (async () => {
-      const { DurableExecutionEngine } = await import('./durable/execution-engine');
-      const { EventedExecutionEngine } = await import('./durable/evented-execution-engine');
       return (this.#executionEngine ??=
         engine === 'evented'
           ? new EventedExecutionEngine(this.id, this.#mastra)
