@@ -4,6 +4,8 @@
 
 Added worker takeover for evented and durable agents on libSQL storage. When a worker process stops in the middle of a run, another worker can pick up the step from a broker such as Redis Streams and finish the run, and the original caller gets the result. If the same step message arrives again late, it no longer overwrites a step that already finished, and a finished loop iteration keeps its saved result instead of running again.
 
+Requires `@mastra/core` 1.86.0 or later. Older versions can leave a restarted loop stuck once libSQL guards its steps.
+
 All processes must use the same database. When they run on more than one machine, use a libSQL server such as sqld or Turso. A database file only works when every process runs on the same machine, because SQLite file locking isn't reliable on network filesystems.
 
 ```ts
