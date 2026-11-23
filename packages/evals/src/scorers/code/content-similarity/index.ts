@@ -7,6 +7,32 @@ interface ContentSimilarityOptions {
   ignoreWhitespace?: boolean;
 }
 
+/**
+ * Like stringSimilarity.compareTwoStrings (Dice coefficient of character pairs), but whitespace counts
+ */
+function compareWithWhitespace(first: string, second: string): number {
+  if (first === second) return 1;
+  if (first.length < 2 || second.length < 2) return 0;
+
+  const pairs = new Map<string, number>();
+  for (let i = 0; i < first.length - 1; i++) {
+    const pair = first.slice(i, i + 2);
+    pairs.set(pair, (pairs.get(pair) ?? 0) + 1);
+  }
+
+  let matches = 0;
+  for (let i = 0; i < second.length - 1; i++) {
+    const pair = second.slice(i, i + 2);
+    const left = pairs.get(pair) ?? 0;
+    if (left > 0) {
+      pairs.set(pair, left - 1);
+      matches++;
+    }
+  }
+
+  return (2 * matches) / (first.length + second.length - 2);
+}
+
 export function createContentSimilarityScorer(
   { ignoreCase, ignoreWhitespace = true }: ContentSimilarityOptions = { ignoreCase: true },
 ) {
@@ -36,22 +62,8 @@ export function createContentSimilarityScorer(
       };
     })
     .generateScore(({ results }) => {
-      // compareTwoStrings strips whitespace, so when it counts, rename each distinct character to a non-whitespace one
-      const codes = new Map<string, string>();
-      const encode = (text: string) =>
-        ignoreWhitespace
-          ? text
-          : text.replace(/[^]/g, char => {
-              const code = codes.get(char) ?? String.fromCharCode(0x4e00 + codes.size);
-              codes.set(char, code);
-              return code;
-            });
+      const compare = ignoreWhitespace ? stringSimilarity.compareTwoStrings : compareWithWhitespace;
 
-      const similarity = stringSimilarity.compareTwoStrings(
-        encode(results.preprocessStepResult?.processedInput),
-        encode(results.preprocessStepResult?.processedOutput),
-      );
-
-      return similarity;
+      return compare(results.preprocessStepResult?.processedInput, results.preprocessStepResult?.processedOutput);
     });
 }

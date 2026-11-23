@@ -101,19 +101,21 @@ describe('ContentSimilarityMetric', () => {
     expect(result.score).toBe(0);
   });
 
-  it('should lower the score for whitespace differences when ignoreWhitespace is false', async () => {
+  it('should count whitespace differences when ignoreWhitespace is false', async () => {
     const whitespaceSensitiveMetric = createContentSimilarityScorer({ ignoreCase: true, ignoreWhitespace: false });
-    const inputMessages = [createTestMessage({ content: 'New York', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: 'NewYork', role: 'assistant', id: 'test-output' })];
-    const result = await whitespaceSensitiveMetric.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBeLessThan(1);
+    const scoreOf = async (input: string, output: string) => {
+      const result = await whitespaceSensitiveMetric.run(
+        createAgentTestRun({
+          inputMessages: [createTestMessage({ content: input, role: 'user', id: 'test-input' })],
+          output: [createTestMessage({ content: output, role: 'assistant', id: 'test-output' })],
+        }),
+      );
+      return result.score;
+    };
 
-    const newlineInput = [createTestMessage({ content: 'The quick\nbrown fox', role: 'user', id: 'test-input' })];
-    const spaceOutput = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
-    const newlineResult = await whitespaceSensitiveMetric.run(
-      createAgentTestRun({ inputMessages: newlineInput, output: spaceOutput }),
-    );
-    expect(newlineResult.score).toBeLessThan(1);
+    expect(await scoreOf('New York', 'NewYork')).toBeCloseTo(10 / 13);
+    expect(await scoreOf('The quick\nbrown fox', 'The quick brown fox')).toBeCloseTo(32 / 36);
+    expect(await scoreOf('ha ha', 'ha ha ha')).toBeCloseTo(8 / 11);
   });
 
   it('should keep ignoring whitespace when only ignoreCase is passed', async () => {
