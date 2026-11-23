@@ -36985,9 +36985,9 @@
     },
     "job:store/libsql": {
       "tier": "in",
-      "since": "2026-11-19",
-      "last_failure": "2026-11-21",
-      "reason": "pr-job-fail",
+      "since": "2026-11-23",
+      "last_failure": "2026-11-23",
+      "reason": "versioning-fail",
       "pr_failures": {
         "131249332487": {
           "date": "2026-11-12",
