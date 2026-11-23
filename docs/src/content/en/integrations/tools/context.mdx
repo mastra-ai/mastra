@@ -28,6 +28,8 @@ CONTEXT_DEV_API_KEY=your-context-dev-api-key
 
 Keep this key server-side and out of source control. Don't expose it in browser code.
 
+The agent example below uses an OpenAI model. Set `OPENAI_API_KEY` in your server environment, or select a model from a provider you have configured.
+
 ## Add tools to an agent
 
 `createContextTools()` returns `{ contextSearch, contextScrape }`. Each tool has Zod input and output schemas.
@@ -64,13 +66,40 @@ export const contextTools = createContextTools({
 
 `createContextSearchTool()` creates a tool with ID `context-search`. It accepts:
 
-| Parameter | Type | Description |
-| - | - | - |
-| `query` | `string` | Required, non-empty search query. Supports operators such as `site:`. |
-| `numResults` | `number` | Integer from 1 to 100. Defaults to 10 in the Context.dev API. |
-| `includeDomains` | `string[]` | Restrict results to these domains, up to 100 entries. |
-| `excludeDomains` | `string[]` | Exclude these domains, up to 100 entries. |
-| `freshness` | `string` | `last_24_hours`, `last_week`, `last_month`, or `last_year`. |
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'Non-empty search query. Supports operators such as `site:`.',
+  },
+  {
+    name: 'numResults',
+    type: 'number',
+    description: 'Integer from 1 to 100. The default is set by the Context.dev API.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+  {
+    name: 'includeDomains',
+    type: 'string[]',
+    description: 'Restrict results to these domains, up to 100 entries.',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description: 'Exclude these domains, up to 100 entries.',
+    isOptional: true,
+  },
+  {
+    name: 'freshness',
+    type: "'last_24_hours' | 'last_week' | 'last_month' | 'last_year'",
+    description: 'Limit results to this freshness window.',
+    isOptional: true,
+  },
+]}
+/>
 
 The output contains `query`, `results`, `requestId`, `cacheMetadata`, and an optional `partial` flag. Each result has `title`, `url`, `description`, and a `relevance` label (`high`, `medium`, or `low`). `cacheMetadata` contains `status` (`hit`, `miss`, or `zdr`) and `ageMs`. An empty results array means no sources were returned.
 
@@ -78,11 +107,29 @@ The output contains `query`, `results`, `requestId`, `cacheMetadata`, and an opt
 
 `createContextScrapeTool()` creates a tool with ID `context-scrape`. It accepts:
 
-| Parameter | Type | Description |
-| - | - | - |
-| `url` | `string` | Required HTTP or HTTPS URL. |
-| `mainContentOnly` | `boolean` | Exclude navigation, headers, and footers. Defaults to `true`. |
-| `maxAgeMs` | `number` | Maximum cache age in milliseconds, from 0 to 31,536,000,000 (one year). Omit to use Context.dev's default of three days. Set to `0` to fetch fresh content. |
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'HTTP or HTTPS URL to scrape.',
+  },
+  {
+    name: 'mainContentOnly',
+    type: 'boolean',
+    description: 'Exclude navigation, headers, and footers.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'maxAgeMs',
+    type: 'number',
+    description:
+      "Maximum cache age in milliseconds, from 0 to 31,536,000,000 (one year). Omit to use Context.dev's default of three days. Set to `0` to fetch fresh content.",
+    isOptional: true,
+  },
+]}
+/>
 
 The output contains `url`, `markdown`, `requestId`, and `cacheMetadata`. The tool checks the Markdown output's success flag before returning content. Failed, missing, or empty Markdown causes an error even if the API returned HTTP 200.
 

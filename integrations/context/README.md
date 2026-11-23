@@ -5,12 +5,13 @@ Add Context.dev web search and Markdown scraping tools to Mastra agents with sha
 ## Installation
 
 ```bash
-npm install @mastra/context @mastra/core zod
+npm install @mastra/context
+npm install @mastra/core zod
 ```
 
-Set `CONTEXT_DEV_API_KEY` in your server environment. Keep the key out of browser code and source control.
-
 ## Usage
+
+Set `CONTEXT_DEV_API_KEY` in your server environment. The example agent also requires `OPENAI_API_KEY`, or you can select a model from a provider you have configured. Keep these keys out of browser code and source control.
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
@@ -39,3 +40,11 @@ This package exposes search and Markdown scraping, not the full hosted MCP catal
 
 - [Context.dev integration guide](https://mastra.ai/integrations/tools/context)
 - [Context.dev TypeScript SDK](https://docs.context.dev/sdks/typescript.md)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/integrations/context/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

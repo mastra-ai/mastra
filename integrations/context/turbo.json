@@ -8,6 +8,8 @@
         "src/**",
         "tsdown.config.ts",
         "tsconfig.json",
+        "tsconfig.build.json",
+        "$TURBO_ROOT$/tsconfig.build.json",
         "package.json",
         "!**/*.md",
         "!**/*.test.ts",
