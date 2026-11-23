@@ -68,7 +68,9 @@ For issue comments use the same voice: diagnosis as a claim (symptom ← cause w
 
 ## How to post
 
-**Default: show the drafted body and verdict, and post only on an explicit go.** This covers request changes, approve, inline comments, issue comments, self-review comments, replies, and edits. A positive verdict alone never bypasses this gate.
+**A request to review a PR is the go to post its review.** When the user asks you to review a PR (or to post a review of it), that request authorizes posting the verdict as a GitHub review—**REQUEST_CHANGES** or **APPROVE**, with its inline comments—once the investigation and the checks below are done. Do not stop at a summary in chat, and do not hand the decision back. This holds in side sessions and headless runs, where nobody is there to give a second go. A session started for someone else's review request carries that request's authorization; say so when you start one, and do not add "do not post" restrictions the user did not ask for.
+
+**Otherwise show the drafted body and verdict, and post only on an explicit go.** That applies when the user asked to see a draft first, to hold, or for findings or a diagnosis only, and to everything a review request does not cover: issue comments, replies to other people's threads, and edits to earlier posts not made in this review. A positive verdict alone never bypasses this gate.
 
 **Autonomous draft review exception: both conditions must hold—the PR is a draft AND its author is the user or a confirmed user-owned bot.** For eligible PRs, complete the investigation and quality checks, then post the review without asking for approval. This also covers review-related inline comments, self-review comments, replies, and edits on that PR. Report what was posted and link to it; do not wait for a ceremonial sign-off. Explicit user instructions to hold or not post override this exception.
 
@@ -95,7 +97,7 @@ EOF
 gh issue comment <n> --body-file /tmp/issue-comment.md
 ```
 
-GitHub rejects approve and request-changes reviews when the posting account is the PR author. Only in that case (confirmed by the login check above, not by the user having written the PR) post the same body with `gh pr comment` and say in the first line that it is a self-review; do not soften the requests because of it. The same posting authorization rules apply.
+GitHub rejects approve and request-changes reviews when the posting account is the PR author. Only in that case (confirmed by the login check above, not by the user having written the PR) post the same body with `gh pr comment` and say in the first line that it is a self-review; do not soften the requests because of it. The same posting authorization rules apply. This also happens when a bot account posts reviews and the same bot opened the PR (for example a Factory-built PR, when `gh` runs as that Factory app's bot). In that case, tell the user it went up as a comment because GitHub blocks that account from giving a verdict on its own PR, and give the verdict you would have posted.
 
 If GraphQL is rate-limited: `gh api repos/<owner>/<repo>/pulls/<n>/reviews -X POST` (above) and `gh api repos/<owner>/<repo>/issues/<n>/comments -X POST -f body=@/tmp/issue-comment.md`. `gh` output can carry ANSI codes; use `--jq` or `NO_COLOR=1`.
 
@@ -105,4 +107,4 @@ If a PR-subscription tool is available (`github_subscribe_pr`), subscribe to the
 
 ## Before posting
 
-Re-read the body against the investigation: the framing, requests, and verification summary must preserve its conclusions and evidence limits. Remove suggestion-style softeners and tier labels without dropping justified requests or strengthening claims beyond their evidence. Then confirm the event and the requests agree: requests present → request changes; none → approve, subject to the self-review comment exception. For an eligible autonomous draft review, verify eligibility immediately before posting and proceed without approval. Otherwise show the body and event to the user and wait for an explicit go; "looks good" on the review is not "post it".
+Re-read the body against the investigation: the framing, requests, and verification summary must preserve its conclusions and evidence limits. Remove suggestion-style softeners and tier labels without dropping justified requests or strengthening claims beyond their evidence. Then confirm the event and the requests agree: requests present → request changes; none → approve, subject to the self-review comment exception. When the user asked for the review, or for an eligible autonomous draft review (verify eligibility immediately before posting), post without asking again. Otherwise show the body and event to the user and wait for an explicit go; "looks good" on the review is not "post it".
