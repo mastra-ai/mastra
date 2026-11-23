@@ -8,7 +8,11 @@ import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/o
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
-import { MASTRA_GATEWAY_PREFIX, normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
+import {
+  MASTRA_GATEWAY_PREFIX,
+  normalizeLegacyProviderId,
+  withCodexFastModels,
+} from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { getModelReasoningOptions, MastraGateway, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
@@ -672,7 +676,7 @@ export async function buildModelCatalog({
       deploymentProviders,
     }),
   ]);
-  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
+  const builtIn: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
       ? [
           {
@@ -687,6 +691,7 @@ export async function buildModelCatalog({
         ]
       : [],
   );
+  const catalog = withCodexFastModels(builtIn, { codexOAuth: access.openai === 'oauth' });
   // The boot-time gateway catalog only carries the local custom providers, so
   // tenant callers get the rows in effect for them here. Dedupe against ids
   // already present.

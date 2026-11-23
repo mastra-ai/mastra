@@ -1,3 +1,4 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -33,6 +34,11 @@ export interface FactorySessionToolDependencies {
   sessionModel: {
     projects: FactoryProjectsStorage;
     modelDefaults: ModelDefaultsStorage;
+    /**
+     * The server's own sign-ins, for local mode without tenant credentials, so
+     * model switches see the same catalog as the Settings picker.
+     */
+    localAuthStorage?: () => AuthStorage | undefined;
     /**
      * Tenant credential stores, present when auth is on. Model switches then
      * check the target session's credential scope, like the Settings picker;
@@ -84,7 +90,9 @@ export function createFactorySessionTools(
     const known = new Set(models.flatMap(model => (typeof model.id === 'string' ? [model.id] : [])));
     const tenantCatalog = deps.sessionModel.tenantCatalog;
     if (!tenantCatalog) {
-      const usable = (await buildModelCatalog({ controller })).map(model => model.id);
+      const usable = (await buildModelCatalog({ controller, authStorage: deps.sessionModel.localAuthStorage?.() })).map(
+        model => model.id,
+      );
       return { usable, known, scopeLabel: 'server' };
     }
     const requestContext = new RequestContext();
