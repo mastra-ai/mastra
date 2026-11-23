@@ -18,7 +18,11 @@ const CommentInputSchema = z.object({
 
 const CustomFieldInputSchema = z.object({
   id: z.number().describe('The ID of the custom field.'),
-  value: z.union([z.string(), z.number(), z.boolean()]).describe('The value to set for the custom field.'),
+  value: z
+    .union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()])
+    .describe(
+      'The value to set for the custom field: an array of option tags for a multi-select field, or null to clear it.',
+    ),
 });
 
 export const updateTicketInputSchema = z.object({
@@ -42,7 +46,7 @@ export const updateTicketInputSchema = z.object({
 
 const TicketFieldSchema = z.object({
   id: z.number(),
-  value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+  value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).optional(),
 });
 
 const ProviderTicketSchema = z.object({
@@ -123,7 +127,7 @@ export function updateTicketTool(proxy: PlatformProxy) {
         group_id?: number;
         requester_id?: number;
         tags?: string[];
-        custom_fields?: Array<{ id: number; value: string | number | boolean }>;
+        custom_fields?: Array<{ id: number; value: string | number | boolean | string[] | null }>;
         comment?: {
           body: string;
           public?: boolean;

@@ -27,8 +27,8 @@ const ProviderResponseSchema = z.object({
   meta: z
     .object({
       has_more: z.boolean().optional(),
-      after_cursor: z.string().optional(),
-      before_cursor: z.string().optional(),
+      after_cursor: z.string().nullish(),
+      before_cursor: z.string().nullish(),
     })
     .optional(),
   count: z.number().optional(),
@@ -81,7 +81,7 @@ export function listViewsTool(proxy: PlatformProxy) {
           ...(view.created_at !== undefined && { created_at: view.created_at }),
           ...(view.updated_at !== undefined && { updated_at: view.updated_at }),
         })),
-        ...(parsed.meta?.after_cursor !== undefined && { next_cursor: parsed.meta.after_cursor }),
+        ...(parsed.meta?.has_more && parsed.meta.after_cursor && { next_cursor: parsed.meta.after_cursor }),
       };
     },
   });

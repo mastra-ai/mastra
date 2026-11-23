@@ -1189,6 +1189,160 @@ function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
  * ticket update over a concurrent one. Writes get exactly one attempt; reads keep
  * the template's retries.
  */
+/** Rewrites expected in the exec body; a different count means the template changed. */
+function rewriteExecBody(action: ExtractedAction, rewrites: readonly StatementRewrite[]): ExtractedAction {
+  let execBody = action.execBody;
+  for (const { pattern, replacement, count, what } of rewrites) {
+    const global = new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`);
+    if ((execBody.match(global)?.length ?? 0) !== count) {
+      throw new Error(
+        `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+      );
+    }
+    execBody = execBody.replace(global, replacement);
+  }
+  return { ...action, execBody };
+}
+
+/** Zendesk sends `null` for the cursor on the edge pages; the templates reject null. */
+const ZENDESK_NULL_CURSORS: StatementRewrite = {
+  pattern: /(after_cursor|before_cursor): z\.string\(\)\.optional\(\)/,
+  replacement: '$1: z.string().nullish()',
+  count: 0,
+  what: 'nullable cursors',
+};
+
+/** A next cursor only while Zendesk says more results remain. */
+function zendeskNextCursor(source: string, pattern: RegExp): StatementRewrite {
+  return {
+    pattern,
+    replacement: `...(${source}.meta?.has_more && ${source}.meta.after_cursor && { next_cursor: ${source}.meta.after_cursor })`,
+    count: 1,
+    what: 'next cursor',
+  };
+}
+
+interface ProviderActionFixes {
+  statements?: readonly StatementRewrite[];
+  exec?: readonly StatementRewrite[];
+}
+
+/**
+ * Corrections to the Zendesk templates, each found reviewing the toolset:
+ * - Cursor pagination answers `null` cursors at either end, which the
+ *   templates reject, and a cursor is only a continuation while `has_more`.
+ * - Multi-select custom fields hold arrays of option tags, and `null` clears a
+ *   field; the update template rejected both, and rejected the ticket Zendesk
+ *   returned after the update had already been applied.
+ * - Help Center content tag ids are strings, so article reads failed.
+ * - Setting a user's organization replaces all their memberships.
+ * Drop an entry once the upstream template is fixed.
+ */
+const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
+  'get-article': {
+    statements: [
+      {
+        pattern: /content_tag_ids: z\.array\(z\.number\(\)\)/,
+        replacement: 'content_tag_ids: z.array(z.string())',
+        count: 2,
+        what: 'string content tag ids',
+      },
+    ],
+  },
+  'list-articles': {
+    statements: [
+      {
+        pattern: /content_tag_ids: z\.array\(z\.number\(\)\)/,
+        replacement: 'content_tag_ids: z.array(z.string())',
+        count: 1,
+        what: 'string content tag ids',
+      },
+    ],
+  },
+  'get-ticket-comments': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
+    exec: [
+      zendeskNextCursor(
+        'responseData',
+        /\.\.\.\(responseData\.meta\?\.after_cursor !== undefined && \{\s*next_cursor: responseData\.meta\.after_cursor\s*\}\)/,
+      ),
+    ],
+  },
+  'list-groups': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }],
+    exec: [
+      zendeskNextCursor(
+        'responseData',
+        /\.\.\.\(responseData\.meta\?\.after_cursor != null && \{ next_cursor: responseData\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'list-tickets': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
+    exec: [
+      zendeskNextCursor(
+        'data',
+        /\.\.\.\(data\.meta\?\.after_cursor != null && \{ next_cursor: data\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'list-users': { statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }] },
+  'list-views': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }],
+    exec: [
+      zendeskNextCursor(
+        'parsed',
+        /\.\.\.\(parsed\.meta\?\.after_cursor !== undefined && \{ next_cursor: parsed\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'update-ticket': {
+    statements: [
+      {
+        pattern:
+          /value: z\.union\(\[z\.string\(\), z\.number\(\), z\.boolean\(\)\]\)\.describe\('The value to set for the custom field\.'\)/,
+        replacement:
+          "value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).describe('The value to set for the custom field: an array of option tags for a multi-select field, or null to clear it.')",
+        count: 1,
+        what: 'custom field input values',
+      },
+      {
+        pattern: /value: z\.union\(\[z\.string\(\), z\.number\(\), z\.boolean\(\), z\.null\(\)\]\)\.optional\(\)/,
+        replacement: 'value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).optional()',
+        count: 1,
+        what: 'custom field values',
+      },
+    ],
+    exec: [
+      {
+        pattern: /value: string \| number \| boolean \}/,
+        replacement: 'value: string | number | boolean | string[] | null }',
+        count: 1,
+        what: 'custom field payload type',
+      },
+    ],
+  },
+  'update-user': {
+    statements: [
+      {
+        pattern: /organizationId: z\.number\(\)\.optional\(\)\.describe\("The ID of the user's organization\."\)/,
+        replacement:
+          'organizationId: z.number().optional().describe("The ID of the organization to make the user\'s only organization. Removes the user from every other organization they belong to.")',
+        count: 1,
+        what: 'organization description',
+      },
+    ],
+  },
+};
+
+function adaptZendeskAction(action: ExtractedAction): ExtractedAction {
+  const fixes = ZENDESK_FIXES[action.candidate.actionSlug];
+  let adapted = attemptWritesOnce(action);
+  if (fixes?.statements) adapted = rewriteModuleStatements(adapted, fixes.statements);
+  if (fixes?.exec) adapted = rewriteExecBody(adapted, fixes.exec);
+  return adapted;
+}
+
 function attemptWritesOnce(action: ExtractedAction): ExtractedAction {
   if (/platformProxy\.get\(/.test(action.execBody)) return action;
   return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
@@ -1326,7 +1480,7 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
     return adaptGitLabAction(action);
   }
   if (action.candidate.providerId === 'zendesk') {
-    return attemptWritesOnce(action);
+    return adaptZendeskAction(action);
   }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);

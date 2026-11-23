@@ -43,7 +43,7 @@ const ProviderCommentSchema = z
 
 const MetaSchema = z.object({
   has_more: z.boolean().optional(),
-  after_cursor: z.string().optional(),
+  after_cursor: z.string().nullish(),
 });
 
 const ProviderResponseSchema = z.object({
@@ -124,9 +124,8 @@ export function getTicketCommentsTool(proxy: PlatformProxy) {
 
       return {
         comments,
-        ...(responseData.meta?.after_cursor !== undefined && {
-          next_cursor: responseData.meta.after_cursor,
-        }),
+        ...(responseData.meta?.has_more &&
+          responseData.meta.after_cursor && { next_cursor: responseData.meta.after_cursor }),
       };
     },
   });

@@ -22,7 +22,7 @@ const ArticleSchema = z.object({
   author_id: z.number().optional(),
   body: z.string().optional(),
   comments_disabled: z.boolean().optional(),
-  content_tag_ids: z.array(z.number()).optional(),
+  content_tag_ids: z.array(z.string()).optional(),
   created_at: z.string().optional(),
   draft: z.boolean().optional(),
   edited_at: z.string().optional(),

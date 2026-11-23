@@ -32,7 +32,7 @@ const ProviderArticleSchema = z.object({
   user_segment_id: z.number().nullable().optional(),
   user_segment_ids: z.array(z.number()).optional(),
   label_names: z.array(z.string()).optional(),
-  content_tag_ids: z.array(z.number()).optional(),
+  content_tag_ids: z.array(z.string()).optional(),
   outdated: z.boolean().optional(),
   outdated_locales: z.array(z.string()).optional(),
 });
@@ -61,7 +61,7 @@ export const getArticleOutputSchema = z.object({
   user_segment_id: z.number().optional(),
   user_segment_ids: z.array(z.number()).optional(),
   label_names: z.array(z.string()).optional(),
-  content_tag_ids: z.array(z.number()).optional(),
+  content_tag_ids: z.array(z.string()).optional(),
   outdated: z.boolean().optional(),
   outdated_locales: z.array(z.string()).optional(),
 });

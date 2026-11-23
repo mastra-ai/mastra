@@ -42,8 +42,8 @@ const ProviderResponseSchema = z.object({
   meta: z
     .object({
       has_more: z.boolean().optional(),
-      after_cursor: z.string().optional(),
-      before_cursor: z.string().optional(),
+      after_cursor: z.string().nullish(),
+      before_cursor: z.string().nullish(),
     })
     .optional(),
 });
@@ -80,7 +80,8 @@ export function listGroupsTool(proxy: PlatformProxy) {
           ...(group.deleted !== undefined && { deleted: group.deleted }),
           ...(group.is_public !== undefined && { is_public: group.is_public }),
         })),
-        ...(responseData.meta?.after_cursor != null && { next_cursor: responseData.meta.after_cursor }),
+        ...(responseData.meta?.has_more &&
+          responseData.meta.after_cursor && { next_cursor: responseData.meta.after_cursor }),
       };
     },
   });

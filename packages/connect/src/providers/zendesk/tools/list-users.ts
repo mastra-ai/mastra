@@ -24,8 +24,8 @@ const ProviderUserSchema = z.object({
 
 const ProviderMetaSchema = z.object({
   has_more: z.boolean().optional(),
-  after_cursor: z.string().optional(),
-  before_cursor: z.string().optional(),
+  after_cursor: z.string().nullish(),
+  before_cursor: z.string().nullish(),
 });
 
 const ProviderLinksSchema = z.object({

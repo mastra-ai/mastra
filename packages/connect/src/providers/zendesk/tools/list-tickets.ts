@@ -95,7 +95,7 @@ const ProviderListResponseSchema = z.object({
   meta: z
     .object({
       has_more: z.boolean().optional(),
-      after_cursor: z.string().optional(),
+      after_cursor: z.string().nullish(),
     })
     .optional(),
 });
@@ -177,7 +177,7 @@ export function listTicketsTool(proxy: PlatformProxy) {
 
       return {
         tickets,
-        ...(data.meta?.after_cursor != null && { next_cursor: data.meta.after_cursor }),
+        ...(data.meta?.has_more && data.meta.after_cursor && { next_cursor: data.meta.after_cursor }),
         ...(data.meta?.has_more !== undefined && { has_more: data.meta.has_more }),
       };
     },

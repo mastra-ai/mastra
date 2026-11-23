@@ -15,7 +15,12 @@ export const updateUserInputSchema = z.object({
   details: z.string().optional().describe('Any details you want to store about the user, such as an address.'),
   notes: z.string().optional().describe('Any notes you want to store about the user.'),
   phone: z.string().optional().describe("The user's primary phone number."),
-  organizationId: z.number().optional().describe("The ID of the user's organization."),
+  organizationId: z
+    .number()
+    .optional()
+    .describe(
+      "The ID of the organization to make the user's only organization. Removes the user from every other organization they belong to.",
+    ),
   role: z.enum(['end-user', 'agent', 'admin']).optional().describe("The user's role."),
   customRoleId: z.number().optional().describe('A custom role ID if the user is an agent on Enterprise plan.'),
   defaultGroupId: z.number().optional().describe("The ID of the user's default group."),

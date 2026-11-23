@@ -308,4 +308,131 @@ describe('Zendesk tools', () => {
       await expect(run('zendesk_list_permission_groups', {})).resolves.toEqual({ permission_groups: [] });
     });
   });
+  describe('custom fields', () => {
+    const ticket = {
+      id: 12,
+      url: 'https://acme.zendesk.com/api/v2/tickets/12.json',
+      status: 'open',
+      requester_id: 5,
+      submitter_id: 5,
+      has_incidents: false,
+      is_public: true,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    it('sets a multi-select field and clears another', async () => {
+      const custom_fields = [
+        { id: 301, value: ['hardware', 'printer'] },
+        { id: 302, value: null },
+      ];
+      answer = () => ({ status: 200, body: { ticket: { ...ticket, custom_fields, fields: custom_fields } } });
+
+      const result = await run('zendesk_update_ticket', { ticket_id: 12, custom_fields });
+
+      expect(requests).toEqual([
+        { method: 'PUT', target: '/api/v2/tickets/12.json', body: { ticket: { custom_fields } } },
+      ]);
+      expect(result).toMatchObject({ id: 12, custom_fields });
+    });
+  });
+
+  describe('content tags', () => {
+    const tagged = {
+      id: 901,
+      title: 'Restart the printer',
+      locale: 'en-us',
+      content_tag_ids: ['01GT23D51Y', '01GT23FWWN'],
+    };
+
+    it('reads an article with content tags', async () => {
+      answer = () => ({ status: 200, body: { article: tagged } });
+
+      await expect(run('zendesk_get_article', { article_id: 901 })).resolves.toMatchObject({
+        content_tag_ids: ['01GT23D51Y', '01GT23FWWN'],
+      });
+    });
+
+    it('lists articles with content tags', async () => {
+      answer = () => ({ status: 200, body: { articles: [tagged], next_page: null } });
+
+      const result = (await run('zendesk_list_articles', { locale: 'en-us' })) as { articles: unknown[] };
+
+      expect(result.articles).toEqual([expect.objectContaining({ content_tag_ids: ['01GT23D51Y', '01GT23FWWN'] })]);
+    });
+  });
+
+  describe('cursor pages', () => {
+    const pages = [
+      ['zendesk_get_ticket_comments', { ticket_id: 12, per_page: 1 }, 'comments', { id: 1 }],
+      [
+        'zendesk_list_groups',
+        {},
+        'groups',
+        {
+          id: 1,
+          name: 'Support',
+          url: 'https://acme.zendesk.com/api/v2/groups/1.json',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ],
+      [
+        'zendesk_list_tickets',
+        {},
+        'tickets',
+        { id: 1, url: 'https://acme.zendesk.com/api/v2/tickets/1.json', status: 'open' },
+      ],
+      ['zendesk_list_users', {}, 'users', { id: 1 }],
+      ['zendesk_list_views', {}, 'views', { id: 1, title: 'Unsolved' }],
+    ] as const;
+
+    it.each(pages)('%s reads the last page, where Zendesk sends null cursors', async (toolId, input, key, record) => {
+      answer = () => ({
+        status: 200,
+        body: { [key]: [record], meta: { has_more: false, after_cursor: null, before_cursor: null } },
+      });
+
+      const result = (await run(toolId, input)) as Record<string, unknown>;
+
+      expect(result[key] ?? result.items).toHaveLength(1);
+      expect(result.next_cursor).toBeUndefined();
+    });
+
+    it.each(pages)('%s offers no cursor once Zendesk has nothing more', async (toolId, input, key, record) => {
+      answer = () => ({
+        status: 200,
+        body: { [key]: [record], meta: { has_more: false, after_cursor: 'end', before_cursor: 'start' } },
+      });
+
+      const result = (await run(toolId, input)) as Record<string, unknown>;
+
+      expect(result.next_cursor).toBeUndefined();
+    });
+
+    it.each(pages)('%s hands back the cursor while more remain', async (toolId, input, key, record) => {
+      answer = () => ({
+        status: 200,
+        body: { [key]: [record], meta: { has_more: true, after_cursor: 'next', before_cursor: null } },
+      });
+
+      const result = (await run(toolId, input)) as Record<string, unknown>;
+
+      expect(result.next_cursor).toBe('next');
+    });
+  });
+
+  it("warns that setting a user's organization replaces their others", async () => {
+    const resolved = await tools({
+      providers: { zendesk: { connectionId: connection.id } },
+      allowTools: ['zendesk_update_user'],
+      projectId: `proj_${++resolutions}`,
+      client: { accessToken: 'test-platform-token', baseUrl },
+    })();
+    const schema = (
+      resolved.zendesk_update_user as { inputSchema: { shape: Record<string, { description?: string }> } }
+    ).inputSchema;
+
+    expect(schema.shape.organizationId?.description).toMatch(/removes the user from every other organization/i);
+  });
 });
