@@ -1,3 +1,4 @@
+import { SetupCommandError } from '../integrations/github/sandbox.js';
 import type {
   SessionSetupInProgress,
   SourceControlSession,
@@ -28,7 +29,8 @@ function warnMarkFailed(action: string, sessionId: string, error: unknown): void
  * Run a setup command, recording it on the session as in progress until it
  * settles. The mark's deadline bounds the command: `run` gets the time left
  * until it as the command's timeout, so however long the mark write took, the
- * command is stopped before the mark lapses. The mark only informs the agent, so failing to write it never
+ * command is stopped before the mark lapses; if the write used up the whole
+ * limit, the command is not started and setup fails. The mark only informs the agent, so failing to write it never
  * stops setup, and clearing it leaves a later setup's mark alone.
  */
 export async function trackSetup<T>(
@@ -47,7 +49,16 @@ export async function trackSetup<T>(
     })
     .catch((error: unknown) => warnMarkFailed('write', sessionId, error));
   try {
-    return await run(Math.max(deadline.getTime() - Date.now(), 1));
+    const timeoutMs = deadline.getTime() - Date.now();
+    // The mark already lapsed: a command started now would run unannounced
+    // and could be recreated away, so fail setup the way a timeout would.
+    if (timeoutMs <= 0) {
+      throw new SetupCommandError(
+        `Setup for ${target} did not start: recording it used up its ${Math.round(limitMs / 1000)}s limit.`,
+        'setup-failed',
+      );
+    }
+    return await run(timeoutMs);
   } finally {
     await storage
       .clearSetupInProgress({ sessionId, startedAt })

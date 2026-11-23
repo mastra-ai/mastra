@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { SetupCommandError } from '../integrations/github/sandbox.js';
 import { describeSetupInProgress, trackSetup, WORKSPACE_SETUP_TARGET } from './setup-progress.js';
 
 describe('trackSetup', () => {
@@ -48,6 +49,36 @@ describe('trackSetup deadline', () => {
     expect(stopsAt).toBeLessThanOrEqual(mark!.deadline.getTime());
     expect(mark!.deadline.toISOString()).toBe('2026-11-23T17:15:00.000Z');
     expect(stopsAt - Date.now()).toBe(10 * 60_000);
+  });
+});
+
+describe('trackSetup with an exhausted limit', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ['uses exactly', 15 * 60_000],
+    ['exceeds', 16 * 60_000],
+  ])('fails setup without starting the command when the mark write %s the limit', async (_, writeMs) => {
+    vi.useFakeTimers({ now: new Date('2026-11-23T17:00:00Z') });
+    const storage = {
+      setSetupInProgress: vi.fn(async () => {
+        await new Promise(resolve => setTimeout(resolve, writeMs));
+      }),
+      clearSetupInProgress: vi.fn(async () => {}),
+    };
+    const run = vi.fn(async () => {});
+    const tracked = trackSetup(storage, 'session-1', 'acme/web', 15 * 60_000, run);
+    const failed = expect(tracked).rejects.toBeInstanceOf(SetupCommandError);
+    await vi.advanceTimersByTimeAsync(writeMs);
+    await failed;
+
+    expect(run).not.toHaveBeenCalled();
+    expect(storage.clearSetupInProgress).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      startedAt: new Date('2026-11-23T17:00:00Z'),
+    });
   });
 });
 
