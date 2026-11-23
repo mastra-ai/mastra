@@ -2204,6 +2204,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runStorage: this.#runStorage(workflowId, runId),
           step,
           logger: this.mastra.getLogger(),
+          startedBy: await this.#sleepStartedBy(args, step),
         },
       );
     } else if (step?.type === 'sleepUntil') {
@@ -2233,6 +2234,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runStorage: this.#runStorage(workflowId, runId),
           step,
           logger: this.mastra.getLogger(),
+          startedBy: await this.#sleepStartedBy(args, step),
         },
       );
     } else if (step?.type === 'foreach') {
@@ -2365,6 +2367,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       deferToGuards: false,
     });
     return typeof decision === 'string' ? decision : 'continue';
+  }
+
+  /** The event id that guards a sleep's start, when the store guards step starts (see `saveWaitingSleep`). */
+  async #sleepStartedBy(args: ProcessorArgs, step: StepFlowEntry): Promise<string | undefined> {
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    return this.#guardsStepStart(store, args, step) ? args.eventId : undefined;
   }
 
   /**
@@ -4710,7 +4718,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         );
         return;
       }
-    } else if (isExecutableStep(step)) {
+    } else if (isExecutableStep(step) || step.type === 'sleep' || step.type === 'sleepUntil') {
+      // A sleep's timer publishes this end once the sleep is over (see sleep.ts).
       // clear from activeStepsPath
       delete activeStepsPath[stepId];
 
@@ -4812,31 +4821,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       } else {
         stepResults = { ...newStepResults, [stepId]: storedResult };
       }
-    } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
-      // A sleep's timer publishes this event once the sleep is over (see sleep.ts).
-      delete activeStepsPath[stepId];
-      // A redelivered end must not save the sleep again or rewrite state from
-      // this event. Routing below still runs, so on stores that do not guard
-      // step starts the next step can run twice.
-      const stored = (await runStorage.loadSteps([stepId]))[stepId];
-      if (stored?.status !== 'success') {
-        await runStorage.writeStepResult({
-          stepId,
-          result: this.pruneStepResultForPersist({
-            workflow,
-            runId,
-            state: currentState,
-            stepId,
-            storedResult: prevResult,
-            stepResults,
-            executionPath,
-            activeStepsPath,
-          }),
-          requestContext: withoutAuthToken(requestContext),
-          state: currentState,
-        });
-      }
-      stepResults = { ...stepResults, [stepId]: prevResult };
     }
 
     // Update stepResults with current state

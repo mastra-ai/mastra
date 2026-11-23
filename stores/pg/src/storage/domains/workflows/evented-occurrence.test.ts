@@ -509,6 +509,140 @@ describe.each([1, 2] as const)('Postgres evented occurrence replay on storage v%
     8_000,
   );
 
+  // Storage v2 rejects pruneSnapshot, so its cases cover the redelivered end without pruning.
+  it.each(['sleep', 'sleepUntil'] as const)(
+    'keeps a finished %s for its successor and continues a redelivered end from the saved result',
+    async kind => {
+      const prune = storageVersion === 1;
+      const driver = new RedeliveryDriver();
+      const schema = z.object({ n: z.number() });
+      const seen: { input: unknown; state: unknown }[] = [];
+      let releaseSecond!: () => void;
+      const secondGate = new Promise<void>(resolve => {
+        releaseSecond = resolve;
+      });
+      const first = createStep({
+        id: 'first',
+        inputSchema: schema,
+        outputSchema: schema,
+        stateSchema: schema,
+        execute: async ({ setState }) => {
+          await setState({ n: 1 });
+          return { n: 1 };
+        },
+      });
+      const second = createStep({
+        id: 'second',
+        inputSchema: schema,
+        outputSchema: schema,
+        stateSchema: schema,
+        execute: async ({ inputData, getState }) => {
+          seen.push({ input: inputData, state: await getState() });
+          await secondGate;
+          return { n: inputData.n + 1 };
+        },
+      });
+      const builder = createWorkflow({
+        id: `sleep-continuation-${randomUUID()}`,
+        inputSchema: schema,
+        outputSchema: schema,
+        stateSchema: schema,
+        options: prune
+          ? {
+              validateInputs: false,
+              pruneSnapshot: ({ snapshot }) => ({
+                ...snapshot,
+                context: Object.fromEntries(
+                  Object.entries(snapshot.context).map(([id, result]) => [
+                    id,
+                    id.startsWith('sleep') && result?.status === 'success' ? { ...result, output: undefined } : result,
+                  ]),
+                ),
+              }),
+            }
+          : { validateInputs: false },
+      }).then(first);
+      const workflow = (
+        kind === 'sleep' ? builder.sleep(10) : builder.sleepUntil(async () => new Date(Date.now() + 10))
+      )
+        .then(second)
+        .commit();
+      const sleepId = (workflow.stepGraph[1] as { id: string }).id;
+      const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+      const publish = driver.pubsub.publish.bind(driver.pubsub);
+      let waitingEvents = 0;
+      let crashed!: () => void;
+      const crash = new Promise<void>(resolve => {
+        crashed = resolve;
+      });
+      let interrupt = true;
+      const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (event.type === 'watch' && event.data?.type === 'workflow-step-waiting') waitingEvents++;
+        // The worker stops after saving the sleep's result, before the successor is published.
+        if (
+          interrupt &&
+          topic === 'workflows' &&
+          event.type === 'workflow.step.run' &&
+          event.data.executionPath[0] === 2
+        ) {
+          crashed();
+          return;
+        }
+        return publish(topic, event, options);
+      });
+      await mastra.startWorkers();
+      const store = (await storage.getStore('workflows'))!;
+      try {
+        const run = await workflow.createRun();
+        const sleepOf = async () =>
+          (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.context[sleepId];
+        const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
+        await crash;
+        expect(await sleepOf()).toMatchObject({ status: 'success', output: { n: 1 } });
+
+        // A redelivered sleep start finds the saved result: it neither re-arms nor reports waiting again.
+        const sleepRun = driver.stepRuns({ spec: '1', runId: run.runId })[0]!;
+        const sleepLease = `workflow-step-run:${run.runId}:${sleepRun.id}`;
+        const redeliverSleepStart = async () => {
+          const owner = await driver.pubsub.getLeaseOwner(sleepLease);
+          if (owner) await driver.pubsub.releaseLease(sleepLease, owner);
+          await driver.redeliverEvent(sleepRun);
+        };
+        const waitingBefore = waitingEvents;
+        await redeliverSleepStart();
+        expect(await sleepOf()).toMatchObject({ status: 'success', output: { n: 1 } });
+        expect(waitingEvents).toBe(waitingBefore);
+
+        interrupt = false;
+        const end = driver.events.find(
+          event => event.type === 'workflow.step.end' && event.runId === run.runId && event.data.executionPath[0] === 1,
+        )!;
+        await driver.redeliverEvent({
+          ...end,
+          data: { ...end.data, prevResult: { ...end.data.prevResult, output: { n: 999 } }, state: { n: 999 } },
+        });
+        await expect.poll(() => seen.length, { timeout: 1_500 }).toBe(1);
+        expect(seen).toEqual([{ input: { n: 1 }, state: { n: 1 } }]);
+        // The successor started with the full input, so the sleep is released for pruning.
+        const released = await sleepOf();
+        expect(released).toMatchObject({ status: 'success', metadata: { __continuationStarted: true } });
+        expect(released?.output).toEqual(prune ? undefined : { n: 1 });
+
+        await redeliverSleepStart();
+        expect(waitingEvents).toBe(waitingBefore);
+        releaseSecond();
+        expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+        expect(seen).toHaveLength(1);
+      } finally {
+        releaseSecond();
+        interrupted.mockRestore();
+        await mastra.stopWorkers();
+        driver.dispose();
+      }
+    },
+    10_000,
+  );
+
   it.each(
     (
       [

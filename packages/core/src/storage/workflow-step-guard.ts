@@ -53,8 +53,9 @@ export function assertWorkflowStepGuard({
       if (stored?.status === 'success') return;
       throw new WorkflowStepConflictError('stale', stored);
     }
-    if (stored?.status === 'running') return;
     if (stored?.metadata?.__continuationStarted) throw new WorkflowStepConflictError('stale', stored);
+    // A sleep's occurrence stays `waiting` until its timer's end completes it.
+    if (stored?.status === 'running' || stored?.status === 'waiting') return;
     throw new WorkflowStepConflictError('completed', stored, snapshot.requestContext, snapshot);
   }
   if (startGuard) {

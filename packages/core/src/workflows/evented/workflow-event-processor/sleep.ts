@@ -18,12 +18,14 @@ import type { ProcessorArgs } from '.';
 function endSleepOnTimer(
   pubsub: PubSub,
   logger: IMastraLogger | undefined,
-  data: Omit<ProcessorArgs, 'workflow' | 'prevResult'> & { prevResult: { output: unknown; startedAt: number } },
+  data: Omit<ProcessorArgs, 'workflow' | 'prevResult'> & {
+    prevResult: { output: unknown; startedAt: number; metadata?: { startedBy: string } };
+  },
   duration: number,
 ) {
   setLongTimeout(() => {
-    const { output, startedAt } = data.prevResult;
-    const prevResult = { status: 'success' as const, payload: output, output, startedAt, endedAt: Date.now() };
+    const { output } = data.prevResult;
+    const prevResult = { status: 'success' as const, payload: output, ...data.prevResult, endedAt: Date.now() };
     pubsub
       .publish('workflows', { type: 'workflow.step.end', runId: data.runId, data: { ...data, prevResult } })
       .catch(error =>
@@ -31,6 +33,52 @@ function endSleepOnTimer(
         logger?.error('Failed to publish the end of a finished sleep', { runId: data.runId, error }),
       );
   }, duration);
+}
+
+/**
+ * Saves a starting sleep as `waiting`. With `startedBy` (a store that guards
+ * step starts) the sleep is an occurrence like a started step: the write is
+ * start-guarded, and its timer's `workflow.step.end` completes it through the
+ * step end every step uses. A redelivered start whose sleep already finished
+ * is rejected and acknowledged: its timer's end, not this start, continues the
+ * run (unlike a step, whose start reclaims a finished result). A start
+ * redelivered while the sleep is still `waiting` re-arms the timer; the
+ * completion guard lets only one of its ends complete the sleep.
+ */
+async function saveWaitingSleep(
+  runStorage: RunStorage,
+  stepId: string,
+  startedBy: string | undefined,
+  {
+    executionPath,
+    stepResults,
+    activeStepsPath,
+    prevResult,
+    requestContext,
+  }: Pick<ProcessorArgs, 'executionPath' | 'stepResults' | 'activeStepsPath' | 'prevResult' | 'requestContext'>,
+) {
+  const output = prevResult.status === 'success' ? prevResult.output : undefined;
+  const waiting = {
+    status: 'waiting' as const,
+    payload: output,
+    startedAt: Date.now(),
+    ...(startedBy && { metadata: { startedBy } }),
+  };
+  const waitingStepsPath = { ...activeStepsPath, [stepId]: executionPath };
+  await runStorage.writeStepResult({
+    stepId,
+    result: waiting,
+    requestContext: withoutAuthToken(requestContext ?? {}),
+    ...(startedBy && {
+      startGuard: { eventId: startedBy, expectedStartedBy: stepResults[stepId]?.metadata?.startedBy },
+    }),
+  });
+  await runStorage.updateHeader({
+    status: 'running',
+    activePaths: executionPath,
+    activeStepsPath: waitingStepsPath,
+  });
+  return { output, waiting, waitingStepsPath };
 }
 
 export async function processWorkflowWaitForEvent(
@@ -112,47 +160,38 @@ export async function processWorkflowSleep(
     runStorage,
     step,
     logger,
+    startedBy,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     runStorage: RunStorage;
     logger?: IMastraLogger;
+    /** The delivery's event id when the store guards this start (see `saveWaitingSleep`). */
+    startedBy?: string;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
   // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
   // `workflows` routing publishes below are never gated — they drive execution.
   const emitStepEvents = workflow.options.emitStepEvents !== false;
-  const startedAt = Date.now();
+  const { output, waiting, waitingStepsPath } = await saveWaitingSleep(runStorage, step.id, startedBy, {
+    executionPath,
+    stepResults,
+    activeStepsPath,
+    prevResult,
+    requestContext,
+  });
+
   if (emitStepEvents) {
     await pubsub.publish(`workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
       data: {
         type: 'workflow-step-waiting',
-        payload: {
-          id: step.id,
-          status: 'waiting',
-          payload: prevResult.status === 'success' ? prevResult.output : undefined,
-          startedAt,
-        },
+        payload: { id: step.id, status: 'waiting', payload: output, startedAt: waiting.startedAt },
       },
     });
   }
-
-  const output = prevResult.status === 'success' ? prevResult.output : undefined;
-  const waiting = { status: 'waiting' as const, payload: output, startedAt };
-  const waitingStepsPath = { ...activeStepsPath, [step.id]: executionPath };
-  await runStorage.writeStepResult({
-    stepId: step.id,
-    result: waiting,
-    requestContext: withoutAuthToken(requestContext ?? {}),
-  });
-  await runStorage.updateHeader({
-    status: 'running',
-    activePaths: executionPath,
-    activeStepsPath: waitingStepsPath,
-  });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
@@ -182,7 +221,7 @@ export async function processWorkflowSleep(
       parentWorkflow,
       stepResults: { ...stepResults, [step.id]: waiting },
       activeStepsPath: waitingStepsPath,
-      prevResult: { output, startedAt },
+      prevResult: { output, startedAt: waiting.startedAt, ...(waiting.metadata && { metadata: waiting.metadata }) },
       requestContext,
       actor,
       perStep,
@@ -219,31 +258,27 @@ export async function processWorkflowSleepUntil(
     runStorage,
     step,
     logger,
+    startedBy,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     runStorage: RunStorage;
     logger?: IMastraLogger;
+    /** The delivery's event id when the store guards this start (see `saveWaitingSleep`). */
+    startedBy?: string;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
   // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
   // `workflows` routing publish below is never gated — it drives execution.
   const emitStepEvents = workflow.options.emitStepEvents !== false;
-  const startedAt = Date.now();
 
-  const output = prevResult.status === 'success' ? prevResult.output : undefined;
-  const waiting = { status: 'waiting' as const, payload: output, startedAt };
-  const waitingStepsPath = { ...activeStepsPath, [step.id]: executionPath };
-  await runStorage.writeStepResult({
-    stepId: step.id,
-    result: waiting,
-    requestContext: withoutAuthToken(requestContext ?? {}),
-  });
-  await runStorage.updateHeader({
-    status: 'running',
-    activePaths: executionPath,
-    activeStepsPath: waitingStepsPath,
+  const { output, waiting, waitingStepsPath } = await saveWaitingSleep(runStorage, step.id, startedBy, {
+    executionPath,
+    stepResults,
+    activeStepsPath,
+    prevResult,
+    requestContext,
   });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
@@ -269,8 +304,8 @@ export async function processWorkflowSleepUntil(
         payload: {
           id: step.id,
           status: 'waiting',
-          payload: prevResult.status === 'success' ? prevResult.output : undefined,
-          startedAt,
+          payload: output,
+          startedAt: waiting.startedAt,
         },
       },
     });
@@ -290,7 +325,7 @@ export async function processWorkflowSleepUntil(
       parentWorkflow,
       stepResults: { ...stepResults, [step.id]: waiting },
       activeStepsPath: waitingStepsPath,
-      prevResult: { output, startedAt },
+      prevResult: { output, startedAt: waiting.startedAt, ...(waiting.metadata && { metadata: waiting.metadata }) },
       requestContext,
       actor,
       perStep,

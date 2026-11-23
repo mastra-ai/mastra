@@ -188,6 +188,40 @@ export function createWorkflowStepGuardTests({
       expect(await load()).toEqual(newer);
     });
 
+    it('completes a waiting occurrence only from the delivery that started it', async () => {
+      const { a, b, runId, finish, load } = await setup();
+      const wait = (worker: typeof a, eventId: string) =>
+        writeStep(worker, runId, {
+          stepId: 'step',
+          result: { status: 'waiting', startedAt: 1, payload: {}, metadata: { startedBy: eventId } },
+          requestContext: {},
+          startGuard: { eventId },
+        });
+      await wait(a, 'sleep');
+      await wait(b, 'sleep');
+      await expect(finish('other', 1)).rejects.toMatchObject({ code: 'WORKFLOW_STEP_CONFLICT' });
+      await finish('sleep', 1);
+      const finished = await load();
+      expect(finished!.context.step).toMatchObject({ status: 'success', output: 1 });
+      // A redelivered start of a finished occurrence neither rewinds it nor writes.
+      await expect(wait(b, 'sleep')).rejects.toMatchObject({ reason: 'completed' });
+      await expect(finish('sleep', 2)).rejects.toMatchObject({ reason: 'completed' });
+      expect(await load()).toEqual(finished);
+    });
+
+    it.each([
+      { status: 'failed', error: new Error('boom'), endedAt: 2 },
+      { status: 'suspended', suspendedAt: 2 },
+    ] as const)('does not complete an occurrence stored as $status by the delivery that started it', async ended => {
+      const { a, runId, finish } = await setup();
+      await writeStep(a, runId, {
+        stepId: 'step',
+        result: { ...ended, startedAt: 1, payload: {}, metadata: { startedBy: 'first' } },
+        requestContext: {},
+      });
+      await expect(finish('first', 1)).rejects.toMatchObject({ reason: 'completed' });
+    });
+
     it('does not let a fresh delivery replace an occurrence still executing on another worker', async () => {
       const { a, b, write, load } = await setup();
       await write(a, 'first');

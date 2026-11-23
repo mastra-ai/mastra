@@ -241,7 +241,7 @@ describe.each([1, 2] as const)('a finished sleep on evented storage v%s', storag
     }
   });
 
-  it.each([false, true])('does not save its result again on a redelivered end (sleepUntil: %s)', async until => {
+  it.each([false, true])('saves the same result again on a redelivered end (sleepUntil: %s)', async until => {
     const pubsub = new EventEmitterPubSub();
     const publish = pubsub.publish.bind(pubsub);
     vi.spyOn(pubsub, 'publish').mockImplementation(async (topic: string, event: any) => {
@@ -258,11 +258,12 @@ describe.each([1, 2] as const)('a finished sleep on evented storage v%s', storag
       const result = await run.start({ inputData: order });
       expect(result.status).toBe('success');
       await new Promise(resolve => setTimeout(resolve, 200));
-      // The end still routes on, in case the first delivery stopped before
-      // publishing the next step; only a store that guards step starts
-      // drops the second run of `charge`.
+      // A sleep's end is a step's end: on a store that does not guard steps a
+      // redelivered end saves and routes again, like any step's redelivered end.
+      // Only a store that guards step starts drops the second run of `charge`.
       expect(charge.mock.calls.length).toBeGreaterThanOrEqual(1);
-      expect(sleepWrites).toHaveLength(1);
+      expect(sleepWrites).toHaveLength(2);
+      expect(sleepWrites[1]).toEqual(sleepWrites[0]);
     } finally {
       await mastra.stopWorkers();
     }
