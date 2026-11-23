@@ -1,7 +1,4 @@
-import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import type { ChartCardProps } from '../../metrics/components/chart-card';
-import { ViewTabs } from '../components/view-tabs';
-import type { DashboardExpand } from '../widget-kind';
 
 /**
  * What a widget's card shows in its top bar: `title`, plus its actions: the drilldown, the alert,
@@ -27,25 +24,3 @@ export const viewValue = (label: string | undefined, index: number) => {
 
 /** A view's visible name: its label, or `View n` when unlabelled or blank, so every option has an accessible name. */
 export const viewLabel = (label: string | undefined, index: number) => label?.trim() || `View ${index + 1}`;
-
-/**
- * The card heading for the open view: the widget's title, with several views as tabs under it
- * (`toolbar`). With somewhere to expand to, the title stays alone instead, and `ExpandAction` links there.
- */
-export function viewTitle(
-  widget: DashboardWidget,
-  views: readonly DashboardWidgetView[],
-  index: number,
-  onChoose: (index: number) => void,
-  expand?: DashboardExpand,
-): ViewHeading {
-  if (expand?.href(widget)) {
-    // The card and its expand link need a name: a blank title falls back to the first view's label.
-    return { title: widget.title?.trim() ? widget.title : viewLabel(views[0]?.label, 0) };
-  }
-  if (views.length < 2) return { title: widget.title ?? '' };
-  return {
-    title: widget.title ?? '',
-    toolbar: <ViewTabs labels={views.map((v, i) => viewLabel(v.label, i))} index={index} onChoose={onChoose} />,
-  };
-}

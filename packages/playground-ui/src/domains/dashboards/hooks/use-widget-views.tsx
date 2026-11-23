@@ -1,10 +1,34 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import { useState } from 'react';
 import type { DrilldownScope } from '../../metrics/drilldown';
-import { viewTitle } from '../lib/chrome';
+import { ViewTabs } from '../components/view-tabs';
+import { viewLabel } from '../lib/chrome';
+import type { ViewHeading } from '../lib/chrome';
 import { viewDrilldown, targetScope } from '../lib/definition';
 import type { OnDashboardDrilldown } from '../lib/definition';
 import type { DashboardExpand, ResolvedView } from '../widget-kind';
+
+/**
+ * The card heading for the open view: the widget's title, with several views as tabs under it
+ * (`toolbar`). With somewhere to expand to, the title stays alone instead, and `ExpandAction` links there.
+ */
+export function viewTitle(
+  widget: DashboardWidget,
+  views: readonly DashboardWidgetView[],
+  index: number,
+  onChoose: (index: number) => void,
+  expand?: DashboardExpand,
+): ViewHeading {
+  if (expand?.href(widget)) {
+    // The card and its expand link need a name: a blank title falls back to the first view's label.
+    return { title: widget.title?.trim() ? widget.title : viewLabel(views[0]?.label, 0) };
+  }
+  if (views.length < 2) return { title: widget.title ?? '' };
+  return {
+    title: widget.title ?? '',
+    toolbar: <ViewTabs labels={views.map((v, i) => viewLabel(v.label, i))} index={index} onChoose={onChoose} />,
+  };
+}
 
 export type Views<Options> = readonly [ResolvedView<Options>, ...ResolvedView<Options>[]];
 
