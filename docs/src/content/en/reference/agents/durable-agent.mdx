@@ -633,7 +633,7 @@ await output.text
 cleanup()
 ```
 
-Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that includes `'running'`. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. With running persistence enabled, a run with memory saves a restartable checkpoint before it saves the user's message, so a crash after the message is saved can be recovered. Enabling persistence after a crash can't reconstruct a missing checkpoint.
+Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that includes `'running'`. On a plain `DurableAgent`, a custom `shouldPersistSnapshot` policy replaces the default, so its `'running'` result decides whether running checkpoints are saved, including when `recovery: { durableAgents: 'auto' }` is enabled. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. With running persistence enabled, a run with memory saves a restartable checkpoint before it saves the user's message, so a crash after the message is saved can be recovered. Enabling persistence after a crash can't reconstruct a missing checkpoint.
 
 Model and tool calls after the checkpoint may run again. Make tool side effects idempotent. Recovery doesn't guarantee exactly-once execution.
 
