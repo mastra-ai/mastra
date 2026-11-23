@@ -4198,4 +4198,110 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
       }
     },
   );
+
+  // Technical: relying on workflow `suspendedAt`/`resumedAt` timestamps collides when a tool
+  // resumes and suspends again within the same millisecond (e.g. phase 2 -> phase 3). Stamping
+  // a fresh `suspensionId` on each durable suspension keeps every re-suspension distinct even
+  // under a stationary clock.
+  it.each(['explicit', 'unlabeled'] as const)(
+    'a stale %s cold resume cannot answer a later re-suspension even within the same millisecond',
+    async mode => {
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+      const answered: Array<{ phase: number | undefined; confirmed: boolean }> = [];
+      const preparing = deferred();
+      const mayFinish = deferred();
+      const ask = createTool({
+        id: 'ask',
+        description: 'Ask for confirmation',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({ phase: z.number() }),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({ phase: 1 });
+          const phase = context.agent.suspendPayload?.phase;
+          answered.push({ phase, confirmed: context.agent.resumeData.confirmed });
+          if (phase && phase < 3) return context.agent.suspend({ phase: phase + 1 });
+          return { confirmed: context.agent.resumeData.confirmed };
+        },
+      });
+      const makeAgent = (toolCallIds: string[]) =>
+        new Agent({
+          id: 'resume-same-ms-agent',
+          name: 'Resume Same MS Agent',
+          instructions: 'Ask for confirmation',
+          model: createToolCallSequenceModel('ask', toolCallIds, 'Confirmed'),
+          tools: async ({ requestContext }) => {
+            if (requestContext.get('tenant') === 'slow-caller') {
+              preparing.resolve();
+              await mayFinish.promise;
+            }
+            return { ask };
+          },
+        });
+      const storage = new InMemoryStore();
+      const pubsub = new EventEmitterPubSub();
+      const otherPubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent: makeAgent(['call-1']), pubsub });
+      const host = new Mastra({ agents: { durable }, storage, logger: false });
+      const otherDurable = new AgentClass({ agent: makeAgent([]), pubsub: otherPubsub });
+      const otherHost = new Mastra({ agents: { durable: otherDurable }, storage, logger: false });
+      try {
+        const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+
+        // Move to phase 2 first so both compared suspensions already have resumedAt at the same ms.
+        const phaseTwo = await (
+          await otherDurable.resume(initial.runId, { confirmed: true }, { runId: initial.runId, closeOnSuspend: true })
+        ).output.getFullOutput();
+        expect(phaseTwo.error).toBeUndefined();
+        otherDurable.runRegistry.clear();
+        durable.runRegistry.clear();
+        globalRunRegistry.delete(initial.runId);
+
+        const slow = durable
+          .resume(
+            initial.runId,
+            { confirmed: false },
+            {
+              runId: initial.runId,
+              toolCallId: mode === 'explicit' ? 'call-1' : undefined,
+              closeOnSuspend: true,
+              requestContext: new RequestContext([['tenant', 'slow-caller']]),
+            },
+          )
+          .then(
+            result => result.output.getFullOutput(),
+            (error: unknown) => error,
+          );
+        await preparing.promise;
+
+        const phaseThree = await (
+          await otherDurable.resume(initial.runId, { confirmed: true }, { runId: initial.runId, closeOnSuspend: true })
+        ).output.getFullOutput();
+        expect(phaseThree.error).toBeUndefined();
+        expect(answered).toEqual([
+          { phase: 1, confirmed: true },
+          { phase: 2, confirmed: true },
+        ]);
+
+        mayFinish.resolve();
+        await expect(slow).resolves.toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+        expect(answered).toEqual([
+          { phase: 1, confirmed: true },
+          { phase: 2, confirmed: true },
+        ]);
+        expect((await durable.listSuspendedRuns()).runs[0]?.toolCalls).toContainEqual(
+          expect.objectContaining({ toolCallId: 'call-1', suspendPayload: { phase: 3 } }),
+        );
+      } finally {
+        clock.mockRestore();
+        mayFinish.resolve();
+        await host.shutdown({ drainTimeout: 1000 });
+        await otherHost.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+        await otherPubsub.close();
+      }
+    },
+  );
 });

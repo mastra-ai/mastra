@@ -8751,9 +8751,13 @@ export class Agent<
     const toolCalls: SuspendedToolCall[] = [];
 
     const collectFromPayload = (payload: Record<string, any>, stepKey: string, timing: SuspensionTiming) => {
-      // Workflow engines stamp these when the step (or its foreach iteration) suspends and resumes,
-      // so they change when a resumed call suspends again under the same tool call ID.
-      const instance = JSON.stringify([stepKey, timing.suspendedAt ?? null, timing.resumedAt ?? null]);
+      // Durable tool suspensions stamp a fresh `suspensionId` each time they suspend so even
+      // same-millisecond re-suspensions under the same toolCallId are distinct. Snapshots
+      // written without one fall back to step key and workflow suspension/resumption timestamps.
+      const instance =
+        typeof payload.suspensionId === 'string'
+          ? payload.suspensionId
+          : JSON.stringify([stepKey, timing.suspendedAt ?? null, timing.resumedAt ?? null]);
       if (payload.requireToolApproval) {
         toolCalls.push({
           call: {

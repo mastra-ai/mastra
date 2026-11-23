@@ -1325,6 +1325,7 @@ export function createDurableToolCallStep() {
         return suspend(
           {
             type: 'approval',
+            suspensionId: crypto.randomUUID(),
             toolCallId,
             toolName,
             args,
@@ -1745,6 +1746,7 @@ export function createDurableToolCallStep() {
           return suspend(
             {
               type: 'approval',
+              suspensionId: crypto.randomUUID(),
               requireToolApproval: { toolCallId, toolName: approvalToolName, args: approvalArgs },
               // Persist the inner suspended run id in the workflow snapshot,
               // partitioned per tool call (resumeLabel = toolCallId), so the
@@ -1808,6 +1810,7 @@ export function createDurableToolCallStep() {
         return suspend(
           {
             type: 'suspension',
+            suspensionId: crypto.randomUUID(),
             toolCallSuspended: suspendPayload,
             toolCallId,
             toolName,
