@@ -251,12 +251,14 @@ describe('durable tool-call FGA error propagation', () => {
       runId: string,
       recall: () => Promise<unknown>,
       getState?: (keys?: string[]) => Promise<unknown>,
+      // A tool that suspends while it runs; without one the call waits for approval first.
+      execute?: (input: unknown, context: any) => Promise<unknown>,
     ) {
       const flushMessages = vi.fn();
       const suspend = vi.fn();
-      toolRequiresApproval.mockResolvedValueOnce(true);
+      if (!execute) toolRequiresApproval.mockResolvedValueOnce(true);
       globalRunRegistry.set(runId, {
-        tools: { secureTool: { execute: vi.fn() } },
+        tools: { secureTool: { execute: execute ?? vi.fn() } },
         saveQueueManager: { flushMessages },
         memory: { recall: vi.fn(recall) },
         messageList: new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' }),
@@ -347,6 +349,30 @@ describe('durable tool-call FGA error propagation', () => {
         const { run, suspend } = await runApproval(runId, async () => {
           throw fenced;
         });
+        await expect(run).rejects.toBe(fenced);
+        expect(suspend).not.toHaveBeenCalled();
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    });
+
+    it('stops the step instead of reporting a tool error when a suspending tool hits the execution fence', async () => {
+      const runId = 'durable-tool-recovery-recall-fenced-in-execution';
+      const fenced = new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+        agentId: 'agent-1',
+        runId,
+        executionId: 'execution-1',
+      });
+      try {
+        const { run, suspend } = await runApproval(
+          runId,
+          async () => {
+            throw fenced;
+          },
+          undefined,
+          // The tool sees the rejected suspension as an ordinary error and lets it propagate.
+          async (_input, context) => context.suspend({ question: 'Favourite colour?' }),
+        );
         await expect(run).rejects.toBe(fenced);
         expect(suspend).not.toHaveBeenCalled();
       } finally {

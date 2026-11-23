@@ -74,7 +74,7 @@ class CrossProcessToolStepPubSub extends EventEmitterPubSub {
   }
 }
 
-function makeModel(toolCallIds = ['call-1']) {
+function makeModel(toolCallIds = ['call-1'], toolNameOf: (toolCallId: string) => string = () => 'askColour') {
   let calls = 0;
   return new MockLanguageModelV2({
     doStream: async () => ({
@@ -97,7 +97,7 @@ function makeModel(toolCallIds = ['call-1']) {
                 type: 'tool-call',
                 toolCallType: 'function',
                 toolCallId,
-                toolName: 'askColour',
+                toolName: toolNameOf(toolCallId),
                 input: '{"question":"Favourite colour?"}',
                 providerExecuted: false,
               })),
@@ -482,5 +482,85 @@ describe('evented agent cross-process tool suspension persistence (#30123)', () 
       const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
       expect(snapshot?.status).toBe('suspended');
     });
+  }, 15_000);
+  it('keeps an answered sibling cleared when the next one starts as a background task in the starting process', async () => {
+    const crossProcess = new CrossProcessToolStepPubSub('starting-process-tools');
+    pubsub = crossProcess;
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const askColour = createTool({
+      id: 'askColour',
+      description: 'Asks the user for a colour',
+      inputSchema: z.object({ question: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      resumeSchema: z.object({ colour: z.string() }),
+      execute: async (input, context: any) => {
+        if (context?.agent?.resumeData) return { colour: context.agent.resumeData.colour };
+        return await context.agent.suspend({ question: input.question });
+      },
+    });
+    let release!: () => void;
+    const released = new Promise<void>(resolve => (release = resolve));
+    const lookUp = createTool({
+      id: 'lookUp',
+      description: 'Looks the answer up in the background',
+      inputSchema: z.object({ question: z.string() }),
+      background: { enabled: true },
+      execute: async () => {
+        await released;
+        return { colour: 'green' };
+      },
+    });
+    const agent = new Agent({
+      id: 'colour-agent',
+      name: 'colour-agent',
+      instructions: 'Ask for a colour.',
+      model: makeModel(['call-1', 'call-2'], id => (id === 'call-1' ? 'askColour' : 'lookUp')) as any,
+      tools: { askColour, lookUp },
+      backgroundTasks: { tools: { lookUp: true } },
+      memory,
+    });
+    const evented = createEventedAgent({ agent });
+    mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub,
+      backgroundTasks: { enabled: true },
+      agents: { [evented.id]: evented },
+    });
+    await mastra.startWorkers();
+    const durable = mastra.getAgentById(evented.id) as any;
+    const threadMemory = { thread: 'thread-1', resource: 'user-1' };
+
+    const first = await durable.stream('Ask me, then look it up', { memory: threadMemory });
+    for await (const chunk of first.output.fullStream) if (chunk.type === 'tool-call-suspended') break;
+    first.cleanup();
+    resumedRuns.push(first.runId);
+    await new Promise(r => setTimeout(r, 200));
+
+    // call-1 is answered in another process; call-2 then starts as a background task in the
+    // starting process, whose list still holds call-1 suspended.
+    const resumed = await durable.resumeStream(
+      { colour: 'blue' },
+      { runId: first.runId, toolCallId: 'call-1', memory: threadMemory },
+    );
+    const reading = (async () => {
+      for await (const _chunk of resumed) {
+      }
+    })().catch(() => {});
+    try {
+      const assistant = await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
+        const message = messages.find(m => m.content.parts.some(part => part.type === 'tool-invocation'))!;
+        // The background task's start was saved.
+        expect((message.content.metadata as any)?.backgroundTasks?.['call-2']).toBeDefined();
+        return message;
+      });
+      expect(crossProcess.toolSteps).toBe(3);
+      expect(Object.keys((assistant.content.metadata as any)?.suspendedTools ?? {})).not.toContain('call-1');
+    } finally {
+      release();
+      await reading;
+    }
   }, 15_000);
 });

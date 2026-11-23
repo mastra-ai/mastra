@@ -933,13 +933,49 @@ export function createDurableToolCallStep() {
         } catch (error) {
           if (isExecutionFenceError(error)) throw error;
           invocationUnverified = true;
-          logger?.warn?.('Failed to read the tool call message before durable tool suspension', {
+          logger?.warn?.('Failed to read the saved tool call message before writing its metadata', {
             runId,
             toolCallId,
             error,
           });
           return undefined;
         }
+      };
+      // The saved copy of a message wins: a sibling's resume in another process may have resolved
+      // its tool parts and cleared their metadata since this step's list last saw it. Undefined when
+      // storage could not be read; see readForRecovery.
+      const recallSaved = async (
+        threadMemory: NonNullable<typeof memory>,
+        threadId: string,
+        resourceId: string,
+        messageId: string,
+      ) => {
+        // Recovery exists only to write, so check that first; the read check gates the recall.
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+        await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
+        const recalled = await readForRecovery<{ messages: MastraDBMessage[] }>(() =>
+          threadMemory.recall({ threadId, resourceId, perPage: false }),
+        );
+        return recalled && { saved: recalled.value.messages.find(message => message.id === messageId) };
+      };
+      // A background task records its start and suspension on the retained tool call message long
+      // after this step read it, so each of those writes starts from the saved copy.
+      const refreshRetainedInvocation = async (list: MessageList) => {
+        if (
+          !saveQueueManager ||
+          !memory ||
+          !state?.threadId ||
+          !state.resourceId ||
+          state.memoryConfig?.readOnly ||
+          // An unsaved response holds writes storage has not seen yet.
+          list.get.response.db().some(hasInvocation)
+        ) {
+          return;
+        }
+        const retained = [...list.get.all.db()].reverse().find(hasInvocation);
+        if (!retained) return;
+        const recalled = await recallSaved(memory, state.threadId, state.resourceId, retained.id);
+        if (recalled?.saved) retained.content = recalled.saved.content;
       };
       const recoverInvocation = async () => {
         if (recoveryAttempted) return;
@@ -963,25 +999,16 @@ export function createDurableToolCallStep() {
         }
         const current = [...(transcript?.get.all.db() ?? [])].reverse().find(hasInvocation);
         if (!current) return;
-        // Recovery exists only to write, so check that first; the read check gates the recall.
-        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
-        await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
-        // The saved copy of this message wins: a sibling's resume in another process may have
-        // resolved its tool parts and cleared their metadata since this list last saw it.
-        const { threadId, resourceId } = state;
-        const recalled = await readForRecovery<{ messages: MastraDBMessage[] }>(() =>
-          memory.recall({ threadId, resourceId, perPage: false }),
-        );
+        const recalled = await recallSaved(memory, state.threadId, state.resourceId, current.id);
         if (!recalled) return;
-        const saved = recalled.value.messages.find((message: MastraDBMessage) => message.id === current.id);
         const retained = persistMessageList?.get.all.db().find(message => message.id === current.id);
         if (retained) {
           // Not an unsaved response (checked above), so this copy holds no local writes and
           // can only be stale. Suspending tools run one at a time, so no sibling writes it meanwhile.
-          if (saved) retained.content = saved.content;
+          if (recalled.saved) retained.content = recalled.saved.content;
           return;
         }
-        const invocation = saved ?? current;
+        const invocation = recalled.saved ?? current;
         // A throwaway list keeps the long-lived registry list from holding a copy that drifts from storage.
         persistMessageList = createRunMessageList({
           mastra,
@@ -1653,6 +1680,9 @@ export function createDurableToolCallStep() {
       // workflow engine's suspend() sets an internal flag but does not throw,
       // so execution continues past the suspend call).
       let wasSuspended = false;
+      // The step lost its run while the tool suspended. The tool sees an ordinary rejection and may
+      // rethrow or wrap it, so the step stops on this error rather than whatever the tool threw.
+      let suspensionFenceError: unknown;
 
       // A tool step can run on a worker whose LLM step ran elsewhere, so it subscribes to abort
       // requests too. Otherwise a deadline or abort() published while the tool runs never reaches it.
@@ -1752,7 +1782,10 @@ export function createDurableToolCallStep() {
         outputWriter,
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) =>
-          suspendToolCall(suspendPayload, suspendOptions, assertOwned),
+          suspendToolCall(suspendPayload, suspendOptions, assertOwned).catch(error => {
+            if (isExecutionFenceError(error)) suspensionFenceError = error;
+            throw error;
+          }),
       };
       // `beforePersist` guards the suspension's memory writes. A background
       // task can suspend after the run settled and released its claim, so with
@@ -2257,6 +2290,17 @@ export function createDurableToolCallStep() {
           onExecution: async (params: any) => {
             // Like onResult: an unverified copy of the tool call message is not changed or saved.
             if (!messageList || invocationUnverified) return;
+            try {
+              await refreshRetainedInvocation(messageList);
+            } catch (error) {
+              if (!isExecutionFenceError(error)) throw error;
+              logger?.debug?.('[DurableAgent] Skipped background-task metadata flush: execution superseded', {
+                runId,
+                toolCallId: params.toolCallId,
+              });
+              return;
+            }
+            if (invocationUnverified) return;
 
             await applyBackgroundToolExecution({
               params,
@@ -2885,6 +2929,7 @@ export function createDurableToolCallStep() {
             ...runStopOf(toolAbortSignal, registryEntry?.abortSignal),
           };
         }
+        if (suspensionFenceError !== undefined) throw suspensionFenceError;
         // Output processor failures and authorization denials must fail the run
         // instead of being serialized as recoverable tool errors.
         if (
