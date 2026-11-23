@@ -35,3 +35,16 @@ export function gatewayUpstreamRateLimit() {
     statusCode: 429,
   });
 }
+
+export function openAiRateLimit() {
+  return new APICallError({
+    message:
+      'Rate limit reached for gpt-5.4-mini in organization org-test on tokens per min (TPM): Limit 200000, Used 199500, Requested 1200. Please try again in 210ms.',
+    url: 'https://api.openai.com/v1/responses',
+    requestBodyValues: {},
+    statusCode: 429,
+    responseBody: JSON.stringify({
+      error: { message: 'Rate limit reached for gpt-5.4-mini', type: 'tokens', code: 'rate_limit_exceeded' },
+    }),
+  });
+}

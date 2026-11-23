@@ -11,7 +11,7 @@ import {
   RETRY_CONFIG,
   withRetry,
 } from '../retry';
-import { openAiNoCredits } from './provider-errors';
+import { openAiNoCredits, openAiRateLimit } from './provider-errors';
 
 describe('isTransientLLMError', () => {
   it('matches undici "terminated" error messages', () => {
@@ -129,6 +129,10 @@ describe('isExhaustedAccountError', () => {
       responseBody: '{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}',
     });
     expect(isExhaustedAccountError(new Error('observer failed', { cause: { error } }))).toBe(true);
+  });
+
+  it('does not match an OpenAI rate limit', () => {
+    expect(isExhaustedAccountError(openAiRateLimit())).toBe(false);
   });
 
   it.each([

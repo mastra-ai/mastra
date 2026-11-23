@@ -17,7 +17,7 @@ import { Memory } from '../../../index';
 import { OmModelExecutionError } from '../error';
 import { ObserverRunner } from '../observer-runner';
 import { RETRY_CONFIG } from '../retry';
-import { anthropicRateLimit, gatewayUpstreamRateLimit, openAiNoCredits } from './provider-errors';
+import { anthropicRateLimit, gatewayUpstreamRateLimit, openAiNoCredits, openAiRateLimit } from './provider-errors';
 
 type StreamPart =
   | { type: 'stream-start'; warnings: unknown[] }
@@ -460,6 +460,7 @@ describe('OM transient-error retry', { timeout: 30_000 }, () => {
 
   it.each([
     { name: 'an account with no credits left', error: openAiNoCredits, expectedCalls: 1 },
+    { name: 'an OpenAI rate limit', error: openAiRateLimit, expectedCalls: 4 },
     { name: 'a rate limit', error: anthropicRateLimit, expectedCalls: 4 },
     { name: 'a gateway rate limit that mentions credits', error: gatewayUpstreamRateLimit, expectedCalls: 4 },
   ])(
