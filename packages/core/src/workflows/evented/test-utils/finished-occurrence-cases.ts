@@ -698,11 +698,14 @@ export function describeFinishedOccurrenceCases({
 
         await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('failed');
         expect((await storedRun(run.runId))?.error?.message).toBe('a broke');
-        // The restart runs b again, which A never finished. Step guards don't treat a saved failure
-        // as final (a retry may follow it), so there the restart runs a again too and it fails again.
+        // The restart dispatches b again, which A never finished. b runs only if its delivery is
+        // handled before a's failure is stored: once the run reads failed, the delivery is dropped
+        // and b does not run on the ended run. Step guards don't treat a saved failure as final (a
+        // retry may follow it), so there the restart runs a again too and it fails again.
         const guards = (await getStorage().getStore('workflows'))!.supportsWorkflowStepGuards();
-        const ran = ['A:b', 'A:a', 'B:b', ...(guards ? ['B:a'] : [])].sort();
-        await expect.poll(() => [...executions].sort()).toEqual(ran);
+        const ran = ['A:b', 'A:a', ...(guards ? ['B:a'] : [])].sort();
+        await expect.poll(() => executions.filter(e => e !== 'B:b').sort()).toEqual(ran);
+        expect(executions.filter(e => e === 'B:b').length).toBeLessThanOrEqual(1);
         expect((await storedRun(run.runId))?.status).toBe('failed');
       },
       20_000,
