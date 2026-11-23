@@ -138,6 +138,30 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     });
   });
 
+  it('ignores nested stopCause inside tool output when salvaging a truncated finish event', async () => {
+    let onMessage: (m: unknown) => void = () => {};
+    subscribeMock.mockImplementation(async (opts: { onMessage: (m: unknown) => void }) => {
+      onMessage = opts.onMessage;
+      return { close: vi.fn() };
+    });
+    const { pubsub } = setup();
+    const received: any[] = [];
+    await pubsub.subscribe('agent.stream.r1', event => received.push(event));
+
+    // Nested stopCause appears before the real top-level data.stopCause, then truncation hits later.
+    onMessage({
+      data: '{"type":"finish","runId":"r1","data":{"output":{"steps":[{"toolResults":[{"result":{"stopCause":"max_steps"}}]}]},"stepResult":{"reason":"tool-calls"},"stopCause":"stop_condition","extra":"xxxx',
+    });
+    // Truncated inside output before any direct data.stopCause: must omit stopCause rather than steal nested one.
+    onMessage({
+      data: '{"type":"finish","runId":"r1","data":{"stepResult":{"reason":"tool-calls"},"output":{"steps":[{"toolResults":[{"result":{"stopCause":"max_steps"}}],"text":"xxxx',
+    });
+
+    expect(received).toHaveLength(2);
+    expect(received[0].data.stopCause).toBe('stop_condition');
+    expect(received[1].data).not.toHaveProperty('stopCause');
+  });
+
   it('keeps an oversized error readable so the stream can close with onError', async () => {
     const { pubsub, published } = setup();
     await pubsub.publish('agent.stream.r1', {
