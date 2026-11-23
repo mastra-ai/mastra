@@ -8,6 +8,8 @@ import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
+import { runtimeNamespace } from './cold-resume-gate';
+import type { ColdResumeRuntime } from './cold-resume-gate';
 import { stopDurableExecutionParticipants } from './evented-execution';
 import type { RunRegistryEntry } from './types';
 
@@ -65,6 +67,22 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
     return entry;
   }
   return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
+}
+
+/**
+ * Whether `entry` holds the full tool set its run executes from. The tool-call step resolves a
+ * tool only from such an entry (by name, provider-tool name, then id) and reports a tool missing
+ * from it as not found; it never falls back to rebuilding the agent's tools or Mastra's catalog.
+ */
+export function hasAuthoritativeToolSnapshot(entry: RunRegistryEntry | undefined): boolean {
+  const model = entry?.model as { __metadataOnly?: boolean } | undefined;
+  return (
+    !!entry &&
+    entry.isPlaceholder !== true &&
+    !!model &&
+    model.__metadataOnly !== true &&
+    (entry.baseTools !== undefined || entry.tools !== undefined)
+  );
 }
 
 /**
@@ -135,39 +153,46 @@ function runActivityHeartbeat(): void {
   }
 }
 
-const inFlightResumes = new Map<string, Map<string, symbol>>();
+/** runtime -> runId -> toolCallId -> the marker of the resume holding that tool call. */
+const inFlightResumes = new WeakMap<object, Map<string, Map<string, symbol>>>();
 
 /**
- * Marks a resume of `toolCallId` on `runId` as in flight in this process,
- * synchronously, so a concurrent resume of the same tool call can fail fast
- * instead of queueing on the execution claim (#27365).
+ * Marks a resume of `toolCallId` on `runId` as in flight on `runtime`, synchronously, so a
+ * concurrent resume of the same tool call can fail fast instead of queueing on the execution claim
+ * (#27365).
+ *
+ * Markers are scoped like cold-resume gates (see `cold-resume-gate.ts`): wrappers and
+ * pinned-version forks on one Mastra instance share them, while separate Mastra instances in one
+ * process, each with its own storage, can resume a reused run ID and tool call ID independently.
  *
  * @returns A release function, or `undefined` when that tool call already has
- * a resume in flight. Release is idempotent and only clears its own marker.
+ * a resume in flight on `runtime`. Release is idempotent and only clears its own marker, so a
+ * late release never clears a marker a later resume of the same tool call set.
  */
-export function markResumeInFlight(runId: string, toolCallId: string): (() => void) | undefined {
-  let byToolCall = inFlightResumes.get(runId);
+export function markResumeInFlight({
+  runtime,
+  runId,
+  toolCallId,
+}: {
+  runtime: ColdResumeRuntime;
+  runId: string;
+  toolCallId: string;
+}): (() => void) | undefined {
+  const namespace = runtimeNamespace(runtime);
+  let byRun = inFlightResumes.get(namespace);
+  if (!byRun) inFlightResumes.set(namespace, (byRun = new Map()));
+  let byToolCall = byRun.get(runId);
   if (byToolCall?.has(toolCallId)) return undefined;
-  if (!byToolCall) inFlightResumes.set(runId, (byToolCall = new Map()));
+  if (!byToolCall) byRun.set(runId, (byToolCall = new Map()));
   const token = Symbol(toolCallId);
   byToolCall.set(toolCallId, token);
+  const markers = byRun;
   return () => {
-    const current = inFlightResumes.get(runId);
+    const current = markers.get(runId);
     if (current?.get(toolCallId) !== token) return;
     current.delete(toolCallId);
-    if (current.size === 0) inFlightResumes.delete(runId);
+    if (current.size === 0) markers.delete(runId);
   };
-}
-
-/**
- * Clears the in-flight marker for a tool call whose resumed segment is
- * suspending again, so a later resume of it is not treated as a duplicate.
- */
-export function clearResumeInFlight(runId: string, toolCallId: string): void {
-  const current = inFlightResumes.get(runId);
-  if (!current) return;
-  current.delete(toolCallId);
-  if (current.size === 0) inFlightResumes.delete(runId);
 }
 
 /**

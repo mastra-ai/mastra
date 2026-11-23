@@ -276,6 +276,7 @@ import {
   ExtendedRunRegistry,
   endRunSpansWithError,
   globalRunRegistry,
+  hasAuthoritativeToolSnapshot,
   markResumeInFlight,
   deleteRunRegistryEntry,
 } from './durable/run-registry';
@@ -528,6 +529,8 @@ const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
+/** The `toolsets` and `clientTools` a call passed itself, before the agent's defaults were merged in. */
+const CALLER_TOOL_INPUTS = Symbol('mastra.durable.callerToolInputs');
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
   const scope = (entry.runScope ??= createRunScope());
   scope.delete(LOCAL_MODEL_REQUEST_KEY);
@@ -552,8 +555,39 @@ export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
  * durable); this bound only guards against a write that never completes so
  * `approveToolCall()` cannot hang forever.
  */
-/** The suspended tool call a durable resume validated its data against. */
-type ResumeSuspension = { readonly toolCallId: string };
+/**
+ * The suspension a durable resume answers. It is read before the resume waits on anything that
+ * lets another resume move the run on (a pinned-version lookup, rebuilding the run, authorization),
+ * and every call it names must still be suspended once the resume holds the run.
+ */
+type ResumeSuspension =
+  /** The one call the resume answers: the call the caller named, or the only call suspended. */
+  | { readonly kind: 'call'; readonly toolCallId: string }
+  /**
+   * An unlabeled resume that began while several calls were suspended. If another resume answers
+   * any of them meanwhile, this one must not answer whichever call remains.
+   */
+  | { readonly kind: 'several'; readonly toolCallIds: readonly [string, string, ...string[]] };
+
+/** The suspended tool call IDs a resume of `suspension` requires to still be suspended. */
+function resumeSuspensionToolCallIds(suspension: ResumeSuspension): readonly string[] {
+  return suspension.kind === 'call' ? [suspension.toolCallId] : suspension.toolCallIds;
+}
+
+/**
+ * How a durable resume tells that a suspended tool missing from its execution tools is unavailable
+ * to its caller, rather than one the tool-call step resolves for itself.
+ */
+type MissingResumeTools =
+  /**
+   * The execution tools are the full set the run executes from (a cold resume's rebuilt entry). A
+   * call its tool suspended proves the starting request had that tool, so a missing one was
+   * withheld from this caller, and the tool-call step would report it not found and consume the
+   * suspension. Approval suspensions are not checked this way (see the validation).
+   */
+  | { readonly kind: 'complete' }
+  /** Only the tools the starting request built that this caller's build leaves out are known. */
+  | { readonly kind: 'withdrawn'; readonly tools: Record<string, CoreTool> };
 
 /**
  * What the resume() an untilIdle wrapper re-enters carries from the outer call. The outer call
@@ -577,6 +611,22 @@ function markResumeAccepted<T extends object>(options: T, accepted: AcceptedResu
 
 function getAcceptedResume(options: object | undefined): AcceptedResume | undefined {
   return options === undefined ? undefined : acceptedResumes.get(options);
+}
+
+/**
+ * The suspension a cold resume bound itself to before handing off to the agent its run's pinned
+ * version resolves to. That agent's resume() must answer this suspension, not the one storage
+ * holds once the (possibly slow) version lookup is done.
+ */
+const boundResumes = new WeakMap<object, ResumeSuspension>();
+
+function bindResume<T extends object>(options: T, suspension: ResumeSuspension): T {
+  boundResumes.set(options, suspension);
+  return options;
+}
+
+function getBoundResume(options: object | undefined): ResumeSuspension | undefined {
+  return options === undefined ? undefined : boundResumes.get(options);
 }
 
 /**
@@ -8912,6 +8962,23 @@ export class Agent<
   }
 
   /**
+   * The suspension a resume of `snapshot` answers: the named call while it is suspended, the only
+   * suspended call, or every suspended call when an unlabeled resume finds several. Undefined when
+   * the snapshot holds no such call, so the resume goes on as it would without a binding.
+   */
+  #bindResumeSuspension(snapshot: WorkflowRunState, toolCallId: string | undefined): ResumeSuspension | undefined {
+    const target = this.#findResumeTarget(snapshot, toolCallId);
+    if (target?.toolCallId) return { kind: 'call', toolCallId: target.toolCallId };
+    if (toolCallId !== undefined) return undefined;
+    const [first, second, ...rest] = this.#getSuspendedToolCalls(snapshot).flatMap(call =>
+      call.toolCallId ? [call.toolCallId] : [],
+    );
+    return first !== undefined && second !== undefined
+      ? { kind: 'several', toolCallIds: [first, second, ...rest] }
+      : undefined;
+  }
+
+  /**
    * Durable counterpart of {@link Agent.#validateToolResumeData}. Checks the data against the tool
    * the resumed run executes, looked up in `tools` (the run's registry entry as this resume will
    * leave it) the way the durable tool-call step looks it up. That covers toolsets kept from the
@@ -8926,25 +8993,35 @@ export class Agent<
     toolCallId,
     resumeData,
     tools,
-    withdrawnTools,
+    missingTools,
     runId,
   }: {
     snapshot: WorkflowRunState;
     toolCallId: string | undefined;
     resumeData: unknown;
     tools: Record<string, CoreTool>;
-    /** Tools the starting request built that this resume's caller cannot use. */
-    withdrawnTools: Record<string, CoreTool>;
+    /** How to tell that a suspended tool missing from `tools` is unavailable to this caller. */
+    missingTools: MissingResumeTools;
     runId: string;
   }): ResumeSuspension | undefined {
     const target = this.#findResumeTarget(snapshot, toolCallId);
-    const suspension = target?.toolCallId ? { toolCallId: target.toolCallId } : undefined;
+    const suspension: ResumeSuspension | undefined = target?.toolCallId
+      ? { kind: 'call', toolCallId: target.toolCallId }
+      : undefined;
     if (!target?.toolName) return suspension;
 
     const tool = findExecutionTool(tools, target.toolName);
     // The suspended tool was built for the caller that started the run, and this caller's tools leave
-    // it out. Running it would act with the starting caller's identity, so the run stays suspended.
-    if (!tool && findExecutionTool(withdrawnTools, target.toolName)) {
+    // it out. Running it would act with the starting caller's identity, and the tool-call step would
+    // consume the suspension reporting it not found, so the run stays suspended instead.
+    // A rebuilt set settles it only for a call its own tool suspended: an approval names the tool it
+    // approves, which for a delegated approval is the sub-agent's tool, not one this agent holds.
+    const unavailable =
+      !tool &&
+      (missingTools.kind === 'complete'
+        ? !target.requiresApproval
+        : findExecutionTool(missingTools.tools, target.toolName) !== undefined);
+    if (unavailable) {
       throw new MastraError({
         id: 'AGENT_RESUME_TOOL_UNAVAILABLE',
         domain: ErrorDomain.AGENT,
@@ -14426,6 +14503,11 @@ export class Agent<
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
     Object.defineProperty(scopedOptions, RESOLVED_DEFAULT_OPTIONS, { value: defaultOptions, enumerable: true });
+    const callerToolInputs: RunRegistryEntry['requestToolInputs'] = {
+      toolsets: options?.toolsets,
+      clientTools: options?.clientTools,
+    };
+    Object.defineProperty(scopedOptions, CALLER_TOOL_INPUTS, { value: callerToolInputs, enumerable: true });
     return scopedOptions;
   }
 
@@ -14805,6 +14887,9 @@ export class Agent<
         requestContext,
         optionsAreResolved: true,
         resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
+        callerToolInputs: (options as { [CALLER_TOOL_INPUTS]?: RunRegistryEntry['requestToolInputs'] })[
+          CALLER_TOOL_INPUTS
+        ],
         scopesResolved: true,
         mastra: this.#mastra,
         methodType,
@@ -15136,11 +15221,12 @@ export class Agent<
       throw abortedRunError();
     }
     // Marked before the first await, so a second resume of the same tool call
-    // fails fast even when both start in the same tick (#27365).
+    // fails fast even when both start in the same tick (#27365). Scoped to this runtime, like the
+    // cold-resume gate: a separate host reusing the run ID and tool call ID is not a duplicate.
     const toolCallId = options?.toolCallId;
     let releaseResumeMarker = () => {};
     if (toolCallId !== undefined) {
-      const release = markResumeInFlight(runId, toolCallId);
+      const release = markResumeInFlight({ runtime: this.#coldResumeRuntime(), runId, toolCallId });
       if (!release) {
         throw new MastraError({
           id: 'AGENT_RESUME_ALREADY_CLAIMED',
@@ -15239,8 +15325,10 @@ export class Agent<
     // the caller passes its own request context.
     let rehydratedScopes: unknown;
     let coldSnapshot: WorkflowRunState | undefined;
-    // The suspension an unlabeled cold resume answers, read before it rebuilds the run.
-    let coldAddressed: ResumeSuspension | undefined;
+    // The suspension a cold resume answers, read from storage before it waits on anything that lets
+    // another resume move the run on. A resume handed off from a call that already read it keeps
+    // that call's binding.
+    let coldAddressed: ResumeSuspension | undefined = getBoundResume(options);
     if (!entry) {
       // Same tick as the loop above: other resumes of this run wait until this one decides.
       coldAttempt.begin();
@@ -15295,6 +15383,11 @@ export class Agent<
         return input;
       };
       let workflowInput = readWorkflowInput(snapshot, true);
+      // Bind the resume to the suspension it sees now, before the pinned-version lookup and the
+      // rebuild below. Another process may resume the run and move it on to a later suspension
+      // meanwhile, and this caller's data must not answer that one. A run another resume holds
+      // (`running`) is bound once recovery has parked it again.
+      if (snapshot.status === 'suspended') coldAddressed ??= this.#bindResumeSuspension(snapshot, options?.toolCallId);
 
       // A run that suspended while executing a stored version must resume on
       // *that* version. Cold rehydration rebuilds tools/model/instructions
@@ -15330,9 +15423,11 @@ export class Agent<
             // Hand the tool-call marker to the pinned agent's resume(), which
             // re-takes it synchronously before its first await.
             releaseResumeMarker();
-            // The pinned agent's resume() rebuilds and decides for itself.
+            // The pinned agent's resume() rebuilds and decides for itself, but answers the
+            // suspension bound above rather than whatever storage holds once the lookup is done.
             coldAttempt.accept();
-            return (resolved as unknown as Agent<TAgentId, TTools, TOutput>).resume(runId, resumeData, options);
+            const handedOff = coldAddressed ? bindResume({ ...options }, coldAddressed) : options;
+            return (resolved as unknown as Agent<TAgentId, TTools, TOutput>).resume(runId, resumeData, handedOff);
           }
         }
       }
@@ -15345,13 +15440,7 @@ export class Agent<
         workflowInput = readWorkflowInput(snapshot);
       }
       coldSnapshot = snapshot;
-      // Without a toolCallId the caller answers the suspension the run waits on now. Bind the resume
-      // to it before rebuilding the run: another process may resume the run and move it on to a
-      // later suspension meanwhile, and this caller's data must not answer that one.
-      if (options?.toolCallId === undefined) {
-        const addressed = this.#findResumeTarget(snapshot, undefined)?.toolCallId;
-        coldAddressed = addressed ? { toolCallId: addressed } : undefined;
-      }
+      coldAddressed ??= this.#bindResumeSuspension(snapshot, options?.toolCallId);
 
       const messageListMemoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
@@ -15535,8 +15624,13 @@ export class Agent<
     const executingEntry = coldSnapshot ? entry : (sharedEntryBeforeAccept ?? entry);
     let executionTools: Record<string, CoreTool> = executingEntry.tools ?? {};
     // Tools the starting request built that this caller's build leaves out. They are removed from the
-    // run, so a resume whose suspended call needs one is refused.
+    // run, so a resume whose suspended call needs one is refused. A cold resume rebuilt every tool
+    // for this caller, so a suspended tool its rebuild leaves out is refused the same way.
     const withdrawnTools: Record<string, CoreTool> = {};
+    const missingTools: MissingResumeTools =
+      coldSnapshot && hasAuthoritativeToolSnapshot(executingEntry)
+        ? { kind: 'complete' }
+        : { kind: 'withdrawn', tools: withdrawnTools };
     let applyRequestTools: (() => void) | undefined;
     // A warm resume reuses the tools built for the first request, which close
     // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
@@ -15547,14 +15641,27 @@ export class Agent<
     // the call that accepted it. Built before acceptance: a resume whose tools cannot be built
     // for its caller is refused and leaves the run as it was, rather than running tools built
     // for another caller.
+    // Per-call `toolsets` or `clientTools` passed to this resume replace the starting request's
+    // under the same name, so they trigger the rebuild too.
     if (
       !coldSnapshot &&
       !accepted &&
-      (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)
+      (options?.requestContext ||
+        options?.delegation ||
+        options?.hooks ||
+        options?.toolsets ||
+        options?.clientTools ||
+        droppedStartingUser)
     ) {
       // Per-call tools the starting request passed are rebuilt for this caller too, unless this call
-      // passes its own under the same name.
+      // passes its own under the same name. Only what callers passed is carried: tools the agent's
+      // defaultOptions gave the starting caller are resolved again for this one (in
+      // `resolvedOptions`), so a caller the defaults leave a tool out for never gets it.
       const startingInputs = executingEntry.requestToolInputs ?? entry.requestToolInputs;
+      const carriedToolInputs: RunRegistryEntry['requestToolInputs'] = {
+        toolsets: { ...startingInputs?.toolsets, ...options?.toolsets },
+        clientTools: { ...startingInputs?.clientTools, ...options?.clientTools },
+      };
       const toolsets = { ...startingInputs?.toolsets, ...resolvedOptions.toolsets };
       const clientTools = { ...startingInputs?.clientTools, ...resolvedOptions.clientTools };
       const requestTools = await this.agentForExecution.getToolsForExecution({
@@ -15627,7 +15734,7 @@ export class Agent<
           // replaced or withheld it), so a later resume still recognizes it. Removed tools drop out.
           const retained = Object.entries(reg.requestTools ?? {}).filter(([name]) => !removed.has(name));
           reg.requestTools = { ...Object.fromEntries(retained), ...requestTools };
-          reg.requestToolInputs = { toolsets, clientTools };
+          reg.requestToolInputs = carriedToolInputs;
           if (options?.delegation) reg.delegation = resolvedOptions.delegation;
         }
       };
@@ -15643,18 +15750,21 @@ export class Agent<
         workflowName: DurableStepIds.AGENTIC_LOOP,
         runId,
       });
-      if (resumeSnapshot) {
+      // A resume bound to several suspended calls answers none of them on its own, so there is no
+      // one tool to check, as when it began.
+      if (resumeSnapshot && coldAddressed?.kind !== 'several') {
         suspension = this.#validateDurableResumeData({
           snapshot: resumeSnapshot,
           toolCallId: resolvedOptions.toolCallId ?? coldAddressed?.toolCallId,
           resumeData,
           tools: executionTools,
-          withdrawnTools,
+          missingTools,
           runId,
         });
       }
-      // A bound suspension that is no longer waiting is caught once this resume holds the run.
-      suspension ??= coldAddressed;
+      // The bound suspension wins over what storage holds now: a call it names that is no longer
+      // waiting is refused once this resume holds the run.
+      suspension = coldAddressed ?? suspension;
     }
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -15746,17 +15856,18 @@ export class Agent<
       // The data was validated against one suspension. Another resume may have answered it and
       // run on to a later one while this resume waited for the claim; resuming now would hand
       // the later suspension data meant for the earlier one, even when no toolCallId was given.
-      if (
-        suspension &&
-        current?.status === 'suspended' &&
-        !this.#getSuspendedToolCalls(current).some(call => call.toolCallId === suspension.toolCallId)
-      ) {
+      let answeredElsewhere: string | undefined;
+      if (suspension && current?.status === 'suspended') {
+        const stillSuspended = new Set(this.#getSuspendedToolCalls(current).map(call => call.toolCallId));
+        answeredElsewhere = resumeSuspensionToolCallIds(suspension).find(id => !stillSuspended.has(id));
+      }
+      if (answeredElsewhere !== undefined) {
         throw new MastraError({
           id: 'AGENT_RESUME_ALREADY_CLAIMED',
           domain: ErrorDomain.AGENT,
           category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume tool call "${suspension.toolCallId}" because another resume of it already ran.`,
-          details: { agentName: this.name, runId, toolCallId: suspension.toolCallId },
+          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume tool call "${answeredElsewhere}" because another resume of it already ran.`,
+          details: { agentName: this.name, runId, toolCallId: answeredElsewhere },
         });
       }
       if (resumeRequestContext) await this.coverMemory(executionFence, resumeRequestContext);
@@ -15794,7 +15905,7 @@ export class Agent<
     for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
       if (!reg) continue;
       reg.executionFence = executionFence;
-      reg.resumeToolCallId = resolvedOptions.toolCallId;
+      reg.releaseResumeMarker = releaseResumeMarker;
     }
 
     // Install a fresh abort controller for the resumed segment. The original

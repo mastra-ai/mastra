@@ -3171,8 +3171,75 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
 
   // Technical: a warm resume swapped in only the tools its caller's build produced. A tool the starting
   // caller's resolver built and this caller's leaves out kept its closure over the starting request and
-  // executed for the resuming caller.
-  it('a caller whose tools leave out the suspended tool is refused, and the run waits for one who has it', async () => {
+  // executed for the resuming caller. A cold resume rebuilt the run without the tool, and the tool-call
+  // step reported it not found and consumed the suspension, so no caller could answer it any more.
+  it.each(['warm', 'cold'] as const)(
+    'a caller whose tools leave out the suspended tool is refused, and the run waits for one who has it (%s)',
+    async registry => {
+      const executedFor: unknown[] = [];
+      const deleteAccount = createTool({
+        id: 'deleteAccount',
+        description: 'Delete an account',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({}),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+          executedFor.push(userIdOf(context.requestContext));
+          return { deleted: context.agent.resumeData.confirmed };
+        },
+      });
+      const agent = new Agent({
+        id: 'resume-admin-tool-agent',
+        name: 'Resume Admin Tool Agent',
+        instructions: 'Delete the account once confirmed',
+        model: createSuspendingThenTextModel('deleteAccount', ['Deleted']),
+        // Only admins get the tool.
+        tools: ({ requestContext }) => (roleOf(requestContext) === 'admin' ? { deleteAccount } : {}),
+      });
+      const pubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent, pubsub });
+      const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+      try {
+        const initial = await durable.stream('Delete it', {
+          closeOnSuspend: true,
+          requestContext: signedIn('alice', 'admin'),
+        });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+        if (registry === 'cold') {
+          durable.runRegistry.clear();
+          globalRunRegistry.delete(initial.runId);
+        }
+        const options = { runId: initial.runId, toolCallId: 'call-1' };
+
+        await expect(
+          durable.resume(initial.runId, { confirmed: true }, { ...options, requestContext: signedIn('guest') }),
+        ).rejects.toMatchObject({ id: 'AGENT_RESUME_TOOL_UNAVAILABLE' });
+        expect(executedFor).toEqual([]);
+        expect((await durable.listSuspendedRuns()).runs).toHaveLength(1);
+
+        const resumed = await (
+          await durable.resume(
+            initial.runId,
+            { confirmed: true },
+            { ...options, requestContext: signedIn('bob', 'admin') },
+          )
+        ).output.getFullOutput();
+        expect(resumed.error).toBeUndefined();
+        expect(resumed.text).toBe('Deleted');
+        expect(executedFor).toEqual(['bob']);
+      } finally {
+        await host.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+      }
+    },
+  );
+
+  // Technical: a warm run kept the per-call toolsets its starting request resolved, including those the
+  // agent's dynamic defaultOptions gave the starting caller, and rebuilt them for the resuming caller. A
+  // guest resume therefore rebuilt and ran an admin-only tool under the guest's identity.
+  it("a tool the agent's defaultOptions give only the starting caller is refused for a caller they leave it out for", async () => {
     const executedFor: unknown[] = [];
     const deleteAccount = createTool({
       id: 'deleteAccount',
@@ -3187,12 +3254,13 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
       },
     });
     const agent = new Agent({
-      id: 'resume-admin-tool-agent',
-      name: 'Resume Admin Tool Agent',
+      id: 'resume-admin-default-toolset-agent',
+      name: 'Resume Admin Default Toolset Agent',
       instructions: 'Delete the account once confirmed',
       model: createSuspendingThenTextModel('deleteAccount', ['Deleted']),
-      // Only admins get the tool.
-      tools: ({ requestContext }) => (roleOf(requestContext) === 'admin' ? { deleteAccount } : {}),
+      // Only admins get the toolset.
+      defaultOptions: ({ requestContext }) =>
+        roleOf(requestContext) === 'admin' ? { toolsets: { admin: { deleteAccount } } } : {},
     });
     const pubsub = new EventEmitterPubSub();
     const durable = new AgentClass({ agent, pubsub });
@@ -3222,6 +3290,123 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
       expect(resumed.error).toBeUndefined();
       expect(resumed.text).toBe('Deleted');
       expect(executedFor).toEqual(['bob']);
+    } finally {
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
+  // Technical: a warm resume rebuilt the run's tools only when it passed a request context, delegation,
+  // hooks or dropped the starting user. Toolsets or client tools passed to the resume alone were ignored,
+  // so the run kept executing and offering the starting call's definitions.
+  it("toolsets passed to a resume replace the starting call's toolset of the same name", async () => {
+    const executed: string[] = [];
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        executed.push('starting');
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const replacement = createTool({
+      id: 'ask',
+      description: 'Replacement confirmation tool',
+      inputSchema: z.object({ action: z.string() }),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async () => {
+        executed.push('replacement');
+        return { confirmed: true };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-replaced-toolset-agent',
+      name: 'Resume Replaced Toolset Agent',
+      instructions: 'Ask for confirmation',
+      model: createSuspendingThenTextModel('ask', ['Confirmed']),
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', { closeOnSuspend: true, toolsets: { extra: { ask } } });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+
+      const resumed = await (
+        await durable.resume(
+          initial.runId,
+          { confirmed: true },
+          { runId: initial.runId, toolCallId: 'call-1', toolsets: { extra: { ask: replacement } } },
+        )
+      ).output.getFullOutput();
+      expect(resumed.error).toBeUndefined();
+      expect(resumed.text).toBe('Confirmed');
+      expect(executed).toEqual(['replacement']);
+    } finally {
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
+  // Technical: as above, for client tools. The model kept receiving the starting call's definition.
+  it("client tools passed to a resume replace the starting call's definition the model sees", async () => {
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const model = createSuspendingThenTextModel('ask', ['Confirmed']);
+    const requests = vi.spyOn(model, 'doStream');
+    const agent = new Agent({
+      id: 'resume-replaced-client-tool-agent',
+      name: 'Resume Replaced Client Tool Agent',
+      instructions: 'Ask for confirmation',
+      model,
+      tools: { ask },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', {
+        closeOnSuspend: true,
+        clientTools: {
+          render: { description: 'Starting client definition', inputSchema: z.object({ value: z.string() }) },
+        },
+      });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+
+      const resumed = await (
+        await durable.resume(
+          initial.runId,
+          { confirmed: true },
+          {
+            runId: initial.runId,
+            toolCallId: 'call-1',
+            clientTools: {
+              render: { description: 'Resuming client definition', inputSchema: z.object({ value: z.number() }) },
+            },
+          },
+        )
+      ).output.getFullOutput();
+      expect(resumed.error).toBeUndefined();
+      expect(resumed.text).toBe('Confirmed');
+      const offered = requests.mock.calls.at(-1)?.[0].tools ?? [];
+      expect(
+        offered.filter(tool => tool.name === 'render').map(tool => 'description' in tool && tool.description),
+      ).toEqual(['Resuming client definition']);
     } finally {
       await host.shutdown({ drainTimeout: 1000 });
       await pubsub.close();
@@ -3338,10 +3523,99 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
 
   // Technical: an unlabeled cold resume chose the call to answer from a snapshot read after it rebuilt the
   // run. Another process resumed the run and it suspended on a later call meanwhile, so the data meant for
-  // the first call answered the later one.
-  it('an unlabeled cold resume is refused when another process moves the run on while it prepares', async () => {
+  // the first call answered the later one. With the call named, DurableAgent found the named call gone,
+  // validated nothing and ran the later call with it; EventedAgent failed on the missing resume label.
+  it.each([
+    { label: 'unlabeled', toolCallId: undefined },
+    { label: 'naming call-1', toolCallId: 'call-1' },
+  ])(
+    'a cold resume ($label) is refused when another process moves the run on while it prepares',
+    async ({ toolCallId }) => {
+      const answered: string[] = [];
+      const preparing = deferred();
+      const mayFinish = deferred();
+      const ask = createTool({
+        id: 'ask',
+        description: 'Ask for confirmation',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({}),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+          answered.push(context.agent.toolCallId);
+          return { confirmed: context.agent.resumeData.confirmed };
+        },
+      });
+      const makeAgent = (toolCallIds: string[]) =>
+        new Agent({
+          id: 'resume-moved-on-agent',
+          name: 'Resume Moved On Agent',
+          instructions: 'Ask for confirmation',
+          model: createToolCallSequenceModel('ask', toolCallIds, 'Confirmed'),
+          tools: async ({ requestContext }) => {
+            if (requestContext.get('tenant') === 'slow-caller') {
+              preparing.resolve();
+              await mayFinish.promise;
+            }
+            return { ask };
+          },
+        });
+      // Two processes running the same agent on one database.
+      const storage = new InMemoryStore();
+      const pubsub = new EventEmitterPubSub();
+      const otherPubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent: makeAgent(['call-1', 'call-2']), pubsub });
+      const host = new Mastra({ agents: { durable }, storage, logger: false });
+      const otherDurable = new AgentClass({ agent: makeAgent(['call-2']), pubsub: otherPubsub });
+      const otherHost = new Mastra({ agents: { durable: otherDurable }, storage, logger: false });
+      try {
+        const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+        durable.runRegistry.clear();
+        globalRunRegistry.delete(initial.runId);
+
+        const slow = durable
+          .resume(
+            initial.runId,
+            { confirmed: false },
+            { runId: initial.runId, toolCallId, requestContext: new RequestContext([['tenant', 'slow-caller']]) },
+          )
+          .then(
+            () => 'resumed',
+            (error: unknown) => error,
+          );
+        await preparing.promise;
+
+        // The other process answers call-1, and the run suspends again on call-2.
+        const moved = await (
+          await otherDurable.resume(initial.runId, { confirmed: true }, { runId: initial.runId, closeOnSuspend: true })
+        ).output.getFullOutput();
+        expect(moved.error).toBeUndefined();
+        expect(answered).toEqual(['call-1']);
+
+        mayFinish.resolve();
+        expect(await slow).toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+        expect(answered).toEqual(['call-1']);
+        const suspendedRuns = (await durable.listSuspendedRuns()).runs;
+        expect(suspendedRuns).toHaveLength(1);
+        expect(JSON.stringify(suspendedRuns[0])).toContain('call-2');
+      } finally {
+        mayFinish.resolve();
+        await host.shutdown({ drainTimeout: 1000 });
+        await otherHost.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+        await otherPubsub.close();
+      }
+    },
+  );
+
+  // Technical: a cold resume of a run pinned to a stored version handed off to the pinned agent before it
+  // read which call it answers, and that agent read storage again after the (slow) version lookup. Another
+  // process had answered call-1 and the run waited on call-2 by then, so this caller's data answered it.
+  it('a resume of a pinned-version run is refused when another process moves the run on during the version lookup', async () => {
     const answered: string[] = [];
-    const preparing = deferred();
+    const lookingUp = deferred();
     const mayFinish = deferred();
     const ask = createTool({
       id: 'ask',
@@ -3357,17 +3631,11 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
     });
     const makeAgent = (toolCallIds: string[]) =>
       new Agent({
-        id: 'resume-moved-on-agent',
-        name: 'Resume Moved On Agent',
+        id: 'resume-pinned-moved-on-agent',
+        name: 'Resume Pinned Moved On Agent',
         instructions: 'Ask for confirmation',
         model: createToolCallSequenceModel('ask', toolCallIds, 'Confirmed'),
-        tools: async ({ requestContext }) => {
-          if (requestContext.get('tenant') === 'slow-caller') {
-            preparing.resolve();
-            await mayFinish.promise;
-          }
-          return { ask };
-        },
+        tools: { ask },
       });
     // Two processes running the same agent on one database.
     const storage = new InMemoryStore();
@@ -3378,23 +3646,30 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
     const otherDurable = new AgentClass({ agent: makeAgent(['call-2']), pubsub: otherPubsub });
     const otherHost = new Mastra({ agents: { durable: otherDurable }, storage, logger: false });
     try {
+      durable.__setRawConfig({ resolvedVersionId: 'v-pinned' });
+      // The version lookup is slow, as a stored-version read can be.
+      vi.spyOn(host, 'resolveVersionedAgent').mockImplementation(async resolving => {
+        lookingUp.resolve();
+        await mayFinish.promise;
+        const fork = resolving.__fork();
+        fork.__setRawConfig({ resolvedVersionId: 'v-pinned' });
+        fork.__markStoredVersionApplied();
+        return fork as typeof resolving;
+      });
       const initial = await durable.stream('Confirm', { closeOnSuspend: true });
       await drain(initial.output.fullStream);
       await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      // A newer version is published, so the cold resume looks the pinned one up.
+      durable.__setRawConfig({ resolvedVersionId: 'v-current' });
+      otherDurable.__setRawConfig({ resolvedVersionId: 'v-pinned' });
       durable.runRegistry.clear();
       globalRunRegistry.delete(initial.runId);
 
-      const slow = durable
-        .resume(
-          initial.runId,
-          { confirmed: false },
-          { runId: initial.runId, requestContext: new RequestContext([['tenant', 'slow-caller']]) },
-        )
-        .then(
-          () => 'resumed',
-          (error: unknown) => error,
-        );
-      await preparing.promise;
+      const slow = durable.resume(initial.runId, { confirmed: false }, { runId: initial.runId }).then(
+        () => 'resumed',
+        (error: unknown) => error,
+      );
+      await lookingUp.promise;
 
       // The other process answers call-1, and the run suspends again on call-2.
       const moved = await (
@@ -3418,83 +3693,206 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
     }
   });
 
-  // Technical: the wait for an undecided cold resume was keyed by run ID alone, so a stalled cold resume on
-  // one Mastra host held up every resume of the same caller-supplied run ID on another host in the process.
-  it('a stalled cold resume on one host does not hold up a run with the same ID on another host', async () => {
-    const runId = `shared-run-${crypto.randomUUID()}`;
-    const resolverStalled = deferred();
-    const stalledResolver = deferred();
-    const makeHost = () => {
-      const ask = createTool({
-        id: 'ask',
-        description: 'Ask for confirmation',
-        inputSchema: z.object({ action: z.string() }),
-        suspendSchema: z.object({}),
-        resumeSchema: z.object({ confirmed: z.boolean() }),
-        execute: async (_input, context) => {
-          if (!context?.agent?.resumeData) return context?.agent?.suspend({});
-          return { confirmed: context.agent.resumeData.confirmed };
-        },
+  // Technical: an unlabeled resume that began while two calls were suspended bound to nothing, and once
+  // another process answered one of them, it bound to the call that remained and answered it with data
+  // the caller never meant for that call.
+  it('an unlabeled resume begun with two calls waiting does not answer the one left after another process answers the other', async () => {
+    const answered: string[] = [];
+    const preparing = deferred();
+    const mayFinish = deferred();
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        answered.push(context.agent.toolCallId);
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const usage = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
+    // The model asks twice in one step, so both calls wait at once.
+    const askTwice = () =>
+      new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            ...['call-1', 'call-2'].map(toolCallId => ({
+              type: 'tool-call' as const,
+              toolCallId,
+              toolName: 'ask',
+              input: JSON.stringify({ action: 'continue' }),
+            })),
+            { type: 'finish' as const, finishReason: 'tool-calls' as const, usage },
+          ]),
+        }),
       });
-      const agent = new Agent({
-        id: 'resume-shared-id-agent',
-        name: 'Resume Shared Id Agent',
+    const makeAgent = (model: LanguageModelV2) =>
+      new Agent({
+        id: 'resume-two-waiting-agent',
+        name: 'Resume Two Waiting Agent',
         instructions: 'Ask for confirmation',
-        model: createSuspendingThenTextModel('ask', ['Confirmed']),
+        model,
+        defaultOptions: { toolCallConcurrency: 2 },
         tools: async ({ requestContext }) => {
-          if (requestContext.get('tenant') === 'stalled-caller') {
-            resolverStalled.resolve();
-            await stalledResolver.promise;
+          if (requestContext.get('tenant') === 'slow-caller') {
+            preparing.resolve();
+            await mayFinish.promise;
           }
           return { ask };
         },
       });
-      const pubsub = new EventEmitterPubSub();
-      const durable = new AgentClass({ agent, pubsub });
-      const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
-      return { durable, host, pubsub };
-    };
-    const first = makeHost();
-    const second = makeHost();
+    // Two processes running the same agent on one database.
+    const storage = new InMemoryStore();
+    const pubsub = new EventEmitterPubSub();
+    const otherPubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent: makeAgent(askTwice()), pubsub });
+    const host = new Mastra({ agents: { durable }, storage, logger: false });
+    const otherDurable = new AgentClass({
+      agent: makeAgent(createToolCallSequenceModel('ask', [], 'Confirmed')),
+      pubsub: otherPubsub,
+    });
+    const otherHost = new Mastra({ agents: { durable: otherDurable }, storage, logger: false });
     try {
-      const firstRun = await first.durable.stream('Confirm', { runId, closeOnSuspend: true });
-      await drain(firstRun.output.fullStream);
-      await globalRunRegistry.get(runId)?.workflowExecution;
-      first.durable.runRegistry.clear();
-      globalRunRegistry.delete(runId);
-      const secondRun = await second.durable.stream('Confirm', { runId, closeOnSuspend: true });
-      await drain(secondRun.output.fullStream);
-      await globalRunRegistry.get(runId)?.workflowExecution;
+      const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      const waiting = JSON.stringify((await durable.listSuspendedRuns()).runs);
+      expect(waiting).toContain('call-1');
+      expect(waiting).toContain('call-2');
+      durable.runRegistry.clear();
+      globalRunRegistry.delete(initial.runId);
 
-      const stalled = first.durable
+      const slow = durable
         .resume(
-          runId,
-          { confirmed: true },
-          { runId, requestContext: new RequestContext([['tenant', 'stalled-caller']]) },
+          initial.runId,
+          { confirmed: false },
+          { runId: initial.runId, requestContext: new RequestContext([['tenant', 'slow-caller']]) },
         )
         .then(
-          result => result.output.getFullOutput(),
-          () => undefined,
+          () => 'resumed',
+          (error: unknown) => error,
         );
-      await resolverStalled.promise;
+      await preparing.promise;
 
-      const resumed = await Promise.race([
-        second.durable
-          .resume(runId, { confirmed: true }, { runId, toolCallId: 'call-1' })
-          .then(result => result.output.getFullOutput())
-          .then(output => output.text),
-        new Promise(resolve => setTimeout(() => resolve('still waiting'), 3000)),
-      ]);
-      expect(resumed).toBe('Confirmed');
+      // The other process answers call-1, and call-2 is left waiting.
+      const moved = await otherDurable.resume(
+        initial.runId,
+        { confirmed: true },
+        { runId: initial.runId, toolCallId: 'call-1', closeOnSuspend: true },
+      );
+      await drain(moved.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      const remaining = JSON.stringify((await otherDurable.listSuspendedRuns()).runs);
+      expect(remaining).toContain('call-2');
+      expect(remaining).not.toContain('call-1');
+      expect(answered).toEqual(['call-1']);
 
-      stalledResolver.resolve();
-      expect((await stalled)?.text).toBe('Confirmed');
+      mayFinish.resolve();
+      expect(await slow).toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+      expect(answered).toEqual(['call-1']);
+      const suspendedRuns = (await durable.listSuspendedRuns()).runs;
+      expect(suspendedRuns).toHaveLength(1);
+      expect(JSON.stringify(suspendedRuns[0])).toContain('call-2');
     } finally {
-      stalledResolver.resolve();
-      await first.host.shutdown({ drainTimeout: 1000 });
-      await second.host.shutdown({ drainTimeout: 1000 });
-      await first.pubsub.close();
-      await second.pubsub.close();
+      mayFinish.resolve();
+      await host.shutdown({ drainTimeout: 1000 });
+      await otherHost.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+      await otherPubsub.close();
     }
   });
+
+  // Technical: the wait for an undecided cold resume was keyed by run ID alone, so a stalled cold resume on
+  // one Mastra host held up every resume of the same caller-supplied run ID on another host in the process.
+  // With the tool call named, the process-wide in-flight marker for that run and tool call ID refused the
+  // other host's resume outright as a duplicate.
+  it.each([
+    { label: 'unlabeled', stalledToolCallId: undefined },
+    { label: 'naming the same tool call', stalledToolCallId: 'call-1' },
+  ])(
+    'a stalled cold resume ($label) on one host does not hold up a run with the same ID on another host',
+    async ({ stalledToolCallId }) => {
+      const runId = `shared-run-${crypto.randomUUID()}`;
+      const resolverStalled = deferred();
+      const stalledResolver = deferred();
+      const makeHost = () => {
+        const ask = createTool({
+          id: 'ask',
+          description: 'Ask for confirmation',
+          inputSchema: z.object({ action: z.string() }),
+          suspendSchema: z.object({}),
+          resumeSchema: z.object({ confirmed: z.boolean() }),
+          execute: async (_input, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+            return { confirmed: context.agent.resumeData.confirmed };
+          },
+        });
+        const agent = new Agent({
+          id: 'resume-shared-id-agent',
+          name: 'Resume Shared Id Agent',
+          instructions: 'Ask for confirmation',
+          model: createSuspendingThenTextModel('ask', ['Confirmed']),
+          tools: async ({ requestContext }) => {
+            if (requestContext.get('tenant') === 'stalled-caller') {
+              resolverStalled.resolve();
+              await stalledResolver.promise;
+            }
+            return { ask };
+          },
+        });
+        const pubsub = new EventEmitterPubSub();
+        const durable = new AgentClass({ agent, pubsub });
+        const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+        return { durable, host, pubsub };
+      };
+      const first = makeHost();
+      const second = makeHost();
+      try {
+        const firstRun = await first.durable.stream('Confirm', { runId, closeOnSuspend: true });
+        await drain(firstRun.output.fullStream);
+        await globalRunRegistry.get(runId)?.workflowExecution;
+        first.durable.runRegistry.clear();
+        globalRunRegistry.delete(runId);
+        const secondRun = await second.durable.stream('Confirm', { runId, closeOnSuspend: true });
+        await drain(secondRun.output.fullStream);
+        await globalRunRegistry.get(runId)?.workflowExecution;
+
+        const stalled = first.durable
+          .resume(
+            runId,
+            { confirmed: true },
+            {
+              runId,
+              toolCallId: stalledToolCallId,
+              requestContext: new RequestContext([['tenant', 'stalled-caller']]),
+            },
+          )
+          .then(
+            result => result.output.getFullOutput(),
+            () => undefined,
+          );
+        await resolverStalled.promise;
+
+        const resumed = await Promise.race([
+          second.durable
+            .resume(runId, { confirmed: true }, { runId, toolCallId: 'call-1' })
+            .then(result => result.output.getFullOutput())
+            .then(output => output.text),
+          new Promise(resolve => setTimeout(() => resolve('still waiting'), 3000)),
+        ]);
+        expect(resumed).toBe('Confirmed');
+
+        stalledResolver.resolve();
+        expect((await stalled)?.text).toBe('Confirmed');
+      } finally {
+        stalledResolver.resolve();
+        await first.host.shutdown({ drainTimeout: 1000 });
+        await second.host.shutdown({ drainTimeout: 1000 });
+        await first.pubsub.close();
+        await second.pubsub.close();
+      }
+    },
+  );
 });

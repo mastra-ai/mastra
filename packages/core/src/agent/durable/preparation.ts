@@ -184,6 +184,13 @@ export interface PreparationOptions<OUTPUT = undefined> {
    */
   resolvedDefaultOptions?: AgentExecutionOptions<OUTPUT>;
   /**
+   * The `toolsets` and `clientTools` the caller passed to this call, before the agent's
+   * `defaultOptions` were merged in. A warm resume rebuilds these for the resuming caller; defaults
+   * are resolved again for that caller instead, so a toolset the defaults gave the starting caller
+   * never reaches one they do not give it. Read from `options` when they are not resolved.
+   */
+  callerToolInputs?: RunRegistryEntry['requestToolInputs'];
+  /**
    * Whether agent scopes were already applied to `options` (DurableAgent does this itself).
    * When false, preparation resolves scopes so wrappers that call it directly honor them.
    */
@@ -253,6 +260,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     options: rawExecOptions,
     optionsAreResolved = false,
     resolvedDefaultOptions,
+    callerToolInputs,
     scopesResolved = false,
     resumedSpanData,
     toolsRequired = false,
@@ -947,7 +955,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     mastra,
     tools,
     requestTools: tools,
-    requestToolInputs: { toolsets: execOptions?.toolsets, clientTools: execOptions?.clientTools },
+    // Only what the caller passed: `execOptions` also holds the defaults resolved for this caller.
+    requestToolInputs:
+      callerToolInputs ??
+      (optionsAreResolved ? {} : { toolsets: rawExecOptions?.toolsets, clientTools: rawExecOptions?.clientTools }),
     methodType,
     saveQueueManager,
     memory,

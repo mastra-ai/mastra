@@ -14,11 +14,19 @@ const undecidedColdResumes = new WeakMap<object, Map<string, ColdResumeGate>>();
 /** The runtime of agents that have no Mastra instance. They share one namespace. */
 const DETACHED_RUNTIME: object = Object.freeze({});
 
-/** The key a runtime's gates are stored under: its Mastra instance, or the detached namespace. */
+/** The runtime a resume runs on: its Mastra instance, unwrapped from any tracing proxy, if it has one. */
 export type ColdResumeRuntime = object | undefined;
 
+/**
+ * The key a runtime's per-run resume state (gates, in-flight resume markers) is stored under: its
+ * Mastra instance, or the shared detached namespace for agents without one.
+ */
+export function runtimeNamespace(runtime: ColdResumeRuntime): object {
+  return runtime ?? DETACHED_RUNTIME;
+}
+
 function gatesFor(runtime: ColdResumeRuntime): Map<string, ColdResumeGate> {
-  const key = runtime ?? DETACHED_RUNTIME;
+  const key = runtimeNamespace(runtime);
   let gates = undecidedColdResumes.get(key);
   if (!gates) undecidedColdResumes.set(key, (gates = new Map()));
   return gates;

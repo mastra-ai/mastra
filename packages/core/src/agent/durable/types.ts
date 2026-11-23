@@ -1082,11 +1082,12 @@ export interface RunRegistryEntry {
   /** The evented engine may dispatch this execution to another process. */
   eventedExecution?: boolean;
   /**
-   * Tool call resumed by the `resume()` currently driving this run in this
-   * process. Its in-flight marker is cleared when the segment suspends again.
+   * Releases the in-flight marker of the tool call the `resume()` currently driving this run in
+   * this process resumed. Called when the segment suspends again, so a later resume of that tool
+   * call is not treated as a duplicate. Idempotent; it never clears a later resume's marker.
    * @internal
    */
-  resumeToolCallId?: string;
+  releaseResumeMarker?: () => void;
   /**
    * Set while an engine that persists the suspended snapshot before returning
    * is executing. The tool-call step queues suspension chunks/events here so

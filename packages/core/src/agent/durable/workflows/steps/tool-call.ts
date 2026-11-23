@@ -86,7 +86,12 @@ import {
   runFencedToClaim,
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import {
+  getRunRegistryEntry,
+  globalRunRegistry,
+  hasAuthoritativeToolSnapshot as isAuthoritativeToolSnapshot,
+  markRunActive,
+} from '../../run-registry';
 import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
@@ -615,13 +620,7 @@ export function createDurableToolCallStep() {
       // back to the Mastra-wide tool registry (exact name, provider-tool
       // name, then by id). Mirrors the non-durable tool-call step.
       let registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-      const registryModel = registryEntry?.model as { __metadataOnly?: boolean } | undefined;
-      const hasAuthoritativeToolSnapshot =
-        !!registryEntry &&
-        registryEntry.isPlaceholder !== true &&
-        !!registryModel &&
-        registryModel.__metadataOnly !== true &&
-        (registryEntry.baseTools !== undefined || registryEntry.tools !== undefined);
+      const hasAuthoritativeToolSnapshot = isAuthoritativeToolSnapshot(registryEntry);
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
@@ -826,9 +825,9 @@ export function createDurableToolCallStep() {
         // Once the new suspension is saved, a later resume of the tool call is a decision on
         // that suspension, not a duplicate. Clearing earlier would let a duplicate approval
         // of the previous gate approve the new one (#27365).
-        const resumedToolCallId = entry?.resumeToolCallId;
+        const releaseResumeMarker = entry?.releaseResumeMarker;
         const clearAndPublish = async () => {
-          if (resumedToolCallId !== undefined) clearResumeInFlight(runId, resumedToolCallId);
+          releaseResumeMarker?.();
           await publish();
         };
         const pending = entry?.pendingSuspensionEvents;
