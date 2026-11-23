@@ -12,21 +12,21 @@ const drawn = (container: HTMLElement) =>
 
 describe('shortcut key symbols', () => {
   it.each([
-    ['⌘K', ['Command'], '⌘K'],
+    ['⌘K', ['Command'], '⌘ K'],
     ['⌘ K', ['Command'], '⌘ K'],
-    ['⇧⌘P', ['Shift', 'Command'], '⇧⌘P'],
+    ['⇧⌘P', ['Shift', 'Command'], '⇧ ⌘ P'],
     ['⇧ ⌘ P', ['Shift', 'Command'], '⇧ ⌘ P'],
-    ['⌘↵', ['Command', 'Enter'], '⌘↵'],
+    ['⌘↵', ['Command', 'Enter'], '⌘ ↵'],
     ['Ctrl ↵', ['Enter'], 'Ctrl ↵'],
     ['↑', ['Up arrow'], '↑'],
-  ])('draws the symbols in %s and keeps its text', (shortcut, names, text) => {
+  ])('draws the symbols in %s, one space apart', (shortcut, names, text) => {
     const { container } = render(<Kbd>{shortcut}</Kbd>);
 
     expect(drawn(container)).toEqual(names);
     expect(container.textContent).toBe(text);
   });
 
-  it.each(['K', 'Ctrl+P', 'Esc', 'Enter', '[', '{', '/', '?'])('leaves %s as plain text', shortcut => {
+  it.each(['K', 'Ctrl K', 'Ctrl+P', 'Esc', 'Enter', '[', '{', '/', '?'])('leaves %s as plain text', shortcut => {
     const { container } = render(<Kbd>{shortcut}</Kbd>);
 
     expect(drawn(container)).toEqual([]);
@@ -40,35 +40,18 @@ describe('shortcut key symbols', () => {
       </button>,
     );
 
-    expect(screen.getByRole('button').textContent).toBe('Apply ⌘ ↵');
-    expect(screen.getByRole('button', { name: /Apply\s+Command\s*Enter/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Apply\s+Command\s+Enter/ })).toBeTruthy();
   });
 
-  it('draws symbols next to elements and in a row without a keycap', () => {
+  it('draws symbols next to elements, keeping the space between them', () => {
     const { container } = render(
       <CommandShortcut>
-        {'⌘'}
-        {'K'} <Kbd>↵</Kbd>
+        ⌘K <Kbd>↵</Kbd> <Kbd>Esc</Kbd>
       </CommandShortcut>,
     );
 
     expect(drawn(container)).toEqual(['Command', 'Enter']);
-    expect(container.textContent).toBe('⌘K ↵');
-  });
-
-  it('keeps the space between a label and an element visible', () => {
-    const { container } = render(
-      <CommandShortcut>
-        ⌘K <Kbd>↵</Kbd> <Kbd>Esc</Kbd> K
-      </CommandShortcut>,
-    );
-    const hidden = Array.from(
-      container.querySelectorAll<HTMLElement>('[style*="font-size: 0"]'),
-      node => node.textContent,
-    );
-
-    expect(container.textContent).toBe('⌘K ↵ Esc K');
-    expect(hidden).toEqual(['⌘', '↵']);
+    expect(container.textContent).toBe('⌘ K ↵ Esc');
   });
 
   it('draws every known symbol', () => {

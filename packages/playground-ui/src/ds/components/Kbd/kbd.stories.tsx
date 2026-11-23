@@ -134,9 +134,9 @@ const Shortcuts = ({ labels }: { labels: string[] }) => (
           key={label}
           className="relative inline-flex bg-card px-1.5 py-2 font-mono text-caption leading-none [font-size-adjust:none]"
         >
-          <span className="relative [text-box:trim-both_cap_alphabetic]">
-            <span aria-hidden className="absolute inset-0 border-[0.25px] border-destructive-indicator" />
-            <KeyLabel face="mono">{label}</KeyLabel>
+          <span className="relative [text-box:trim-both_cap_alphabetic] [word-spacing:-0.3em]">
+            <span aria-hidden className="absolute inset-0 border-y-[0.25px] border-destructive-indicator" />
+            <KeyLabel>{label}</KeyLabel>
           </span>
         </span>
       ))}
@@ -144,13 +144,13 @@ const Shortcuts = ({ labels }: { labels: string[] }) => (
   </div>
 );
 
-// Every symbol beside a letter. The magnified boxes are the letters' cap height and baseline, and the label's ends.
+// Every symbol beside a letter. The magnified row's lines are the letters' cap height and baseline.
 export const Symbols: Story = {
   parameters: { layout: 'padded' },
   render: () => <Shortcuts labels={symbols.map(symbol => `${symbol}K`)} />,
 };
 
-// Every pair of keys, with one gap between them and none around the label.
+// Every kind of pair, to compare the gaps.
 export const Pairs: Story = {
   parameters: { layout: 'padded' },
   render: () => <Shortcuts labels={pairs} />,

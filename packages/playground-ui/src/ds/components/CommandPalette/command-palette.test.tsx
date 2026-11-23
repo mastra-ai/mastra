@@ -225,7 +225,7 @@ describe('CommandPaletteItem', () => {
   it('adds the shortcut that would reach it', () => {
     renderItem({ shortcut: '⌘K' });
 
-    expect(itemElement().textContent).toContain('⌘K');
+    expect(itemElement().textContent).toContain('⌘ K');
     expect(itemElement().childElementCount).toBe(3);
   });
 

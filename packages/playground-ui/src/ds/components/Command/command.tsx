@@ -314,7 +314,7 @@ const CommandShortcut = ({ className, children, ...props }: React.HTMLAttributes
       className={cn('ml-auto tracking-wider tabular-nums', className)}
       {...props}
     >
-      <KeyLabel face="body">{children}</KeyLabel>
+      <KeyLabel>{children}</KeyLabel>
     </Txt>
   );
 };
