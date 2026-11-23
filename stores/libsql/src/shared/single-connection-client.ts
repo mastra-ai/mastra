@@ -42,14 +42,23 @@ export function gateSingleConnectionClient(client: Client): Client {
     held?.release();
   };
 
-  const waitForGate = <T>(run: () => Promise<T>): Promise<T> => {
-    // Closing the client settles the transaction under it. `commit`, `rollback` and `close`
-    // then never reach the proxy, and waiting on that transaction would never return.
+  /**
+   * Frees a gate whose transaction the driver settled itself. Closing the client settles the
+   * transaction under it, and SQLite can roll one back on a statement error, either way
+   * without `commit`, `rollback` or `close` reaching the proxy — so the caller may never
+   * release the gate, and waiting on that transaction would never return.
+   */
+  const releaseSettledHolder = (): void => {
     if (holder?.tx.closed) releaseHolder();
+  };
+
+  const waitForGate = <T>(run: () => Promise<T>): Promise<T> => {
+    releaseSettledHolder();
     return gate.then(run, run);
   };
 
   const transaction = async (mode?: TransactionMode): Promise<Transaction> => {
+    releaseSettledHolder();
     let release!: () => void;
     const held = new Promise<void>(resolve => {
       release = resolve;
