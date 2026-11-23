@@ -46,21 +46,7 @@
     "nemotron-3-ultra"
   ],
   "reasoning": {
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "nemotron-3-ultra": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-pro": [
+    "deepseek-v4-pro:0813": [
       {
         "type": "toggle"
       },
@@ -75,16 +61,36 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "minimax-m3": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "max"]
       }
     ],
-    "muse-spark-open": [
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-super": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.7-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3.1-pro": [
       {
         "type": "toggle"
       },
@@ -98,21 +104,10 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.6-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "gpt-oss:20b": [
+    "gpt-oss:120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "deepseek-v4.1-flash:1017": [
@@ -124,13 +119,28 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3.1-pro": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "nemotron-3-nano:30b": [
@@ -138,15 +148,18 @@
         "type": "toggle"
       }
     ],
-    "kimi-k2.6": [
+    "nemotron-3-ultra": [
       {
         "type": "toggle"
       }
     ],
-    "mistral-large-4": [
+    "muse-spark-open": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high", "max"]
       }
     ],
     "inkling-2-small": [
@@ -158,27 +171,19 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "beam": [
+    "mistral-large-4": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "glm-5.2": [
-      {
-        "type": "toggle"
-      },
+    "hy4": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "kimi-k2.7-code": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-pro:0813": [
+    "kimi-k3": [
       {
         "type": "toggle"
       },
@@ -187,12 +192,18 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "gpt-oss:20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "mimo-v2.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "minimax-m3.1-flash": [
+    "beam": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -204,24 +215,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-oss:120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "nemotron-3-super": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3": [
+    "glm-5.2": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ]
   }

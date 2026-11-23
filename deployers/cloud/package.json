@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "versions.json"
   ],
   "main": "dist/index.js",
