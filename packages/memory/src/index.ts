@@ -3932,7 +3932,7 @@ Notes:
     if (!coreRendersWorkingMemoryInstructionThroughMemory()) {
       const index = processors.findIndex(p => p.id === 'working-memory' && !configuredProcessors.includes(p));
       if (index !== -1) {
-        processors[index] = await this.createWorkingMemoryInstructionCompatProcessor(context);
+        processors[index] = await this.createWorkingMemoryInstructionCompatProcessor(processors[index]!, context);
       }
     }
 
@@ -4036,6 +4036,7 @@ Notes:
    * config core's `MastraMemory.getInputProcessors()` uses for the processor it replaces.
    */
   private async createWorkingMemoryInstructionCompatProcessor(
+    fallbackProcessor: InputProcessor,
     context?: RequestContext,
   ): Promise<WorkingMemoryInstructionCompat> {
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
@@ -4052,9 +4053,9 @@ Notes:
       readOnly: effectiveConfig.readOnly,
       agentManaged: workingMemory?.agentManaged,
       defaultTemplate: this.defaultWorkingMemoryTemplate,
+      fallbackProcessor,
       getWorkingMemoryTemplate: args => this.getWorkingMemoryTemplate(args),
-      renderInstruction: args =>
-        this.getWorkingMemoryInstruction(args) ?? this.renderBuiltInWorkingMemoryInstruction(args),
+      getWorkingMemoryInstruction: args => this.getWorkingMemoryInstruction(args),
     });
   }
 

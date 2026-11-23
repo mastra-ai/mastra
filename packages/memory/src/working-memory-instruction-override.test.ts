@@ -359,6 +359,45 @@ describe.each(['current core', 'older core without an instruction provider'] as 
       expect(systemPromptSentToModel()).not.toContain('CUSTOM_WM');
     });
 
+    it('returning undefined in vnext keeps stock core template guidance even when subclass sets defaultWorkingMemoryTemplate', async () => {
+      const customTemplate = '# Custom VNext\n- Item:';
+      class CustomDefaultVNextMemory extends Memory {
+        public override defaultWorkingMemoryTemplate = customTemplate;
+        override getWorkingMemoryInstruction(): string | undefined {
+          return undefined;
+        }
+      }
+      llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      const memory = createMemory(CustomDefaultVNextMemory, {
+        workingMemory: { enabled: true, scope: 'thread', template: customTemplate, version: 'vnext' },
+      });
+      await seedWorkingMemory(memory, 'thread-vnext-default', '# Custom VNext\n- Item: rocket');
+
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-vnext-default', resource: RESOURCE } });
+
+      const system = systemPromptSentToModel();
+      expect(system).toContain("Only store information if it's in the working memory template");
+      expect(system).not.toContain("If you're unsure whether to store something, store it");
+    });
+
+    it('preserves object-valued thread workingMemory metadata consistently with core', async () => {
+      llm.on({ endpoint: 'chat' }, { content: 'ok' });
+      const memory = createMemory(DurableFactsMemory, {
+        workingMemory: { ...markdownWorkingMemory, scope: 'thread' },
+      }) as DurableFactsMemory;
+      await memory.createThread({
+        threadId: 'thread-object-wm',
+        resourceId: RESOURCE,
+        metadata: { workingMemory: { name: 'Ada' } },
+      });
+
+      await createAgent(memory).generate('hello', { memory: { thread: 'thread-object-wm', resource: RESOURCE } });
+
+      expect(memory.seen).toHaveLength(1);
+      expect(memory.seen[0]?.data).toEqual({ name: 'Ada' });
+      expect(systemPromptSentToModel()).not.toContain('No working memory data available.');
+    });
+
     it('with useStateSignals the instruction methods are not used', async () => {
       llm.on({ endpoint: 'chat' }, { content: 'ok' });
       const memory = createMemory(DurableFactsMemory, {

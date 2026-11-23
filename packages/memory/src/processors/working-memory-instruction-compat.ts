@@ -1,8 +1,6 @@
-import type { MessageList } from '@mastra/core/agent';
-import type { MastraDBMessage, MemoryConfigInternal, WorkingMemoryTemplate } from '@mastra/core/memory';
+import type { MemoryConfigInternal, WorkingMemoryTemplate } from '@mastra/core/memory';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
-import type { Processor } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import type { InputProcessor, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 
 /**
@@ -31,9 +29,11 @@ export interface WorkingMemoryInstructionCompatOptions {
   agentManaged?: boolean;
   /** Used when neither `getWorkingMemoryTemplate` nor `template` gives a template. */
   defaultTemplate: string;
+  /** Original WorkingMemory processor built by core, delegated to when `getWorkingMemoryInstruction` returns `undefined`. */
+  fallbackProcessor: InputProcessor;
   getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null>;
-  /** Renders the instruction. An empty string adds no system message. */
-  renderInstruction(args: WorkingMemoryInstructionArgs): string;
+  /** Renders the instruction. Return `undefined` to fall back to core's built-in processor, or an empty string to add no system message. */
+  getWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string | undefined;
 }
 
 /**
@@ -52,12 +52,7 @@ export class WorkingMemoryInstructionCompat implements Processor<'working-memory
 
   constructor(private readonly options: WorkingMemoryInstructionCompatOptions) {}
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    requestContext?: RequestContext;
-  }): Promise<MessageList> {
+  async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     const { messageList, requestContext } = args;
 
     const memoryContext = parseMemoryRequestContext(requestContext);
@@ -74,8 +69,7 @@ export class WorkingMemoryInstructionCompat implements Processor<'working-memory
     if (scope === 'thread' && threadId) {
       // The thread was already loaded and ownership-validated during run preparation.
       const thread = memoryRunState?.thread ?? (await this.options.storage.getThreadById({ threadId }));
-      const stored = thread?.metadata?.workingMemory;
-      workingMemoryData = typeof stored === 'string' && stored ? stored : null;
+      workingMemoryData = (thread?.metadata?.workingMemory as string) || null;
     } else if (scope === 'resource' && resourceId) {
       const loadWorkingMemory = async () => {
         const resource = await this.options.storage.getResourceById({ resourceId });
@@ -104,11 +98,15 @@ export class WorkingMemoryInstructionCompat implements Processor<'working-memory
       this.options.agentManaged === false ||
       (typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false);
 
-    const instruction = this.options.renderInstruction(
+    const instruction = this.options.getWorkingMemoryInstruction(
       isConfiguredReadOnly || isAppManaged
         ? { kind: 'read-only', template, data: workingMemoryData, autoUpdated: !isConfiguredReadOnly }
         : { kind: this.options.useVNext ? 'vnext' : 'tool', template, data: workingMemoryData },
     );
+
+    if (instruction === undefined) {
+      return (await this.options.fallbackProcessor.processInput?.(args)) ?? messageList;
+    }
 
     if (instruction) {
       messageList.addSystem(instruction, 'memory');
