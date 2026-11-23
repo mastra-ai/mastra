@@ -185,7 +185,7 @@ export const ${camelCase(id)}Agent = new Agent({
   name: ${tsString(`${docs.name} agent`)},
   instructions: ${tsString(`You help people ${docs.summary} in ${docs.name}.`)},
   model: '${MODEL}',
-  tools: tools({ providers: ['${id}'] }),
+  tools: tools({ providers: ['${id}']${docs.requireApproval ? ', requireApproval: true' : ''} }),
 })
 \`\`\``;
 }

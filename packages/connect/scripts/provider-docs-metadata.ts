@@ -46,6 +46,8 @@ export interface ProviderDocs {
   warning?: string;
   /** Account or capability limit shown in the provider's page or partial, and for toolsets in the reference. */
   note?: string;
+  /** Approval policy the page's agent example passes to `tools()`, for providers whose warning asks for approval. */
+  requireApproval?: true;
 }
 
 export type ToolProviderDocs = ProviderDocs;
@@ -388,7 +390,8 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     summary: 'query transactions, financial statements, and ledger data, and update accounting records',
     emit: true,
     warning:
-      'Digits tools can create, update, and delete records in your general ledger. Require approval for write tools with `requireApproval` so a person confirms each change before it runs. See [MCP providers](/reference/connect/tools#mcp-providers).',
+      'Digits tools can create, update, and delete records in your general ledger. The example below requires approval for every Digits tool so a person confirms each call before it runs. To let reads run without approval, list only the write tools by key in `requireApproval`. See [MCP providers](/reference/connect/tools#mcp-providers).',
+    requireApproval: true,
     mcpDocsUrl: 'https://help.digits.com/business-connections/digits-mcp',
     mcpDocsLabel: 'Digits MCP',
   },
@@ -422,7 +425,8 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     summary: 'read account and market data and place trades',
     emit: true,
     warning:
-      'These tools can place real trades with real money. Require approval for trading tools with `requireApproval` so a person confirms each order before it runs. See [MCP providers](/reference/connect/tools#mcp-providers).',
+      'These tools can place real trades with real money. The example below requires approval for every Robinhood tool so a person confirms each call before it runs. To let reads run without approval, list only the trading tools by key in `requireApproval`. See [MCP providers](/reference/connect/tools#mcp-providers).',
+    requireApproval: true,
     mcpDocsUrl: 'https://robinhood.com/us/en/support/agentic-trading',
     mcpDocsLabel: 'Agentic Trading',
   },

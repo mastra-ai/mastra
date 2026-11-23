@@ -17,7 +17,7 @@ Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get
 
 :::warning
 
-Digits tools can create, update, and delete records in your general ledger. Require approval for write tools with `requireApproval` so a person confirms each change before it runs. See [MCP providers](/reference/connect/tools#mcp-providers).
+Digits tools can create, update, and delete records in your general ledger. The example below requires approval for every Digits tool so a person confirms each call before it runs. To let reads run without approval, list only the write tools by key in `requireApproval`. See [MCP providers](/reference/connect/tools#mcp-providers).
 
 :::
 
@@ -45,7 +45,7 @@ export const digitsMcpAgent = new Agent({
   instructions:
     'You help people query transactions, financial statements, and ledger data, and update accounting records in Digits.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
-  tools: tools({ providers: ['digits-mcp'] }),
+  tools: tools({ providers: ['digits-mcp'], requireApproval: true }),
 })
 ```
 

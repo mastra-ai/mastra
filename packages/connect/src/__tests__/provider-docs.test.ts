@@ -208,6 +208,17 @@ describe('Connect provider docs generation', () => {
     expect(acme).toContain('Shared accounts can only read events.');
   });
 
+  it('requires approval in the agent example when the metadata asks for it', () => {
+    const metadata = meta();
+    metadata.mcpProviders['remote-mcp'] = { ...metadata.mcpProviders['remote-mcp']!, requireApproval: true };
+    generate(metadata);
+
+    expect(read(join(INTEGRATIONS_DIR, 'providers/remote.mdx'))).toContain(
+      "tools: tools({ providers: ['remote-mcp'], requireApproval: true }),",
+    );
+    expect(read(join(INTEGRATIONS_DIR, 'providers/acme.mdx'))).toContain("tools: tools({ providers: ['acme'] }),");
+  });
+
   it('emits only providers explicitly opted in', () => {
     const written = generate();
     expect(written).toEqual([
@@ -374,6 +385,12 @@ describe('Connect provider docs metadata matches the published catalog', () => {
       ),
     );
     expect(linked.sort()).toEqual([...expected].sort());
+  });
+
+  it('shows approval in the example of every provider whose warning asks for it', () => {
+    for (const [id, docs] of Object.entries({ ...TOOL_PROVIDERS, ...MCP_PROVIDERS })) {
+      if (docs.warning?.includes('requireApproval')) expect(docs.requireApproval, id).toBe(true);
+    }
   });
 
   it('puts Slack tools and Slack chat on the same page', () => {
