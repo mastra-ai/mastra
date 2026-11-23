@@ -30,7 +30,7 @@ import {
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Node, Project, SyntaxKind } from 'ts-morph';
+import { Node, Project, SyntaxKind, VariableDeclarationKind } from 'ts-morph';
 import type { CallExpression, ImportDeclaration, ObjectLiteralExpression, SourceFile, Statement } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
@@ -148,6 +148,28 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
   const initializer = property.getInitializer();
   return initializer && Node.isIdentifier(initializer) ? initializer.getText() : undefined;
+}
+
+/**
+ * Some templates declare `output` inline (e.g. `output: z.null()` for a
+ * delete). Hoist it into a top-level schema declaration so it gets the same
+ * naming and export treatment as declared schemas.
+ */
+function hoistInlineOutputSchema(source: SourceFile, argument: ObjectLiteralExpression): void {
+  const property = argument.getProperty('output');
+  if (!property || !Node.isPropertyAssignment(property)) return;
+  const initializer = property.getInitializer();
+  if (!initializer || !Node.isCallExpression(initializer)) return;
+  let name = 'OutputSchema';
+  while (source.getVariableDeclaration(name)) name = `Inline${name}`;
+  const actionStatement = argument.getFirstAncestorOrThrow(
+    ancestor => Node.isStatement(ancestor) && ancestor.getParent() === source,
+  );
+  source.insertVariableStatement(actionStatement.getChildIndex(), {
+    declarationKind: VariableDeclarationKind.Const,
+    declarations: [{ name, initializer: initializer.getText() }],
+  });
+  property.setInitializer(name);
 }
 
 function normalizeSupportedRuntimeImports(source: SourceFile): void {
@@ -507,6 +529,7 @@ function extractAction(
     return { kind: 'skip', reason: 'createAction argument is not an object literal' };
   }
 
+  hoistInlineOutputSchema(source, argument);
   const inputName = readIdentifierPropertyInitializer(argument, 'input');
   const outputName = readIdentifierPropertyInitializer(argument, 'output');
   const execProperty = argument.getProperty('exec');
@@ -533,8 +556,10 @@ function extractAction(
     ? execBodyNode.getText()
     : `{ return ${execBodyNode.getText()}; }`;
   const usedContextMethods = new Set<string>();
-  for (const match of originalExecBody.matchAll(/\bnango\.([A-Za-z_$][\w$]*)/g)) {
-    usedContextMethods.add(match[1]!);
+  // Walk property accesses rather than matching text, so a comment such as a
+  // `docs.nango.dev` link isn't mistaken for a call to a `dev` helper.
+  for (const access of execBodyNode.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+    if (access.getExpression().getText() === 'nango') usedContextMethods.add(access.getName());
   }
   const unsupportedMethods = [...usedContextMethods].filter(method => !PROXY_CONTEXT_METHODS.has(method));
   if (unsupportedMethods.length > 0) {
@@ -603,6 +628,7 @@ function extractAction(
     [
       actionVariableName ? `Parameters<(typeof ${actionVariableName})['exec']>[0]` : undefined,
       "Parameters<Parameters<typeof createAction>[0]['exec']>[0]",
+      "Parameters<ReturnType<typeof createAction>['exec']>[0]",
     ].filter((text): text is string => text !== undefined),
   );
   const inlineContextNodes = source
@@ -1637,12 +1663,124 @@ function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   return description ? { ...adapted, description } : adapted;
 }
 
+const ATLASSIAN_API_ORIGIN = 'https://api.atlassian.com';
+const CONFLUENCE_SITE_BASE =
+  /^(?:`https:\/\/api\.atlassian\.com\/ex\/confluence\/\$\{(\w+)\}`|'https:\/\/api\.atlassian\.com\/ex\/confluence\/' \+ (\w+))$/;
+
+/**
+ * Confluence templates point `baseUrlOverride` at
+ * `https://api.atlassian.com/ex/confluence/{cloudId}`. The platform proxy
+ * forwards only an override's origin (and only origins it allowlists), so the
+ * `/ex/confluence/{cloudId}` path would be dropped. Nango's Confluence
+ * provider already proxies to api.atlassian.com, so drop the override and send
+ * the site path as part of the endpoint instead.
+ */
+function routeConfluenceThroughProviderBase(action: ExtractedAction): ExtractedAction {
+  const slug = action.candidate.actionSlug;
+  const wrapped = dropConfluenceBaseUrlOverrides(`async function exec() {\n${action.execBody}\n}`, slug);
+  let execBody = wrapped.slice(wrapped.indexOf('{') + 1, wrapped.lastIndexOf('}')).replace(/^\n/, '');
+  if (slug === 'search-content') {
+    // Every other Confluence template reads the site the user connected from
+    // the connection config first; this one skips straight to metadata and
+    // accessible-resources, which fails for tokens that cover several sites.
+    execBody = replaceOnce(
+      execBody,
+      /let cloudId = metaResult\.success \? metaResult\.data\.cloudId : undefined;/,
+      `const connection = await platformProxy.getConnection();
+      const configCloudId = connection.connection_config?.['cloudId'];
+      let cloudId =
+        typeof configCloudId === 'string' && configCloudId
+          ? configCloudId
+          : metaResult.success
+            ? metaResult.data.cloudId
+            : undefined;`,
+      action,
+      'connection cloudId',
+    );
+  }
+  return {
+    ...action,
+    execBody,
+    moduleStatements: action.moduleStatements.map(statement =>
+      statement.includes('baseUrlOverride') ? dropConfluenceBaseUrlOverrides(statement, slug) : statement,
+    ),
+  };
+}
+
+function dropConfluenceBaseUrlOverrides(code: string, slug: string): string {
+  const source = new Project({ useInMemoryFileSystem: true }).createSourceFile('code.ts', code);
+  const initializerOf = (name: string): string | undefined =>
+    source
+      .getDescendantsOfKind(SyntaxKind.VariableDeclaration)
+      .find(declaration => declaration.getName() === name)
+      ?.getInitializer()
+      ?.getText();
+
+  const overrides = source.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression).flatMap(literal => {
+    const property = literal.getProperty('baseUrlOverride');
+    return property ? [{ literal, property }] : [];
+  });
+  for (const { literal, property } of overrides.reverse()) {
+    let value: string | undefined;
+    if (Node.isShorthandPropertyAssignment(property)) value = initializerOf(property.getName());
+    else if (Node.isPropertyAssignment(property)) {
+      const initializer = property.getInitializerOrThrow();
+      value = Node.isIdentifier(initializer) ? initializerOf(initializer.getText()) : initializer.getText();
+    }
+    if (value === `'${ATLASSIAN_API_ORIGIN}'`) {
+      property.remove();
+      continue;
+    }
+    const site = value?.match(CONFLUENCE_SITE_BASE);
+    const endpoint = literal.getProperty('endpoint');
+    const endpointValue = Node.isPropertyAssignment(endpoint) ? endpoint.getInitializer() : undefined;
+    if (
+      !site ||
+      !endpointValue ||
+      !(
+        Node.isStringLiteral(endpointValue) ||
+        Node.isTemplateExpression(endpointValue) ||
+        Node.isNoSubstitutionTemplateLiteral(endpointValue)
+      )
+    ) {
+      throw new Error(
+        `confluence/${slug}: unexpected baseUrlOverride ${value ?? property.getText()}; update routeConfluenceThroughProviderBase`,
+      );
+    }
+    const cloudId = site[1] ?? site[2];
+    const path = endpointValue.getText().slice(1, -1).replace(/^\//, '');
+    endpointValue.replaceWithText(`\`/ex/confluence/\${${cloudId}}/${path}\``);
+    property.remove();
+  }
+
+  // Drop the override variables the rewrite left unused; some templates also
+  // use theirs as the base for parsing `_links.next`, so keep those.
+  for (const declaration of source.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = declaration.getInitializer()?.getText();
+    if (!initializer || !CONFLUENCE_SITE_BASE.test(initializer)) continue;
+    const name = declaration.getName();
+    const uses = source
+      .getDescendantsOfKind(SyntaxKind.Identifier)
+      .filter(identifier => identifier.getText() === name && identifier.getParent() !== declaration);
+    if (uses.length === 0) declaration.getVariableStatementOrThrow().remove();
+  }
+
+  const rewritten = source.getFullText();
+  if (rewritten.includes('baseUrlOverride')) {
+    throw new Error(`confluence/${slug}: baseUrlOverride left after rewrite`);
+  }
+  return rewritten;
+}
+
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
   if (action.candidate.providerId === 'gitlab') {
     return adaptGitLabAction(action);
   }
   if (action.candidate.providerId === 'zendesk') {
     return adaptZendeskAction(action);
+  }
+  if (action.candidate.providerId === 'confluence') {
+    return routeConfluenceThroughProviderBase(action);
   }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);

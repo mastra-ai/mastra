@@ -4,6 +4,7 @@ import type { ProviderRegistration } from '../registry.js';
 
 import { anthropicProvider } from './anthropic/index.js';
 import { clerkProvider } from './clerk/index.js';
+import { confluenceProvider } from './confluence/index.js';
 import { discordProvider } from './discord/index.js';
 import { elevenlabsProvider } from './elevenlabs/index.js';
 import { firefliesProvider } from './fireflies/index.js';
@@ -42,6 +43,7 @@ import { zendeskProvider } from './zendesk/index.js';
 export const PROVIDERS: readonly ProviderRegistration[] = [
   anthropicProvider,
   clerkProvider,
+  confluenceProvider,
   discordProvider,
   elevenlabsProvider,
   firefliesProvider,

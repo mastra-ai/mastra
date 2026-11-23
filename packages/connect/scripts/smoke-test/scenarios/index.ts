@@ -1,6 +1,7 @@
 import type { Scenario } from '../scenario.js';
 import { anthropicScenario } from './anthropic.js';
 import { clerkScenario } from './clerk.js';
+import { confluenceScenario } from './confluence.js';
 import { discordScenario } from './discord.js';
 import { elevenlabsScenario } from './elevenlabs.js';
 import { firefliesScenario } from './fireflies.js';
@@ -44,6 +45,7 @@ import { zendeskScenario } from './zendesk.js';
 export const scenarios: Scenario[] = [
   anthropicScenario,
   clerkScenario,
+  confluenceScenario,
   discordScenario,
   elevenlabsScenario,
   firefliesScenario,
