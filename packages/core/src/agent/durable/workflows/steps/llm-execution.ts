@@ -80,6 +80,7 @@ import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
+import { dropUnmappedClientToolMarkers } from '../../../workflows/prepare-stream/client-tool-output-hooks';
 import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
@@ -1198,6 +1199,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // non-durable path today (not exposed through AgentExecutionOptions),
             // so durable also relies on the MessageList defaults here. If those
             // ever become user-facing they should be plumbed in identically.
+            // Memory processors may have loaded history this step; scrub it before the prompt is built.
+            dropUnmappedClientToolMarkers({ messageList, tools: currentTools });
             const messageListPromptArgs = await buildLlmPromptArgs({
               model: currentModel,
               skipUnavailableAttachments,

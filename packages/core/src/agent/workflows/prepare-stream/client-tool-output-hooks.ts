@@ -138,6 +138,35 @@ function stripModelOutputMarkers(part: { providerMetadata?: unknown }): void {
   part.providerMetadata = { ...(part.providerMetadata as object), mastra: restMastra };
 }
 
+const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provider-defined';
+
+/**
+ * Drop stored mappings on results of client tools that define no `toModelOutput`.
+ *
+ * The server never writes a mapping there, so one can only have come from a
+ * client; releases before the input strip in `applyClientToolModelOutput`
+ * could persist such a forgery. History can enter the MessageList late
+ * (memory processors load it in the loop), so the loop calls this right
+ * before every prompt build, once all history sources are merged.
+ */
+export function dropUnmappedClientToolMarkers({
+  messageList,
+  tools,
+}: {
+  messageList: MessageList;
+  tools?: Record<string, unknown>;
+}): void {
+  if (!tools) return;
+  for (const message of messageList.get.all.db()) {
+    if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      const tool = tools[part.toolInvocation.toolName] as CoreTool | undefined;
+      if (tool && isClientTool(tool) && typeof tool.toModelOutput !== 'function') stripModelOutputMarkers(part);
+    }
+  }
+}
+
 /**
  * Apply a server-defined `toModelOutput` to client-supplied tool results.
  *
@@ -171,22 +200,12 @@ export async function applyClientToolModelOutput({
   tools?: Record<string, CoreTool>;
   logger?: Pick<IMastraLogger, 'error'>;
 }): Promise<void> {
-  const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provider-defined';
   if (!tools) return;
   if (!Object.values(tools).some(isClientTool)) return;
 
-  // Memory-recalled history is not re-mapped (see above), but a stored mapping
-  // on a client tool without `toModelOutput` can only have come from a client:
-  // the server never writes one there. Releases before the input strip below
-  // could persist such a forged mapping, so drop it before prompt building.
-  for (const message of messageList.get.remembered.db()) {
-    if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
-    for (const part of message.content.parts) {
-      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
-      const tool = tools[part.toolInvocation.toolName];
-      if (tool && isClientTool(tool) && typeof tool.toModelOutput !== 'function') stripModelOutputMarkers(part);
-    }
-  }
+  // Memory-recalled history is not re-mapped (see above), but its stored
+  // mappings on tools that define none are dropped.
+  dropUnmappedClientToolMarkers({ messageList, tools });
 
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
