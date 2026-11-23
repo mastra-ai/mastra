@@ -27,7 +27,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
-import { getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
+import { findRouteModelIndex, getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import {
@@ -528,7 +528,7 @@ function resolveAccountRoute(
     ? explicit
     : pendingMatchesThread
       ? routeEntries.find(candidate => candidate.id === pending.toEntryId && candidate.modelId === pending.toModelId)
-      : routeEntries.find(candidate => candidate.modelId === controller?.session?.modelId);
+      : routeEntries[findRouteModelIndex(routeEntries, controller?.session?.modelId)];
   if (!entry || typeof entry.id !== 'string' || typeof entry.modelId !== 'string') return null;
   const providerId = providerFromModelId(entry.modelId);
   if (!providerId) return null;
@@ -821,7 +821,7 @@ export class AccountRotationProcessor implements Processor {
       (pending.threadId === undefined || pending.threadId === controller?.threadId);
     const startIndex = pendingMatchesThread
       ? route?.findIndex(entry => entry.id === pending.toEntryId)
-      : route?.findIndex(entry => entry.modelId === controller?.session?.modelId);
+      : route && findRouteModelIndex(route, controller?.session?.modelId);
     if (!route || startIndex === undefined || startIndex < 0 || route.length - startIndex < 2) {
       args.state.modelRouteCascade = null;
       return null;
