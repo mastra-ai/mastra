@@ -118,6 +118,18 @@ describe('ContentSimilarityMetric', () => {
     expect(await scoreOf('ha ha', 'ha ha ha')).toBeCloseTo(8 / 11);
   });
 
+  it('should count whitespace in texts with many distinct characters', async () => {
+    const metric = createContentSimilarityScorer({ ignoreCase: false, ignoreWhitespace: false });
+    const text = Array.from({ length: 0xffff }, (_, i) => String.fromCharCode(i))
+      .filter(char => /\S/.test(char))
+      .slice(0, 45311)
+      .join('');
+    const inputMessages = [createTestMessage({ content: text + ' '.repeat(100000), role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: text, role: 'assistant', id: 'test-output' })];
+    const result = await metric.run(createAgentTestRun({ inputMessages, output }));
+    expect(result.score).toBe(90620 / 190620);
+  });
+
   it('should keep ignoring whitespace when only ignoreCase is passed', async () => {
     const caseOnlyMetric = createContentSimilarityScorer({ ignoreCase: false });
     const inputMessages = [createTestMessage({ content: 'New York', role: 'user', id: 'test-input' })];
