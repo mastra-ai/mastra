@@ -7,8 +7,13 @@ import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 export const searchTicketsInputSchema = z.object({
   query: z
     .string()
+    .min(1)
+    .refine(
+      query => !/(^|\s)-?type:(?!ticket(\s|$))/i.test(query),
+      'Only tickets can be searched; remove the other type: filter.',
+    )
     .describe(
-      'Zendesk search query. Should include "type:ticket" and any additional filters like status, tags, dates. Example: "type:ticket status:open"',
+      'Zendesk search query; results are limited to tickets. Add filters like status, tags, and dates. Example: "status:open tags:vip"',
     ),
   sort_by: z
     .enum(['updated_at', 'created_at', 'priority', 'status', 'ticket_type'])
@@ -110,7 +115,7 @@ export function searchTicketsTool(proxy: PlatformProxy) {
       const response = await platformProxy.get({
         endpoint: '/api/v2/search.json',
         params: {
-          query: input.query,
+          query: /(^|\s)type:ticket(\s|$)/i.test(input.query) ? input.query : `type:ticket ${input.query}`,
           ...(input.sort_by !== undefined && { sort_by: input.sort_by }),
           ...(input.sort_order !== undefined && { sort_order: input.sort_order }),
           ...(input.page !== undefined && { page: String(input.page) }),
@@ -129,10 +134,7 @@ export function searchTicketsTool(proxy: PlatformProxy) {
           'result_type' in result &&
           result.result_type === 'ticket'
         ) {
-          const parsed = TicketSchema.safeParse(result);
-          if (parsed.success) {
-            tickets.push(parsed.data);
-          }
+          tickets.push(TicketSchema.parse(result));
         }
       }
 

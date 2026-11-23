@@ -81,9 +81,7 @@ export function getTicketCommentsTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string | number> = {};
 
-      if (input.per_page !== undefined) {
-        params['page[size]'] = input.per_page;
-      }
+      params['page[size]'] = input.per_page ?? 100;
       if (input.cursor !== undefined) {
         params['page[after]'] = input.cursor;
       }

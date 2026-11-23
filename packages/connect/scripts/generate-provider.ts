@@ -1212,6 +1212,14 @@ const ZENDESK_NULL_CURSORS: StatementRewrite = {
   what: 'nullable cursors',
 };
 
+/** Asks for cursor pages even when the caller gives no page size; Zendesk only sends cursors then. */
+const ZENDESK_ALWAYS_CURSOR_PAGES: StatementRewrite = {
+  pattern: /if \(input\.per_page !== undefined\) \{\s*params\['page\[size\]'\] = input\.per_page;\s*\}/,
+  replacement: "params['page[size]'] = input.per_page ?? 100;",
+  count: 1,
+  what: 'cursor pages',
+};
+
 /** A next cursor only while Zendesk says more results remain. */
 function zendeskNextCursor(source: string, pattern: RegExp): StatementRewrite {
   return {
@@ -1236,6 +1244,15 @@ interface ProviderActionFixes {
  *   returned after the update had already been applied.
  * - Help Center content tag ids are strings, so article reads failed.
  * - Setting a user's organization replaces all their memberships.
+ * - Comments and macros fall back to offset pages unless `page[size]` is
+ *   sent, and the templates only read cursors, so the default listing never
+ *   offered a next page; macros never read the cursor Zendesk answered with.
+ * - A section or category article listing ignored the requested locale.
+ * - get_ticket fetched the requested sideloads and dropped them, and rejected
+ *   a ticket with no group.
+ * - An unscoped search mixed users and organizations into the ticket counts
+ *   and pages; the search is now limited to tickets, and a ticket it cannot
+ *   read is an error rather than silently missing from a counted page.
  * Drop an entry once the upstream template is fixed.
  */
 const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
@@ -1249,6 +1266,53 @@ const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
       },
     ],
   },
+  'get-ticket-comments': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
+    exec: [
+      ZENDESK_ALWAYS_CURSOR_PAGES,
+      zendeskNextCursor(
+        'responseData',
+        /\.\.\.\(responseData\.meta\?\.after_cursor !== undefined && \{\s*next_cursor: responseData\.meta\.after_cursor\s*\}\)/,
+      ),
+    ],
+  },
+  'get-ticket': {
+    statements: [
+      {
+        pattern: /group_id: z\.number\(\)\.optional\(\)/,
+        replacement: 'group_id: z.number().nullish()',
+        count: 2,
+        what: 'ticket without a group',
+      },
+      {
+        pattern: /^(export const \w+OutputSchema = z\.object\(\{[\s\S]*?)(\s*\}\);)$/,
+        replacement:
+          "$1,\n    sideloads: z.record(z.string(), z.unknown()).optional().describe('Records Zendesk sideloaded for `include`, keyed by sideload name, such as users or groups.')$2",
+        count: 1,
+        what: 'sideloads output',
+      },
+    ],
+    exec: [
+      {
+        pattern: /\.\.\.\(rawTicket\.group_id !== undefined && /,
+        replacement: '...(rawTicket.group_id != null && ',
+        count: 1,
+        what: 'ticket without a group',
+      },
+      {
+        pattern: /(const rawTicket = ProviderTicketSchema\.parse\(response\.data\.ticket\);)/,
+        replacement: '$1\nconst { ticket: _ticket, ...sideloads } = response.data;',
+        count: 1,
+        what: 'sideloads',
+      },
+      {
+        pattern: /(\.\.\.\(rawTicket\.tags !== undefined && \{ tags: rawTicket\.tags \}\))/,
+        replacement: '$1,\n...(input.include && Object.keys(sideloads).length > 0 && { sideloads })',
+        count: 1,
+        what: 'sideloads',
+      },
+    ],
+  },
   'list-articles': {
     statements: [
       {
@@ -1258,14 +1322,70 @@ const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
         what: 'string content tag ids',
       },
     ],
-  },
-  'get-ticket-comments': {
-    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
     exec: [
-      zendeskNextCursor(
-        'responseData',
-        /\.\.\.\(responseData\.meta\?\.after_cursor !== undefined && \{\s*next_cursor: responseData\.meta\.after_cursor\s*\}\)/,
-      ),
+      {
+        pattern:
+          /`\/api\/v2\/help_center\/(sections|categories)\/\$\{encodeURIComponent\(input\.(section_id|category_id)\)\}\/articles`/,
+        replacement:
+          "`/api/v2/help_center/${input.locale !== undefined ? `${encodeURIComponent(input.locale)}/` : ''}$1/${encodeURIComponent(input.$2)}/articles`",
+        count: 2,
+        what: 'locale for section and category listings',
+      },
+    ],
+  },
+  'list-macros': {
+    statements: [
+      {
+        pattern: /(const ProviderResponseSchema = z\.object\(\{\s*macros: z\.array\(ProviderMacroSchema\),)/,
+        replacement:
+          '$1\n    meta: z.object({ has_more: z.boolean().optional(), after_cursor: z.string().nullish() }).optional(),',
+        count: 1,
+        what: 'cursor metadata',
+      },
+      {
+        pattern: /^function extractCursorFromUrl\([\s\S]*\}$/,
+        replacement: '',
+        count: 1,
+        what: 'unused offset cursor parsing',
+      },
+    ],
+    exec: [
+      ZENDESK_ALWAYS_CURSOR_PAGES,
+      {
+        pattern: /const next_cursor = extractCursorFromUrl\(providerData\.next_page\);/,
+        replacement:
+          'const next_cursor = providerData.meta?.has_more && providerData.meta.after_cursor ? providerData.meta.after_cursor : undefined;',
+        count: 1,
+        what: 'next cursor',
+      },
+    ],
+  },
+  'search-tickets': {
+    statements: [
+      {
+        pattern:
+          /query: z\s*\.string\(\)\s*\.describe\(\s*'Zendesk search query\. Should include "type:ticket" and any additional filters like status, tags, dates\. Example: "type:ticket status:open"'\s*\)/,
+        replacement:
+          "query: z.string().min(1).refine(query => !/(^|\\s)-?type:(?!ticket(\\s|$))/i.test(query), 'Only tickets can be searched; remove the other type: filter.').describe('Zendesk search query; results are limited to tickets. Add filters like status, tags, and dates. Example: \"status:open tags:vip\"')",
+        count: 1,
+        what: 'ticket-only query',
+      },
+    ],
+    exec: [
+      {
+        pattern: /query: input\.query,/,
+        replacement:
+          'query: /(^|\\s)type:ticket(\\s|$)/i.test(input.query) ? input.query : `type:ticket ${input.query}`,',
+        count: 1,
+        what: 'ticket-only query',
+      },
+      {
+        pattern:
+          /const parsed = TicketSchema\.safeParse\(result\);\s*if \(parsed\.success\) \{\s*tickets\.push\(parsed\.data\);\s*\}/,
+        replacement: 'tickets.push(TicketSchema.parse(result));',
+        count: 1,
+        what: 'unreadable tickets',
+      },
     ],
   },
   'list-groups': {
@@ -1340,7 +1460,7 @@ function adaptZendeskAction(action: ExtractedAction): ExtractedAction {
   let adapted = attemptWritesOnce(action);
   if (fixes?.statements) adapted = rewriteModuleStatements(adapted, fixes.statements);
   if (fixes?.exec) adapted = rewriteExecBody(adapted, fixes.exec);
-  return adapted;
+  return { ...adapted, moduleStatements: adapted.moduleStatements.filter(statement => statement.trim() !== '') };
 }
 
 function attemptWritesOnce(action: ExtractedAction): ExtractedAction {

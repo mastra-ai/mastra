@@ -25,7 +25,7 @@ const ProviderTicketSchema = z.object({
   requester_id: z.number().optional(),
   assignee_id: z.number().nullable().optional(),
   organization_id: z.number().nullable().optional(),
-  group_id: z.number().optional(),
+  group_id: z.number().nullish(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -42,10 +42,14 @@ export const getTicketOutputSchema = z.object({
   requester_id: z.number().optional(),
   assignee_id: z.number().optional(),
   organization_id: z.number().optional(),
-  group_id: z.number().optional(),
+  group_id: z.number().nullish(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  sideloads: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Records Zendesk sideloaded for `include`, keyed by sideload name, such as users or groups.'),
 });
 
 export function getTicketTool(proxy: PlatformProxy) {
@@ -73,6 +77,7 @@ export function getTicketTool(proxy: PlatformProxy) {
       const response = await platformProxy.get(config);
 
       const rawTicket = ProviderTicketSchema.parse(response.data.ticket);
+      const { ticket: _ticket, ...sideloads } = response.data;
 
       return {
         id: rawTicket.id,
@@ -85,10 +90,11 @@ export function getTicketTool(proxy: PlatformProxy) {
         ...(rawTicket.requester_id !== undefined && { requester_id: rawTicket.requester_id }),
         ...(rawTicket.assignee_id != null && { assignee_id: rawTicket.assignee_id }),
         ...(rawTicket.organization_id != null && { organization_id: rawTicket.organization_id }),
-        ...(rawTicket.group_id !== undefined && { group_id: rawTicket.group_id }),
+        ...(rawTicket.group_id != null && { group_id: rawTicket.group_id }),
         ...(rawTicket.created_at !== undefined && { created_at: rawTicket.created_at }),
         ...(rawTicket.updated_at !== undefined && { updated_at: rawTicket.updated_at }),
         ...(rawTicket.tags !== undefined && { tags: rawTicket.tags }),
+        ...(input.include && Object.keys(sideloads).length > 0 && { sideloads }),
       };
     },
   });

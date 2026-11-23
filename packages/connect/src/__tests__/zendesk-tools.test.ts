@@ -435,4 +435,143 @@ describe('Zendesk tools', () => {
 
     expect(schema.shape.organizationId?.description).toMatch(/removes the user from every other organization/i);
   });
+  describe('paging comments and macros', () => {
+    it('reads a long comment thread page by page without a page size', async () => {
+      answer = () => ({
+        status: 200,
+        body: { comments: [{ id: 1 }], meta: { has_more: true, after_cursor: 'c2' } },
+      });
+
+      const result = await run('zendesk_get_ticket_comments', { ticket_id: 12 });
+
+      expect(requests).toEqual([{ method: 'GET', target: '/api/v2/tickets/12/comments.json?page%5Bsize%5D=100' }]);
+      expect(result).toMatchObject({ next_cursor: 'c2' });
+    });
+
+    it.each([{}, { per_page: 5 }])('pages macros with the cursor Zendesk answers (%o)', async input => {
+      answer = () => ({
+        status: 200,
+        body: {
+          macros: [{ id: 1, title: 'Close' }],
+          links: { next: 'https://acme.zendesk.com/api/v2/macros.json?page%5Bafter%5D=m2&page%5Bsize%5D=5' },
+          meta: { has_more: true, after_cursor: 'm2' },
+        },
+      });
+
+      const result = await run('zendesk_list_macros', input);
+
+      expect(requests[0]?.target).toBe(`/api/v2/macros.json?page%5Bsize%5D=${'per_page' in input ? 5 : 100}`);
+      expect(result).toMatchObject({ next_cursor: 'm2' });
+    });
+
+    it('stops paging macros on the last page', async () => {
+      answer = () => ({
+        status: 200,
+        body: { macros: [{ id: 1, title: 'Close' }], meta: { has_more: false, after_cursor: 'm2' } },
+      });
+
+      const result = (await run('zendesk_list_macros', { cursor: 'm1' })) as Record<string, unknown>;
+
+      expect(requests[0]?.target).toBe('/api/v2/macros.json?page%5Bafter%5D=m1&page%5Bsize%5D=100');
+      expect(result.next_cursor).toBeUndefined();
+    });
+  });
+
+  describe('article listings', () => {
+    it.each([
+      [{ section_id: '77', locale: 'fr' }, '/api/v2/help_center/fr/sections/77/articles'],
+      [{ category_id: '6', locale: 'fr' }, '/api/v2/help_center/fr/categories/6/articles'],
+      [{ section_id: '77' }, '/api/v2/help_center/sections/77/articles'],
+    ])('lists %o in the requested language', async (input, target) => {
+      answer = () => ({ status: 200, body: { articles: [], next_page: null } });
+
+      await run('zendesk_list_articles', input);
+
+      expect(requests).toEqual([{ method: 'GET', target }]);
+    });
+  });
+
+  describe('tickets', () => {
+    const ticket = {
+      id: 12,
+      url: 'https://acme.zendesk.com/api/v2/tickets/12.json',
+      subject: 'Printer jam',
+      status: 'open',
+      group_id: null,
+    };
+
+    it('returns the sideloads it asks Zendesk for', async () => {
+      const users = [{ id: 5, name: 'Ada' }];
+      const groups = [{ id: 9, name: 'Support' }];
+      answer = () => ({ status: 200, body: { ticket, users, groups } });
+
+      const result = await run('zendesk_get_ticket', { ticket_id: 12, include: 'users,groups' });
+
+      expect(requests).toEqual([{ method: 'GET', target: '/api/v2/tickets/12.json?include=users%2Cgroups' }]);
+      expect(result).toEqual({
+        id: 12,
+        url: ticket.url,
+        subject: 'Printer jam',
+        status: 'open',
+        sideloads: { users, groups },
+      });
+    });
+
+    it('reads a ticket with no sideloads requested', async () => {
+      answer = () => ({ status: 200, body: { ticket } });
+
+      await expect(run('zendesk_get_ticket', { ticket_id: 12 })).resolves.toEqual({
+        id: 12,
+        url: ticket.url,
+        subject: 'Printer jam',
+        status: 'open',
+      });
+    });
+
+    it('searches only tickets, so counts and pages describe tickets', async () => {
+      answer = () => ({
+        status: 200,
+        body: {
+          count: 1,
+          next_page: null,
+          previous_page: null,
+          results: [
+            {
+              ...ticket,
+              result_type: 'ticket',
+              requester_id: 5,
+              submitter_id: 5,
+              created_at: '2026-01-01T00:00:00Z',
+              updated_at: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+      });
+
+      const result = await run('zendesk_search_tickets', { query: 'printer status:open' });
+
+      expect(requests).toEqual([
+        { method: 'GET', target: '/api/v2/search.json?query=type%3Aticket+printer+status%3Aopen' },
+      ]);
+      expect(result).toMatchObject({ count: 1, tickets: [expect.objectContaining({ id: 12 })] });
+    });
+
+    it('reports a ticket it cannot read instead of leaving it out of a counted page', async () => {
+      answer = () => ({ status: 200, body: { count: 1, results: [{ id: 12, result_type: 'ticket' }] } });
+
+      await expect(run('zendesk_search_tickets', { query: 'printer' })).rejects.toThrow();
+    });
+
+    it('keeps a query that already names tickets', async () => {
+      answer = () => ({ status: 200, body: { count: 0, results: [] } });
+
+      await run('zendesk_search_tickets', { query: 'type:ticket status:open' });
+
+      expect(requests[0]?.target).toBe('/api/v2/search.json?query=type%3Aticket+status%3Aopen');
+    });
+
+    it('refuses a search for another record type', async () => {
+      await expectRefused('zendesk_search_tickets', { query: 'type:user ada' });
+    });
+  });
 });

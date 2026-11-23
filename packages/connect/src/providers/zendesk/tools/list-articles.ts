@@ -75,9 +75,9 @@ export function listArticlesTool(proxy: PlatformProxy) {
 
       let endpoint: string;
       if (input.section_id !== undefined) {
-        endpoint = `/api/v2/help_center/sections/${encodeURIComponent(input.section_id)}/articles`;
+        endpoint = `/api/v2/help_center/${input.locale !== undefined ? `${encodeURIComponent(input.locale)}/` : ''}sections/${encodeURIComponent(input.section_id)}/articles`;
       } else if (input.category_id !== undefined) {
-        endpoint = `/api/v2/help_center/categories/${encodeURIComponent(input.category_id)}/articles`;
+        endpoint = `/api/v2/help_center/${input.locale !== undefined ? `${encodeURIComponent(input.locale)}/` : ''}categories/${encodeURIComponent(input.category_id)}/articles`;
       } else if (input.locale !== undefined) {
         endpoint = `/api/v2/help_center/${encodeURIComponent(input.locale)}/articles`;
       } else {

@@ -52,6 +52,7 @@ const ProviderMacroSchema = z.object({
 
 const ProviderResponseSchema = z.object({
   macros: z.array(ProviderMacroSchema),
+  meta: z.object({ has_more: z.boolean().optional(), after_cursor: z.string().nullish() }).optional(),
   next_page: z.string().optional().nullable(),
   previous_page: z.string().optional().nullable(),
   count: z.number().int().optional(),
@@ -77,18 +78,6 @@ export const listMacrosOutputSchema = z.object({
   next_cursor: z.string().optional(),
 });
 
-function extractCursorFromUrl(url: string | null | undefined): string | undefined {
-  if (!url) return undefined;
-  // @allowTryCatch - URL parsing may throw for invalid URLs, this is intentional graceful handling
-  try {
-    const parsed = new URL(url);
-    const cursor = parsed.searchParams.get('page[after]') || parsed.searchParams.get('cursor');
-    return cursor || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function listMacrosTool(proxy: PlatformProxy) {
   return createTool({
     id: 'zendesk_list_macros',
@@ -102,9 +91,7 @@ export function listMacrosTool(proxy: PlatformProxy) {
       if (input.cursor) {
         params['page[after]'] = input.cursor;
       }
-      if (input.per_page !== undefined) {
-        params['page[size]'] = input.per_page;
-      }
+      params['page[size]'] = input.per_page ?? 100;
       if (input.active !== undefined) {
         params['active'] = String(input.active);
       }
@@ -151,7 +138,8 @@ export function listMacrosTool(proxy: PlatformProxy) {
         ...(macro.url !== undefined && { url: macro.url }),
       }));
 
-      const next_cursor = extractCursorFromUrl(providerData.next_page);
+      const next_cursor =
+        providerData.meta?.has_more && providerData.meta.after_cursor ? providerData.meta.after_cursor : undefined;
 
       return {
         macros,
