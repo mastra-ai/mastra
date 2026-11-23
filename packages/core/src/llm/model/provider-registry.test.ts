@@ -1582,6 +1582,17 @@ describe('Runtime provider registry filtering', () => {
     expect(registry.getModels().acme).toBeUndefined();
   });
 
+  it('hides providers of gateways replaced by one whose id contains a newline', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
+    const registry = GatewayRegistry.getInstance();
+
+    registry.registerCustomGateways([new ToggleGateway('acme'), new ToggleGateway('acmf')]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(true);
+
+    registry.registerCustomGateways([new ToggleGateway('acme\nacmf')]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+  });
+
   it('follows a registered gateway being disabled and re-enabled after the registry was first read', async () => {
     const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
     const acme = new ToggleGateway('acme');

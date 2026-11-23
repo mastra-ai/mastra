@@ -260,7 +260,7 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
 
   // Production: use static import (bundled at build time)
   if (!useDynamicLoading) {
-    const enabledGatewayKey = [...enabledGatewayIds].sort().join('\n');
+    const enabledGatewayKey = JSON.stringify([...enabledGatewayIds].sort());
     if (filteredStaticRegistry?.enabledGatewayKey !== enabledGatewayKey) {
       filteredStaticRegistry = {
         enabledGatewayKey,
