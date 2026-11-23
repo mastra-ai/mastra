@@ -2163,15 +2163,6 @@ export class Workflow<
       autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
 
-    if (options.storageVersion === 2 && options.pruneSnapshot) {
-      throw new MastraError({
-        id: 'WORKFLOW_STORAGE_V2_PRUNE_SNAPSHOT',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-        text: `Workflow "${id}" sets both storageVersion: 2 and pruneSnapshot. Storage version 2 doesn't support pruneSnapshot.`,
-      });
-    }
-
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
       this.executionEngine = new DefaultExecutionEngine({
