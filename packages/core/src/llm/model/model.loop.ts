@@ -4,6 +4,7 @@ import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import { CONTINUATION_STOP_CAUSE_KEY, DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
+import { markStepBudgetCondition } from '../../loop/shared/continuation-core';
 import { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
@@ -23,8 +24,11 @@ import type { MastraModelOptions } from './shared.types';
 
 // Like `stepCountIs`, but processor retry steps re-run the same step, so they
 // do not count against `maxSteps`. Retries stay bounded by maxProcessorRetries.
+// Marked so the loop can tell the budget running out from the caller's stopWhen.
 function llmStepCountIs(maxSteps: number): StopCondition<any> {
-  return ({ steps }) => steps.filter(step => (step.finishReason as string) !== 'retry').length >= maxSteps;
+  return markStepBudgetCondition<StopCondition<any>>(
+    ({ steps }) => steps.filter(step => (step.finishReason as string) !== 'retry').length >= maxSteps,
+  );
 }
 
 export class MastraLLMVNext extends MastraBase {

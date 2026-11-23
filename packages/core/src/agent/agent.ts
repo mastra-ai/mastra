@@ -14116,12 +14116,16 @@ export class Agent<
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.
-            const { output: finalOutput, stepResult, tracingTermination } = result.result;
+            const { output: finalOutput, stepResult, tracingTermination, stopCause } = result.result;
             // map-final-output, which ends the recovered spans, did not re-run. It saved the outcome
             // it ended the run's spans with, so the recovered pair ends the same way.
             recoverModelSpan?.end({ ...tracingTermination });
             recoverAgentSpan?.end({ ...tracingTermination, output: { text: finalOutput?.text } });
-            await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
+            await emitFinishEvent(recoveryPubsub, runId, {
+              output: finalOutput,
+              stepResult,
+              ...(stopCause && { stopCause }),
+            });
           }
           if (result?.status === 'suspended' && options?.closeOnSuspend) {
             // Same contract as resume(): close on the persisted suspension,
