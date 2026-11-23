@@ -215,7 +215,7 @@ export function TraceColumnsMenu({
               </DialogHeader>
               <DialogBody>
                 <Field invalid={Boolean(metadataError)}>
-                  <FieldLabel>Metadata key</FieldLabel>
+                  <FieldLabel required>Metadata key</FieldLabel>
                   <Combobox
                     options={metadataKeyOptions}
                     value={metadataKey}

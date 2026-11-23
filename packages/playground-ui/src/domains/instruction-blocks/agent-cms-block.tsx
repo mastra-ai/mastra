@@ -104,7 +104,7 @@ const SaveAsPromptBlockDialog = ({
         <Form onSubmit={handleSubmit}>
           <DialogBody>
             <Field>
-              <FieldLabel>Name</FieldLabel>
+              <FieldLabel required>Name</FieldLabel>
               <Input
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -113,7 +113,7 @@ const SaveAsPromptBlockDialog = ({
               />
             </Field>
             <Field>
-              <FieldLabel>Description (optional)</FieldLabel>
+              <FieldLabel>Description</FieldLabel>
               <Input
                 value={description}
                 onChange={e => setDescription(e.target.value)}

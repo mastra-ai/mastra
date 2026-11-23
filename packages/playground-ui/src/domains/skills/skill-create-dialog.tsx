@@ -40,7 +40,7 @@ export function SkillCreateDialog({
           </DrawerDescription>
         </DrawerHeader>
         <DrawerBody>
-          <SkillSimpleForm {...fields} />
+          <SkillSimpleForm {...fields} instructionsRequired />
           {error && <Notice variant="warning" title={error} role="alert" />}
         </DrawerBody>
         <DrawerFooter>

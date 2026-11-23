@@ -84,7 +84,7 @@ export function CustomProviderForm({
         </Txt>
       )}
       <Field className="gap-1">
-        <FieldLabel>Name</FieldLabel>
+        <FieldLabel required>Name</FieldLabel>
         <Input
           size="sm"
           placeholder="e.g. my-llm"
@@ -94,7 +94,7 @@ export function CustomProviderForm({
         />
       </Field>
       <Field className="gap-1">
-        <FieldLabel>Base URL</FieldLabel>
+        <FieldLabel required>Base URL</FieldLabel>
         <Input
           size="sm"
           placeholder="https://api.example.com/v1"
@@ -103,7 +103,7 @@ export function CustomProviderForm({
         />
       </Field>
       <Field className="gap-1">
-        <FieldLabel>API key {provider ? '(leave blank to keep, unless the host changes)' : '(optional)'}</FieldLabel>
+        <FieldLabel>API key{provider ? ' (leave blank to keep, unless the host changes)' : ''}</FieldLabel>
         <Input
           type="password"
           size="sm"
@@ -113,7 +113,7 @@ export function CustomProviderForm({
         />
       </Field>
       <Field className="gap-1">
-        <FieldLabel>Models (comma-separated)</FieldLabel>
+        <FieldLabel required={requireModels}>Models (comma-separated)</FieldLabel>
         <Input
           size="sm"
           placeholder="model-a, model-b"

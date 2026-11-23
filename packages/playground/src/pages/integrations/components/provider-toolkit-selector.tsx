@@ -45,7 +45,7 @@ export function ProviderToolkitSelector({
   return (
     <div className="space-y-4 rounded border p-4">
       <Field invalid={Boolean(providersError)} disabled={providersLoading}>
-        <FieldLabel>Provider</FieldLabel>
+        <FieldLabel required>Provider</FieldLabel>
         <Select value={providerId} onValueChange={onProviderChange}>
           <SelectTrigger>
             <SelectValue placeholder={providersLoading ? 'Loading providers…' : 'Select provider'} />
@@ -62,7 +62,7 @@ export function ProviderToolkitSelector({
       </Field>
 
       <Field invalid={Boolean(toolkitsError)} disabled={!providerId || toolkitsLoading}>
-        <FieldLabel>Toolkit</FieldLabel>
+        <FieldLabel required>Toolkit</FieldLabel>
         <Select value={toolkit} onValueChange={onToolkitChange}>
           <SelectTrigger>
             <SelectValue placeholder={toolkitsLoading ? 'Loading toolkits…' : 'Select toolkit'} />
@@ -79,7 +79,7 @@ export function ProviderToolkitSelector({
       </Field>
 
       <Field disabled={!providerId || !toolkit}>
-        <FieldLabel>Label (optional)</FieldLabel>
+        <FieldLabel>Label</FieldLabel>
         <Input placeholder="My personal Gmail" value={label} onChange={event => onLabelChange(event.target.value)} />
       </Field>
 

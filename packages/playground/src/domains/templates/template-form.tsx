@@ -54,7 +54,7 @@ export function TemplateForm({
           Install Template <IconPackage />
         </Txt>
         <Field orientation="horizontal">
-          <FieldLabel>Template AI Model Provider</FieldLabel>
+          <FieldLabel required>Template AI Model Provider</FieldLabel>
           <FieldContent className="flex-1">
             <Select name="template-provider" value={selectedProvider} onValueChange={onProviderChange}>
               <SelectTrigger size="md">
@@ -100,7 +100,9 @@ export function TemplateForm({
                       <Input name={`env-${key}`} value={key} disabled className="w-full" />
                     </Field>
                     <Field invalid={errors.includes(key)} className="w-full">
-                      <FieldLabel className="sr-only">Value</FieldLabel>
+                      <FieldLabel required className="sr-only">
+                        Value
+                      </FieldLabel>
                       <Input
                         name={key}
                         value={value}

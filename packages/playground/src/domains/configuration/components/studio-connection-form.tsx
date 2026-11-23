@@ -100,7 +100,12 @@ export function StudioConnectionForm({ initialConfig }: { initialConfig: StudioC
   return (
     <form onSubmit={save} onReset={discard} noValidate>
       <SettingsContainer>
-        <SettingsRow label="Mastra instance URL" description="The server this studio talks to." errorMsg={urlError}>
+        <SettingsRow
+          label="Mastra instance URL"
+          description="The server this studio talks to."
+          required
+          errorMsg={urlError}
+        >
           <Input
             name="url"
             value={draft.baseUrl}

@@ -67,6 +67,7 @@ A row that only shows a value, status or per-item actions is a `SettingsItem`, a
 - A new component that duplicates an existing `ds/` or `domains/` component
 - A `SettingsRow` per list entry or read-only value (versions, members, keys), or a `SettingsItem` wrapping a control that changes a setting: see "Settings pages" above
 - `bg-[#hex]`, `text-[15px]`, `p-[13px]` — a token or scale value exists
+- "(optional)", "(required)" or an asterisk written into a label or placeholder, `aria-required` set by hand on a control in a `Field`, or a restyled `FieldLabel`: use `FieldLabel required` for a field the form can't be submitted without, and `optional` only in a form with no required field. The full rule is in the Field story docs
 - Token names that don't exist in `theme.css` (guessed from memory)
 - `bg-[var(--x)]` — use `bg-(--x)`
 - `min-w-[400px]` and friends that divide cleanly by 4px — use the scale (`min-w-100`)

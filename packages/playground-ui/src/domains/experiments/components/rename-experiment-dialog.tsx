@@ -78,7 +78,7 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange, onRenam
               <Input
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="Enter experiment description (optional)"
+                placeholder="Enter experiment description"
               />
             </Field>
           </DialogBody>

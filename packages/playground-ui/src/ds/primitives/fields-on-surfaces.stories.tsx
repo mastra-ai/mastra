@@ -72,7 +72,7 @@ function Fields() {
       <DateTimePicker value={date} onValueChange={setDate} placeholder="Pick an expiry date" />
       <Field>
         <FieldLabel>Notes</FieldLabel>
-        <Textarea placeholder="Optional" />
+        <Textarea placeholder="Add a note" />
       </Field>
       <Field disabled>
         <FieldLabel>Legacy token</FieldLabel>

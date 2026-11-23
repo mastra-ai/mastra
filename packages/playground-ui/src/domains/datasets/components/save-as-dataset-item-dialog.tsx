@@ -293,7 +293,7 @@ export function SaveAsDatasetItemDialog({
           </Field>
 
           <Field>
-            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
+            <FieldLabel>Ground Truth (JSON)</FieldLabel>
             <CodeEditor
               value={groundTruth}
               onChange={handleGroundTruthChange}
@@ -303,7 +303,7 @@ export function SaveAsDatasetItemDialog({
           </Field>
 
           <Field>
-            <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
+            <FieldLabel>Expected Trajectory (JSON)</FieldLabel>
             <CodeEditor
               value={expectedTrajectory}
               onChange={handleExpectedTrajectoryChange}
@@ -313,7 +313,7 @@ export function SaveAsDatasetItemDialog({
           </Field>
 
           <Field>
-            <FieldLabel>Tool Mocks (JSON, optional)</FieldLabel>
+            <FieldLabel>Tool Mocks (JSON)</FieldLabel>
             <CodeEditor
               value={toolMocks}
               onChange={handleToolMocksChange}

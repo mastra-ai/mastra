@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RadioGroup } from '@mastra/playground-ui/components/RadioGroup';
@@ -378,17 +379,15 @@ export function RuleBuilderDialog({
 
               {step === 'review' && (
                 <div className="flex flex-col gap-5">
-                  <label className="flex flex-col gap-1.5">
-                    <Txt as="span" variant="label" tone="muted">
-                      Name
-                    </Txt>
+                  <Field>
+                    <FieldLabel required={!readOnly}>Name</FieldLabel>
                     <Input
                       value={shownName}
                       maxLength={MAX_RULE_NAME}
                       disabled={readOnly}
                       onChange={change => setName(change.target.value)}
                     />
-                  </label>
+                  </Field>
                   <div className="border-border bg-fill-subtle rounded-xl border p-4">
                     <Txt as="span" variant="eyebrow" tone="muted" className="mb-3 block">
                       This rule reads as

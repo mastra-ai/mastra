@@ -123,7 +123,7 @@ export function SignalDefinitionFormDialog({
             }}
           >
             <Field invalid={Boolean(validationErrors.name)} disabled={editing || pending}>
-              <FieldLabel>Signal name</FieldLabel>
+              <FieldLabel required={!editing}>Signal name</FieldLabel>
               <Input
                 name="name"
                 placeholder="handoff_quality"
@@ -134,7 +134,7 @@ export function SignalDefinitionFormDialog({
               <FieldError>{validationErrors.name}</FieldError>
             </Field>
             <Field invalid={Boolean(validationErrors.displayLabel)} disabled={pending}>
-              <FieldLabel>Display label</FieldLabel>
+              <FieldLabel required>Display label</FieldLabel>
               <Input
                 name="displayLabel"
                 placeholder="Handoff quality"
@@ -153,7 +153,7 @@ export function SignalDefinitionFormDialog({
               />
             </Field>
             <Field invalid={Boolean(validationErrors.taskPrompt)} disabled={pending}>
-              <FieldLabel>Signal instructions</FieldLabel>
+              <FieldLabel required>Signal instructions</FieldLabel>
               <Textarea
                 name="taskPrompt"
                 rows={5}

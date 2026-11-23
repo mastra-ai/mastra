@@ -421,7 +421,7 @@ function EditModeContent({
         </Field>
 
         <Field>
-          <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
+          <FieldLabel>Ground Truth (JSON)</FieldLabel>
           <CodeEditor
             value={groundTruthValue}
             onChange={setGroundTruthValue}
@@ -431,7 +431,7 @@ function EditModeContent({
         </Field>
 
         <Field>
-          <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
+          <FieldLabel>Expected Trajectory (JSON)</FieldLabel>
           <CodeEditor
             value={trajectoryValue}
             onChange={setTrajectoryValue}
@@ -441,7 +441,7 @@ function EditModeContent({
         </Field>
 
         <Field>
-          <FieldLabel>Request Context (JSON, optional)</FieldLabel>
+          <FieldLabel>Request Context (JSON)</FieldLabel>
           <CodeEditor
             value={requestContextValue}
             onChange={setRequestContextValue}
@@ -451,7 +451,7 @@ function EditModeContent({
         </Field>
 
         <Field>
-          <FieldLabel>Metadata (JSON, optional)</FieldLabel>
+          <FieldLabel>Metadata (JSON)</FieldLabel>
           <CodeEditor
             value={metadataValue}
             onChange={setMetadataValue}

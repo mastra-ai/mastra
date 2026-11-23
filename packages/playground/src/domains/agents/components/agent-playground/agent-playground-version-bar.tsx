@@ -268,7 +268,7 @@ export function AgentPlaygroundVersionBar({
             </DialogHeader>
             <DialogBody>
               <Field>
-                <FieldLabel>Change message</FieldLabel>
+                <FieldLabel optional>Change message</FieldLabel>
                 <Input
                   placeholder="Describe what changed"
                   value={changeMessage}

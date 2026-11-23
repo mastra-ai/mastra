@@ -167,7 +167,7 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
                   const key = headlessAuthFieldKey(field);
                   return (
                     <Field key={key}>
-                      <FieldLabel>{field.label ?? field.name}</FieldLabel>
+                      <FieldLabel required={!!field.required}>{field.label ?? field.name}</FieldLabel>
                       <Input
                         type={field.secret ? 'password' : 'text'}
                         placeholder={field.placeholder ?? undefined}

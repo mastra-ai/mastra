@@ -178,7 +178,7 @@ export function SchemaConfigSection({
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2', 'text-subheading')}>
         <DisclosureChevron direction="right" className="size-4" />
-        Schema Configuration (Optional)
+        Schema Configuration
       </CollapsibleTrigger>
 
       <CollapsibleContent className="space-y-4 pt-4">

@@ -65,8 +65,8 @@ export function ScorerEditSidebar({
           </Field>
 
           <Field invalid={Boolean(errors.description)}>
-            <FieldLabel required>Description</FieldLabel>
-            <Textarea placeholder="Describe what this scorer does" required {...register('description')} />
+            <FieldLabel>Description</FieldLabel>
+            <Textarea placeholder="Describe what this scorer does" {...register('description')} />
             <FieldError>{errors.description?.message}</FieldError>
           </Field>
 

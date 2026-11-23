@@ -286,7 +286,9 @@ function SandboxEnvDialog({
         </DialogHeader>
         <DialogBody>
           <Field invalid={taken}>
-            <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
+            <FieldLabel htmlFor={`${id}-name`} required={!env}>
+              Name
+            </FieldLabel>
             <Input
               id={`${id}-name`}
               autoFocus={!env}
@@ -301,7 +303,9 @@ function SandboxEnvDialog({
             {taken && <FieldError>{trimmedName} already exists. Edit it instead.</FieldError>}
           </Field>
           <Field>
-            <FieldLabel htmlFor={`${id}-value`}>Value</FieldLabel>
+            <FieldLabel htmlFor={`${id}-value`} required={!env}>
+              Value
+            </FieldLabel>
             <Input
               id={`${id}-value`}
               autoFocus={Boolean(env)}

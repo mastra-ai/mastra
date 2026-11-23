@@ -208,7 +208,7 @@ function ScorerConfigPanel({ samplingConfig, onSamplingChange, readOnly = false 
       <div className="flex flex-col gap-2">
         <Field disabled={readOnly}>
           <Fieldset className="gap-2" render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} />}>
-            <FieldsetLegend className="text-muted-foreground">Sampling</FieldsetLegend>
+            <FieldsetLegend>Sampling</FieldsetLegend>
             <FieldItem>
               <RadioGroupItem value="none" />
               <FieldLabel>None (evaluate all)</FieldLabel>

@@ -126,6 +126,7 @@ export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
   label: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
+  required?: boolean;
   /** Same as `SettingsRow`'s: `below` puts the controls under the label at full width. */
   controlPlacement?: 'side' | 'below';
 };
@@ -144,6 +145,7 @@ export function SettingsFieldsetRow({
   description,
   children,
   className,
+  required = false,
   controlPlacement = 'side',
   ...props
 }: SettingsFieldsetRowProps) {
@@ -158,7 +160,9 @@ export function SettingsFieldsetRow({
       {...props}
     >
       <div className={cn(headingClassName, !controlBelow && sideHeadingClassName)}>
-        <FieldsetLegend className={settingsRowLabelClassName()}>{label}</FieldsetLegend>
+        <FieldsetLegend required={required} className={settingsRowLabelClassName()}>
+          {label}
+        </FieldsetLegend>
         {description != null && (
           <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
             {description}

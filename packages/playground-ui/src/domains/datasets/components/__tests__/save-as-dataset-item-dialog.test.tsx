@@ -221,7 +221,7 @@ describe('SaveAsDatasetItemDialog', () => {
   it('renders a Tool Mocks editor and seeds it from initialToolMocks', () => {
     renderDialog({ initialToolMocks: '[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]' });
 
-    expect(screen.getByText('Tool Mocks (JSON, optional)')).not.toBeNull();
+    expect(screen.getByText('Tool Mocks (JSON)')).not.toBeNull();
     // Editors: 0=input, 1=groundTruth, 2=trajectory, 3=toolMocks
     expect(getEditors()[3].value).toBe('[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]');
   });

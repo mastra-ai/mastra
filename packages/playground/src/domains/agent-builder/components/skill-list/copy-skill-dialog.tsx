@@ -55,7 +55,7 @@ export function CopySkillDialog({
         </AlertDialog.Header>
         <AlertDialog.Body>
           <Field invalid={collides}>
-            <FieldLabel>New skill name</FieldLabel>
+            <FieldLabel required>New skill name</FieldLabel>
             <Input
               value={name}
               onChange={e => setName(e.target.value)}

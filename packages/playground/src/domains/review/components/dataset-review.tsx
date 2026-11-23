@@ -582,11 +582,11 @@ export function DatasetReview({
           <DialogBody>
             <div className="grid grid-cols-2 gap-2">
               <Field className="gap-1">
-                <FieldLabel>Provider</FieldLabel>
+                <FieldLabel required>Provider</FieldLabel>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </Field>
               <Field className="gap-1">
-                <FieldLabel>Model</FieldLabel>
+                <FieldLabel required>Model</FieldLabel>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </Field>
             </div>
@@ -594,7 +594,7 @@ export function DatasetReview({
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
             <Field className="gap-1">
-              <FieldLabel>Instructions (optional)</FieldLabel>
+              <FieldLabel>Instructions</FieldLabel>
               <Textarea
                 className="text-caption"
                 value={analyzePrompt}

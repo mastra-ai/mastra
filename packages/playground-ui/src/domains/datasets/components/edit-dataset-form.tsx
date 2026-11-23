@@ -153,7 +153,7 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         <Input
           value={formState.description}
           onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
-          placeholder="Enter dataset description (optional)"
+          placeholder="Enter dataset description"
         />
       </Field>
 

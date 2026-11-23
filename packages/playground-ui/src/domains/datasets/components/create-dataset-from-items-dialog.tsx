@@ -169,7 +169,7 @@ export function CreateDatasetFromItemsDialog({
               <Input
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="Enter dataset description (optional)"
+                placeholder="Enter dataset description"
                 disabled={isCreating}
               />
             </Field>

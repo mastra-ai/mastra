@@ -15,6 +15,8 @@ export interface SkillSimpleFormProps {
   readOnly?: boolean;
   /** Locks only the name, for skills whose name is their identity. */
   nameReadOnly?: boolean;
+  /** The skill can't be saved without instructions. */
+  instructionsRequired?: boolean;
 }
 
 /** A value the user can't change: plain text, so it never looks like a field to fill in. */
@@ -41,6 +43,7 @@ export function SkillSimpleForm({
   onInstructionsChange,
   readOnly,
   nameReadOnly,
+  instructionsRequired,
 }: SkillSimpleFormProps) {
   return (
     <div className="flex h-full flex-col gap-4">
@@ -48,7 +51,7 @@ export function SkillSimpleForm({
         <LockedValue label="Name" value={name} />
       ) : (
         <Field>
-          <FieldLabel>Name</FieldLabel>
+          <FieldLabel required>Name</FieldLabel>
           <Input value={name} onChange={e => onNameChange(e.target.value)} placeholder="Skill name" />
         </Field>
       )}
@@ -67,7 +70,7 @@ export function SkillSimpleForm({
       )}
 
       <Field className="flex min-h-0 flex-1 flex-col gap-1.5">
-        <FieldLabel>Instructions</FieldLabel>
+        <FieldLabel required={instructionsRequired && !readOnly}>Instructions</FieldLabel>
 
         {readOnly ? (
           <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-background p-4">

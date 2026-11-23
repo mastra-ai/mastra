@@ -51,12 +51,7 @@ function RecursiveFieldRenderer({
         <JSONSchemaForm.FieldType label="Type" placeholder="Type" />
         <JSONSchemaForm.FieldRemove />
       </div>
-      <JSONSchemaForm.FieldDescription
-        label="Description"
-        labelIsHidden
-        placeholder="Description (optional)"
-        className="mb-2"
-      />
+      <JSONSchemaForm.FieldDescription label="Description" labelIsHidden placeholder="Description" className="mb-2" />
       <div className="mb-2 flex gap-4">
         <JSONSchemaForm.FieldOptional />
         <JSONSchemaForm.FieldNullable />
@@ -128,7 +123,7 @@ export const WithDefaultValues: Story = {
                 <JSONSchemaForm.FieldDescription
                   label="Description"
                   labelIsHidden
-                  placeholder="Description (optional)"
+                  placeholder="Description"
                   className="mb-2"
                 />
                 <div className="mb-4 flex gap-4">

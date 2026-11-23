@@ -18,7 +18,6 @@ export function ExperimentDescriptionField({
       <Textarea
         value={description}
         onChange={event => onDescriptionChange(event.target.value)}
-        placeholder="Optional"
         rows={2}
         disabled={disabled}
       />

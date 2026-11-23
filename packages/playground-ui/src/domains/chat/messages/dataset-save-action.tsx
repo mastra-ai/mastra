@@ -106,7 +106,7 @@ function DatasetSaveDialog({
         </DialogHeader>
         <DialogBody>
           <Field>
-            <FieldLabel>Dataset</FieldLabel>
+            <FieldLabel required>Dataset</FieldLabel>
             <Select
               value={selectedDatasetId}
               onValueChange={setSelectedDatasetId}
@@ -132,12 +132,12 @@ function DatasetSaveDialog({
           </Field>
 
           <Field>
-            <FieldLabel>Input (JSON)</FieldLabel>
+            <FieldLabel required>Input (JSON)</FieldLabel>
             <CodeEditor value={input} onChange={onInputChange} showCopyButton={false} className="max-h-60 min-h-30" />
           </Field>
 
           <Field>
-            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
+            <FieldLabel>Ground Truth (JSON)</FieldLabel>
             <CodeEditor
               value={groundTruth}
               onChange={setGroundTruth}

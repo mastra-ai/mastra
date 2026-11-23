@@ -16,7 +16,7 @@ export function ScorerSelector({
   setSelectedScorers,
   disabled = false,
   container,
-  label = 'Scorers (Optional)',
+  label = 'Scorers',
   helperText,
 }: ScorerSelectorProps) {
   const { data: scorers, isLoading } = useScorers();

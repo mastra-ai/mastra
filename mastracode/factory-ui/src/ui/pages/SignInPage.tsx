@@ -93,7 +93,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
     <Form onSubmit={handleSubmit} className="w-full gap-5">
       {mode === 'sign-up' ? (
         <Field>
-          <FieldLabel>Name</FieldLabel>
+          <FieldLabel required>Name</FieldLabel>
           <Input
             type="text"
             size="lg"
@@ -107,7 +107,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         </Field>
       ) : null}
       <Field>
-        <FieldLabel>Email</FieldLabel>
+        <FieldLabel required>Email</FieldLabel>
         <Input
           type="email"
           size="lg"
@@ -120,7 +120,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
         <FieldError />
       </Field>
       <Field>
-        <FieldLabel>Password</FieldLabel>
+        <FieldLabel required>Password</FieldLabel>
         <Input
           type="password"
           size="lg"

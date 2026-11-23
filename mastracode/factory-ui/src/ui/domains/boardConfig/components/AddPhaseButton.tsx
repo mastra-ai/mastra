@@ -109,11 +109,15 @@ function AddPhaseDialog({
           </DialogHeader>
           <DialogBody className="flex flex-col gap-4">
             <Field>
-              <FieldLabel htmlFor={`${id}-name`}>Phase name</FieldLabel>
+              <FieldLabel htmlFor={`${id}-name`} required>
+                Phase name
+              </FieldLabel>
               <Input id={`${id}-name`} value={name} autoFocus onChange={event => setName(event.target.value)} />
             </Field>
             <Field invalid={problem !== undefined}>
-              <FieldLabel htmlFor={`${id}-key`}>Phase key</FieldLabel>
+              <FieldLabel htmlFor={`${id}-key`} required>
+                Phase key
+              </FieldLabel>
               <Input id={`${id}-key`} value={key} onChange={event => setTypedKey(event.target.value)} />
               {problem ? (
                 <FieldError>{problem}</FieldError>

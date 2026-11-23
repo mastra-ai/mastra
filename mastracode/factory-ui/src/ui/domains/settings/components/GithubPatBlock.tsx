@@ -60,7 +60,7 @@ function TokenRows() {
       />
       <TokenRow
         kind="reviewer"
-        title="Reviewer token (optional)"
+        title="Reviewer token"
         description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
         configured={statusQuery.data.reviewerConfigured === true}
       />

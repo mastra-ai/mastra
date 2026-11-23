@@ -61,7 +61,7 @@ export const AttachFileMenu = () => {
             </DialogHeader>
             <DialogBody>
               <Field>
-                <FieldLabel>Public URL</FieldLabel>
+                <FieldLabel required>Public URL</FieldLabel>
                 <Input name="url-attachment" type="url" placeholder="https://placehold.co/600x400/png" />
                 <FieldError />
               </Field>

@@ -48,7 +48,7 @@ export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChan
         <DialogBody>
           <Form onSubmit={handleSubmit}>
             <Field>
-              <FieldLabel>Title</FieldLabel>
+              <FieldLabel required>Title</FieldLabel>
               <Input
                 value={title}
                 onChange={e => setTitle(e.target.value)}

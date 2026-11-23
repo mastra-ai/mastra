@@ -104,7 +104,9 @@ export function NewBoardPage() {
           }}
         >
           <Field>
-            <FieldLabel htmlFor={`${id}-name`}>Board name</FieldLabel>
+            <FieldLabel htmlFor={`${id}-name`} required>
+              Board name
+            </FieldLabel>
             <Input
               id={`${id}-name`}
               value={name}
@@ -116,7 +118,9 @@ export function NewBoardPage() {
             />
           </Field>
           <Field invalid={keyError !== undefined}>
-            <FieldLabel htmlFor={`${id}-key`}>Board key</FieldLabel>
+            <FieldLabel htmlFor={`${id}-key`} required>
+              Board key
+            </FieldLabel>
             <Input
               id={`${id}-key`}
               value={key}

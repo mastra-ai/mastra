@@ -71,7 +71,7 @@ export function EditModeContent({
         </Field>
 
         <Field invalid={validationErrors?.field === 'groundTruth'}>
-          <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
+          <FieldLabel>Ground Truth (JSON)</FieldLabel>
           <CodeEditor
             value={groundTruthValue}
             onChange={setGroundTruthValue}
@@ -84,7 +84,7 @@ export function EditModeContent({
         </Field>
 
         <Field>
-          <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
+          <FieldLabel>Expected Trajectory (JSON)</FieldLabel>
           <CodeEditor
             value={trajectoryValue}
             onChange={setTrajectoryValue}
@@ -94,7 +94,7 @@ export function EditModeContent({
         </Field>
 
         <Field invalid={validationErrors?.field === 'toolMocks'}>
-          <FieldLabel>Tool Mocks (JSON array, optional)</FieldLabel>
+          <FieldLabel>Tool Mocks (JSON array)</FieldLabel>
           <FieldDescription>
             Ordered static mocks served in place of executing the tool. Each entry is{' '}
             <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
@@ -112,7 +112,7 @@ export function EditModeContent({
         </Field>
 
         <Field>
-          <FieldLabel>Request Context (JSON, optional)</FieldLabel>
+          <FieldLabel>Request Context (JSON)</FieldLabel>
           <CodeEditor
             value={requestContextValue}
             onChange={setRequestContextValue}
@@ -122,7 +122,7 @@ export function EditModeContent({
         </Field>
 
         <Field>
-          <FieldLabel>Metadata (JSON, optional)</FieldLabel>
+          <FieldLabel>Metadata (JSON)</FieldLabel>
           <CodeEditor
             value={metadataValue}
             onChange={setMetadataValue}
