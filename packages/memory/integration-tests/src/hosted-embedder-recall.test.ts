@@ -380,9 +380,14 @@ describe('recall search with the local fastembed embedder', () => {
       resourceId: 'resource',
       abortSignal: cancel.signal,
     });
+    // Cancel once it is queued behind the first embed, which takes 200 ms.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const cancelledAt = Date.now();
     cancel.abort(new Error('recall gave up'));
 
     await expect(queued).rejects.toThrow('recall gave up');
+    // It stopped waiting as soon as it was cancelled, not ~150 ms later when the first embed finished.
+    expect(Date.now() - cancelledAt).toBeLessThan(100);
     await first;
     expect(embedded).toEqual([['tabs indentation']]);
   });

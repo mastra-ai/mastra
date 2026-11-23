@@ -1610,8 +1610,17 @@ ${workingMemory}`;
     // so wait for the first one. If it fails, the first waiter to wake up becomes the first embed and the rest
     // wait for it in turn.
     while (isFastEmbed && this.firstEmbed) {
-      const gate = this.firstEmbed;
-      await gate;
+      const gate: Promise<void> = this.firstEmbed;
+      // A caller that gives up stops waiting right away instead of when the first embed finishes.
+      await new Promise<void>((resolve, reject) => {
+        abortSignal?.throwIfAborted();
+        const onAbort = () => reject(abortSignal!.reason);
+        abortSignal?.addEventListener('abort', onAbort, { once: true });
+        void gate.then(() => {
+          abortSignal?.removeEventListener('abort', onAbort);
+          resolve();
+        });
+      });
       if (this.firstEmbed === gate) break;
     }
     // A caller that gave up while waiting doesn't get an embed it no longer wants.
