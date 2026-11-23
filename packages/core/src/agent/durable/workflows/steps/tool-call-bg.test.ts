@@ -1263,7 +1263,11 @@ describe('durable tool-call background task dispatch', () => {
 
   it('onExecution hook updates message metadata with startedAt/taskId', async () => {
     const pubsub = mockPubsub();
-    const { messageList } = setupRegistry();
+    const { messageList, saveQueueManager } = setupRegistry();
+    // The update is applied inside the save queue, just before the drain.
+    saveQueueManager.flushMessages.mockImplementation(async (...args: any[]) => {
+      await args[3]?.beforePersist?.();
+    });
     const initData = makeInitData();
 
     let capturedOnExecution: any;

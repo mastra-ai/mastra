@@ -123,7 +123,7 @@ describe('durable tool-call FGA error propagation', () => {
     const runId = 'durable-tool-memory-read-denied';
     const denial = new Error('memory read denied');
     denial.name = 'FGADeniedError';
-    const require = vi.fn(async (_user: unknown, { permission }: { permission: string }) => {
+    const require = vi.fn(async (_user: unknown, { permission }: { permission: unknown }) => {
       if (permission === 'memory:read') throw denial;
     });
     const fgaProvider: IFGAProvider = {
@@ -356,7 +356,19 @@ describe('durable tool-call FGA error propagation', () => {
       }
     });
 
-    it('stops the step instead of reporting a tool error when a suspending tool hits the execution fence', async () => {
+    it.each([
+      [
+        'lets the rejection propagate',
+        async (_input: unknown, context: any) => context.suspend({ question: 'Favourite colour?' }),
+      ],
+      [
+        'catches the rejection and returns',
+        async (_input: unknown, context: any) => {
+          await context.suspend({ question: 'Favourite colour?' }).catch(() => {});
+          return { colour: 'unknown' };
+        },
+      ],
+    ] as const)('stops the step when a suspending tool hits the execution fence and %s', async (_name, execute) => {
       const runId = 'durable-tool-recovery-recall-fenced-in-execution';
       const fenced = new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
         agentId: 'agent-1',
@@ -370,8 +382,7 @@ describe('durable tool-call FGA error propagation', () => {
             throw fenced;
           },
           undefined,
-          // The tool sees the rejected suspension as an ordinary error and lets it propagate.
-          async (_input, context) => context.suspend({ question: 'Favourite colour?' }),
+          execute,
         );
         await expect(run).rejects.toBe(fenced);
         expect(suspend).not.toHaveBeenCalled();

@@ -959,19 +959,10 @@ export function createDurableToolCallStep() {
         return recalled && { saved: recalled.value.messages.find(message => message.id === messageId) };
       };
       // A background task records its start and suspension on the retained tool call message long
-      // after this step read it, so each of those writes starts from the saved copy.
+      // after this step read it, so each of those writes starts from the saved copy (see onExecution).
       const refreshRetainedInvocation = async (list: MessageList) => {
-        if (
-          !saveQueueManager ||
-          !memory ||
-          !state?.threadId ||
-          !state.resourceId ||
-          state.memoryConfig?.readOnly ||
-          // An unsaved response holds writes storage has not seen yet.
-          list.get.response.db().some(hasInvocation)
-        ) {
-          return;
-        }
+        // An unsaved response holds writes storage has not seen yet.
+        if (!memory || !state?.threadId || !state.resourceId || list.get.response.db().some(hasInvocation)) return;
         const retained = [...list.get.all.db()].reverse().find(hasInvocation);
         if (!retained) return;
         const recalled = await recallSaved(memory, state.threadId, state.resourceId, retained.id);
@@ -2290,29 +2281,19 @@ export function createDurableToolCallStep() {
           onExecution: async (params: any) => {
             // Like onResult: an unverified copy of the tool call message is not changed or saved.
             if (!messageList || invocationUnverified) return;
-            try {
-              await refreshRetainedInvocation(messageList);
-            } catch (error) {
-              if (!isExecutionFenceError(error)) throw error;
-              logger?.debug?.('[DurableAgent] Skipped background-task metadata flush: execution superseded', {
-                runId,
-                toolCallId: params.toolCallId,
+            const list = messageList;
+            const apply = () =>
+              applyBackgroundToolExecution({
+                params,
+                args: cleanedArgs,
+                messageList: list,
+                transformChunk: chunk =>
+                  applyToolPayloadTransformToChunk(chunk, {
+                    policy: toolPayloadTransform,
+                    tools: toolsForTransform,
+                    logger: logger as any,
+                  }),
               });
-              return;
-            }
-            if (invocationUnverified) return;
-
-            await applyBackgroundToolExecution({
-              params,
-              args: cleanedArgs,
-              messageList,
-              transformChunk: chunk =>
-                applyToolPayloadTransformToChunk(chunk, {
-                  policy: toolPayloadTransform,
-                  tools: toolsForTransform,
-                  logger: logger as any,
-                }),
-            });
 
             // Flush to storage so the metadata update (especially an open suspension)
             // is persisted. Unlike the regular agent which has a single long-lived
@@ -2322,21 +2303,30 @@ export function createDurableToolCallStep() {
             // step (the background-task manager calls it), so the error is not
             // rethrown: that would fail the task instead of stopping the step.
             const threadId = state?.threadId;
-            if (saveQueueManager && threadId && !state?.memoryConfig?.readOnly) {
-              try {
-                await runFencedToClaim(claimFenceArgs, () =>
-                  saveQueueManager.flushMessages(messageList, threadId, state.memoryConfig, {
-                    beforePersist: skipUnverified(messageList, assertNotSuperseded),
+            if (!saveQueueManager || !threadId || state?.memoryConfig?.readOnly) {
+              await apply();
+              return;
+            }
+            try {
+              await runFencedToClaim(claimFenceArgs, () =>
+                saveQueueManager.flushMessages(list, threadId, state.memoryConfig, {
+                  // The update starts from the saved copy, read inside the save queue so this thread's
+                  // earlier saves (another background task's included) have landed first.
+                  beforePersist: skipUnverified(list, async () => {
+                    await assertNotSuperseded();
+                    await refreshRetainedInvocation(list);
+                    if (invocationUnverified) throw new UnverifiedToolCallMessageError();
+                    await apply();
                   }),
-                );
-              } catch (error) {
-                if (error instanceof UnverifiedToolCallMessageError) return;
-                if (!isExecutionFenceError(error)) throw error;
-                logger?.debug?.('[DurableAgent] Skipped background-task metadata flush: execution superseded', {
-                  runId,
-                  toolCallId: params.toolCallId,
-                });
-              }
+                }),
+              );
+            } catch (error) {
+              if (error instanceof UnverifiedToolCallMessageError) return;
+              if (!isExecutionFenceError(error)) throw error;
+              logger?.debug?.('[DurableAgent] Skipped background-task metadata flush: execution superseded', {
+                runId,
+                toolCallId: params.toolCallId,
+              });
             }
           },
 
@@ -2596,6 +2586,8 @@ export function createDurableToolCallStep() {
           .finally(outcomeRecorded);
 
         ownership?.throwIfLost();
+        // Even when the tool caught the rejection and returned.
+        if (suspensionFenceError !== undefined) throw suspensionFenceError;
         if (outcome.status === 'error') {
           // Route through the catch below so error serialization and the
           // tool-error chunk emission stay on the single existing path.
