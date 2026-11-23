@@ -1698,6 +1698,46 @@ function routeConfluenceThroughProviderBase(action: ExtractedAction): ExtractedA
       'connection cloudId',
     );
   }
+  if (slug === 'delete-page-property') {
+    // This template skips the metadata lookup every other Confluence template
+    // does, so with no cloudId in the connection config it ignores the site
+    // the metadata names and asks Atlassian instead.
+    execBody = replaceOnce(
+      execBody,
+      /(let cloudId = z\.string\(\)\.optional\(\)\.parse\(connection\.connection_config\?\.\['cloudId'\]\);)/,
+      `$1
+        if (!cloudId) {
+            const metadata = MetadataSchema.safeParse(await platformProxy.getMetadata());
+            cloudId = metadata.success ? metadata.data.cloudId : undefined;
+        }`,
+      action,
+      'metadata cloudId',
+    );
+  }
+  // Most Confluence templates refuse to pick a site when the token can see
+  // several and none has been chosen; these three take the first one and cache
+  // it, which silently moves every later call onto that site.
+  const pickedSite = {
+    'delete-page-property': [/const firstResource = resources\[0\];/, 'resources'],
+    'create-page': [/const firstResourceSchema = z\.object\(\{/, 'resources.data'],
+    'update-footer-comment': [/if \(!accessibleResources\[0\]\) \{/, 'accessibleResources'],
+  } as const satisfies Record<string, readonly [RegExp, string]>;
+  if (slug in pickedSite) {
+    const [anchor, list] = pickedSite[slug as keyof typeof pickedSite];
+    execBody = replaceOnce(
+      execBody,
+      new RegExp(`(${anchor.source})`),
+      `if (${list}.length > 1) {
+                throw new platformProxy.ActionError({
+                    type: 'ambiguous_cloud_id',
+                    message: 'Multiple Confluence sites found. Please set an explicit cloudId in the connection metadata.',
+                });
+            }
+            $1`,
+      action,
+      'single accessible site',
+    );
+  }
   return {
     ...action,
     execBody,

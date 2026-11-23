@@ -108,6 +108,12 @@ export function updateFooterCommentTool(proxy: PlatformProxy) {
         });
 
         const accessibleResources = z.array(z.object({ id: z.string() })).parse(accessibleResourcesResponse.data);
+        if (accessibleResources.length > 1) {
+          throw new platformProxy.ActionError({
+            type: 'ambiguous_cloud_id',
+            message: 'Multiple Confluence sites found. Please set an explicit cloudId in the connection metadata.',
+          });
+        }
         if (!accessibleResources[0]) {
           throw new platformProxy.ActionError({
             type: 'cloud_id_not_found',

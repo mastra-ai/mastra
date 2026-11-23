@@ -129,6 +129,12 @@ export function createPageTool(proxy: PlatformProxy) {
             });
           }
 
+          if (resources.data.length > 1) {
+            throw new platformProxy.ActionError({
+              type: 'ambiguous_cloud_id',
+              message: 'Multiple Confluence sites found. Please set an explicit cloudId in the connection metadata.',
+            });
+          }
           const firstResourceSchema = z.object({
             id: z.string(),
           });

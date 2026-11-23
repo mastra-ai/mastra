@@ -72,6 +72,7 @@ describe('generated Confluence tools', () => {
   let baseUrl: string;
   let requests: RecordedRequest[];
   let connectionConfig: Record<string, unknown> | null;
+  let connectionMetadata: Record<string, unknown> | null;
   let answer: (target: string) => { status: number; body: unknown };
   let resolutions = 0;
 
@@ -85,7 +86,7 @@ describe('generated Confluence tools', () => {
       if (target.endsWith('/connections')) return send(200, { connections: [connection] });
       if (target.endsWith('/integrations')) return send(200, { integrations: [integration] });
       if (target === `/v2/connections/${connection.id}/context`) {
-        return send(200, { connection_config: connectionConfig, metadata: null });
+        return send(200, { connection_config: connectionConfig, metadata: connectionMetadata });
       }
       if (!target.startsWith(PROXY_PREFIX)) return send(404, { error: `unexpected request ${target}` });
       const proxied = target.slice(PROXY_PREFIX.length);
@@ -111,24 +112,34 @@ describe('generated Confluence tools', () => {
   beforeEach(() => {
     requests = [];
     connectionConfig = { cloudId: CLOUD_ID, baseUrl: 'https://acme.atlassian.net' };
+    connectionMetadata = null;
     answer = () => ({ status: 204, body: undefined });
   });
 
-  async function run(toolId: string, input: Record<string, unknown>) {
+  // One toolset shares one metadata overlay, where templates cache the cloudId
+  // they looked up, so calls through the same toolset see each other's writes.
+  async function toolset(toolIds: string[]) {
     const resolved = await tools({
       providers: { confluence: { connectionId: connection.id } },
-      allowTools: [toolId],
-      // A fresh project per run keeps the metadata overlay (where templates
-      // cache a looked-up cloudId) from carrying over between tests.
+      allowTools: toolIds,
+      // A fresh project per toolset keeps the overlay from carrying over
+      // between tests.
       projectId: `proj_${++resolutions}`,
       client: { accessToken: 'test-platform-token', baseUrl },
     })();
-    const tool = resolved[toolId] as
-      { execute?: (input: unknown, context: { requestContext: RequestContext }) => Promise<unknown> } | undefined;
-    if (!tool?.execute) throw new Error(`${toolId} was not resolved`);
-    const result = await tool.execute(input, { requestContext: new RequestContext() });
-    if (isValidationError(result)) throw new Error(`${toolId} failed validation: ${result.message}`);
-    return result;
+    return async (toolId: string, input: Record<string, unknown>) => {
+      const tool = resolved[toolId] as
+        | { execute?: (input: unknown, context: { requestContext: RequestContext }) => Promise<unknown> }
+        | undefined;
+      if (!tool?.execute) throw new Error(`${toolId} was not resolved`);
+      const result = await tool.execute(input, { requestContext: new RequestContext() });
+      if (isValidationError(result)) throw new Error(`${toolId} failed validation: ${result.message}`);
+      return result;
+    };
+  }
+
+  async function run(toolId: string, input: Record<string, unknown>) {
+    return (await toolset([toolId]))(toolId, input);
   }
 
   it.each([
@@ -203,6 +214,54 @@ describe('generated Confluence tools', () => {
       { method: 'GET', target: '/oauth/token/accessible-resources', baseUrlOverride: undefined },
       { method: 'DELETE', target: '/ex/confluence/cloud-2/wiki/api/v2/inline-comments/77', baseUrlOverride: undefined },
     ]);
+  });
+
+  describe('on a token that can see several Confluence sites', () => {
+    const sites = [
+      { id: 'site-a', url: 'https://a.atlassian.net', name: 'a', scopes: [] },
+      { id: 'site-b', url: 'https://b.atlassian.net', name: 'b', scopes: [] },
+    ];
+
+    beforeEach(() => {
+      connectionConfig = {};
+      answer = target =>
+        target === '/oauth/token/accessible-resources'
+          ? { status: 200, body: sites }
+          : { status: 200, body: { id: '7', title: 'Page', status: 'current', version: { number: 1 } } };
+    });
+
+    it('deletes a page property on the site the connection metadata names, and later tools stay there', async () => {
+      connectionMetadata = { cloudId: 'site-b' };
+      const call = await toolset(['confluence_delete_page_property', 'confluence_get_page']);
+
+      await call('confluence_delete_page_property', { pageId: 7, propertyId: 9 });
+      await call('confluence_get_page', { id: '7' }).catch(() => undefined);
+
+      expect(requests.map(request => `${request.method} ${request.target.split('?')[0]}`)).toEqual([
+        'DELETE /ex/confluence/site-b/wiki/api/v2/pages/7/properties/9',
+        'GET /ex/confluence/site-b/wiki/api/v2/pages/7',
+      ]);
+    });
+
+    it.each([
+      ['confluence_delete_page_property', { pageId: 7, propertyId: 9 }],
+      ['confluence_create_page', { spaceId: '42', title: 'Page' }],
+      ['confluence_update_footer_comment', { comment_id: '9', version_number: 2, body: '<p>hi</p>' }],
+      ['confluence_get_space', { id: 42 }],
+    ])('%s refuses to guess a site when none is chosen', async (toolId, input) => {
+      const call = await toolset([toolId]);
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await expect(call(toolId, input)).rejects.toThrow(/Multiple Confluence sites/);
+      }
+
+      // Only site lookups went out, and the refusal left no site cached for the
+      // second call to pick up.
+      expect(requests.map(request => request.target)).toEqual([
+        '/oauth/token/accessible-resources',
+        '/oauth/token/accessible-resources',
+      ]);
+    });
   });
 
   it('never sets a base URL override in any generated tool', () => {

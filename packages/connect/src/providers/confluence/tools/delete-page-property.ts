@@ -33,6 +33,10 @@ export function deletePagePropertyTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const connection = await platformProxy.getConnection();
       let cloudId = z.string().optional().parse(connection.connection_config?.['cloudId']);
+      if (!cloudId) {
+        const metadata = MetadataSchema.safeParse(await platformProxy.getMetadata());
+        cloudId = metadata.success ? metadata.data.cloudId : undefined;
+      }
 
       if (!cloudId) {
         // https://developer.atlassian.com/cloud/confluence/rest/v2/intro/#auth
@@ -42,6 +46,12 @@ export function deletePagePropertyTool(proxy: PlatformProxy) {
         });
 
         const resources = AccessibleResourceSchema.parse(accessibleResources.data);
+        if (resources.length > 1) {
+          throw new platformProxy.ActionError({
+            type: 'ambiguous_cloud_id',
+            message: 'Multiple Confluence sites found. Please set an explicit cloudId in the connection metadata.',
+          });
+        }
         const firstResource = resources[0];
         if (!firstResource) {
           throw new platformProxy.ActionError({
