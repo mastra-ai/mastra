@@ -36,10 +36,14 @@ function KeySymbol({ symbol }: { symbol: string }) {
 /** A shortcut with its key symbols (⌘, ↵, ↑…) drawn, and one space between a symbol and the key beside it. */
 export function KeyLabel({ children }: { children?: ReactNode }) {
   // JSX like ⌘{key} is several strings: one label
-  const parts = Children.toArray(children);
-  const label = parts.every(part => typeof part !== 'object') ? parts.join('') : parts;
+  const labels = Children.toArray(children).reduce<ReactNode[]>((joined, child) => {
+    const last = joined.at(-1);
+    return typeof last === 'string' && typeof child === 'string'
+      ? [...joined.slice(0, -1), last + child]
+      : [...joined, child];
+  }, []);
 
-  return Children.map(label, child => {
+  return Children.map(labels, child => {
     if (typeof child !== 'string' || !symbolPattern.test(child)) return child;
 
     const keys = child.replace(symbolGapPattern, ' ').split(symbolPattern);

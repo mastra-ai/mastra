@@ -45,9 +45,13 @@ describe('shortcut key symbols', () => {
 
   it('spaces a label split by a JSX expression the same', () => {
     const key = 'K';
-    const { container } = render(<Kbd>⌘{key}</Kbd>);
+    const { container } = render(
+      <CommandShortcut>
+        ⌘{key} <Kbd>⌘{key}</Kbd>
+      </CommandShortcut>,
+    );
 
-    expect(container.textContent).toBe('⌘ K');
+    expect(container.textContent).toBe('⌘ K ⌘ K');
   });
 
   it('draws symbols next to elements, keeping the space between them', () => {
