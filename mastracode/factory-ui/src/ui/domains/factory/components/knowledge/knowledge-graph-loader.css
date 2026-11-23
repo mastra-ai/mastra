@@ -1,0 +1,126 @@
+.knowledge-loader-scene {
+  --tint: var(--color-brand-purple);
+  --rim: color-mix(in oklab, var(--tint) 68%, var(--foreground));
+  --cycle: 5.2s;
+}
+
+.knowledge-loader-scene::before {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, var(--border-strong) 1px, transparent 1px) center / 12px 12px;
+  mask-image: radial-gradient(ellipse, black 15%, transparent 72%);
+  content: '';
+}
+
+.knowledge-loader-branch {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  rotate: var(--angle);
+}
+
+.knowledge-loader-edge {
+  position: absolute;
+  width: var(--reach);
+  height: 1px;
+  background: color-mix(in oklab, var(--rim) 55%, transparent);
+  transform-origin: left center;
+}
+
+.knowledge-loader-node,
+.knowledge-loader-core {
+  position: absolute;
+  border: 1px solid var(--rim);
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--tint) 20%, var(--background));
+  translate: -50% -50%;
+}
+
+.knowledge-loader-node {
+  left: var(--reach);
+  width: var(--node-size);
+  height: var(--node-size);
+}
+
+.knowledge-loader-core {
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  background: color-mix(in oklab, var(--tint) 32%, var(--background));
+}
+
+.knowledge-loader-core::after {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rim);
+  content: '';
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .knowledge-loader-edge {
+    animation: knowledge-loader-connect var(--cycle) var(--ease-out-custom) var(--delay) infinite both;
+  }
+
+  .knowledge-loader-node {
+    animation: knowledge-loader-create var(--cycle) var(--ease-out-custom) var(--delay) infinite both;
+  }
+
+  .knowledge-loader-core {
+    animation: knowledge-loader-pulse var(--cycle) ease-in-out infinite;
+  }
+}
+
+/* The branch grows outward first, then fades with its node before both reset. */
+@keyframes knowledge-loader-connect {
+  0%,
+  100% {
+    opacity: 0;
+    scale: 0 1;
+  }
+  12%,
+  54% {
+    opacity: 1;
+    scale: 1 1;
+  }
+  75% {
+    opacity: 0;
+    scale: 1 1;
+  }
+}
+
+@keyframes knowledge-loader-create {
+  0%,
+  7%,
+  100% {
+    opacity: 0;
+    scale: 0.3;
+  }
+  17% {
+    opacity: 1;
+    scale: 1.12;
+  }
+  24%,
+  54% {
+    opacity: 1;
+    scale: 1;
+  }
+  75% {
+    opacity: 0;
+    scale: 0.85;
+  }
+}
+
+@keyframes knowledge-loader-pulse {
+  0%,
+  45%,
+  100% {
+    scale: 1;
+  }
+  18% {
+    scale: 1.12;
+  }
+}

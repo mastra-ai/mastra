@@ -19,7 +19,7 @@ import {
   useKnowledgeTreeLevels,
 } from '../../hooks/useKnowledgeGraph';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { KnowledgeLoadingSkeleton } from '../domains/factory/components/knowledge/KnowledgeLoadingSkeleton';
+import { KnowledgeGraphLoader } from '../domains/factory/components/knowledge/KnowledgeGraphLoader';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /**
@@ -82,7 +82,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) return <KnowledgeLoadingSkeleton label="Loading knowledge" layout="graph" />;
+  if (graph.isPending) return <KnowledgeGraphLoader />;
   if (graph.isError) return <Notice variant="destructive">{graph.error.message}</Notice>;
   if (graph.data.pages.length === 0) {
     return (
