@@ -64,6 +64,7 @@ import {
   getValidationIssuePaths,
   isValidationError,
   registerToolOutputValidationSchema,
+  registerToolResumeValidationSchema,
   validateToolInput,
   validateToolOutput,
   validateToolSuspendData,
@@ -616,6 +617,7 @@ export class CoreToolBuilder extends MastraBase {
       } as unknown as CoreTool & { id: `${string}.${string}` };
 
       registerToolOutputValidationSchema(builtTool, outputSchema);
+      registerToolResumeValidationSchema(builtTool, this.getResumeSchema());
       return builtTool;
     }
 
@@ -1386,6 +1388,7 @@ export class CoreToolBuilder extends MastraBase {
     } as unknown as CoreTool;
 
     registerToolOutputValidationSchema(builtTool, outputSchema);
+    registerToolResumeValidationSchema(builtTool, this.getResumeSchema());
     return builtTool;
   }
 }

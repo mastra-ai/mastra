@@ -76,6 +76,12 @@ import { isJsonSafe } from './workflows/shared/schemas';
 export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
 export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
+/**
+ * Carries the cold resume a `prepare()` call rebuilds a run for. Preparation then fails when the
+ * tools cannot be built, registers nothing once that resume was abandoned, and leaves the shared
+ * registry slot to the resume to fill when it accepts.
+ */
+export const COLD_RESUME_ATTEMPT = Symbol('mastra.durable.coldResumeAttempt');
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -188,6 +194,12 @@ export interface PreparationOptions<OUTPUT = undefined> {
    */
   resumedSpanData?: { agentSpanData?: unknown; modelSpanData?: unknown };
   /**
+   * Fail preparation when the tools cannot be resolved, instead of preparing a run without them.
+   * A resume rebuilt from storage sets it: the suspended tool must be built for its caller, or the
+   * resume is refused and the run stays suspended.
+   */
+  toolsRequired?: boolean;
+  /**
    * Scopes the caller passed. When the property is absent, `options.scopes`; set it (even to
    * undefined) when `options` already include the agent defaults, so the Agent's own
    * `defaultOptions.scopes` are not treated as caller input.
@@ -243,6 +255,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     resolvedDefaultOptions,
     scopesResolved = false,
     resumedSpanData,
+    toolsRequired = false,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -688,6 +701,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       model,
     });
   } catch (error) {
+    if (toolsRequired) throw error;
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
   }
 

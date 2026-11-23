@@ -15,11 +15,49 @@ export function undecidedColdResume(runId: string): Promise<void> | undefined {
   return undecidedColdResumes.get(runId);
 }
 
+/**
+ * Settles with `pending`, or rejects with the abort reason once `signal` aborts first. A resume
+ * waiting for another one to decide stops waiting when its own caller gives up.
+ */
+export function waitUnlessAborted<T>(pending: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return pending;
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    pending.then(
+      value => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+type AttemptState = 'idle' | 'deciding' | 'accepted' | 'abandoned';
+
+/**
+ * Thrown into a preparation that finishes after its resume was abandoned. Nobody awaits that
+ * preparation any more; the error only stops it from registering the run.
+ */
+export class AbandonedColdResumeError extends Error {
+  constructor(runId: string) {
+    super(`The cold resume of run ${runId} was abandoned before its preparation finished.`);
+    this.name = 'AbandonedColdResumeError';
+  }
+}
+
 /** One resume() call's hold on a run it is rebuilding from storage. Every method is idempotent. */
 export class ColdResumeAttempt {
   readonly #runId: string;
+  #state: AttemptState = 'idle';
   #release: (() => void) | undefined;
   #rollback: (() => void) | undefined;
+  #share: (() => void) | undefined;
 
   constructor(runId: string) {
     this.#runId = runId;
@@ -30,6 +68,8 @@ export class ColdResumeAttempt {
    * read that found no entry, so no other resume can start rebuilding the run in between.
    */
   begin(): void {
+    if (this.#state !== 'idle') return;
+    this.#state = 'deciding';
     let resolve!: () => void;
     const pending = new Promise<void>(r => {
       resolve = r;
@@ -41,26 +81,71 @@ export class ColdResumeAttempt {
     };
   }
 
-  /** Records how to remove what preparation registered for this attempt. */
+  /**
+   * Called by preparation right before it registers the run. A preparation that outlived its
+   * resume (the caller gave up while a tool resolver stalled) must not register anything: later
+   * resumes may already have rebuilt the run.
+   */
+  throwIfAbandoned(): void {
+    if (this.#state === 'abandoned') throw new AbandonedColdResumeError(this.#runId);
+  }
+
+  /** Records how to remove what preparation registered; runs it at once if already abandoned. */
   prepared(rollback: () => void): void {
+    if (this.#state === 'abandoned') {
+      rollback();
+      return;
+    }
     this.#rollback = rollback;
+  }
+
+  /**
+   * Holds preparation's write to the shared registry slot until this attempt accepts. Another
+   * agent instance in this process may be running the run from that slot, and must not see an
+   * entry built for a caller that could still be rejected.
+   */
+  shareOnAccept(register: () => void): void {
+    if (this.#state === 'abandoned') return;
+    if (this.#state === 'accepted') {
+      register();
+      return;
+    }
+    this.#share = register;
   }
 
   /** The run now belongs to an accepted resume (or another agent's): keep it and let others in. */
   accept(): void {
-    this.#rollback = undefined;
-    this.#release?.();
-    this.#release = undefined;
+    if (this.#state === 'deciding') {
+      this.#state = 'accepted';
+      const share = this.#share;
+      this.#share = undefined;
+      this.#rollback = undefined;
+      try {
+        share?.();
+      } finally {
+        this.#releaseGate();
+      }
+      return;
+    }
+    if (this.#state === 'idle') this.#state = 'accepted';
   }
 
   /** The resume failed before accepting: remove what it registered, then let others in. */
   abandon(): void {
+    if (this.#state === 'accepted' || this.#state === 'abandoned') return;
+    this.#state = 'abandoned';
     const rollback = this.#rollback;
     this.#rollback = undefined;
+    this.#share = undefined;
     try {
       rollback?.();
     } finally {
-      this.accept();
+      this.#releaseGate();
     }
+  }
+
+  #releaseGate(): void {
+    this.#release?.();
+    this.#release = undefined;
   }
 }

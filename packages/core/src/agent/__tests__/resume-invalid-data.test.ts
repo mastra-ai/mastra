@@ -6,7 +6,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
-function createModel() {
+function createModel(toolName = 'ask') {
   let calls = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
@@ -14,7 +14,7 @@ function createModel() {
       const parts: any[] =
         calls === 1
           ? [
-              { type: 'tool-call', toolCallId: 'call-1', toolName: 'ask', input: '{}', providerExecuted: false },
+              { type: 'tool-call', toolCallId: 'call-1', toolName, input: '{}', providerExecuted: false },
               {
                 type: 'finish',
                 finishReason: 'tool-calls',
@@ -49,8 +49,8 @@ function createAsk() {
   });
 }
 
-function setup(tools: Record<string, any> = { ask: createAsk() }) {
-  const agent = new Agent({ id: 'asker', name: 'asker', instructions: 'ask', model: createModel(), tools });
+function setup(tools: Record<string, any> = { ask: createAsk() }, toolName?: string) {
+  const agent = new Agent({ id: 'asker', name: 'asker', instructions: 'ask', model: createModel(toolName), tools });
   new Mastra({ agents: { asker: agent }, storage: new InMemoryStore(), logger: false });
   return agent;
 }
@@ -86,5 +86,22 @@ describe('resume with data that fails the tool resumeSchema', () => {
       id: 'AGENT_RESUME_INVALID_DATA',
     });
     expect((await agent.listSuspendedRuns()).total).toBe(1);
+  });
+
+  // Technical: formatTools() exposes `ask-person?` as `ask-person_`, the name the suspended call records,
+  // so a lookup by the configured key missed the tool and skipped validation.
+  it('validates a tool whose name was sanitized for the model', async () => {
+    const agent = setup({ 'ask-person?': createAsk() }, 'ask-person_');
+    const first = await (await agent.stream('go')).getFullOutput();
+    expect(first.finishReason).toBe('suspended');
+    const runId = first.runId!;
+
+    await expect(agent.resumeGenerate({ nope: 1 }, { runId })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_INVALID_DATA',
+    });
+    expect((await agent.listSuspendedRuns()).total).toBe(1);
+
+    const resumed = await (await agent.resumeStream({ answer: 'the blue one' }, { runId })).getFullOutput();
+    expect(resumed.text).toBe('done');
   });
 });

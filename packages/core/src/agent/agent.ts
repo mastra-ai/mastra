@@ -165,6 +165,7 @@ import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvide
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import {
+  getProviderToolName,
   isMastraTool,
   isProviderTool,
   isApprovalExempt,
@@ -178,7 +179,7 @@ import type {
   ToolHooks,
   ToolPayloadTransformPolicy,
 } from '../tools/types';
-import { validateToolInput } from '../tools/validation';
+import { resolveToolResumeValidationSchema, validateToolInput } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import type { ToolOptions } from '../utils';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge, rebindProcessorTools } from '../utils';
@@ -220,7 +221,7 @@ import type {
 import type { DelegationRefInput, DelegationRefRegistry } from './delegation-refs';
 import { createDelegationRefRegistry, resolveDelegationRefs } from './delegation-refs';
 import { releaseRemoteAbortListener } from './durable/abort-transport';
-import { ColdResumeAttempt, undecidedColdResume } from './durable/cold-resume-gate';
+import { ColdResumeAttempt, undecidedColdResume, waitUnlessAborted } from './durable/cold-resume-gate';
 import {
   AgentStreamEventTypes,
   DurableStepIds,
@@ -259,7 +260,12 @@ import { getExecutionStreamOwner } from './durable/execution-stream-publisher';
 import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { persistDurableRunInput } from './durable/persist-run-input';
 import type { PreparationOptions, PreparationResult } from './durable/preparation';
-import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA } from './durable/preparation';
+import {
+  COLD_RESUME_ATTEMPT,
+  prepareForDurableExecution,
+  SCOPES_ALREADY_APPLIED,
+  RESUMED_SPAN_DATA,
+} from './durable/preparation';
 import { createRunAbortController } from './durable/run-abort';
 import { createRunCleanup } from './durable/run-cleanup';
 import { recordRunSavedMessages } from './durable/run-message-refs';
@@ -544,19 +550,49 @@ export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
  * durable); this bound only guards against a write that never completes so
  * `approveToolCall()` cannot hang forever.
  */
-/**
- * Set by the untilIdle wrapper on the resume() it re-enters: the outer call already authorized and
- * validated this resume and accepted it, so the inner call must not check again and fail after
- * acceptance, when the run already carries the caller's request context.
- */
-const RESUME_ALREADY_ACCEPTED = Symbol('durable-agent.resume-already-accepted');
+/** The suspended tool call a durable resume validated its data against. */
+type ResumeSuspension = { readonly toolCallId: string };
 
-function markResumeAccepted<T extends object>(options: T): T {
-  return Object.assign(options, { [RESUME_ALREADY_ACCEPTED]: true });
+/**
+ * What the resume() an untilIdle wrapper re-enters was accepted with. The outer call already
+ * authorized and validated the resume, rebuilt its tools and accepted it, so the inner call must
+ * not repeat any of that and fail after acceptance, when the run already carries the caller's
+ * request context. It still claims only the suspension the outer call validated.
+ */
+type AcceptedResume = { readonly suspension: ResumeSuspension | undefined };
+
+const acceptedResumes = new WeakMap<object, AcceptedResume>();
+
+function markResumeAccepted<T extends object>(options: T, accepted: AcceptedResume): T {
+  acceptedResumes.set(options, accepted);
+  return options;
 }
 
-function isAcceptedResume(options: object | undefined): boolean {
-  return options !== undefined && RESUME_ALREADY_ACCEPTED in options;
+function getAcceptedResume(options: object | undefined): AcceptedResume | undefined {
+  return options === undefined ? undefined : acceptedResumes.get(options);
+}
+
+/**
+ * The name `formatTools()` exposes a tool under, which is the name the model calls it by and the
+ * name a suspended tool call records.
+ */
+function formatToolName(key: string): string {
+  let name = key.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  if (!name[0]?.match(/[a-zA-Z_]/)) name = '_' + name;
+  return name.slice(0, 63);
+}
+
+/** Finds the tool a durable tool-call step executes for `toolName`, in the same order it does. */
+function findExecutionTool(tools: Record<string, CoreTool>, toolName: string): CoreTool | undefined {
+  return (
+    tools[toolName] ??
+    Object.values(tools).find(
+      tool =>
+        isProviderTool(tool) &&
+        (getProviderToolName(tool.id) === toolName || ('name' in tool && tool.name === toolName)),
+    ) ??
+    Object.values(tools).find(tool => !!tool && typeof tool === 'object' && 'id' in tool && tool.id === toolName)
+  );
 }
 
 const RESUME_SUSPEND_DURABILITY_TIMEOUT_MS = 30_000;
@@ -8262,17 +8298,9 @@ export class Agent<
    * @internal
    */
   private formatTools(tools: Record<string, CoreTool>): Record<string, CoreTool> {
-    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/g;
-    const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
-
     for (const key of Object.keys(tools)) {
-      if (tools[key] && (key.length > 63 || key.match(INVALID_CHAR_REGEX) || !key[0]!.match(STARTING_CHAR_REGEX))) {
-        let newKey = key.replace(INVALID_CHAR_REGEX, '_');
-        if (!newKey[0]!.match(STARTING_CHAR_REGEX)) {
-          newKey = '_' + newKey;
-        }
-        newKey = newKey.slice(0, 63);
-
+      const newKey = formatToolName(key);
+      if (tools[key] && newKey !== key) {
         if (tools[newKey]) {
           const mastraError = new MastraError({
             id: 'AGENT_TOOL_NAME_COLLISION',
@@ -8807,13 +8835,11 @@ export class Agent<
   }
 
   /**
-   * @internal
    * Rejects resume data that fails the suspended tool's `resumeSchema` while the run is
-   * still suspended. Shared with durable resume preflight.
-   * Otherwise the tool-call step hands the validation error to the model,
+   * still suspended. Otherwise the tool-call step hands the validation error to the model,
    * the run finishes and the caller can never resume it with corrected data.
    */
-  public async __validateToolResumeData({
+  async #validateToolResumeData({
     snapshot,
     toolCallId,
     resumeData,
@@ -8834,12 +8860,7 @@ export class Agent<
   }): Promise<void> {
     // A run pinned to a stored version resolves that version's tools later; the current
     // agent's schema may differ, so leave validation to the tool-call step.
-    const durableInput = snapshot.context?.input;
-    if (
-      this.#getSnapshotAgentVersionId(snapshot) ||
-      (durableInput?.__workflowKind === 'durable-agent' && durableInput.agentVersionId)
-    )
-      return;
+    if (this.#getSnapshotAgentVersionId(snapshot)) return;
 
     // Without a toolCallId the target is only certain when exactly one call is suspended.
     const suspended = this.#getSuspendedToolCalls(snapshot);
@@ -8857,7 +8878,11 @@ export class Agent<
       ...Object.assign({}, ...Object.values(toolsets ?? {})),
       ...clientTools,
     };
-    const tool = tools[target.toolName] ?? Object.values(tools).find(t => t?.id === target.toolName);
+    // The suspended call records the name the model called, which formatTools() may have sanitized.
+    const tool =
+      tools[target.toolName] ??
+      Object.entries(tools).find(([name]) => formatToolName(name) === target.toolName)?.[1] ??
+      Object.values(tools).find(t => t?.id === target.toolName);
     // Tools resolved elsewhere (workspace, processors) keep the tool-call step's validation.
     if (!tool?.resumeSchema) return;
     const validation = validateToolInput(tool.resumeSchema, resumeData, target.toolName);
@@ -8869,6 +8894,62 @@ export class Agent<
       category: ErrorCategory.USER,
       text: `Agent "${this.name}" ${method}() received resume data that does not match the resumeSchema of tool "${target.toolName}". The run is still suspended. ${validation.error.message}`,
       details: { agentName: this.name, method, runId, toolName: target.toolName, toolCallId: target.toolCallId ?? '' },
+    });
+  }
+
+  /**
+   * Durable counterpart of {@link Agent.#validateToolResumeData}. Checks the data against the tool
+   * the resumed run executes, looked up in `tools` (the run's registry entry as this resume will
+   * leave it) the way the durable tool-call step looks it up. That covers toolsets kept from the
+   * first call, tool names formatTools() sanitized, a tool a processor kept in place of a rebuilt
+   * one, and a run pinned to a stored version, whose entry holds that version's tools.
+   *
+   * Returns the suspended tool call it checked, which the resume must still find suspended once it
+   * holds the run.
+   */
+  #validateDurableResumeData({
+    snapshot,
+    toolCallId,
+    resumeData,
+    tools,
+    runId,
+  }: {
+    snapshot: WorkflowRunState;
+    toolCallId: string | undefined;
+    resumeData: unknown;
+    tools: Record<string, CoreTool>;
+    runId: string;
+  }): ResumeSuspension | undefined {
+    // Without a toolCallId the target is only certain when exactly one call is suspended.
+    const suspended = this.#getSuspendedToolCalls(snapshot);
+    const target =
+      toolCallId !== undefined
+        ? suspended.find(call => call.toolCallId === toolCallId)
+        : suspended.length === 1
+          ? suspended[0]
+          : undefined;
+    const suspension = target?.toolCallId ? { toolCallId: target.toolCallId } : undefined;
+    if (!target?.toolName || target.requiresApproval) return suspension;
+
+    const tool = findExecutionTool(tools, target.toolName);
+    const schema = tool ? resolveToolResumeValidationSchema(tool) : undefined;
+    // A tool missing here is resolved by the tool-call step itself (cross-process rebuilds), which validates then.
+    if (!schema) return suspension;
+    const validation = validateToolInput(schema, resumeData, target.toolName);
+    if (!validation.error) return suspension;
+
+    throw new MastraError({
+      id: 'AGENT_RESUME_INVALID_DATA',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `Agent "${this.name}" resume() received resume data that does not match the resumeSchema of tool "${target.toolName}". The run is still suspended. ${validation.error.message}`,
+      details: {
+        agentName: this.name,
+        method: 'resume',
+        runId,
+        toolName: target.toolName,
+        toolCallId: target.toolCallId ?? '',
+      },
     });
   }
 
@@ -11933,7 +12014,7 @@ export class Agent<
       runId,
       method,
     });
-    await this.__validateToolResumeData({
+    await this.#validateToolResumeData({
       snapshot: resumeSnapshot,
       toolCallId,
       resumeData: resumeWith,
@@ -12173,7 +12254,7 @@ export class Agent<
       runId,
       method: 'resumeGenerate',
     });
-    await this.__validateToolResumeData({
+    await this.#validateToolResumeData({
       snapshot: resumeSnapshot,
       toolCallId: options?.toolCallId,
       resumeData,
@@ -12934,10 +13015,12 @@ export class Agent<
   #runInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
 
   /**
-   * Registry entries of recovered executions whose memory is fenced but which are not registered yet,
-   * so a total deadline in that window still saves the turn.
+   * The registry entry each execution runs on, keyed by its fence. A total deadline saves the turn
+   * through that entry's output processors and messages, never through whatever the shared slot
+   * holds by then (another resume of the run may have rebuilt it), and still finds a recovered
+   * execution that is fenced but not registered yet.
    */
-  #recoveredEntries = new WeakMap<ExecutionFence, RunRegistryEntry>();
+  #executionEntries = new WeakMap<ExecutionFence, RunRegistryEntry>();
 
   /**
    * Share the owner of a run this process registered, so other replicas can
@@ -13707,8 +13790,7 @@ export class Agent<
     const finished = totalTimeout || (status !== undefined && status !== 'suspended');
     const runInput = totalTimeout && fence ? this.#runInputs.get(fence) : undefined;
     // Captured before the error below lets the caller clean the run up.
-    const runInputEntry =
-      runInput && (getRunRegistryEntry(runId, this.#mastra) ?? (fence && this.#recoveredEntries.get(fence)));
+    const runInputEntry = runInput && fence && this.#executionEntries.get(fence);
     let wrote = false;
     let deadlineSave: Promise<void> | undefined;
     const writeTerminalState = async () => {
@@ -13981,7 +14063,7 @@ export class Agent<
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
       await this.coverMemory(executionFence, recoveryState.requestContext, true);
-      this.#recoveredEntries.set(executionFence, recoveryState.registryEntry as unknown as RunRegistryEntry);
+      this.#executionEntries.set(executionFence, recoveryState.registryEntry as unknown as RunRegistryEntry);
       this.executionEngine.assertRecoveryActive();
     } catch (error) {
       const settlement = await executionFence?.settle(async () => {});
@@ -14724,6 +14806,7 @@ export class Agent<
     this.executionRunRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     const globalRegistryEntry = { ...registryEntry, messageList };
     globalRunRegistry.set(runId, globalRegistryEntry);
+    this.#executionEntries.set(executionFence, globalRegistryEntry);
     await this.attachStreamPublisher(runId, { threadId, resourceId });
     const segment = methodType === 'stream' ? this.#beginSegment(runId) : undefined;
 
@@ -15033,10 +15116,17 @@ export class Agent<
       releaseResumeMarker = release;
     }
     const coldAttempt = new ColdResumeAttempt(runId);
+    // Until the resume accepts, it can wait on another resume of the run or on rebuilding the run
+    // itself. Both stop once this caller gives up: its abort signal fires or its total budget ends.
+    const giveUp = createTimeoutAbortSignal({
+      parentSignal: options?.abortSignal,
+      timeoutMs: options?.modelSettings?.timeout?.totalMs,
+      timeoutType: 'total',
+    });
     try {
       // An abort on another server leaves the run canceled in storage.
       if (await this.#isRunCanceledInStorage(runId)) throw abortedRunError();
-      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker, coldAttempt);
+      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker, coldAttempt, giveUp.signal);
     } catch (error) {
       // A rebuilt run whose resume never accepted is removed again, so no later resume inherits
       // the rejected caller's request context.
@@ -15044,7 +15134,9 @@ export class Agent<
       releaseResumeMarker();
       throw error;
     } finally {
-      coldAttempt.accept();
+      // An attempt is never left undecided; after acceptance this does nothing.
+      coldAttempt.abandon();
+      giveUp.cleanup();
     }
   }
 
@@ -15086,11 +15178,13 @@ export class Agent<
     options: DurableAgentResumeOptions<TOutput> | undefined,
     releaseResumeMarker: () => void,
     coldAttempt: ColdResumeAttempt,
+    giveUp: AbortSignal | undefined,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    const accepted = getAcceptedResume(options);
     // Wait out any cold resume of this run that is still deciding, then read the registry and claim
     // a cold run in the same tick, so two resumes can never both rebuild it.
     for (let pending = undecidedColdResume(runId); pending; pending = undecidedColdResume(runId)) {
-      await pending;
+      await waitUnlessAborted(pending, giveUp);
     }
     let entry = this.executionRunRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
@@ -15240,12 +15334,12 @@ export class Agent<
           }
         : options?.memory;
 
-      // Another agent instance in this process may already run this run from the shared registry slot;
-      // preparation replaces it, so a rollback must put it back rather than empty the slot.
-      const globalEntryBeforePrepare = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
-      await this.prepare([], {
+      // Preparation registers the run for this attempt only: the attempt removes it again unless it
+      // accepts, and publishes it to the shared registry slot only once it does.
+      const preparing = this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
+        [COLD_RESUME_ATTEMPT]: coldAttempt,
         [RESUMED_SPAN_DATA]: { agentSpanData: workflowInput.agentSpanData, modelSpanData: workflowInput.modelSpanData },
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
@@ -15259,17 +15353,11 @@ export class Agent<
         // override wins.
         modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
       } as AgentExecutionOptions<TOutput>);
+      // A stalled tool resolver must not hold the run once this caller gives up. The abandoned
+      // preparation keeps running, but registers nothing when it finishes.
+      preparing.catch(() => {});
+      await waitUnlessAborted(preparing, giveUp);
       entry = this.executionRunRegistry.get(runId);
-      const preparedEntry = entry;
-      const preparedGlobalEntry = getRunRegistryEntry(runId, this.#mastra);
-      coldAttempt.prepared(() => {
-        if (preparedEntry && this.executionRunRegistry.get(runId) === preparedEntry)
-          this.executionRunRegistry.cleanup(runId);
-        if (!preparedGlobalEntry || preparedGlobalEntry === globalEntryBeforePrepare) return;
-        if (getRunRegistryEntry(runId, this.#mastra) !== preparedGlobalEntry) return;
-        if (globalEntryBeforePrepare) globalRunRegistry.set(runId, globalEntryBeforePrepare);
-        else deleteRunRegistryEntry(runId, this.#mastra);
-      });
     }
     if (!entry) {
       throw new Error(`Failed to rehydrate registry entry for run ${runId}. Cannot resume.`);
@@ -15344,8 +15432,7 @@ export class Agent<
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
-    const alreadyAccepted = isAcceptedResume(options);
-    if (!alreadyAccepted) {
+    if (!accepted) {
       await this.requireAgentExecutionFGA({
         requestContext: resolvedOptions.requestContext,
         memory: resolvedOptions.memory,
@@ -15358,39 +15445,122 @@ export class Agent<
     // Settle the prior segment before claiming the run and reading its snapshot
     // and event offset. The suspension chunk can arrive before the suspended
     // snapshot is persisted, and a late suspension event replayed into the new
-    // segment would close it early.
-    const priorExecution = getRunRegistryEntry(runId, this.#mastra)?.workflowExecution;
-    await priorExecution?.catch(() => {
-      /* errors already handled by the prior segment */
-    });
-    // Validate before claiming or advancing the suspended run so invalid answers can be corrected.
-    // Use Agent's preflight to preserve target selection, approval and stored-version behavior.
-    const preflightStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const resumeSnapshot = await preflightStore?.loadWorkflowSnapshot({
-      workflowName: DurableStepIds.AGENTIC_LOOP,
-      runId,
-    });
-    if (resumeSnapshot && !alreadyAccepted) {
-      await this.agentForExecution.__validateToolResumeData({
-        snapshot: resumeSnapshot,
-        toolCallId: resolvedOptions.toolCallId,
-        resumeData,
-        requestContext: resumeRequestContext,
+    // segment would close it early. A cold resume has not published its entry yet,
+    // so this is the execution another agent instance runs from the shared slot.
+    const sharedEntryBeforeAccept = getRunRegistryEntry(runId, this.#mastra);
+    const priorExecution = sharedEntryBeforeAccept?.workflowExecution;
+    await waitUnlessAborted(
+      priorExecution?.catch(() => {
+        /* errors already handled by the prior segment */
+      }) ?? Promise.resolve(),
+      giveUp,
+    );
+
+    // The tools the resumed run executes: what preparation rebuilt for a cold resume, or the run's
+    // registry entry with this call's request-built tools swapped in (below) for a warm one.
+    let executionTools: Record<string, CoreTool> =
+      (coldSnapshot ? entry : (sharedEntryBeforeAccept ?? entry)).tools ?? {};
+    let applyRequestTools: (() => void) | undefined;
+    // A warm resume reuses the tools built for the first request, which close
+    // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
+    // this call and swap in only entries still holding a request-built tool, so
+    // tools a processor added or replaced are kept. Processor-added tools are
+    // rebuilt for this call's request context instead (#27544). Cold resumes already
+    // rebuilt everything in prepare() above, and an accepted untilIdle resume was rebuilt by
+    // the call that accepted it. Built before acceptance: a resume whose tools cannot be built
+    // for its caller is refused and leaves the run as it was, rather than running tools built
+    // for another caller.
+    if (
+      !coldSnapshot &&
+      !accepted &&
+      (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)
+    ) {
+      const requestTools = await this.agentForExecution.getToolsForExecution({
         toolsets: resolvedOptions.toolsets,
         clientTools: resolvedOptions.clientTools,
+        threadId: memoryInfo?.threadId,
+        resourceId: memoryInfo?.resourceId,
         runId,
-        method: 'resume',
+        requestContext: resumeRequestContext,
+        memoryConfig: resolvedOptions.memory?.options,
+        autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
+        // resolvedOptions always carries defaultOptions.delegation, so only a delegation passed
+        // to this resume may replace the one the first call parked on the entry.
+        delegation: options?.delegation ? resolvedOptions.delegation : (entry.delegation ?? resolvedOptions.delegation),
+        hooks: resolvedOptions.hooks,
+        // Build for the method that started the run. `closeOnSuspend` is also a
+        // stream() option and resumeStream() always sets it, so it cannot tell (#29436).
+        methodType: entry.methodType ?? 'stream',
+        backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
+        backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
+        model: entry.model,
       });
+      const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
+        const next = { ...current };
+        for (const [name, tool] of Object.entries(requestTools)) {
+          // A name missing from current but present in previous was withheld by a processor.
+          const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+          if (configured) next[name] = tool;
+        }
+        return next;
+      };
+      const refreshed = [...new Set([entry, sharedEntryBeforeAccept])].flatMap(reg =>
+        reg
+          ? [
+              {
+                reg,
+                tools: rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext),
+                baseTools: reg.baseTools
+                  ? rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext)
+                  : undefined,
+              },
+            ]
+          : [],
+      );
+      executionTools = refreshed.find(({ reg }) => reg === sharedEntryBeforeAccept)?.tools ?? executionTools;
+      applyRequestTools = () => {
+        for (const { reg, tools, baseTools } of refreshed) {
+          reg.tools = tools;
+          if (baseTools) reg.baseTools = baseTools;
+          // Tools this rebuild did not produce still hold their earlier build, so
+          // keep that as their baseline; otherwise a later resume can never refresh them.
+          reg.requestTools = { ...reg.requestTools, ...requestTools };
+          if (options?.delegation) reg.delegation = resolvedOptions.delegation;
+        }
+      };
     }
-    // Only an accepted resume may change the suspended run's request context: it carries
-    // the caller's identity and per-request tool configuration into the next resume. Everything
-    // above runs before acceptance, so a cold resume that fails there is rolled back by resume().
+
+    // Validate before claiming or advancing the suspended run so invalid answers can be corrected.
+    // The schema is the one the tool that executes checks: retained toolsets, sanitized tool names,
+    // a tool a processor kept and a pinned stored version all resolve as they will at execution.
+    let suspension = accepted?.suspension;
+    if (!accepted) {
+      const preflightStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const resumeSnapshot = await preflightStore?.loadWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      if (resumeSnapshot) {
+        suspension = this.#validateDurableResumeData({
+          snapshot: resumeSnapshot,
+          toolCallId: resolvedOptions.toolCallId,
+          resumeData,
+          tools: executionTools,
+          runId,
+        });
+      }
+    }
+    // Only an accepted resume may change the suspended run: its request context carries the
+    // caller's identity and per-request tool configuration into the next resume. Everything above
+    // runs before acceptance, so a resume that fails there leaves the run as it was, and a cold
+    // one is rolled back by resume(). Accepting publishes a cold resume's entry to the shared slot.
+    coldAttempt.accept();
+    applyRequestTools?.();
     entry.requestContext = resumeRequestContext;
     const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
     }
-    coldAttempt.accept();
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -15408,10 +15578,13 @@ export class Agent<
           this.resume(
             innerRunId,
             innerResumeData,
-            markResumeAccepted({
-              ...innerOptions,
-              tracingOptions: resumeTracingOptions,
-            } as DurableAgentResumeOptions<TOutput>),
+            markResumeAccepted(
+              {
+                ...innerOptions,
+                tracingOptions: resumeTracingOptions,
+              } as DurableAgentResumeOptions<TOutput>,
+              { suspension },
+            ),
           ),
         stream: this.stream.bind(this),
       } as unknown as DurableAgent<any, any, TOutput>;
@@ -15427,59 +15600,6 @@ export class Agent<
       );
     }
 
-    // A warm resume reuses the tools built for the first request, which close
-    // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
-    // this call and swap in only entries still holding a request-built tool, so
-    // tools a processor added or replaced are kept. Processor-added tools are
-    // rebuilt for this call's request context instead (#27544). Cold resumes already
-    // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
-      try {
-        const requestTools = await this.agentForExecution.getToolsForExecution({
-          toolsets: resolvedOptions.toolsets,
-          clientTools: resolvedOptions.clientTools,
-          threadId: memoryInfo?.threadId,
-          resourceId: memoryInfo?.resourceId,
-          runId,
-          requestContext: resumeRequestContext,
-          memoryConfig: resolvedOptions.memory?.options,
-          autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
-          // resolvedOptions always carries defaultOptions.delegation, so only a delegation passed
-          // to this resume may replace the one the first call parked on the entry.
-          delegation: options?.delegation
-            ? resolvedOptions.delegation
-            : (entry.delegation ?? resolvedOptions.delegation),
-          hooks: resolvedOptions.hooks,
-          // Build for the method that started the run. `closeOnSuspend` is also a
-          // stream() option and resumeStream() always sets it, so it cannot tell (#29436).
-          methodType: entry.methodType ?? 'stream',
-          backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
-          backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
-          model: entry.model,
-        });
-        const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
-          const next = { ...current };
-          for (const [name, tool] of Object.entries(requestTools)) {
-            // A name missing from current but present in previous was withheld by a processor.
-            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
-            if (configured) next[name] = tool;
-          }
-          return next;
-        };
-        for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
-          if (!reg) continue;
-          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
-          if (reg.baseTools)
-            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
-          // Tools this rebuild did not produce still hold their earlier build, so
-          // keep that as their baseline; otherwise a later resume can never refresh them.
-          reg.requestTools = { ...reg.requestTools, ...requestTools };
-          if (options?.delegation) reg.delegation = resolvedOptions.delegation;
-        }
-      } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
-      }
-    }
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
     // Memory is covered only once the run is known to be resumable below, so a
@@ -15520,6 +15640,22 @@ export class Agent<
           category: ErrorCategory.USER,
           text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it already ran.`,
           details: { agentName: this.name, runId },
+        });
+      }
+      // The data was validated against one suspension. Another resume may have answered it and
+      // run on to a later one while this resume waited for the claim; resuming now would hand
+      // the later suspension data meant for the earlier one, even when no toolCallId was given.
+      if (
+        suspension &&
+        current?.status === 'suspended' &&
+        !this.#getSuspendedToolCalls(current).some(call => call.toolCallId === suspension.toolCallId)
+      ) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_ALREADY_CLAIMED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume tool call "${suspension.toolCallId}" because another resume of it already ran.`,
+          details: { agentName: this.name, runId, toolCallId: suspension.toolCallId },
         });
       }
       if (resumeRequestContext) await this.coverMemory(executionFence, resumeRequestContext);
@@ -15569,8 +15705,11 @@ export class Agent<
     if (resumeTotalMs !== undefined) {
       entry.timeoutTotalMs = resumeTotalMs;
     }
-    // The resumed segment's deadline saves the turn from the run's persisted input, as a first segment does.
+    // The resumed segment's deadline saves the turn from the run's persisted input, as a first segment does,
+    // through the entry this segment runs on.
     if (persistedInput) this.#runInputs.set(executionFence, persistedInput);
+    const executionEntry = getRunRegistryEntry(runId, this.#mastra) ?? entry;
+    this.#executionEntries.set(executionFence, executionEntry);
     this.installAbortWithTotalTimeout(entry, abortController, executionFence);
     const globalEntryForAbort = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForAbort) {
@@ -16934,6 +17073,7 @@ export class Agent<
   ): Promise<Omit<PreparationResult<TOutput>, 'messageList'>> {
     if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('prepare');
 
+    const coldAttempt = (options as { [COLD_RESUME_ATTEMPT]?: ColdResumeAttempt } | undefined)?.[COLD_RESUME_ATTEMPT];
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.agentForExecution as Agent<string, any, TOutput>,
       messages,
@@ -16949,11 +17089,15 @@ export class Agent<
       resumedSpanData: (options as { [RESUMED_SPAN_DATA]?: PreparationOptions['resumedSpanData'] } | undefined)?.[
         RESUMED_SPAN_DATA
       ],
+      toolsRequired: !!coldAttempt,
       mastra: this.#mastra,
       durableAgentId: this.id,
       durableAgentName: this.name,
     });
 
+    // A cold resume that gave up while this preparation ran must not register the run: later resumes
+    // may already have rebuilt it. Checked in the same tick as the registration below.
+    coldAttempt?.throwIfAbandoned();
     preparation.registryEntry.agentId = this.id;
     this.executionRunRegistry.registerWithMessageList(
       preparation.runId,
@@ -16964,14 +17108,24 @@ export class Agent<
         resourceId: preparation.resourceId,
       },
     );
+    const localEntry = preparation.registryEntry;
+    coldAttempt?.prepared(() => {
+      if (this.executionRunRegistry.get(preparation.runId) === localEntry) {
+        this.executionRunRegistry.cleanup(preparation.runId);
+      }
+    });
     await this.attachStreamPublisher(preparation.runId, {
       threadId: preparation.threadId,
       resourceId: preparation.resourceId,
     });
-    globalRunRegistry.set(preparation.runId, {
+    const sharedEntry = {
       ...preparation.registryEntry,
       messageList: preparation.messageList,
-    });
+    };
+    // A cold resume publishes the run to the shared slot only once it accepts: until then another
+    // agent instance may be running the run from that slot.
+    if (coldAttempt) coldAttempt.shareOnAccept(() => globalRunRegistry.set(preparation.runId, sharedEntry));
+    else globalRunRegistry.set(preparation.runId, sharedEntry);
 
     return {
       runId: preparation.runId,

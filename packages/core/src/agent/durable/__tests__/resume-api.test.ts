@@ -151,6 +151,61 @@ function createSuspendingThenTextModel(toolName: string, texts: string[]) {
   });
 }
 
+/** Calls `toolName` once per id in `toolCallIds`, one per model call, then answers `text`. */
+function createToolCallSequenceModel(toolName: string, toolCallIds: string[], text: string) {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      const toolCallId = toolCallIds[call];
+      call++;
+      const chunks = toolCallId
+        ? [
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call' as const,
+              toolCallType: 'function' as const,
+              toolCallId,
+              toolName,
+              input: JSON.stringify({ action: 'continue' }),
+              providerExecuted: false,
+            },
+            {
+              type: 'finish' as const,
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]
+        : [
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start' as const, id: `text-${call}` },
+            { type: 'text-delta' as const, id: `text-${call}`, delta: text },
+            { type: 'text-end' as const, id: `text-${call}` },
+            {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ];
+      return {
+        stream: convertArrayToReadableStream(chunks),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+}
+
+/** A promise with its resolver, for holding a tool resolver or tool until the test lets it go. */
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(r => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 async function drain(stream: ReadableStream<any>) {
   const chunks: any[] = [];
   const reader = stream.getReader();
@@ -1847,17 +1902,25 @@ describe('per-call tool injection survives in-process resume', () => {
 });
 
 // #28229: invalid data must not consume the suspension before the caller can correct it.
+// Both engines. The `durable-other-storage-version` Vitest project runs this suite again with runs
+// stored in the other workflow storage version.
 describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', AgentClass => {
   it.each(
     ['warm', 'cold'].flatMap(registry =>
       (['resumeStream', 'resumeGenerate', 'resume'] as const).flatMap(method =>
-        ['assigned', 'toolset'].map(source => ({ registry, method, source })),
+        // `toolset-retained`: the toolset is passed to the first call only; a warm run keeps it.
+        // `sanitized`: formatTools() exposes the tool as `ask-confirm_`, the name the call records.
+        ['assigned', 'toolset', 'sanitized', ...(registry === 'warm' ? ['toolset-retained'] : [])].map(source => ({
+          registry,
+          method,
+          source,
+        })),
       ),
     ),
   )(
     'allows correcting invalid data via $method with a $registry registry and $source tool',
     async ({ registry, method, source }) => {
-      const resumedValues: boolean[] = [];
+      const resumedValues: unknown[] = [];
       const ask = createTool({
         id: 'ask',
         description: 'Ask for confirmation',
@@ -1866,22 +1929,23 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
         resumeSchema: z.object({ confirmed: z.boolean() }).transform(data => ({ ...data, validated: true })),
         execute: async (_input, context) => {
           if (!context?.agent?.resumeData) return context?.agent?.suspend({});
-          resumedValues.push(context.agent.resumeData.confirmed);
+          resumedValues.push(context.agent.resumeData);
           return { confirmed: context.agent.resumeData.confirmed };
         },
       });
+      const toolName = source === 'sanitized' ? 'ask-confirm_' : 'ask';
       const agent = new Agent({
         id: 'resume-schema-agent',
         name: 'Resume Schema Agent',
         instructions: 'Ask for confirmation',
-        model: createSuspendingThenTextModel('ask', ['Confirmed']),
-        tools: source === 'assigned' ? { ask } : {},
+        model: createSuspendingThenTextModel(toolName, ['Confirmed']),
+        tools: source === 'assigned' ? { ask } : source === 'sanitized' ? { 'ask-confirm?': ask } : {},
       });
       const pubsub = new EventEmitterPubSub();
       const durable = new AgentClass({ agent, pubsub });
       const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
       try {
-        const toolOptions = source === 'toolset' ? { toolsets: { extra: { ask } } } : {};
+        const toolOptions = source.startsWith('toolset') ? { toolsets: { extra: { ask } } } : {};
         const initial = await durable.stream('Confirm', { closeOnSuspend: true, ...toolOptions });
         await drain(initial.output.fullStream);
         await globalRunRegistry.get(initial.runId)?.workflowExecution;
@@ -1891,7 +1955,7 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
           globalRunRegistry.delete(initial.runId);
         }
         const options = {
-          ...toolOptions,
+          ...(source === 'toolset' ? toolOptions : {}),
           runId: initial.runId,
           ...(registry === 'warm' ? { toolCallId: 'call-1' } : {}),
         };
@@ -1911,7 +1975,9 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
         const resumed = await resume({ confirmed: true });
         expect(resumed.error).toBeUndefined();
         expect(resumed.text).toBe('Confirmed');
-        expect(resumedValues).toEqual([true]);
+        // The preflight hands the caller's data on unchanged: the tool applies its own resumeSchema
+        // (transform included) when it executes, as it does without the preflight.
+        expect(resumedValues).toEqual([{ confirmed: true }]);
         expect(resumed.toolResults.map(chunk => chunk.payload.result)).toContainEqual({ confirmed: true });
       } finally {
         await host.shutdown({ drainTimeout: 1000 });
@@ -2314,14 +2380,19 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
               requestContext: new RequestContext([['tenant', 'flaky-caller']]),
             },
           )
-          .then(result => result.output.getFullOutput())
           .then(
-            () => 'ran' as const,
-            () => 'rejected' as const,
+            result => result.output,
+            () => undefined,
           );
 
-        // An accepted resume is the caller's to finish; only a refused one must leave no trace.
-        if (flaky === 'ran') return;
+        if (flaky) {
+          // An accepted resume runs the tool built for its own caller, never one built for another.
+          const output = await flaky.getFullOutput();
+          expect(output.error).toBeUndefined();
+          expect(output.text).toBe('Confirmed');
+          expect(seenTenants).toEqual(['flaky-caller']);
+          return;
+        }
         // A refused one leaves the run as it was for the next caller.
         const retry = await durable.resume(
           initial.runId,
@@ -2399,6 +2470,461 @@ describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', Agen
         expect(resumed.error).toBeUndefined();
         expect(resumed.text).toBe('Confirmed');
         expect(seenTenants).toEqual(['acme']);
+      } finally {
+        await host.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+      }
+    },
+  );
+
+  // Technical: a cold resume on another agent instance published the entry it rebuilt for its caller to the
+  // shared registry slot before deciding, and the accepted run's total deadline saved the turn through that
+  // entry's output processors.
+  it("an accepted run's deadline saves the turn with its own processors, not a concurrently rejected caller's", async () => {
+    const processedFor: unknown[] = [];
+    const rejectedLookupsDone = deferred();
+    const rejectedMayFinish = deferred();
+    const toolStarted = deferred();
+    let rejectedLookups = 0;
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        toolStarted.resolve();
+        const signal = context.abortSignal;
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 1500);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-deadline-processor-agent',
+      name: 'Resume Deadline Processor Agent',
+      instructions: 'Ask for confirmation',
+      model: createSuspendingThenTextModel('ask', ['Confirmed']),
+      tools: async ({ requestContext }) => {
+        // The rejected caller's preparation builds its tools, then stalls on its next lookup.
+        if (requestContext.get('tenant') === 'rejected-caller' && ++rejectedLookups > 1) {
+          rejectedLookupsDone.resolve();
+          await rejectedMayFinish.promise;
+        }
+        return { ask };
+      },
+      outputProcessors: ({ requestContext }) => [
+        {
+          id: 'record-caller',
+          processOutputResult: ({ messages }) => {
+            processedFor.push(requestContext.get('tenant'));
+            return messages;
+          },
+        },
+      ],
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', {
+        closeOnSuspend: true,
+        requestContext: new RequestContext([['tenant', 'acme']]),
+      });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      durable.runRegistry.clear();
+      globalRunRegistry.delete(initial.runId);
+      const otherInstance = new AgentClass({ agent, pubsub });
+      otherInstance.__setMastra(host);
+
+      const valid = durable.resume(
+        initial.runId,
+        { confirmed: true },
+        {
+          runId: initial.runId,
+          requestContext: new RequestContext([['tenant', 'valid-caller']]),
+          modelSettings: { timeout: { totalMs: 300 } },
+        },
+      );
+      const rejected = otherInstance
+        .resume(
+          initial.runId,
+          { confirmed: 'yes' },
+          { runId: initial.runId, requestContext: new RequestContext([['tenant', 'rejected-caller']]) },
+        )
+        .then(
+          () => 'resumed',
+          (error: unknown) => error,
+        );
+      // The accepted run reaches its deadline while the other caller may still be undecided.
+      await expect((await valid).output.getFullOutput()).rejects.toThrow('modelSettings.timeout.totalMs');
+      await Promise.race([rejectedLookupsDone.promise, new Promise(resolve => setTimeout(resolve, 100))]);
+      rejectedMayFinish.resolve();
+      expect(await rejected).toBeInstanceOf(Error);
+
+      await vi.waitFor(() => expect(processedFor).toContain('valid-caller'));
+      expect(processedFor).not.toContain('rejected-caller');
+    } finally {
+      rejectedMayFinish.resolve();
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
+  // Technical: a run pinned to a stored version skipped the preflight, so data the pinned version's tool
+  // rejects consumed the suspension. The pinned version's own tool must check it.
+  it("checks resume data against the pinned version's tool, not the current one", async () => {
+    const pinnedAnswers: unknown[] = [];
+    const currentAsk = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        throw new Error('the current version must not answer a pinned run');
+      },
+    });
+    const pinnedAsk = createTool({
+      id: 'ask',
+      description: 'Ask for approval',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        pinnedAnswers.push(context.agent.resumeData);
+        return { approved: context.agent.resumeData.approved };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-pinned-agent',
+      name: 'Resume Pinned Agent',
+      instructions: 'Ask for confirmation',
+      model: createSuspendingThenTextModel('ask', ['Approved']),
+      // The run starts on stored version v-pinned, whose tool asks for approval.
+      tools: { ask: pinnedAsk },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    // As the editor resolves a stored version: a fork carrying that version's tools.
+    vi.spyOn(host, 'resolveVersionedAgent').mockImplementation(async resolving => {
+      const fork = resolving.__fork();
+      fork.__setTools({ ask: pinnedAsk });
+      fork.__setRawConfig({ resolvedVersionId: 'v-pinned' });
+      fork.__markStoredVersionApplied();
+      return fork as typeof resolving;
+    });
+    try {
+      durable.__setRawConfig({ resolvedVersionId: 'v-pinned' });
+      const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      // A new version is published while the run is suspended; its tool takes a different answer.
+      durable.__setRawConfig({ resolvedVersionId: 'v-current' });
+      durable.__setTools({ ask: currentAsk });
+      durable.runRegistry.clear();
+      globalRunRegistry.delete(initial.runId);
+
+      // Valid for the current version, invalid for the pinned one that executes.
+      await expect(durable.resume(initial.runId, { confirmed: true }, { runId: initial.runId })).rejects.toMatchObject({
+        id: 'AGENT_RESUME_INVALID_DATA',
+      });
+      expect((await durable.listSuspendedRuns()).runs).toHaveLength(1);
+
+      const resumed = await (
+        await durable.resume(initial.runId, { approved: true }, { runId: initial.runId, closeOnSuspend: true })
+      ).output.getFullOutput();
+      expect(resumed.error).toBeUndefined();
+      expect(resumed.text).toBe('Approved');
+      expect(pinnedAnswers).toEqual([{ approved: true }]);
+    } finally {
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
+  // Technical: two resumes without a toolCallId both validated against call-1. The one that claimed the run
+  // second did so after the first had run on to call-2, and resumed call-2 with data meant for call-1.
+  it('two resumes of one suspension answer it once and leave the next suspension waiting', async () => {
+    const answered: string[] = [];
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        answered.push(context.agent.toolCallId);
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-stale-agent',
+      name: 'Resume Stale Agent',
+      instructions: 'Ask for confirmation',
+      model: createToolCallSequenceModel('ask', ['call-1', 'call-2'], 'Confirmed'),
+      tools: { ask },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+
+      const outcome = (attempt: Promise<{ output: { getFullOutput(): Promise<{ error?: unknown }> } }>) =>
+        attempt.then(
+          result => result.output.getFullOutput().then(output => output.error ?? 'answered'),
+          (error: unknown) => error,
+        );
+      const options = { runId: initial.runId, closeOnSuspend: true };
+      const outcomes = await Promise.all([
+        outcome(durable.resume(initial.runId, { confirmed: true }, options)),
+        outcome(durable.resume(initial.runId, { confirmed: false }, options)),
+      ]);
+
+      expect(answered).toEqual(['call-1']);
+      expect(outcomes).toContainEqual(expect.objectContaining({ id: 'AGENT_RESUME_ALREADY_CLAIMED' }));
+      const suspendedRuns = (await durable.listSuspendedRuns()).runs;
+      expect(suspendedRuns).toHaveLength(1);
+      expect(JSON.stringify(suspendedRuns[0])).toContain('call-2');
+    } finally {
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
+  // Technical: resumes of a run another cold resume was rebuilding waited for that resume without a bound, so
+  // a tool resolver that never answered held every later resume, even one whose caller had given up.
+  it.each(['abort', 'deadline'] as const)(
+    'a resume stops waiting on a stalled cold resume once its caller gives up (%s)',
+    async giveUp => {
+      const resolverStalled = deferred();
+      const stalledResolver = deferred();
+      const ask = createTool({
+        id: 'ask',
+        description: 'Ask for confirmation',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({}),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (_input, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+          return { confirmed: context.agent.resumeData.confirmed };
+        },
+      });
+      const agent = new Agent({
+        id: 'resume-stalled-agent',
+        name: 'Resume Stalled Agent',
+        instructions: 'Ask for confirmation',
+        model: createSuspendingThenTextModel('ask', ['Confirmed']),
+        tools: async ({ requestContext }) => {
+          if (requestContext.get('tenant') === 'stalled-caller') {
+            resolverStalled.resolve();
+            await stalledResolver.promise;
+          }
+          return { ask };
+        },
+      });
+      const pubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent, pubsub });
+      const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+      try {
+        const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+        durable.runRegistry.clear();
+        globalRunRegistry.delete(initial.runId);
+
+        const stalled = durable
+          .resume(
+            initial.runId,
+            { confirmed: true },
+            { runId: initial.runId, requestContext: new RequestContext([['tenant', 'stalled-caller']]) },
+          )
+          .catch(() => undefined);
+        await resolverStalled.promise;
+
+        const controller = new AbortController();
+        const retry = durable.resume(
+          initial.runId,
+          { confirmed: true },
+          {
+            runId: initial.runId,
+            abortSignal: controller.signal,
+            modelSettings: { timeout: { totalMs: giveUp === 'deadline' ? 200 : 60_000 } },
+          },
+        );
+        if (giveUp === 'abort') setTimeout(() => controller.abort(), 50);
+        const settled = await Promise.race([
+          retry.then(
+            () => 'resumed',
+            () => 'refused',
+          ),
+          new Promise(resolve => setTimeout(() => resolve('still waiting'), 3000)),
+        ]);
+        expect(settled).toBe('refused');
+
+        stalledResolver.resolve();
+        await stalled;
+      } finally {
+        stalledResolver.resolve();
+        await host.shutdown({ drainTimeout: 1000 });
+        await pubsub.close();
+      }
+    },
+  );
+
+  // Technical: a cold resume whose caller gave up while its tool resolver stalled kept preparing, and once the
+  // resolver answered it registered the run it had rebuilt for that caller over the one a later resume built.
+  it('a cold resume abandoned during a stalled resolver leaves later resumes the original context', async () => {
+    const seenTenants: unknown[] = [];
+    const resolverStalled = deferred();
+    const stalledResolver = deferred();
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        seenTenants.push(context.requestContext?.get('tenant'));
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-abandoned-agent',
+      name: 'Resume Abandoned Agent',
+      instructions: 'Ask for confirmation',
+      model: createToolCallSequenceModel('ask', ['call-1', 'call-2'], 'Confirmed'),
+      tools: async ({ requestContext }) => {
+        if (requestContext.get('tenant') === 'stalled-caller') {
+          resolverStalled.resolve();
+          await stalledResolver.promise;
+        }
+        return { ask };
+      },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', {
+        closeOnSuspend: true,
+        requestContext: new RequestContext([['tenant', 'acme']]),
+      });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      durable.runRegistry.clear();
+      globalRunRegistry.delete(initial.runId);
+
+      const controller = new AbortController();
+      const abandoned = durable.resume(
+        initial.runId,
+        { confirmed: true },
+        {
+          runId: initial.runId,
+          abortSignal: controller.signal,
+          requestContext: new RequestContext([['tenant', 'stalled-caller']]),
+        },
+      );
+      await resolverStalled.promise;
+      controller.abort();
+      await expect(abandoned).rejects.toBeDefined();
+
+      // A later caller resumes call-1 and the run suspends again on call-2.
+      const first = await (
+        await durable.resume(initial.runId, { confirmed: true }, { runId: initial.runId, closeOnSuspend: true })
+      ).output.getFullOutput();
+      expect(first.error).toBeUndefined();
+      // The abandoned preparation finishes now.
+      stalledResolver.resolve();
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const second = await (
+        await durable.resume(
+          initial.runId,
+          { confirmed: true },
+          { runId: initial.runId, requestContext: new RequestContext([['requestId', 'next']]) },
+        )
+      ).output.getFullOutput();
+      expect(second.error).toBeUndefined();
+      expect(second.text).toBe('Confirmed');
+      expect(seenTenants).toEqual(['acme', 'acme']);
+    } finally {
+      stalledResolver.resolve();
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+
+  // Technical: the warm preflight resolved the agent's tools again and checked their schema, while the run
+  // kept executing the tool it suspended in. A changed definition then rejected answers the suspended tool
+  // accepts. When this call's request rebuilds the tool, the rebuilt one executes and is the one to check.
+  it.each([false, true])(
+    'checks resume data against the tool that will execute (request context passed: %s)',
+    async passRequestContext => {
+      const answers: unknown[] = [];
+      const makeAsk = (version: 'v1' | 'v2') =>
+        createTool({
+          id: 'ask',
+          description: 'Ask for confirmation',
+          inputSchema: z.object({ action: z.string() }),
+          suspendSchema: z.object({}),
+          resumeSchema:
+            version === 'v1' ? z.object({ confirmed: z.boolean() }) : z.object({ choice: z.enum(['yes', 'no']) }),
+          execute: async (_input, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+            answers.push({ version, ...context.agent.resumeData });
+            return { ok: true };
+          },
+        });
+      let definition: 'v1' | 'v2' = 'v1';
+      const agent = new Agent({
+        id: 'resume-retained-tool-agent',
+        name: 'Resume Retained Tool Agent',
+        instructions: 'Ask for confirmation',
+        model: createSuspendingThenTextModel('ask', ['Confirmed']),
+        tools: () => ({ ask: makeAsk(definition) }),
+      });
+      const pubsub = new EventEmitterPubSub();
+      const durable = new AgentClass({ agent, pubsub });
+      const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+      try {
+        const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+        await drain(initial.output.fullStream);
+        await globalRunRegistry.get(initial.runId)?.workflowExecution;
+        // The tool's definition changes while the run is suspended.
+        definition = 'v2';
+
+        const options = {
+          runId: initial.runId,
+          closeOnSuspend: true,
+          ...(passRequestContext ? { requestContext: new RequestContext([['requestId', 'resume']]) } : {}),
+        };
+        const [executing, other] = passRequestContext
+          ? [{ choice: 'yes' }, { confirmed: true }]
+          : [{ confirmed: true }, { choice: 'yes' }];
+        // An answer only the tool that will not execute accepts is refused.
+        await expect(durable.resume(initial.runId, other, options)).rejects.toMatchObject({
+          id: 'AGENT_RESUME_INVALID_DATA',
+        });
+        const resumed = await (await durable.resume(initial.runId, executing, options)).output.getFullOutput();
+        expect(resumed.error).toBeUndefined();
+        expect(resumed.text).toBe('Confirmed');
+        expect(answers).toEqual([{ version: passRequestContext ? 'v2' : 'v1', ...executing }]);
       } finally {
         await host.shutdown({ drainTimeout: 1000 });
         await pubsub.close();

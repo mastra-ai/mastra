@@ -22,6 +22,37 @@ export function registerToolOutputValidationSchema(tool: object, schema: unknown
   });
 }
 
+const TOOL_RESUME_VALIDATION_SCHEMA: unique symbol = Symbol.for('mastra.tool.resumeValidationSchema');
+
+type ToolWithResumeSchema = {
+  [TOOL_RESUME_VALIDATION_SCHEMA]?: StandardSchemaWithJSON;
+};
+
+/**
+ * Keeps the schema a built tool validates resume data against on the built tool itself, so code
+ * holding only the executable tool (a durable run's registry entry) can validate an answer before
+ * resuming with it. Enumerable so tool wrappers that copy the tool keep it.
+ */
+export function registerToolResumeValidationSchema(
+  tool: object,
+  schema: StandardSchemaWithJSON | null | undefined,
+): void {
+  // The same check validateToolInput() makes before validating.
+  if (!schema || !('~standard' in schema)) return;
+
+  Object.defineProperty(tool, TOOL_RESUME_VALIDATION_SCHEMA, {
+    configurable: true,
+    enumerable: true,
+    value: schema,
+  });
+}
+
+/** The schema a built `tool` validates resume data against when it executes, if it has one. */
+export function resolveToolResumeValidationSchema(tool: object): StandardSchemaWithJSON | undefined {
+  // Only registerToolResumeValidationSchema() writes this key, always with a schema.
+  return (tool as ToolWithResumeSchema)[TOOL_RESUME_VALIDATION_SCHEMA];
+}
+
 export function resolveToolOutputValidationSchema(tool: ToolWithOutputSchema): StandardSchemaWithJSON | undefined {
   const outputSchema =
     typeof tool.outputSchema === 'function' && !isStandardSchemaWithJSON(tool.outputSchema)
