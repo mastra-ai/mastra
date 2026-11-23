@@ -1393,7 +1393,7 @@ export function KnowledgePageExplorer({
           <ActionRow
             className={flush && !floatingToolbar ? 'shrink-0 border-b border-surface-rim px-3 py-2' : undefined}
           >
-            <ActionRow.Start className={floatingToolbar ? 'min-w-0 flex-nowrap *:pointer-events-auto' : undefined}>
+            <ActionRow.Start className={floatingToolbar ? 'min-w-0 *:pointer-events-auto' : undefined}>
               <Tabs<KnowledgeExplorerView>
                 ref={viewTabs}
                 value={tabValue}
