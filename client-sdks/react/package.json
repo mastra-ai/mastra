@@ -72,7 +72,8 @@
     "build-storybook": "storybook build"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",

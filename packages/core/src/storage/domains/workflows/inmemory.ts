@@ -30,6 +30,7 @@ import {
   stateBaseOf,
   stateColumnsWrite,
   summarizeStepResult,
+  unusedStateEntries,
 } from './journal';
 import type {
   StateRef,
@@ -663,6 +664,27 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return cloneRunData(steps as Record<string, StepResult<any, any, any, any>>);
   }
 
+  /** One method body with no awaits, so no write lands between the header and the step read. */
+  async loadWorkflowRunStep({
+    workflowName,
+    runId,
+    stepId,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+  }): Promise<(StoredWorkflowRunHeader & { steps: Record<string, StepResult<any, any, any, any>> }) | null> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const record = this.db.workflowRunHeaders.get(key);
+    if (!record) return null;
+    const steps = Object.fromEntries(latestStepResults(this.db.workflowRunEntries.get(key) ?? [], new Set([stepId])));
+    return {
+      ...storedHeader(record),
+      ...(record.resourceId !== undefined && { resourceId: record.resourceId }),
+      steps: cloneRunData(steps as Record<string, StepResult<any, any, any, any>>),
+    };
+  }
+
   /**
    * Patches a storage v2 run's header. With `opts.expectedStatus`, only when the stored status
    * matches. Returns the updated header, or undefined when the run isn't stored or the status
@@ -827,6 +849,41 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return { seq };
   }
 
+  async dropUnusedStateEntries({
+    workflowName,
+    runId,
+    expectedLastSeq,
+    expectedRunToken,
+    protectDraftSeqs,
+  }: {
+    workflowName: string;
+    runId: string;
+    expectedLastSeq: number;
+    expectedRunToken?: string;
+    protectDraftSeqs?: readonly number[];
+  }): Promise<void> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const record = this.db.workflowRunHeaders.get(key);
+    if (!record || record.lastSeq !== expectedLastSeq) return;
+    if (expectedRunToken !== undefined && record.runToken !== expectedRunToken) return;
+    // A protected draft counts as referenced: its child's linking write may not have landed yet.
+    const refs: StateVersion[] = (protectDraftSeqs ?? []).map(seq => ({ seq, draft: true }));
+    for (const entries of this.db.workflowRunEntries.values()) {
+      for (const entry of entries) {
+        if (entry.kind === 'state-base' && entry.base.workflowName === workflowName && entry.base.runId === runId) {
+          refs.push(entry.base);
+        }
+      }
+    }
+    const entries = this.db.workflowRunEntries.get(key) ?? [];
+    const unused = new Set(unusedStateEntries(entries, record.startStateSeq, refs));
+    if (unused.size)
+      this.db.workflowRunEntries.set(
+        key,
+        entries.filter(entry => !unused.has(entry.seq)),
+      );
+  }
+
   /**
    * Writes the header (or with none, merges `requestContext` into the stored one) and one entry per
    * step and step patch, then the state, state base or state patch. A checkpoint first drops the old
@@ -874,16 +931,35 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const now = new Date();
     let seq = existing?.lastSeq ?? 0;
     const previous = this.db.workflowRunEntries.get(key) ?? [];
-    const kept: WorkflowRunEntry[] = existing?.stateShared
-      ? previous.filter(entry => entry.kind !== 'step' && entry.kind !== 'step-patch')
-      : [];
+    // An appended step entry replaces the step's earlier entries, so they are deleted; it keeps the
+    // step's first-write position as `firstSeq`.
+    const firstSeqs = new Map<string, number>();
+    const kept: WorkflowRunEntry[] = append
+      ? previous.filter(entry => {
+          if ((entry.kind !== 'step' && entry.kind !== 'step-patch') || !Object.hasOwn(steps, entry.stepId))
+            return true;
+          if (entry.kind === 'step') {
+            firstSeqs.set(entry.stepId, Math.min(entry.firstSeq ?? entry.seq, firstSeqs.get(entry.stepId) ?? Infinity));
+          }
+          return false;
+        })
+      : existing?.stateShared
+        ? previous.filter(entry => entry.kind !== 'step' && entry.kind !== 'step-patch')
+        : [];
     // Build the new entries, the header and the state columns before storing any of them: cloning a
     // step result or serializing the state or a patch can throw, and a throw must not leave the
     // journal holding entries the header doesn't count, whose sequence numbers the next append
     // would hand out again.
     const added: WorkflowRunEntry[] = [];
     for (const [stepId, result] of Object.entries(steps)) {
-      added.push({ seq: ++seq, kind: 'step', stepId, result: cloneRunData(result) });
+      const firstSeq = firstSeqs.get(stepId);
+      added.push({
+        seq: ++seq,
+        kind: 'step',
+        stepId,
+        result: cloneRunData(result),
+        ...(firstSeq !== undefined && { firstSeq }),
+      });
     }
     for (const [stepId, ops] of Object.entries(stepPatches ?? {})) {
       added.push({ seq: ++seq, kind: 'step-patch', stepId, ops: cloneRunData(ops) });
@@ -928,11 +1004,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       updatedAt: now,
       ...stateColumns,
     };
-    if (append) previous.push(...added);
-    else kept.push(...added);
+    kept.push(...added);
     if (sharedBase) sharedBase.stateShared = true;
     this.db.workflowRunHeaders.set(key, record);
-    this.db.workflowRunEntries.set(key, append ? previous : kept);
+    this.db.workflowRunEntries.set(key, kept);
     return record;
   }
 

@@ -145,6 +145,12 @@ export const mcp = new MCPClient<MCPServers>({
 })
 ```
 
+The command loads your client module with `tsx` and converts schemas with `json-schema-to-typescript-lite`. `@mastra/mcp` declares both as optional peer dependencies, so install them in your project first. Without them, the command exits before loading any module and prints the install command for npm, pnpm, Yarn, and Bun:
+
+```bash npm2yarn
+npm install --save-dev tsx@4 json-schema-to-typescript-lite@15
+```
+
 Set the environment variables and authentication credentials your module needs, then run this command from your project root:
 
 ```bash npm2yarn

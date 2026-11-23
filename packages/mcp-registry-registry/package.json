@@ -8,6 +8,7 @@
   "bin": "dist/stdio.js",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "README.md"
   ],
   "exports": {

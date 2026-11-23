@@ -607,6 +607,45 @@ describe('RunJournal.getStepResultAsync', () => {
   });
 });
 
+describe('RunJournal close-time state cleanup', () => {
+  const run = { workflowName: 'wf', runId: 'r' };
+
+  it('keeps a draft handed to a nested run that links it only after the parent closed', async () => {
+    // A parent can close while a child it handed a draft to hasn't written its state-base yet:
+    // a parallel arm fails, the engine bails and closes the journal, and the abandoned arm's
+    // nested-run creation is still in flight. The cleanup must not collect that draft; the child
+    // links or dies, and the next drive's cleanup judges the draft by its real references.
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const journal = new RunJournal({ store: memory, ...run });
+    await journal.write({ snapshot: snapshot({ input: {}, a: ok(1) }, 'running', { x: 1 }) });
+    const base = await journal.baseFor({ x: 1, y: 2 });
+    expect(base).toBeDefined();
+
+    const gcDone = new Promise<void>(resolve => {
+      const original = memory.dropUnusedStateEntries.bind(memory);
+      vi.spyOn(memory, 'dropUnusedStateEntries').mockImplementation(async args => {
+        try {
+          return await original(args);
+        } finally {
+          resolve();
+        }
+      });
+    });
+    journal.close();
+    await gcDone;
+
+    // The child's first write names the draft, as a nested v2 run's pending snapshot does.
+    await memory.writeWorkflowRunCheckpoint({
+      workflowName: 'wf',
+      runId: 'child',
+      header: { runId: 'child', status: 'pending' } as any,
+      steps: {},
+      stateBase: base!.ref,
+    });
+    expect(await memory.loadWorkflowRunState({ workflowName: 'wf', runId: 'child' })).toEqual({ x: 1, y: 2 });
+  });
+});
+
 describe('RunJournal.settledLastSeq', () => {
   const run = { workflowName: 'wf', runId: 'r' };
   const storedLastSeq = async (memory: WorkflowsInMemory) => (await memory.loadWorkflowRunHeader(run))!.lastSeq;

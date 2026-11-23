@@ -19,7 +19,8 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "scripts": {
     "build": "tsdown --silent --config tsdown.config.ts",
