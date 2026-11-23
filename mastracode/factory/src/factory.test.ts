@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { tools as connectTools } from '@mastra/connect';
@@ -35,6 +36,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { MCPClient, MCPServer } from '@mastra/mcp';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 import { defineBoard } from './boards/index.js';
@@ -2737,6 +2739,53 @@ describe('MastraFactory.prepare', () => {
     // `/auth/me` is ungated, so it authenticates for itself.
     const me = await app.request('http://localhost/auth/me', { headers: { Authorization: `Bearer ${mcpTokens[0]}` } });
     expect(await me.json()).toMatchObject({ authenticated: false });
+  });
+
+  it('with WorkOS, refuses tokens issued for any other resource', async () => {
+    // WorkOS verifies a bearer's signature against its JWKS but never its audience.
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' }] };
+    const jwksServer = createServer((_req, res) =>
+      res.setHeader('content-type', 'application/json').end(JSON.stringify(jwks)),
+    );
+    jwksServer.listen(0, '127.0.0.1');
+    await once(jwksServer, 'listening');
+    onTestFinished(() => void jwksServer.close());
+    const provider = new MastraAuthWorkos({
+      apiKey: 'sk_test',
+      clientId: 'client_test',
+      redirectUri: 'https://factory.example.com/auth/callback',
+      trustJwtClaims: true,
+    });
+    vi.spyOn(provider.getWorkOS().userManagement, 'getJwksUrl').mockReturnValue(
+      `http://127.0.0.1:${(jwksServer.address() as AddressInfo).port}/jwks`,
+    );
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: provider,
+      publicUrl: 'https://factory.example.com',
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const sign = (audience?: string) => {
+      const jwt = new SignJWT({ sub: 'user_1', org_id: 'org_1' })
+        .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+        .setIssuer('https://api.workos.com')
+        .setExpirationTime('5m');
+      return (audience ? jwt.setAudience(audience) : jwt).sign(privateKey);
+    };
+    const status = async (token: string) =>
+      (await app.request('http://localhost/api/agents', { headers: { Authorization: `Bearer ${token}` } })).status;
+
+    expect(await status(await sign())).toBe(200);
+    expect(await status(await sign('https://factory.example.com/mcp'))).toBe(401);
+    expect(await status(await sign('https://other.factory.mastra.cloud/mcp'))).toBe(401);
+    expect(await status(await sign('https://platform.mastra.ai/v1/mcp'))).toBe(401);
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {

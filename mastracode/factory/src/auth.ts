@@ -288,23 +288,33 @@ export interface FactoryAuthOptions {
    * `aud` names it) are refused everywhere else.
    */
   mcpResource?: string;
+  /**
+   * Refuse every bearer token that carries an `aud` claim. Set for providers
+   * that verify bearers by signature and issuer only (WorkOS, Platform): their
+   * logins carry no audience, so a token with one was issued for some other
+   * resource — another Factory's `/mcp`, Platform's MCP server — and must not
+   * authenticate here.
+   */
+  refuseAudienceBoundTokens?: boolean;
 }
 
 /**
- * Whether a bearer token's `aud` names the MCP resource. Such a token is for
- * `/mcp` alone, but a provider that verifies bearers by signature and issuer
- * only (self-managed WorkOS) would accept it on every route. The claims are
- * read unverified, which is safe because a match only ever refuses.
+ * Whether a bearer token was issued for a resource other than the Factory app:
+ * its `aud` names the MCP resource or, with `refuseAudienceBoundTokens`, it has
+ * any audience at all. The claims are read unverified, which is safe because a
+ * match only ever refuses.
  */
-function isMcpAccessToken(token: string, mcpResource: string | undefined): boolean {
-  const payload = mcpResource ? token.split('.')[1] : undefined;
+function isResourceBoundToken(token: string, options: FactoryAuthOptions): boolean {
+  const payload = options.mcpResource || options.refuseAudienceBoundTokens ? token.split('.')[1] : undefined;
   if (!payload) return false;
+  let aud: unknown;
   try {
-    const { aud } = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { aud?: unknown };
-    return aud === mcpResource || (Array.isArray(aud) && aud.includes(mcpResource));
+    ({ aud } = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { aud?: unknown });
   } catch {
     return false;
   }
+  if (options.refuseAudienceBoundTokens && aud !== undefined) return true;
+  return aud === options.mcpResource || (Array.isArray(aud) && aud.includes(options.mcpResource));
 }
 
 /**
@@ -317,7 +327,7 @@ async function authenticateRequest(
   raw: Request,
   options: FactoryAuthOptions,
 ): Promise<FactoryAuthUser | null> {
-  if (isMcpAccessToken(token, options.mcpResource)) return null;
+  if (isResourceBoundToken(token, options)) return null;
   try {
     const result = await provider.authenticateToken(token, raw);
     return toFactoryAuthUser(result);

@@ -928,8 +928,12 @@ export class MastraFactory {
     const deploymentModelProviders = resolveDeploymentModelProviders(this.#config.deploymentModelProviders);
     // One RouteAuth seam per boot, closed over the resolved provider. Every
     // factory route module receives this handle — no service locator.
-    // Tokens issued for the MCP endpoint are refused on every other route.
-    const authOptions = { mcpResource: factoryMcpResource(publicOrigin) };
+    // Tokens issued for the MCP endpoint are refused on every other route, and
+    // so is any audience-bound token where the provider doesn't check `aud`.
+    const authOptions = {
+      mcpResource: factoryMcpResource(publicOrigin),
+      refuseAudienceBoundTokens: isWorkOSAuth(auth) || auth instanceof MastraAuthStudio,
+    };
     const routeAuth = createFactoryRouteAuth(auth, authOptions);
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
