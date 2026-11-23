@@ -1324,8 +1324,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
             }
 
-            // A recovery that finds this step saved ends its own spans with the same outcome.
-            return { ...finalOutput, tracingTermination: termination };
+            // A recovery that finds this step saved ends its own spans with the same outcome and
+            // republishes FINISH with the same stop cause.
+            return { ...finalOutput, tracingTermination: termination, ...(stopCause && { stopCause }) };
           },
           { id: MAP_FINAL_OUTPUT_STEP_ID },
         )

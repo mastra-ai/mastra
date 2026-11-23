@@ -496,6 +496,28 @@ describe('ChatProvider', () => {
       expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
     });
 
+    it('shows no maxSteps warning after a hook-requested feedback turn uses the last step', async () => {
+      const chunks = await runAgent({
+        maxSteps: 2,
+        onIterationComplete: ({ iteration }) =>
+          iteration === 1 ? { continue: false, feedback: 'Wait for the user to choose a style.' } : undefined,
+      });
+      expectToolCallFinish(chunks, 2);
+
+      await renderRun({ maxSteps: 2, chunks });
+
+      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
+    });
+
+    it('warns when the agent exhausts its implicit five-step budget', async () => {
+      const chunks = await runAgent({});
+      expectToolCallFinish(chunks, 5);
+
+      await renderRun({ maxSteps: 5, chunks });
+
+      expect(screen.queryByText(MAX_STEPS_WARNING)).not.toBeNull();
+    });
+
     it('shows no maxSteps warning when the run stopped on a client tool on its only step', async () => {
       const chunks = await runAgent({ maxSteps: 1, clientTools: { askQuestion: askQuestionInBrowser } });
       expectToolCallFinish(chunks, 1);

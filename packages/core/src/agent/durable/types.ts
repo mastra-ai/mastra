@@ -646,6 +646,8 @@ export interface DurableAgenticLoopOutput {
   state: SerializableDurableState;
   /** The outcome the run's spans ended with; a recovery of the saved run ends its own spans with it. */
   tracingTermination?: SpanTermination;
+  /** Why the loop stopped, as on the FINISH this step published; a recovery that republishes FINISH reads it. */
+  stopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
 }
 
 export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';

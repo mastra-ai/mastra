@@ -592,6 +592,18 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 return await condition({ steps });
               } catch (error) {
                 const originalError = getErrorFromUnknown(error);
+                // On the last allowed step the run stops either way; the condition only decides
+                // whether the caller or the budget gets the credit. Its failure must not throw away
+                // the step that already completed, so the budget takes the credit.
+                if (!underMaxSteps) {
+                  mastra
+                    ?.getLogger?.()
+                    ?.warn('A stopWhen condition failed after the step budget ran out; the run stops on maxSteps', {
+                      runId: state.runId,
+                      error: originalError,
+                    });
+                  return false;
+                }
                 throw new MastraError(
                   {
                     id: DURABLE_STOP_WHEN_ERROR_ID,

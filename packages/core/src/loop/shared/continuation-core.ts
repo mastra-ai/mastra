@@ -27,35 +27,68 @@ export function markStepBudgetCondition<C extends StopCondition>(condition: C): 
   return condition;
 }
 
-/** Evaluates every stop condition once and reports which kinds matched. */
-async function evaluateStopWhen(
-  stopWhen: NonNullable<LoopOptions['stopWhen']>,
-  steps: unknown[],
-): Promise<{ matched: boolean; callerConditionMatched: boolean }> {
+interface StopWhenEvaluation {
+  matched: boolean;
+  /** A caller's own condition matched, as opposed to only the marked `maxSteps` cap. */
+  callerConditionMatched: boolean;
+}
+
+/**
+ * Evaluates every stop condition once and reports which kinds matched.
+ *
+ * Once the step budget is spent the run stops whatever the conditions say; they
+ * only decide whether the caller or the budget gets the credit. A caller's
+ * condition that throws there must not fail a run whose last step already
+ * completed, so the failure is logged and the condition counts as unmatched. A
+ * condition that throws while the run could still continue fails the run, as
+ * before: its answer decides whether another model call happens.
+ */
+async function evaluateStopWhen({
+  stopWhen,
+  steps,
+  underMaxSteps,
+  logger,
+}: {
+  stopWhen: NonNullable<LoopOptions['stopWhen']>;
+  steps: unknown[];
+  underMaxSteps: boolean;
+  logger?: IMastraLogger;
+}): Promise<StopWhenEvaluation> {
   const conditions: StopCondition[] = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
   // Cast steps to any for v5/v6 StopCondition compatibility — the step
   // shapes differ slightly (rawFinishReason, finishReason format) but are
   // compatible at runtime for stop condition evaluation.
   const stepsForConditions = steps as any;
-  const results = await Promise.all(conditions.map(condition => condition({ steps: stepsForConditions })));
+  const settled = await Promise.allSettled(conditions.map(async condition => condition({ steps: stepsForConditions })));
+  const matchedAt = (index: number) => {
+    const result = settled[index];
+    return result?.status === 'fulfilled' && Boolean(result.value);
+  };
+  const budgetSpent =
+    !underMaxSteps || conditions.some((condition, index) => stepBudgetConditions.has(condition) && matchedAt(index));
+  const rejection = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejection) {
+    if (!budgetSpent) throw rejection.reason;
+    logger?.warn('A stopWhen condition failed after the step budget ran out; the run stops on maxSteps', {
+      error: rejection.reason,
+    });
+  }
   return {
-    matched: results.some(Boolean),
+    matched: conditions.some((_, index) => matchedAt(index)),
     callerConditionMatched: conditions.some(
-      (condition, index) => results[index] && !stepBudgetConditions.has(condition),
+      (condition, index) => matchedAt(index) && !stepBudgetConditions.has(condition),
     ),
   };
 }
 
 /**
- * The cause of a matched stopWhen. Only the `maxSteps` cap matching on the last
- * allowed step means the budget ran out; a caller's own condition that matched
- * there stopped the run on purpose, and a larger `maxSteps` would not change that.
+ * The cause of a matched stopWhen. Only the marked `maxSteps` cap matching means
+ * the budget ran out, whether the caller set `maxSteps` or the default cap
+ * applies; a caller's own condition that matched stopped the run on purpose, and
+ * a larger `maxSteps` would not change that.
  */
-function stopConditionCause(
-  evaluation: { callerConditionMatched: boolean },
-  underMaxSteps: boolean,
-): ContinuationStopCause {
-  return underMaxSteps || evaluation.callerConditionMatched ? 'stop_condition' : 'max_steps';
+function stopConditionCause(evaluation: StopWhenEvaluation): ContinuationStopCause {
+  return evaluation.callerConditionMatched ? 'stop_condition' : 'max_steps';
 }
 
 /** Decision returned by {@link decideContinuation}, projected back onto engine state by the glue. */
@@ -206,10 +239,15 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
   // still run on the last allowed step: the run stops there either way, but a
   // match says the caller ended it, not the step budget (#29612).
   if (shouldContinue && !hasFinishedSteps && deps.stopWhen && deps.steps.length > 0) {
-    const evaluation = await evaluateStopWhen(deps.stopWhen, deps.steps);
+    const evaluation = await evaluateStopWhen({
+      stopWhen: deps.stopWhen,
+      steps: deps.steps,
+      underMaxSteps: deps.underMaxSteps,
+      logger: deps.logger,
+    });
     if (evaluation.matched) {
       hasFinishedSteps = true;
-      stopCause = stopConditionCause(evaluation, deps.underMaxSteps);
+      stopCause = stopConditionCause(evaluation);
     }
   }
 
@@ -313,12 +351,19 @@ async function decideContinuationDefault(
   // effects (logging, metrics, external calls) are behavior users shipped
   // against. Durable's gate exists only for its settled-record constraint.
   if (shouldContinue && deps.stopWhen && deps.steps.length > 0) {
-    const evaluation = await evaluateStopWhen(deps.stopWhen, deps.steps);
+    const evaluation = await evaluateStopWhen({
+      stopWhen: deps.stopWhen,
+      steps: deps.steps,
+      underMaxSteps: deps.underMaxSteps,
+      logger: deps.logger,
+    });
     if (evaluation.matched) {
+      // `maxSteps` (or the default cap) arrives here as a marked stop condition
+      // that matches on the last allowed step, so only a caller's own match
+      // counts as stopWhen there. A completed feedback turn keeps its cause: the
+      // hook asked for exactly that one turn, even when it was the last allowed.
+      if (!hasFinishedSteps) stopCause = stopConditionCause(evaluation);
       hasFinishedSteps = true;
-      // `maxSteps` arrives here as a marked stop condition that matches on the
-      // last allowed step, so only a caller's own match counts as stopWhen there.
-      stopCause = stopConditionCause(evaluation, deps.underMaxSteps);
     }
   }
 

@@ -162,4 +162,57 @@ describeForAllEngines('AIMock scenario: the finish chunk says why the run stoppe
     it.fails.each(failsOnEngine)(streamName, onStream);
     it.fails.each(failsOnEngine)(threadName, onThreadSubscription);
   }
+
+  const toolCallEveryTurn = (turns: number) => (llm: any) => {
+    for (let turn = 0; turn < turns; turn++) {
+      llm.on(
+        { endpoint: 'chat', sequenceIndex: turn },
+        { toolCalls: [{ id: `lookup-${turn}`, name: 'lookup', arguments: { query: `poster style ${turn}` } }] },
+      );
+    }
+  };
+
+  // Technical: the default loop also receives maxSteps as a stop condition, which matched on the
+  // feedback turn and replaced its cause with max_steps. The hook asked for exactly one more
+  // turn, so the run ended as requested, not because the budget ran out. (#29612)
+  // Pinned with it.fails on Inngest until its loop runs onIterationComplete; it reports max_steps.
+  const itUnlessInngest = engine === 'inngest' ? it.fails : it;
+  itUnlessInngest('says the feedback turn ended the run when that turn uses the last allowed step', async () => {
+    const { chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Make me a poster',
+      tools: { lookup },
+      maxSteps: 2,
+      collectChunks: true,
+      onIterationComplete: ({ iteration }) =>
+        iteration === 1 ? { continue: false, feedback: 'Wait for the user to pick a style.' } : undefined,
+      fixtures: toolCallEveryTurn(2),
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[1]?.body)).toContain('Wait for the user to pick a style.');
+    const finish = chunks?.find((chunk): chunk is FinishChunk => chunk.type === 'finish');
+    expect(finish?.payload.stepResult.reason).toBe('tool-calls');
+    expect(finish?.payload.stopCause).toBe('feedback_complete');
+  });
+
+  // Technical: with neither maxSteps nor stopWhen the default loop caps the run at five steps
+  // through an unmarked stepCountIs(5), so hitting it reported stop_condition and Studio
+  // stayed quiet about the exhausted budget. (#29612)
+  it('says the run ran out of steps when it hits the default five-step cap', async () => {
+    const { chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Make me a poster',
+      tools: { lookup },
+      collectChunks: true,
+      fixtures: toolCallEveryTurn(5),
+    });
+
+    expect(requests).toHaveLength(5);
+    const finish = chunks?.find((chunk): chunk is FinishChunk => chunk.type === 'finish');
+    expect(finish?.payload.stepResult.reason).toBe('tool-calls');
+    expect(finish?.payload.stopCause).toBe('max_steps');
+  });
 });
