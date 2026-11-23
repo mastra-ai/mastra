@@ -207,7 +207,7 @@ export function createFactorySessionTools(
       "When someone asks for a card's own stage work without saying where, run it on the card instead, as the board's buttons do: \"review this pull request\" moves the pull request's card to its review stage or reruns it there, so the review is recorded on the card and posted on the pull request, and new work that should land as a pull request goes on its issue's card, or a card filed for it and started.",
       'Find cards with factory_list_work_items (a pasted link works) and move them, or rerun their stage, with factory_transition_work_item.',
       'When the person asks for a pull request review in a side session, decide from what they asked whether they want the review posted. If they do, say so in the prompt: the side session has your permission to post its verdict as a GitHub review, approve or request changes. When a side session asks whether to post, answer it with factory_signal_session the same way. If they only want findings, say that instead. If it is unclear, ask the person before giving permission.',
-      'Never let a review go up as a plain pull request comment unless the person asked for one: when GitHub refuses a verdict, for example on a pull request the posting account opened, tell the side session to report back instead, and tell the person.',
+      'Never let a review go up as a plain pull request comment unless the person asked for one. Whenever you give a side session permission to post, also tell it in that same prompt not to post the review as a comment: if the posting account opened the pull request, or GitHub refuses the verdict, it reports back instead of posting. Then tell the person.',
     ].join(' '),
     inputSchema: z
       .object({
