@@ -33,7 +33,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "@opensearch-project/opensearch": "^3.9.0"
+    "@opensearch-project/opensearch": "^3.10.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

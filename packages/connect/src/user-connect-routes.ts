@@ -533,6 +533,10 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
             // which verifies the caller's identity against the pending row
             // immediately before OAuth entry.
             launchUrl: `${basePath}/connections/${encodeURIComponent(session.connectionId)}/launch`,
+            // Host the browser's connect SDK must call with the token the
+            // launch gate releases (self-hosted Nango). Null on older
+            // platforms, where the SDK keeps its default host.
+            apiBaseUrl: session.apiBaseUrl ?? null,
             expiresAt: session.expiresAt,
           },
           201,

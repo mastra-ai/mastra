@@ -669,7 +669,9 @@ export abstract class MemoryStorage extends StorageDomain {
    * The `tokenCount` in input is the processor-computed token count for the combined content.
    * Buffered observation chunks and buffering state move to the new generation, as in
    * `createReflectionGeneration`. If `currentRecord` was superseded, nothing is created and
-   * the head is returned.
+   * the head is returned. If the stored buffered reflection or reflected line count differs from
+   * `currentRecord`'s (another writer extended the buffer), nothing is created and the stored
+   * record is returned.
    */
   async swapBufferedReflectionToActive(
     _input: SwapBufferedReflectionToActiveInput,

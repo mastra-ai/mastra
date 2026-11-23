@@ -29,7 +29,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.31.0",
+    "@lancedb/lancedb": "^0.41.0",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
