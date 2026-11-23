@@ -225,7 +225,7 @@ overrides:
   which-typed-array: npm:@socketregistry/which-typed-array@^1.0.9
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1.0.25
   undici@<8.12.4: 8.12.4
-  '@qdrant/js-client-rest>undici': 6.29.1
+  '@qdrant/js-client-rest>undici': 7.30.2
   yargs@<18.1.0: 18.2.0
   raw-body@<4.0.0: 4.0.0
   protobufjs@<8.8.0: 8.8.0
@@ -31901,9 +31901,9 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@6.29.1:
-    resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
-    engines: {node: '>=18.17'}
+  undici@7.30.2:
+    resolution: {integrity: sha512-mLyPQnHwUxaM/rideoK/+KL8DaAJLRl4aBCfmX444aCSLnIaomqPLtNRe2jdCYcsk5wZzXrDIQC8ZeYNRAYyIA==}
+    engines: {node: '>=20.18.1'}
 
   undici@8.12.4:
     resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
@@ -43029,7 +43029,7 @@ snapshots:
     dependencies:
       '@qdrant/openapi-typescript-fetch': 1.2.6
       typescript: 7.0.2
-      undici: 6.29.1
+      undici: 7.30.2
 
   '@qdrant/openapi-typescript-fetch@1.2.6': {}
 
@@ -57860,7 +57860,7 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@6.29.1: {}
+  undici@7.30.2: {}
 
   undici@8.12.4: {}
 
