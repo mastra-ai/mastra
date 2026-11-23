@@ -177,7 +177,8 @@ const dataListScrollbarStyles = [
 
 const dataListVariantClasses: Record<DataListVariant, string> = {
   default: raisedSurfaceStyle,
-  light: '',
+  // No panel, so rows rest on the page and only show on hover.
+  light: '[--row:var(--background)]',
 };
 
 // The sticky header reads this so it stays opaque while scrolling: the panel
