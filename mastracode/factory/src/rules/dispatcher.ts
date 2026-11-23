@@ -1691,7 +1691,7 @@ export class FactoryDecisionDispatcher {
             (await this.#decisionOvertaken(record, decision.role));
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
-          await this.#waitForOpenRun(session, binding, 'Factory skill run');
+          await this.#waitForOpenRun(session, binding, 'Factory skill run', decision.startsAfterOwnMove === true);
           if (await this.#roleSuperseded(record, decision.role)) throw new FactoryDecisionSuperseded();
           const activeBinding = await this.#requireBinding(record, decision.role);
           if (activeBinding.id !== binding.id) {
@@ -3163,8 +3163,18 @@ export class FactoryDecisionDispatcher {
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
   }
 
-  /** Waits for the run in flight on `binding` to end, so a kickoff never overlaps it. */
-  async #waitForOpenRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, label: string) {
+  /**
+   * Waits for the run in flight on `binding` to end, so a kickoff never overlaps it. With
+   * `afterOwnMove`, a run live here on the binding's thread is waited on whoever started it: the
+   * agent that moved the card may still be running under the role it had before the move, with
+   * that role's tools, and the next phase's kickoff must start a fresh run with its own.
+   */
+  async #waitForOpenRun(
+    session: BoundDispatcherSession,
+    binding: FactoryRunBindingRecord,
+    label: string,
+    afterOwnMove: boolean,
+  ) {
     const runStillActive = () =>
       this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
     // Only a *live* run on this binding can be duplicated by a second
@@ -3185,8 +3195,9 @@ export class FactoryDecisionDispatcher {
       });
       try {
         const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
-        if (open.length === 0) break;
-        if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
+        const waitsOnLiveRun = afterOwnMove && runStillActive();
+        if (open.length === 0 && !waitsOnLiveRun) break;
+        if (!waitsOnLiveRun && open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
           throw new FactoryDispatchError(
             'session_unavailable',
             `Factory binding ${binding.id} has a run in flight on another dispatcher.`,

@@ -1,0 +1,13 @@
+Compatible with the OpenAI Audio API. List transcription models with [`/v1/models`](/docs/mastra-platform/gateway/api/models). Each transcription model's `endpoints` includes `transcription`.
+
+Send one audio file as multipart form data:
+
+```bash
+curl https://gateway-api.mastra.ai/v1/audio/transcriptions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -F model="deepgram/nova-3" \
+  -F file="@meeting.mp3"
+```
+
+- Files can be up to 8 MiB in MP3, MP4, M4A, WAV, WebM, OGG, or FLAC format.
+- The response is a JSON transcript. `response_format` must be `json` if set.

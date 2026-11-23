@@ -26,11 +26,6 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -53,6 +48,11 @@
       }
     ],
     "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }

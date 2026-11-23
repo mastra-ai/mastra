@@ -103,6 +103,13 @@ const processor = new WorkingMemory({
             isOptional: true,
           },
           {
+            name: 'instructionProvider',
+            type: '{ getWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string | undefined }',
+            description:
+              "Renders the working memory instruction. `args.kind` is 'tool', 'vnext', or 'read-only', and `args` also carries the template and the stored data, plus `autoUpdated` for 'read-only'. Return `undefined` to use the built-in instruction, or an empty string to add no instruction. Memory passes itself, so a `Memory` subclass that overrides `getWorkingMemoryToolInstruction`, `getReadOnlyWorkingMemoryInstruction`, or `__experimental_getWorkingMemoryToolInstructionVNext` changes what agents receive.",
+            isOptional: true,
+          },
+          {
             name: 'logger',
             type: 'IMastraLogger',
             description: 'Optional logger instance for structured logging',
@@ -214,7 +221,7 @@ const processor = new WorkingMemory({
    - Thread metadata (`scope: 'thread'`)
    - Resource record (`scope: 'resource'`)
 1. Resolves the template (from provider, options, or default)
-1. Generates system instructions based on mode:
+1. Asks `instructionProvider` for the instruction, if set. When there is no provider or it returns `undefined`, generates the built-in instruction based on mode:
    - **Normal mode**: Includes guidelines for storing and updating information, along with the template structure and current data
    - **Read-only mode** (`readOnly: true`): Includes only the current data as context without update instructions
 1. Adds the instruction as a system message with `source: 'memory'` tag

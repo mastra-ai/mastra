@@ -62,7 +62,7 @@ export function ComposerPreview({
         submitMessage();
       }}
     >
-      <ComposerRing tone={tone} busy={running}>
+      <ComposerRing busy={running}>
         <ComposerBox>
           <ComposerInput
             ref={inputRef}

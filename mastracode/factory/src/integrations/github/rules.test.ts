@@ -1378,6 +1378,7 @@ describe('GithubRules', () => {
 
     const controller = {
       queryThreadById: vi.fn(async () => null),
+      listActiveThreadRuns: vi.fn(() => []),
       createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
       getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId)),
     };

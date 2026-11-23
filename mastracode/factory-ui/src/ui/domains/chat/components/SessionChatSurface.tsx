@@ -26,7 +26,7 @@ interface SessionChatSurfaceProps {
   emptyState: ReactNode;
   openingSession?: boolean;
   composerLabel: string;
-  /** Leads the status row above the composer. */
+  /** Leads the status row below the composer. */
   composerStatus?: ReactNode;
   contentOverlay?: ReactNode;
 }
@@ -80,7 +80,7 @@ export function SessionChatSurface({
               </ChatShell.Transcript>
             </ChatShell.Content>
             <ChatShell.Dock className="pb-[calc(var(--chat-gutter)+env(safe-area-inset-bottom))]">
-              <ChatShell.ScrollButton aria-label="Jump to latest message" />
+              <ChatShell.ScrollButton aria-label="Jump to latest message" busy={busy} />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
                 <div role="region" aria-label={composerLabel}>

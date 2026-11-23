@@ -32,8 +32,8 @@ export function KnowledgePage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant="fit" {...slots}>
-      <div className="flex min-h-0 flex-1 flex-col p-4">
+    <PageLayout variant="page" body="fixed" {...slots}>
+      <div className="flex min-h-0 flex-col p-4">
         <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
       </div>
     </PageLayout>

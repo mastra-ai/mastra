@@ -1,0 +1,146 @@
+import type { DropResult, DroppableProvided, DroppableStateSnapshot } from '@hello-pangea/dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
+import { createPortal } from 'react-dom';
+import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
+import { Txt } from '@/ds/components/Txt';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
+import { Icon } from '@/ds/icons/Icon';
+import { cn } from '@/utils/cn';
+
+export interface ColumnMappingStepProps {
+  headers: string[];
+  mapping: ColumnMapping;
+  onMappingChange: (column: string, field: FieldType) => void;
+}
+
+// Zone configuration for display
+const ZONES: { id: FieldType; label: string; description: string; required?: boolean }[] = [
+  { id: 'input', label: 'Input', description: 'Data passed to target', required: true },
+  { id: 'groundTruth', label: 'Ground Truth', description: 'Ground truth for comparison' },
+  { id: 'metadata', label: 'Metadata', description: 'Additional context' },
+  { id: 'ignore', label: 'Ignore', description: 'Not imported' },
+];
+
+export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnMappingStepProps) {
+  // Handle drag end - move column to new zone
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+
+    const column = result.draggableId;
+    const targetField = result.destination.droppableId as FieldType;
+
+    // Only update if field changed
+    if (mapping[column] !== targetField) {
+      onMappingChange(column, targetField);
+    }
+  };
+
+  // Get columns for a specific zone
+  const getColumnsForZone = (zone: FieldType): string[] => {
+    return headers.filter(header => mapping[header] === zone);
+  };
+
+  // Check if input zone has columns
+  const inputHasColumns = getColumnsForZone('input').length > 0;
+
+  return (
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <div className="flex flex-col gap-4">
+        <Txt as="p" variant="body" tone="muted">
+          Drag columns to assign them to dataset fields
+        </Txt>
+
+        {ZONES.map(zone => {
+          const columnsInZone = getColumnsForZone(zone.id);
+          const isEmpty = columnsInZone.length === 0;
+          const needsAttention = zone.required && isEmpty;
+
+          return (
+            <div key={zone.id} className="flex flex-col gap-2">
+              {/* Zone header */}
+              <div className="flex items-center gap-2">
+                <Txt as="span" variant="subheading" tone="faint">
+                  {zone.label}
+                </Txt>
+                {zone.required && (
+                  <Txt as="span" variant="caption" tone="muted">
+                    *
+                  </Txt>
+                )}
+                <Txt as="span" variant="caption" tone="muted">
+                  {zone.description}
+                </Txt>
+              </div>
+
+              {/* Drop zone */}
+              <Droppable droppableId={zone.id} direction="horizontal">
+                {(provided: DroppableProvided, snapshot: DroppableStateSnapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={`flex min-h-header-default flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-border-strong bg-fill-subtle' : 'border-border'} ${needsAttention ? 'border-warning-edge bg-warning-subtle' : ''} `}
+                  >
+                    {isEmpty && !snapshot.isDraggingOver && (
+                      <Txt as="span" variant="caption" tone="muted" className="italic">
+                        {needsAttention ? 'Drag at least one column here' : 'No columns assigned'}
+                      </Txt>
+                    )}
+
+                    {columnsInZone.map((column, index) => (
+                      <Draggable key={column} draggableId={column} index={index}>
+                        {(provided, snapshot) => {
+                          const child = (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              style={provided.draggableProps.style}
+                              className={cn(
+                                'text-placeholder',
+                                `inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`,
+                              )}
+                            >
+                              <span
+                                {...provided.dragHandleProps}
+                                className="cursor-grab text-muted-foreground active:cursor-grabbing"
+                              >
+                                <Icon>
+                                  <IconDotGrid2x3 />
+                                </Icon>
+                              </span>
+                              <Txt as="span" variant="subheading">
+                                {column}
+                              </Txt>
+                            </div>
+                          );
+
+                          // Portal dragged item to document.body to avoid
+                          // offset issues from Radix Dialog portal + scrollable container
+                          if (snapshot.isDragging) {
+                            return createPortal(child, document.body);
+                          }
+
+                          return child;
+                        }}
+                      </Draggable>
+                    ))}
+
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </div>
+          );
+        })}
+
+        {/* Validation message */}
+        {!inputHasColumns && (
+          <Txt as="p" variant="body" className="text-warning-foreground">
+            At least one column must be mapped to Input
+          </Txt>
+        )}
+      </div>
+    </DragDropContext>
+  );
+}
