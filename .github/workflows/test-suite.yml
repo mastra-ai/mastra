@@ -68,9 +68,11 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache turbo build setup
+      # Restore only. These jobs check out inputs.head_sha, and a caller on
+      # schedule or workflow_dispatch can write the default-branch cache.
+      - name: Restore turbo build cache
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -129,9 +131,11 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache turbo build setup
+      # Restore only. These jobs check out inputs.head_sha, and a caller on
+      # schedule or workflow_dispatch can write the default-branch cache.
+      - name: Restore turbo build cache
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -196,9 +200,11 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache turbo build setup
+      # Restore only. These jobs check out inputs.head_sha, and a caller on
+      # schedule or workflow_dispatch can write the default-branch cache.
+      - name: Restore turbo build cache
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
