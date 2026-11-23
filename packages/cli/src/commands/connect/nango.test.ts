@@ -133,6 +133,14 @@ describe('oauthConnectUrl', () => {
         'https://override.example/oauth/connect/linear?connect_session_token=tok',
       );
     });
+
+    it('allows a plain-HTTP session host only on loopback', () => {
+      vi.stubEnv('MASTRA_NANGO_HOST', '');
+      expect(oauthConnectUrl('linear', 'tok', undefined, 'http://localhost:3003')).toBe(
+        'http://localhost:3003/oauth/connect/linear?connect_session_token=tok',
+      );
+      expect(() => oauthConnectUrl('linear', 'tok', undefined, 'http://nango.internal.example')).toThrow(/HTTPS/);
+    });
   });
 });
 
@@ -201,6 +209,21 @@ describe('submitCredentialAuth', () => {
       'https://nango.internal.example/api-auth/api-key/resend?connect_session_token=tok',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('refuses to send credentials to a remote plain-HTTP session host', async () => {
+    vi.stubEnv('MASTRA_NANGO_HOST', '');
+    await expect(
+      submitCredentialAuth({
+        integrationId: 'resend',
+        authType: 'API_KEY',
+        sessionToken: 'tok',
+        apiBaseUrl: 'http://nango.internal.example',
+        credentials: { apiKey: 'sk-1' },
+      }),
+    ).rejects.toThrow(/HTTPS/);
+    vi.unstubAllEnvs();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('maps connection_test_failed to a friendly error', async () => {

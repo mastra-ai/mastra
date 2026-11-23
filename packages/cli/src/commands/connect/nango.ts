@@ -27,11 +27,32 @@ const DEFAULT_NANGO_HOST = 'https://api.nango.dev';
  * override; otherwise the host the platform returned with the session
  * (self-hosted Nango), falling back to Nango Cloud for platforms that don't
  * return one.
+ *
+ * Session tokens and credentials go to this host, so a platform-supplied host
+ * must use HTTPS (plain HTTP only for loopback). The env override is the
+ * user's explicit choice and is not checked.
  */
 function nangoHost(apiBaseUrl?: string | null): string {
-  let host = process.env.MASTRA_NANGO_HOST || apiBaseUrl || DEFAULT_NANGO_HOST;
+  const override = process.env.MASTRA_NANGO_HOST;
+  if (!override && apiBaseUrl) assertSecureHost(apiBaseUrl);
+  let host = override || apiBaseUrl || DEFAULT_NANGO_HOST;
   while (host.endsWith('/')) host = host.slice(0, -1);
   return host;
+}
+
+function assertSecureHost(value: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (cause) {
+    throw new Error('The platform returned an invalid Nango host.', { cause });
+  }
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    throw new Error(
+      'The platform returned a Nango host that does not use HTTPS. Set MASTRA_NANGO_HOST to override it.',
+    );
+  }
 }
 
 const OAUTH_AUTH_TYPES = new Set(['OAUTH1', 'OAUTH2', 'MCP_OAUTH2', 'MCP_OAUTH2_GENERIC']);
