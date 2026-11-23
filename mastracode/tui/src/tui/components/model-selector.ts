@@ -76,6 +76,7 @@ export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem 
 }
 
 const MASTRACODE_GATEWAY_PREFIX = 'mastracode/';
+const FAST_SUFFIX = ':fast';
 
 /**
  * The shared catalog namespaces the MastraCode gateway's providers (the user's
@@ -217,15 +218,32 @@ export class ModelSelectorComponent extends Box implements Focusable {
       return a.modelName.localeCompare(b.modelName);
     });
 
-    // Keep the current model's Fast or standard entry right below it, not further down the list.
-    if (currentModelId && sorted[0]?.id === currentModelId) {
-      const standardId = parseCodexModelSelection(currentModelId).modelId;
-      const twinId = standardId === currentModelId ? `${currentModelId}:fast` : standardId;
-      const twinIndex = sorted.findIndex(model => model.id === twinId);
-      if (twinIndex > 1) sorted.splice(1, 0, ...sorted.splice(twinIndex, 1));
-    }
+    return this.keepFastEntriesNextToStandard(sorted, currentModelId);
+  }
 
-    return sorted;
+  /**
+   * Puts each Fast entry directly under its standard model. A Fast entry that is the current model stays first,
+   * with its standard model right below it.
+   */
+  private keepFastEntriesNextToStandard(sorted: ModelItem[], currentModelId?: string): ModelItem[] {
+    const byId = new Map(sorted.map(model => [model.id, model]));
+    const standardOf = (model: ModelItem) =>
+      model.id.endsWith(FAST_SUFFIX) ? byId.get(model.id.slice(0, -FAST_SUFFIX.length)) : undefined;
+    const placed = new Set<string>();
+    const result: ModelItem[] = [];
+    for (const model of sorted) {
+      if (placed.has(model.id)) continue;
+      const standard = standardOf(model);
+      if (standard && model.id !== currentModelId) continue;
+      result.push(model);
+      placed.add(model.id);
+      const partner = standard ?? byId.get(`${model.id}${FAST_SUFFIX}`);
+      if (partner && !placed.has(partner.id)) {
+        result.push(partner);
+        placed.add(partner.id);
+      }
+    }
+    return result;
   }
 
   /** Whether the custom "Use: ..." item is showing at the top */

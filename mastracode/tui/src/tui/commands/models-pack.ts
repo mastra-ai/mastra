@@ -22,6 +22,7 @@ import {
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import chalk from 'chalk';
+import { withFastEntries } from '../codex-fast-entries.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
@@ -96,7 +97,10 @@ export async function selectModel(
   modeColor?: string,
   currentModelId?: string,
 ): Promise<string | undefined> {
-  const availableModels = await ctx.state.controller.listAvailableModels();
+  const availableModels = withFastEntries(await ctx.state.controller.listAvailableModels(), {
+    authStorage: ctx.authStorage,
+    factory: ctx.state.factory,
+  });
   if (availableModels.length === 0) return undefined;
 
   return new Promise<string | undefined>(resolve => {
