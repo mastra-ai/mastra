@@ -20,8 +20,11 @@ export function describeOccurrenceReplayCases({
 }: {
   getStorage: () => MastraStorage;
   storageVersion: 1 | 2;
-  /** Counts the rows of the store's v1 snapshot table. */
-  countV1Snapshots: () => Promise<number>;
+  /**
+   * Counts the rows of the store's v1 snapshot table. Omit it when the caller checks the table
+   * itself, for example to also cover its own cases.
+   */
+  countV1Snapshots?: () => Promise<number>;
 }) {
   describe('evented occurrence replay', () => {
     let storage: MastraStorage;
@@ -37,7 +40,7 @@ export function describeOccurrenceReplayCases({
     });
     // A v2 run must never fall back to the v1 snapshot table.
     afterAll(async () => {
-      if (storageVersion === 2) expect(await countV1Snapshots()).toBe(0);
+      if (storageVersion === 2 && countV1Snapshots) expect(await countV1Snapshots()).toBe(0);
     });
 
     it.each([false, true])(
@@ -65,8 +68,8 @@ export function describeOccurrenceReplayCases({
           )
           .commit();
         const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
-        await mastra.startWorkers();
         try {
+          await mastra.startWorkers();
           const run = await workflow.createRun();
           expect(await run.start({ inputData: { n: 1 } })).toMatchObject({ status: 'success', result: { n: 1 } });
           const store = (await storage.getStore('workflows'))!;
@@ -87,8 +90,11 @@ export function describeOccurrenceReplayCases({
           );
           expect(calls).toBe(1);
         } finally {
-          await mastra.stopWorkers();
-          driver.dispose();
+          try {
+            await mastra.stopWorkers();
+          } finally {
+            driver.dispose();
+          }
         }
       },
       8_000,
@@ -116,8 +122,8 @@ export function describeOccurrenceReplayCases({
         )
         .commit();
       const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
-      await mastra.startWorkers();
       try {
+        await mastra.startWorkers();
         const run = await workflow.createRun();
         const result = await run.start({ inputData: { n: 1 } });
         expect(result.status).toBe('failed');
@@ -125,8 +131,11 @@ export function describeOccurrenceReplayCases({
           1,
         );
       } finally {
-        await mastra.stopWorkers();
-        driver.dispose();
+        try {
+          await mastra.stopWorkers();
+        } finally {
+          driver.dispose();
+        }
       }
     }, 8_000);
 
@@ -185,8 +194,8 @@ export function describeOccurrenceReplayCases({
           }
           return publish(topic, event, options);
         });
-        await mastra.startWorkers();
         try {
+          await mastra.startWorkers();
           const run = await workflow.createRun();
           const requestContext = new RequestContext();
           requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-loop-recovery-token');
@@ -212,8 +221,11 @@ export function describeOccurrenceReplayCases({
           if (bodyKind === 'step' || bodyKind === 'snapshots-disabled') expect(contexts).toEqual([undefined, 1, 2]);
         } finally {
           interrupted.mockRestore();
-          await mastra.stopWorkers();
-          driver.dispose();
+          try {
+            await mastra.stopWorkers();
+          } finally {
+            driver.dispose();
+          }
         }
       },
       20_000,
@@ -267,16 +279,19 @@ export function describeOccurrenceReplayCases({
           }
           return publish(topic, event, options);
         });
-        await mastra.startWorkers();
         try {
+          await mastra.startWorkers();
           const run = await workflow.createRun();
           expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 3 } });
           expect(legacyWrite).toBe(true);
           expect(calls).toEqual([1, 2, 3]);
         } finally {
           olderWorker.mockRestore();
-          await mastra.stopWorkers();
-          driver.dispose();
+          try {
+            await mastra.stopWorkers();
+          } finally {
+            driver.dispose();
+          }
         }
       },
     );
@@ -329,8 +344,8 @@ export function describeOccurrenceReplayCases({
         }
         return publish(topic, event, options);
       });
-      await mastra.startWorkers();
       try {
+        await mastra.startWorkers();
         const run = await workflow.createRun();
         const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
         await expect.poll(() => executions).toBe(1);
@@ -346,8 +361,11 @@ export function describeOccurrenceReplayCases({
       } finally {
         release();
         interrupted.mockRestore();
-        await mastra.stopWorkers();
-        driver.dispose();
+        try {
+          await mastra.stopWorkers();
+        } finally {
+          driver.dispose();
+        }
       }
     }, 8_000);
 
@@ -371,16 +389,19 @@ export function describeOccurrenceReplayCases({
         .dountil(body, async ({ inputData }) => inputData.n === 2)
         .commit();
       const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
-      await mastra.startWorkers();
       try {
+        await mastra.startWorkers();
         const run = await workflow.createRun();
         expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
         const result = run.resume({ resumeData: { approved: true } });
         await expect.poll(() => calls, { timeout: 1_500 }).toEqual([0, 1]);
         expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
       } finally {
-        await mastra.stopWorkers();
-        driver.dispose();
+        try {
+          await mastra.stopWorkers();
+        } finally {
+          driver.dispose();
+        }
       }
     }, 8_000);
 
@@ -463,8 +484,8 @@ export function describeOccurrenceReplayCases({
           }
           return publish(topic, event, options);
         });
-        await mastra.startWorkers();
         try {
+          await mastra.startWorkers();
           const run = await workflow.createRun();
           const requestContext = new RequestContext();
           requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-recovery-token');
@@ -516,8 +537,11 @@ export function describeOccurrenceReplayCases({
         } finally {
           releaseSecond();
           interrupted.mockRestore();
-          await mastra.stopWorkers();
-          driver.dispose();
+          try {
+            await mastra.stopWorkers();
+          } finally {
+            driver.dispose();
+          }
         }
       },
       8_000,
@@ -636,8 +660,8 @@ export function describeOccurrenceReplayCases({
               return publish(topic, event, options);
             })
           : undefined;
-        await mastra.startWorkers();
         try {
+          await mastra.startWorkers();
           const run = await workflow.createRun();
           const result = run.start({ inputData: [{ n: 0 }] });
           if (replay) {
@@ -707,8 +731,11 @@ export function describeOccurrenceReplayCases({
           failedPrune?.mockRestore();
           interrupted?.mockRestore();
           release();
-          await mastra.stopWorkers();
-          driver.dispose();
+          try {
+            await mastra.stopWorkers();
+          } finally {
+            driver.dispose();
+          }
         }
       },
       8_000,
@@ -748,8 +775,8 @@ export function describeOccurrenceReplayCases({
         }
         return publish(topic, event, options);
       });
-      await mastra.startWorkers();
       try {
+        await mastra.startWorkers();
         const run = await workflow.createRun();
         void run.start({ inputData: { n: 0 } });
         await saved;
@@ -760,8 +787,11 @@ export function describeOccurrenceReplayCases({
         expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
       } finally {
         interrupted.mockRestore();
-        await mastra.stopWorkers();
-        driver.dispose();
+        try {
+          await mastra.stopWorkers();
+        } finally {
+          driver.dispose();
+        }
       }
     }, 8_000);
 
@@ -795,8 +825,8 @@ export function describeOccurrenceReplayCases({
           else workflow.then(kind === 'nested' ? child : pause);
           workflow.commit();
           const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
-          await mastra.startWorkers();
           try {
+            await mastra.startWorkers();
             const run = await workflow.createRun();
             const result = run.start({ inputData: kind === 'foreach' ? [{ n: 0 }] : { n: 0 } });
             expect(await result).toMatchObject({ status: 'suspended' });
@@ -814,8 +844,11 @@ export function describeOccurrenceReplayCases({
               });
             }
           } finally {
-            await mastra.stopWorkers();
-            driver.dispose();
+            try {
+              await mastra.stopWorkers();
+            } finally {
+              driver.dispose();
+            }
           }
         }
       },
@@ -859,8 +892,8 @@ export function describeOccurrenceReplayCases({
           }
           return publish(topic, event, options);
         });
-        await mastra.startWorkers();
         try {
+          await mastra.startWorkers();
           const run = await workflow.createRun();
           const result = run.start({ inputData: { n: 0 } });
           await saved;
@@ -890,8 +923,11 @@ export function describeOccurrenceReplayCases({
           expect(calls).toBe(2);
         } finally {
           interrupted.mockRestore();
-          await mastra.stopWorkers();
-          driver.dispose();
+          try {
+            await mastra.stopWorkers();
+          } finally {
+            driver.dispose();
+          }
         }
       },
       20_000,
@@ -940,8 +976,8 @@ export function describeOccurrenceReplayCases({
         .then(checkpoint)
         .commit();
       const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
-      await mastra.startWorkers();
       try {
+        await mastra.startWorkers();
         const run = await workflow.createRun();
         const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
         await started;
@@ -966,8 +1002,11 @@ export function describeOccurrenceReplayCases({
         expect(await result).toMatchObject({ status: 'success', result: { n: 3 } });
       } finally {
         release();
-        await mastra.stopWorkers();
-        driver.dispose();
+        try {
+          await mastra.stopWorkers();
+        } finally {
+          driver.dispose();
+        }
       }
     }, 20_000);
   });

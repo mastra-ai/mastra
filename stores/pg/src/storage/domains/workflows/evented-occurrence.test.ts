@@ -24,12 +24,20 @@ describe.each([1, 2] as const)('Postgres evented occurrence replay on storage v%
     await storage.init();
     expect((await storage.getStore('workflows'))!.supportsWorkflowStepGuards()).toBe(true);
   });
+  // Checked here rather than in the shared cases, so it also runs when only this file's case is selected.
   afterAll(async () => {
-    await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    await storage.close();
+    try {
+      // A v2 run must never fall back to the v1 snapshot table.
+      if (storageVersion === 2) {
+        const { n } = await storage.db.one(`SELECT count(*)::int AS n FROM "${schemaName}".mastra_workflow_snapshot`);
+        expect(n).toBe(0);
+      }
+    } finally {
+      await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await storage.close();
+    }
   });
 
-  // Declared before the shared cases so their v1-table check also covers this run.
   it('keeps the committed terminal result when the read replica still sees a running step', async () => {
     const readPool = new Pool({ connectionString, max: 1 });
     const replicaStorage = new PostgresStore({ ...TEST_CONFIG, id: 'lagging-reader', schemaName, readPool });
@@ -123,10 +131,5 @@ describe.each([1, 2] as const)('Postgres evented occurrence replay on storage v%
     }
   }, 8_000);
 
-  describeOccurrenceReplayCases({
-    getStorage: () => storage,
-    storageVersion,
-    countV1Snapshots: async () =>
-      (await storage.db.one(`SELECT count(*)::int AS n FROM "${schemaName}".mastra_workflow_snapshot`)).n,
-  });
+  describeOccurrenceReplayCases({ getStorage: () => storage, storageVersion });
 });
