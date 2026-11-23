@@ -14801,8 +14801,8 @@ packages:
   '@fastify/merge-json-schemas@0.2.2':
     resolution: {integrity: sha512-d/gx9sRbUCVgGRGzma46wLcwiY8noTqO2Nmjg/vbTARxHRE5bdh5PIL8s97Lt1X7ScRWRW52eVYxwIoPwIdVUA==}
 
-  '@fastify/proxy-addr@5.1.1':
-    resolution: {integrity: sha512-zv07Y9GEuDsJPegZoDFd4SDWaZOW8N2pa0GSrYmKpId/tjt1Hgo3BjZBVjdVpfVrHaA+Qv5jawtS2O50J5xM9g==}
+  '@fastify/proxy-addr@5.1.3':
+    resolution: {integrity: sha512-ptgIgB+abBNTs5lsKNvFaKMCauPaTOE6ZIjxJr3FxCLehmYQQKYGg4srwwNICR9QQlFrYw59jWAo+i9GalVCaw==}
 
   '@fastify/send@4.2.1':
     resolution: {integrity: sha512-zOB8L9z444PnGbd1Nd7gNXPz/7bnDR8Z4KNTNSwLVQuE3cTGsU9qUj1N4SjXKK0Tq4cauZYTwB+tqvlqosuKsw==}
@@ -38562,7 +38562,7 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  '@fastify/proxy-addr@5.1.1':
+  '@fastify/proxy-addr@5.1.3':
     dependencies:
       '@fastify/forwarded': 3.0.2
       ipaddr.js: 2.5.0
@@ -50041,7 +50041,7 @@ snapshots:
       '@fastify/ajv-compiler': 4.0.7
       '@fastify/error': 4.2.1
       '@fastify/fast-json-stringify-compiler': 5.1.1
-      '@fastify/proxy-addr': 5.1.1
+      '@fastify/proxy-addr': 5.1.3
       abstract-logging: 2.0.1
       avvio: 9.3.1
       fast-json-stringify: 7.2.1
