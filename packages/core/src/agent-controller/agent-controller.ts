@@ -453,15 +453,12 @@ export class AgentController<TState = {}> {
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
       releaseSuspendedRun: async (runId, releaseInMemory) => {
         const agents = [...new Set([this.getCurrentAgent(session), ...this.backingAgents()])];
-        await releaseInMemory();
-        if (await this.#deleteParkedRun(runId, agents)) return;
-        // A resume holds the run; decide once it settles, without holding up the session's teardown.
-        // A resume that failed or parked the run again left a new hold, so release it before each delete.
+        if (await this.#releaseParkedRun(runId, agents, releaseInMemory)) return;
+        // A resume overlapped the attempt; decide once it settles, without holding up the session's teardown.
         void (async () => {
           do {
             await Promise.all(agents.map(agent => agent.__resumesSettled(runId)));
-            await releaseInMemory();
-          } while (!(await this.#deleteParkedRun(runId, agents)));
+          } while (!(await this.#releaseParkedRun(runId, agents, releaseInMemory)));
         })().catch(error =>
           this.getMastra()
             ?.getLogger()
@@ -1799,22 +1796,38 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Deletes a released run's registration and snapshot rows while it is still parked. Resolves `false`,
-   * deleting nothing, while a resume in one of `agents` holds the run; `true` once the run is deleted or a
-   * settled resume has moved it on (the run is that resume's from there). A run a resume still in flight
-   * stores as running is not decided yet: that resume may park it again.
+   * One attempt to release a run from memory and delete its registration and snapshot rows while it is parked.
+   * Resolves `false` when a resume of the run in one of `agents` was in flight at the start or started at any
+   * point before the deletes settled: that resume may have parked the run again (leaving a new hold) or moved it
+   * on, so the run is not decided until it settles. `true` once the run is deleted or a settled resume has moved
+   * it on (the run is that resume's from there).
    */
-  async #deleteParkedRun(runId: string, agents: Agent<any, any, any, any>[]): Promise<boolean> {
-    const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
-    const run = await workflowsStore?.getWorkflowRunById({ runId });
-    const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
-    const isResuming = (id: string) => agents.some(agent => agent.__isResumingRun(id));
-    if (snapshot && snapshot.status !== 'suspended') return !isResuming(runId);
-    // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
-    return agents[0]!.__deleteSuspendedRun(runId, {
-      isResuming,
-      workflowNames: new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()])),
-    });
+  async #releaseParkedRun(
+    runId: string,
+    agents: Agent<any, any, any, any>[],
+    releaseInMemory: () => Promise<void>,
+  ): Promise<boolean> {
+    // Watching every resume start, not sampling whether one is in flight, so one that starts and settles
+    // between two awaits below is not missed.
+    const watchers = agents.map(agent => agent.__watchResumeStarts(runId));
+    try {
+      if (agents.some(agent => agent.__isResumingRun(runId))) return false;
+      const resumed = () => watchers.some(watcher => watcher.started);
+      await releaseInMemory();
+      const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
+      const run = await workflowsStore?.getWorkflowRunById({ runId });
+      const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
+      if (snapshot && snapshot.status !== 'suspended') return !resumed();
+      // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
+      const deleted = await agents[0]!.__deleteSuspendedRun(runId, {
+        isResuming: resumed,
+        workflowNames: new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()])),
+      });
+      // A resume that started while the deletes were in flight may have parked the run again.
+      return deleted && !resumed();
+    } finally {
+      for (const watcher of watchers) watcher.stop();
+    }
   }
 
   /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */

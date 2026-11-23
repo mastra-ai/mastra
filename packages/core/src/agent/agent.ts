@@ -13054,6 +13054,7 @@ export class Agent<
   /** Marks a resume of the run as in progress until the returned release is called. */
   #markResuming(runId: string): () => void {
     this.#resumesInProgress.set(runId, (this.#resumesInProgress.get(runId) ?? 0) + 1);
+    for (const watcher of this.#resumeStartWatchers.get(runId) ?? []) watcher.started = true;
     let released = false;
     return () => {
       if (released) return;
@@ -13067,6 +13068,31 @@ export class Agent<
       const waiters = this.#resumesSettledWaiters.get(runId);
       this.#resumesSettledWaiters.delete(runId);
       for (const resolve of waiters ?? []) resolve();
+    };
+  }
+
+  /** Open {@link __watchResumeStarts} watchers, keyed by run. */
+  readonly #resumeStartWatchers = new Map<string, Set<{ started: boolean }>>();
+
+  /**
+   * @internal Records whether any resume() of the run starts while the watcher is open. Unlike
+   * {@link __isResumingRun}, a resume that starts and settles in between two checks is not missed.
+   */
+  __watchResumeStarts(runId: string): { readonly started: boolean; stop(): void } {
+    const watcher = { started: false };
+    let watchers = this.#resumeStartWatchers.get(runId);
+    if (!watchers) this.#resumeStartWatchers.set(runId, (watchers = new Set()));
+    watchers.add(watcher);
+    return {
+      get started() {
+        return watcher.started;
+      },
+      stop: () => {
+        watchers.delete(watcher);
+        if (watchers.size === 0 && this.#resumeStartWatchers.get(runId) === watchers) {
+          this.#resumeStartWatchers.delete(runId);
+        }
+      },
     };
   }
 
