@@ -7,7 +7,7 @@ import {
   observationalMemoryQueryKey,
 } from '@mastra/react/hooks/memory';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import { useCallback, useInsertionEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
   buildMaxStepsStreamErrorMessage,
@@ -385,7 +385,7 @@ export const useChatSendHandler = ({
   };
 
   const latestSendTurn = useRef(sendTurn);
-  useLayoutEffect(() => {
+  useInsertionEffect(() => {
     sendDepsRef.current = deps;
     latestSendTurn.current = sendTurn;
   });

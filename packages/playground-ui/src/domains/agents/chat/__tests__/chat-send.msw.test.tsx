@@ -156,7 +156,7 @@ describe('the send a chat hands out', () => {
   );
 
   it(
-    "never pairs one agent's endpoint with another agent's context, even when sent from a layout effect as the agent switches",
+    'reaches the agent the chat just switched to, with its context, even when sent from a layout effect during the switch',
     { timeout: 30_000 },
     async () => {
       const support = serveAgent('support', 'Support is on it.');
@@ -166,12 +166,8 @@ describe('the send a chat hands out', () => {
       chat.switchTo('billing');
       await screen.findByText(/ is on it\.$/, undefined, TURN);
 
-      const sent = [
-        ...support.map(body => ({ to: 'support', context: body.requestContext })),
-        ...billing.map(body => ({ to: 'billing', context: body.requestContext })),
-      ];
-      expect(sent).toHaveLength(1);
-      expect(sent[0].context).toMatchObject({ team: sent[0].to });
+      expect(support).toHaveLength(0);
+      expect(billing.map(body => body.requestContext)).toEqual([expect.objectContaining({ team: 'billing' })]);
     },
   );
 });
