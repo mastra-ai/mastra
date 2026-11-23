@@ -35,6 +35,20 @@ describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)'
     ).toMatchObject({ isFinal: true, stopCause: 'iteration_hook' });
   });
 
+  // Agent passes maxSteps as a stepCountIs(maxSteps) stopWhen, which also matches on the last step.
+  it('does not attribute a hook stop on the last allowed step to the step-count stop condition', async () => {
+    expect(
+      await decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: () => true,
+          onIterationComplete: () => ({ continue: false }),
+        }),
+      ),
+    ).toMatchObject({ isFinal: true, forceContinue: false, stopCause: 'iteration_hook' });
+  });
+
   it('reports a stop condition without re-running the predicate', async () => {
     let calls = 0;
     const decision = await decideContinuation(

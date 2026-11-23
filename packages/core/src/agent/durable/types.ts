@@ -686,6 +686,8 @@ export interface AgentFinishEventData {
    * instead of the text they buffered from the stream.
    */
   textRewritten?: boolean;
+  /** Why the loop stopped calling the model, as on the default loop's finish chunk. */
+  stopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
 }
 
 /**

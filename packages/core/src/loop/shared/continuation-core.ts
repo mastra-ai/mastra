@@ -327,7 +327,11 @@ async function decideContinuationDefault(
             isFinal = false;
             forceContinue = true;
           }
-        } else if (iterationResult.continue === false && !hasFinishedSteps) {
+        } else if (iterationResult.continue === false && (!hasFinishedSteps || stopCause === 'max_steps')) {
+          // `maxSteps` reaches this ladder as a `stepCountIs(maxSteps)` stopWhen, which
+          // matches on the last allowed step. The hook's stop still owns the cause there,
+          // as on the durable ladder, which skips stopWhen once the budget is spent. The
+          // run stops either way; only the attribution differs.
           hasFinishedSteps = true;
           isFinal = true;
           stopCause = 'iteration_hook';

@@ -2,16 +2,16 @@
 '@mastra/core': patch
 ---
 
-Thread subscription copies of an agent's `finish` chunk now include `output.stepCount`, the number of steps that count against `maxSteps`. These copies leave out `output.steps` to stay small, so subscribers had no way to tell whether a run used its whole step budget. Processor retry steps are not counted, matching how `maxSteps` is enforced. Fixes [#29612](https://github.com/mastra-ai/mastra/issues/29612).
+Added `stopCause` to an agent's `finish` chunk. It says why the agent loop stopped calling the model, which `stepResult.reason` can't: every run that ends on a tool call reports `'tool-calls'`, whether it ran out of `maxSteps`, stopped on a client tool, matched `stopWhen` or was ended by `onIterationComplete`. The field is on the chunk from `stream()` and on the copies that `subscribeToThread()` subscribers receive. Fixes [#29612](https://github.com/mastra-ai/mastra/issues/29612).
 
 ```ts
-const maxSteps = 10
 const subscription = await agent.subscribeToThread({ threadId, resourceId })
 
 for await (const chunk of subscription.stream) {
-  const stepCount = chunk.type === 'finish' ? chunk.payload.output.stepCount : undefined
-  if (stepCount !== undefined && stepCount >= maxSteps) {
-    // The run used its whole step budget
+  if (chunk.type === 'finish' && chunk.payload.stopCause === 'max_steps') {
+    // The run used its whole step budget while the model still wanted to call tools
   }
 }
 ```
+
+Also fixed `Agent` traces reporting `max_steps` when `onIterationComplete` returned `{ continue: false }` on the last allowed step. They now report `iteration_hook`, as durable agents already did.

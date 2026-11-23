@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { AgentExecutionOptions } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { ChunkType } from '@mastra/core/stream';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
@@ -12,21 +13,37 @@ const askQuestion = createTool({
   execute: async () => ({ shown: true }),
 });
 
-type StreamOptions = NonNullable<Parameters<Agent['stream']>[1]>;
-type RunOptions = Pick<StreamOptions, 'maxSteps' | 'stopWhen'>;
+/** The same question tool run by the browser: no `execute`, so the run stops and hands it back. */
+export const askQuestionInBrowser = createTool({
+  id: 'askQuestion',
+  description: 'Show the user a question with answer buttons',
+  inputSchema: z.object({ question: z.string() }),
+});
 
-/** Ends the turn once the agent has asked its question, like an agent whose question tool waits for the user. */
-export const stopAfterQuestion: NonNullable<StreamOptions['stopWhen']> = ({ steps }) =>
+type StreamOptions = AgentExecutionOptions;
+type RunOptions = Pick<StreamOptions, 'maxSteps' | 'stopWhen' | 'clientTools' | 'onIterationComplete'>;
+
+/**
+ * Ends the turn once the agent has asked its question, like an agent whose question tool waits for the user.
+ * `stopWhen` accepts AI SDK v5 and v6 conditions, so the steps are typed by the one field both share here.
+ */
+export const stopAfterQuestion = ({ steps }: { steps: Array<{ toolCalls: Array<{ toolName: string }> }> }) =>
   (steps.at(-1)?.toolCalls ?? []).some(call => call.toolName === 'askQuestion');
 
-/** A real agent whose model calls `askQuestion` on every step. */
-const createQuestionAgent = () => {
+/** Ends the turn from `onIterationComplete`, like a supervisor that stops the agent once it asks. */
+export const endTurnFromHook: NonNullable<StreamOptions['onIterationComplete']> = () => ({ continue: false });
+
+/**
+ * A real agent whose model calls `askQuestion` on every step. The agent runs the
+ * tool itself unless the run passes it as a client tool.
+ */
+const createQuestionAgent = (options: RunOptions) => {
   let modelCalls = 0;
   return new Agent({
     id: 'agent-1',
     name: 'Poster agent',
     instructions: 'Ask the user which style they want before designing.',
-    tools: { askQuestion },
+    tools: options.clientTools ? {} : { askQuestion },
     model: new MastraLanguageModelV2Mock({
       doStream: async () => {
         modelCalls++;
@@ -56,7 +73,7 @@ const createQuestionAgent = () => {
 
 /** The chunks the agent's own stream produced, as the agent stream route sends them. */
 export const streamQuestionAgent = async (options: RunOptions): Promise<ChunkType[]> => {
-  const output = await createQuestionAgent().stream('Make me a poster', options);
+  const output = await createQuestionAgent(options).stream('Make me a poster', options);
   const chunks: ChunkType[] = [];
   for await (const chunk of output.fullStream) chunks.push(chunk);
   return chunks;
@@ -68,7 +85,7 @@ export const streamQuestionAgent = async (options: RunOptions): Promise<ChunkTyp
  * Thread broadcasts are slimmed copies of the run's chunks, not the chunks themselves.
  */
 export const broadcastQuestionAgent = async (options: RunOptions): Promise<ChunkType[]> => {
-  const agent = createQuestionAgent();
+  const agent = createQuestionAgent(options);
   new Mastra({ agents: { agent }, logger: false });
   const memory = { thread: 'thread-1', resource: 'user-1' };
   const subscription = await agent.subscribeToThread({ threadId: memory.thread, resourceId: memory.resource });

@@ -2306,8 +2306,7 @@ describe('BackgroundTaskManager', () => {
       });
       expect(finish.payload).toEqual({
         stepResult: { reason: 'stop' },
-        // The steps are dropped; only how many there were stays.
-        output: { usage: { totalTokens: 3 }, stepCount: 1 },
+        output: { usage: { totalTokens: 3 } },
         metadata: {},
         response: { id: 'resp-1', modelId: 'gpt-5' },
       });

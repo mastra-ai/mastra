@@ -26,7 +26,13 @@ import {
   emptyApprovalHistory,
   generatedApprovalResponse,
 } from './fixtures/nested-approval';
-import { broadcastQuestionAgent, stopAfterQuestion, streamQuestionAgent } from './fixtures/question-agent';
+import {
+  askQuestionInBrowser,
+  broadcastQuestionAgent,
+  endTurnFromHook,
+  stopAfterQuestion,
+  streamQuestionAgent,
+} from './fixtures/question-agent';
 import {
   acceptedToolRun,
   emptyMcpServers,
@@ -379,8 +385,9 @@ describe('ChatProvider', () => {
     );
   });
 
-  // A finish reason of 'tool-calls' only says the last step called a tool. A stopWhen
-  // match ends a run the same way, so Studio must not read it as running out of steps. (#29612)
+  // A finish reason of 'tool-calls' only says the last step called a tool. A stopWhen match,
+  // a client tool and an onIterationComplete stop end a run the same way, and on the last
+  // allowed step they also use every step, so Studio reads core's stopCause instead. (#29612)
   // Studio's default signal transport reads the run from a thread subscription, whose
   // chunks are slimmed broadcast copies, so both transports are covered.
   describe.each(['legacy', 'signals'] as const)('when a %s run ends on a tool call', transport => {
@@ -453,7 +460,7 @@ describe('ChatProvider', () => {
       subscription?.close();
     };
 
-    // Both runs end the same way on the wire; only the number of steps tells them apart.
+    // Every run ends the same way on the wire: a finish whose last step called a tool.
     const expectToolCallFinish = (chunks: ChunkType[], steps: number) => {
       expect(chunks.at(-1)).toMatchObject({ type: 'finish', payload: { stepResult: { reason: 'tool-calls' } } });
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(steps);
@@ -468,13 +475,33 @@ describe('ChatProvider', () => {
       expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
     });
 
-    it('warns when the run used every step it had', async () => {
-      const chunks = await runAgent({ maxSteps: 3 });
-      expectToolCallFinish(chunks, 3);
+    it('shows no maxSteps warning when the run stopped on a client tool on its only step', async () => {
+      const chunks = await runAgent({ maxSteps: 1, clientTools: { askQuestion: askQuestionInBrowser } });
+      expectToolCallFinish(chunks, 1);
 
-      await renderRun({ maxSteps: 3, chunks });
+      await renderRun({ maxSteps: 1, chunks });
 
-      expect(await screen.findByText(/reached maxSteps \(3\)/)).toBeTruthy();
+      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
+    });
+
+    it('shows no maxSteps warning when onIterationComplete ended the run on its only step', async () => {
+      const chunks = await runAgent({ maxSteps: 1, onIterationComplete: endTurnFromHook });
+      expectToolCallFinish(chunks, 1);
+
+      await renderRun({ maxSteps: 1, chunks });
+
+      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
+    });
+
+    it.each([1, 3])('warns when the run used every step of maxSteps %i', async maxSteps => {
+      const chunks = await runAgent({ maxSteps });
+      expectToolCallFinish(chunks, maxSteps);
+
+      await renderRun({ maxSteps, chunks });
+
+      expect(
+        await screen.findByText(`Agent stopped because it reached maxSteps (${maxSteps})`, { exact: false }),
+      ).toBeTruthy();
     });
   });
 
