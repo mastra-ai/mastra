@@ -3,6 +3,7 @@ import { Octokit } from '@octokit/rest';
 import type { GithubDependabotAlert } from '../../dependabot/sync.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
 import { REVIEW_STATUS_COMMENT_MARKER } from '../../github/review-status-comment.js';
+import { resolveReviewThreadOfComment } from '../../github/review-threads.js';
 import { platformErrorStatus } from '../platform-connect.js';
 import {
   isPullRequestIssue,
@@ -477,6 +478,12 @@ export class ConnectGithubTransport implements GithubTransport {
         ...repo(call),
         comment_id: commentId,
       }),
+    );
+  }
+
+  async resolveReviewThread(call: GithubCall, commentId: number, resolved: boolean): Promise<void> {
+    await this.#write(call, 'resolveReviewThread', 'review', octokit =>
+      resolveReviewThreadOfComment(octokit, repo(call), call.repository, commentId, resolved),
     );
   }
 

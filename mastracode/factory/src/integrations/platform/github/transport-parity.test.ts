@@ -366,6 +366,9 @@ async function transports(): Promise<{ legacy: LegacyGithubTransport; connect: C
   const github = await startFakeGithub();
   platform.credentials.set('conn-github', { type: 'oauth2', accessToken: 'tok-github', expiresAt: FUTURE });
   platform.credentials.set('conn-reviews', { type: 'oauth2', accessToken: 'tok-reviews', expiresAt: FUTURE });
+  // Each app's connection names its own installation; tokens are minted for that one.
+  platform.contexts.set('conn-github', { connection_config: { installation_id: '900' }, metadata: null });
+  platform.contexts.set('conn-reviews', { connection_config: { installation_id: '901' }, metadata: null });
   platform.route = (method, path) => {
     const operation = OPERATIONS.find(
       candidate => candidate.legacy.method === method && candidate.legacy.path === path,
@@ -411,6 +414,8 @@ describe('GitHub transport parity', () => {
           'installUrl',
           'authenticateUrl',
           'userConnection',
+          // Several GitHub calls (REST then GraphQL) behind one legacy route; connect-transport.test.ts covers it.
+          'resolveReviewThread',
         ].includes(name),
     );
     expect(new Set(OPERATIONS.map(operation => operation.name))).toEqual(new Set(contract));

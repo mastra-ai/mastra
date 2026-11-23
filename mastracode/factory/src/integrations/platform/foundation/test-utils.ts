@@ -80,7 +80,7 @@ export class FakePlatform {
   readonly contexts = new Map<string, unknown>();
   /**
    * `GET /v2/connections/:id/credentials` bodies, by connection id. An
-   * `accessToken` here is also what `POST .../github/installation-token` mints.
+   * `accessToken` here is also what `POST .../github/app/installations/:id/access_tokens` mints.
    */
   readonly credentials = new Map<string, unknown>();
 
@@ -184,21 +184,24 @@ export class FakePlatform {
       const reply = this.contexts.get(decodeURIComponent(context[1]!));
       return reply === undefined ? problem(404, 'not_found', path) : { status: 200, body: reply };
     }
-    const mint = /^\/v2\/connections\/([^/]+)\/github\/installation-token$/.exec(path);
+    const mint = /^\/v2\/connections\/([^/]+)\/github\/app\/installations\/([^/]+)\/access_tokens$/.exec(path);
     if (method === 'POST' && mint) {
-      // A GitHub App connection's installation token is its credential's
-      // token; a narrowed one names its repositories so tests can tell them apart.
-      const credential = this.credentials.get(decodeURIComponent(mint[1]!)) as
-        { accessToken?: string; expiresAt?: string } | undefined;
+      // As the platform: a connection mints only for the installation its context
+      // names. Its token is the credential's token; a narrowed one names its
+      // repositories so tests can tell them apart.
+      const id = decodeURIComponent(mint[1]!);
+      const context = this.contexts.get(id) as { connection_config?: { installation_id?: unknown } } | undefined;
+      if (String(context?.connection_config?.installation_id) !== mint[2]) return problem(404, 'not_found', path);
+      const credential = this.credentials.get(id) as { accessToken?: string; expiresAt?: string } | undefined;
       if (!credential?.accessToken) return problem(404, 'not_found', path);
       const { repositories } = (body ?? {}) as { repositories?: string[] };
       return {
-        status: 200,
+        status: 201,
         body: {
           token: repositories ? `${credential.accessToken}@${repositories.join(',')}` : credential.accessToken,
-          expiresAt: credential.expiresAt ?? '2099-01-01T00:00:00.000Z',
+          expires_at: credential.expiresAt ?? '2099-01-01T00:00:00.000Z',
           permissions: {},
-          repositorySelection: repositories ? 'selected' : 'all',
+          repository_selection: repositories ? 'selected' : 'all',
         },
       };
     }

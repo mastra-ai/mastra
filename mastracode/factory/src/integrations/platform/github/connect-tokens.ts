@@ -15,9 +15,10 @@ export interface GithubTokenScope {
   permissions: Readonly<Record<string, 'read' | 'write' | 'admin'>>;
 }
 
+/** GitHub's create-installation-access-token response, as the platform passes it on. */
 interface MintedInstallationToken {
   token: string;
-  expiresAt: string;
+  expires_at: string;
 }
 
 export type GithubUserToken =
@@ -27,6 +28,14 @@ export type GithubUserToken =
 export type GithubUserPatSource = (orgId: string, userId: string) => Promise<string | null>;
 
 type Cached<T> = { value: T; expiresAt: number };
+
+/** Thrown when a GitHub App connection's context does not name its installation. */
+export class GithubConnectInstallationUnknownError extends Error {
+  constructor(connectionId: string) {
+    super(`GitHub connection ${connectionId} does not record its GitHub App installation.`);
+    this.name = 'GithubConnectInstallationUnknownError';
+  }
+}
 
 /** Thrown when a Connect credential is not the OAuth token a GitHub connection must hold. */
 export class GithubConnectCredentialError extends Error {
@@ -51,6 +60,8 @@ export class GithubConnectTokens {
   readonly #now: () => number;
   readonly #userPat: GithubUserPatSource;
   readonly #installations = new Map<string, Cached<string>>();
+  /** A connection's GitHub App installation id; it never changes for a connection. */
+  readonly #installationIds = new Map<string, number>();
   readonly #users = new Map<string, Cached<GithubUserToken | null>>();
   readonly #inflight = new Map<string, Promise<unknown>>();
 
@@ -84,14 +95,29 @@ export class GithubConnectTokens {
     const cached = this.#installations.get(key);
     if (cached && cached.expiresAt > this.#now()) return Promise.resolve(cached.value);
     return this.#once(`installation:${key}`, async () => {
+      const installationId = await this.#installationId(connectionId);
+      // GitHub's own endpoint, served under the connection: the platform signs it with the app's key.
       const minted = await this.#connect.request<MintedInstallationToken>(
         'POST',
-        `/v2/connections/${encodeURIComponent(connectionId)}/github/installation-token`,
+        `/v2/connections/${encodeURIComponent(connectionId)}/github/app/installations/${installationId}/access_tokens`,
         { body },
       );
-      this.#installations.set(key, { value: minted.token, expiresAt: this.#expiry(minted.expiresAt) });
+      this.#installations.set(key, { value: minted.token, expiresAt: this.#expiry(minted.expires_at) });
       return minted.token;
     });
+  }
+
+  async #installationId(connectionId: string): Promise<number> {
+    const known = this.#installationIds.get(connectionId);
+    if (known !== undefined) return known;
+    const context = await this.#connect.getContext(connectionId);
+    const raw = context.connection_config?.installation_id;
+    const installationId = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : Number.NaN;
+    if (!Number.isSafeInteger(installationId) || installationId <= 0) {
+      throw new GithubConnectInstallationUnknownError(connectionId);
+    }
+    this.#installationIds.set(connectionId, installationId);
+    return installationId;
   }
 
   /** The user's own GitHub token in `orgId`, or null when they have neither a connection nor a PAT. */

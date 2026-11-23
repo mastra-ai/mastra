@@ -63,6 +63,9 @@ async function setup(
   if (options.reviewsActive !== false) connection(platform, 'conn-reviews', FACTORY_REVIEWS_GITHUB_PROVIDER_KEY);
   platform.credentials.set('conn-github', { type: 'oauth2', accessToken: 'tok-github', expiresAt: FUTURE });
   platform.credentials.set('conn-reviews', { type: 'oauth2', accessToken: 'tok-reviews', expiresAt: FUTURE });
+  // Each app's connection names its own installation; tokens are minted for that one.
+  platform.contexts.set('conn-github', { connection_config: { installation_id: '900' }, metadata: null });
+  platform.contexts.set('conn-reviews', { connection_config: { installation_id: '901' }, metadata: null });
   const logins = new Map<string, string>();
   for (const [userId, login] of Object.entries(options.users ?? {})) {
     const id = `conn-user-${userId}`;
@@ -249,7 +252,7 @@ describe('PlatformGithubIntegration in connect mode', () => {
     expect(platform.requests.filter(request => request.path.includes('token'))).toEqual([
       {
         method: 'POST',
-        path: '/v2/connections/conn-github/github/installation-token',
+        path: '/v2/connections/conn-github/github/app/installations/900/access_tokens',
         query: new URLSearchParams(),
         body: {
           repositories: ['app'],

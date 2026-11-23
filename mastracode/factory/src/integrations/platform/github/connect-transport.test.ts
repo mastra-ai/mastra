@@ -4,7 +4,7 @@ import { REVIEW_STATUS_COMMENT_MARKER } from '../../github/review-status-comment
 import { startFakePlatform } from '../foundation/test-utils.js';
 import type { FakePlatform } from '../foundation/test-utils.js';
 import { FACTORY_GITHUB_PROVIDER_KEY } from './connect-events.js';
-import { GithubConnectTokens } from './connect-tokens.js';
+import { GithubConnectInstallationUnknownError, GithubConnectTokens } from './connect-tokens.js';
 import {
   ConnectGithubTransport,
   GithubApiError,
@@ -73,6 +73,9 @@ async function harness(
   platform.linked.add('conn-github');
   platform.credentials.set('conn-github', { type: 'oauth2', accessToken: 'tok-github', expiresAt: FUTURE });
   platform.credentials.set('conn-reviews', { type: 'oauth2', accessToken: 'tok-reviews', expiresAt: FUTURE });
+  // Each app's connection names its own installation; tokens are minted for that one.
+  platform.contexts.set('conn-github', { connection_config: { installation_id: '900' }, metadata: null });
+  platform.contexts.set('conn-reviews', { connection_config: { installation_id: '901' }, metadata: null });
   const answerUser = (token: string, login: string) => {
     const previous = github.route;
     github.route = request =>
@@ -173,6 +176,66 @@ describe('ConnectGithubTransport', () => {
         'tok-reviews',
       ]);
       expect(new Set(tokenClasses.map(event => event.tokenClass))).toEqual(new Set(['review']));
+    });
+
+    it("resolves and reopens a review comment's thread as factory-reviews-github", async () => {
+      const { github, transport } = await harness();
+      answer(github, 'GET', `/repos/${REPO}/pulls/comments/77`, () => ({
+        status: 200,
+        body: { id: 77, pull_request_url: `https://api.github.com/repos/${REPO}/pulls/7` },
+      }));
+      const mutations: string[] = [];
+      answer(github, 'POST', '/graphql', request => {
+        const { query, variables } = request.body as { query: string; variables: Record<string, unknown> };
+        if (query.includes('reviewThreads')) {
+          expect(variables).toMatchObject({ owner: 'acme', repo: 'widgets', number: 7 });
+          return {
+            status: 200,
+            body: {
+              data: {
+                repository: {
+                  pullRequest: {
+                    reviewThreads: {
+                      nodes: [
+                        {
+                          id: 'thread-other',
+                          comments: {
+                            nodes: [{ fullDatabaseId: '5' }],
+                            pageInfo: { hasNextPage: false, endCursor: null },
+                          },
+                        },
+                        {
+                          id: 'thread-77',
+                          comments: {
+                            nodes: [{ fullDatabaseId: '77' }],
+                            pageInfo: { hasNextPage: false, endCursor: null },
+                          },
+                        },
+                      ],
+                      pageInfo: { hasNextPage: false, endCursor: null },
+                    },
+                  },
+                },
+              },
+            },
+          };
+        }
+        mutations.push(`${query.includes('unresolveReviewThread') ? 'unresolve' : 'resolve'} ${variables.threadId}`);
+        return { status: 200, body: { data: { thread: { id: variables.threadId } } } };
+      });
+
+      await transport.resolveReviewThread({ repository: REPO }, 77, true);
+      await transport.resolveReviewThread({ repository: REPO }, 77, false);
+
+      expect(mutations).toEqual(['resolve thread-77', 'unresolve thread-77']);
+      expect(new Set(github.requests.map(request => request.token))).toEqual(new Set(['tok-reviews']));
+    });
+
+    it('says which review comment it could not find when resolving a thread', async () => {
+      const { transport } = await harness();
+      await expect(transport.resolveReviewThread({ repository: REPO }, 404, true)).rejects.toThrow(
+        `GitHub review comment 404 was not found in ${REPO}`,
+      );
     });
 
     it('posts the review-status comment as the Reviews app and other comments as factory-github', async () => {
@@ -411,8 +474,9 @@ describe('ConnectGithubTransport', () => {
       });
       answer(github, 'GET', `/repos/${REPO}/pulls`, () => ({ status: 200, body: [] }));
       const mints = () =>
-        platform.requests.filter(request => request.path === '/v2/connections/conn-github/github/installation-token')
-          .length;
+        platform.requests.filter(
+          request => request.path === '/v2/connections/conn-github/github/app/installations/900/access_tokens',
+        ).length;
 
       await transport.listPullRequests({ repository: REPO }, { state: 'open', page: 1, perPage: 30 });
       await transport.listPullRequests({ repository: REPO }, { state: 'open', page: 1, perPage: 30 });
@@ -424,10 +488,41 @@ describe('ConnectGithubTransport', () => {
       expect(mints()).toBe(2);
     });
 
+    it("mints at GitHub's path for the connection's own installation, reading it once", async () => {
+      const { platform, tokens } = await harness();
+
+      await tokens.installationToken('conn-github');
+      tokens.invalidateInstallation('conn-github');
+      await tokens.repositoryToken('conn-github', { repositories: ['web'], permissions: { contents: 'read' } });
+
+      expect(platform.count('GET', '/v2/connections/conn-github/context')).toBe(1);
+      expect(
+        platform.requests.filter(request => request.method === 'POST').map(request => [request.path, request.body]),
+      ).toEqual([
+        ['/v2/connections/conn-github/github/app/installations/900/access_tokens', {}],
+        [
+          '/v2/connections/conn-github/github/app/installations/900/access_tokens',
+          { repositories: ['web'], permissions: { contents: 'read' } },
+        ],
+      ]);
+    });
+
+    it('refuses to mint for a connection that does not name its installation', async () => {
+      const { platform, tokens } = await harness();
+      platform.contexts.set('conn-github', { connection_config: {}, metadata: null });
+
+      await expect(tokens.installationToken('conn-github')).rejects.toBeInstanceOf(
+        GithubConnectInstallationUnknownError,
+      );
+      expect(platform.requests.filter(request => request.method === 'POST')).toEqual([]);
+    });
+
     it('mints a scoped token per repository set, reuses it, and drops it with the installation', async () => {
       const { platform, tokens } = await harness();
       const mints = () =>
-        platform.requests.filter(request => request.path === '/v2/connections/conn-github/github/installation-token');
+        platform.requests.filter(
+          request => request.path === '/v2/connections/conn-github/github/app/installations/900/access_tokens',
+        );
       const scope = { repositories: ['web', 'api'], permissions: { contents: 'write', issues: 'write' } } as const;
 
       expect(await tokens.repositoryToken('conn-github', scope)).toBe('tok-github@api,web');
