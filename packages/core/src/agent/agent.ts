@@ -11130,13 +11130,9 @@ export class Agent<
   }
 
   /**
-   * @internal Drops a suspended run's workflow registration and every snapshot row it may be stored under.
-   * When `isResuming` is given it is checked once storage is ready, right before anything is deleted, and a
-   * run it reports as resuming is left untouched (resolves `false`). Rejects if a delete fails.
+   * @internal Every workflow name a suspended run of this agent may be stored under.
    */
-  async __deleteSuspendedRun(runId: string, isResuming?: (runId: string) => boolean): Promise<boolean> {
-    const mastra = this.#mastra ?? this.#ephemeralMastra;
-    if (!mastra) return true;
+  __suspendedRunWorkflowNames(): Set<string> {
     const runtimeLoopWorkflowName = (
       this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
     )?.durableLoopWorkflowName;
@@ -11147,8 +11143,26 @@ export class Agent<
       DurableStepIds.AGENTIC_EXECUTION,
     ]);
     if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
+    return workflowNames;
+  }
+
+  /**
+   * @internal Drops a suspended run's workflow registration and its snapshot rows under `workflowNames`
+   * (default: {@link __suspendedRunWorkflowNames}). When `isResuming` is given it is checked after the last
+   * await, right before the deletes are issued, and a run it reports as resuming is left untouched (resolves
+   * `false`). A resume that starts after that finds no snapshot, as if it started after the delete.
+   * Rejects if a delete fails.
+   */
+  async __deleteSuspendedRun(
+    runId: string,
+    {
+      isResuming,
+      workflowNames = this.__suspendedRunWorkflowNames(),
+    }: { isResuming?: (runId: string) => boolean; workflowNames?: Iterable<string> } = {},
+  ): Promise<boolean> {
+    const mastra = this.#mastra ?? this.#ephemeralMastra;
+    if (!mastra) return true;
     const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-    // Checked after the last await before the deletes start, so a resume that began meanwhile keeps its snapshot.
     if (isResuming?.(runId)) return false;
     mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
     await Promise.all(

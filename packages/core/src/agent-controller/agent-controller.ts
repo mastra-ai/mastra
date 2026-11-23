@@ -453,12 +453,13 @@ export class AgentController<TState = {}> {
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
       releaseSuspendedRun: async runId => {
         const agents = [...new Set([this.getCurrentAgent(session), ...this.backingAgents()])];
-        // A resume in any of the session's agents owns the run, so its snapshot stays while it runs.
-        const isResuming = (id: string) => agents.some(agent => agent.__isResumingRun(id));
-        const deleted = await Promise.all(agents.map(agent => agent.__deleteSuspendedRun(runId, isResuming)));
-        if (deleted.every(Boolean)) return;
-        // Decided once the resume settles: a run it left parked is still the session's to drop.
-        void this.#deleteSuspendedRunOnceResumed(runId, agents, isResuming).catch(error =>
+        if (await this.#deleteParkedRun(runId, agents)) return;
+        // A resume holds the run; decide once it settles, without holding up the session's teardown.
+        void (async () => {
+          do {
+            await Promise.all(agents.map(agent => agent.__resumesSettled(runId)));
+          } while (!(await this.#deleteParkedRun(runId, agents)));
+        })().catch(error =>
           this.getMastra()
             ?.getLogger()
             ?.warn(`[AgentController:${this.id}] Failed to delete snapshot of released run ${runId}`, { runId, error }),
@@ -1794,23 +1795,24 @@ export class AgentController<TState = {}> {
     }
   }
 
-  /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */
-  async #deleteSuspendedRunOnceResumed(
-    runId: string,
-    agents: Agent<any, any, any, any>[],
-    isResuming: (runId: string) => boolean,
-  ): Promise<void> {
+  /**
+   * Deletes a released run's registration and snapshot rows while it is still parked. Resolves `false`,
+   * deleting nothing, while a resume in one of `agents` holds the run; `true` once the run is deleted or a
+   * resume has moved it on (the run is that resume's from there).
+   */
+  async #deleteParkedRun(runId: string, agents: Agent<any, any, any, any>[]): Promise<boolean> {
     const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
-    for (;;) {
-      await Promise.all(agents.map(agent => agent.__resumesSettled(runId)));
-      const run = await workflowsStore?.getWorkflowRunById({ runId });
-      // A resume that moved the run on owns it from here; only a run still parked is the session's to drop.
-      if (typeof run?.snapshot !== 'object' || run.snapshot.status !== 'suspended') return;
-      const deleted = await Promise.all(agents.map(agent => agent.__deleteSuspendedRun(runId, isResuming)));
-      if (deleted.every(Boolean)) return;
-    }
+    const run = await workflowsStore?.getWorkflowRunById({ runId });
+    const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
+    if (snapshot && snapshot.status !== 'suspended') return true;
+    // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
+    return agents[0]!.__deleteSuspendedRun(runId, {
+      isResuming: id => agents.some(agent => agent.__isResumingRun(id)),
+      workflowNames: new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()])),
+    });
   }
 
+  /** The distinct agents backing this controller: the shared one plus any deprecated per-mode agent. */
   private backingAgents(): Set<Agent<any, any, any, any>> {
     const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {
