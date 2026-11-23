@@ -173,6 +173,7 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
   // pruned, and the prune would otherwise drop that block as "observed" (GRWTH-1926).
   const preserved: MastraDBMessage['content']['parts'] = [];
   let pendingReasoning: number[] = [];
+  let toolSinceReasoning = false;
   let keptAnything = false;
 
   for (let i = 0; i < endMarkerIndex; i++) {
@@ -181,22 +182,35 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
     if (id !== undefined && unobservedResultIds.has(id)) {
       for (const index of pendingReasoning) preserved.push(parts[index]!);
       pendingReasoning = [];
+      toolSinceReasoning = true;
       preserved.push(part);
       keptAnything = true;
       continue;
     }
     // Only reasoning from the same step as a kept call is replayed; a file, image or other
-    // part in between means the block belongs to an already-observed step. Text and step
-    // markers do not end the run: a step writes its thinking, then text, then the call, and
-    // pruning the block out of that turn leaves the call at the start of the turn, which
-    // Anthropic rejects. A sibling call from the same step does not end the block either:
-    // parallel calls share one signed run, and only the one whose result is still pending
-    // survives the prune.
+    // part in between means the block belongs to an already-observed step. Text does not end
+    // the run: a step writes its thinking, then text, then the call, and pruning the block out
+    // of that turn leaves the call at the start of the turn, which Anthropic rejects. A sibling
+    // call from the same step does not end the block either: parallel calls share one signed
+    // run, and only the one whose result is still pending survives the prune. A sibling that
+    // already completed is stored in result state, so tool invocations in any state keep it.
+    // A step marker or a new signed run after a tool invocation starts a later step, whose
+    // calls must not inherit the earlier step's signature.
     if (part?.type === 'reasoning' && hasReplayableReasoningMetadata(part)) {
+      if (toolSinceReasoning) pendingReasoning = [];
+      toolSinceReasoning = false;
       pendingReasoning.push(i);
       continue;
     }
-    if (part?.type === 'text' || part?.type === 'step-start' || id !== undefined) continue;
+    if (part?.type === 'tool-invocation') {
+      toolSinceReasoning = true;
+      continue;
+    }
+    if (part?.type === 'step-start') {
+      if (toolSinceReasoning) pendingReasoning = [];
+      continue;
+    }
+    if (part?.type === 'text') continue;
     pendingReasoning = [];
   }
 
