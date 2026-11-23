@@ -51,10 +51,10 @@ export interface AgentStreamEvent<T = unknown> {
  * are published on and the replay cache that lets readers reconnect.
  */
 export interface AgentStreamsConfig {
-  /** Provisional naming/API: execution policy only. Native activation is deferred; wrappers remain unchanged. */
-  executionEngine?: 'durable' | 'evented' | false;
+  /** Select the default (in-process) or evented durable engine, or false for the plain Agent loop. */
+  executionEngine?: 'default' | 'evented' | false;
 
-  /** Provisional naming/API: snapshot persistence policy; not yet applied by native Agent. */
+  /** Snapshot persistence policy for durable execution. */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
