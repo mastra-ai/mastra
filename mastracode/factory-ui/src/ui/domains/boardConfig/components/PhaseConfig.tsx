@@ -283,8 +283,8 @@ export function PhaseConfig({
                     >
                       <InputNumberGroup size="sm">
                         <InputNumberInput placeholder="Default" />
-                        <InputGroupAddon align="inline-end" variant="flush">
-                          <InputGroupText className="mr-1">runs</InputGroupText>
+                        <InputGroupAddon align="inline-end">
+                          <InputGroupText>runs</InputGroupText>
                           <InputNumberDecrement />
                           <InputNumberIncrement />
                         </InputGroupAddon>

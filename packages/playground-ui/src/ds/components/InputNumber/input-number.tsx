@@ -2,11 +2,15 @@ import { NumberField as NumberFieldPrimitive } from '@base-ui/react/number-field
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
-import { inputGroupClassName, inputGroupControlClassName } from '@/ds/components/InputGroup/input-group';
+import {
+  inputGroupClassName,
+  inputGroupControlClassName,
+  inputGroupIconButtonBySize,
+} from '@/ds/components/InputGroup/input-group';
 import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { Icon } from '@/ds/icons/Icon';
-import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
+import { ControlSizeContext, controlHeight, controlSpacing } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
@@ -34,8 +38,12 @@ function InputNumberGroup({ className, size, ...props }: InputNumberGroupProps) 
       className={cn(
         inputGroupClassName,
         controlHeight[resolved],
-        'has-[>[data-slot=input-number-decrement]]:[&>[data-slot=input-number-input]]:pl-0',
-        'has-[>[data-slot=input-number-increment]]:[&>[data-slot=input-number-input]]:pr-0',
+        controlSpacing[resolved],
+        'has-[>[data-slot=input-number-decrement]]:[&>[data-slot=input-group-control]]:pl-0',
+        'has-[>[data-slot=input-number-increment]]:[&>[data-slot=input-group-control]]:pr-0',
+        // A stepper at the group's own end sits in the same ring as one in an addon.
+        '[&>[data-slot=input-number-decrement]]:mr-(--control-gap) [&>[data-slot=input-number-decrement]]:ml-[3px]',
+        '[&>[data-slot=input-number-increment]]:mr-[3px] [&>[data-slot=input-number-increment]]:ml-(--control-gap)',
         className,
       )}
       {...props}
@@ -50,7 +58,8 @@ type InputNumberInputProps = Omit<NumberFieldPrimitive.Input.Props, 'className'>
 function InputNumberInput({ className, autoComplete, ...props }: InputNumberInputProps) {
   return (
     <NumberFieldPrimitive.Input
-      data-slot="input-number-input"
+      // The InputGroup slot gives it the addon spacing and click-to-focus of any other field.
+      data-slot="input-group-control"
       className={cn(inputGroupControlClassName, className)}
       {...props}
       {...textFieldAutofillProps(autoComplete)}
@@ -58,7 +67,17 @@ function InputNumberInput({ className, autoComplete, ...props }: InputNumberInpu
   );
 }
 
-const inputNumberButtonClassName = cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'mx-1 shrink-0');
+const inputNumberButtonClassName = cn(
+  buttonVariants({ variant: 'ghost', size: 'icon-sm' }),
+  inputGroupIconButtonBySize,
+  // The chip is small: its hit area is the field's height and 24px wide, larger for a finger.
+  "relative before:absolute before:-inset-x-0.75 before:-inset-y-1.25 before:content-['']",
+  'pointer-coarse:before:-inset-1.75',
+);
+
+// Two steppers side by side in an addon read as one pair, closer than the addon's own gap.
+const inputNumberPairClassName =
+  '[[data-variant=default]>[data-slot=input-number-decrement]+&]:-ml-1 [[data-variant=default]>[data-slot=input-number-decrement]+&]:pointer-coarse:ml-1';
 
 type InputNumberDecrementProps = Omit<NumberFieldPrimitive.Decrement.Props, 'className'> & {
   className?: string;
@@ -68,6 +87,7 @@ function InputNumberDecrement({ className, children, ...props }: InputNumberDecr
   return (
     <NumberFieldPrimitive.Decrement
       data-slot="input-number-decrement"
+      data-shape="icon"
       className={cn(inputNumberButtonClassName, className)}
       {...props}
     >
@@ -84,7 +104,8 @@ function InputNumberIncrement({ className, children, ...props }: InputNumberIncr
   return (
     <NumberFieldPrimitive.Increment
       data-slot="input-number-increment"
-      className={cn(inputNumberButtonClassName, className)}
+      data-shape="icon"
+      className={cn(inputNumberButtonClassName, inputNumberPairClassName, className)}
       {...props}
     >
       <Icon size="sm">{children ?? <IconPlusMedium />}</Icon>

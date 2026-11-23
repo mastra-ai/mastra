@@ -54,22 +54,14 @@ export const WithField: Story = {
   ),
 };
 
-export const FlushTrailingSteppers: Story = {
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'Use the flush addon variant to join trailing stepper buttons at the field edge. Add a margin to separate the unit label from the buttons.',
-      },
-    },
-  },
+export const TrailingSteppers: Story = {
   render: () => (
     <div className="w-64">
       <InputNumber defaultValue={30000} min={1} step={1000} format={{ maximumFractionDigits: 0 }}>
         <InputNumberGroup size="sm">
           <InputNumberInput aria-label="Observation threshold" />
-          <InputGroupAddon align="inline-end" variant="flush">
-            <InputGroupText className="mr-2">tokens</InputGroupText>
+          <InputGroupAddon align="inline-end">
+            <InputGroupText>tokens</InputGroupText>
             <InputNumberDecrement />
             <InputNumberIncrement />
           </InputGroupAddon>

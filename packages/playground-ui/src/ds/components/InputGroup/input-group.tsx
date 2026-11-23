@@ -284,7 +284,8 @@ export type InputGroupButtonProps = Omit<React.ComponentProps<typeof Button>, 's
 // An icon button inside a field is a chip inset in it: 8px shorter than the field, so a 3px
 // ring of field (plus the 1px border) shows evenly around it, with the addon's end padding
 // matching that ring.
-const inputGroupIconButtonBySize = cn(
+// eslint-disable-next-line react-refresh/only-export-components -- shared with InputNumber
+export const inputGroupIconButtonBySize = cn(
   'group-data-[size=sm]/input-group:size-[calc(var(--spacing-control-sm)-8px)]',
   'group-data-[size=md]/input-group:size-[calc(var(--spacing-control-md)-8px)]',
   'group-data-[size=lg]/input-group:size-[calc(var(--spacing-control-lg)-8px)]',
