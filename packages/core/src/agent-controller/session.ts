@@ -440,9 +440,11 @@ export interface SessionMachinery {
   /**
    * Release a suspended run that was aborted instead of resumed: drop its
    * run-scoped workflow registration and delete its snapshot rows, so it is no
-   * longer listed as suspended.
+   * longer listed as suspended. `releaseInMemory` drops this process's hold on
+   * the run; it is called before every delete attempt, including the ones
+   * deferred until a resume holding the run settles. It must not reject.
    */
-  releaseSuspendedRun(runId: string): Promise<void>;
+  releaseSuspendedRun(runId: string, releaseInMemory: () => Promise<void>): Promise<void>;
   /** Open a fresh subscription to a thread's agent event stream. */
   subscribeToThread(input: {
     agent?: Agent;
@@ -4847,10 +4849,11 @@ export class Session<TState = unknown> {
         // Drop this process's hold on the parked run (stream, registry entries, cached
         // workflow run) while its snapshot still reads as suspended, then the snapshot.
         // A failed in-memory release must not keep the snapshot from being deleted.
-        await this.#releaseParkedRunInMemory(runId).catch(error =>
-          this.emit({ type: 'error', error: getErrorFromUnknown(error) }),
+        await this.machinery.releaseSuspendedRun(runId, () =>
+          this.#releaseParkedRunInMemory(runId).catch(error =>
+            this.emit({ type: 'error', error: getErrorFromUnknown(error) }),
+          ),
         );
-        await this.machinery.releaseSuspendedRun(runId);
       } catch (error) {
         this.emit({ type: 'error', error: getErrorFromUnknown(error) });
       }

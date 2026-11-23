@@ -43,7 +43,11 @@ async function setup({ storageVersion }: { storageVersion?: 1 | 2 } = {}) {
     inputSchema: z.object({}),
     suspendSchema: z.object({ q: z.string() }),
     resumeSchema: z.object({ a: z.string() }),
-    execute: async (_input, ctx) => (ctx?.agent?.resumeData ? 'ok' : ctx?.agent?.suspend?.({ q: '?' })),
+    // Answering 'again' parks the run once more.
+    execute: async (_input, ctx) =>
+      ctx?.agent?.resumeData && (ctx.agent.resumeData as { a: string }).a !== 'again'
+        ? 'ok'
+        : ctx?.agent?.suspend?.({ q: '?' }),
   });
   const storage = new InMemoryStore();
   const agent = createDurableAgent({
@@ -184,8 +188,91 @@ describe('deleteSession with a parked suspension (#30743)', () => {
       expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
 
       expect((await workflows.getWorkflowRunById({ runId }))?.snapshot).toBeDefined();
+      const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
       proceed();
       expect(await resumed).toBe('done');
+      // The deferred release, run once the resume settles, finds nothing of the finished run to release.
+      await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
+      for (const result of releaseParkedRun.mock.results) expect(await result.value).toBe(false);
+    },
+  );
+
+  async function deleteDuringResume(storageVersion: 1 | 2, { resumeData = { a: 'yes' }, failResume = false } = {}) {
+    const { agent, controller, storage } = await setup({ storageVersion });
+    const session = await park(controller, 0);
+    const errors = collectErrors(session);
+    const workflows = (await storage.getStore('workflows'))!;
+    const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
+    expect(parked?.storageVersion ?? 1).toBe(storageVersion);
+    const runId = parked!.runId;
+    const engine = (agent as any).executionEngine;
+    const isCanceled = engine.isRunCanceledInStorage.bind(engine);
+    let entered!: () => void;
+    const resumeEntered = new Promise<void>(resolve => (entered = resolve));
+    let proceed!: () => void;
+    const gate = new Promise<void>(resolve => (proceed = resolve));
+    vi.spyOn(engine, 'isRunCanceledInStorage').mockImplementation(async (id: any) => {
+      entered();
+      await gate;
+      if (failResume) throw new Error('resume failed');
+      return isCanceled(id);
+    });
+    // A re-parked run's output never ends, so the resume is done once it settles.
+    const resumed = agent.resume(runId, resumeData).then(
+      async () => {
+        await agent.__resumesSettled(runId);
+        return 'resumed';
+      },
+      (error: Error) => error.message,
+    );
+    await resumeEntered;
+    expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
+    return { agent, workflows, runId, errors, resumed, proceed };
+  }
+
+  async function expectReleased(agent: any, workflows: any, runId: string) {
+    await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
+    expect(agent.runRegistry.size).toBe(0);
+    expect(agent.getWorkflow().runs.size).toBe(0);
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+  }
+
+  it.each([1, 2] as const)(
+    'releases the run and deletes its snapshot when a resume in flight at deletion fails (storage v%i)',
+    async storageVersion => {
+      const { agent, workflows, runId, resumed, proceed } = await deleteDuringResume(storageVersion, {
+        failResume: true,
+      });
+      proceed();
+      expect(await resumed).toBe('resume failed');
+      await expectReleased(agent, workflows, runId);
+    },
+  );
+
+  it.each([1, 2] as const)(
+    'releases the run and deletes its snapshot when a resume in flight at deletion parks it again (storage v%i)',
+    async storageVersion => {
+      const { agent, workflows, runId, resumed, proceed } = await deleteDuringResume(storageVersion, {
+        resumeData: { a: 'again' },
+      });
+      proceed();
+      expect(await resumed).toBe('resumed');
+      await expectReleased(agent, workflows, runId);
+    },
+  );
+
+  it.each([1, 2] as const)(
+    'still deletes the snapshot after a deferred release throws (storage v%i)',
+    async storageVersion => {
+      const { agent, workflows, runId, errors, resumed, proceed } = await deleteDuringResume(storageVersion, {
+        resumeData: { a: 'again' },
+      });
+      const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun').mockRejectedValue(new Error('release failed'));
+      proceed();
+      expect(await resumed).toBe('resumed');
+      await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
+      expect(releaseParkedRun).toHaveBeenCalledWith(runId);
+      expect(errors).toContain('release failed');
     },
   );
 

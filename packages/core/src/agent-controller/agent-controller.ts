@@ -451,13 +451,16 @@ export class AgentController<TState = {}> {
       getAgent: () => this.getCurrentAgent(session),
       getAgents: () => this.backingAgents(),
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
-      releaseSuspendedRun: async runId => {
+      releaseSuspendedRun: async (runId, releaseInMemory) => {
         const agents = [...new Set([this.getCurrentAgent(session), ...this.backingAgents()])];
+        await releaseInMemory();
         if (await this.#deleteParkedRun(runId, agents)) return;
         // A resume holds the run; decide once it settles, without holding up the session's teardown.
+        // A resume that failed or parked the run again left a new hold, so release it before each delete.
         void (async () => {
           do {
             await Promise.all(agents.map(agent => agent.__resumesSettled(runId)));
+            await releaseInMemory();
           } while (!(await this.#deleteParkedRun(runId, agents)));
         })().catch(error =>
           this.getMastra()
