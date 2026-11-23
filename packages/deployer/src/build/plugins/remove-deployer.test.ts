@@ -47,4 +47,14 @@ describe('Remove deployer', () => {
 
     expect(result?.output[0].code).toMatchSnapshot();
   });
+
+  // #29572: `#mastra` resolves to a slash-normalized id while the entry path is native on Windows
+  it('should remove the deployer when the module id is slash-normalized', async () => {
+    const plugin = removeDeployer('C:\\project\\src\\mastra\\index.ts');
+    const code = `import { Mastra } from '@mastra/core';\nexport const mastra = new Mastra({ deployer: new Deployer() });`;
+
+    const result = await (plugin.transform as Function)(code, 'C:/project/src/mastra/index.ts');
+
+    expect(result?.code).toContain('export const mastra = new Mastra({});');
+  });
 });

@@ -7,7 +7,7 @@
  */
 
 import type { ToolExecutionContext } from '../../tools/types';
-import { WORKSPACE_TOOLS } from '../constants';
+import type { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import type { ComputerScreenshot, SandboxComputer, WorkspaceSandbox } from '../sandbox';
 import { supportsComputer } from '../sandbox';

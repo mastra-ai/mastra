@@ -22,7 +22,7 @@ export function Processor() {
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{processorId}</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -32,7 +32,7 @@ export function Processor() {
   // 403 check - permission denied for processors
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{processorId}</h1>
         <PermissionDenied variant="fill" resource="processors" />
       </PageLayout>
@@ -46,7 +46,7 @@ export function Processor() {
 
   if (isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{processorId}</h1>
         <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
@@ -55,7 +55,7 @@ export function Processor() {
   }
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">{processorId}</h1>
       <div className="h-full w-full overflow-y-hidden">
         <ProcessorPanel processorId={processorId!} />

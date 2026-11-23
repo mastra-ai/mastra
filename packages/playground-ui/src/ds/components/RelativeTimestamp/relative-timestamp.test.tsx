@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RelativeTimestamp } from './relative-timestamp';

@@ -112,14 +112,14 @@ async function waitForTrace(traceId: string, timeoutMs = 15000): Promise<any[]> 
           if (node.attributes && typeof node.attributes === 'string') {
             try {
               node.attributes = JSON.parse(node.attributes);
-            } catch (e) {
+            } catch {
               // If parsing fails, leave as string
             }
           }
           return node;
         });
       }
-    } catch (error) {
+    } catch {
       // Trace not found yet, continue waiting
     }
 

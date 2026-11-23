@@ -7,9 +7,7 @@ const getMock = useLoopScenarioAimock();
 describeForAllEngines(
   'AIMock loop scenario: goal satisfied',
   engine => {
-    const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
-    // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
-    itFailsOnInngest('judge marks objective satisfied, goal chunk emitted with passed=true', async () => {
+    it('judge marks objective satisfied, goal chunk emitted with passed=true', async () => {
       const memory = new MockMemory();
       const THREAD = 'goal-thread-1';
       const RESOURCE = 'user-1';

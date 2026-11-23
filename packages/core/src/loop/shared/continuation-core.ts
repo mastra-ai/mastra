@@ -2,8 +2,162 @@ import type { IterationCompleteContext, OnIterationCompleteHandler } from '../..
 import type { IMastraLogger } from '../../logger';
 import type { LoopOptions } from '../types';
 
+export const CONTINUATION_STOP_CAUSES = [
+  'model_finished',
+  'max_steps',
+  'stop_condition',
+  'iteration_hook',
+  'feedback_complete',
+  'delegation',
+] as const;
+export type ContinuationStopCause = (typeof CONTINUATION_STOP_CAUSES)[number];
+
+type StopCondition = Exclude<NonNullable<LoopOptions['stopWhen']>, readonly unknown[]>;
+
+const stepBudgetConditions = new WeakSet<StopCondition>();
+
+/**
+ * Marks a stop condition that only enforces `maxSteps`. The default engine
+ * receives `maxSteps` as such a condition next to the caller's `stopWhen`, and it
+ * matches on every last allowed step, so the ladder needs to tell it apart from a
+ * caller's condition that matched there too.
+ */
+export function markStepBudgetCondition<C extends StopCondition>(condition: C): C {
+  stepBudgetConditions.add(condition);
+  return condition;
+}
+
+interface StopWhenEvaluation {
+  matched: boolean;
+  /** A caller's own condition matched, as opposed to only the marked `maxSteps` cap. */
+  callerConditionMatched: boolean;
+}
+
+const POST_BUDGET_STOP_WHEN_TIMEOUT_MS = 250;
+
+/**
+ * Evaluates every stop condition once and reports which kinds matched.
+ *
+ * Once the step budget is spent the run stops whatever the conditions say; they
+ * only decide whether the caller or the budget gets the credit. A caller's
+ * condition that throws or stalls there must not fail or hang a run whose last
+ * step already completed, so post-budget evaluation is bounded: any caller
+ * condition that matches before the bound wins `stop_condition`, while
+ * rejections and conditions still pending at the bound are logged and count as
+ * unmatched (`max_steps`). A condition that throws while the run could still
+ * continue fails the run immediately, as before: its answer decides whether
+ * another model call happens.
+ */
+async function evaluateStopWhen({
+  stopWhen,
+  steps,
+  underMaxSteps,
+  logger,
+}: {
+  stopWhen: NonNullable<LoopOptions['stopWhen']>;
+  steps: unknown[];
+  underMaxSteps: boolean;
+  logger?: IMastraLogger;
+}): Promise<StopWhenEvaluation> {
+  const conditions: StopCondition[] = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
+  // Cast steps to any for v5/v6 StopCondition compatibility — the step
+  // shapes differ slightly (rawFinishReason, finishReason format) but are
+  // compatible at runtime for stop condition evaluation.
+  const stepsForConditions = steps as any;
+  const budgetConditions = conditions.filter(condition => stepBudgetConditions.has(condition));
+  const callerConditions = conditions.filter(condition => !stepBudgetConditions.has(condition));
+  const budgetMatched = (
+    await Promise.all(budgetConditions.map(async condition => Boolean(await condition({ steps: stepsForConditions }))))
+  ).some(Boolean);
+  const budgetSpent = !underMaxSteps || budgetMatched;
+  if (!budgetSpent) {
+    // Under budget, preserve Promise.all fail-fast semantics so a rejecting predicate
+    // surfaces immediately without waiting for pending sibling predicates.
+    const callerConditionMatched = (
+      await Promise.all(
+        callerConditions.map(async condition => Boolean(await condition({ steps: stepsForConditions }))),
+      )
+    ).some(Boolean);
+    return { matched: callerConditionMatched, callerConditionMatched };
+  }
+  if (callerConditions.length === 0) {
+    return { matched: budgetMatched, callerConditionMatched: false };
+  }
+
+  const safeWarn = (message: string, details?: Record<string, unknown>) => {
+    try {
+      logger?.warn(message, details);
+    } catch {
+      // A failing logger must never block terminal delivery or leak an unhandled rejection.
+    }
+  };
+
+  let loggedRejection = false;
+  const logPostBudgetFailure = (reason: unknown) => {
+    if (loggedRejection) return;
+    loggedRejection = true;
+    safeWarn('A stopWhen condition failed after the step budget ran out; ignoring its result', {
+      error: reason,
+    });
+  };
+
+  const callerConditionMatched = await new Promise<boolean>(resolve => {
+    let settled = false;
+    let remaining = callerConditions.length;
+    const finish = (matched: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(matched);
+    };
+
+    const timeout = setTimeout(() => {
+      safeWarn('A stopWhen condition did not settle after the step budget ran out; attributing stop to maxSteps');
+      finish(false);
+    }, POST_BUDGET_STOP_WHEN_TIMEOUT_MS);
+
+    for (const condition of callerConditions) {
+      const evalPromise = (async () => Boolean(await condition({ steps: stepsForConditions })))();
+      void evalPromise.then(
+        matched => {
+          remaining -= 1;
+          if (matched) {
+            finish(true);
+          } else if (remaining === 0) {
+            finish(false);
+          }
+        },
+        reason => {
+          logPostBudgetFailure(reason);
+          remaining -= 1;
+          if (remaining === 0) {
+            finish(false);
+          }
+        },
+      );
+    }
+  });
+
+  return {
+    matched: budgetMatched || callerConditionMatched,
+    callerConditionMatched,
+  };
+}
+
+/**
+ * The cause of a matched stopWhen. Only the marked `maxSteps` cap matching means
+ * the budget ran out, whether the caller set `maxSteps` or the default cap
+ * applies; a caller's own condition that matched stopped the run on purpose, and
+ * a larger `maxSteps` would not change that.
+ */
+function stopConditionCause(evaluation: StopWhenEvaluation): ContinuationStopCause {
+  return evaluation.callerConditionMatched ? 'stop_condition' : 'max_steps';
+}
+
 /** Decision returned by {@link decideContinuation}, projected back onto engine state by the glue. */
 export interface ContinuationDecision {
+  /** Authoritative loop stop boundary; absent while continuing. Not a provider finish reason. */
+  stopCause?: ContinuationStopCause;
   /** True when the loop must stop after this iteration. */
   isFinal: boolean;
   /**
@@ -126,6 +280,8 @@ export async function decideContinuation(deps: ContinuationDeps): Promise<Contin
  */
 async function decideContinuationDurable(deps: ContinuationDeps): Promise<ContinuationDecision> {
   let hasFinishedSteps = false;
+  let stopCause: ContinuationStopCause =
+    deps.llmWantsToContinue && !deps.underMaxSteps ? 'max_steps' : 'model_finished';
   // Hard-stop tracks reasons the onIterationComplete hook must NOT override.
   let hardStop = false;
   let nextPendingFeedbackStop = false;
@@ -136,29 +292,32 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
   if (deps.pendingFeedbackStop) {
     hasFinishedSteps = true;
     hardStop = true;
+    stopCause = 'feedback_complete';
   }
 
   const shouldContinue = deps.llmWantsToContinue;
 
   // Evaluate user-supplied stopWhen predicate(s), but only while the outcome
-  // is still open — a loop that is already stopping (or out of budget) never
-  // needs them.
-  if (shouldContinue && deps.underMaxSteps && !hasFinishedSteps && deps.stopWhen && deps.steps.length > 0) {
-    // Cast steps to any for v5/v6 StopCondition compatibility — the step
-    // shapes differ slightly (rawFinishReason, finishReason format) but are
-    // compatible at runtime for stop condition evaluation.
-    const steps = deps.steps as any;
-    const conditions = await Promise.all(
-      (Array.isArray(deps.stopWhen) ? deps.stopWhen : [deps.stopWhen]).map(condition => condition({ steps })),
-    );
-    if (conditions.some(Boolean)) {
+  // is still open — a loop that is already stopping never needs them. They
+  // still run on the last allowed step: the run stops there either way, but a
+  // match says the caller ended it, not the step budget (#29612).
+  if (shouldContinue && !hasFinishedSteps && deps.stopWhen && deps.steps.length > 0) {
+    const evaluation = await evaluateStopWhen({
+      stopWhen: deps.stopWhen,
+      steps: deps.steps,
+      underMaxSteps: deps.underMaxSteps,
+      logger: deps.logger,
+    });
+    if (evaluation.matched) {
       hasFinishedSteps = true;
+      stopCause = stopConditionCause(evaluation);
     }
   }
 
   // Delegation bail (ctx.bail() from a delegation hook) is a hard stop.
   // Consumed before the hook so its isFinal context reflects the bail.
   if (deps.consumeDelegationBail()) {
+    if (shouldContinue && deps.underMaxSteps && !hasFinishedSteps) stopCause = 'delegation';
     hasFinishedSteps = true;
     hardStop = true;
   }
@@ -198,11 +357,14 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
         } else if (iterationResult.continue === false && !hasFinishedSteps) {
           hasFinishedSteps = true;
           isFinal = true;
+          stopCause = 'iteration_hook';
         } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
           if (deps.underMaxSteps) {
             hasFinishedSteps = false;
             isFinal = false;
             forceContinue = true;
+          } else {
+            stopCause = 'max_steps';
           }
         }
       }
@@ -212,7 +374,7 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
     }
   }
 
-  return { isFinal, forceContinue, nextPendingFeedbackStop };
+  return { isFinal, forceContinue, nextPendingFeedbackStop, ...(isFinal ? { stopCause } : {}) };
 }
 
 /**
@@ -230,6 +392,8 @@ async function decideContinuationDefault(
   policy: Extract<ContinuationPolicy, { mode: 'default' }>,
 ): Promise<ContinuationDecision> {
   let hasFinishedSteps = false;
+  let stopCause: ContinuationStopCause =
+    deps.llmWantsToContinue && !deps.underMaxSteps ? 'max_steps' : 'model_finished';
   let nextPendingFeedbackStop = false;
 
   // SOFT stop: the previous turn's `{ continue: false, feedback }`
@@ -239,6 +403,7 @@ async function decideContinuationDefault(
   // released contract let hook authors override the two-phase stop.
   if (deps.pendingFeedbackStop) {
     hasFinishedSteps = true;
+    stopCause = 'feedback_complete';
   }
 
   const shouldContinue = deps.llmWantsToContinue;
@@ -249,14 +414,18 @@ async function decideContinuationDefault(
   // effects (logging, metrics, external calls) are behavior users shipped
   // against. Durable's gate exists only for its settled-record constraint.
   if (shouldContinue && deps.stopWhen && deps.steps.length > 0) {
-    // Cast steps to any for v5/v6 StopCondition compatibility — the step
-    // shapes differ slightly (rawFinishReason, finishReason format) but are
-    // compatible at runtime for stop condition evaluation.
-    const steps = deps.steps as any;
-    const conditions = await Promise.all(
-      (Array.isArray(deps.stopWhen) ? deps.stopWhen : [deps.stopWhen]).map(condition => condition({ steps })),
-    );
-    if (conditions.some(Boolean)) {
+    const evaluation = await evaluateStopWhen({
+      stopWhen: deps.stopWhen,
+      steps: deps.steps,
+      underMaxSteps: deps.underMaxSteps,
+      logger: deps.logger,
+    });
+    if (evaluation.matched) {
+      // `maxSteps` (or the default cap) arrives here as a marked stop condition
+      // that matches on the last allowed step, so only a caller's own match
+      // counts as stopWhen there. A completed feedback turn keeps its cause: the
+      // hook asked for exactly that one turn, even when it was the last allowed.
+      if (!hasFinishedSteps) stopCause = stopConditionCause(evaluation);
       hasFinishedSteps = true;
     }
   }
@@ -293,6 +462,10 @@ async function decideContinuationDefault(
             // released contract.
             if (!hasFinishedSteps) {
               isFinal = false;
+            } else if (stopCause === 'max_steps') {
+              // On the last allowed step the hook asked to stop, so it owns the
+              // cause, as in the plain `continue: false` branch below.
+              stopCause = 'iteration_hook';
             }
           } else if (!hasFinishedSteps && policy.hasFiniteMaxSteps && deps.underMaxSteps) {
             // Feedback force-continue requires a FINITE maxSteps:
@@ -302,9 +475,13 @@ async function decideContinuationDefault(
             isFinal = false;
             forceContinue = true;
           }
-        } else if (iterationResult.continue === false && !hasFinishedSteps) {
+        } else if (iterationResult.continue === false && (!hasFinishedSteps || stopCause === 'max_steps')) {
+          // `maxSteps` reaches this ladder as a stop condition that matches on the
+          // last allowed step. The hook's stop still owns the cause there, as on the
+          // durable ladder. The run stops either way; only the attribution differs.
           hasFinishedSteps = true;
           isFinal = true;
+          stopCause = 'iteration_hook';
         } else if (iterationResult.continue === true && (hasFinishedSteps || !shouldContinue)) {
           // Resurrection: `{ continue: true }` on a stopped run forces
           // another turn. Inject feedback before reopening the run so the
@@ -316,6 +493,8 @@ async function decideContinuationDefault(
             hasFinishedSteps = false;
             isFinal = false;
             forceContinue = true;
+          } else {
+            stopCause = 'max_steps';
           }
         }
       }
@@ -339,9 +518,10 @@ async function decideContinuationDefault(
   // which `isFinal = true` (applied after forceContinue by the glue)
   // reproduces exactly.
   if (!hasFinishedSteps && deps.consumeDelegationBail()) {
+    if (!isFinal || forceContinue) stopCause = 'delegation';
     isFinal = true;
     forceContinue = false;
   }
 
-  return { isFinal, forceContinue, nextPendingFeedbackStop };
+  return { isFinal, forceContinue, nextPendingFeedbackStop, ...(isFinal ? { stopCause } : {}) };
 }

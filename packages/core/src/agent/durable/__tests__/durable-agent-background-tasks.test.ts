@@ -17,6 +17,8 @@ import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { DurableAgent } from '../durable-agent';
+import type { DurableAgentStreamOptions } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
 
 // ============================================================================
@@ -212,7 +214,10 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await vi.waitFor(() => expect(chunks.find(c => c.type === 'background-task-started')).toBeDefined(), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -252,7 +257,10 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await vi.waitFor(() => expect(chunks.find(c => c.type === 'tool-result')).toBeDefined(), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeUndefined();
@@ -303,7 +311,16 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 1500));
+    const resultParts = () =>
+      ((globalRunRegistry.get(runId) as any)?.messageList?.get.all.db() ?? []).flatMap((m: any) =>
+        (m.content?.parts ?? (Array.isArray(m.content) ? m.content : [])).filter(
+          (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'result',
+        ),
+      );
+    await vi.waitFor(() => expect(resultParts()[0]?.toolInvocation.result).toEqual({ summary: 'Research on AI' }), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -326,6 +343,110 @@ describe('DurableAgent background tasks via stream()', () => {
     expect(firstResult.toolName).toBe('research');
     expect(firstResult.result).toEqual({ summary: 'Research on AI' });
 
+    cleanup();
+  });
+
+  it('preserves a completed background result when another tool in the same step finishes later', async () => {
+    let completeBackground!: () => void;
+    const backgroundCompleted = new Promise<void>(resolve => {
+      completeBackground = resolve;
+    });
+    const researchTool = createTool({
+      id: 'research',
+      description: 'Research a topic',
+      inputSchema: z.object({ topic: z.string() }),
+      background: { enabled: true },
+      execute: async () => {
+        completeBackground();
+        return { summary: 'Research complete' };
+      },
+    });
+    let sawTerminalResultBeforeMapping = false;
+    const reviewTool = createTool({
+      id: 'review',
+      description: 'Review a topic',
+      inputSchema: z.object({ topic: z.string() }),
+      execute: async () => {
+        await backgroundCompleted;
+        await vi.waitFor(() => {
+          const parts = [...globalRunRegistry.values()].flatMap(
+            entry => entry.messageList?.get.all.db().flatMap(message => message.content?.parts ?? []) ?? [],
+          );
+          expect(
+            parts.find(part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'bg-call')
+              ?.toolInvocation?.result,
+          ).toEqual({ summary: 'Research complete' });
+        });
+        sawTerminalResultBeforeMapping = true;
+        return { reviewed: true };
+      },
+    });
+    const { model } = makeScriptedModel([
+      () =>
+        convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'bg-call',
+            toolName: 'research',
+            input: '{"topic":"AI"}',
+            providerExecuted: false,
+          },
+          {
+            type: 'tool-call',
+            toolCallId: 'sync-call',
+            toolName: 'review',
+            input: '{"topic":"AI"}',
+            providerExecuted: false,
+          },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+        ]),
+      textResponse('Done'),
+    ]);
+    const agent = new Agent({
+      id: 'bg-mapping-race-agent',
+      name: 'BG mapping race agent',
+      instructions: 'Review research',
+      model: model as LanguageModelV2,
+      tools: { research: researchTool, review: reviewTool },
+      backgroundTasks: { tools: { research: true } },
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    const localMastra = new Mastra({
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+      agents: { 'bg-mapping-race-agent': durableAgent as any },
+    });
+    await localMastra.startWorkers();
+
+    const { runId, cleanup } = await durableAgent.stream('Review the research');
+    await vi.waitFor(() => {
+      const parts =
+        globalRunRegistry
+          .get(runId)
+          ?.messageList?.get.all.db()
+          .flatMap(message => message.content?.parts ?? []) ?? [];
+      expect(
+        parts.some(
+          part =>
+            part.type === 'tool-invocation' &&
+            part.toolInvocation?.toolCallId === 'sync-call' &&
+            part.toolInvocation?.state === 'result',
+        ),
+      ).toBe(true);
+    });
+    expect(sawTerminalResultBeforeMapping).toBe(true);
+    const parts =
+      globalRunRegistry
+        .get(runId)
+        ?.messageList?.get.all.db()
+        .flatMap(message => message.content?.parts ?? []) ?? [];
+    expect(
+      parts.find(part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === 'bg-call')
+        ?.toolInvocation?.result,
+    ).toEqual({ summary: 'Research complete' });
     cleanup();
   });
 
@@ -424,7 +545,14 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 1500));
+    await vi.waitFor(
+      async () => {
+        const started = chunks.find(c => c.type === 'background-task-started');
+        expect(started).toBeDefined();
+        expect((await localMastra.backgroundTaskManager!.getTask(started.payload.taskId))?.status).toBe('completed');
+      },
+      { timeout: 10_000, interval: 10 },
+    );
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -494,7 +622,14 @@ describe('DurableAgent background tasks via stream()', () => {
     });
 
     // Wait for the bg task to dispatch and the tool to call suspend.
-    await new Promise(r => setTimeout(r, 1500));
+    await vi.waitFor(
+      async () => {
+        const started = chunks.find(c => c.type === 'background-task-started');
+        expect(started).toBeDefined();
+        expect((await localMastra.backgroundTaskManager!.getTask(started.payload.taskId))?.status).toBe('suspended');
+      },
+      { timeout: 10_000, interval: 10 },
+    );
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -508,7 +643,10 @@ describe('DurableAgent background tasks via stream()', () => {
 
     await manager.resume(taskId, { approved: true, notes: 'looks good' });
 
-    await new Promise(r => setTimeout(r, 1500));
+    await vi.waitFor(async () => expect((await manager.getTask(taskId))?.status).toBe('completed'), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const completed = await manager.getTask(taskId);
     expect(completed?.status).toBe('completed');
@@ -747,6 +885,58 @@ describe('DurableAgent.streamUntilIdle', () => {
     expect(chunks.filter(c => c.type === 'finish')).toHaveLength(2);
     expect(getCallCount()).toBe(2);
     if (runId) expect(outer.runId).toBe(runId);
+
+    outer.cleanup();
+  });
+
+  it('routes untilIdle turns through a subclass stream() override', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([textResponse('first response'), textResponse('continuation response')]);
+    const baseAgent = new Agent({ id: 'da-sub', name: 'da-sub', instructions: 'test', model, memory });
+
+    class CountingDurableAgent extends DurableAgent {
+      streamCalls = 0;
+      override async stream(messages: Parameters<DurableAgent['stream']>[0], options?: DurableAgentStreamOptions) {
+        this.streamCalls++;
+        return super.stream(messages, options);
+      }
+    }
+    const durableAgent = new CountingDurableAgent({ agent: baseAgent });
+    mastra.addAgent(durableAgent as any, 'da-sub');
+
+    const publishEvent = (type: string, taskId: string) =>
+      (mastra.backgroundTaskManager as any).publishLifecycleEvent(type, {
+        id: taskId,
+        toolName: 'dummy',
+        toolCallId: taskId,
+        runId: 'run-1',
+        agentId: 'da-sub',
+        threadId: 'thread-sub',
+        resourceId: 'user-1',
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    const outer = await durableAgent.stream('hi', {
+      memory: { thread: 'thread-sub', resource: 'user-1' },
+      untilIdle: true,
+    });
+    await publishEvent('task.running', 'task-1');
+    await new Promise(r => setTimeout(r, 50));
+    await publishEvent('task.completed', 'task-1');
+
+    const chunks = await drain(outer.fullStream as ReadableStream<any>);
+    expect(chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text)).toEqual([
+      'first response',
+      'continuation response',
+    ]);
+    // The outer call, the initial turn, and the continuation all run through the override.
+    expect(durableAgent.streamCalls).toBe(3);
 
     outer.cleanup();
   });

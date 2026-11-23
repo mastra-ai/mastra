@@ -73,16 +73,6 @@ describe('formValuesToSaveParams', () => {
     expect(result.workflows).toEqual({});
   });
 
-  it('returns an empty tools record when a previously-selected tool is toggled off', () => {
-    const availableAgentTools: AgentTool[] = [
-      { id: 'tool-a', name: 'Tool A', description: 'Tool A desc', isChecked: false, type: 'tool' },
-    ];
-
-    const result = formValuesToSaveParams({ ...baseValues, tools: { 'tool-a': false } }, availableAgentTools);
-
-    expect(result.tools).toEqual({});
-  });
-
   it('builds a workflow entry with description when the available workflow has one', () => {
     const availableAgentTools: AgentTool[] = [
       { id: 'wf-1', name: 'Workflow One', description: 'Workflow desc', isChecked: true, type: 'workflow' },

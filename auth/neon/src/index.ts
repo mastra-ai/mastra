@@ -3,39 +3,41 @@ import type {
   ICredentialsProvider,
   ISessionProvider,
   MastraAuthRequest,
+  MastraUser,
   Session,
   CredentialsResult,
 } from '@mastra/core/auth';
 import { getRequestHeader } from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+import { MastraAuthProvider, normalizeMastraUser } from '@mastra/core/server';
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 
+import { linkNeonUser, readCookie, rememberSessionCookie, stripTrailingSlashes } from './session-cookie';
+
 export { MastraRBACNeon } from './rbac-provider';
 export type { MastraRBACNeonOptions, NeonRoleMappingOptions } from './rbac-provider';
 
-function stripTrailingSlashes(url: string): string {
-  let end = url.length;
-  while (end > 0 && url[end - 1] === '/') {
-    end--;
-  }
-  return url.slice(0, end);
-}
+/** Cookie name Neon Auth uses for the signed session token. */
+export const NEON_AUTH_SESSION_COOKIE = '__Secure-neon-auth.session_token';
 
-function parseCookies(response: Response): string[] {
+function parseSetCookies(response: Response): string[] {
   if (typeof response.headers.getSetCookie === 'function') {
     return response.headers.getSetCookie();
   }
   const raw = response.headers.get('set-cookie');
   if (!raw) return [];
-  return raw.split(/,(?=\s*\w+=)/);
+  return raw.split(/,(?=\s*[^;,\s]+=)/).map(cookie => cookie.trim());
+}
+
+function isJwtShaped(token: string): boolean {
+  return token.split('.').length === 3;
 }
 
 /**
- * Response shape from Neon Auth session endpoint.
+ * Response shape from the Neon Auth `get-session` endpoint.
  */
 export interface NeonSessionResponse {
   session: {
@@ -45,6 +47,7 @@ export interface NeonSessionResponse {
     expiresAt: string;
     createdAt: string;
     updatedAt: string;
+    activeOrganizationId?: string | null;
   };
   user: {
     id: string;
@@ -54,15 +57,21 @@ export interface NeonSessionResponse {
     emailVerified: boolean;
     createdAt: string;
     updatedAt: string;
+    /** Neon Auth user role (for example `user` or `admin`). Not present for JWT-authenticated requests. */
+    role?: string | null;
   };
 }
 
 /**
  * User type returned by the adapter's authenticateToken.
  * Contains the session and user data from Neon Auth,
- * plus optional JWT claims when authenticated via bearer JWT.
+ * plus the verified JWT claims when authenticated via bearer JWT.
  */
 export interface NeonAuthUser {
+  /** Neon Auth user ID. Mastra RBAC and FGA identify users by this top-level field. */
+  id: string;
+  email: string;
+  name: string;
   session?: NeonSessionResponse['session'];
   user: NeonSessionResponse['user'];
   jwt?: JWTPayload;
@@ -84,19 +93,19 @@ export function mapNeonUserToEEUser(user: NeonSessionResponse['user']): EEUser {
 
 export interface MastraAuthNeonOptions extends MastraAuthProviderOptions<NeonAuthUser> {
   /**
-   * The Neon Auth base URL (e.g., `https://your-project.neon.tech`).
+   * The Neon Auth URL, as shown in the Neon Console under **Auth > Configuration**
+   * (for example `https://ep-xxx.neonauth.us-east-2.aws.neon.tech/neondb/auth`).
    * Falls back to the `NEON_AUTH_BASE_URL` environment variable.
    */
   baseUrl?: string;
   /**
-   * Explicit JWKS URL for JWT token verification.
-   * Overrides the URL derived from `baseUrl`.
-   * Falls back to the `NEON_AUTH_JWKS_URL` environment variable.
+   * JWKS URL for JWT verification.
+   * Falls back to the `NEON_AUTH_JWKS_URL` environment variable, then `<baseUrl>/.well-known/jwks.json`.
    */
   jwksUrl?: string;
   /**
-   * The session cookie name used by Neon Auth.
-   * @default 'neonauth.session_token'
+   * Name of the Neon Auth session cookie.
+   * @default '__Secure-neon-auth.session_token'
    */
   sessionCookieName?: string;
   /**
@@ -115,41 +124,18 @@ export interface MastraAuthNeonOptions extends MastraAuthProviderOptions<NeonAut
  *
  * This adapter supports:
  * - JWT bearer token verification via JWKS (for API clients)
- * - Session cookie verification via Neon Auth REST API (for Studio)
- * - Email/password sign-in and sign-up (for Studio credentials flow)
- * - Session management (validate, refresh, destroy)
+ * - Session cookie verification via the Neon Auth API (for Studio)
+ * - Email/password sign-in and sign-up (for the Studio credentials flow)
+ * - Session validation and sign-out
  *
  * @example
  * ```typescript
  * import { MastraAuthNeon } from '@mastra/auth-neon';
  *
- * const auth = new MastraAuthNeon({
- *   baseUrl: process.env.NEON_AUTH_BASE_URL,
- * });
- *
- * const mastra = new Mastra({
- *   server: {
- *     auth,
- *   },
- * });
- * ```
- *
- * @example With RBAC
- * ```typescript
- * import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon';
- *
  * const mastra = new Mastra({
  *   server: {
  *     auth: new MastraAuthNeon({
  *       baseUrl: process.env.NEON_AUTH_BASE_URL,
- *     }),
- *     rbac: new MastraRBACNeon({
- *       roleMapping: {
- *         owner: ['*'],
- *         admin: ['*'],
- *         member: ['agents:read', 'workflows:*'],
- *         _default: [],
- *       },
  *     }),
  *   },
  * });
@@ -163,8 +149,11 @@ export class MastraAuthNeon
 {
   protected baseUrl: string;
   protected jwksUrl: string;
+  /** Origin of the Neon Auth URL. Neon Auth issues JWTs with this as `iss` and `aud`. */
+  protected issuer: string;
   public sessionCookieName: string;
   protected signUpEnabledConfig: boolean;
+  private jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
 
   constructor(options?: MastraAuthNeonOptions) {
     super({ name: options?.name ?? 'neon' });
@@ -178,8 +167,9 @@ export class MastraAuthNeon
     }
 
     this.baseUrl = stripTrailingSlashes(baseUrl);
-    this.jwksUrl = options?.jwksUrl ?? process.env.NEON_AUTH_JWKS_URL ?? `${this.baseUrl}/auth/jwks`;
-    this.sessionCookieName = options?.sessionCookieName ?? 'neonauth.session_token';
+    this.issuer = new URL(this.baseUrl).origin;
+    this.jwksUrl = options?.jwksUrl ?? process.env.NEON_AUTH_JWKS_URL ?? `${this.baseUrl}/.well-known/jwks.json`;
+    this.sessionCookieName = options?.sessionCookieName ?? NEON_AUTH_SESSION_COOKIE;
     this.signUpEnabledConfig = options?.signUpEnabled ?? true;
 
     this.registerOptions(options);
@@ -197,13 +187,13 @@ export class MastraAuthNeon
   // ── IUserProvider ──
 
   async getCurrentUser(request: Request): Promise<EEUser | null> {
-    try {
-      const result = await this.fetchSession(request.headers);
-      if (!result?.user) return null;
-      return mapNeonUserToEEUser(result.user);
-    } catch {
-      return null;
-    }
+    const authorization = request.headers.get('Authorization');
+    const bearer = authorization?.replace(/^Bearer\s+/i, '').trim() ?? '';
+    const result = await this.authenticateToken(bearer, request);
+    if (!result) return null;
+    const user = mapNeonUserToEEUser(result.user);
+    linkNeonUser(user, result);
+    return user;
   }
 
   async getUser(_userId: string): Promise<EEUser | null> {
@@ -216,58 +206,46 @@ export class MastraAuthNeon
 
   // ── MastraAuthProvider ──
 
+  /**
+   * Authenticates a request.
+   *
+   * - A JWT-shaped bearer token is verified against the Neon Auth JWKS
+   *   (signature, issuer, audience, and expiry).
+   * - Otherwise the Neon Auth session cookie is validated with `get-session`.
+   *   The cookie comes from the request, or from `token` when an API client
+   *   sends the session cookie value as a bearer token.
+   */
   async authenticateToken(token: string, request: MastraAuthRequest): Promise<NeonAuthUser | null> {
-    if (!token || typeof token !== 'string') {
-      return null;
+    const bearer = typeof token === 'string' ? token.trim() : '';
+    const requestCookie = readCookie(getRequestHeader(request, 'Cookie'), this.sessionCookieName);
+
+    let cookieValue: string | null;
+    if (bearer && isJwtShaped(bearer)) {
+      const payload = await this.verifyJwt(bearer);
+      if (payload) return this.userFromJwt(payload);
+      // An expired or invalid JWT shouldn't sign out a client that also
+      // sends a valid session cookie (for example MastraClient with both).
+      cookieValue = requestCookie;
+    } else {
+      cookieValue = requestCookie ?? (bearer || null);
     }
 
-    // Try JWT verification first (for bearer JWT tokens from API clients).
-    const jwtResult = await this.verifyJwt(token);
-    if (jwtResult) {
-      return {
-        user: {
-          id: jwtResult.sub ?? '',
-          email: (jwtResult.email as string) ?? '',
-          name: (jwtResult.name as string) ?? '',
-          image: (jwtResult.picture as string) ?? null,
-          emailVerified: (jwtResult.email_verified as boolean) ?? false,
-          createdAt: jwtResult.iat ? new Date(jwtResult.iat * 1000).toISOString() : '',
-          updatedAt: '',
-        },
-        jwt: jwtResult,
-      };
-    }
+    // Reject values that would add extra cookies to the Neon Auth request.
+    if (!cookieValue || !/^[^\s;,]+$/.test(cookieValue)) return null;
 
-    // Fall back to session cookie verification via Neon Auth API.
-    try {
-      const headers = new Headers();
+    const sessionCookie = `${this.sessionCookieName}=${cookieValue}`;
+    const result = await this.fetchSession(sessionCookie);
+    if (!result) return null;
 
-      const cookieHeader = getRequestHeader(request, 'Cookie');
-      if (cookieHeader) {
-        headers.set('Cookie', cookieHeader);
-      }
-
-      const hasSessionCookie = !!cookieHeader
-        ?.split(';')
-        .some(pair => pair.trim().split('=')[0]?.trim() === this.sessionCookieName);
-
-      if (token && !hasSessionCookie) {
-        const existingCookies = cookieHeader ? `${cookieHeader}; ` : '';
-        headers.set('Cookie', `${existingCookies}${this.sessionCookieName}=${token}`);
-      }
-
-      const result = await this.fetchSession(headers);
-      if (!result?.session || !result?.user) {
-        return null;
-      }
-
-      return {
-        session: result.session,
-        user: result.user,
-      };
-    } catch {
-      return null;
-    }
+    const user: NeonAuthUser = {
+      id: result.user.id,
+      email: result.user.email,
+      name: result.user.name,
+      session: result.session,
+      user: result.user,
+    };
+    rememberSessionCookie(user, sessionCookie);
+    return user;
   }
 
   async authorizeUser(user: NeonAuthUser): Promise<boolean> {
@@ -280,36 +258,22 @@ export class MastraAuthNeon
     return true;
   }
 
+  /**
+   * Normalize the inner Neon Auth user record; the default normalization
+   * cannot see through the `{ session, user, jwt }` wrapper and `image` field.
+   */
+  override toMastraUser(authUser: NeonAuthUser): MastraUser {
+    const normalized = normalizeMastraUser(authUser.user);
+    if (!normalized.avatarUrl && authUser.user.image) {
+      normalized.avatarUrl = authUser.user.image;
+    }
+    return normalized;
+  }
+
   // ── ICredentialsProvider ──
 
   async signIn(email: string, password: string, request: Request): Promise<CredentialsResult<EEUser>> {
-    const response = await fetch(`${this.baseUrl}/auth/sign-in/email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(request?.headers ? Object.fromEntries(request.headers.entries()) : {}),
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const errorData = (await response.json().catch(() => ({}))) as { message?: string };
-      throw new Error(errorData.message || 'Invalid email or password');
-    }
-
-    const result = (await response.json()) as { user?: NeonSessionResponse['user']; token?: string | null };
-
-    if (!result?.user) {
-      throw new Error('Invalid email or password');
-    }
-
-    const cookies = parseCookies(response);
-
-    return {
-      user: mapNeonUserToEEUser(result.user),
-      token: result.token ?? undefined,
-      cookies,
-    };
+    return this.credentialsRequest('/sign-in/email', { email, password }, request, 'Invalid email or password');
   }
 
   async signUp(
@@ -318,45 +282,28 @@ export class MastraAuthNeon
     name: string | undefined,
     request: Request,
   ): Promise<CredentialsResult<EEUser>> {
-    const displayName = name ?? email.split('@')[0] ?? 'User';
-
-    const response = await fetch(`${this.baseUrl}/auth/sign-up/email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(request?.headers ? Object.fromEntries(request.headers.entries()) : {}),
-      },
-      body: JSON.stringify({ email, password, name: displayName }),
-    });
-
-    if (!response.ok) {
-      const errorData = (await response.json().catch(() => ({}))) as { message?: string };
-      throw new Error(errorData.message || 'Failed to create account');
+    // Mastra's sign-up route doesn't check isSignUpEnabled(), so enforce it here.
+    // Otherwise `signUpEnabled: false` only hides the form in Studio.
+    if (!this.signUpEnabledConfig) {
+      throw new Error('Sign up is disabled');
     }
-
-    const result = (await response.json()) as { user?: NeonSessionResponse['user']; token?: string | null };
-
-    if (!result?.user) {
-      throw new Error('Failed to create account');
-    }
-
-    const cookies = parseCookies(response);
-
-    return {
-      user: mapNeonUserToEEUser(result.user),
-      token: result.token ?? undefined,
-      cookies,
-    };
+    const displayName = name || email.split('@')[0] || 'User';
+    return this.credentialsRequest(
+      '/sign-up/email',
+      { email, password, name: displayName },
+      request,
+      'Failed to create account',
+    );
   }
 
   // ── ISessionProvider ──
 
-  async createSession(_userId: string, metadata?: Record<string, unknown>): Promise<Session> {
+  async createSession(userId: string, metadata?: Record<string, unknown>): Promise<Session> {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     return {
       id: crypto.randomUUID(),
-      userId: _userId,
+      userId,
       createdAt: now,
       expiresAt,
       metadata,
@@ -364,46 +311,43 @@ export class MastraAuthNeon
   }
 
   async validateSession(sessionId: string): Promise<Session | null> {
-    try {
-      const headers = new Headers();
-      headers.set('Cookie', `${this.sessionCookieName}=${sessionId}`);
-      const result = await this.fetchSession(headers);
-      if (!result?.session) return null;
+    const result = await this.fetchSession(`${this.sessionCookieName}=${sessionId}`);
+    if (!result) return null;
 
-      return {
-        id: result.session.id,
-        userId: result.session.userId,
-        expiresAt: new Date(result.session.expiresAt),
-        createdAt: new Date(result.session.createdAt),
-      };
+    return {
+      id: result.session.id,
+      userId: result.session.userId,
+      expiresAt: new Date(result.session.expiresAt),
+      createdAt: new Date(result.session.createdAt),
+    };
+  }
+
+  /** Revokes the session in Neon Auth. */
+  async destroySession(sessionId: string): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/sign-out`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Neon Auth rejects cookie-authenticated POSTs without a trusted Origin.
+          // Its own origin is always trusted, and no browser origin is available here.
+          Origin: this.issuer,
+          Cookie: `${this.sessionCookieName}=${sessionId}`,
+        },
+        body: '{}',
+      });
     } catch {
-      return null;
+      // Clearing the local cookie still signs the user out of Mastra.
     }
   }
 
-  async destroySession(_sessionId: string): Promise<void> {
-    // Neon Auth (Better Auth) manages session destruction via the sign-out endpoint.
-    // Cookie clearing happens via getClearSessionHeaders.
-  }
-
   async refreshSession(sessionId: string): Promise<Session | null> {
-    // Neon Auth (Better Auth) refreshes sessions automatically when
-    // get-session is called and the updateAge threshold is reached.
+    // Neon Auth extends sessions itself when get-session is called.
     return this.validateSession(sessionId);
   }
 
   getSessionIdFromRequest(request: Request): string | null {
-    const cookieHeader = request.headers.get('Cookie');
-    if (!cookieHeader) return null;
-
-    for (const pair of cookieHeader.split(';')) {
-      const [key, ...rest] = pair.trim().split('=');
-      if (key?.trim() === this.sessionCookieName) {
-        return rest.join('=') || null;
-      }
-    }
-
-    return null;
+    return readCookie(request.headers.get('Cookie'), this.sessionCookieName);
   }
 
   getSessionHeaders(session: Session): Record<string, string> {
@@ -415,43 +359,140 @@ export class MastraAuthNeon
   }
 
   getClearSessionHeaders(): Record<string, string> {
-    const cookies = [
-      `${this.sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
-      `${this.sessionCookieName}_sig=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
-    ];
+    // Attributes must match the cookie Neon Auth set, or the browser keeps it.
+    const secure = this.sessionCookieName.startsWith('__Secure-') || this.sessionCookieName.startsWith('__Host-');
+    const attributes = secure
+      ? 'Path=/; HttpOnly; Secure; SameSite=None; Partitioned'
+      : 'Path=/; HttpOnly; SameSite=Lax';
     return {
-      'Set-Cookie': cookies.join(', '),
+      'Set-Cookie': `${this.sessionCookieName}=; ${attributes}; Max-Age=0`,
     };
   }
 
   // ── Internal helpers ──
 
+  private async credentialsRequest(
+    path: string,
+    body: Record<string, string>,
+    request: Request | undefined,
+    fallbackError: string,
+  ): Promise<CredentialsResult<EEUser>> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: 'POST',
+      headers: this.credentialsHeaders(request),
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorData = (await response.json().catch(() => ({}))) as { message?: string };
+      throw new Error(errorData.message || fallbackError);
+    }
+
+    const result = (await response.json()) as { user?: NeonSessionResponse['user'] };
+    if (!result?.user) {
+      throw new Error(fallbackError);
+    }
+
+    const cookies = parseSetCookies(response);
+    const sessionCookie = cookies
+      .map(cookie => cookie.split(';')[0]!)
+      .find(pair => pair.startsWith(`${this.sessionCookieName}=`));
+
+    return {
+      user: mapNeonUserToEEUser(result.user),
+      // The raw session token in Neon's response is unsigned and is rejected by
+      // Neon Auth, so hand API clients a JWT they can send as a bearer token.
+      token: sessionCookie ? await this.fetchJwt(sessionCookie) : undefined,
+      cookies,
+    };
+  }
+
+  /**
+   * Builds headers for Neon Auth credential endpoints.
+   *
+   * Only safe headers are forwarded. Copying every incoming header would send
+   * the Mastra server's Host and Content-Length (which do not match the new
+   * request) along with unrelated cookies and credentials.
+   */
+  private credentialsHeaders(request: Request | undefined): Headers {
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    const origin = request?.headers.get('Origin') ?? (request?.url ? new URL(request.url).origin : this.issuer);
+    headers.set('Origin', origin);
+    const userAgent = request?.headers.get('User-Agent');
+    if (userAgent) headers.set('User-Agent', userAgent);
+    return headers;
+  }
+
+  private async fetchJwt(sessionCookie: string): Promise<string | undefined> {
+    try {
+      const response = await fetch(`${this.baseUrl}/token`, { headers: { Cookie: sessionCookie } });
+      if (!response.ok) return undefined;
+      const data = (await response.json()) as { token?: string };
+      return data.token || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private userFromJwt(payload: JWTPayload): NeonAuthUser | null {
+    const id = payload.sub ?? (typeof payload.id === 'string' ? payload.id : undefined);
+    if (!id) return null;
+    const str = (value: unknown) => (typeof value === 'string' ? value : '');
+
+    return {
+      id,
+      email: str(payload.email),
+      name: str(payload.name),
+      user: {
+        id,
+        email: str(payload.email),
+        name: str(payload.name),
+        image: typeof payload.image === 'string' ? payload.image : null,
+        emailVerified: payload.emailVerified === true,
+        createdAt: str(payload.createdAt) || (payload.iat ? new Date(payload.iat * 1000).toISOString() : ''),
+        updatedAt: str(payload.updatedAt),
+        // The JWT `role` claim is the Postgres role for the Data API
+        // (`authenticated`), not the user's Neon Auth role, so it is not mapped.
+      },
+      jwt: payload,
+    };
+  }
+
   private async verifyJwt(token: string): Promise<JWTPayload | null> {
     try {
-      const JWKS = createRemoteJWKSet(new URL(this.jwksUrl));
-      const { payload } = await jwtVerify(token, JWKS);
+      this.jwks ??= createRemoteJWKSet(new URL(this.jwksUrl));
+      const { payload } = await jwtVerify(token, this.jwks, {
+        issuer: this.issuer,
+        audience: this.issuer,
+      });
       return payload;
     } catch {
       return null;
     }
   }
 
-  /** Fetch and validate a session from the Neon Auth REST API. */
-  public async fetchSession(headers: Headers): Promise<NeonSessionResponse | null> {
-    const response = await fetch(`${this.baseUrl}/auth/get-session`, {
-      method: 'GET',
-      headers,
-    });
+  /**
+   * Fetch and validate a session from the Neon Auth `get-session` endpoint.
+   * Accepts a Cookie header value containing the Neon Auth session cookie,
+   * or a Headers object whose Cookie header contains it.
+   */
+  public async fetchSession(cookieOrHeaders: string | Headers): Promise<NeonSessionResponse | null> {
+    const cookie = typeof cookieOrHeaders === 'string' ? cookieOrHeaders : cookieOrHeaders.get('Cookie');
+    if (!cookie) return null;
+    try {
+      const response = await fetch(`${this.baseUrl}/get-session`, {
+        method: 'GET',
+        headers: { Cookie: cookie },
+      });
 
-    if (!response.ok) {
+      if (!response.ok) return null;
+
+      const data = (await response.json()) as NeonSessionResponse | null;
+      if (!data?.session || !data?.user) return null;
+
+      return data;
+    } catch {
       return null;
     }
-
-    const data = (await response.json()) as NeonSessionResponse | null;
-    if (!data?.session || !data?.user) {
-      return null;
-    }
-
-    return data;
   }
 }

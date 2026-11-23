@@ -13,7 +13,7 @@ import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
 import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
-import type { XaiProviderOptions } from '@ai-sdk/xai-v6';
+import type { XaiLanguageModelResponsesOptions as XaiProviderOptions } from '@ai-sdk/xai-v7';
 
 // Re-export the types
 export type {

@@ -10,7 +10,7 @@ import {
   resolveTeamsAdapterConfig,
 } from './index';
 import type { TeamsProviderConfig, TeamsTokenResolver } from './index';
-import { PLATFORM } from './install-store';
+import { PLATFORM, TeamsInstallStore } from './install-store';
 
 const GRAPH_ORIGIN = 'https://graph.microsoft.com';
 const DEV_PORTAL_ORIGIN = 'https://dev.teams.microsoft.com';
@@ -652,6 +652,61 @@ describe('TeamsProvider.disconnect', () => {
   it('throws for an unknown agent', async () => {
     const { provider } = makeProvider();
     await expect(provider.disconnect('missing')).rejects.toThrow(/No Teams installation found/);
+  });
+});
+
+describe('TeamsProvider — undecryptable installations (encryption key changed)', () => {
+  /** Seed storage with a record encrypted under a key the provider does not have. */
+  async function seedUnderOtherKey(storage: InMemoryChannelsStorage) {
+    const otherKeyStore = new TeamsInstallStore(storage, 'the-original-key-now-lost');
+    await otherKeyStore.save({
+      id: 'install-1',
+      agentId: 'agent-1',
+      webhookId: 'webhook-1',
+      status: 'active',
+      appId: APP_ID,
+      appPassword: 'secret-under-old-key',
+      installedAt: new Date(),
+    });
+  }
+
+  it('initialize() survives a record it cannot decrypt instead of crashing boot', async () => {
+    const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
+    await seedUnderOtherKey(storage);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(provider.initialize()).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot decrypt the stored bot secret'));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('does not report configured when the only installation is unreadable', async () => {
+    const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
+    await seedUnderOtherKey(storage);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await provider.initialize();
+    } finally {
+      errorSpy.mockRestore();
+    }
+    expect(provider.isConfigured()).toBe(false);
+  });
+
+  it('disconnect() still deletes the stored record so the agent can reconnect', async () => {
+    const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
+    await seedUnderOtherKey(storage);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await provider.disconnect('agent-1');
+    } finally {
+      errorSpy.mockRestore();
+    }
+    expect(await storage.getInstallationByAgent(PLATFORM, 'agent-1')).toBeNull();
   });
 });
 

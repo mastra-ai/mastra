@@ -325,12 +325,12 @@ type _BuilderRegistryInstall = Expect<
   BuilderRegistryInstallBody extends Body<'POST /editor/builder/registries/:registryId/install'> ? true : false
 >;
 type _AgentControllerSession = Expect<
-  Equal<AgentControllerSessionState, RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>>
+  Equal<AgentControllerSessionState, RouteResponse<'GET /agent-controller/:controllerId/sessions/:sessionId'>>
 >;
 type _AgentControllerThread = Expect<
   Equal<
     AgentControllerThreadInfo,
-    RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number]
+    RouteResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/threads'>['threads'][number]
   >
 >;
 type _VoiceSpeakers = Expect<
@@ -396,3 +396,30 @@ const invalidCreateResponse: CreateResponseParams = { input: 1 };
 
 void invalidScoreRequest;
 void invalidCreateResponse;
+
+// HTTP signal writes require a trace; storage records remain nullable.
+type _FeedbackWriteTraceId = Expect<
+  Equal<Pick<Parameters<MastraClient['createFeedback']>[0]['feedback'], 'traceId'>, { traceId: string }>
+>;
+type _ScoreWriteTraceId = Expect<
+  Equal<Pick<Parameters<MastraClient['createScore']>[0]['score'], 'traceId'>, { traceId: string }>
+>;
+
+type _OptionalWriteMode = Expect<
+  Equal<Parameters<MastraClient['createFeedback']>[0]['contextMode'], 'resolve' | 'provided' | undefined>
+>;
+type _OptionalScoreTimestamp = Expect<
+  Equal<Parameters<MastraClient['createScore']>[0]['score']['timestamp'], string | undefined>
+>;
+type _OptionalFeedbackData = Expect<
+  Equal<undefined extends Awaited<ReturnType<MastraClient['createFeedback']>>['data'] ? true : false, true>
+>;
+type _FeedbackTimestampResponse = Expect<
+  Equal<NonNullable<Awaited<ReturnType<MastraClient['createFeedback']>>['data']>['timestamp'], string>
+>;
+type _ReplacementIdentity = Expect<
+  Equal<
+    Pick<Parameters<MastraClient['replaceFeedback']>[0]['feedback'], 'feedbackId' | 'traceId' | 'timestamp'>,
+    { feedbackId: string; traceId: string; timestamp: string }
+  >
+>;

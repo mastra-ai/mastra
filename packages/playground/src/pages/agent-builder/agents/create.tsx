@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { useAgents, useStoredSkills } from '@mastra/react/hooks/agents';
 import { useTools } from '@mastra/react/hooks/tools';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
-import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { useBuilderAgentAccess, useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentBuilderStarter } from '@/domains/agent-builder/components/agent-starter/agent-builder-starter';
@@ -40,11 +40,10 @@ export default function AgentBuilderCreate() {
               viewTransition: true,
             })
           }
-          className="rounded-full"
           tooltip="Agents list"
           data-testid="agent-builder-back-to-list"
         >
-          <ArrowLeftIcon />
+          <IconArrowLeft />
         </Button>
       </div>
 

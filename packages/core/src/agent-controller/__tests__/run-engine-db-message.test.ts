@@ -36,6 +36,7 @@ function createHarness() {
     },
     buildStreamOptions: async () => ({}),
     buildSharedRunOptions: () => ({}),
+    resolveModeActiveTools: () => undefined,
     buildToolsets: async () => ({}),
     buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
     persistTokenUsage: vi.fn(async () => {}),
@@ -387,5 +388,33 @@ describe('SessionRunEngine compact message lifecycle', () => {
       },
     ]);
     expect(events.filter(event => event.type === 'message_end')).toContainEqual({ type: 'message_end', id: 'msg-1' });
+  });
+});
+
+describe('SessionRunEngine command exits', () => {
+  it('tells clients how each command ended, not only its exit code', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const context = new RequestContext();
+
+    const chunks: StreamChunk[] = [
+      {
+        type: 'data-sandbox-exit',
+        data: { toolCallId: 'unreachable', exitCode: -1, success: false, error: 'sandbox disconnected' },
+      },
+      {
+        type: 'data-sandbox-exit',
+        data: { toolCallId: 'slow', exitCode: 124, success: false, killed: true, timedOut: true },
+      },
+      { type: 'data-sandbox-exit', data: { toolCallId: 'grep', exitCode: 1, success: false } },
+    ];
+    for (const item of chunks) await engine.processStreamChunk(state, item, context);
+
+    const exits = events.filter(event => event.type === 'command_exit');
+    expect(exits).toEqual([
+      expect.objectContaining({ toolCallId: 'unreachable', exitCode: -1, error: 'sandbox disconnected' }),
+      expect.objectContaining({ toolCallId: 'slow', exitCode: 124, killed: true, timedOut: true }),
+      expect.objectContaining({ toolCallId: 'grep', exitCode: 1, killed: false, timedOut: false, error: undefined }),
+    ]);
   });
 });

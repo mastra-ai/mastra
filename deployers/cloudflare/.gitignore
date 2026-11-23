@@ -1,1 +1,4 @@
 .mastra
+
+# Project dirs the workerd tests create inside the package so bundles resolve its dependencies.
+.workerd-test-*

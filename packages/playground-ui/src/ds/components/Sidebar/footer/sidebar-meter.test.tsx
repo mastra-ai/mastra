@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Search } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from '..';
 import { SidebarMeter } from './sidebar-meter';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
 afterEach(() => cleanup());
 
@@ -18,21 +18,7 @@ describe('SidebarMeter', () => {
     expect(bloom?.querySelector('span')).toBeNull();
   });
 
-  it('keeps one card height across tones', () => {
-    const { container: neutral } = render(<SidebarMeter label="Credits" value="$26" />);
-    const neutralHeight = neutral.querySelector<HTMLElement>('[data-slot="sidebar-meter"]')?.style.height;
-
-    cleanup();
-
-    const { container: danger } = render(
-      <SidebarMeter label="Credits" value="$0" status="Out of credits" tone="danger" />,
-    );
-    const dangerHeight = danger.querySelector<HTMLElement>('[data-slot="sidebar-meter"]')?.style.height;
-
-    expect(neutralHeight).toBe(dangerHeight);
-  });
-
-  it('drops the label and covers the card with the link when collapsed', () => {
+  it('folds the label away and covers the card with the link when collapsed', () => {
     render(
       <SidebarMeter
         label="Credits"
@@ -42,11 +28,22 @@ describe('SidebarMeter', () => {
         state="collapsed"
         href="/billing"
         linkLabel="Credit balance"
+        action={<button type="button">What are credits?</button>}
       />,
     );
+    // Folded away, the action can't be reached with the keyboard either.
+    expect(screen.getByRole('button', { name: 'What are credits?', hidden: true }).closest('[inert]')).not.toBeNull();
 
-    expect(screen.queryByText('Credits')).toBeNull();
+    // The label and its action stay in the card so the collapse can fold them away, out of reach meanwhile.
+    expect(screen.getByText('Credits').closest('[inert]')).not.toBeNull();
     expect(screen.getByLabelText('Credit balance').getAttribute('href')).toBe('/billing');
+  });
+
+  it('keeps the full amount beside the rail amount, for the stylesheet to pick by state', () => {
+    render(<SidebarMeter label="Credits" value="$6,649.10" railValue="$7K" state="collapsed" />);
+
+    expect(screen.getByText('$6,649.10').hasAttribute('data-meter-full')).toBe(true);
+    expect(screen.getByText('$7K').hasAttribute('data-meter-rail')).toBe(true);
   });
 
   it('renders the action outside the card link', () => {
@@ -93,7 +90,7 @@ describe('Sidebar command header', () => {
           <Sidebar.CommandHeader>
             <Sidebar.Brand title="Mastra" />
             <Sidebar.SearchTrigger aria-label="Search" shortcut="⌘ K" onClick={onSearch}>
-              <Search />
+              <IconMagnifyingGlass />
             </Sidebar.SearchTrigger>
           </Sidebar.CommandHeader>
           <Sidebar.Nav>Navigation</Sidebar.Nav>
@@ -112,7 +109,8 @@ describe('Sidebar command header', () => {
     expect(container.querySelector('[data-slot="sidebar-footer-meta"]')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Search' })).toBeDefined();
     expect(screen.getByText('Mastra')).toBeDefined();
-    expect(screen.getByText('⌘ K')).toBeDefined();
+    // The shortcut lives in the tooltip, not next to the icon
+    expect(screen.queryByText('⌘ K')).toBeNull();
     expect(screen.getByText('Mastra v0.24.6')).toBeDefined();
   });
 

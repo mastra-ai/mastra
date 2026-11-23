@@ -29,10 +29,31 @@ export const REPROCESS_PART_KEY = '__mastraReprocessPart';
  */
 export const FLUSH_HELD_PARTS_KEY = '__mastraFlushHeldParts';
 
-export type FlushHeldParts = () => Promise<ChunkType[]> | ChunkType[];
+/**
+ * With `discard`, the hold is cleared without running any checks: held content
+ * (see {@link withoutHeldContent}) is dropped and only held control parts are
+ * returned, since the stream failed or was aborted and its content must not be emitted.
+ */
+export type FlushHeldParts = (options?: { discard?: boolean }) => Promise<ChunkType[]> | ChunkType[];
+
+/** Whether a part marks its model stream as errored or aborted (held parts are then discarded). */
+export function isFailedStreamChunk<OUTPUT>(part: ChunkType<OUTPUT>): boolean {
+  if (part.type === 'error' || part.type === 'abort') return true;
+  if (part.type !== 'finish') return false;
+  const reason = (part.payload as { stepResult?: { reason?: string } } | undefined)?.stepResult?.reason;
+  return reason === 'error' || reason === 'abort';
+}
+
+/** Drops content parts from a discarded hold, keeping control parts (start, error, finish, ...). */
+export function withoutHeldContent<T extends { type: string }>(parts: T[]): T[] {
+  return parts.filter(part => part.type !== 'text-delta' && part.type !== 'reasoning-delta');
+}
 
 /** Releases the parts a processor is holding, or none if it holds nothing. */
-export async function takeHeldParts(state: Record<string, unknown> | undefined): Promise<ChunkType[]> {
+export async function takeHeldParts(
+  state: Record<string, unknown> | undefined,
+  options?: { discard?: boolean },
+): Promise<ChunkType[]> {
   const flush = state?.[FLUSH_HELD_PARTS_KEY] as FlushHeldParts | undefined;
-  return flush ? await flush() : [];
+  return flush ? await flush(options) : [];
 }

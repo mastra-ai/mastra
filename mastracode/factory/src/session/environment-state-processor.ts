@@ -14,7 +14,6 @@ export interface SessionEnvironmentRepositoryState {
   /** The branch the checkout ended on after boot; `null` when it stays detached. */
   branch: string | null;
   defaultBranch: string;
-  position: number;
   /** `ok` ran or was already set up, `failed` exited non-zero, `skipped` has no setup command. */
   setupStatus: EnvironmentRepositorySetupStatus;
   /** The change request this session opened in the repository, once it has. */
@@ -104,13 +103,22 @@ function escapeText(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-// The session id is the controller's resource id. Unlike factory runs, a user
-// session carries no `factoryProjectId` in its controller state, and the
-// environment is recorded for both, so only the resource id is required.
+// Unlike factory runs, a user session carries no `factoryProjectId` in its
+// controller state, and the environment is recorded for both, so only the
+// session id is required.
 function sessionIdFromContext(requestContext: RequestContext | undefined): string | null {
   if (!requestContext || typeof requestContext.get !== 'function') return null;
-  const controller = requestContext.get('controller') as { resourceId?: unknown } | undefined;
-  return typeof controller?.resourceId === 'string' && controller.resourceId ? controller.resourceId : null;
+  const controller = requestContext.get('controller') as { sessionId?: unknown } | undefined;
+  return typeof controller?.sessionId === 'string' && controller.sessionId ? controller.sessionId : null;
+}
+
+// An untrusted checkout (a pull request under review) can carry attacker-written
+// AGENTS.md files, which the SDK deliberately never loads from the working tree.
+function isUntrustedCheckout(requestContext: RequestContext | undefined): boolean {
+  const controller = requestContext?.get('controller') as
+    | { getState?: () => { untrustedCheckout?: unknown } }
+    | undefined;
+  return controller?.getState?.().untrustedCheckout === true;
 }
 
 function environmentCacheKey(state: SessionEnvironmentState): string {
@@ -132,13 +140,14 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     if (!sessionId) return;
     const state = environments.get(sessionId)?.state;
     if (!state) return;
-    const cacheKey = environmentCacheKey(state);
+    const untrusted = isUntrustedCheckout(args.requestContext);
+    const cacheKey = environmentCacheKey(state) + (untrusted ? ':untrusted' : '');
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
     const lines = state.repositories.map(
-      repo =>
-        `${repo.position}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
+      (repo, index) =>
+        `${index + 1}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
         (repo.changeRequestUrl ? `, change request ${escapeText(repo.changeRequestUrl)}` : ''),
     );
     const only = state.repositories.length === 1 ? state.repositories[0] : undefined;
@@ -148,6 +157,9 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
         : `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n`) +
       lines.join('\n') +
       (only ? '' : '\nRun git and project commands inside the repository directory they belong to.') +
+      (untrusted
+        ? ''
+        : "\nA directory's AGENTS.md loads after you open a file there with view or an edit tool, not through execute_command. Before your first change in a directory, read any AGENTS.md in it or its parent directories you have not seen yet.") +
       (state.note ? `\n${escapeText(state.note)}` : '');
     return {
       id: STATE_ID,

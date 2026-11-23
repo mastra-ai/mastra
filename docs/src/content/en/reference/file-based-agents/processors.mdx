@@ -48,6 +48,8 @@ model → config.outputProcessors → processors/output/* → response
 
 If `config.inputProcessors` or `config.outputProcessors` is a function, discovered processors of that type are ignored with a warning because function-valued processors can't be statically merged.
 
+If `config.ts` exports a `new Agent()` instead of a config object, Mastra uses that agent as-is. Discovered files under `processors/input/` and `processors/output/` are ignored with a warning, so set `inputProcessors` and `outputProcessors` on the `Agent` instead.
+
 ## Precedence with config
 
 Use `config.ts` for processors that need to be created at runtime or shared across agents. Use file-based processors for static, per-agent processors that should be reviewed alongside the agent.

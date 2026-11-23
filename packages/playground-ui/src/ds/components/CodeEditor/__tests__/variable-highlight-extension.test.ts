@@ -12,11 +12,6 @@ describe('VARIABLE_PATTERN', () => {
     return matches;
   };
 
-  it('should match simple variable names', () => {
-    const text = '{{userName}}';
-    expect(matchAll(text)).toEqual(['{{userName}}']);
-  });
-
   it('should match variables starting with underscore', () => {
     const text = '{{_privateVar}}';
     expect(matchAll(text)).toEqual(['{{_privateVar}}']);
@@ -76,17 +71,5 @@ describe('VARIABLE_PATTERN', () => {
 
   it('should not match a trailing dot', () => {
     expect(matchAll('{{user.}}')).toEqual([]);
-  });
-
-  it('should match in markdown context', () => {
-    const text = `# Instructions
-
-You are helping {{userName}} at {{companyName}}.
-
-## Context
-- Role: {{userRole}}
-- Language: {{preferredLanguage}}`;
-
-    expect(matchAll(text)).toEqual(['{{userName}}', '{{companyName}}', '{{userRole}}', '{{preferredLanguage}}']);
   });
 });

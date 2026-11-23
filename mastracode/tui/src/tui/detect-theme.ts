@@ -91,7 +91,6 @@ function queryTerminalBackground(timeoutMs = 200): Promise<ThemeDetectionResult 
         const luma = luminance(detectedBgHex);
 
         resolve({ mode: luma >= 0.5 ? 'light' : 'dark', detectedBgHex });
-        return;
       }
     };
 

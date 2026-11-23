@@ -19,6 +19,7 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
       experimentalScheduleTools: false,
+      experimentalKnowledge: false,
       githubPollIntervalMs: 60_000,
     };
     writeFileSync(settingsPath, JSON.stringify(settings));

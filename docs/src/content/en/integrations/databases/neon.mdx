@@ -1,14 +1,18 @@
 ---
 title: "Neon Postgres | Database"
-description: "Connect Mastra to Neon Postgres with PostgresStore, pooled production connections, schema initialization, vector search, and Neon agent skills."
+description: "Connect Mastra to Neon Postgres with PostgresStore, pooled production connections, schema initialization, vector search, and Neon agent skills, and give agents Neon tools through Mastra Connect."
 packages:
-  - "@mastra/core"
+  - "@mastra/connect"
   - "@mastra/pg"
 ---
+
+import NeonMcpConnectTools from "@site/src/components/connect/generated/neon-mcp.mdx";
 
 # Neon Postgres
 
 [Neon](https://neon.com) is a managed PostgreSQL service. Mastra connects to Neon through [`PostgresStore`](/integrations/databases/postgresql), which uses the Node.js `pg` driver. Neon doesn't require a separate Mastra storage package.
+
+You can also give an agent tools to manage Neon projects and branches, run SQL, and apply schema migrations through [Mastra Connect](#connect).
 
 ## Quickstart
 
@@ -151,7 +155,7 @@ See [Neon connection pooling](https://neon.com/docs/connect/connection-pooling) 
 
 ## Vector search
 
-Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use the direct `DATABASE_URL_UNPOOLED` connection while creating the extension and indexes. After setup, configure [`PgVector`](/reference/vectors/pg) with the pooled connection for runtime queries:
+Neon supports the [`pgvector` extension](https://neon.com/docs/extensions/pgvector). Use the direct `DATABASE_URL_UNPOOLED` connection while creating the extension and indexes. After setup, configure [`PgVector`](/integrations/vectors/pg) with the pooled connection for runtime queries:
 
 ```typescript
 import { PgVector } from '@mastra/pg'
@@ -164,3 +168,9 @@ const vector = new PgVector({
 ```
 
 Setting `disableInit: true` prevents the runtime process from creating or changing the extension, tables and indexes.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<NeonMcpConnectTools />

@@ -2,9 +2,11 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect, vi } from 'vitest';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { SpanType } from '../../../../observability';
 import type { InputProcessor } from '../../../../processors';
 import { RequestContext } from '../../../../request-context';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -372,6 +374,61 @@ describeForAllEngines('AIMock loop scenario: thread title generation', engine =>
     expect(llm.getRequests()).toHaveLength(4);
   });
 
+  it('a run with observational memory switched off titles its thread', async () => {
+    const llm = getMock();
+    const memory = new MockMemory({ options: { generateTitle: true } });
+
+    const { output } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Suggest a weekend hike',
+      memory,
+      threadId: 'title-om-disabled',
+      resourceId: 'user-1',
+      memoryOptions: { observationalMemory: { enabled: false } },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', predicate: isTitleRequest(DEFAULT_INSTRUCTIONS_MARKER) },
+          { content: 'Weekend Hike' },
+        );
+        llm.on({ endpoint: 'chat' }, { content: 'Try the ridge trail.' });
+      },
+    });
+
+    expect(await output.text).toBe('Try the ridge trail.');
+    expect(await waitForTitle(memory, 'title-om-disabled')).toBe('Weekend Hike');
+  });
+
+  it('traces the title model call under the agent run, with the input and output the run hides', async () => {
+    const llm = getMock();
+    const { observability, ended } = captureOutcomeEvents();
+    const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });
+
+    await runLoopScenario({
+      engine,
+      llm,
+      observability,
+      prompt: 'Plan a surprise party',
+      memory,
+      threadId: 'title-traced',
+      resourceId: 'user-1',
+      tracingOptions: { hideInput: true, hideOutput: true },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', predicate: isTitleRequest(TITLE_INSTRUCTIONS) }, { content: 'Party Plan' });
+        llm.on({ endpoint: 'chat' }, { content: 'Book the venue first.' });
+      },
+    });
+
+    expect(await waitForTitle(memory, 'title-traced')).toBe('Party Plan');
+    // The agent's own model call and the title model call.
+    await vi.waitFor(() => expect(ended(SpanType.MODEL_GENERATION)).toHaveLength(2));
+    const [agentRun] = ended(SpanType.AGENT_RUN);
+    expect(ended(SpanType.MODEL_GENERATION).map(span => [span.parentSpanId, span.input, span.output])).toEqual([
+      [agentRun!.id, undefined, undefined],
+      [agentRun!.id, undefined, undefined],
+    ]);
+  });
+
   it('keeps existing thread metadata when saving the title', async () => {
     const llm = getMock();
     const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });
@@ -395,11 +452,7 @@ describeForAllEngines('AIMock loop scenario: thread title generation', engine =>
     expect(thread?.metadata).toMatchObject({ keep: 'me' });
   });
 
-  // The durable finish step (finalize-run.ts generateDurableThreadTitle) saves the title but never
-  // writes the data-thread-title chunk, so durable/evented runs can't stream it. Deterministic; tracked in #27551.
-  const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
-
-  itFailsOnDurable('generateTitle.emitEvent streams the title as a transient chunk before finish', async () => {
+  it('generateTitle.emitEvent streams the title as a transient chunk before finish', async () => {
     const llm = getMock();
     const memory = new MockMemory({
       options: { generateTitle: { instructions: TITLE_INSTRUCTIONS, emitEvent: true } },
@@ -424,5 +477,52 @@ describeForAllEngines('AIMock loop scenario: thread title generation', engine =>
     const titleChunk = chunks!.find((c: any) => c.type === 'data-thread-title') as any;
     expect(titleChunk).toMatchObject({ data: { threadId: 'title-emit', title: 'Quantum Basics' }, transient: true });
     expect(types.indexOf('finish')).toBeGreaterThan(types.indexOf('data-thread-title'));
+  });
+
+  it('calls memory.onTitleGenerated with the saved title', async () => {
+    const llm = getMock();
+    const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });
+    const onTitleGenerated = vi.fn();
+
+    await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Recommend a book',
+      memory,
+      threadId: 'title-callback',
+      resourceId: 'user-1',
+      onTitleGenerated,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', predicate: isTitleRequest(TITLE_INSTRUCTIONS) }, { content: 'Book Picks' });
+        llm.on({ endpoint: 'chat' }, { content: 'Try Dune.' });
+      },
+    });
+
+    await vi.waitFor(() => expect(onTitleGenerated).toHaveBeenCalledWith('Book Picks'));
+    expect(onTitleGenerated).toHaveBeenCalledTimes(1);
+    expect((await memory.getThreadById({ threadId: 'title-callback' }))?.title).toBe('Book Picks');
+  });
+
+  it('does not stream a title chunk when emitEvent is unset, but still saves the title', async () => {
+    const llm = getMock();
+    const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Summarize the news',
+      memory,
+      threadId: 'title-no-emit',
+      resourceId: 'user-1',
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', predicate: isTitleRequest(TITLE_INSTRUCTIONS) }, { content: 'News Summary' });
+        llm.on({ endpoint: 'chat' }, { content: 'Nothing new.' });
+      },
+    });
+
+    expect(chunks!.some((c: any) => c.type === 'finish')).toBe(true);
+    expect(await waitForTitle(memory, 'title-no-emit')).toBe('News Summary');
+    expect(chunks!.some((c: any) => c.type === 'data-thread-title')).toBe(false);
   });
 });

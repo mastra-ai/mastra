@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { Agent } from '@mastra/core/agent';
 import type { IWorkflowBuilder, WorkflowBuilderOptions } from '@mastra/core/editor';
-import type { MastraModelConfig } from '@mastra/core/llm';
+import type { MastraModelConfig, WidenedMastraModelConfig } from '@mastra/core/llm';
 import { createWorkflowBuilderAgent as createSharedWorkflowBuilderAgent } from '@mastra/core/workflows/builder';
 import { Memory } from '@mastra/memory';
 
@@ -23,7 +23,7 @@ export function createWorkflowBuilderAgent(
     id: 'workflow-builder-agent',
     name: 'Workflow Builder',
     description: 'Builds persisted workflow definitions through constrained client tools',
-    model: model ?? DEFAULT_WORKFLOW_BUILDER_MODEL,
+    model: (model as WidenedMastraModelConfig | undefined) ?? DEFAULT_WORKFLOW_BUILDER_MODEL,
     memory: new Memory({ options: { lastMessages } }),
     surfaceInstructions: `# Studio authoring policy
 

@@ -45,12 +45,12 @@ beforeEach(() => {
 });
 
 describe('Session favicon tracks the session lifecycle', () => {
-  describe('when the session prepare stepper is showing', () => {
+  describe('while the thread history is loading', () => {
     it('shows the purple initializing indicator', async () => {
       const session = stubPreparingSession();
       const { client } = renderThread();
 
-      await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
+      expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
       expect(faviconHref()).toBe('/favicon-session-initializing.svg');
 
       session.finishWorkspace();
@@ -67,7 +67,7 @@ describe('Session favicon tracks the session lifecycle', () => {
       await waitForMutationsIdle(client);
       await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
 
-      expect(screen.queryByTestId('session-prepare-steps')).not.toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
       await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
     });
   });

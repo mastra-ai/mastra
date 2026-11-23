@@ -46,27 +46,6 @@ const semanticTokens = [
   'border-focus',
 ] as const;
 
-const deferredSemanticTokens = [
-  'card-foreground',
-  'popover-foreground',
-  'tertiary-foreground',
-  'disabled-foreground',
-  'contrast-foreground',
-  'secondary',
-  'secondary-foreground',
-  'accent',
-  'accent-foreground',
-  'input',
-  'sidebar-foreground',
-  'sidebar-accent',
-  'sidebar-accent-foreground',
-  'sidebar-border',
-  'sidebar-ring',
-  'sidebar-divider',
-  'selected',
-  'ring',
-] as const;
-
 const semanticAliases = {
   background: 'background-2',
   sidebar: 'background-1',
@@ -192,23 +171,9 @@ describe('theme.css export', () => {
     expect(lightTheme).not.toMatch(/--color-brand-/);
   });
 
-  it('does not ship legacy colors', async () => {
-    expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).not.toContain('legacy-theme');
-    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
-    for (const variables of [darkVariables, lightVariables]) {
-      for (const name of ['accent1', 'positive1', 'notice-success', 'brand-green-500', 'chart-1', 'span-type-agent']) {
-        expect(variables.has(name)).toBe(false);
-      }
-    }
+  it('generates the badge and status utilities', async () => {
     const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
-    const css = compiler.build([
-      'bg-accent1',
-      'text-positive1',
-      'bg-notice-success',
-      'text-badge-green-foreground',
-      'bg-success-subtle',
-    ]);
-    for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success']) expect(css).not.toContain(`.${name}`);
+    const css = compiler.build(['text-badge-green-foreground', 'bg-success-subtle']);
     for (const name of ['text-badge-green-foreground', 'bg-success-subtle']) expect(css).toContain(`.${name}`);
   });
 
@@ -350,12 +315,27 @@ describe('theme.css export', () => {
     expect(declared.toSorted()).toEqual([...TextRoles].toSorted());
   });
 
-  it('generates the field and dialog fill utilities', async () => {
-    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
-    const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);
+  it('keeps display-lg a complete fixed-size role without changing display', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('text-display-lg')).toBe('1.75rem');
+    expect(variables.get('text-display-lg--line-height')).toBe('127%');
+    expect(variables.get('text-display-lg--font-weight')).toBe('var(--font-weight-medium)');
+    expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
+    expect(variables.get('text-display')).toBe('1.375rem');
+    expect(variables.get('text-display--line-height')).toBe('127%');
+    expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
+    expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
+  });
 
-    for (const token of ['field', 'field-disabled', 'dialog']) {
-      expect(output).toContain(`.bg-${token} {`);
+  it('gives text roles two weights, regular 465 and strong 515', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('font-weight-normal')).toBe('465');
+    expect(variables.get('font-weight-medium')).toBe('515');
+    for (const role of ['body', 'body-sm', 'caption', 'lead', 'menu']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-normal)');
+    }
+    for (const role of ['label', 'column', 'eyebrow', 'meta', 'subheading', 'heading', 'title']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-medium)');
     }
   });
 
@@ -389,16 +369,6 @@ describe('theme.css export', () => {
 
     for (const token of semanticTokens) {
       expect(exportedColors[token]).toBe(`var(--${token})`);
-    }
-  });
-
-  it('keeps unproven semantic roles out of the contract', () => {
-    const exportedColors = { ...Colors, ...BorderColors };
-
-    for (const token of deferredSemanticTokens) {
-      expect(themeCss).not.toContain(`--${token}:`);
-      expect(themeCss).not.toContain(`--color-${token}:`);
-      expect(Object.hasOwn(exportedColors, token)).toBe(false);
     }
   });
 
@@ -437,6 +407,16 @@ describe('theme.css export', () => {
         expect(output).toMatch(new RegExp(`\\.${prefix}-${token} \\{\\s*${property}: var\\(--${token}\\)`));
       }
     }
+  });
+
+  it('floors typed text at 16px on touch screens only, over any role or variant on the field', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['zoom-safe-text']);
+
+    expect(output).toMatch(
+      /@media \(pointer: coarse\) \{\s*\.zoom-safe-text \{\s*font-size: 16px !important;\s*\}\s*\}/,
+    );
+    expect(output.match(/\.zoom-safe-text \{/g)).toHaveLength(1);
   });
 
   it('registers semantic utilities and their :root defaults in the shared bundle', async () => {
@@ -669,9 +649,11 @@ describe('theme.css export', () => {
     const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:invert']);
 
     expect(compiler.sources).toEqual([]);
-    for (const utility of ['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field']) {
+    for (const utility of ['shadow-raised', 'prose', 'animate-in', 'bg-field']) {
       expect(output).toContain(`.${utility} {`);
     }
+    // Only states, no resting rule.
+    expect(output).toMatch(/\.state-layer:not\([^)]*\):hover/);
     expect(output).toContain('.dark\\:invert:is(.dark *)');
     expect(output).toContain('--syntax-string: var(--green-300)');
   });

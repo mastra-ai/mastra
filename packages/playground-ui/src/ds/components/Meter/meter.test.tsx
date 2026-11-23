@@ -167,3 +167,110 @@ describe('Meter with sources', () => {
     ).toMatch(/^10\.71/);
   });
 });
+
+describe('Meter paid from credits', () => {
+  it('describes over-allowance usage with the amount paid from credits', () => {
+    render(<Meter variant="over-allowance" value={112} max={100} paidFromCredits={4.37} aria-label="vCPU" />);
+
+    const meter = screen.getByRole('meter', { name: 'vCPU' });
+    const caption = screen.getByText('$4.37 paid from credits');
+    expect(meter.getAttribute('aria-describedby')).toBe(caption.id);
+    expect(meter.getAttribute('aria-valuetext')).toBe('112 of 100, 12 over');
+    expect(segments(meter)).toEqual([
+      { part: 'meter-used', grow: '100' },
+      { part: 'meter-over', grow: '12' },
+    ]);
+  });
+
+  it('keeps the caption, caller description and source key accessible together', () => {
+    render(
+      <>
+        <span id="usage-period">This billing period</span>
+        <Meter
+          variant="over-allowance"
+          value={112}
+          max={100}
+          paidFromCredits={0.004}
+          aria-label="vCPU"
+          aria-describedby="usage-period"
+        >
+          <Meter.Source label="Agents" value={112} />
+        </Meter>
+      </>,
+    );
+
+    const meter = screen.getByRole('meter');
+    const descriptions = meter
+      .getAttribute('aria-describedby')
+      ?.split(' ')
+      .map(id => document.getElementById(id)?.textContent);
+    expect(descriptions).toEqual(['This billing period', '<$0.01 paid from credits', 'Agents112Over allowance12']);
+  });
+
+  it.each([
+    { value: 80, max: 100, paidFromCredits: 4.37 },
+    { value: 100, max: 100, paidFromCredits: 4.37 },
+    { value: 112, max: 100, paidFromCredits: undefined },
+    { value: 112, max: 100, paidFromCredits: 0 },
+    { value: 0, max: 0, paidFromCredits: 0 },
+  ])('does not claim a credit payment without charged overage: %j', props => {
+    render(<Meter variant="over-allowance" {...props} aria-label="vCPU" />);
+
+    expect(screen.queryByText(/paid from credits/)).toBeNull();
+    expect(screen.getByRole('meter').getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('preserves the default meter without a billing caption', () => {
+    render(<Meter value={112} max={100} paidFromCredits={4.37} aria-label="vCPU" />);
+
+    expect(screen.queryByText(/paid from credits/)).toBeNull();
+    expect(screen.getByRole('meter').getAttribute('aria-valuetext')).toBe('112 of 100, 12 over');
+  });
+});
+
+describe('Meter label slot', () => {
+  it('preserves the full text of a long label for accessibility and native hover disclosure', () => {
+    const label = 'Compute usage for production and preview environments across all projects';
+    render(<Meter label={label} value={112} max={100} aria-label={label} />);
+
+    expect(screen.getByTitle(label).textContent).toBe(label);
+    expect(screen.getByRole('meter', { name: label })).toBeDefined();
+  });
+
+  it('places the visible label and credit caption together before the bar', () => {
+    render(
+      <Meter
+        label={<span>Compute usage</span>}
+        variant="over-allowance"
+        value={112}
+        max={100}
+        paidFromCredits={4.37}
+        aria-label="Compute usage"
+      />,
+    );
+
+    const label = screen.getByText('Compute usage');
+    const caption = screen.getByText('$4.37 paid from credits');
+    const meter = screen.getByRole('meter', { name: 'Compute usage' });
+    expect(label.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(caption.compareDocumentPosition(meter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(meter.getAttribute('aria-describedby')).toBe(caption.id);
+  });
+
+  it('provides a heading slot without requiring a credit charge', () => {
+    render(<Meter label="Memory" value={148} max={360} aria-label="Memory" />);
+
+    const label = screen.getByText('Memory');
+    const meter = screen.getByRole('meter', { name: 'Memory' });
+    expect(label.compareDocumentPosition(meter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/paid from credits/)).toBeNull();
+  });
+
+  it('keeps an unlabelled credit caption before its standalone bar', () => {
+    render(<Meter variant="over-allowance" value={112} max={100} paidFromCredits={4.37} aria-label="vCPU" />);
+
+    const caption = screen.getByText('$4.37 paid from credits');
+    const meter = screen.getByRole('meter', { name: 'vCPU' });
+    expect(caption.compareDocumentPosition(meter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

@@ -34,27 +34,20 @@ import posixPath from 'node:path/posix';
 import Docker from 'dockerode';
 import { pack as tarPack } from 'tar-stream';
 import { createAbortError, normalizeAbortError, throwIfAborted, waitForAbortable } from '../abort';
-import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
-import {
-  BoundedTail,
-  createBuildEventNormalizer,
-  DEFAULT_MAX_OUTPUT_BYTES,
-  type BuildEventNormalizer,
-  type DockerTemplateBuildEvent,
-  type DockerTemplateBuildStep,
-} from './build-progress';
-import { openBuildSession, type BuildSession } from './build-session';
-import {
-  assertValidOwner,
-  type AptInstallOptions,
-  type DockerTemplateDefinition,
-  type DockerTemplateOperation,
-  type NpmInstallOptions,
-  type PipInstallOptions,
-  type RunWithSecretsOptions,
-  secretNames,
-  synthesizeDockerfile,
-  templateImageTag,
+import { DockerSandbox } from '../sandbox';
+import type { DockerSandboxOptions } from '../sandbox';
+import { BoundedTail, createBuildEventNormalizer, DEFAULT_MAX_OUTPUT_BYTES } from './build-progress';
+import type { BuildEventNormalizer, DockerTemplateBuildEvent, DockerTemplateBuildStep } from './build-progress';
+import { openBuildSession } from './build-session';
+import type { BuildSession } from './build-session';
+import { assertValidOwner, secretNames, synthesizeDockerfile, templateImageTag } from './dockerfile';
+import type {
+  AptInstallOptions,
+  DockerTemplateDefinition,
+  DockerTemplateOperation,
+  NpmInstallOptions,
+  PipInstallOptions,
+  RunWithSecretsOptions,
 } from './dockerfile';
 
 const MAX_OPERATIONS = 256;
@@ -423,6 +416,9 @@ export class DockerTemplate {
     const context = tarPack();
     context.entry({ name: 'Dockerfile' }, this.dockerfile);
     context.finalize();
+    // tar-stream's bundled types describe a streamx Readable, which dockerode
+    // pipes fine at runtime but doesn't match NodeJS.ReadableStream structurally.
+    const contextStream = context as unknown as NodeJS.ReadableStream;
 
     const tail = new BoundedTail(maxOutputBytes);
     const normalizer = createBuildEventNormalizer(emit, tail);
@@ -431,7 +427,14 @@ export class DockerTemplate {
     try {
       const nocache = options.force === true;
       if (secrets) {
-        const { stream, session } = await this.#buildWithSecrets(docker, context, tag, secrets, nocache, abortSignal);
+        const { stream, session } = await this.#buildWithSecrets(
+          docker,
+          contextStream,
+          tag,
+          secrets,
+          nocache,
+          abortSignal,
+        );
         try {
           await this.#followBuild(docker, stream, normalizer, abortSignal);
         } finally {
@@ -440,7 +443,7 @@ export class DockerTemplate {
           session.close();
         }
       } else {
-        const build = docker.buildImage(context, { t: tag, nocache, forcerm: true }).then(stream => {
+        const build = docker.buildImage(contextStream, { t: tag, nocache, forcerm: true }).then(stream => {
           if (abortSignal?.aborted) {
             (stream as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
             throw createAbortError(abortSignal, 'build Docker template');
@@ -448,7 +451,7 @@ export class DockerTemplate {
           return stream;
         });
         const stream = await waitForAbortable(build, abortSignal, 'build Docker template', () => {
-          (context as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
+          context.destroy();
         });
         await this.#followBuild(docker, stream, normalizer, abortSignal);
       }

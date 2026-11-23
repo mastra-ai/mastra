@@ -1,6 +1,6 @@
 import type { SignalCatalogEntry, ThemeLearningEntity } from '@mastra/client-js';
-import { Columns2, List } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useThemeEntities } from '../hooks';
 import { TraceSignalSettingsButton, TraceSignalSettingsPanel } from '../settings/trace-signal-settings';
@@ -16,8 +16,10 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ListSearch } from '@/ds/components/ListSearch';
+import { SearchInput, listSearchProps } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { IconLayoutColumn } from '@/ds/icons/central/IconLayoutColumn';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
 export type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
@@ -74,11 +76,12 @@ function EntityIndexControls({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="max-w-120 flex-1">
-        <ListSearch
+        <SearchInput
+          {...listSearchProps}
           value={search}
-          onSearch={onSearchChange}
-          label="Filter agents"
-          placeholder="Filter by agent identifier"
+          onValueChange={onSearchChange}
+          label="Search agents"
+          placeholder="Search by agent identifier"
         />
       </div>
       <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
@@ -103,7 +106,7 @@ function EntityIndexControls({
             aria-pressed={view === 'list'}
             onClick={() => onViewChange('list')}
           >
-            <List />
+            <IconListBullets />
           </Button>
           <Button
             type="button"
@@ -113,7 +116,7 @@ function EntityIndexControls({
             aria-pressed={view === 'compact'}
             onClick={() => onViewChange('compact')}
           >
-            <Columns2 />
+            <IconLayoutColumn />
           </Button>
         </ButtonsGroup>
       </div>

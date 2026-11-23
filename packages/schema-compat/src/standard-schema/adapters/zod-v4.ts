@@ -38,6 +38,7 @@ function convertToJsonSchema(
   zodSchema: unknown,
   options: StandardJSONSchemaV1.Options,
   adapterOptions: ZodV4AdapterOptions,
+  io: 'input' | 'output',
 ): Record<string, unknown> {
   // Work around a Zod v4 bug where `z.record(valueSchema)` puts the value
   // in `def.keyType` instead of `def.valueType`, which crashes
@@ -50,6 +51,7 @@ function convertToJsonSchema(
 
   const jsonSchemaOptions: Record<string, unknown> = {
     target: ZOD_V4_TARGET_MAP[target] ?? target,
+    io,
   };
 
   if (adapterOptions.unrepresentable) {
@@ -89,10 +91,10 @@ export function toStandardSchema<T>(
   // Create the JSON Schema converter using z.toJSONSchema()
   const jsonSchemaConverter: StandardJSONSchemaV1.Converter = {
     input: (options: StandardJSONSchemaV1.Options): Record<string, unknown> => {
-      return convertToJsonSchema(zodSchema, options, adapterOptions);
+      return convertToJsonSchema(zodSchema, options, adapterOptions, 'input');
     },
     output: (options: StandardJSONSchemaV1.Options): Record<string, unknown> => {
-      return convertToJsonSchema(zodSchema, options, adapterOptions);
+      return convertToJsonSchema(zodSchema, options, adapterOptions, 'output');
     },
   };
 

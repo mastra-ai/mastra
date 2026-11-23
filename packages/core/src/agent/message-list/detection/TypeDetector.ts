@@ -1,13 +1,14 @@
 import type { Message as AIV4Message, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 
 import type { MastraDBMessage, MastraMessageV1 } from '../state/types';
-import type { AIV5Type, AIV6Type, AIV7Type, CoreMessageV4 } from '../types';
+import type { AIV5Type, AIV6Type, AIV7Type, AIV7ForwardCompatibleUIMessage, CoreMessageV4 } from '../types';
 
 /**
  * Type representing all possible message input formats
  */
 export type MessageInput =
   | AIV7Type.UIMessage
+  | AIV7ForwardCompatibleUIMessage
   | AIV7Type.ModelMessage
   | AIV6Type.UIMessage
   | AIV6Type.ModelMessage
@@ -144,7 +145,13 @@ export class TypeDetector {
    * Check if a message has AIV6-only UI characteristics.
    */
   static hasAIV6UIMessageCharacteristics(
-    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | UIMessageV4 | AIV4Message,
+    msg:
+      | AIV7Type.UIMessage
+      | AIV7ForwardCompatibleUIMessage
+      | AIV6Type.UIMessage
+      | AIV5Type.UIMessage
+      | UIMessageV4
+      | AIV4Message,
   ): msg is AIV6Type.UIMessage {
     if (!('parts' in msg) || !msg.parts) return false;
 
@@ -175,7 +182,13 @@ export class TypeDetector {
    * V5 UIMessages have specific part types and field names that differ from V4.
    */
   static hasAIV5UIMessageCharacteristics(
-    msg: AIV7Type.UIMessage | AIV6Type.UIMessage | AIV5Type.UIMessage | UIMessageV4 | AIV4Message,
+    msg:
+      | AIV7Type.UIMessage
+      | AIV7ForwardCompatibleUIMessage
+      | AIV6Type.UIMessage
+      | AIV5Type.UIMessage
+      | UIMessageV4
+      | AIV4Message,
   ): msg is AIV5Type.UIMessage {
     // AI SDK v4 has separate arrays of tool invocations, reasoning, and
     // attachments that do not preserve overall part ordering, so their

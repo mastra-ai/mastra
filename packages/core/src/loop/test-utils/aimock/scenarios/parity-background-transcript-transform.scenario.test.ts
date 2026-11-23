@@ -25,7 +25,6 @@ import { z } from 'zod';
 import { Agent } from '../../../../agent';
 import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
-import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { MockStore } from '../../../../storage/mock';
@@ -98,7 +97,6 @@ async function drive(engine: ParityEngine): Promise<Contract> {
   const resource = `t64-resource-${engine}`;
   const memory = new MockMemory();
   const storage = new MockStore();
-  const pubsub = new EventEmitterPubSub();
 
   const { model, requests } = createRecordingModel({ respond });
   const agent: Agent<any, any, any> = new Agent({
@@ -112,8 +110,8 @@ async function drive(engine: ParityEngine): Promise<Contract> {
   });
 
   let wrapper: ReturnType<typeof createDurableAgent> | ReturnType<typeof createEventedAgent> | undefined;
-  if (engine === 'durable') wrapper = createDurableAgent({ agent, pubsub });
-  if (engine === 'evented') wrapper = createEventedAgent({ agent, pubsub });
+  if (engine === 'durable') wrapper = createDurableAgent({ agent });
+  if (engine === 'evented') wrapper = createEventedAgent({ agent });
 
   const host = new Mastra({
     logger: false,
@@ -151,7 +149,6 @@ async function drive(engine: ParityEngine): Promise<Contract> {
     released = true;
     cleanup();
     await host.backgroundTaskManager?.shutdown();
-    await pubsub.close();
   };
 
   try {

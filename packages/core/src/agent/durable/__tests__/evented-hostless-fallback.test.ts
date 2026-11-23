@@ -5,7 +5,7 @@
  * requires the host's registries, storage, and event workers). Before the
  * evented engine was re-enabled, such an agent silently streamed on the
  * default in-process engine — released behavior we preserve, now with a
- * warning instead of silence (see DurableAgent.resolveWorkflowEngine).
+ * warning instead of silence (see DefaultAgentExecutionEngine.resolveWorkflowEngine).
  */
 
 import { createTextStreamModel } from '@internal/test-utils';
@@ -38,6 +38,9 @@ describe('EventedAgent without a Mastra host', () => {
     // The degradation is visible, and memoized (warned once, not per read).
     const hostWarnings = warn.mock.calls.filter((c: any[]) => String(c[0]).includes('no Mastra host'));
     expect(hostWarnings).toHaveLength(1);
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('supportsConcurrentUpdates'))).toHaveLength(
+      0,
+    );
 
     cleanup();
   }, 30_000);

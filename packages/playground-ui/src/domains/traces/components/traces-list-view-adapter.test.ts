@@ -26,8 +26,28 @@ describe('toTracesListViewTraces', () => {
         status: trace.status,
         startedAt: trace.startedAt,
         endedAt: trace.endedAt,
+        timeToFirstChunkMs: trace.timeToFirstChunkMs,
+        timeToFirstTokenMs: trace.timeToFirstTokenMs,
       },
     ]);
+  });
+
+  it('passes the root time to first chunk through', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    const [streamed] = toTracesListViewTraces([{ ...trace, timeToFirstChunkMs: 412 }]);
+    const [neverStreamed] = toTracesListViewTraces([{ ...trace, timeToFirstChunkMs: null }]);
+    expect(streamed?.timeToFirstChunkMs).toBe(412);
+    expect(neverStreamed?.timeToFirstChunkMs).toBeNull();
+  });
+
+  it('passes the root time to first token through', () => {
+    const trace = firstTraceQueryPage.traces[0];
+    if (!trace) throw new Error('Expected a trace fixture');
+    const [streamed] = toTracesListViewTraces([{ ...trace, timeToFirstTokenMs: 538 }]);
+    const [neverStreamed] = toTracesListViewTraces([{ ...trace, timeToFirstTokenMs: null }]);
+    expect(streamed?.timeToFirstTokenMs).toBe(538);
+    expect(neverStreamed?.timeToFirstTokenMs).toBeNull();
   });
 
   it('passes the output and error previews through', () => {

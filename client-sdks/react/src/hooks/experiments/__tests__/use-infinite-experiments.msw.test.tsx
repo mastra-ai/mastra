@@ -7,7 +7,8 @@ import { useMockIntersectionObserver } from '../../../test/intersection-observer
 import { server } from '../../../test/msw-server';
 import { makeWrapper, TEST_BASE_URL } from '../../../test/render';
 import { EXPERIMENTS_PER_PAGE, useInfiniteExperiments } from '../use-infinite-experiments';
-import { buildListExperimentsResponse, experiments } from './fixtures/experiments';
+import type { buildListExperimentsResponse } from './fixtures/experiments';
+import { experiments } from './fixtures/experiments';
 
 type PagedResponse = ReturnType<typeof buildListExperimentsResponse>;
 

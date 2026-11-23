@@ -1,7 +1,256 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ContinuationDeps } from './continuation-core';
-import { decideContinuation } from './continuation-core';
+import { decideContinuation, markStepBudgetCondition } from './continuation-core';
+
+describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)', mode => {
+  const deps = (overrides: Partial<ContinuationDeps> = {}) =>
+    makeDeps({ policy: mode === 'default' ? { mode, hasFiniteMaxSteps: true } : { mode }, ...overrides });
+
+  it('reports normal completion on the final allowed step', async () => {
+    expect(await decideContinuation(deps({ underMaxSteps: false, llmWantsToContinue: false }))).toMatchObject({
+      isFinal: true,
+      stopCause: 'model_finished',
+    });
+  });
+
+  it('reports a step limit only when the model requested continuation', async () => {
+    expect(await decideContinuation(deps({ underMaxSteps: false, llmWantsToContinue: true }))).toMatchObject({
+      isFinal: true,
+      stopCause: 'max_steps',
+    });
+  });
+
+  it('reports a step limit when a hook requests another turn after the model finishes', async () => {
+    expect(
+      await decideContinuation(deps({ underMaxSteps: false, onIterationComplete: () => ({ continue: true }) })),
+    ).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+  });
+
+  it('does not attribute an intentional hook stop to the step limit', async () => {
+    expect(
+      await decideContinuation(
+        deps({ underMaxSteps: false, llmWantsToContinue: true, onIterationComplete: () => ({ continue: false }) }),
+      ),
+    ).toMatchObject({ isFinal: true, stopCause: 'iteration_hook' });
+  });
+
+  // The default engine gets maxSteps as a marked stop condition; durable gets only the caller's.
+  const stepBudget = () => (mode === 'default' ? [markStepBudgetCondition(() => true)] : []);
+
+  it('does not attribute a hook stop on the last allowed step to the step-count stop condition', async () => {
+    expect(
+      await decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: stepBudget(),
+          onIterationComplete: () => ({ continue: false }),
+        }),
+      ),
+    ).toMatchObject({ isFinal: true, forceContinue: false, stopCause: 'iteration_hook' });
+  });
+
+  it('reports a step limit when only the maxSteps condition matches on the last allowed step', async () => {
+    expect(
+      await decideContinuation(
+        deps({ underMaxSteps: false, llmWantsToContinue: true, stopWhen: [...stepBudget(), () => false] }),
+      ),
+    ).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+  });
+
+  it("reports the caller's stop condition when it matches on the last allowed step", async () => {
+    expect(
+      await decideContinuation(
+        deps({ underMaxSteps: false, llmWantsToContinue: true, stopWhen: [...stepBudget(), () => true] }),
+      ),
+    ).toMatchObject({ isFinal: true, forceContinue: false, stopCause: 'stop_condition' });
+  });
+
+  it('does not attribute a hook stop with feedback on the last allowed step to the step limit', async () => {
+    expect(
+      await decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: stepBudget(),
+          onIterationComplete: () => ({ continue: false, feedback: 'Wait for the user.' }),
+        }),
+      ),
+    ).toMatchObject({ isFinal: true, forceContinue: false, stopCause: 'iteration_hook' });
+  });
+
+  it('reports a stop condition without re-running the predicate', async () => {
+    let calls = 0;
+    const decision = await decideContinuation(
+      deps({
+        llmWantsToContinue: true,
+        stopWhen: () => {
+          calls++;
+          return true;
+        },
+      }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'stop_condition' });
+    expect(calls).toBe(1);
+  });
+
+  it('does not report a terminal cause after a hook reopens execution', async () => {
+    const decision = await decideContinuation(deps({ onIterationComplete: () => ({ continue: true }) }));
+    expect(decision.isFinal).toBe(false);
+    expect(decision.stopCause).toBeUndefined();
+  });
+
+  it('bounds a post-budget stopWhen that never settles and attributes the stop to max_steps', async () => {
+    vi.useFakeTimers();
+    try {
+      const warn = vi.fn();
+      let resolvePending!: (value: boolean) => void;
+      const pending = new Promise<boolean>(resolve => {
+        resolvePending = resolve;
+      });
+      const decisionPromise = decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [...stepBudget(), () => pending],
+          logger: { warn } as any,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await decisionPromise).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+      expect(warn).toHaveBeenCalledTimes(1);
+      resolvePending(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a post-budget rejecting stopWhen alongside a pending sibling and attributes max_steps', async () => {
+    vi.useFakeTimers();
+    try {
+      const warn = vi.fn();
+      let resolvePending!: (value: boolean) => void;
+      const pending = new Promise<boolean>(resolve => {
+        resolvePending = resolve;
+      });
+      const decisionPromise = decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [
+            ...stepBudget(),
+            async () => {
+              throw new Error('post-budget failure');
+            },
+            () => pending,
+          ],
+          logger: { warn } as any,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await decisionPromise).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+      expect(warn).toHaveBeenCalled();
+      resolvePending(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('attributes stop_condition immediately when a post-budget sibling matches alongside a pending predicate', async () => {
+    let resolvePending!: (value: boolean) => void;
+    const pending = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    try {
+      expect(
+        await decideContinuation(
+          deps({
+            underMaxSteps: false,
+            llmWantsToContinue: true,
+            stopWhen: [...stepBudget(), () => true, () => pending],
+          }),
+        ),
+      ).toMatchObject({ isFinal: true, stopCause: 'stop_condition' });
+    } finally {
+      resolvePending(false);
+    }
+  });
+
+  it('attributes stop_condition when a post-budget sibling matches alongside a rejecting predicate', async () => {
+    const warn = vi.fn();
+    expect(
+      await decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [
+            ...stepBudget(),
+            async () => {
+              throw new Error('sibling failed');
+            },
+            () => true,
+          ],
+          logger: { warn } as any,
+        }),
+      ),
+    ).toMatchObject({ isFinal: true, stopCause: 'stop_condition' });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps under-budget fail-fast rejection even when a sibling predicate stays pending', async () => {
+    let resolvePending!: (value: boolean) => void;
+    const pending = new Promise<boolean>(resolve => {
+      resolvePending = resolve;
+    });
+    try {
+      await expect(
+        decideContinuation(
+          deps({
+            underMaxSteps: true,
+            llmWantsToContinue: true,
+            stopWhen: [
+              async () => {
+                throw new Error('under-budget boom');
+              },
+              () => pending,
+            ],
+          }),
+        ),
+      ).rejects.toThrow('under-budget boom');
+    } finally {
+      resolvePending(false);
+    }
+  });
+
+  it('still settles cleanly if logger.warn throws on post-budget timeout or late rejection', async () => {
+    vi.useFakeTimers();
+    try {
+      let rejectPending!: (error: Error) => void;
+      const pending = new Promise<boolean>((_, reject) => {
+        rejectPending = reject;
+      });
+      const decisionPromise = decideContinuation(
+        deps({
+          underMaxSteps: false,
+          llmWantsToContinue: true,
+          stopWhen: [...stepBudget(), () => pending],
+          logger: {
+            warn: () => {
+              throw new Error('logger broken');
+            },
+          } as any,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await decisionPromise).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+      rejectPending(new Error('late rejection'));
+      await Promise.resolve();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 /**
  * Truth-table tests for the per-engine continuation policy split.
@@ -50,11 +299,30 @@ describe('decideContinuation — pendingFeedbackStop finality', () => {
         onIterationComplete: async () => ({ continue: true }),
       }),
     );
-    expect(decision).toEqual({ isFinal: true, forceContinue: false, nextPendingFeedbackStop: false });
+    expect(decision).toEqual({
+      isFinal: true,
+      forceContinue: false,
+      nextPendingFeedbackStop: false,
+      stopCause: 'feedback_complete',
+    });
   });
 });
 
 describe('decideContinuation — delegation bail ordering (per-engine split)', () => {
+  it.each(['default', 'durable'] as const)('%s: records bail when it stops requested continuation', async mode => {
+    const decision = await decideContinuation(
+      makeDeps({ policy: { mode }, llmWantsToContinue: true, underMaxSteps: true, consumeDelegationBail: () => true }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'delegation' });
+  });
+
+  it.each(['default', 'durable'] as const)('%s: a queued bail does not relabel normal model completion', async mode => {
+    const decision = await decideContinuation(
+      makeDeps({ policy: { mode }, llmWantsToContinue: false, consumeDelegationBail: () => true }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'model_finished' });
+  });
+
   it('default: the bail is checked AFTER the hook — the hook sees a pre-bail isFinal, then the bail wins the stop', async () => {
     const consumeDelegationBail = vi.fn(() => true);
     const seenIsFinal: boolean[] = [];

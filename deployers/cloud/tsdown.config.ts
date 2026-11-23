@@ -12,7 +12,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   onSuccess: async () => {
     const studioPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
 
