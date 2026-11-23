@@ -258,7 +258,10 @@ describe.each([1, 2] as const)('a finished sleep on evented storage v%s', storag
       const result = await run.start({ inputData: order });
       expect(result.status).toBe('success');
       await new Promise(resolve => setTimeout(resolve, 200));
-      expect(charge).toHaveBeenCalled();
+      // The end still routes on, in case the first delivery stopped before
+      // publishing the next step; only a store that guards step starts
+      // drops the second run of `charge`.
+      expect(charge.mock.calls.length).toBeGreaterThanOrEqual(1);
       expect(sleepWrites).toHaveLength(1);
     } finally {
       await mastra.stopWorkers();
@@ -327,7 +330,7 @@ describe.each([1, 2] as const)('a finished sleep on evented storage v%s', storag
     await mastra.startWorkers();
     try {
       const run = await workflow.createRun();
-      const result = await run.start({ inputData: order, outputOptions: { includeState: true } });
+      const result = await run.start({ inputData: order });
       expect(result.status).toBe('success');
       expect(charge).toHaveBeenCalledTimes(1);
       expect(charge.mock.calls[0]![0].inputData).toEqual(order);

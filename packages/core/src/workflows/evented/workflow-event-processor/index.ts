@@ -4815,7 +4815,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       // A sleep's timer publishes this event once the sleep is over (see sleep.ts).
       delete activeStepsPath[stepId];
-      // A redelivery after the next step started must not roll back the state it wrote.
+      // A redelivered end must not save the sleep again or rewrite state from
+      // this event. Routing below still runs, so on stores that do not guard
+      // step starts the next step can run twice.
       const stored = (await runStorage.loadSteps([stepId]))[stepId];
       if (stored?.status !== 'success') {
         await runStorage.writeStepResult({
