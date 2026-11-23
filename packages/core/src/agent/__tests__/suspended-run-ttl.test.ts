@@ -697,6 +697,63 @@ describe('suspended run in-memory TTL', () => {
         };
       };
 
+      it('moves it on to the resumed stream and the next run once the superseded parked stream is released before it reads', async () => {
+        const watcher = await watchThread(pubsub, 'thread-1');
+        const run1 = createFakeRun('run-1');
+        await runtime.registerRun(
+          fakeAgent,
+          run1.output,
+          { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+          pubsub,
+          { continuation: 'across-suspension' },
+        );
+        run1.emitSuspendPart();
+        await watcher.waitFor('stream-part', 'run-1');
+        run1.parkWithStreamOpen();
+        await watcher.waitFor('run-suspended', 'run-1');
+        const subscription = await runtime.subscribeToThread(
+          createWakeableAgent('run-2').agent,
+          { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+          pubsub,
+        );
+        try {
+          // Same-run resume supersedes the parked stream, which is then released before anyone reads it.
+          const resumed = createFakeRun('run-1');
+          await runtime.registerRun(
+            fakeAgent,
+            resumed.output,
+            { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+            pubsub,
+          );
+          expect(runtime.evictParkedRun(run1.output, pubsub)).toBe(true);
+
+          const seen: string[] = [];
+          const reading = (async () => {
+            for await (const part of subscription.stream as AsyncIterable<any>) {
+              if (part?.type === 'finish') seen.push(`finish:${part.runId}`);
+              if (part?.runId === 'run-2' && part.type === 'finish') return;
+            }
+          })();
+          resumed.emitFinishPart();
+          resumed.settle('success');
+          await watcher.waitFor('run-completed', 'run-1');
+          const run2 = createFakeRun('run-2');
+          await runtime.registerRun(
+            fakeAgent,
+            run2.output,
+            { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+            pubsub,
+          );
+          run2.emitFinishPart();
+          run2.settle('success');
+
+          await vi.waitFor(() => expect(seen).toEqual(['finish:run-1', 'finish:run-2']));
+          await reading;
+        } finally {
+          subscription.unsubscribe();
+        }
+      });
+
       it('ends it with an abort once it is aborted while parked', async () => {
         const watcher = await watchThread(pubsub, 'thread-1');
         const subscription = await parkAndSubscribeLazily(watcher);

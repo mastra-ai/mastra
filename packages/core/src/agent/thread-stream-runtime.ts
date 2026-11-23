@@ -4959,8 +4959,9 @@ export class AgentThreadStreamRuntime {
   ) {
     state.threadRunsByStreamId.delete(streamId);
     state.watchedThreadStreamIds.delete(streamId);
-    // Subscribers reading this parked stream would otherwise wait on it forever. Only this stream's readers stop,
-    // since a same-instance resume reads a newer stream; a superseded record needs nothing more than that.
+    // Subscribers reading this parked stream, or with it still queued, would otherwise wait on it forever.
+    // Only this stream's readers stop, since a same-instance resume reads a newer stream.
+    state.displacedRecords.set(record, 'moved-on');
     this.#stopReadingDisplacedRun(state, record.runId, streamId);
     if (state.threadRunsById.get(record.runId) !== record) return;
     const staleKey = this.#threadKey(record.resourceId, record.threadId);
@@ -4969,7 +4970,6 @@ export class AgentThreadStreamRuntime {
     this.#clearSuspendedRun(state, record.runId);
     this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
     state.sweptLeasedRunIds.set(record.runId, now);
-    state.displacedRecords.set(record, 'moved-on');
     if (
       state.activeThreadRunIds.get(staleKey) === record.runId &&
       state.activeThreadStreamIds.get(staleKey) === streamId
