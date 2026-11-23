@@ -148,12 +148,13 @@ export class WorkingMemory implements Processor {
     if (scope === 'thread' && threadId) {
       // The thread was already loaded and ownership-validated during run preparation.
       const thread = memoryRunState?.thread ?? (await this.options.storage.getThreadById({ threadId }));
-      workingMemoryData = (thread?.metadata?.workingMemory as string) || null;
+      const stored = thread?.metadata?.workingMemory;
+      workingMemoryData = typeof stored === 'string' && stored ? stored : null;
     } else if (scope === 'resource' && resourceId) {
       const cacheKey = `working-memory:resource:${resourceId}`;
       const loadWorkingMemory = async () => {
         const resource = await this.options.storage.getResourceById({ resourceId });
-        return resource?.workingMemory || null;
+        return typeof resource?.workingMemory === 'string' && resource.workingMemory ? resource.workingMemory : null;
       };
       workingMemoryData = memoryRunState
         ? await memoryRunState.load(cacheKey, loadWorkingMemory)

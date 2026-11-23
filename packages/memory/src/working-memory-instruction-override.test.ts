@@ -382,11 +382,16 @@ describe.each(['current core', 'older core without an instruction provider'] as 
       expect(system).toContain(fromMemory!);
     });
 
-    it('preserves object-valued thread workingMemory metadata consistently with core', async () => {
+    it('coerces non-string thread workingMemory metadata to null so string-only overrides do not throw', async () => {
+      class TrimmingMemory extends Memory {
+        override getWorkingMemoryToolInstruction({ data }: { template: WorkingMemoryTemplate; data: string | null }) {
+          return `TRIMMED_WM:${data?.trim() ?? 'empty'}`;
+        }
+      }
       llm.on({ endpoint: 'chat' }, { content: 'ok' });
-      const memory = createMemory(DurableFactsMemory, {
+      const memory = createMemory(TrimmingMemory, {
         workingMemory: { ...markdownWorkingMemory, scope: 'thread' },
-      }) as DurableFactsMemory;
+      });
       await memory.createThread({
         threadId: 'thread-object-wm',
         resourceId: RESOURCE,
@@ -395,9 +400,9 @@ describe.each(['current core', 'older core without an instruction provider'] as 
 
       await createAgent(memory).generate('hello', { memory: { thread: 'thread-object-wm', resource: RESOURCE } });
 
-      expect(memory.seen).toHaveLength(1);
-      expect(memory.seen[0]?.data).toEqual({ name: 'Ada' });
-      expect(systemPromptSentToModel()).not.toContain('No working memory data available.');
+      const fromMemory = await memory.getSystemMessage({ threadId: 'thread-object-wm', resourceId: RESOURCE });
+      expect(fromMemory).toBe('TRIMMED_WM:empty');
+      expect(systemPromptSentToModel()).toContain('TRIMMED_WM:empty');
     });
 
     it('with useStateSignals the instruction methods are not used', async () => {

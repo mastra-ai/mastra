@@ -1900,14 +1900,15 @@ ${workingMemory}`;
       const loadWorkingMemory = async () => {
         const memoryStore = await this.getMemoryStore();
         const resource = await memoryStore.getResourceById({ resourceId });
-        return resource?.workingMemory || null;
+        return typeof resource?.workingMemory === 'string' && resource.workingMemory ? resource.workingMemory : null;
       };
       workingMemoryData = runState
         ? await runState.load(`working-memory:resource:${resourceId}`, loadWorkingMemory)
         : await loadWorkingMemory();
     } else {
       const thread = runState?.threadLoaded ? runState.thread : await this.getThreadById({ threadId });
-      workingMemoryData = thread?.metadata?.workingMemory as string;
+      const stored = thread?.metadata?.workingMemory;
+      workingMemoryData = typeof stored === 'string' && stored ? stored : null;
     }
 
     if (!workingMemoryData) {
