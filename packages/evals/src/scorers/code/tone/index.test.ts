@@ -178,7 +178,7 @@ describe('ToneConsistencyMetric', () => {
       const withPeriod = await scoreFor(`${text}.`);
       expect(withPeriod).toBeLessThan(0.5);
       expect(await scoreFor(text)).toBe(withPeriod);
-      expect(await scoreFor(`${text}. [1]`)).toBe(withPeriod);
+      expect(await scoreFor(`${text}. [1, 2]`)).toBe(withPeriod);
       expect(await scoreFor(text.replace('This is terrible garbage and I hate it', '**$&**'))).toBe(withPeriod);
       expect(await scoreFor('Great news, you saved $3.50 today')).toBe(1);
     });

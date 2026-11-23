@@ -36,7 +36,9 @@ export function createToneScorer(config: ToneScorerConfig = {}) {
       }
 
       // Evaluate sentiment stability across response
-      const sentences = agentMessage.match(/[^.!?]+[.!?]+|(?<=[.!?])(?!\w)[^.!?]*\s\w[^.!?]*$/g) || [agentMessage];
+      const sentences = agentMessage.match(/[^.!?]+[.!?]+|(?<=[.!?])(?!\w)[^.!?]*\s[a-zA-Z][^.!?]*$/g) || [
+        agentMessage,
+      ];
       const sentiments = sentences.map(s => sentiment.analyze(s).comparative);
       const avgSentiment = sentiments.reduce((a, b) => a + b, 0) / sentiments.length;
       const variance = sentiments.reduce((sum, s) => sum + Math.pow(s - avgSentiment, 2), 0) / sentiments.length;
