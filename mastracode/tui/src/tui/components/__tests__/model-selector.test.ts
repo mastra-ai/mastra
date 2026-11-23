@@ -203,6 +203,28 @@ describe('Fast entries next to their standard model', () => {
       'openai/gpt-6.2-sol:fast',
     ]);
   });
+
+  it('leaves a model name ending in :fast alone on any provider but OpenAI', () => {
+    const acme = (modelName: string) => ({
+      id: `acme/${modelName}`,
+      provider: 'acme',
+      modelName,
+      hasApiKey: true,
+    });
+    const rows = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: [claude, acme('qwen'), acme('qwen:fast'), acme('qwen-max')],
+      currentModelId: claude.id,
+      onSelect: vi.fn(),
+      onCancel: vi.fn(),
+    })
+      .render(100)
+      .map(line => stripAnsi(line).trim())
+      .filter(line => line.includes('acme/'));
+
+    // `:fast` is part of the name here, so the rows keep the order they sort in.
+    expect(rows).toEqual(['acme/qwen', 'acme/qwen-max', 'acme/qwen:fast']);
+  });
 });
 
 describe('MastraCode gateway catalog models', () => {

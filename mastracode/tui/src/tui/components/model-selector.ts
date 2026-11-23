@@ -222,13 +222,15 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   /**
-   * Puts each Fast entry directly under its standard model. A Fast entry that is the current model stays first,
-   * with its standard model right below it.
+   * Puts each Codex Fast entry directly under its standard model. A Fast entry that is the current model stays first,
+   * with its standard model right below it. `:fast` on any other provider is part of the model name and stays put.
    */
   private keepFastEntriesNextToStandard(sorted: ModelItem[], currentModelId?: string): ModelItem[] {
     const byId = new Map(sorted.map(model => [model.id, model]));
+    const isFastEntry = (model: ModelItem | undefined) =>
+      model !== undefined && parseCodexModelSelection(model.id).codexServiceTier === 'fast';
     const standardOf = (model: ModelItem) =>
-      model.id.endsWith(FAST_SUFFIX) ? byId.get(model.id.slice(0, -FAST_SUFFIX.length)) : undefined;
+      isFastEntry(model) ? byId.get(parseCodexModelSelection(model.id).modelId) : undefined;
     const placed = new Set<string>();
     const result: ModelItem[] = [];
     for (const model of sorted) {
@@ -237,7 +239,8 @@ export class ModelSelectorComponent extends Box implements Focusable {
       if (standard && model.id !== currentModelId) continue;
       result.push(model);
       placed.add(model.id);
-      const partner = standard ?? byId.get(`${model.id}${FAST_SUFFIX}`);
+      const fastEntry = byId.get(`${model.id}${FAST_SUFFIX}`);
+      const partner = standard ?? (isFastEntry(fastEntry) ? fastEntry : undefined);
       if (partner && !placed.has(partner.id)) {
         result.push(partner);
         placed.add(partner.id);

@@ -617,6 +617,26 @@ describe('MastraTUI startup stopped part-way', () => {
     await vi.waitFor(() => expect(mocks.ModelSelectorComponent).toHaveBeenCalledTimes(1));
   });
 
+  it('offers the Fast entry in the onboarding model selector only with a ChatGPT sign-in', async () => {
+    const sol = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
+    const offeredWith = async (credential: { type: string } | undefined) => {
+      mocks.ModelSelectorComponent.mockClear();
+      const { tui } = createStartupTui('');
+      const component = await openRealOnboarding(tui);
+      tui.state.authStorage = { get: () => credential };
+      tui.state.controller = { listAvailableModels: vi.fn(async () => [sol]) };
+
+      void component.options.onSelectModel('Build');
+      await vi.waitFor(() => expect(mocks.ModelSelectorComponent).toHaveBeenCalledTimes(1));
+      return (mocks.ModelSelectorComponent.mock.calls[0]![0] as { models: Array<{ id: string }> }).models.map(
+        model => model.id,
+      );
+    };
+
+    expect(await offeredWith({ type: 'oauth' })).toEqual(['openai/gpt-6.2-sol', 'openai/gpt-6.2-sol:fast']);
+    expect(await offeredWith({ type: 'api_key' })).toEqual(['openai/gpt-6.2-sol']);
+  });
+
   it('does not open the onboarding model selector when stopped while models are listed', async () => {
     const { tui } = createStartupTui('model-list');
     const component = await openRealOnboarding(tui);
