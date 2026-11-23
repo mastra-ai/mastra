@@ -1400,8 +1400,13 @@ export function KnowledgePageExplorer({
                 defaultTab={tabValue}
                 onValueChange={next => onViewChange(next)}
                 aria-label="View"
+                className={floatingToolbar ? 'max-w-full min-w-0 overflow-visible' : undefined}
               >
-                <TabList variant="pill-ghost" size="sm" className={floatingToolbar ? overlaySurfaceStyle : undefined}>
+                <TabList
+                  variant={floatingToolbar ? 'pill' : 'pill-ghost'}
+                  size="sm"
+                  overflow={floatingToolbar ? 'visible' : 'scroll'}
+                >
                   {views.map(option => (
                     <Tab
                       key={option.value}
@@ -1448,7 +1453,7 @@ export function KnowledgePageExplorer({
               data-state={treeClosed ? 'closed' : 'open'}
               className={`absolute top-[calc(var(--knowledge-toolbar-inset)+0.5rem)] bottom-2 left-2 z-10 flex w-72 transition duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'pointer-events-none -translate-x-4 opacity-0' : 'translate-x-0 opacity-100'}`}
             >
-              <DataPanel variant="inline" title="Pages" className="shadow-overlay">
+              <DataPanel variant="inline" title="Pages">
                 {treeHeader}
                 {treeBody}
               </DataPanel>
@@ -1468,7 +1473,7 @@ export function KnowledgePageExplorer({
               size="icon-sm"
               inert={!treeClosed}
               aria-hidden={!treeClosed || undefined}
-              className={`absolute top-[calc(var(--knowledge-toolbar-inset)+0.75rem)] left-3 z-10 shadow-overlay transition-opacity duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+              className={`absolute top-[calc(var(--knowledge-toolbar-inset)+0.75rem)] left-3 z-10 transition-opacity duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
               ref={showPagesButton}
               onClick={() => toggleTree(true)}
             >
@@ -1491,17 +1496,16 @@ export function KnowledgePageExplorer({
             </section>
           ) : (
             <div
-              className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-sidebar lg:block lg:h-full ${flush || floatingToolbar ? '' : 'rounded-xl border border-border'} ${view === 'graph' || pageOverGraph ? 'block' : 'hidden'}`}
+              className={cn(
+                'relative min-h-0 min-w-0 flex-1 bg-background lg:h-full',
+                !flush && !floatingToolbar && 'rounded-xl border border-border',
+                view === 'graph' || pageOverGraph ? 'block' : 'hidden',
+              )}
               data-testid="knowledge-graph-container"
             >
               {graphShown && !pageOverGraph ? (
                 <div className="absolute top-[calc(var(--knowledge-toolbar-inset)+0.75rem)] right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
-                  <ButtonsGroup
-                    orientation="vertical"
-                    size="sm"
-                    aria-label="Graph options"
-                    className="rounded-xl shadow-overlay"
-                  >
+                  <ButtonsGroup orientation="vertical" size="sm" aria-label="Graph options">
                     <Button
                       data-testid="knowledge-graph-back"
                       aria-label="Back"
@@ -1520,7 +1524,7 @@ export function KnowledgePageExplorer({
                       tooltip={allLinks ? 'Show only the selected page’s links' : 'Show every link between pages'}
                       tooltipPosition="left"
                       size="icon-sm"
-                      className={allLinks ? '[--control-icon:var(--foreground)]' : undefined}
+                      variant={allLinks ? 'subtle' : 'default'}
                       onClick={() => setAllLinks(current => !current)}
                     >
                       <IconChainLink3 />
@@ -1532,7 +1536,7 @@ export function KnowledgePageExplorer({
                       tooltip={dotCounts ? 'Hide link counts' : 'Show link counts on each dot'}
                       tooltipPosition="left"
                       size="icon-sm"
-                      className={dotCounts ? '[--control-icon:var(--foreground)]' : undefined}
+                      variant={dotCounts ? 'subtle' : 'default'}
                       onClick={() => setDotCounts(current => !current)}
                     >
                       <IconHashtag />
@@ -1595,7 +1599,7 @@ export function KnowledgePageExplorer({
                   className={`absolute top-[calc(var(--knowledge-toolbar-inset)+0.5rem)] right-2 bottom-2 z-10 flex w-96 transition duration-slow ease-out-custom motion-reduce:transition-none ${drawerPageId ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0'}`}
                 >
                   {drawerShownId ? (
-                    <DataPanel variant="inline" title="Page details" className="shadow-overlay">
+                    <DataPanel variant="inline" title="Page details">
                       <DataPanel.Header>
                         <DataPanel.Heading className="min-w-0 flex-1 shrink">
                           <span className="truncate">{drawerPage?.name ?? 'Page'}</span>
@@ -1649,7 +1653,7 @@ export function KnowledgePageExplorer({
                   aria-label="Selected page"
                   className="absolute inset-y-2 right-2 left-[calc(var(--knowledge-tree-inset)+0.5rem)] z-20 flex transition-[left] duration-slow ease-out-custom motion-reduce:transition-none"
                 >
-                  <DataPanel variant="inline" title="Page" className="shadow-overlay">
+                  <DataPanel variant="inline" title="Page">
                     <DataPanel.Header>
                       <DataPanel.Heading>Page</DataPanel.Heading>
                       <DataPanel.HeaderActions>

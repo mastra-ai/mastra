@@ -125,6 +125,11 @@
     --control-border: 1px;
   }
 
+  [data-slot='buttons-group'] > [data-variant='subtle'] {
+    border-width: 1px;
+    --control-border: 1px;
+  }
+
   /* One border per seam, and no overlap. A border is a translucent alpha of the
      foreground, so two 1px edges collapsed onto the same pixel (the `-ml-px` trick) stack
      to double the alpha and out-read the ring around the group. The left segment owns the

@@ -1,8 +1,6 @@
 import type { Edge, EdgeProps, NodeProps } from '@xyflow/react';
 import {
-  Background,
   BaseEdge,
-  BackgroundVariant,
   getViewportForBounds,
   Handle,
   MarkerType,
@@ -59,7 +57,6 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
-
 import './knowledge.css';
 import { IconArrowWallUp } from '@/ds/icons/central/IconArrowWallUp';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
@@ -68,6 +65,9 @@ import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
 import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPin } from '@/ds/icons/central/IconPin';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { GraphCanvasBackground } from '@/ds/primitives/graph-canvas-background';
+import { overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 const NO_PANE_INSETS: PaneInsets = { left: 0, right: 0 };
 type PaneStyle = CSSProperties & { '--knowledge-pane-left': string };
@@ -657,7 +657,6 @@ function GraphLegend({
           size="sm"
           icon={<IconCircleInfo />}
           aria-expanded={open}
-          className="shadow-overlay"
           onFocus={() => setPeeking(true)}
           onBlur={() => setPeeking(false)}
           onClick={() => {
@@ -671,7 +670,10 @@ function GraphLegend({
       <ul
         aria-label="Legend"
         hidden={collapsible && !open}
-        className={`pointer-events-none flex flex-col gap-1 rounded-lg px-2.5 py-2 ${collapsible ? 'bg-card shadow-overlay' : 'rounded-md border border-border bg-card/90 shadow-raised'}`}
+        className={cn(
+          'pointer-events-none flex flex-col gap-1 rounded-lg px-2.5 py-2',
+          collapsible ? overlaySurfaceStyle : raisedSurfaceStyle,
+        )}
       >
         <li className="flex items-center gap-2">
           <span className={LEGEND_SWATCH} style={{ ...SCOPE_STYLE }} aria-hidden />
@@ -1577,7 +1579,7 @@ function KnowledgePageGraphInner({
     <div
       ref={containerRef}
       style={paneStyle}
-      className="knowledge-graph relative size-full"
+      className="knowledge-graph relative size-full rounded-[inherit]"
       data-emphasis={neighbours ? 'on' : undefined}
       data-testid="knowledge-page-graph"
       onKeyDown={onKeyDown}
@@ -1600,6 +1602,7 @@ function KnowledgePageGraphInner({
         )}
       />
       <ReactFlow
+        className="rounded-[inherit]"
         nodes={drawnNodes}
         edges={emphasisedEdges}
         nodeTypes={nodeTypes}
@@ -1625,10 +1628,10 @@ function KnowledgePageGraphInner({
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
       >
-        <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
+        <GraphCanvasBackground />
       </ReactFlow>
       <div className="absolute bottom-3 left-3 z-10 translate-x-(--knowledge-tree-drawer-inset,0px) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
-        <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom className="rounded-full shadow-overlay">
+        <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom>
           <Button
             size="icon-sm"
             tooltip="Zoom out"
