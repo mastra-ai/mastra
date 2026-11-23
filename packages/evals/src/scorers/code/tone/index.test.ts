@@ -166,5 +166,20 @@ describe('ToneConsistencyMetric', () => {
       expect(Math.abs(metrics?.avgSentiment || 0)).toBeLessThan(0.2);
       expect(metrics?.sentimentVariance).toBeLessThan(0.1);
     });
+
+    it('should score the last sentence when the response ends without punctuation', async () => {
+      const scorer = createToneScorer();
+      const text = 'Thank you for reaching out. I am happy to help. This is terrible garbage and I hate it';
+      const scoreFor = async (content: string) => {
+        const output = [createTestMessage({ content, role: 'assistant', id: 'test-output' })];
+        return (await scorer.run(createAgentTestRun({ output }))).score;
+      };
+
+      const withPeriod = await scoreFor(`${text}.`);
+      expect(withPeriod).toBeLessThan(0.5);
+      expect(await scoreFor(text)).toBe(withPeriod);
+      expect(await scoreFor(`${text}. [1]`)).toBe(withPeriod);
+      expect(await scoreFor('Great news, you saved $3.50 today')).toBe(1);
+    });
   });
 });
