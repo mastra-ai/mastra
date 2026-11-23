@@ -15117,16 +15117,22 @@ export class Agent<
     }
     const coldAttempt = new ColdResumeAttempt(runId);
     // Until the resume accepts, it can wait on another resume of the run or on rebuilding the run
-    // itself. Both stop once this caller gives up: its abort signal fires or its total budget ends.
-    const giveUp = createTimeoutAbortSignal({
-      parentSignal: options?.abortSignal,
-      timeoutMs: options?.modelSettings?.timeout?.totalMs,
-      timeoutType: 'total',
-    });
+    // itself. Both stop once this caller gives up: its abort signal fires or its total budget, counted
+    // from this call, ends. Built only when the resume does wait, so other resumes leave the caller's
+    // signal untouched.
+    const calledAt = Date.now();
+    const totalMs = options?.modelSettings?.timeout?.totalMs;
+    let giveUp: ReturnType<typeof createTimeoutAbortSignal> | undefined;
+    const giveUpSignal = () =>
+      (giveUp ??= createTimeoutAbortSignal({
+        parentSignal: options?.abortSignal,
+        timeoutMs: totalMs === undefined ? undefined : Math.max(1, totalMs - (Date.now() - calledAt)),
+        timeoutType: 'total',
+      })).signal;
     try {
       // An abort on another server leaves the run canceled in storage.
       if (await this.#isRunCanceledInStorage(runId)) throw abortedRunError();
-      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker, coldAttempt, giveUp.signal);
+      return await this.#resumeRun(runId, resumeData, options, releaseResumeMarker, coldAttempt, giveUpSignal);
     } catch (error) {
       // A rebuilt run whose resume never accepted is removed again, so no later resume inherits
       // the rejected caller's request context.
@@ -15136,7 +15142,7 @@ export class Agent<
     } finally {
       // An attempt is never left undecided; after acceptance this does nothing.
       coldAttempt.abandon();
-      giveUp.cleanup();
+      giveUp?.cleanup();
     }
   }
 
@@ -15178,13 +15184,13 @@ export class Agent<
     options: DurableAgentResumeOptions<TOutput> | undefined,
     releaseResumeMarker: () => void,
     coldAttempt: ColdResumeAttempt,
-    giveUp: AbortSignal | undefined,
+    giveUp: () => AbortSignal | undefined,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     const accepted = getAcceptedResume(options);
     // Wait out any cold resume of this run that is still deciding, then read the registry and claim
     // a cold run in the same tick, so two resumes can never both rebuild it.
     for (let pending = undecidedColdResume(runId); pending; pending = undecidedColdResume(runId)) {
-      await waitUnlessAborted(pending, giveUp);
+      await waitUnlessAborted(pending, giveUp());
     }
     let entry = this.executionRunRegistry.get(runId);
     // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
@@ -15356,7 +15362,7 @@ export class Agent<
       // A stalled tool resolver must not hold the run once this caller gives up. The abandoned
       // preparation keeps running, but registers nothing when it finishes.
       preparing.catch(() => {});
-      await waitUnlessAborted(preparing, giveUp);
+      await waitUnlessAborted(preparing, giveUp());
       entry = this.executionRunRegistry.get(runId);
     }
     if (!entry) {
@@ -15449,12 +15455,13 @@ export class Agent<
     // so this is the execution another agent instance runs from the shared slot.
     const sharedEntryBeforeAccept = getRunRegistryEntry(runId, this.#mastra);
     const priorExecution = sharedEntryBeforeAccept?.workflowExecution;
-    await waitUnlessAborted(
+    const settledPrior =
       priorExecution?.catch(() => {
         /* errors already handled by the prior segment */
-      }) ?? Promise.resolve(),
-      giveUp,
-    );
+      }) ?? Promise.resolve();
+    // A cold resume holds back every other resume of the run while it waits here, so it stops when
+    // its caller gives up.
+    await (coldSnapshot ? waitUnlessAborted(settledPrior, giveUp()) : settledPrior);
 
     // The tools the resumed run executes: what preparation rebuilt for a cold resume, or the run's
     // registry entry with this call's request-built tools swapped in (below) for a warm one.
