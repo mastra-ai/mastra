@@ -3012,6 +3012,40 @@ describe('GitHub session workspace preparation', () => {
         expect(await toolCall(opened, member)).toBeUndefined();
       });
 
+      it.each([
+        ['vault', true],
+        ['unknown', undefined],
+      ] as const)(
+        "refuses the new owner the previous owner's %s-mode sandbox until a takeover releases it",
+        async (_mode, vault) => {
+          mocks.vault = vault;
+          const { workspace } = await createLocalFactory();
+          addProject();
+          const row = addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+          const opened = await workspace({
+            requestContext: createGithubRequestContext('project-1', 'session-a', owner),
+          });
+          const sandbox = mocks.createSandbox.mock.results[0]!.value;
+          sandbox.exec.mockClear();
+
+          // The takeover has committed the new owner but not yet released the sandbox.
+          row.userId = 'member-2';
+
+          if (vault === true) {
+            await expect(
+              workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+            ).rejects.toThrow(notAvailable);
+          } else {
+            await expect(
+              workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+            ).resolves.toBe(opened);
+          }
+          await expect(toolCall(opened, member)).rejects.toThrow(notAvailable);
+          expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+          expect(sandbox.exec).not.toHaveBeenCalled();
+        },
+      );
+
       it("gives the new owner a sandbox of their own once a takeover releases the old owner's", async () => {
         mocks.vault = true;
         const registry = new FactoryWorkspaceRegistry();

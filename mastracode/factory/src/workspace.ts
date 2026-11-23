@@ -63,7 +63,13 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
-import { assertVaultSandboxCaller, learnSandboxGithubAuth, sandboxAcceptsGithubToken } from './sandbox/vault.js';
+import {
+  assertVaultSandboxCaller,
+  bindSandboxOwner,
+  learnSandboxGithubAuth,
+  sandboxAcceptsGithubToken,
+  sandboxOwner,
+} from './sandbox/vault.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -1166,6 +1172,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // waits for this resolver to finish because the start hook reads
           // bindings declared further down.
           startEagerly = eagerSandboxStart;
+          bindSandboxOwner(sandbox, session.userId);
           return sandbox;
         },
         environment?.repos.map(repo => repo.slug) ?? [],
@@ -1185,8 +1192,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const sessionEntry = constructSessionEntry();
     // A credential-vault sandbox acts with its owner's vault grant (the sandbox
-    // is created with `userId: session.userId`), so only the owner may create or
-    // reuse it; an org-visible session gives other members no share of that
+    // is created with `userId: session.userId`), so only that user may create or
+    // reuse it, even after the session changes owner; an org-visible session gives other members no share of that
     // credential. Learning the mode never starts the sandbox: `refreshVault()`
     // asks the platform about an existing VM and is a no-op before one exists.
     // A resolution refuses a non-owner only once the mode is known to be vault,
@@ -1194,7 +1201,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // (the first thing that would start or use the VM) refuses unless the mode
     // is known to be token.
     const vaultSandbox = sessionEntry.sandbox as WorkspaceSandbox & { vault?: boolean };
-    const ownsVault = (callerId: string | undefined) => callerId === session.userId || !('vault' in vaultSandbox);
+    const ownsVault = (callerId: string | undefined) =>
+      callerId === sandboxOwner(vaultSandbox, session.userId) || !('vault' in vaultSandbox);
     const vaultCaller = (callerId: string | undefined) => ({
       ownerId: session.userId,
       callerId,

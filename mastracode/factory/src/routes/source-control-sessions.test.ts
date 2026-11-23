@@ -24,6 +24,7 @@ import { createTerminalStageCleanup } from '../rules/terminal-cleanup.js';
 import { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { evictSessionSandbox, getSessionSandbox, peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
+import { bindSandboxOwner } from '../sandbox/vault.js';
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listSessionOpenRuns,
@@ -1918,7 +1919,10 @@ describe('session sandbox recreate', () => {
         refreshVault: vi.fn(async () => {}),
         destroy: vi.fn(async () => {}),
       };
-      getSessionSandbox(sessionRowId, 'acme/repo', () => sandbox as never);
+      getSessionSandbox(sessionRowId, 'acme/repo', () => {
+        bindSandboxOwner(sandbox, 'user-1');
+        return sandbox as never;
+      });
       onTestFinished(() => evictSessionSandbox(sessionRowId));
       return sandbox;
     }
@@ -1952,6 +1956,51 @@ describe('session sandbox recreate', () => {
         userId: 'user-2',
         sandboxId: null,
       });
+    });
+
+    it("refuses the new owner the previous owner's sandbox while the takeover is still releasing it", async () => {
+      const { seed, sourceControl, session } = await materialized();
+      const sandbox = Object.assign(heldSandbox(session.id, true), {
+        start: vi.fn(async () => {}),
+        executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      });
+      const sessionRetirement = new SessionRetirementCoordinator();
+      let releasing!: () => void;
+      const released = new Promise<void>(resolve => (releasing = resolve));
+      const recreate = sessionRetirement.recreateSessionSandbox.bind(sessionRetirement);
+      let entered!: () => void;
+      const releaseStarted = new Promise<void>(resolve => (entered = resolve));
+      vi.spyOn(sessionRetirement, 'recreateSessionSandbox').mockImplementation(async args => {
+        entered();
+        await released;
+        return recreate(args);
+      });
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        workItems: noRuns,
+        sessionRetirement,
+        controller: {
+          getSession: vi.fn(async () => ({ getWorkspace: () => ({ sandbox }) })),
+          deleteSession: vi.fn(async () => {}),
+          queryThreadById: vi.fn(async () => null),
+        } as never,
+      });
+
+      const takeover = takeOwnership(app, session.sessionId, 'user-1');
+      await releaseStarted;
+      // The new owner is committed; the previous owner's instance is still memoized.
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-2',
+      });
+      const start = await app.request(`/web/user-sessions/${session.sessionId}/sandbox/start`, { method: 'POST' });
+
+      expect(start.status).toBe(403);
+      expect(sandbox.start).not.toHaveBeenCalled();
+      expect(sandbox.executeCommand).not.toHaveBeenCalled();
+      releasing();
+      expect((await takeover).status).toBe(200);
+      expect(sandbox.destroy).toHaveBeenCalledTimes(1);
     });
 
     it('releases a VM this process holds no instance for, since its mode is unknown', async () => {

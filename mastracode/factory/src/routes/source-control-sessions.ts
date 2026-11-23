@@ -696,13 +696,13 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const controller = options.controller;
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
 
-        // A vault sandbox acts with its owner's credential vault, so only the owner may start it. Anyone else
-        // (an org admin) needs the session already online with a sandbox the platform confirms is token mode;
-        // learning the mode never starts it, and an unknown mode, or an offline session on a host whose sandboxes
-        // can use the vault, is refused.
-        if (resolved.tenant.userId !== session.userId) {
+        // A vault sandbox acts with the credential vault of the user it was built for, so only that user may
+        // start it. Anyone else (an org admin, or a new owner before the previous owner's sandbox is released)
+        // needs a sandbox the platform confirms is token mode; learning the mode never starts it, and an unknown
+        // mode, or an offline session a non-owner asks for on a host whose sandboxes can use the vault, is refused.
+        {
           const online = await controller.getSession(session.sessionId);
-          const existing = online?.getWorkspace()?.sandbox ?? peekSessionSandbox(session.id)?.sandbox;
+          const existing = peekSessionSandbox(session.id)?.sandbox ?? online?.getWorkspace()?.sandbox;
           const refusal = existing
             ? await assertVaultSandboxCaller(existing, {
                 ownerId: session.userId,
@@ -712,7 +712,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
                 () => undefined,
                 (error: unknown) => error,
               )
-            : options.vaultSandboxes
+            : options.vaultSandboxes && resolved.tenant.userId !== session.userId
               ? vaultOwnerRefusal(session.sessionId)
               : undefined;
           if (refusal) {

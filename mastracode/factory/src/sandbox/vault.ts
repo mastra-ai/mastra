@@ -44,7 +44,27 @@ export function sandboxAcceptsGithubToken(sandbox: object): boolean {
 }
 
 /**
- * Refuse `callerId` a credential-vault sandbox bound to `ownerId` unless the
+ * The user each session sandbox was built for. A vault sandbox carries that
+ * user's credential for its whole life, so the owner-only rule compares callers
+ * with this user, not with the session's current owner: after a takeover, the
+ * instance built for the previous owner refuses the new one until it is
+ * released, whatever order the takeover runs in.
+ */
+const sandboxOwners = new WeakMap<object, string | null>();
+
+/** Record the user a session sandbox is built for (`FactorySandboxContext.userId`). */
+export function bindSandboxOwner(sandbox: object, ownerId: string | null | undefined): void {
+  sandboxOwners.set(sandbox, ownerId ?? null);
+}
+
+/** The user the sandbox was built for, or `fallback` for one built elsewhere. */
+export function sandboxOwner(sandbox: object, fallback: string | null | undefined): string | null | undefined {
+  return sandboxOwners.has(sandbox) ? sandboxOwners.get(sandbox) : fallback;
+}
+
+/**
+ * Refuse `callerId` a credential-vault sandbox bound to its owner (the user it
+ * was built for, else `ownerId`) unless the
  * mode is known to be token. A vault sandbox acts with its owner's vault grant,
  * so nobody else may start or run commands in it. Learning the mode never
  * starts the sandbox: `refreshVault()` asks the platform about an existing VM
@@ -58,7 +78,7 @@ export async function assertVaultSandboxCaller(
     sessionId,
   }: { ownerId: string | null | undefined; callerId: string | undefined; sessionId: string },
 ): Promise<void> {
-  if (!('vault' in sandbox) || (callerId !== undefined && callerId === ownerId)) return;
+  if (!('vault' in sandbox) || (callerId !== undefined && callerId === sandboxOwner(sandbox, ownerId))) return;
   const reporting = sandbox as VaultReportingSandbox;
   if (reporting.vault === undefined && typeof reporting.refreshVault === 'function') {
     try {
