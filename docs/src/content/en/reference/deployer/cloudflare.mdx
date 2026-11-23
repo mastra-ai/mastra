@@ -82,7 +82,7 @@ The generated `wrangler.jsonc` sets `minify: true` and `upload_source_maps: true
 
 Wrangler keeps function and class names when it minifies (`keep_names` defaults to `true`), so code that reads `constructor.name` or an error's `name` keeps working. Leave `keep_names` on.
 
-Stack traces from a minified Worker point at positions in the minified file. With `upload_source_maps: true`, Cloudflare maps the stack traces of uncaught exceptions in [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) and real-time logs back to the files in `.mastra/output`. The `stack` property your code reads at runtime isn't mapped. Source maps don't count toward the Worker size limit and don't affect startup time.
+Stack traces from a minified Worker point at positions in the minified file. With `upload_source_maps: true`, Cloudflare maps the stack traces of uncaught exceptions in [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) and real-time logs back to your source files. Errors that Mastra catches and logs, such as a failing route handler, appear as log messages and aren't mapped. The `stack` property your code reads at runtime isn't mapped either. Source maps don't count toward the Worker size limit and don't affect startup time.
 
 To turn either setting off, pass it to the constructor:
 
