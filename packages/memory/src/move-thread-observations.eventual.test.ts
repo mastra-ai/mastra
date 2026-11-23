@@ -26,7 +26,16 @@ class EventuallyConsistentVector extends LibSQLVector {
 
   override async query(params: Parameters<LibSQLVector['query']>[0]) {
     // Only migration reads lag; ordinary reads inspect the committed database state.
-    if (!params.includeVector || typeof params.filter?.resource_id !== 'object') return super.query(params);
+    const filter = params.filter;
+    if (
+      !params.includeVector ||
+      !filter ||
+      typeof filter !== 'object' ||
+      !('resource_id' in filter) ||
+      typeof filter.resource_id !== 'object'
+    ) {
+      return super.query(params);
+    }
     if (params.topK && params.topK > 20) throw new Error('Vectorize permits at most 20 results with values');
     this.migrationStartedAt ??= Date.now();
     if (this.queryDelayMs > 0) await new Promise(resolve => setTimeout(resolve, this.queryDelayMs));
@@ -69,6 +78,8 @@ async function createFixture(visibilityDelay: number) {
       specificationVersion: 'v3',
       provider: 'test',
       modelId: 'test-embedding',
+      maxEmbeddingsPerCall: 100,
+      supportsParallelCalls: true,
       doEmbed: async ({ values }) => ({ embeddings: values.map(() => [1, 0]), warnings: [] }),
     },
     options: { generateTitle: false },
