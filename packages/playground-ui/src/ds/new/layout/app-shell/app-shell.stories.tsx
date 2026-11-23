@@ -62,7 +62,7 @@ const crumbs = (
 
 function MainContent({ withHeader = true }: { withHeader?: boolean }) {
   return (
-    <PageLayout breadcrumbs={withHeader ? crumbs : undefined}>
+    <PageLayout variant="page" breadcrumbs={withHeader ? crumbs : undefined}>
       <div className="grid gap-4">
         <PageHeader>
           <PageHeader.Icon>

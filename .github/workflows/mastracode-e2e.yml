@@ -20,11 +20,16 @@ on:
 permissions: {}
 
 jobs:
+  # Mastra Code E2E and the web host OM scenarios share one runner and setup. Each suite's steps
+  # skip on its own tier key and run even when the other suite failed;
+  # scripts/test-tiers/update.mjs reads the step results per suite. Every step has its own
+  # timeout and the job allows their sum, so a stall in Mastra Code E2E can't use up the OM
+  # scenarios' time.
   mastracode-e2e:
     name: Mastra Code E2E
-    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-e2e') }}
+    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-e2e') || !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-om') }}
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 145
     permissions:
       contents: read
       id-token: write
@@ -41,12 +46,14 @@ jobs:
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
+        timeout-minutes: 10
         uses: ./.github/actions/setup-pnpm-node
 
       # Restore only. This job checks out inputs.head_sha, and a schedule or
       # workflow_dispatch caller can write the default-branch cache.
       - name: Restore turbo build cache
         if: ${{ env.TURBO_TOKEN == '' }}
+        timeout-minutes: 5
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
@@ -56,22 +63,28 @@ jobs:
 
       - name: Build Mastra Code
         id: build
+        if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-e2e') }}
+        timeout-minutes: 15
         run: pnpm run build:mastracode
 
       - name: Typecheck Code SDK
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 10
         run: pnpm --filter @mastra/code-sdk check
 
       - name: Run ACP unit tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 10
         run: pnpm --filter @mastra/code-sdk test:acp
 
       - name: Check built SDK ACP conformance
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 10
         run: pnpm --filter @mastra/code-sdk test:acp:conformance
 
       - name: Upload ACP conformance reports
-        if: always()
+        if: ${{ always() && !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-e2e') }}
+        timeout-minutes: 5
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: acp-conformance
@@ -83,51 +96,26 @@ jobs:
 
       - name: Run Mastra Code E2E
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm --filter ./mastracode/tui run e2e:test -- --reporter=dot
-
-  mastracode-web-e2e:
-    name: Mastra Code web host OM scenarios
-    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-om') }}
-    runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
-      NODE_OPTIONS: --max-old-space-size=8192
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         timeout-minutes: 20
-        with:
-          ref: ${{ inputs.head_sha }}
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      # Restore only. This job checks out inputs.head_sha, and a schedule or
-      # workflow_dispatch caller can write the default-branch cache.
-      - name: Restore turbo build cache
-        if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
+        run: pnpm --filter ./mastracode/tui run e2e:test -- --reporter=dot
 
       # `mastracode/web` is a separate pnpm project; its scenario tests resolve
       # workspace packages from their built `dist`.
-      - name: Install web host dependencies
+      - name: 'Mastra Code web host OM scenarios: install web host dependencies'
+        id: om_install
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-om') }}
+        timeout-minutes: 10
         run: pnpm --dir mastracode/web install --frozen-lockfile
 
-      - name: Build web host dependencies
+      - name: 'Mastra Code web host OM scenarios: build web host dependencies'
+        id: om_build
+        if: ${{ !cancelled() && steps.om_install.outcome == 'success' }}
+        timeout-minutes: 10
         run: pnpm --dir mastracode/web run prebuild
 
-      - name: Run web host OM scenarios
+      - name: Mastra Code web host OM scenarios
+        if: ${{ !cancelled() && steps.om_build.outcome == 'success' }}
+        timeout-minutes: 20
         run: >-
           pnpm --dir mastracode/web exec vitest run --project e2e:mastracode-web
           e2e/web/om-config.scenario.test.ts

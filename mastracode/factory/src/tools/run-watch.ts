@@ -50,6 +50,9 @@ export type SessionRunEndReport = (outcome: FactoryRunOutcome, since: Date) => P
 /** Told when the run holds a tool call for approval; the run stays open meanwhile. */
 export type SessionApprovalReport = (request: { toolName: string; toolCallId: string; args: unknown }) => Promise<void>;
 
+/** How core's `agent_end.abortReason` says an observational-memory failure stopped the run. */
+export const MEMORY_FAILURE_ABORT_REASON = 'memory-failure';
+
 /** How much of a run's error message a `failed` report quotes. */
 const ERROR_MESSAGE_LENGTH = 400;
 
@@ -102,7 +105,7 @@ export function observeSessionRunReports(
       return;
     }
     if (event.type !== 'agent_end') return;
-    const outcome = runOutcome(event.reason, parked, lastError);
+    const outcome = runOutcome(event.reason, parked, lastError, event.abortReason);
     parked = undefined;
     lastError = undefined;
     if (!outcome) return;
@@ -147,12 +150,17 @@ export function heartbeatOpenRunUntilEnd(
   return { endReason: () => endReason, stop };
 }
 
-/** `null` for an aborted run: someone stopped or steered it, which is not an outcome. */
+/**
+ * `null` for an aborted run: someone stopped or steered it, which is not an outcome. A run
+ * that a memory-model failure stopped did not end by anyone's choice, so it failed.
+ */
 export function runOutcome(
   reason: RunEndReason,
   parked: ParkedTool | undefined,
   errorMessage?: string,
+  abortReason?: string,
 ): FactoryRunOutcome | null {
+  if (reason === 'aborted' && abortReason === MEMORY_FAILURE_ABORT_REASON) reason = 'error';
   switch (reason) {
     case 'error': {
       const message = errorMessage?.trim();

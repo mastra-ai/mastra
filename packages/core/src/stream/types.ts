@@ -24,6 +24,7 @@ import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
+import type { ContinuationStopCause } from '../loop/shared/continuation-core';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -284,6 +285,15 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
   };
+  /**
+   * Why the agent loop stopped calling the model, as opposed to `stepResult.reason`,
+   * which is why the model's last response ended. A run that ends on a tool call has
+   * reason `'tool-calls'` whether it ran out of `maxSteps` (`'max_steps'`), stopped on a
+   * client tool (`'model_finished'`), matched `stopWhen` (`'stop_condition'`) or was ended
+   * by `onIterationComplete` (`'iteration_hook'`). Absent when the loop ended before
+   * deciding whether to continue, such as on abort.
+   */
+  stopCause?: ContinuationStopCause;
   metadata: {
     providerMetadata?: ProviderMetadata;
     request?: LanguageModelRequestMetadata;

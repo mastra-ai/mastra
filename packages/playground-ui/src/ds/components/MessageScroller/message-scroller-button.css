@@ -1,0 +1,110 @@
+/* Shadows only, never a border, matching the composer. Layer counts match so hover transitions. */
+[data-slot='message-scroller-button'] {
+  --scroller-button-drop:
+    inset 0 1px 0 var(--inset-highlight), 0 1px 2px oklch(0% 0 0deg / 30%), 0 4px 12px -2px oklch(0% 0 0deg / 32%),
+    0 12px 28px -8px oklch(0% 0 0deg / 28%);
+  --scroller-button-drop-lifted:
+    inset 0 1px 0 var(--inset-highlight), 0 1px 2px oklch(0% 0 0deg / 34%), 0 6px 16px -2px oklch(0% 0 0deg / 38%),
+    0 16px 36px -8px oklch(0% 0 0deg / 34%);
+
+  background: var(--muted);
+  box-shadow: var(--scroller-button-drop);
+}
+
+html.light [data-slot='message-scroller-button'] {
+  --scroller-button-drop:
+    inset 0 0 0 0 transparent, 0 1px 2px oklch(0% 0 0deg / 6%), 0 4px 12px -2px oklch(0% 0 0deg / 8%),
+    0 12px 28px -8px oklch(0% 0 0deg / 8%);
+  --scroller-button-drop-lifted:
+    inset 0 0 0 0 transparent, 0 1px 2px oklch(0% 0 0deg / 8%), 0 6px 16px -2px oklch(0% 0 0deg / 11%),
+    0 16px 36px -8px oklch(0% 0 0deg / 11%);
+
+  background: var(--card);
+}
+
+@media (hover: hover) {
+  [data-slot='message-scroller-button']:hover {
+    box-shadow: var(--scroller-button-drop-lifted);
+  }
+}
+
+[data-slot='message-scroller-button-glyph'] {
+  display: grid;
+  place-items: center;
+
+  & > * {
+    grid-area: 1 / 1;
+    transition:
+      opacity var(--duration-normal) var(--ease-out-custom),
+      scale var(--duration-normal) var(--ease-out-custom);
+  }
+}
+
+[data-slot='message-scroller-button-activity'] {
+  width: 20px;
+  height: 16px;
+  opacity: 0;
+  scale: 0.6;
+
+  & path {
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 1 1.2;
+    stroke-dashoffset: 1.05;
+  }
+}
+
+[data-slot='message-scroller-button'][data-busy='true'] {
+  & [data-slot='message-scroller-button-glyph'] > svg:first-child {
+    opacity: 0;
+    scale: 0.6;
+  }
+
+  & [data-slot='message-scroller-button-activity'] {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+[data-slot='message-scroller-button'][data-busy='true'][data-active='true']
+  [data-slot='message-scroller-button-activity']
+  path {
+  animation: message-scroller-button-write 1.8s var(--ease-in-out-custom) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='message-scroller-button-glyph'] > * {
+    scale: 1 !important;
+    transition: opacity var(--duration-fast) linear;
+  }
+
+  [data-slot='message-scroller-button'][data-busy='true'][data-active='true']
+    [data-slot='message-scroller-button-activity']
+    path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-slot='message-scroller-button'] {
+    outline: 1px solid CanvasText;
+  }
+}
+
+/* The pen writes the stroke in, then its tail chases it off. Offsets overshoot 1 so round caps leave no dot at rest. */
+@keyframes message-scroller-button-write {
+  0% {
+    stroke-dashoffset: 1.05;
+  }
+
+  55% {
+    stroke-dashoffset: 0;
+  }
+
+  100% {
+    stroke-dashoffset: -1.05;
+  }
+}

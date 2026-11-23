@@ -11,10 +11,7 @@
         "values": ["none", "high"]
       }
     ],
-    "hy4-preview": [
-      {
-        "type": "toggle"
-      },
+    "hy4": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -29,7 +26,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "hy4": [
+    "hy4-preview": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["none", "high"]

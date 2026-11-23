@@ -1298,7 +1298,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const promptBlocksStore = await storage.getStore('promptBlocks');
       if (!promptBlocksStore) throw new Error('Prompt blocks storage domain is not available');
       const context = requestContext.toJSON();
-      return resolveInstructionBlocks(blocks, context, { promptBlocksStorage: promptBlocksStore });
+      return resolveInstructionBlocks(blocks, context, {
+        promptBlocksStorage: promptBlocksStore,
+        includePromptBlockLabels: true,
+      });
     };
   }
 

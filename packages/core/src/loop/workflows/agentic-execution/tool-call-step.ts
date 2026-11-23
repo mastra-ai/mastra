@@ -1,5 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import { stopGoalActivity } from '../../../agent/goal';
+import { stopGoalActivity } from '../../../agent/goal/activity';
 import { MemoryMessageRefs } from '../../../agent/message-list/memory-message-refs';
 import { startRunStep } from '../../../agent/run-lease-fence';
 import { resolveDeclineReason } from '../../../agent/tool-approval';

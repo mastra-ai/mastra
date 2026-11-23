@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.3.3-alpha.3",
+  "version": "0.3.3-alpha.6",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -74,7 +74,8 @@
     "node": ">=22.13.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
