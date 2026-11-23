@@ -146,6 +146,65 @@ describe('Codex fast model selection', () => {
   });
 });
 
+describe('Fast entries next to their standard model', () => {
+  const openai = (modelName: string) => ({
+    id: `openai/${modelName}`,
+    provider: 'openai',
+    modelName,
+    hasApiKey: true,
+  });
+  const twin = (modelName: string) => openai(`${modelName}:fast`);
+  const claude = { id: 'anthropic/claude-opus-5', provider: 'anthropic', modelName: 'claude-opus-5', hasApiKey: true };
+
+  it('puts each Fast entry directly under its standard model, whatever the current model is', () => {
+    const openaiRows = (currentModelId: string) =>
+      new ModelSelectorComponent({
+        tui: { requestRender: vi.fn() } as unknown as TUI,
+        models: [
+          claude,
+          openai('gpt-5.4'),
+          openai('gpt-5.4-mini'),
+          twin('gpt-5.4'),
+          openai('gpt-5.5'),
+          twin('gpt-5.5'),
+          openai('gpt-6.2-sol'),
+          twin('gpt-6.2-sol'),
+        ],
+        currentModelId,
+        onSelect: vi.fn(),
+        onCancel: vi.fn(),
+      })
+        .render(100)
+        .map(line =>
+          stripAnsi(line)
+            .replace(/^[→\s]+/, '')
+            .replace(/ ✓.*$/, '')
+            .trim(),
+        )
+        .filter(line => line.startsWith('openai/'));
+
+    const expected = [
+      'openai/gpt-5.4',
+      'openai/gpt-5.4:fast',
+      'openai/gpt-5.4-mini',
+      'openai/gpt-5.5',
+      'openai/gpt-5.5:fast',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ];
+    expect(openaiRows(claude.id)).toEqual(expected);
+    expect(openaiRows('openai/gpt-5.5:fast')).toEqual([
+      'openai/gpt-5.5:fast',
+      'openai/gpt-5.5',
+      'openai/gpt-5.4',
+      'openai/gpt-5.4:fast',
+      'openai/gpt-5.4-mini',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ]);
+  });
+});
+
 describe('MastraCode gateway catalog models', () => {
   const customProviderModels: ModelItem[] = ['gemma-4-31b', 'gemma-4-9b'].map(modelName => ({
     id: `mastracode/acme-local/${modelName}`,

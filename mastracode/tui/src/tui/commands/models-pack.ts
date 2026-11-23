@@ -90,7 +90,7 @@ export function deserializePack(input: string): ModePack | null {
   }
 }
 
-async function selectModel(
+export async function selectModel(
   ctx: SlashCommandContext,
   title: string,
   modeColor?: string,
