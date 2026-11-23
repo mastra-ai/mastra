@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Notice } from '@/ds/components/Notice';
 import { Table } from '@/ds/components/Table';
@@ -318,29 +318,31 @@ function SandboxEnvDialog({
             />
           </Field>
           <Field invalid={appliesTo === undefined}>
-            <FieldLabel>Applies to</FieldLabel>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  aria-label="Build"
-                  checked={targets.build}
-                  onCheckedChange={checked => setTargets(current => ({ ...current, build: checked === true }))}
-                />
-                <Txt as="span" variant="body-sm">
-                  Build
-                </Txt>
-              </label>
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  aria-label="Runtime"
-                  checked={targets.runtime}
-                  onCheckedChange={checked => setTargets(current => ({ ...current, runtime: checked === true }))}
-                />
-                <Txt as="span" variant="body-sm">
-                  Runtime
-                </Txt>
-              </label>
-            </div>
+            <Fieldset className="gap-2">
+              <FieldsetLegend required>Applies to</FieldsetLegend>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    aria-label="Build"
+                    checked={targets.build}
+                    onCheckedChange={checked => setTargets(current => ({ ...current, build: checked === true }))}
+                  />
+                  <Txt as="span" variant="body-sm">
+                    Build
+                  </Txt>
+                </label>
+                <label className="flex items-center gap-2">
+                  <Checkbox
+                    aria-label="Runtime"
+                    checked={targets.runtime}
+                    onCheckedChange={checked => setTargets(current => ({ ...current, runtime: checked === true }))}
+                  />
+                  <Txt as="span" variant="body-sm">
+                    Runtime
+                  </Txt>
+                </label>
+              </div>
+            </Fieldset>
             <FieldDescription>
               Build: template builds and setup commands. Runtime: every command, from the next one on.
             </FieldDescription>
