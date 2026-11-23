@@ -28,15 +28,20 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "zai-org/glm-5.1": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "zai-org/glm-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.5": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v4-flash": [
@@ -45,12 +50,7 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/glm-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/glm-5.2": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["high", "max"]
