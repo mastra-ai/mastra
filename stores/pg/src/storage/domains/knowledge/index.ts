@@ -124,9 +124,10 @@ class TransactionDbClient implements DbClient {
 const transactionClients = new WeakMap<KnowledgeStorage, TxClient>();
 
 /**
- * The transaction behind a {@link KnowledgePG} transaction view, for tables in this package that
- * must commit with the page writes.
- * @internal
+ * The transaction behind a {@link KnowledgePG} transaction view, for tables that must commit with
+ * the page writes: this package's own, and a host's (an importer host's `admit(tx)` records its
+ * claim through it, in the run's start transaction).
+ * @experimental
  */
 export function pgKnowledgeTransactionClient(view: KnowledgeStorage): TxClient {
   const tx = transactionClients.get(view);
