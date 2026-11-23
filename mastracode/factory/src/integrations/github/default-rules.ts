@@ -332,7 +332,12 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-review-feedback`,
     role,
-    prepareBinding: context.phase?.kind !== 'terminal' && !context.boardClosure?.itemTerminal,
+    // Anyone who can review the PR still reaches a seat that is already live, but only a
+    // trusted reviewer or Factory's own verdict may start a new one.
+    prepareBinding:
+      (trustedGithubActor(context) || factoryVerdict) &&
+      context.phase?.kind !== 'terminal' &&
+      !context.boardClosure?.itemTerminal,
     priority: 'high',
     message:
       `Changes were requested on pull request #${context.pullRequest.number} (${context.review.url}). ` +

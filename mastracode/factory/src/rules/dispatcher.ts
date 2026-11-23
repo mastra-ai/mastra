@@ -632,6 +632,9 @@ function requestsConsent(
   decision: FactoryCommitDecision,
 ): boolean {
   if (decision.type === 'invokeSkill') return true;
+  // A message that may prepare a seat starts a run when nobody is live, so an external
+  // event sending one asks like any other run start.
+  if (decision.type === 'sendMessage') return decision.prepareBinding === true && externalActor(record.actor);
   if (decision.type !== 'transition' || !externalActor(record.actor)) return false;
   // Fail closed: a phase the installed board does not declare is treated as working, so consent is asked.
   return (resolvePhaseSemantics(boards, decision.board, decision.stage)?.kind ?? 'working') === 'working';
@@ -1713,9 +1716,12 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'sendMessage': {
+        // Feedback for a live seat is delivered as before. Only when nobody holds the role,
+        // and this message would prepare a new seat, does a card that moved on supersede it.
         if (
           decision.prepareBinding &&
           decision.role !== undefined &&
+          !(await this.#liveSeat(record, decision.role)) &&
           ((await this.#roleSuperseded(record, decision.role)) ||
             (await this.#decisionOvertaken(record, decision.role)))
         ) {
@@ -2532,6 +2538,12 @@ export class FactoryDecisionDispatcher {
         },
       ),
     );
+  }
+
+  /** Whether an active binding for the role has a session that is still live. */
+  async #liveSeat(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
+    const binding = await this.#findBinding(record, role);
+    return binding !== undefined && Boolean(await this.#controller.getSession(binding.sessionId));
   }
 
   async #messageBinding(

@@ -974,6 +974,77 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it('delivers queued review feedback to a live Work seat after the card moves to PR review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'Address requested PR changes.',
+      prepareBinding: true,
+      idempotencyKey: 'review-feedback-live-seat',
+    });
+    await bindWorkRun(storage, item.id);
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['pr-review'] } });
+    const { controller, sendNotificationSignal } = createSession();
+    const prepareBinding = vi.fn(async () => {});
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
+  it('holds review feedback from GitHub for approval when it would start a run on an unarmed card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'review-1', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'reviewer', trusted: true, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Address requested PR changes.',
+          prepareBinding: true,
+          idempotencyKey: 'review-feedback-unarmed',
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller, sendNotificationSignal } = createSession();
+    const prepareBinding = vi.fn(async () => {});
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'proposed' });
+    expect(prepareBinding).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
   it.each(['done', 'canceled'])(
     'supersedes queued review feedback before preparing a Work binding after a card reaches %s',
     async stage => {

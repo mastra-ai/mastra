@@ -663,6 +663,13 @@ describe('built-in board and integration handlers', () => {
       expect((decision as { message: string }).message).toContain('#pullrequestreview-99');
     });
 
+    it('lets an untrusted change request reach a live seat without preparing a new one', async () => {
+      const decision = await defaultGithubRules.pullRequestReviewSubmitted?.(
+        reviewContext({ actor: { type: 'github', login: 'drive-by', trusted: false, factoryAuthored: false } }),
+      );
+      expect(decision).toMatchObject({ type: 'sendMessage', role: 'work', prepareBinding: false });
+    });
+
     it.each(['done', 'canceled'])(
       'does not prepare a Work binding for a %s card when changes are requested',
       async stage => {

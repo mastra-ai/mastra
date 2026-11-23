@@ -35,12 +35,17 @@ export function startsInAutoPhase(boards: BoardRegistry, item: PhaseCard, decisi
   if (decision.type === 'transition') {
     return boards.get(decision.board)?.startsAutomatically(decision.stage, cardRuleFacts(item)) === true;
   }
-  if (decision.type !== 'invokeSkill' || item.stages.length !== 1) return false;
+  // A message that may prepare a seat starts that role's run, like a skill does.
+  const role =
+    decision.type === 'invokeSkill' || (decision.type === 'sendMessage' && decision.prepareBinding === true)
+      ? decision.role
+      : undefined;
+  if (role === undefined || item.stages.length !== 1) return false;
   const boardKey = boardForWorkItem(item);
   const board = boards.get(boardKey);
   const stage = item.stages[0]!;
   if (!board) return false;
-  return board.roleForPhase(stage) === decision.role && board.startsAutomatically(stage, cardRuleFacts(item));
+  return board.roleForPhase(stage) === role && board.startsAutomatically(stage, cardRuleFacts(item));
 }
 
 /** The exit tool of the card's phase when it is approved without a person for this card. */
