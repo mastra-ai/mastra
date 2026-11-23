@@ -3,6 +3,7 @@ import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
 } from '@internal/core/memory';
@@ -634,6 +635,11 @@ export class MssqlObservationalMemory {
         // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
         // reflected line count.
         if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
+          return stored;
+        }
+        // The swap must consume the buffer and reflected line count the caller read; another
+        // writer may have extended both since, which the activated text alone cannot reveal.
+        if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) {
           return stored;
         }
 

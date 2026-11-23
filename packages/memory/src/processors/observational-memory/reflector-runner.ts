@@ -14,6 +14,7 @@ import type { Memory } from '../..';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { publishBufferedReflectionValues, stageBufferedReflectionValues } from './buffered-reflection-values';
 import { BufferingCoordinator } from './buffering-coordinator';
+import type { ReflectionBufferOwner } from './buffering-coordinator';
 import { runOMCommit } from './commit-queue';
 import { omDebug, omError } from './debug';
 import { isOmModelExecutionError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
@@ -761,14 +762,14 @@ export class ReflectorRunner {
       return;
     }
 
-    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
+    const owner = BufferingCoordinator.startReflectionBuffer(bufferKey, observationTokens, record.id);
 
     registerOp(record.id, 'bufferingReflection');
     const flagSet = this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
-    const asyncOp = (async () => {
+    const run = async () => {
       await flagSet;
       let outcome:
         | {
@@ -782,6 +783,7 @@ export class ReflectorRunner {
         outcome = await this.doAsyncBufferedReflection(
           record,
           bufferKey,
+          owner,
           writer,
           requestContext,
           observabilityContext,
@@ -830,13 +832,19 @@ export class ReflectorRunner {
           omError('[OM] onReflectionEnd hook failed after async buffered reflection', hookError);
         }
 
-        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        // Retirement seen while this op ran (including while the hook was awaited) is completed
+        // here. State of a newer op, e.g. one started after the memory was cleared, is kept.
+        BufferingCoordinator.finishReflectionBuffer(bufferKey, owner);
+        if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === asyncOp) {
+          BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        }
         unregisterOp(record.id, 'bufferingReflection');
         await this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
       }
-    })();
+    };
+    const asyncOp = run();
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
     this.trackBackgroundWork?.(asyncOp, lockKey);
@@ -849,6 +857,7 @@ export class ReflectorRunner {
   private async doAsyncBufferedReflection(
     record: ObservationalMemoryRecord,
     bufferKey: string,
+    owner: ReflectionBufferOwner,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
@@ -872,6 +881,8 @@ export class ReflectorRunner {
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
+    // The buffer is written for the generation read here, which may be newer than `record`.
+    owner.recordId = currentRecord.id;
     BufferingCoordinator.reflectionBufferCycleIds.set(bufferKey, cycleId);
 
     const fullObservations = currentRecord.activeObservations ?? '';
@@ -987,7 +998,8 @@ export class ReflectorRunner {
       omDebug(
         `[OM:reflect] doAsyncBufferedReflection: record ${currentRecord.id} is no longer the head; discarding the buffered reflection`,
       );
-      BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+      // Its boundary and cycle are dropped when this op finishes.
+      owner.retired = true;
       return { usage: reflectResult.usage, providerMetadata: reflectResult.providerMetadata };
     }
     omDebug(
@@ -1016,11 +1028,13 @@ export class ReflectorRunner {
   }
 
   /**
-   * Decide what a buffered-reflection swap did. Storage builds the new generation from the stored
-   * buffer and line count, which another writer may have extended between the head check and the
-   * swap. So the swap activated the snapshot's buffer only if its result equals what that buffer
-   * and line count produce from the text the swap retired. Retired records are never written
-   * again, so that text is exactly what the swap read.
+   * Decide what a buffered-reflection swap did. Built-in adapters only swap the buffer and line
+   * count in the snapshot, and return the stored record (no new generation) when another writer
+   * extended them after the head check. Adapters without that check build the new generation from
+   * whatever is stored, so the swap counts as activating the snapshot's buffer only if its result
+   * equals what that buffer and line count produce from the text the swap retired. Retired records
+   * are never written again, so that text is exactly what the swap read. For those adapters an
+   * extension that repeats the unreflected tail cannot be told apart from the snapshot's buffer.
    */
   private async classifyBufferedReflectionSwap({
     result,
@@ -1233,13 +1247,13 @@ export class ReflectorRunner {
       omDebug(
         `[OM:reflect] tryActivateBufferedReflection: buffered reflection on ${freshRecord.id} not applied (head is ${commit.headId})`,
       );
-      if (commit.headId !== freshRecord.id && !this.buffering.isAsyncBufferingInProgress(bufferKey)) {
+      if (commit.headId !== freshRecord.id) {
         // Another writer retired the snapshot's generation. Its buffering boundary and cycle
         // describe a buffer that can never activate, and would stop this process from buffering
-        // for the current generation. Only this process's coordinator state is dropped: the
-        // stored state belongs to the winning generation, and no marker is emitted.
-        BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
-        BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
+        // for the current generation. Only this process's coordinator state is dropped (once the
+        // op that set it finishes): the stored state belongs to the winning generation, and no
+        // marker is emitted.
+        BufferingCoordinator.retireReflectionBuffer(bufferKey, freshRecord.id);
       }
       return { status: 'not-applied' };
     }
@@ -1292,6 +1306,7 @@ export class ReflectorRunner {
     }
 
     BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
+    BufferingCoordinator.reflectionBufferOwners.delete(bufferKey);
 
     return { status: 'activated' };
   }

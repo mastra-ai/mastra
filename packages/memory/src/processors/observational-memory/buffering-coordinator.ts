@@ -6,6 +6,14 @@ import { isOpActiveInProcess } from './operation-registry';
 import type { ResolvedObservationConfig, ResolvedReflectionConfig } from './types';
 import { waitWithAbort } from './wait-with-abort';
 
+/** The buffered-reflection op that owns a reflection boundary and cycle. */
+export interface ReflectionBufferOwner {
+  /** The generation the op buffers for. */
+  recordId: string;
+  /** Another writer retired `recordId` while the op was still running. */
+  retired: boolean;
+}
+
 /**
  * Manages the static buffering state machine for async observation and reflection.
  *
@@ -72,6 +80,49 @@ export class BufferingCoordinator {
    * Key format: "refl:{lockKey}"
    */
   static reflectionBufferCycleIds = new Map<string, string>();
+
+  /**
+   * The buffered-reflection op that set the reflection boundary and cycle, and the generation
+   * it buffers for. Key format: "refl:{lockKey}"
+   */
+  static reflectionBufferOwners = new Map<string, ReflectionBufferOwner>();
+
+  /** Set the reflection boundary for a new buffered-reflection op on generation `recordId`. */
+  static startReflectionBuffer(bufferKey: string, tokens: number, recordId: string): ReflectionBufferOwner {
+    const owner: ReflectionBufferOwner = { recordId, retired: false };
+    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, tokens);
+    BufferingCoordinator.reflectionBufferOwners.set(bufferKey, owner);
+    return owner;
+  }
+
+  /** Drop this process's reflection boundary, cycle, and owner. */
+  static clearReflectionBuffer(bufferKey: string): void {
+    BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+    BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
+    BufferingCoordinator.reflectionBufferOwners.delete(bufferKey);
+  }
+
+  /**
+   * Another writer retired generation `recordId`, so a buffer this process prepared for it can
+   * never activate. Its boundary and cycle are dropped now, or, while the op that set them is
+   * still running (it may be awaiting its `onReflectionEnd` hook), when that op finishes. State
+   * owned by a newer generation is kept.
+   */
+  static retireReflectionBuffer(bufferKey: string, recordId: string): void {
+    const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
+    if (owner && owner.recordId !== recordId) return;
+    if (owner && BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+      owner.retired = true;
+      return;
+    }
+    BufferingCoordinator.clearReflectionBuffer(bufferKey);
+  }
+
+  /** Called when the op that started as `owner` finishes; completes a deferred retirement. */
+  static finishReflectionBuffer(bufferKey: string, owner: ReflectionBufferOwner): void {
+    if (BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner) return;
+    if (owner.retired) BufferingCoordinator.clearReflectionBuffer(bufferKey);
+  }
 
   constructor(opts: {
     observationConfig: ResolvedObservationConfig;
@@ -146,6 +197,7 @@ export class BufferingCoordinator {
       BufferingCoordinator.asyncBufferingOps.delete(obsBufKey);
       BufferingCoordinator.asyncBufferingOps.delete(reflBufKey);
       BufferingCoordinator.reflectionBufferCycleIds.delete(reflBufKey);
+      BufferingCoordinator.reflectionBufferOwners.delete(reflBufKey);
     }
   }
 

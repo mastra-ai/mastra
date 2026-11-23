@@ -3,6 +3,7 @@ import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
 } from '@internal/core/memory';
@@ -2746,6 +2747,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
         // reflected line count.
         if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) return null;
+        // The swap must consume the buffer and reflected line count the caller read; another
+        // writer may have extended both since, which the activated text alone cannot reveal.
+        if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) return null;
 
         // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
         // Lines after reflectedLineCount were added after reflection started → kept as-is.

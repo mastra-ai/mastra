@@ -1,6 +1,7 @@
 import {
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
 } from '@mastra/core/storage';
@@ -12,6 +13,7 @@ import {
   deepMergeOMConfig,
   handleObservationalMemoryOperation,
   isAppendOnly,
+  isBufferedReflectionUnchanged,
   isChunkCoveredByCursor,
   maxCursor,
   mergeReflectionWithUnreflected,
@@ -729,6 +731,24 @@ describe('lifecycle rule parity with @mastra/core', () => {
         );
       }
       expect(isAppendOnly(stored, snapshot)).toBe(isAppendOnlySince(stored, snapshot));
+    }
+  });
+
+  it('isBufferedReflectionUnchanged matches the core rule', () => {
+    const states = [
+      {},
+      { bufferedReflection: null, reflectedObservationLineCount: null },
+      { bufferedReflection: 'R', reflectedObservationLineCount: 2 },
+      { bufferedReflection: 'R', reflectedObservationLineCount: 3 },
+      { bufferedReflection: 'R\n\nextended', reflectedObservationLineCount: 3 },
+      { bufferedReflection: 'R' },
+    ];
+    for (const stored of states) {
+      for (const snapshot of states) {
+        expect(isBufferedReflectionUnchanged(stored, snapshot)).toBe(
+          isBufferedReflectionUnchangedSince(stored, snapshot),
+        );
+      }
     }
   });
 });

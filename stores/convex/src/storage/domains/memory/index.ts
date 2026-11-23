@@ -1215,6 +1215,8 @@ export class MemoryConvex extends MemoryStorage {
       generationCount: currentRecord.generationCount,
       activeObservations: currentRecord.activeObservations ?? '',
       observationTokenCount: currentRecord.observationTokenCount ?? 0,
+      bufferedReflection: currentRecord.bufferedReflection ?? null,
+      reflectedObservationLineCount: currentRecord.reflectedObservationLineCount ?? null,
     };
   }
 

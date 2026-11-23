@@ -199,6 +199,28 @@ export function isAppendOnly(storedObservations: string, snapshotObservations: s
   return stored === snapshot || stored.startsWith(snapshot);
 }
 
+type BufferedReflectionFields = {
+  bufferedReflection?: string | null;
+  reflectedObservationLineCount?: number | null;
+};
+
+/**
+ * Whether the stored buffered reflection and reflected line count are still the snapshot's, so
+ * a swap activates exactly the buffer the caller read. Mirrors core's
+ * `isBufferedReflectionUnchangedSince`. A snapshot without a buffered reflection is not checked.
+ */
+export function isBufferedReflectionUnchanged(
+  stored: BufferedReflectionFields,
+  snapshot: BufferedReflectionFields,
+): boolean {
+  if (snapshot.bufferedReflection === undefined || snapshot.bufferedReflection === null) return true;
+  if ((stored.bufferedReflection ?? '') !== snapshot.bufferedReflection) return false;
+  if (snapshot.reflectedObservationLineCount === undefined || snapshot.reflectedObservationLineCount === null) {
+    return true;
+  }
+  return Number(stored.reflectedObservationLineCount ?? 0) === snapshot.reflectedObservationLineCount;
+}
+
 type OMDoc = Record<string, any> & { _id: any };
 
 /** Canonical head order: generationCount DESC, createdAt ASC, id ASC. */
@@ -657,6 +679,15 @@ export async function handleObservationalMemoryOperation(
       // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
       // reflected line count.
       if (!isAppendOnly(storedObservations, currentRecord.activeObservations ?? '')) {
+        return { ok: true, result: stored };
+      }
+      // The swap must consume the buffer and reflected line count the caller read; another
+      // writer may have extended both since, which the activated text alone cannot reveal.
+      const storedBufferedReflection = {
+        bufferedReflection: stored.bufferedReflection,
+        reflectedObservationLineCount: stored.reflectedObservationLineCount,
+      };
+      if (!isBufferedReflectionUnchanged(storedBufferedReflection, currentRecord)) {
         return { ok: true, result: stored };
       }
 

@@ -1548,6 +1548,11 @@ export interface UpdateBufferedReflectionInput {
  * and appends any unreflected observations that were added after the reflection started.
  */
 export interface SwapBufferedReflectionToActiveInput {
+  /**
+   * The caller's snapshot. When it carries a `bufferedReflection`, the swap applies only if the
+   * stored `bufferedReflection` and `reflectedObservationLineCount` still equal the snapshot's;
+   * otherwise nothing is created and the stored record is returned.
+   */
   currentRecord: ObservationalMemoryRecord;
   /**
    * Token count for the combined new activeObservations (bufferedReflection + unreflected).

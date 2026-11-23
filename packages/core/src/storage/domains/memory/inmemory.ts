@@ -45,6 +45,7 @@ import {
   compareObservationalMemoryHeadOrder,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
 } from './observational-memory-lifecycle';
@@ -1327,6 +1328,11 @@ export class InMemoryMemory extends MemoryStorage {
     // Only appends may have happened since the caller's snapshot; a rewrite invalidates
     // the reflected line count.
     if (!isAppendOnlySince(record.activeObservations, currentRecord.activeObservations)) {
+      return record;
+    }
+    // The swap must consume the buffer and reflected line count the caller read; another
+    // writer may have extended both since, which the activated text alone cannot reveal.
+    if (!isBufferedReflectionUnchangedSince(record, currentRecord)) {
       return record;
     }
 

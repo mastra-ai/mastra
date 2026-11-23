@@ -1,156 +1,44 @@
-import { randomUUID } from 'node:crypto';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { MessageList } from '@mastra/core/agent';
-import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
-import type { ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Extractor } from '../extractor';
+import { ObservationalMemory } from '../observational-memory';
+import {
+  createFixtureMemory,
+  expectedBufferExtendedWithUnreflectedTail,
+  expectedNewerReflectionBufferSurvivesRetiredHook,
+  expectedRetiredWhileReflectionEndHookHeld,
+  prepare,
+  reachActivation as reachFixtureActivation,
+  recordingWriter,
+  reflection,
+  runBufferExtendedWithUnreflectedTail,
+  runNewerReflectionBufferSurvivesRetiredHook,
+  runRetiredWhileReflectionEndHookHeld,
+  setup as setupFixture,
+  values,
+  writeDuringSwap,
+} from './buffered-reflection-fixture';
+import type { BufferedReflectionEnv } from './buffered-reflection-fixture';
 
-function scriptedModel(reply: () => string | Promise<string>) {
-  return new MockLanguageModelV2({
-    doStream: async () => ({
-      stream: convertArrayToReadableStream([
-        { type: 'text-start', id: 'text' },
-        { type: 'text-delta', id: 'text', delta: await reply() },
-        { type: 'text-end', id: 'text' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 30, totalTokens: 130 } },
-      ]),
-    }),
-  });
+const env: BufferedReflectionEnv = {
+  Memory,
+  ObservationalMemory,
+  Extractor,
+  createStorage: async () => new InMemoryStore(),
+};
+
+function createMemory(storage: MastraCompositeStore, reply: () => string | Promise<string>) {
+  return createFixtureMemory(env, storage, reply);
 }
 
-function createMemory(storage: InMemoryStore, reply: () => string | Promise<string>) {
-  return new Memory({
-    storage,
-    options: {
-      semanticRecall: false,
-      observationalMemory: {
-        scope: 'thread',
-        observation: { model: scriptedModel(() => '<observations>* observed</observations>'), messageTokens: 1000 },
-        reflection: {
-          model: scriptedModel(reply),
-          observationTokens: 1000,
-          bufferActivation: 0.5,
-          extract: [
-            new Extractor({ name: 'Priority', instructions: 'Extract the priority.' }),
-            new Extractor({ name: 'Task', instructions: 'Extract the task.', metadataKeyPath: 'currentTask' }),
-            new Extractor({ name: 'Title', instructions: 'Extract the title.', metadataKeyPath: 'threadTitle' }),
-          ],
-        },
-      },
-    },
-  });
+function setup(reply: () => string | Promise<string>, initialTokens = 800) {
+  return setupFixture(env, reply, initialTokens);
 }
 
-function reflection(value: string) {
-  return `<observations>* condensed ${value}</observations><current-task>${value} task</current-task><thread-title>${value} title</thread-title><extracted-values>{"priority":"${value}","task":"${value} task","title":"${value} title"}</extracted-values>`;
-}
-
-async function prepare(memory: Memory, threadId: string, resourceId: string, writer?: ProcessorStreamWriter) {
-  const om = await memory.omEngine;
-  if (!om) throw new Error('OM must be enabled');
-  const turn = om.beginTurn({ threadId, resourceId, messageList: new MessageList({ threadId, resourceId }) });
-  turn.writer = writer;
-  await turn.start(memory);
-  await turn.step(0).prepare();
-  await om.settled();
-  return om;
-}
-
-async function setup(reply: () => string | Promise<string>, initialTokens = 800) {
-  const storage = new InMemoryStore();
-  const memory = createMemory(storage, reply);
-  const threadId = randomUUID();
-  const resourceId = randomUUID();
-  await memory.createThread({
-    threadId,
-    resourceId,
-    title: 'Original',
-    metadata: setThreadOMMetadata(
-      { unrelated: 'preserved' },
-      {
-        currentTask: 'original task',
-        threadTitle: 'original title',
-        extracted: { priority: 'original' },
-      },
-    ),
-  });
-  const om = await memory.omEngine;
-  if (!om) throw new Error('OM must be enabled');
-  const record = await om.getOrCreateRecord(threadId, resourceId);
-  const store = await storage.getStore('memory');
-  if (!store) throw new Error('Memory store must exist');
-  await store.updateActiveObservations({
-    id: record.id,
-    observations: '* original fact',
-    tokenCount: initialTokens,
-    lastObservedAt: new Date(),
-  });
-  return { storage, memory, om, store, threadId, resourceId };
-}
-
-async function values(memory: Memory, threadId: string) {
-  return getThreadOMMetadata((await memory.getThreadById({ threadId }))?.metadata);
-}
-
-async function reachActivation(
-  fixture: Awaited<ReturnType<typeof setup>>,
-  memory = fixture.memory,
-  { tail = '\n* later fact', writer }: { tail?: string; writer?: ProcessorStreamWriter } = {},
-) {
-  const head = await fixture.om.getRecord(fixture.threadId, fixture.resourceId);
-  if (!head) throw new Error('Missing head');
-  await fixture.store.updateActiveObservations({
-    id: head.id,
-    observations: head.activeObservations + tail,
-    tokenCount: 1100,
-    lastObservedAt: new Date(),
-  });
-  return prepare(memory, fixture.threadId, fixture.resourceId, writer);
-}
-
-function recordingWriter() {
-  const chunks: Array<{ type: string; data?: unknown }> = [];
-  const writer = {
-    custom: async (chunk: { type: string; data?: unknown }) => {
-      chunks.push(chunk);
-    },
-  } as unknown as ProcessorStreamWriter;
-  const reflectionActivations = () =>
-    chunks.filter(
-      chunk =>
-        chunk.type === 'data-om-activation' &&
-        (chunk.data as { operationType?: string } | undefined)?.operationType === 'reflection',
-    );
-  return { writer, reflectionActivations };
-}
-
-type Fixture = Awaited<ReturnType<typeof setup>>;
-
-/**
- * Runs `write` as another writer whose storage write lands after the activation's head check but
- * before its swap reads storage. Only real storage calls run, so the adapter's swap logic is used.
- * With `legacy`, the adapter behaves like one that predates `newRecordId`: it ignores the id and
- * never reports `supersededBy`.
- */
-function writeDuringSwap(
-  f: Fixture,
-  write: (snapshot: ObservationalMemoryRecord) => Promise<unknown>,
-  { legacy = false }: { legacy?: boolean } = {},
-) {
-  const swap = f.store.swapBufferedReflectionToActive.bind(f.store);
-  return vi.spyOn(f.store, 'swapBufferedReflectionToActive').mockImplementationOnce(async input => {
-    await write(input.currentRecord);
-    if (!legacy) return swap(input);
-    const result = { ...(await swap({ ...input, newRecordId: undefined })) };
-    delete result.supersededBy;
-    return result;
-  });
-}
+const reachActivation = reachFixtureActivation;
 
 describe('buffered reflection extracted thread values (#27262)', () => {
   it.each([false, true])('publishes only after successful activation (reload=%s)', async reload => {
@@ -430,6 +318,8 @@ describe('buffered reflection extracted thread values (#27262)', () => {
 
     // Technical: updateBufferedReflection appends to the stored buffer, so the activated text
     // starts with the snapshot's buffer and can look like the snapshot's buffer plus an append.
+    // The swap only activates the buffer the activation read; the extended buffer stays stored
+    // and activates on the next turn, without the values staged for the shorter buffer.
     it.each([
       ['an empty tail', '', 0, '* newer buffered fact'],
       ['a whitespace-only tail', '\n \t', 1, '* newer buffered fact'],
@@ -452,7 +342,16 @@ describe('buffered reflection extracted thread values (#27262)', () => {
             reflectedObservationLineCount: (snapshot.reflectedObservationLineCount ?? 0) + extraReflectedLines,
           }),
         );
-        await reachActivation(f, f.memory, { tail });
+        const { writer, reflectionActivations } = recordingWriter();
+        await reachActivation(f, f.memory, { tail, writer });
+        expect(reflectionActivations()).toEqual([]);
+        expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
+          generationCount: 0,
+          bufferedReflection: `${preparedBuffer}\n\n${extension}`,
+        });
+
+        await prepare(f.memory, f.threadId, f.resourceId, writer);
+        expect(reflectionActivations()).toHaveLength(1);
         expect(await f.om.getRecord(f.threadId, f.resourceId)).toMatchObject({
           generationCount: 1,
           activeObservations: `${preparedBuffer}\n\n${extension}`,
@@ -464,6 +363,14 @@ describe('buffered reflection extracted thread values (#27262)', () => {
         });
       },
     );
+
+    // Technical: the extension repeats the unreflected tail and moves the reflected line count
+    // past it, so the stored buffer and cut produce the same text as the snapshot's buffer and
+    // cut. Only the swap can tell which buffer it consumed. (#27262)
+    it('does not publish staged values when the extension repeats the unreflected tail', async () => {
+      const outcome = await runBufferExtendedWithUnreflectedTail(env);
+      expect(outcome).toEqual(expectedBufferExtendedWithUnreflectedTail(outcome));
+    });
 
     it.each([false, true])(
       'shows no activation and keeps values when the generation is replaced (legacy adapter=%s)',
@@ -533,6 +440,21 @@ describe('buffered reflection extracted thread values (#27262)', () => {
         expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'original' } });
       },
     );
+
+    // Technical: the buffered reflection is still running its awaited onReflectionEnd hook when
+    // the idle activation sees its generation retired, so the cleanup has to wait for that
+    // operation to finish. Otherwise its boundary outlives it and blocks the winner. (#27262)
+    it('buffers for the generation that won after a held onReflectionEnd hook resolves', async () => {
+      expect(await runRetiredWhileReflectionEndHookHeld(env)).toEqual(expectedRetiredWhileReflectionEndHookHeld);
+    });
+
+    // Control: cleanup for the retired operation must not touch the buffering state of a newer
+    // operation that started (after the memory was cleared) before the retired one finished.
+    it("keeps a newer buffered reflection's state when the retired operation finishes", async () => {
+      const outcome = await runNewerReflectionBufferSurvivesRetiredHook(env);
+      expect(outcome).toEqual(expectedNewerReflectionBufferSurvivesRetiredHook(outcome));
+      expect(outcome.newerCycleId).toEqual(expect.any(String));
+    });
 
     it('publishes values and shows the activation on an adapter without newRecordId support', async () => {
       const f = await setup(() => reflection('prepared'));
