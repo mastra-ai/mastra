@@ -108,14 +108,13 @@ describe('ChatShell', () => {
     expect(track?.className).toContain('relative');
   });
 
-  it('ramps the veil in over its own band of air, never past full strength', () => {
+  it('starts the veil at the composer, leaving the transcript above it untouched', () => {
     renderShell();
 
     const dock = screen.getByTestId('dock');
-    // Rise and margin match, so the ramp starts exactly where resting content
-    // ends; anything shorter dims the last row on a still transcript.
     expect(dock.className).toContain('mt-(--chat-fade)');
-    expect(dock.className).toContain('before:-top-(--chat-fade)');
+    expect(dock.className).toContain('before:inset-0');
+    expect(dock.className).not.toContain('before:-top-');
     expect(dock.className).toContain(
       'before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
     );

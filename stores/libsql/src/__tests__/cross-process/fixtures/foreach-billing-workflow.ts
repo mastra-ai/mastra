@@ -1,18 +1,13 @@
 /** Default-engine billing workflow registered by both processes in foreach-billing-restart.test.ts. */
 import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { z } from 'zod';
 
-const customerSchema = { type: 'number' } as const;
-const customersSchema = { type: 'array', items: customerSchema } as const;
-const chargedSchema = {
-  type: 'object',
-  properties: { charged: { type: 'number' } },
-  required: ['charged'],
-} as const;
+const chargedSchema = z.object({ charged: z.number() });
 
 export function createBillingWorkflow(concurrency: number, charge: (customer: number) => Promise<void>) {
   const step = createStep({
     id: 'charge',
-    inputSchema: customerSchema,
+    inputSchema: z.number(),
     outputSchema: chargedSchema,
     execute: async ({ inputData }) => {
       await charge(inputData);
@@ -21,8 +16,8 @@ export function createBillingWorkflow(concurrency: number, charge: (customer: nu
   });
   return createWorkflow({
     id: `foreach-billing-${concurrency}`,
-    inputSchema: customersSchema,
-    outputSchema: { type: 'array', items: chargedSchema },
+    inputSchema: z.array(z.number()),
+    outputSchema: z.array(chargedSchema),
   })
     .foreach(step, { concurrency })
     .commit();

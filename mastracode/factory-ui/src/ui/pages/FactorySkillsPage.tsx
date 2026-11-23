@@ -1,10 +1,9 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
 import { useBoardQuery } from '../../hooks/useBoardEditor';
@@ -13,7 +12,6 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { boardConfigPath, newSkillPath } from '../domains/boardConfig/boardConfigPaths';
 import { FactorySkillsSection } from '../domains/boardConfig/components/skills/FactorySkillsSection';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
-import { SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /**
@@ -44,29 +42,25 @@ export function FactorySkillsPage() {
 
   return (
     <PageLayout
-      variant="narrow"
+      variant="settings"
       header={
-        <div className={cn(SETTINGS_COLUMN, 'pb-8')}>
-          <PageHeader>
-            <PageHeader.Title>Skills</PageHeader.Title>
-            <PageHeader.Description>
-              Agents load these when they need them. Skills a phase runs are on that phase's page.
-            </PageHeader.Description>
-            {canEdit && (
-              <PageHeader.Action>
-                <Button size="sm" icon={<IconPlusMedium />} render={<Link to={newSkillPath(factory.id, boardId)} />}>
-                  New skill
-                </Button>
-              </PageHeader.Action>
-            )}
-          </PageHeader>
-        </div>
+        <PageHeader>
+          <PageHeader.Title>Skills</PageHeader.Title>
+          <PageHeader.Description>
+            Agents load these when they need them. Skills a phase runs are on that phase's page.
+          </PageHeader.Description>
+          {canEdit && (
+            <PageHeader.Action>
+              <Button size="sm" icon={<IconPlusMedium />} render={<Link to={newSkillPath(factory.id, boardId)} />}>
+                New skill
+              </Button>
+            </PageHeader.Action>
+          )}
+        </PageHeader>
       }
       {...slots}
     >
-      <div className={SETTINGS_COLUMN}>
-        <FactorySkillsSection factoryId={factory.id} boardId={boardId} />
-      </div>
+      <FactorySkillsSection factoryId={factory.id} boardId={boardId} />
     </PageLayout>
   );
 }

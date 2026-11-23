@@ -35,16 +35,10 @@
     "gpt-oss-120b"
   ],
   "reasoning": {
-    "GLM-5.3-Flash": [
+    "MiniMax-M2.7": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "Qwen3.8-Max": [
@@ -53,46 +47,16 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "DeepSeek-V4-pro": [
-      {
-        "type": "toggle"
-      },
+    "GLM-5.2": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high", "max"]
       }
     ],
     "GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "GLM-5.2-Fast": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
       }
     ],
     "DeepSeek-V4.1-flash-1017": [
@@ -104,16 +68,28 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "MiniMax-M2.7": [
+    "DeepSeek-V4-pro": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "GLM-5.2": [
+    "DeepSeek-V4.1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "DeepSeek-V4-flash": [
@@ -123,6 +99,30 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "GLM-5.2-Fast": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ]
   }
