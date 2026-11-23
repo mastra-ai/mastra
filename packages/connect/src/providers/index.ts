@@ -37,6 +37,7 @@ import { stripeProvider } from './stripe/index.js';
 import { supabaseProvider } from './supabase/index.js';
 import { twitterV2Provider } from './twitter-v2/index.js';
 import { workosProvider } from './workos/index.js';
+import { zendeskProvider } from './zendesk/index.js';
 
 export const PROVIDERS: readonly ProviderRegistration[] = [
   anthropicProvider,
@@ -74,4 +75,5 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   supabaseProvider,
   twitterV2Provider,
   workosProvider,
+  zendeskProvider,
 ];

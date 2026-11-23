@@ -1181,13 +1181,13 @@ function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
 }
 
 /**
- * The proxy replays PUT and DELETE after a transient 5xx, so a GitLab write the
- * first attempt already applied could run again: deleting a branch recreated
- * by someone else meanwhile, committing a file change twice, or undoing a
- * concurrent group setting. GitLab writes get exactly one attempt; reads keep
+ * The proxy replays PUT and DELETE after a transient 5xx, so a write the first
+ * attempt already applied could run again: deleting a GitLab branch recreated by
+ * someone else meanwhile, committing a file change twice, or reapplying a Zendesk
+ * ticket update over a concurrent one. Writes get exactly one attempt; reads keep
  * the template's retries.
  */
-function attemptGitLabWritesOnce(action: ExtractedAction): ExtractedAction {
+function attemptWritesOnce(action: ExtractedAction): ExtractedAction {
   if (/platformProxy\.get\(/.test(action.execBody)) return action;
   return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
 }
@@ -1258,7 +1258,7 @@ function paginateGitLabList(action: ExtractedAction): ExtractedAction {
 
 function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   const slug = action.candidate.actionSlug;
-  let adapted = attemptGitLabWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
+  let adapted = attemptWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
   const schemaFixes = [...(GITLAB_RESPONSE_SCHEMA_FIXES[slug] ?? []), ...(GITLAB_INPUT_FIXES[slug] ?? [])];
   if (schemaFixes.length > 0) adapted = rewriteModuleStatements(adapted, schemaFixes);
   const updateIdentifiers = GITLAB_UPDATE_IDENTIFIERS[slug];
@@ -1322,6 +1322,9 @@ function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
   if (action.candidate.providerId === 'gitlab') {
     return adaptGitLabAction(action);
+  }
+  if (action.candidate.providerId === 'zendesk') {
+    return attemptWritesOnce(action);
   }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);

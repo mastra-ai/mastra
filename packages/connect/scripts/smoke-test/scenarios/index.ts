@@ -34,6 +34,7 @@ import { stripeScenario } from './stripe.js';
 import { supabaseScenario } from './supabase.js';
 import { twitterScenario } from './twitter-v2.js';
 import { workosScenario } from './workos.js';
+import { zendeskScenario } from './zendesk.js';
 
 /**
  * Alphabetical scenario registry. Add new deep scenarios here and keep the
@@ -76,4 +77,5 @@ export const scenarios: Scenario[] = [
   supabaseScenario,
   twitterScenario,
   workosScenario,
+  zendeskScenario,
 ];

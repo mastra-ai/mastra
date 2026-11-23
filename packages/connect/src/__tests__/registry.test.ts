@@ -45,6 +45,7 @@ describe('shipped provider registry', () => {
       'supabase',
       'twitter-v2',
       'workos',
+      'zendesk',
     ]);
   });
 
