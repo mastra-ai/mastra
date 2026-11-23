@@ -416,7 +416,7 @@ When a worker stops during an evented workflow step, the broker redelivers the s
 
 A step can run more than once. If a worker stops during a step, or after the step finishes but before it publishes the result, the step runs again when its event is redelivered. Make steps with side effects idempotent. See [restarting active workflow runs](/docs/workflows/overview#restarting-active-workflow-runs) for how to build an idempotency key for a step, and [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat) for agent tools.
 
-When handling an evented workflow event fails, for example because the database is briefly unreachable, the worker retries the event twice before it marks the run as failed. It waits 0.5 to 1 second before the first retry and 2 to 4 seconds before the second, so a short outage doesn't fail the run.
+When handling an evented workflow event fails, for example because the database connection drops, the worker retries the event twice before it marks the run as failed. It waits 0.5 to 1 second before the first retry and 2 to 4 seconds before the second, so a short outage doesn't fail the run.
 
 The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
 
