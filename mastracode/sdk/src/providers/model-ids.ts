@@ -74,6 +74,72 @@ export function getCredentialProviderId(providerId: string): string {
   return providerId;
 }
 
+export type CodexServiceTier = 'fast';
+
+/**
+ * OpenAI models with a Fast tier on Codex sign-in, per OpenAI's Codex speed docs
+ * and rate card. On any other model the service runs the request at standard
+ * speed, so `:fast` is dropped there instead of being sent.
+ */
+const CODEX_FAST_MODELS = new Set([
+  'gpt-6.2-sol',
+  'gpt-6.2-astra',
+  'gpt-6.1-sol',
+  'gpt-6.1-terra',
+  'gpt-6-astra',
+  'gpt-6-sol',
+  'gpt-6-luna',
+  'gpt-5.6',
+  'gpt-5.6-sol',
+  'gpt-5.5',
+  'gpt-5.4',
+]);
+
+/** `:fast` is reserved on native OpenAI selections, not a catalog model suffix. */
+export function parseCodexModelSelection(modelId: string): { modelId: string; codexServiceTier?: CodexServiceTier } {
+  const selection = stripMastraGatewayPrefix(modelId);
+  if (!/^openai\/[^/:]+:fast$/.test(selection)) return { modelId };
+  const canonicalModelId = modelId.slice(0, -':fast'.length);
+  const supportsFast = CODEX_FAST_MODELS.has(selection.slice(OPENAI_PREFIX.length, -':fast'.length));
+  return supportsFast ? { modelId: canonicalModelId, codexServiceTier: 'fast' } : { modelId: canonicalModelId };
+}
+
+/**
+ * Adds a `<model>:fast` entry right after each connected OpenAI model that has
+ * a Fast tier, when OpenAI is signed in with Codex (Fast has no effect with an
+ * API key). Fast entries already in the list are replaced.
+ */
+export function withCodexFastModels<T extends { id: string; modelName: string; hasApiKey: boolean }>(
+  models: T[],
+  { codexOAuth }: { codexOAuth: boolean },
+): T[] {
+  const listed: T[] = [];
+  for (const model of models) {
+    if (parseCodexModelSelection(model.id).modelId !== model.id) continue;
+    listed.push(model);
+    if (
+      codexOAuth &&
+      model.hasApiKey &&
+      model.id.startsWith(OPENAI_PREFIX) &&
+      parseCodexModelSelection(`${model.id}:fast`).codexServiceTier
+    ) {
+      listed.push({ ...model, id: `${model.id}:fast`, modelName: `${model.modelName}:fast` });
+    }
+  }
+  return listed;
+}
+
+/** Prefer the exact selection if both standard and Fast entries for a model exist. */
+export function findRouteModelIndex(entries: Array<{ modelId?: unknown }>, selectionId: unknown): number {
+  if (typeof selectionId !== 'string') return -1;
+  const exact = entries.findIndex(entry => entry.modelId === selectionId);
+  if (exact !== -1) return exact;
+  const { modelId } = parseCodexModelSelection(selectionId);
+  return entries.findIndex(
+    entry => typeof entry.modelId === 'string' && parseCodexModelSelection(entry.modelId).modelId === modelId,
+  );
+}
+
 export function remapOpenAIModelForCodexOAuth(modelId: string): string {
   const normalizedModelId = stripMastraGatewayPrefix(modelId);
 

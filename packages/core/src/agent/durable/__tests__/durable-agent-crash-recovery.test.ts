@@ -374,10 +374,13 @@ async function captureCheckpoints(
   const result = await original.durableAgent.stream('Look two things up');
   try {
     let text = '';
+    let originalStopCause: string | undefined;
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'text-delta') text += chunk.payload.text;
+      if (chunk.type === 'finish') originalStopCause = chunk.payload.stopCause;
     }
     expect(text).toBe('done');
+    expect(originalStopCause).toBe('model_finished');
     // A finished run deletes its snapshots; wait for that so every write has been captured.
     await vi.waitFor(
       async () =>
@@ -432,11 +435,13 @@ async function recoverFrom(
     // model turn recovers without streaming any text.
     let finalText: string | undefined;
     let finalUsage: unknown;
+    let finalStopCause: string | undefined;
     for await (const chunk of recovered.fullStream) {
       if (chunk.type === 'error') errors.push(String((chunk.payload as any)?.error?.message ?? chunk.payload));
       if (chunk.type === 'finish') {
         finalText = String((chunk.payload.output as { text?: string }).text);
         finalUsage = (chunk.payload.output as { usage?: unknown }).usage;
+        finalStopCause = chunk.payload.stopCause;
       }
     }
     const executionError = await Promise.resolve(execution).then(
@@ -446,6 +451,7 @@ async function recoverFrom(
     if (errors.length) return `stream error: ${errors[0]}`;
     if (executionError) return `workflow error: ${executionError}`;
     if (finalText === undefined) return 'stream closed without finish';
+    if (finalStopCause !== 'model_finished') return `finish stopCause was ${finalStopCause}`;
     if (finishEvents !== 1) return `published FINISH ${finishEvents} times`;
     if (onFinishCalls !== 1) return `onFinish fired ${onFinishCalls} times`;
     // The result names the recovered run's span, so a score or log can be linked to the trace.

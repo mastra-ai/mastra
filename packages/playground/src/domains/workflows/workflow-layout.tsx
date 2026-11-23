@@ -68,7 +68,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 
   if (!workflowId) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{workflowId}</h1>
         <div className="flex h-full flex-col items-center justify-center">
           <Txt variant="body" tone="ink" className="text-center">
@@ -81,7 +81,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 
   if (isWorkflowLoading && activeTab === 'graph') {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{workflowId}</h1>
         <Skeleton className="h-full" />
       </PageLayout>
@@ -89,7 +89,12 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   }
 
   const page = (content: React.ReactNode) => (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<WorkflowHeader />}>
+    <PageLayout
+      variant="page"
+      body="fixed"
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      headerActions={<WorkflowHeader />}
+    >
       <h1 className="sr-only">{workflowId}</h1>
       <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
         <WorkflowPageTabs workflowId={workflowId} activeTab={activeTab} showObservability={hasObservability} />

@@ -12,9 +12,10 @@ import {
   noScorers,
   noWorkflows,
 } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
+import { LinkComponentProvider } from '@/exports';
 import { RouteSidePanelProvider } from '@/lib/route-side-panel';
 import DatasetPage from '@/pages/datasets/dataset';
-import { TestLinkProvider } from '@/test/link-provider';
+import { StubLink, stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -69,9 +70,9 @@ const renderDatasetRoute = (initialPath = `/datasets/${DATASET_ID}`) => {
   render(
     <MastraReactProvider baseUrl={TEST_BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <TestLinkProvider>
+        <LinkComponentProvider Link={StubLink} navigate={path => void router.navigate(path)} paths={stubLinkPaths}>
           <RouterProvider router={router} />
-        </TestLinkProvider>
+        </LinkComponentProvider>
       </QueryClientProvider>
     </MastraReactProvider>,
   );
