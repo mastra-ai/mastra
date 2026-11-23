@@ -3323,6 +3323,42 @@ describe('Agent Routes Authorization', () => {
       vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({});
     });
 
+    it('still fences a wrapper from a @mastra/core that predates engine selection', async () => {
+      // Older cores have no engine check; their wrappers are recognized by shape alone.
+      const subscribe = vi.fn(async (_runId: string, options: { onComplete?: () => void }) => {
+        options.onComplete?.();
+        return async () => {};
+      });
+      // Shaped like a pre-engine-selection DurableAgent: the wrapper contract and its fenced
+      // subscribe, everything else forwarded to the agent it wraps, and no engine check.
+      const target = {
+        id: 'test-durable-agent',
+        name: 'test-durable-agent',
+        agent: mockAgent,
+        pubsub: new EventEmitterPubSub(),
+        stream: vi.fn(),
+        recover: vi.fn(),
+        recoverActiveRuns: vi.fn(),
+        __getRunOwner: () => ({}),
+        __subscribeToRunStream: subscribe,
+      };
+      const oldCoreWrapper = new Proxy(target, {
+        get(t, prop, receiver) {
+          if (prop === '__hasDurableExecution') return undefined;
+          if (prop in t) return Reflect.get(t, prop, receiver);
+          const value = (mockAgent as any)[prop];
+          return typeof value === 'function' ? value.bind(mockAgent) : value;
+        },
+        has: (t, prop) => prop !== '__hasDurableExecution' && (prop in t || prop in mockAgent),
+      });
+      mastra = new Mastra({ agents: { 'test-durable-agent': oldCoreWrapper as any }, storage, logger: false });
+      const runId = 'observe-old-core-wrapper';
+
+      await collectWithDeadline(await observe(runId));
+
+      expect(subscribe).toHaveBeenCalledWith(runId, expect.anything(), expect.any(Function));
+    });
+
     it('observes an adapter proxy (Inngest) through its own pubsub, not the wrapped agent', async () => {
       const inner = new Agent({
         id: 'adapter-inner',

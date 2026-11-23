@@ -309,6 +309,11 @@ function hasDurableExecution(agent: Agent): boolean {
   return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
 }
 
+/** Whether the agent comes from a @mastra/core with engine selection (`__hasDurableExecution`). */
+function hasEngineCheck(agent: Agent): boolean {
+  return typeof (agent as unknown as { __hasDurableExecution?: unknown }).__hasDurableExecution === 'function';
+}
+
 /** Whether the agent itself resolved a core durable engine, as opposed to matching the wrapper shape. */
 function ownsDurableEngine(agent: Agent): boolean {
   const native = agent as unknown as { __hasDurableExecution?: () => boolean };
@@ -3213,8 +3218,12 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Agents running on a core durable engine (native or a core wrapper) subscribe for us so the
       // client never sees what an execution that lost the run still publishes. Asked of the agent
       // itself: an adapter proxy (Inngest) forwards this to the plain agent it wraps, which answers
-      // false, so it keeps reading its own transport below.
-      const fencedAgent = ownsDurableEngine(agent) ? (agent as unknown as DurableAgentLike) : undefined;
+      // false, so it keeps reading its own transport below. A wrapper from a @mastra/core that
+      // predates engine selection has no engine check at all, so its shape decides.
+      const fencedAgent =
+        ownsDurableEngine(agent) || (durableAgent && !hasEngineCheck(agent))
+          ? (agent as unknown as DurableAgentLike)
+          : undefined;
       // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
