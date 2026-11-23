@@ -390,64 +390,77 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     },
   );
 
-  // A resume that starts and settles while the delete awaits its snapshot read, which no in-flight check sees.
-  async function resumeSettlingDuringRead(storageVersion: 1 | 2, answer: 'again' | 'yes') {
+  /**
+   * Starts a resume that settles (re-parked when answered 'again', finished when 'yes') while the session's
+   * delete is held at `phase`, where no check of whether a resume is in flight can see it:
+   * - 'release': inside the in-memory release, before the snapshot is read;
+   * - 'read': the snapshot read, which answers with what storage held before the resume.
+   */
+  async function resumeSettlingDuring(storageVersion: 1 | 2, phase: 'release' | 'read', answer: string) {
     const { agent, controller, storage } = await setup({ storageVersion });
     await park(controller, 0);
     const workflows = (await storage.getStore('workflows'))!;
     const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
     expect(parked?.storageVersion ?? 1).toBe(storageVersion);
     const runId = parked!.runId;
-    const read = workflows.getWorkflowRunById.bind(workflows);
     let held!: () => void;
     const holding = new Promise<void>(resolve => (held = resolve));
-    let releaseRead!: () => void;
-    const gate = new Promise<void>(resolve => (releaseRead = resolve));
-    let armed = true;
+    let resumeSettled!: () => void;
+    const settledGate = new Promise<void>(resolve => (resumeSettled = resolve));
+    // Counts the delete's in-memory releases, so only the first attempt's own calls are held.
+    let releases = 0;
+    const releaseParkedRun = agent.releaseParkedRun.bind(agent);
+    vi.spyOn(agent, 'releaseParkedRun').mockImplementation(async (id: string) => {
+      if (++releases === 1 && phase === 'release') {
+        held();
+        await settledGate;
+      }
+      return releaseParkedRun(id);
+    });
+    const read = workflows.getWorkflowRunById.bind(workflows);
+    let readHeld = false;
     vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async args => {
-      // Only the controller's own read is held, and it answers with what storage held before the resume.
-      if (!armed || !new Error().stack?.includes('agent-controller.ts')) return read(args);
-      armed = false;
+      if (phase !== 'read' || releases !== 1 || readHeld) return read(args);
+      readHeld = true;
       const before = await read(args);
       held();
-      await gate;
+      await settledGate;
       return before;
     });
-    const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
     const settledWaits = vi.spyOn(agent, '__resumesSettled');
     const deleted = controller.deleteSession({ sessionId: 's-0' });
     await holding;
-    const releasesBeforeResume = releaseParkedRun.mock.calls.length;
-    const resumed = await agent.resume(runId, { a: answer }).then(async ({ output }: any) => {
-      if (answer === 'yes') await output.text;
-      await agent.__resumesSettled(runId);
+    await agent.resume(runId, { a: answer }).then(async ({ output }: any) => {
+      if (answer !== 'again') await output.text;
     });
-    expect(resumed).toBeUndefined();
+    await agent.__resumesSettled(runId);
     const testWaits = settledWaits.mock.calls.length;
-    expect(agent.__isResumingRun(runId)).toBe(false);
-    releaseRead();
+    resumeSettled();
     expect(await deleted).toBe(true);
     if (answer === 'again') {
       await expectReleased(agent, workflows, runId);
-      // The re-parked run's new hold went through a later in-memory release.
-      expect(releaseParkedRun.mock.calls.length).toBeGreaterThan(releasesBeforeResume);
     } else {
       // The finished run drops its own rows and workflow run; nothing of it is left parked.
       await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
       expect(agent.getWorkflow().runs.size).toBe(0);
-      // The stale read is not trusted: the attempt is decided again once the overlapping resume settled.
-      await vi.waitFor(() => expect(settledWaits.mock.calls.length).toBeGreaterThan(testWaits));
     }
+    // Decided again once the overlapping resume settled, with a fresh in-memory release.
+    await vi.waitFor(() => expect(settledWaits.mock.calls.length).toBeGreaterThan(testWaits));
+    expect(releases).toBeGreaterThan(1);
   }
 
-  it.each([1, 2] as const)(
-    'releases the run when a resume parks it again while the delete reads its snapshot (storage v%i)',
-    async storageVersion => resumeSettlingDuringRead(storageVersion, 'again'),
+  it.each([
+    [1, 'release'],
+    [2, 'release'],
+    [1, 'read'],
+    [2, 'read'],
+  ] as const)('releases a run a resume parks again during the delete (storage v%i, %s)', (storageVersion, phase) =>
+    resumeSettlingDuring(storageVersion, phase, 'again'),
   );
 
   it.each([1, 2] as const)(
     'leaves nothing parked when a resume finishes the run while the delete reads its snapshot (storage v%i)',
-    async storageVersion => resumeSettlingDuringRead(storageVersion, 'yes'),
+    storageVersion => resumeSettlingDuring(storageVersion, 'read', 'yes'),
   );
 
   it('makes one release attempt when no resume overlaps', async () => {
