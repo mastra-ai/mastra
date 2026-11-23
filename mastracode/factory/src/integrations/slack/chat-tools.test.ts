@@ -83,6 +83,13 @@ function answer(method: string, args: Record<string, string>): Record<string, un
       return { channel: args.channel, ts: '1800000000.000001', message: { text: args.text } };
     case 'conversations.open':
       return { channel: { id: `D-${args.users}` } };
+    case 'conversations.info': {
+      const id = args.channel!;
+      if (id.startsWith('D')) return { channel: { id, is_im: true } };
+      const channel = workspace.channels.find(c => c.id === id);
+      if (!channel || (channel.is_private && !channel.is_member)) return { ok: false, error: 'channel_not_found' };
+      return { channel: { ...channel, is_channel: true } };
+    }
     case 'conversations.list': {
       const { items, response_metadata } = page(workspace.channels, args.cursor);
       return { channels: items, response_metadata };
@@ -571,12 +578,12 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     expect(sent('chat.postMessage')).toEqual([]);
   });
 
-  it("can't read a channel the app isn't in: Slack refuses it", async () => {
+  it("can't read a private channel the app isn't in: Slack refuses it", async () => {
     const { run } = await slackSession(wide);
 
     await expect(
       run('fetchChannelMessages', { channelId: 'slack:C3', limit: 5, direction: 'backward' }),
-    ).rejects.toThrow(/not_in_channel/);
+    ).rejects.toThrow(/channel_not_found/);
   });
 
   it('finds channels and people by name across every page Slack returns', async () => {
@@ -645,7 +652,7 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     const result = await run('searchMessages', { query: 'deploy', channelIds: ['slack:C3', 'slack:C1'] });
 
     expect(result.matches.map((m: { channelId: string }) => m.channelId)).toEqual(['slack:C1']);
-    expect(result.errors).toEqual([{ channelId: 'slack:C3', error: 'not_in_channel' }]);
+    expect(result.errors).toEqual([{ channelId: 'slack:C3', error: 'channel_not_found' }]);
   });
 
   it('DMs anyone in the workspace', async () => {

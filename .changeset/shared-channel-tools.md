@@ -13,4 +13,4 @@ const agent = new Agent({
 });
 ```
 
-Other people's direct messages with the bot can never be read. With `access: 'read'`, the tools post only in the conversation's own channel. The tools need zod 4.2 or newer.
+Other people's direct messages with the bot, including group DMs, can never be read. `channelIds` must be full chat ids such as `slack:C0123ABC`. With `access: 'read'`, the tools post only in the conversation's own channel. The tools need zod 4.2 or newer.

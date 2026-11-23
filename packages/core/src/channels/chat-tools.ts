@@ -31,7 +31,8 @@ export interface ChannelToolsOptions {
   access?: 'read' | 'post';
   /**
    * `'anyone'` adds a `sendDirectMessage` tool that messages any person.
-   * Other people's direct messages with the bot are never readable either way.
+   * Other people's direct messages with the bot, including group DMs, are never
+   * readable either way.
    *
    * @default 'none'
    */
@@ -59,10 +60,10 @@ export interface ChannelToolScope {
   settings: ChannelToolsSettings;
   /** The channel a thread or channel id belongs to. */
   channelOf(id: string): string;
-  /** Throws unless the tool may read `id` (a thread or channel id). */
-  assertReadable(id: string): void;
-  /** Throws unless the tool may post in `id` (a thread or channel id). */
-  assertPostable(id: string): void;
+  /** Rejects unless the tool may read `id` (a thread or channel id). */
+  assertReadable(id: string): Promise<void>;
+  /** Rejects unless the tool may post in `id` (a thread or channel id). */
+  assertPostable(id: string): Promise<void>;
   /** One sentence naming the channels this conversation can use. */
   describe(): string;
 }
@@ -89,7 +90,14 @@ export const DEFAULT_CHANNEL_TOOLS_SETTINGS: ChannelToolsSettings = {
 export function resolveChannelToolsSettings(options: ChannelToolsOptions = {}): ChannelToolsSettings {
   // An explicit `undefined` means "use the default", not "unset it".
   const granted = Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined));
-  return { ...DEFAULT_CHANNEL_TOOLS_SETTINGS, ...granted };
+  const settings: ChannelToolsSettings = { ...DEFAULT_CHANNEL_TOOLS_SETTINGS, ...granted };
+  const bare = settings.channelIds.filter(id => !id.includes(':'));
+  if (bare.length) {
+    throw new Error(
+      `channelIds must be full chat ids with the platform prefix, e.g. "slack:${bare[0]}". Got: ${bare.join(', ')}.`,
+    );
+  }
+  return settings;
 }
 
 /** The channel a thread or channel id belongs to, as the Chat SDK resolves it. */
@@ -139,20 +147,37 @@ export function createChannelToolScope({
   const allowed = new Set([ownChannel, ...(settings.channels === 'selected' ? settings.channelIds : [])]);
   const describe = () => `${describeSettings(settings, ownChannel)} This conversation's thread is ${threadId}.`;
 
-  const assertReadable = (id: string) => {
+  // Group DMs can look like ordinary channels to `adapter.isDM`, so channels
+  // other than the conversation's own are also checked against their metadata.
+  const dmLookups = new Map<string, Promise<boolean>>();
+  const isDirectMessageChannel = (channel: string) => {
+    let lookup = dmLookups.get(channel);
+    if (!lookup) {
+      lookup = chat
+        .channel(channel)
+        .fetchMetadata()
+        .then(info => Boolean(info.isDM));
+      lookup.catch(() => dmLookups.delete(channel));
+      dmLookups.set(channel, lookup);
+    }
+    return lookup;
+  };
+  const refuseDirectMessage = (id: string): never => {
+    throw new Error(
+      `"${id}" is someone else's direct message with the bot.${
+        settings.directMessages === 'anyone' ? ' Use sendDirectMessage to message a person.' : ''
+      }`,
+    );
+  };
+
+  const assertReadable = async (id: string) => {
     const prefix = id.split(':')[0];
     if (!prefix || !chat.getAdapter(prefix as never)) {
       throw new Error(`"${id}" isn't a full chat id. Use the platform prefix, e.g. "${ownChannel}".`);
     }
     const channel = channelOf(chat, id);
     const dm = channel === ownChannel ? false : isDirectMessage(chat, channel);
-    if (dm) {
-      throw new Error(
-        `"${id}" is someone else's direct message with the bot.${
-          settings.directMessages === 'anyone' ? ' Use sendDirectMessage to message a person.' : ''
-        }`,
-      );
-    }
+    if (dm) refuseDirectMessage(id);
     // A platform that can't classify DMs could hide one behind `channels: 'all'`,
     // so there only channels granted by id are allowed.
     if (dm === undefined && !allowed.has(channel)) {
@@ -163,11 +188,12 @@ export function createChannelToolScope({
     if (!all && !allowed.has(channel)) {
       throw new Error(`"${id}" is outside the channels this conversation can use. ${describe()}`);
     }
+    if (channel !== ownChannel && (await isDirectMessageChannel(channel))) refuseDirectMessage(id);
   };
 
-  const assertPostable = (id: string) => {
+  const assertPostable = async (id: string) => {
     if (settings.access === 'read') {
-      assertReadable(id);
+      await assertReadable(id);
       if (channelOf(chat, id) !== ownChannel) {
         throw new Error(
           `"${id}" is read only for this conversation: it can only post in its own channel, ${ownChannel}.`,
@@ -175,7 +201,7 @@ export function createChannelToolScope({
       }
       return;
     }
-    assertReadable(id);
+    await assertReadable(id);
   };
 
   return {
@@ -297,7 +323,10 @@ export async function createChannelTools(options: CreateChannelToolsOptions = {}
   const note = ` ${options.scope ? options.scope.describe() : describeSettings(settings, "this conversation's own channel")}`;
   const tools: ChannelTools = {};
 
-  const build = (name: ChannelToolName, check: (scope: ChannelToolScope, input: Record<string, unknown>) => void) => {
+  const build = (
+    name: ChannelToolName,
+    check: (scope: ChannelToolScope, input: Record<string, unknown>) => void | Promise<void>,
+  ) => {
     const template = templates[name];
     if (!template) return;
     tools[name] = createTool({
@@ -306,7 +335,7 @@ export async function createChannelTools(options: CreateChannelToolsOptions = {}
       inputSchema: template.inputSchema,
       execute: async (input: unknown, context) => {
         const scope = await resolve(context);
-        check(scope, input as Record<string, unknown>);
+        await check(scope, input as Record<string, unknown>);
         const spec = (await specsFor(scope.chat))[name]!;
         return spec.execute(input);
       },
@@ -314,15 +343,15 @@ export async function createChannelTools(options: CreateChannelToolsOptions = {}
   };
 
   for (const [name, { target, post }] of Object.entries(CHAT_TOOLS)) {
-    build(name as ChannelToolName, (scope, input) => {
+    build(name as ChannelToolName, async (scope, input) => {
       const id = String(input[target]);
       // Given a thread id, some platforms (Slack) silently post a new
       // top-level message instead of replying in that thread.
       if (name === 'postChannelMessage' && scope.channelOf(id) !== id) {
         throw new Error(`"${id}" is a thread, not a channel. Use postMessage to reply in a thread.`);
       }
-      if (post) scope.assertPostable(id);
-      else scope.assertReadable(id);
+      if (post) await scope.assertPostable(id);
+      else await scope.assertReadable(id);
     });
   }
   if (settings.directMessages === 'anyone') {

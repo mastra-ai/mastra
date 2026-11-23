@@ -187,7 +187,7 @@ export function createSlackTools(options: CreateChannelToolsOptions = {}): Chann
           let cursor: string | undefined;
           let read = 0;
           try {
-            scope.assertReadable(id);
+            await scope.assertReadable(id);
             while (read < scan) {
               const page = await client.conversations.history({ channel, limit: Math.min(200, scan - read), cursor });
               for (const message of (page.messages ?? []).slice(0, scan - read)) {
@@ -226,7 +226,7 @@ export function createSlackTools(options: CreateChannelToolsOptions = {}): Chann
       execute: async ({ threadId, messageId, attachmentIndex }, context) => {
         const { scope, adapter } = await slack(context);
         const id = withPrefix(threadId);
-        scope.assertReadable(id);
+        await scope.assertReadable(id);
         const lookupThreadId = id.split(':')[2] ? id : `${scope.channelOf(id)}:${messageId}`;
         const message = await adapter.fetchMessage(lookupThreadId, messageId);
         if (!message) throw new Error('Message not found in this thread.');

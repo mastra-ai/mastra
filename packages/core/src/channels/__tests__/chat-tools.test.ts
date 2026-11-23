@@ -110,6 +110,29 @@ describe('createChannelTools', () => {
     expect(adapter.fetchChannelMessages).not.toHaveBeenCalled();
   });
 
+  it('never reads a group DM the platform only reports as a DM in its channel info', async () => {
+    const adapter = createAdapter();
+    // Like Slack: `isDM` only knows 1:1 DMs, the channel info knows group DMs.
+    adapter.fetchChannelInfo = vi.fn(async (id: string) => ({ id, isDM: id === 'test:G9', metadata: {} }));
+    const { run } = await setup({ channels: 'all' }, adapter);
+
+    await expect(run('fetchChannelMessages', { channelId: 'test:G9' })).rejects.toThrow(
+      "someone else's direct message",
+    );
+    await expect(run('fetchMessages', { threadId: 'test:G9:1700000000.000100' })).rejects.toThrow(
+      "someone else's direct message",
+    );
+    await run('fetchChannelMessages', { channelId: 'test:C3' });
+    expect(adapter.fetchChannelMessages).toHaveBeenCalledTimes(1);
+    expect(adapter.fetchChannelMessages).toHaveBeenCalledWith('test:C3', expect.anything());
+  });
+
+  it('rejects channelIds without the platform prefix', async () => {
+    await expect(setup({ channels: 'selected', channelIds: ['C2'] })).rejects.toThrow(
+      'channelIds must be full chat ids',
+    );
+  });
+
   it('only allows channels granted by id when the platform cannot tell DMs apart', async () => {
     const adapter = createAdapter();
     delete adapter.isDM;
