@@ -8,7 +8,7 @@ export function GlobalSearchWorkItemResults({
   results,
   onSelect,
 }: {
-  results: WorkItemSearchResult[];
+  results: readonly WorkItemSearchResult[];
   onSelect: (result: WorkItemSearchResult) => void;
 }) {
   if (results.length === 0) return null;

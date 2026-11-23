@@ -167,7 +167,12 @@ export class MemoryLibSQL extends MemoryStorage {
     const client = resolveClient(config);
     this.#client = client;
     this.#embeddedReplica = config.embeddedReplica === true;
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   /**

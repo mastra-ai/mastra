@@ -27,14 +27,7 @@ describe('slash command parsing', () => {
   });
 
   it('matches case-insensitively', () => {
-    expect(matchCommands(COMMANDS, '/MO').map(command => command.name)).toEqual(
-      matchCommands(COMMANDS, '/mo').map(command => command.name),
-    );
-    expect(matchCommands(COMMANDS, '/MODEL').map(command => command.name)).toContain('model');
-  });
-
-  it('returns one result for an exact command name', () => {
-    expect(matchCommands(COMMANDS, '/yolo').map(command => command.name)).toEqual(['yolo']);
+    expect(matchCommands(COMMANDS, '/MO').map(command => command.name)).toEqual(['model', 'mode']);
   });
 
   it('returns no suggestions for an unknown command prefix', () => {

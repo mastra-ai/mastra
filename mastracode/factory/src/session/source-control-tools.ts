@@ -26,6 +26,7 @@ import type {
 import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
 import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
+import type { ChangeTarget } from './self-review-gate.js';
 
 type RepositorySessionState = {
   factoryProjectId?: string;
@@ -181,11 +182,11 @@ async function resolveSessionTarget(
  * then describe the default without naming it.
  */
 async function describeSessionRepositories(
-  sessionId: string,
-  providers: readonly SourceControlToolProvider[],
+  match: { provider: SourceControlToolProvider; session: SourceControlSession } | undefined,
 ): Promise<{ slugs: string[]; own: string | undefined } | undefined> {
+  if (!match) return undefined;
+  const { provider, session } = match;
   try {
-    const { provider, session } = await resolveProviderSession(sessionId, providers);
     const repositories = await resolveSessionRepositories({ sourceControl: provider.storage, session });
     const own = repositories.find(candidate => candidate.link.id === session.projectRepositoryId);
     return { slugs: environmentSlugs(repositories), own: own?.repository.slug };
@@ -227,6 +228,10 @@ async function emitAgentAudit(
   }
 }
 
+function changeTarget(target: SessionTarget): ChangeTarget {
+  return { slug: target.repository.slug, ownRepository: target.ownRepository };
+}
+
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
 const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
@@ -236,17 +241,23 @@ export async function createSourceControlTools({
   requestContext,
   providers,
   audit,
-  selfReviewApprovedHead,
+  workItem,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
-  /**
-   * Self-review gate for opening a change request. `undefined` means the session
-   * is not gated (no Work item, or its change request predates Self-review);
-   * `null` means Self-review has not approved; a SHA is the approved head.
-   */
-  selfReviewApprovedHead?: () => Promise<string | null | undefined>;
+  /** The session's card, when it is bound to one. */
+  workItem?: {
+    /**
+     * Self-review gate for opening a change request in `target`. `undefined` means
+     * it is not gated (no Work item, another repository than the card's, or its
+     * change request predates Self-review); `null` means Self-review has not
+     * approved; a SHA is the approved head.
+     */
+    selfReviewApprovedHead(target: ChangeTarget): Promise<string | null | undefined>;
+    /** Records `target` as the card's repository when the card names none. */
+    recordRepository(sourceControl: SourceControlStorageHandle, target: ChangeTarget): Promise<void>;
+  };
 }): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
   const controller = requestContext.get('controller') as
@@ -255,9 +266,13 @@ export async function createSourceControlTools({
   const identity = authIdentity(requestContext);
   if (!controller?.sessionId || !identity.orgId || !identity.userId || providers.length === 0) return {};
 
-  const repositoryArgument = repositoryArgumentDescription(
-    await describeSessionRepositories(controller.sessionId, providers),
-  );
+  // Resolved once for the tool descriptions and to decide which tools to offer;
+  // execute re-resolves, so a failure here only drops the descriptions' detail.
+  const sessionMatch = await resolveProviderSession(controller.sessionId, providers).catch(() => undefined);
+  const repositoryArgument = repositoryArgumentDescription(await describeSessionRepositories(sessionMatch));
+  // Checkout refresh only works in a GitLab merge-request review session.
+  const offersCheckoutRefresh =
+    sessionMatch?.provider.id === 'gitlab' && mergeRequestNumberFromBranch(sessionMatch.session.branch) !== undefined;
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
@@ -268,9 +283,9 @@ export async function createSourceControlTools({
     })),
     actingUserId: target.userId,
   });
-
-  return {
-    source_control_refresh_change_request_checkout: createTool({
+  // Gated by `offersCheckoutRefresh`; execute still checks the binding it resolves at call time.
+  const createRefreshCheckoutTool = () =>
+    createTool({
       id: 'source_control_refresh_change_request_checkout',
       description:
         'Refresh the active GitLab review session checkout to its current MR head. The MR, repository, branch, and credential are resolved server-side; no provider credentials enter the agent workspace.',
@@ -295,18 +310,20 @@ export async function createSourceControlTools({
           orgId: target.orgId,
           repositoryId: target.repository.id,
         });
-        const result = await refreshMergeRequestCheckout(sandbox, workdir, {
+        return refreshMergeRequestCheckout(sandbox, workdir, {
           branch: target.session.branch,
           mergeRequestNumber,
           expectedHeadSha: mergeRequest.headSha,
           access,
         });
-        return result;
       },
-    }),
+    });
+
+  return {
+    ...(offersCheckoutRefresh ? { source_control_refresh_change_request_checkout: createRefreshCheckoutTool() } : {}),
     source_control_push_branch: createTool({
       id: 'source_control_push_branch',
-      description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. ${repositoryArgument}`,
+      description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. Returns the pushed \`commit\`; \`upToDate: true\` means the remote already had it and nothing new was pushed, so check that commit is the one you meant to push. Commit before pushing, not in parallel with it. ${repositoryArgument}`,
       inputSchema: repositorySchema,
       execute: async (input, { workspace }) => {
         const target = await targetFor(input);
@@ -326,19 +343,26 @@ export async function createSourceControlTools({
         // Materialize the session branch at the active HEAD without discarding
         // session-only commits, so the push includes the agent's current work.
         await ensureLocalBranch(sandbox, workdir, branch);
-        await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug);
+        const { commit, upToDate } = await pushRepositoryBranch(
+          sandbox,
+          workdir,
+          branch,
+          access,
+          target.repository.slug,
+        );
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,
           branch,
         });
         updateSessionEnvironmentRepository(target.session.sessionId, target.repository.slug, { branch });
+        await workItem?.recordRepository(target.provider.storage, changeTarget(target));
         await emitAgentAudit(audit, requestContext, {
           action: 'factory.agent.push',
           targets: [{ type: 'repository', id: target.repository.slug }],
           metadata: { branch, provider: target.provider.id, repository: target.repository.slug },
         });
-        return { pushed: true, branch, repository: target.repository.slug };
+        return { pushed: true, branch, repository: target.repository.slug, commit, upToDate };
       },
     }),
     source_control_get_change_request: createTool({
@@ -376,7 +400,7 @@ export async function createSourceControlTools({
       }),
       execute: async (input, execution) => {
         const target = await targetFor(input);
-        const approvedHead = target.ownRepository ? await selfReviewApprovedHead?.() : undefined;
+        const approvedHead = await workItem?.selfReviewApprovedHead(changeTarget(target));
         if (approvedHead === null) {
           throw new Error(
             'Self-review has not approved this branch. Move the work item to Self-review; the change request opens after it approves.',
@@ -414,6 +438,7 @@ export async function createSourceControlTools({
         updateSessionEnvironmentRepository(target.session.sessionId, target.repository.slug, {
           changeRequestUrl: created.url,
         });
+        await workItem?.recordRepository(target.provider.storage, changeTarget(target));
         await emitAgentAudit(audit, requestContext, {
           action: 'factory.agent.pr_opened',
           targets: [
@@ -621,7 +646,7 @@ export async function createSourceControlTools({
     }),
     source_control_review_change_request: createTool({
       id: 'source_control_review_change_request',
-      description: `Submit an approve, request-changes, or comment review to a change request. Provider limitations are returned explicitly. ${repositoryArgument}`,
+      description: `Submit an approve, request-changes, or comment review to a change request. Provider limitations are returned explicitly. Submit only findings you checked yourself against the change request's current diff: a side session's report is not a check. ${repositoryArgument}`,
       inputSchema: changeRequestSchema
         .extend({
           event: z.enum(['approve', 'request-changes', 'comment']),

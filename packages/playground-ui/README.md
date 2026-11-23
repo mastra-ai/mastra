@@ -100,9 +100,9 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 
 ### Central Icons
 
-New interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `CirclePause`, for the `Loader2` spinner, and for filled stars, which would need a second Central style. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
+Interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `Network`. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
 
-Each icon is its own module under `@mastra/playground-ui/icons/central/`. Wrap it in `Icon` for the standard sizes, the same as any other icon. Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
+Each icon is its own module under `@mastra/playground-ui/icons/central/`. An icon inside a design system component, such as a button or menu item, takes its size from that component. Anywhere else, wrap it in `Icon` or give it a `size-icon-*` class. Don't set `size`, `width`, `height` or a size class on an icon: the `playground-ui/icon-size-from-parent` lint rule reports it. The **Icons** docs page in Storybook covers the sizes and the optical inset a few edge-to-edge shapes get. Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
 
 ```tsx
 import { Icon } from '@mastra/playground-ui/icons/Icon';

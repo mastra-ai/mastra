@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.27.1-alpha.0",
+  "version": "1.28.0-alpha.1",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "license": "Apache-2.0",
   "type": "module",
@@ -59,7 +59,8 @@
     "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

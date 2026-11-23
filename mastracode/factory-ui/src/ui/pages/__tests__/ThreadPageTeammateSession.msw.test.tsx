@@ -112,9 +112,7 @@ function openWardSessionAs(
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [
-              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/local/acme/app' }),
-            ],
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -137,6 +135,7 @@ function openWardSessionAs(
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SESSION_ID,
+        running: agentRunning,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
@@ -186,8 +185,11 @@ describe("a teammate's Factory session", () => {
     it('says "a teammate" when the owner has no profile, never the raw user id', async () => {
       openWardSessionAs('user-damien', { session: wardSessionWithoutProfile });
 
-      expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
-      expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
+      const composer = await screen.findByRole('region', { name: 'Thread composer' });
+      expect(await within(composer).findByText('You’re steering a teammate’s session')).toBeInTheDocument();
+      expect(within(composer).queryByText(/user-ward/)).not.toBeInTheDocument();
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
+      expect(await screen.findByRole('alertdialog', { name: 'Take a teammate’s session?' })).toBeInTheDocument();
     });
 
     // A card a webhook filed, or an automatic phase picked up, runs in a session no person owns.
@@ -224,18 +226,22 @@ describe("a teammate's Factory session", () => {
   describe('when a teammate tries to change its model', () => {
     const lockedReason = 'Only Ward Peeters can change this session’s model or thinking level.';
 
-    it('shows the model and thinking level disabled, with who can change them', async () => {
+    it('shows the model picker disabled with its thinking level, who can change it, and whose credential it runs on', async () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
       openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
-      const model = await screen.findByRole('button', { name: `Session model: GPT-4o Mini. ${lockedReason}` });
+      const credentialNote = 'Your messages use Ward Peeters’s OpenAI API key.';
+      const model = await screen.findByRole('button', {
+        name: `Session model: GPT-4o Mini. Thinking: Medium. ${lockedReason} ${credentialNote}`,
+      });
       expect(model).toHaveAttribute('aria-disabled', 'true');
-      const thinking = await screen.findByRole('button', { name: `Thinking: Medium. ${lockedReason}` });
-      expect(thinking).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByRole('button', { name: /^OpenAI API key\./ })).not.toBeInTheDocument();
 
       await user.hover(model);
-      expect(await screen.findByRole('tooltip')).toHaveTextContent(lockedReason);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(`${lockedReason} ${credentialNote}`);
+      await user.click(model);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('refuses /model and /think without changing the session', async () => {

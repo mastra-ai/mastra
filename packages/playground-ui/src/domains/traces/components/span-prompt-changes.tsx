@@ -10,7 +10,7 @@ import { DiffStat } from '@/ds/components/DiffStat';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 import { IconScript } from '@/ds/icons/central/IconScript';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber } from '@/lib/cost';
@@ -274,7 +274,7 @@ function DiffCard({
     <div data-slot="prompt-diff" className="min-w-0 overflow-clip rounded-md border border-border bg-card">
       <header className="flex min-w-0 flex-col gap-0.5 border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span aria-hidden className="flex shrink-0 text-muted-foreground [&_svg]:size-4">
+          <span aria-hidden className="flex shrink-0 text-muted-foreground [&_svg]:size-icon-md">
             {icon}
           </span>
           <Txt as="h4" variant="label" tone="ink" className="truncate">
@@ -327,7 +327,7 @@ export function SpanPromptChanges({ span }: { span: SpanRecord }) {
           kept={keptSystemMessages(span, system)}
         />
       )}
-      {conversation.length > 0 && <DiffCard icon={<IconBubbleText />} title="Conversation" changes={conversation} />}
+      {conversation.length > 0 && <DiffCard icon={<IconChatBubbles />} title="Conversation" changes={conversation} />}
     </div>
   );
 }

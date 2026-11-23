@@ -8,15 +8,33 @@ import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { RunErrorRecovery } from '../../run-error.js';
 import { describeRunError } from '../../run-error.js';
 import { runCredential } from '../../session/reply-credential-processor.js';
-import { modelSettingsLink } from './channel-reply-processor.js';
+import { memorySettingsLink, modelSettingsLink } from './channel-reply-processor.js';
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 
+/** Where a run error card's buttons point: the session's project settings and the session itself. */
+export interface RunErrorLinkTarget {
+  factoryProjectId?: string;
+  sessionUrl?: string;
+}
+
 export function slackRunErrorCard(error: Error, { requestContext }: ChannelErrorContext) {
+  const target = requestContext && {
+    factoryProjectId: readFactorySessionScope(requestContext)?.factoryProjectId,
+    sessionUrl: sessionLinkFromRequest(requestContext),
+  };
+  return runErrorCard(error, { requestContext, target });
+}
+
+/** The run error card, for a run's own error or, with `target` from its session, for one posted after it ended. */
+export function runErrorCard(
+  error: Error,
+  { requestContext, target }: { requestContext?: RequestContext; target?: RunErrorLinkTarget },
+) {
   const { title, message, recoveries, model } = describeRunError(error);
   const requestId = providerRequestId(error);
   const facts = [model && `Model: ${model}`, requestId && `Request id: ${requestId}`].filter(Boolean).join(' · ');
   const credential = model && recoveries.includes('credentials') ? credentialLine(requestContext, model) : undefined;
-  const links = requestContext ? recoveryLinks(requestContext, recoveries) : [];
+  const links = target ? recoveryLinks(target, recoveries) : [];
   return Card({
     title: `❌ ${title}`,
     children: [
@@ -41,16 +59,17 @@ function credentialLine(requestContext: RequestContext | undefined, failedModel:
   return `Runs on ${credential.label} · ${credential.ownerId ? 'Personal credential' : 'Shared by the organization'}`;
 }
 
-function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecovery[]) {
-  const factoryProjectId = readFactorySessionScope(requestContext)?.factoryProjectId;
+function recoveryLinks({ factoryProjectId, sessionUrl }: RunErrorLinkTarget, recoveries: RunErrorRecovery[]) {
   const settingsUrl = factoryProjectId && modelSettingsLink(factoryProjectId);
-  const sessionUrl = sessionLinkFromRequest(requestContext);
+  const memoryUrl = factoryProjectId && memorySettingsLink(factoryProjectId);
   const links = recoveries.flatMap(recovery => {
     switch (recovery) {
       case 'credentials':
         return settingsUrl ? [{ url: settingsUrl, label: 'Review credentials' }] : [];
       case 'model':
         return sessionUrl ? [{ url: sessionUrl, label: 'Change model' }] : [];
+      case 'memory_model':
+        return memoryUrl ? [{ url: memoryUrl, label: 'Change memory model' }] : [];
       case 'credits':
         return [];
       // A reply in the thread continues the run; a mention in a new thread starts a new session.

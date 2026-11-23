@@ -17,17 +17,44 @@ const SOURCES: Record<string, KnowledgeSource> = {
   google: { label: 'Google', icon: GoogleIcon },
 };
 
-/** The source an imported scope came from, read from its address prefix (`linear:…`). */
-export function scopeSource(page: KnowledgePagePayload) {
-  if (!page.isScope || !page.address) return undefined;
-  const prefix = page.address.slice(0, page.address.indexOf(':'));
-  return Object.hasOwn(SOURCES, prefix) ? SOURCES[prefix] : undefined;
+function importerRootKey(page: KnowledgePagePayload) {
+  return !page.isScope && page.parentId === page.scopeId ? page.key : undefined;
 }
 
-/** A scope's readable name: an imported scope named only by its address reads as its source, e.g. "Linear". */
+/**
+ * The source imported pages came from: an importer's own scope (`linear:…`), or the page an importer
+ * writes its pages under, directly inside the organization scope and keyed by its source (`notion`).
+ */
+export function scopeSource(page: KnowledgePagePayload) {
+  const key = page.isScope && page.address ? page.address.slice(0, page.address.indexOf(':')) : importerRootKey(page);
+  return key && Object.hasOwn(SOURCES, key) ? SOURCES[key] : undefined;
+}
+
+/** Fallback labels for scopes whose declaration has no display label. */
+const SCOPE_KINDS = new Map([
+  ['org', 'Organization'],
+  ['project', 'Project'],
+  ['user', 'User'],
+  ['agent', 'Agent'],
+  ['team', 'Team'],
+]);
+
 export function scopeTitle(page: KnowledgePagePayload): string {
+  const importerKey = importerRootKey(page);
+  if (importerKey && page.name === importerKey) return scopeSource(page)?.label ?? page.name;
+  if (!page.isScope || !page.address) return page.name;
+  // Template child scopes are stored with their final address segment as their name.
+  const childKey = page.address.includes('/') ? page.address.slice(page.address.lastIndexOf('/') + 1) : undefined;
+  if (page.name !== page.address && page.name !== childKey) return page.name;
   const source = scopeSource(page);
-  return source && page.name === page.address ? source.label : page.name;
+  if (source) return source.label;
+  if (page.displayLabel?.trim()) return page.displayLabel;
+  if (childKey && page.name === childKey) return page.name;
+  const kind = page.address.slice(0, page.address.indexOf(':'));
+  const readableKind = kind.replace(/[-_]+/g, ' ');
+  return (
+    SCOPE_KINDS.get(kind) ?? (readableKind ? readableKind.charAt(0).toUpperCase() + readableKind.slice(1) : page.name)
+  );
 }
 
 /** The page's place from its root scope down, through the pages the graph holds. */

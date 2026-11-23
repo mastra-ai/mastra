@@ -60,6 +60,8 @@ export interface SuspensionPrompt {
   toolName: string;
   args: unknown;
   suspendPayload: unknown;
+  /** The run the call is parked on, when the server names it. */
+  runId?: string;
 }
 
 export interface NotificationEntry {
@@ -131,7 +133,7 @@ export interface OutgoingFile {
 }
 
 type Action =
-  | { type: 'event'; event: AgentControllerEvent; viewerId?: string }
+  | { type: 'event'; event: AgentControllerEvent; viewerId?: string; opensStream?: boolean }
   | { type: 'localUser'; id?: string; text: string; steer?: boolean; files?: OutgoingFile[] }
   | { type: 'failLocalUser'; id: string }
   | { type: 'clearPending' }
@@ -209,13 +211,18 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'resolvePrompt':
       return { ...state, entries: state.entries.filter(e => !('id' in e) || e.id !== action.id) };
     case 'event':
-      return applyEvent(state, action.event, action.viewerId);
+      return applyEvent(state, action.event, action.viewerId, action.opensStream);
     default:
       return state;
   }
 }
 
-function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerId?: string): TranscriptState {
+function applyEvent(
+  state: TranscriptState,
+  event: AgentControllerEvent,
+  viewerId?: string,
+  opensStream?: boolean,
+): TranscriptState {
   if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
     case 'agent_start':
@@ -225,6 +232,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return { ...state, pending: false };
 
     case 'message_start':
+      if (opensStream && event.message.role === 'assistant') return followLiveRow(state, event.message, viewerId);
       return upsertMessage(state, event.message, true, viewerId);
 
     case 'message_update': {
@@ -299,6 +307,11 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       );
       return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
+    case 'display_state_changed': {
+      const { isRunning, currentMessage } = event.displayState;
+      if (!isRunning || !currentMessage) return state;
+      return followLiveRow(state, { ...currentMessage, createdAt: new Date(currentMessage.createdAt) }, viewerId);
+    }
 
     case 'tool_input_start':
       return withTool(state, event.toolCallId, t => ({ ...t, toolName: event.toolName }), {
@@ -364,7 +377,20 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         toolName: event.toolName,
         args: event.args,
         suspendPayload: event.suspendPayload,
+        ...(event.runId ? { runId: event.runId } : {}),
       });
+    case 'tool_suspension_cancelled':
+      // The server retracted the prompt (its run ended or can no longer be resumed). A prompt
+      // parked on another run under the same call id stays.
+      return {
+        ...state,
+        entries: state.entries.filter(
+          e =>
+            e.kind !== 'suspension' ||
+            e.toolCallId !== event.toolCallId ||
+            (event.runId !== undefined && e.runId !== undefined && e.runId !== event.runId),
+        ),
+      };
 
     case 'mode_changed':
     case 'model_changed':
@@ -446,6 +472,11 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error': {
+      if (event.retryable) {
+        const attempt =
+          event.retryAttempt && event.maxRetries ? ` (attempt ${event.retryAttempt} of ${event.maxRetries})` : '';
+        return pushNotice(state, 'info', `Retrying request${attempt}.`);
+      }
       const error = errorEventIdentity(event);
       return pushNotice(state, 'error', error.message, error);
     }
@@ -986,18 +1017,18 @@ function adoptCoveringWindowCopies(state: TranscriptState, anchors: Map<MastraDB
 
 function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessagePart[]): boolean {
   if (persisted.length < onScreen.length) return false;
-  return onScreen.every((part, index) => {
-    const counterpart = persisted[index];
-    if (part.type === 'text' && counterpart.type === 'text') return counterpart.text.startsWith(part.text);
-    if (part.type === 'tool-invocation' && counterpart.type === 'tool-invocation') {
-      if (part.toolInvocation.toolCallId !== counterpart.toolInvocation.toolCallId) return false;
-      return (
-        !isTerminalInvocationState(part.toolInvocation.state) ||
-        isTerminalInvocationState(counterpart.toolInvocation.state)
-      );
-    }
-    return JSON.stringify(counterpart) === JSON.stringify(part);
-  });
+  return onScreen.every((part, index) => partCovers(persisted[index], part));
+}
+
+function partCovers(copy: MastraMessagePart, part: MastraMessagePart): boolean {
+  if (part.type === 'text' && copy.type === 'text') return copy.text.startsWith(part.text);
+  if (part.type === 'tool-invocation' && copy.type === 'tool-invocation') {
+    if (part.toolInvocation.toolCallId !== copy.toolInvocation.toolCallId) return false;
+    return (
+      !isTerminalInvocationState(part.toolInvocation.state) || isTerminalInvocationState(copy.toolInvocation.state)
+    );
+  }
+  return JSON.stringify(copy) === JSON.stringify(part);
 }
 
 // SSE gaps can swallow tool_start or tool_end; persisted invocations settle the row.
@@ -1158,6 +1189,36 @@ function upsertMessage(
   else entries[idx] = entry;
   const next = { ...state, entries };
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+// The stream sends no backlog: each new stream opens on the row in flight, indexed as the stream indexes its parts.
+function followLiveRow(state: TranscriptState, live: MastraDBMessage, viewerId?: string): TranscriptState {
+  if (live.role !== 'assistant') return state;
+  if (live.threadId && state.threadId && live.threadId !== state.threadId) return state;
+  const index = state.entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === live.id || entry.message.id === live.id),
+  );
+  const entry = state.entries[index];
+  if (entry?.kind === 'message' && followsStream(entry, live, toolCallIdsDrawnElsewhere(state.entries, index))) {
+    return state;
+  }
+  return upsertMessage(state, live, entry?.kind === 'message' && entry.streaming === true, viewerId);
+}
+
+function followsStream(entry: MessageEntry, live: MastraDBMessage, drawnElsewhere: Set<string>): boolean {
+  const drawn = entry.message.content.parts;
+  const streamIndexes = entry.sourcePartIndexes ?? drawn.map((_, at) => at);
+  const drawnAt = new Map(streamIndexes.map((streamIndex, at) => [streamIndex, drawn[at]]));
+  const holdsLiveParts = live.content.parts.every((part, index) => {
+    const own = drawnAt.get(index);
+    return own ? partCovers(own, part) : drawnElsewhere.has(toolCallIdForPart(part) ?? '');
+  });
+  return (
+    holdsLiveParts &&
+    drawn.every(
+      (part, at) => (streamIndexes[at] ?? Infinity) < live.content.parts.length || part.type === 'tool-invocation',
+    )
+  );
 }
 
 // A composer bubble keeps its local message id until its echo signal claims it, so each send is consumed once.

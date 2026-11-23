@@ -1,6 +1,3 @@
-import type { EntityType } from '@mastra/core/observability';
-import { useMastraClient } from '@mastra/react';
-import { createTraceQueryValuesResolver, useEntityNames, useEnvironments } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import {
   createTraceFilterBarFields,
@@ -8,11 +5,9 @@ import {
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '../../trace-filters';
-import type { TraceQueryRelatedScope } from '../../trace-query-filters';
-import { getSelectedEntityOption } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
-import { useTracesDiscovery } from './use-traces-discovery';
-import { TEXT_SEARCH_FIELD, textSearchFilterItems } from '@/domains/observability/lib/text-search-filter';
+import type { TracesExplorerFilterSuggestions } from './traces-explorer-data';
+import { withTokenSearchFields } from '@/domains/observability/lib/token-search-predicate';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 import {
@@ -21,50 +16,50 @@ import {
   FILTER_BAR_TIME_RANGE_ITEM,
 } from '@/ds/components/FilterBar/filter-bar-time-range';
 
-const NO_SUGGESTIONS: string[] = [];
-
-/** The fields the trace filter bar offers: time range, trace fields, and discovered metadata. */
-export function useTracesFilterBarFields(): FilterBarField[] {
+/**
+ * The fields the trace filter bar offers: time range, trace fields, and discovered metadata. The
+ * suggestions come from the host (Studio: `useTracesFilterSuggestionsQuery`). A list the host leaves
+ * out makes its field take free text (`Primitive name`, `Environment`); without `resolveValues`, the
+ * span, score and feedback fields take free text too.
+ */
+export function useTracesFilterBarFields({
+  rootEntityNames,
+  environments,
+  resolveValues,
+}: TracesExplorerFilterSuggestions = {}): FilterBarField[] {
   const {
     hiddenFieldIds,
-    withTextSearch,
+    withTokenSearch,
     withQueryTrace,
     withRootDuration,
     withTimeToFirstChunk,
     withTimeToFirstToken,
     withOutcomeFields,
-    discoveryTimeRange,
+    discovery: { fields: metadataFields, canonicalFields },
   } = useTracesConfig();
-  const { filters } = useTracesFilters();
-  const selectedEntityType = getSelectedEntityOption(filters.tokens)?.entityType as EntityType | undefined;
-
-  const { data: rootEntityNames = NO_SUGGESTIONS } = useEntityNames({ entityType: selectedEntityType, rootOnly: true });
-  const { data: environments = NO_SUGGESTIONS } = useEnvironments();
-  const { fields: metadataFields, canonicalFields } = useTracesDiscovery();
-  const client = useMastraClient();
 
   // Memoized for correctness: static suggestion lists live on the fields and become the value
   // editor's Combobox `items`, which loops if handed a new array on every render.
   return useMemo(
     () => [
       FILTER_BAR_TIME_RANGE_FIELD,
-      ...(withTextSearch ? [TEXT_SEARCH_FIELD] : []),
-      ...createTraceFilterBarFields({
-        availableRootEntityNames: rootEntityNames,
-        availableEnvironments: environments,
-        hiddenFieldIds,
-        metadataFields,
-        canonicalTraceFields: canonicalFields,
-        valueSuggestions: withQueryTrace
-          ? (relatedScope: TraceQueryRelatedScope | 'trace', path: string) =>
-              createTraceQueryValuesResolver(client, discoveryTimeRange, relatedScope, path)
-          : undefined,
-        withQueryTrace,
-        withRootDuration,
-        withTimeToFirstChunk,
-        withTimeToFirstToken,
-        withOutcomeFields,
-      }),
+      ...withTokenSearchFields(
+        createTraceFilterBarFields({
+          availableRootEntityNames: rootEntityNames,
+          availableEnvironments: environments,
+          hiddenFieldIds,
+          metadataFields,
+          canonicalTraceFields: canonicalFields,
+          valueSuggestions: withQueryTrace ? resolveValues : undefined,
+          withQueryTrace,
+          withRootDuration,
+          withTimeToFirstChunk,
+          withTimeToFirstToken,
+          withOutcomeFields,
+        }),
+        withTokenSearch,
+        'spans.',
+      ),
     ],
     [
       rootEntityNames,
@@ -72,14 +67,13 @@ export function useTracesFilterBarFields(): FilterBarField[] {
       hiddenFieldIds,
       metadataFields,
       canonicalFields,
-      withTextSearch,
+      withTokenSearch,
       withQueryTrace,
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
       withOutcomeFields,
-      client,
-      discoveryTimeRange,
+      resolveValues,
     ],
   );
 }
@@ -89,13 +83,10 @@ export function useTracesFilterBarFields(): FilterBarField[] {
  * Scope items never show up in the bar; the explorer keeps them on every edit.
  */
 export function useTracesFilterBar() {
-  const { scopedFieldIds, withTextSearch } = useTracesConfig();
-  const { filters, setFilterTokens, setTextSearch } = useTracesFilters();
+  const { scopedFieldIds } = useTracesConfig();
+  const { filters, setFilterTokens } = useTracesFilters();
 
-  const items = [
-    ...textSearchFilterItems(withTextSearch ? filters.textSearch : undefined),
-    ...traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId)),
-  ];
+  const items = traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId));
   // The time range is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens. Expression mode so root-level AND/OR
   // groups render as "Advanced filter" chips.
@@ -110,17 +101,9 @@ export function useTracesFilterBar() {
   const onFilterBarChange = (expression: FilterBarExpression) => {
     const { tokens, groups } = filterBarExpressionToTraceFilters({
       ...expression,
-      nodes: expression.nodes.filter(
-        node =>
-          isFilterBarGroup(node) ||
-          (node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID && node.fieldId !== TEXT_SEARCH_FIELD.id),
-      ),
+      nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID),
     });
-    const search = expression.nodes.find(node => !isFilterBarGroup(node) && node.fieldId === TEXT_SEARCH_FIELD.id);
-    const textSearch =
-      search && !isFilterBarGroup(search) && typeof search.value === 'string' ? search.value : undefined;
     setFilterTokens(tokens, groups);
-    if (withTextSearch && textSearch !== filters.textSearch) setTextSearch(textSearch);
   };
 
   return {

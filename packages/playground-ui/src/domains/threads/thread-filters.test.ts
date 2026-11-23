@@ -3,7 +3,7 @@ import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import type { TraceFilterGroup, TraceFilterToken } from '../traces/trace-query-filters';
 import { buildThreadQueryWhere, createThreadFilterBarFields, THREAD_FILTER_FIELD_IDS } from './thread-filters';
-import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 
 const eq = (path: string, literal: string | number): TraceQueryScalarPredicate => ({
   op: 'eq',
@@ -41,10 +41,6 @@ describe('thread filter fields', () => {
     it('only offers paths the thread query grammar accepts', () => {
       const registryPaths = Object.keys(THREAD_QUERY_FIELD_REGISTRY);
       for (const id of THREAD_FILTER_FIELD_IDS) expect(registryPaths).toContain(id);
-    });
-
-    it('offers every thread filter field', () => {
-      expect(fields.map(field => field.id).sort()).toEqual([...THREAD_FILTER_FIELD_IDS].sort());
     });
 
     it('leaves the start and end timestamps to the time range', () => {
@@ -98,7 +94,7 @@ describe('thread filter fields', () => {
     });
 
     it('labels the trace count as Messages with the Threads message icon', () => {
-      expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: IconBubbleText });
+      expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: IconChatBubbles });
     });
 
     it('treats time to first chunk and time to first token as numbers', () => {

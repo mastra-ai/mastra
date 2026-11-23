@@ -5,7 +5,7 @@ packages:
   - '@mastra/client-js'
 ---
 
-# Agent Controller API
+# Agent controller API
 
 The Agent Controller API reaches an [`AgentController`](/reference/agent-controller/agent-controller-class) registered on a Mastra instance over its HTTP routes. Use it from a browser or any other process that doesn't own the controller. A process that owns the controller uses the in-process [`Session`](/reference/agent-controller/session) instead.
 
@@ -174,6 +174,14 @@ Subscribes to the session's event stream over SSE. The promise resolves once the
     description:
       'Treats the stream as dropped after this many milliseconds without receiving any data. Server heartbeats, sent every 25 seconds, reset the timer, so only a silent connection, such as one left half-open by laptop sleep or a proxy timeout, trips it. A timeout is handled like any other drop: it triggers `reconnect` and `onReconnect` when reconnect is enabled, otherwise `onError`. Also bounds opening the stream: `subscribe()` rejects, and a reconnect attempt counts as failed, when no response arrives in time. Set to `0` to disable.',
   },
+  {
+    name: 'displayState',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Set to `false` to receive no `display_state_changed` snapshots, including the one that opens the stream. The stream then opens with the session state as ordinary events instead: a `message_start` for the reply in flight, the latest `om_status`, and a `usage_update` carrying the token total. Use this when the client keeps its own state from events, since each snapshot carries the whole display state.',
+  },
 ]}
 />
 
@@ -311,6 +319,8 @@ Returns: `Promise<SendNotificationResult>`
 | Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
 | Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
 | Diagnostics | `info`, `error` |
+
+`usage_update` carries the step's `usage` and, from servers that send it, `total`: the thread's running token total after that step.
 
 Notifications are delivered as agent signals carried on messages rather than as `notification` or `notification_summary` controller events.
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getTracePropertyFilterTokens } from '../../../trace-filters';
 import {
   EMPTY_TRACES_SELECTION,
   applyDate,
@@ -227,6 +228,18 @@ describe('applyDateRange', () => {
 });
 
 describe('sanitizeTracesFilters', () => {
+  it.each(['all', 'input', 'output', 'error', 'inputPreview', 'outputPreview', 'errorPreview'])(
+    'drops unsupported %s content chips and preserves supported chips',
+    field => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
+      };
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([]);
+      expect(sanitizeTracesFilters(filters, { withTokenSearch: true })).toBe(filters);
+    },
+  );
+
   describe('when the filters hold entries the query cannot run', () => {
     it('drops a running status, unsupported fields and root duration without support', () => {
       const filters: TracesFilters = {
@@ -319,6 +332,16 @@ describe('getSelectedEntityOption / getSelectedStatus', () => {
       expect(getSelectedStatus(tokens)).toBeUndefined();
     });
   });
+
+  describe('when the tokens exclude an entity type and a status', () => {
+    it('reads nothing, since nothing is selected', () => {
+      const tokens = getTracePropertyFilterTokens(
+        new URLSearchParams('rootEntityType=agent&rootEntityType.op=isNot&status=error&status.op=isNot'),
+      );
+      expect(getSelectedEntityOption(tokens)).toBeUndefined();
+      expect(getSelectedStatus(tokens)).toBeUndefined();
+    });
+  });
 });
 
 describe('resolveTracesDateWindow', () => {
@@ -330,7 +353,7 @@ describe('resolveTracesDateWindow', () => {
       vi.setSystemTime(new Date('2026-06-10T12:00:00.000Z'));
 
       expect(resolveTracesDateWindow('last-3d', new Date(0), new Date(1))).toEqual({
-        dateFrom: new Date(Date.now() - 72 * 3600_000),
+        dateFrom: new Date('2026-06-07T12:00:00.000Z'),
         dateTo: undefined,
       });
     });
@@ -377,6 +400,31 @@ describe('buildTracesQueryRequest', () => {
         right: { literal: 'agent' },
       });
       expect(request.where?.args).toContainEqual({ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } });
+    });
+  });
+
+  describe.each([
+    { param: 'status', path: 'status', value: 'error' },
+    { param: 'rootEntityType', path: 'entityType', value: 'agent' },
+  ])('when the URL excludes one $param', ({ param, path, value }) => {
+    const whereFor = (query: string) =>
+      buildTracesQueryRequest({
+        filters: { ...baseFilters, tokens: getTracePropertyFilterTokens(new URLSearchParams(query)) },
+        now,
+      }).where;
+
+    it('with "is not", queries only traces without it', () => {
+      expect(whereFor(`${param}=${value}&${param}.op=isNot`)).toEqual({
+        op: 'and',
+        args: [{ op: 'ne', left: { path }, right: { literal: value } }],
+      });
+    });
+
+    it('with "is not any of", queries only traces without it', () => {
+      expect(whereFor(`${param}=${value}&${param}.op=notIn`)).toEqual({
+        op: 'and',
+        args: [{ op: 'notIn', value: { path }, set: [value] }],
+      });
     });
   });
 
@@ -446,12 +494,17 @@ describe('buildTracesLegacyFilters', () => {
       });
     });
   });
-});
 
-describe('trace search with date presets', () => {
-  describe('when the user changes the time window', () => {
-    it('keeps the applied search', () => {
-      expect(applyDatePreset({ ...baseFilters, textSearch: 'needle' }, 'last-24h').textSearch).toBe('needle');
+  describe.each(['isNot', 'notIn'])('when the URL excludes a root entity type and a status with %s', operator => {
+    it('does not filter the light list to them', () => {
+      const tokens = getTracePropertyFilterTokens(
+        new URLSearchParams(`rootEntityType=agent&rootEntityType.op=${operator}&status=error&status.op=${operator}`),
+      );
+
+      const legacy = buildTracesLegacyFilters({ filters: { ...baseFilters, tokens } });
+
+      expect(legacy).not.toHaveProperty('entityType');
+      expect(legacy).not.toHaveProperty('status');
     });
   });
 });

@@ -113,7 +113,6 @@ export function stubPreparingSession({
             repositories: [
               listedRepository(PROJECT_REPOSITORY_ID, 'octo/hello', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/preparing',
               }),
             ],
           },

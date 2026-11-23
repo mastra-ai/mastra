@@ -19,6 +19,44 @@ export class GenerationError extends Error {
   }
 }
 
+/**
+ * Optional peer dependencies of `@mastra/mcp`: only `generate` needs them, so the library does not
+ * install them for every user. `tsx` loads the supplied TypeScript client modules and
+ * `json-schema-to-typescript-lite` converts the discovered schemas.
+ */
+const HELPERS = [
+  { name: 'tsx', specifier: 'tsx/esm/api', install: 'tsx@4' },
+  {
+    name: 'json-schema-to-typescript-lite',
+    specifier: 'json-schema-to-typescript-lite',
+    install: 'json-schema-to-typescript-lite@15',
+  },
+] as const;
+
+/** Fail before importing client modules or contacting servers when a helper cannot be resolved. */
+function assertHelpersInstalled(): void {
+  const absent = HELPERS.filter(helper => {
+    try {
+      import.meta.resolve(helper.specifier);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  if (!absent.length) return;
+  const names = absent.map(helper => helper.name).join(' and ');
+  const packages = absent.map(helper => helper.install).join(' ');
+  throw new GenerationError(
+    [
+      `mastra-mcp generate requires ${names}, which @mastra/mcp does not install automatically. Install or upgrade ${absent.length > 1 ? 'them' : 'it'} in your project's dev dependencies, then run the command again:`,
+      `  npm install --save-dev ${packages}`,
+      `  pnpm add --save-dev ${packages}`,
+      `  yarn add --dev ${packages}`,
+      `  bun add --dev ${packages}`,
+    ].join('\n'),
+  );
+}
+
 /** A catalogue can widen thousands of schemas; report enough to act on without flooding a terminal. */
 const MAX_REPORTED_WARNINGS = 25;
 
@@ -134,6 +172,7 @@ function convert(
 
 /** Internal command runner. Errors are deliberately independent of imported error messages. */
 export async function generate(files: string[], cwd = process.cwd()): Promise<void> {
+  assertHelpersInstalled();
   const clients = new Set<MCPClient>();
   const staged: { temporary: string; output: string }[] = [];
   const abort = new AbortController();

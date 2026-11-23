@@ -1,5 +1,7 @@
+import { unstartedCards } from '@mastra/factory/routes/work-item-selection';
+
+import { storedCard } from '../../../../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
-import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
@@ -17,16 +19,14 @@ export const factoryProjects: FactoryProjectPayload[] = [
 
 export const factoryRepositories = {
   [ACTIVE_FACTORY_ID]: [
-    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/workspaces/mastra' }),
+    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main' }),
     listedRepository(SECOND_REPOSITORY_ID, 'mastra-ai/docs', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/mastra-docs',
     }),
   ],
   [OTHER_FACTORY_ID]: [
     listedRepository(OTHER_REPOSITORY_ID, 'other-org/other-repo', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/other',
     }),
   ],
 };
@@ -179,44 +179,6 @@ export const workItems: WorkItem[] = [
   },
 ];
 
-/** Live GitHub intake for `FIRST_REPOSITORY_ID`: what the board's Intake column offers. */
-export const intakePullRequests: GithubPullRequest[] = [
-  {
-    number: 20454,
-    title: 'Harden the review board drop target',
-    url: 'https://github.com/mastra-ai/mastra/pull/20454',
-    author: 'ana',
-    baseBranch: 'main',
-    headBranch: 'fix/review-drop-target',
-    createdAt: '2026-07-30T09:00:00.000Z',
-    updatedAt: '2026-07-30T09:05:00.000Z',
-  },
-  {
-    // Already filed as `work-item-review`; the live feed still lists it, search must not double it.
-    number: 900,
-    title: 'Review command palette PR',
-    url: 'https://github.com/mastra-ai/mastra/pull/900',
-    author: 'ben',
-    baseBranch: 'main',
-    headBranch: 'feat/command-palette',
-    createdAt: '2026-07-29T13:00:00.000Z',
-    updatedAt: '2026-07-29T13:10:00.000Z',
-  },
-];
-
-export const intakeIssues: GithubIssue[] = [
-  {
-    number: 20455,
-    title: 'Rail scopes overflow on narrow viewports',
-    url: 'https://github.com/mastra-ai/mastra/issues/20455',
-    author: 'cleo',
-    labels: [],
-    comments: 0,
-    createdAt: '2026-07-30T08:00:00.000Z',
-    updatedAt: '2026-07-30T08:10:00.000Z',
-  },
-];
-
 function toExternalSource(source: WorkItem['source'], sourceKey: string | null, url: string | null) {
   if (source === 'manual' || !sourceKey) return null;
 
@@ -259,22 +221,15 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
   let total: number | undefined;
   if (scope !== null && scope !== 'sessions') return null;
   if (query.get('started') === 'false') {
-    const words = (query.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-    const matches = cards
-      .filter(card => !holdsSession(card))
-      .filter(card => {
-        // The number the server's `workItemNumber` reads: the source's own, else the one given to a card filed by hand.
-        const facts = card.workItem?.metadata;
-        const number =
-          facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? card.metadata.cardNumber;
-        const text = [card.title, card.workItem?.key, typeof number === 'number' ? `#${number}` : null, card.sourceKey]
-          .join(' ')
-          .toLowerCase();
-        return words.every(word => text.includes(word));
-      })
-      .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    listed = matches.slice(0, Number(query.get('limit') ?? 20));
-    total = matches.length;
+    // The server's own search, over the cards as the server stores them.
+    const byId = new Map(cards.map(card => [card.id, card]));
+    const found = unstartedCards(
+      cards.map(card => storedCard(toWireWorkItem(card))),
+      query.get('q') ?? '',
+      Number(query.get('limit') ?? 20),
+    );
+    listed = found.cards.map(card => byId.get(card.id)!);
+    total = found.total;
   } else if (scope === 'sessions') {
     listed = cards.filter(holdsSession);
   } else if (sessionIds.length > 0) {
@@ -284,10 +239,5 @@ export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams)
   } else if (ids.length > 0) {
     listed = cards.filter(card => ids.includes(card.id));
   }
-  return {
-    workItems: listed.map(toWireWorkItem),
-    runningSessionIds: [],
-    parkedSessionIds: [],
-    ...(total === undefined ? {} : { total }),
-  };
+  return { workItems: listed.map(toWireWorkItem), ...(total === undefined ? {} : { total }) };
 }

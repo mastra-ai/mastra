@@ -54,6 +54,26 @@ describe('observeSessionRunReports', () => {
     );
   });
 
+  it('reports a run a memory-model failure stopped as failed, quoting the failure', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+
+    session.emit({
+      type: 'error',
+      error: new Error('Observational memory observation run failed: insufficient_quota'),
+    } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' } as AgentControllerEvent);
+    session.emit({ type: 'agent_end', reason: 'aborted', abortReason: 'thread-lease-lost' } as AgentControllerEvent);
+
+    expect(report.mock.calls.map(([outcome]) => outcome)).toEqual([
+      {
+        status: 'failed',
+        reason: 'the run ended in error: Observational memory observation run failed: insufficient_quota',
+      },
+    ]);
+  });
+
   it('says nothing for an aborted run, and the next run’s window starts where the aborted one did', () => {
     vi.useFakeTimers({ now: new Date('2026-10-15T12:00:00Z') });
     try {

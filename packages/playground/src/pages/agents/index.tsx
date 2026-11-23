@@ -2,6 +2,14 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
+import { AgentsCompactGrid } from '@mastra/playground-ui/domains/agents/agent-list/agents-compact-grid';
+import { AgentsList } from '@mastra/playground-ui/domains/agents/agent-list/agents-list';
+import { sortAgents } from '@mastra/playground-ui/domains/agents/agent-list/agents-sort';
+import type { AgentsSort } from '@mastra/playground-ui/domains/agents/agent-list/agents-sort';
+import { AgentsViewToggle } from '@mastra/playground-ui/domains/agents/agent-list/agents-view-toggle';
+import type { AgentsView } from '@mastra/playground-ui/domains/agents/agent-list/agents-view-toggle';
+import { NoAgentsInfo } from '@mastra/playground-ui/domains/agents/agent-list/no-agents-info';
+import { extractPrompt } from '@mastra/playground-ui/domains/agents/extract-prompt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -9,14 +17,6 @@ import { useAgents } from '@mastra/react/hooks/agents';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
-import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';
-import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
-import { sortAgents } from '@/domains/agents/components/agent-list/agents-sort';
-import type { AgentsSort } from '@/domains/agents/components/agent-list/agents-sort';
-import { AgentsViewToggle } from '@/domains/agents/components/agent-list/agents-view-toggle';
-import type { AgentsView } from '@/domains/agents/components/agent-list/agents-view-toggle';
-import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
-import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/agents')];
@@ -29,7 +29,7 @@ function Agents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -38,7 +38,7 @@ function Agents() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <PermissionDenied variant="fill" resource="agents" />
       </PageLayout>
@@ -47,7 +47,7 @@ function Agents() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load agents" descriptionSlot={error.message} />
       </PageLayout>
@@ -56,7 +56,7 @@ function Agents() {
 
   if (Object.keys(agents).length === 0 && !isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Agents</h1>
         <NoAgentsInfo />
       </PageLayout>
@@ -85,6 +85,7 @@ function Agents() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<AgentHeaderCreateAction />}
       actionRow={

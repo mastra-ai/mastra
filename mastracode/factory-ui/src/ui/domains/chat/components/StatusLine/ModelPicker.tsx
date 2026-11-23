@@ -15,16 +15,16 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { useModelCredential } from '../../hooks/useModelCredential';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../../settings/settingsSections';
-import { LockedModelButton } from './LockedModelButton';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';
 import { ModelProviderMark } from './ModelProviderMark';
 import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
-import { ModelThinkingGroup } from './ModelThinkingGroup';
 import { SessionThinkingIcon } from './SessionThinkingIcon';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
+import { useSessionThinking } from './useSessionThinking';
 import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
@@ -42,13 +42,12 @@ const withinProvider = (provider: string, modelId: string) =>
   modelId.startsWith(`${provider}/`) ? modelId.slice(provider.length + 1) : modelId;
 
 function canSwitchModel({
-  kind,
   draftSessionId,
   sessionEnabled,
   modelLockedReason,
-}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
+}: Pick<ChatSessionContextApi, 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
   if (modelLockedReason) return false;
-  if (kind === 'user' && draftSessionId) return true;
+  if (draftSessionId) return true;
   return sessionEnabled;
 }
 
@@ -97,11 +96,13 @@ interface ModelMenuProps {
   align?: 'start' | 'end';
   /** Controls under the model list, e.g. the thinking level. */
   settings?: ReactNode;
+  /** Keeps the trigger's look but disables it, explaining why in its tooltip. */
+  unavailableReason?: string;
   children: ReactNode;
 }
 
 const renderProviderIcon = (provider: string) => (
-  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-3.5" />} />
+  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-icon-sm" />} />
 );
 
 function ModelMenu({
@@ -111,6 +112,7 @@ function ModelMenu({
   side,
   align,
   settings,
+  unavailableReason,
   children,
 }: ModelMenuProps) {
   const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
@@ -168,6 +170,7 @@ function ModelMenu({
           : undefined
       }
       busy={locked}
+      unavailableReason={unavailableReason}
       side={side}
       align={align}
       triggerClassName={triggerClassName}
@@ -175,6 +178,33 @@ function ModelMenu({
     >
       {children}
     </SharedModelPicker>
+  );
+}
+
+function LockedModelMenu({
+  modelSwitch,
+  lockedReason,
+  modelAriaLabel,
+  triggerClassName,
+  children,
+}: Pick<ModelMenuProps, 'modelSwitch' | 'triggerClassName' | 'children'> & {
+  lockedReason: string;
+  modelAriaLabel: string;
+}) {
+  const { summary } = useSessionThinking(modelSwitch.activeModelId, modelSwitch.busy);
+  const modelCredential = useModelCredential(modelSwitch.activeModelId);
+  const credentialNote =
+    modelCredential &&
+    (modelCredential.warning ?? `${modelCredential.credential}: ${modelCredential.holderDescription}`);
+  return (
+    <ModelMenu
+      modelSwitch={modelSwitch}
+      triggerAriaLabel={`${modelAriaLabel}. Thinking: ${summary}`}
+      triggerClassName={triggerClassName}
+      unavailableReason={credentialNote ? `${lockedReason} ${credentialNote}.` : lockedReason}
+    >
+      {children}
+    </ModelMenu>
   );
 }
 
@@ -188,7 +218,12 @@ export function ModelPicker() {
   const organizationScoped = useOrganizationScopedFactory();
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
-    return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
+    return (
+      <div role="status" aria-label="Loading model" className="flex items-center gap-1.5">
+        <Skeleton className="size-4 rounded-full" />
+        <Skeleton data-composer-line-hidden className="h-3.5 w-20" />
+      </div>
+    );
   }
   if (!selectedModelId && error) {
     return (
@@ -198,23 +233,41 @@ export function ModelPicker() {
     );
   }
 
-  if (modelLockedReason && activeModelId) {
-    return (
-      <>
-        <ModelCredential />
-        <ModelThinkingGroup modelId={activeModelId} lockedReason={modelLockedReason}>
-          <LockedModelButton modelId={activeModelId} reason={modelLockedReason} />
-        </ModelThinkingGroup>
-      </>
-    );
-  }
-
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
     !scopeLoading &&
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
+  const trigger = (
+    <>
+      <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
+      <Metadata
+        singleLine
+        className="max-w-48 max-sm:max-w-28"
+        data-composer-line-hidden={notConfigured ? undefined : ''}
+      >
+        <Metadata.Item>{label}</Metadata.Item>
+        {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
+      </Metadata>
+      <span className="flex shrink-0" data-composer-line-hidden>
+        <SessionThinkingIcon modelId={activeModelId} switchingModel={busy} />
+      </span>
+    </>
+  );
+
+  if (modelLockedReason && selectedModelId) {
+    return (
+      <LockedModelMenu
+        modelSwitch={modelSwitch}
+        lockedReason={modelLockedReason}
+        modelAriaLabel={notConfigured ? `Session model, ${label} is not configured` : `Session model: ${label}`}
+        triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
+      >
+        {trigger}
+      </LockedModelMenu>
+    );
+  }
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
@@ -267,12 +320,7 @@ export function ModelPicker() {
       triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
       settings={<SessionThinkingSettings modelId={activeModelId} switchingModel={busy} />}
     >
-      <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
-      <Metadata singleLine className="max-w-48 max-sm:max-w-28">
-        <Metadata.Item>{label}</Metadata.Item>
-        {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
-      </Metadata>
-      <SessionThinkingIcon modelId={activeModelId} switchingModel={busy} />
+      {trigger}
     </ModelMenu>
   );
 }

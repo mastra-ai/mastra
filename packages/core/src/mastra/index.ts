@@ -4,6 +4,8 @@ import {
   getActiveDurableAgentWorkflowExecutions,
   isDurableAgentExecutionDetached,
 } from '../agent/durable/run-registry';
+import { hasDurableExecution } from '../agent/streams/execution-capability';
+import type { ExecutionEngineDefaults } from '../agent/streams/execution-policy';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -502,6 +504,9 @@ export interface Config<
    */
   pubsub?: PubSub;
 
+  /** Provisional naming/API: registered native-agent policy defaults; execution activation is deferred. */
+  durable?: ExecutionEngineDefaults;
+
   /**
    * Server cache for storing stream events and other temporary data.
    * Used by durable agents for resumable streams - clients can disconnect
@@ -891,6 +896,8 @@ const DEFAULT_WORKFLOW_GRACE_MS = 2_000;
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 // The active runs whose leases one `getRunOwnerships` call reads during a recovery pass.
 const RECOVERY_OWNERSHIP_BATCH_SIZE = 100;
+// How many `listWorkflowRuns` calls the recovery passes of one instance make at once, all passes together.
+const RECOVERY_LISTING_CONCURRENCY = 5;
 // The statuses of the runs a recovery pass looks at.
 const ACTIVE_RUN_STATUSES: readonly WorkflowRunStatus[] = ['running', 'waiting'];
 const DEFAULT_WORKFLOW_SCAN_INTERVAL_MS = 60_000;
@@ -1101,6 +1108,9 @@ export class Mastra<
   #recoveryLeaderClaim?: Promise<boolean>;
   /** Runs the restarts of every recovery pass, `recovery.workflowConcurrency` at a time. */
   #recoveryRestarts!: ConcurrencyLimiter;
+  // Shared by every recovery pass, so overlapping scans don't take every connection of the store's pool
+  // and hold up this process's other reads.
+  #recoveryListings = createConcurrencyLimiter(RECOVERY_LISTING_CONCURRENCY);
   /** The runs a recovery pass handed to `#recoveryRestarts` whose restart has not settled. */
   #queuedRecoveryRestarts = new Set<string>();
   /** The runs whose last recovery restart threw, by the engine whose pass restarts them. */
@@ -1285,6 +1295,7 @@ export class Mastra<
   #runTracingContexts: Map<string, TracingContext> = new Map();
   // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
+  #durable: ExecutionEngineDefaults | undefined;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
   // Cache for stored scorers to allow in-memory modifications to persist across requests
@@ -1831,6 +1842,7 @@ export class Mastra<
 
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
+    this.#durable = config?.durable;
 
     // Boot-time recovery policy for durable agent runs. Default is 'off' so
     // that an install can't silently re-run tools/LLM calls on restart; opt-in
@@ -3243,6 +3255,7 @@ export class Mastra<
         (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
         (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
+        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy(this.#durable);
         return;
       }
       throw new MastraError({
@@ -3270,6 +3283,7 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
+    mastraAgent.__registerExecutionEnginePolicy(this.#durable);
     agents[agentKey] = mastraAgent;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
@@ -3999,17 +4013,26 @@ export class Mastra<
   /**
    * Retrieves a registered workspace by its ID.
    *
-   * @throws {MastraError} When the workspace with the specified ID is not found
+   * Pass `{ optional: true }` to get `undefined` instead of an error when the
+   * workspace isn't registered, e.g. when checking before creating it.
+   *
+   * @throws {MastraError} When the workspace with the specified ID is not found and `optional` is not set
    *
    * @example
    * ```typescript
    * const workspace = mastra.getWorkspaceById('workspace-123');
    * const files = await workspace.filesystem.readdir('/');
+   *
+   * const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
    * ```
    */
-  public getWorkspaceById(id: string): Workspace {
+  public getWorkspaceById(id: string, options?: { optional?: false }): Workspace;
+  public getWorkspaceById(id: string, options: { optional: true }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined {
     const entry = this.#workspaces[id];
     if (!entry) {
+      if (options?.optional) return undefined;
       const error = new MastraError({
         id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
@@ -4863,15 +4886,12 @@ export class Mastra<
         }
 
         try {
-          const byStatus = await Promise.all(
-            ACTIVE_RUN_STATUSES.map(status =>
-              workflowsStore.listWorkflowRuns({ workflowName: workflow.id, status, perPage: false, summary: true }),
-            ),
-          );
-
           // A run that moved from one status to the other between the two reads is listed under both.
           const runs = new Map<string, WorkflowRun>();
-          for (const { runs: listedRuns } of byStatus) {
+          for (const status of ACTIVE_RUN_STATUSES) {
+            const { runs: listedRuns } = await this.#recoveryListings.run(() =>
+              workflowsStore.listWorkflowRuns({ workflowName: workflow.id, status, perPage: false, summary: true }),
+            );
             for (const run of listedRuns) {
               if (!runs.has(run.runId) && !this.#brokerOwnsRun(workflow, run.runId)) {
                 runs.set(run.runId, run);
@@ -5208,7 +5228,7 @@ export class Mastra<
 
     const durableAgents: DurableAgentLike[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
-      if (agent && isDurableAgentLike(agent)) {
+      if (agent && hasDurableExecution(agent)) {
         durableAgents.push(agent);
       }
     }
@@ -5835,7 +5855,10 @@ export class Mastra<
    * This method allows dynamic registration of tools after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a tool with the same key already exists
+   * If a tool with the same key already exists, this method leaves the existing
+   * tool registered and returns without an error. The new tool is not added.
+   *
+   * @throws {MastraError} When the tool is undefined
    *
    * @example
    * ```typescript
@@ -7204,6 +7227,8 @@ export class Mastra<
     this.#storageSource = getStorageSource(storage);
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+    // Storage attached after construction must log through this instance's logger too.
+    this.#storage.__setLogger(this.#logger);
     for (const knowledge of Object.values(this.#knowledge)) {
       if (!knowledge.hasOwnStorage) {
         knowledge.setStorage(this.#storage, this.#storageSource);

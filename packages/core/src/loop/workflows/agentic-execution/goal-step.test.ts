@@ -87,6 +87,7 @@ async function runGoalStep(
             getWorkflowRunById: vi.fn().mockResolvedValue(null),
             deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
             persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+            supportsRunJournal: () => false,
           };
         }
         return store;

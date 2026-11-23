@@ -132,12 +132,6 @@ describe('Knowledge page', () => {
       expect(await within(tree).findByText('Payments Service')).toBeTruthy();
       expect(within(tree).getByText('Deploy Runbook')).toBeTruthy();
     });
-
-    it('renders the graph beside the tree', async () => {
-      withInstance();
-      renderPage();
-      expect(await screen.findByTestId('knowledge-graph-container')).toBeTruthy();
-    });
   });
 
   describe('when the server sends grants between scopes', () => {
@@ -248,8 +242,8 @@ describe('Knowledge page', () => {
       fireEvent.pointerMove(title, { pointerType: 'mouse' });
       fireEvent.mouseMove(title);
       expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('org:acme#payments');
-      expect((await within(detail).findByTestId('knowledge-page-version')).textContent).toContain('Updated');
-      expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
+      expect(within(await within(detail).findByRole('region', { name: 'Details' })).getByText('Updated')).toBeTruthy();
+      expect(document.querySelector('.react-flow')).toBeNull();
     });
 
     it('returns to the graph from the page', async () => {

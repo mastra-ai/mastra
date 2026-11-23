@@ -18,9 +18,9 @@ GraphRAG is particularly effective when:
 - Documents reference each other
 - You need to traverse relationships to find complete answers
 - Understanding connections between concepts is important
-- Simple vector similarity misses important contextual relationships
+- Vector similarity alone misses important contextual relationships
 
-For straightforward semantic search without relationship traversal, use [standard retrieval methods](/reference/rag/retrieval).
+For semantic search without relationship traversal, use [standard retrieval methods](/reference/rag/retrieval).
 
 ## How GraphRAG works
 
@@ -152,7 +152,7 @@ The agent uses the graph query tool to:
 
 The threshold parameter substantially impacts retrieval quality:
 
-- **High threshold (0.8-0.9)**: Strict connections and fewer relationships, plus more precise but potentially incomplete results
+- **High threshold (0.8-0.9)**: Strict connections and fewer relationships, plus more precise but incomplete results
 - **Medium threshold (0.6-0.8)**: Balanced approach, good for most use cases
 - **Low threshold (0.4-0.6)**: More connections and broader context, plus risk of including less relevant information
 

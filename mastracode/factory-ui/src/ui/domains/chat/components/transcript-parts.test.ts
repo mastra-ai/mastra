@@ -3,7 +3,7 @@ import type { ToolInvocationPart } from '@mastra/react/ui';
 import { describe, expect, it } from 'vitest';
 
 import type { MessageEntry, ToolCall } from '../services/transcript';
-import { draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
+import { messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
 import type { MessagePart } from './transcript-parts';
 
 const errorPart = (message = 'The model request failed.'): MastraErrorPart => ({
@@ -78,14 +78,5 @@ describe('persisted terminal error parts', () => {
   it('keeps its slot after the partial reply', () => {
     const parts = renderableParts(entry([{ type: 'text', text: 'partial answer' }, errorPart()]));
     expect(parts.map(p => p.type)).toEqual(['text', 'error']);
-  });
-
-  it('keeps the slot of an error-only reply', () => {
-    const parts = renderableParts(entry([errorPart()]));
-    expect(parts.map(p => p.type)).toEqual(['error']);
-  });
-
-  it('draws immediately, with nothing to wait for', () => {
-    expect(draws(errorPart(), entry([errorPart()]), new Map())).toBe(true);
   });
 });

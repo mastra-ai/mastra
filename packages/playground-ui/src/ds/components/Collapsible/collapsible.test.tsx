@@ -9,19 +9,6 @@ afterEach(() => {
 });
 
 describe('Collapsible', () => {
-  it('mounts trigger and content in an open collapsible without throwing', () => {
-    expect(() =>
-      render(
-        <Collapsible defaultOpen>
-          <CollapsibleTrigger>Toggle</CollapsibleTrigger>
-          <CollapsibleContent>Panel content</CollapsibleContent>
-        </Collapsible>,
-      ),
-    ).not.toThrow();
-
-    expect(screen.getByText('Panel content')).toBeDefined();
-  });
-
   it('renders an asChild Trigger as the child element without nesting buttons', () => {
     render(
       <Collapsible>

@@ -1,5 +1,1407 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.9
+
+### Minor Changes
+
+- Dashboard chart widgets with several views, such as Latency, Agent runs and Token usage on the Metrics page, now list them as pill tabs under the title instead of a dropdown in the title, matching the Breakdown table. Tabs sit on the left of the toolbar with the legend on the right; views that don't fit fold into a "+N" menu. Tab names drop the words views share, so "Agent latency", "Workflow latency" and "Tool latency" read "Agent", "Workflow" and "Tool". Multi-view widgets can now be renamed from their title. Widgets with an expand link keep a single title and no tabs. Custom widget kinds built on `useViewMenu` get the tabs through `heading.toolbar`. ([#31181](https://github.com/mastra-ai/mastra/pull/31181))
+
+### Patch Changes
+
+- Metrics cards now wait for all their requests before reporting a failure. The "Resources and threads" and breakdown cards used to show "Couldn't load this data" as soon as one of their requests failed, even while another was still running. Retry re-sends only the requests that failed, so a request that failed later left the card stuck until a second click. Cards now report the failure once every request behind them has settled, and one Retry recovers them. A request that fails after that click is the next click's job. ([#28982](https://github.com/mastra-ai/mastra/pull/28982))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`8bbaab6`](https://github.com/mastra-ai/mastra/commit/8bbaab64784fac9426f5b2bd0e35f1bd6ae4640a), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`d5546d6`](https://github.com/mastra-ai/mastra/commit/d5546d686498ddb3981f4e1e05c322eba9777e07), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`7388601`](https://github.com/mastra-ai/mastra/commit/73886018497772a47154f67ce512081d8f3e9818), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`45320c3`](https://github.com/mastra-ai/mastra/commit/45320c334035c969dcef98a91de6ad2a6610c8c0), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`8fab5e2`](https://github.com/mastra-ai/mastra/commit/8fab5e2fda43beca4be00e43d4f231cdd87fd7fd), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`c736a22`](https://github.com/mastra-ai/mastra/commit/c736a22be04a3960793a86d9fff2cbc6ad8c2227), [`89fb271`](https://github.com/mastra-ai/mastra/commit/89fb27175fd7036b8600241da8a6d288a7f2bae4), [`4aeb6ce`](https://github.com/mastra-ai/mastra/commit/4aeb6ce414105e45b1c36d174258f9165738ecef), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4), [`55a2249`](https://github.com/mastra-ai/mastra/commit/55a2249be2f5505e3022856d477628e6ca2fd9a9)]:
+  - @mastra/ai-sdk@1.12.1-alpha.0
+  - @mastra/client-js@1.61.2-alpha.6
+  - @mastra/core@1.86.0-alpha.6
+  - @mastra/json-render@0.2.0-alpha.1
+  - @mastra/memory@1.41.3-alpha.2
+  - @mastra/react@1.16.0-alpha.6
+
+## 71.0.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`8bc3a19`](https://github.com/mastra-ai/mastra/commit/8bc3a19a73e6e683a29d8c8cf8ab1f0bf4343a26), [`3b6d29c`](https://github.com/mastra-ai/mastra/commit/3b6d29c8ae20172a0d2be883686f3e9aec86ce25)]:
+  - @mastra/core@1.86.0-alpha.5
+  - @mastra/memory@1.41.3-alpha.1
+  - @mastra/client-js@1.61.2-alpha.5
+  - @mastra/ai-sdk@1.12.0
+  - @mastra/react@1.16.0-alpha.5
+
+## 71.0.0-alpha.7
+
+### Minor Changes
+
+- Studio's experiments UI now ships from `@mastra/playground-ui/domains/experiments`, so another app can render its own experiments list, experiment page and comparison. No part fetches: experiments, results, scores and usage come in as props typed with the `@mastra/client-js` and `@mastra/react` response types, and actions (delete, rename, request review, add a tag, open an item) go out through callbacks. The parts render without a Mastra client, React Query or a router; links use `useLinkComponent()` paths (`experimentLink`, `experimentItemLink`, `datasetLink`, `traceLink`). ([#31119](https://github.com/mastra-ai/mastra/pull/31119))
+
+  Call the `@mastra/react` hooks yourself and pass the data down. An action you leave out hides its control: without `onDeleteExperiment` the list has no delete buttons, without `onRename` the header has no rename item, and without a `tracePanel` slot nothing links to a trace.
+
+  ```tsx
+  import {
+    ExperimentItemPanel,
+    ExperimentItemPanelProvider,
+    ExperimentKpis,
+    ExperimentResultsSection,
+    ExperimentsList,
+    useResultsSelection,
+  } from '@mastra/playground-ui/domains/experiments';
+
+  <ExperimentsList
+    experiments={experiments}
+    isLoading={isLoading}
+    onDeleteExperiment={id => deleteExperiment.mutateAsync(id)}
+  />;
+
+  const selection = useResultsSelection(results);
+
+  <ExperimentItemPanelProvider
+    experimentId={experiment.id}
+    datasetId={experiment.datasetId}
+    results={results}
+    isLoadingResults={isLoading}
+    currentItemId={itemId}
+    onOpenItem={openItem}
+    onClose={closeItem}
+  >
+    <ExperimentKpis experiment={experiment} scoresByItemId={scores} usage={usage?.summary} />
+    <ExperimentResultsSection
+      results={results}
+      isLoading={isLoading}
+      scoresByItemId={scores}
+      selectedIds={selection.selectedIds}
+      onToggleSelect={selection.toggleSelect}
+      onToggleSelectAll={selection.toggleSelectAll}
+    />
+    <ExperimentItemPanel
+      scoresByItemId={scores}
+      onFlagForReview={resultId => flagForReview(resultId)}
+      tracePanel={state => (
+        <MyTracePanel traceId={state.featuredTraceId} onClose={() => state.setFeaturedTraceId(undefined)} />
+      )}
+    />
+  </ExperimentItemPanelProvider>;
+  ```
+
+  **Added**
+
+  - Experiments list: `ExperimentsList`, `ExperimentRowCells`, `ExperimentsToolbar`, `ExperimentsFilterBar`, `ExperimentsBulkActions`, `ExperimentsComparableLegend`, `DeleteExperimentsButton`, `DeleteExperimentDialog`, `NoExperimentsInfo` and the name labels. Target names resolve through an optional `targetRegistries` prop and fall back to the target id. The toolbar and filter bar take their `Target type` / `Target` fields as a `targetFields` prop: build them with `useTargetFilterFields(targetType)` from `@mastra/playground-ui/domains/datasets`, or pass `[]` to hide the target filter.
+  - Experiment page: `ExperimentPageLayout` (breadcrumbs and the actions menu over the page body) and `ExperimentBreadcrumbs` ("Experiments / name", with the run status and item count), `ExperimentHeaderActions` (with a `rerunSlot`), `RenameExperimentDialog`, `ExperimentKpis`, `ExperimentRunProgress`, `ExperimentResultsSection`, `ExperimentResultsList`, `ExperimentResultsBulkActions`, `ExperimentResultsTagPicker`, `ExperimentItemPanelProvider` (router-agnostic: the open item and its open/close callbacks come in as props), `ExperimentItemPanel`, `ExperimentResultDetail`, `ExperimentResultPanel`, `ExperimentScorePanel`, `ToolMockReportSection`, and the `useResultsSelection`, `useExperimentResultDetailState` and `useNow` hooks.
+  - Comparison: `ExperimentsComparison` with `itemPanel` and `tracePanel` slots, `ComparisonSideTitle`, `ComparisonSideSummary`, `CompareMetricsMenu`, `ComparisonItemPanel`, `ComparisonSideCell` and `buildComparisonRows`.
+  - Helpers: `getExperimentDisplayName`, the result output helpers and the target name helpers.
+
+## 71.0.0-alpha.6
+
+### Patch Changes
+
+- Generative UI forms in agent chat keep what the user entered after they submit. Before, the values reset to the agent's defaults once the agent replied. ([#31137](https://github.com/mastra-ai/mastra/pull/31137))
+
+## 71.0.0-alpha.5
+
+### Patch Changes
+
+- Fixed the Knowledge and Memory empty state drawings losing their movement when an app minifies CSS with Lightning CSS, the Vite 8 default. The filing sheet drops into the drawer and the memory cards fly into their slots again. ([#31103](https://github.com/mastra-ai/mastra/pull/31103))
+
+- Agent chat can show the agent's avatar on the empty-thread welcome. Pass `agentAvatarUrl` to `AgentChat` (or `AgentThreadPage`'s `chat` props); without it the agent's initial is shown as before. ([#31134](https://github.com/mastra-ai/mastra/pull/31134))
+
+  ```tsx
+  <AgentThreadPage chat={{ agentName: agent.name, agentAvatarUrl: agent.metadata?.avatarUrl }} />
+  ```
+
+## 71.0.0-alpha.4
+
+### Minor Changes
+
+- Simplified page frames to one component, `PageLayout`, with a required `variant` that says what the page is for. Each variant takes only the props that make sense for it, so a page can no longer pick its own width, gutter or scroll mode, and a form can no longer show breadcrumbs next to its back link. ([#30956](https://github.com/mastra-ai/mastra/pull/30956))
+
+  - `variant="page"`: lists, dashboards, detail pages and explorers. The full width with the standard gutter, up to 1536px on very wide screens. Takes `breadcrumbs`, `headerActions`, `actionRow` and `header`. Add `body="fixed"` when the body is panels, an editor, a graph, a board or a chat that scroll on their own: it takes the remaining height edge to edge, as `variant="fit"` did.
+  - `variant="settings"`: settings pages. A centered 640px column of `SettingsGroup`s under the title. Takes `breadcrumbs`, `headerActions`, `title`, `titleAccessory`, `action` and `header`.
+  - `variant="form"`: create and edit forms. A centered 640px column under the title, with an optional back link above it and no breadcrumb bar. Takes `backHref`, `backLabel`, `title`, `isLoading`, `LinkComponent` and `aside`, for a live preview beside the form when the column is wide enough.
+
+  What goes inside the frame (`PageHeader`, `SettingsGroup`, `EmptyState`, `DashboardGrid`, panels) is unchanged.
+
+  **Migrating**
+
+  The old `container`, `fit` and `narrow` variants and the `mask` prop are gone, and `FormLayout` and `SettingsLayout` are no longer exported. Use the matching variant instead:
+
+  ```tsx
+  // Before
+  <PageLayout breadcrumbs={crumbs}>{list}</PageLayout>
+  <PageLayout variant="fit" breadcrumbs={crumbs}>
+    <AgentPanels />
+  </PageLayout>
+  <PageLayout breadcrumbs={crumbs}>
+    <SettingsLayout title="Project settings">{sections}</SettingsLayout>
+  </PageLayout>
+  <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert">
+    {sections}
+  </FormLayout>
+
+  // After
+  <PageLayout variant="page" breadcrumbs={crumbs}>{list}</PageLayout>
+  <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
+    <AgentPanels />
+  </PageLayout>
+  <PageLayout variant="settings" breadcrumbs={crumbs} title="Project settings">
+    {sections}
+  </PageLayout>
+  <PageLayout variant="form" backHref="/alerts" backLabel="Alerts" title="New alert">
+    {sections}
+  </PageLayout>
+  ```
+
+  Pages that used `variant="narrow"` move to `variant="settings"` or `variant="form"` when that is what they are, and to `variant="page"` otherwise.
+
+  **Lint**
+
+  Added the `playground-ui/no-page-width` rule and a `pageRules` preset. Turn it on for page files so a page can't center a `max-w-*` column of its own:
+
+  ```ts
+  overrides: [{ files: ['src/pages/**/*.tsx'], rules: pageRules }];
+  ```
+
+  Added `playground-ui/page-layout-props` to the `recommended` preset. It flags a `PageLayout` with no `variant`, the removed `container`, `fit` and `narrow` variants, the `mask` prop, and props a variant does not take (breadcrumbs on a form, `body` on a form or settings page). Each message says which variant or prop to use instead.
+
+- The scroll-to-latest button is a round 32px control with a muted arrow, lifted by soft shadows instead of a border, matching the composer. `MessageScrollerButton` / `ChatShell.ScrollButton` take a `busy` prop: while a reply is still streaming in below, the arrow gives way to a small stroke drawn as if by a pen, written in and chased off in a loop, in the same spot. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+  ```tsx
+  <ChatShell.ScrollButton busy={isRunning} />
+  ```
+
+- Added `AgentAvatarUpload` and `downscaleImageToDataUrl` under `@mastra/playground-ui/domains/agent-avatar`, so hosts other than Studio can let users pick an agent avatar. The image is downscaled in the browser and returned as a data URL. ([#31133](https://github.com/mastra-ai/mastra/pull/31133))
+
+  ```tsx
+  import { AgentAvatarUpload } from '@mastra/playground-ui/domains/agent-avatar';
+
+  <AgentAvatarUpload name={name} avatarUrl={avatarUrl} onChange={dataUrl => setAvatarUrl(dataUrl)} />;
+  ```
+
+- Added `RepositoryList`, `CommittedInput`, `SandboxSettings`, `SandboxEnvList` and `GitlabIcon` components for configuring sandbox environments (repositories, settings, environment variables) in any app. ([#31131](https://github.com/mastra-ai/mastra/pull/31131))
+
+- Added the instruction block editor (`AgentCMSBlocks`, prompt block picker, saved-block references and `DisplayConditionsDialog`) under `@mastra/playground-ui/domains/instruction-blocks`, so apps other than Studio can let users compose agent instructions from text and saved prompt blocks. ([#31133](https://github.com/mastra-ai/mastra/pull/31133))
+
+  The editor loads and saves prompt blocks through the `@mastra/react` hooks, so render it inside `MastraReactProvider` and a React Query `QueryClientProvider`:
+
+  ```tsx
+  import { MastraReactProvider } from '@mastra/react';
+  import {
+    AgentCMSBlocks,
+    createInstructionBlock,
+    type InstructionBlock,
+  } from '@mastra/playground-ui/domains/instruction-blocks';
+
+  function InstructionsEditor() {
+    const [blocks, setBlocks] = useState<InstructionBlock[]>([createInstructionBlock('You are a helpful agent.')]);
+    return <AgentCMSBlocks items={blocks} onChange={setBlocks} />;
+  }
+
+  <MastraReactProvider baseUrl="https://my-mastra-server">
+    <InstructionsEditor />
+  </MastraReactProvider>;
+  ```
+
+- Added the prompt-block list and edit components (`PromptsList`, `PromptBlockEditMain`, `PromptBlockEditSidebar`, `usePromptBlockEditForm`, version combobox, delete action) under `@mastra/playground-ui/domains/prompt-blocks`, so other apps can host a Prompts library page. ([#31133](https://github.com/mastra-ai/mastra/pull/31133))
+
+  The components read and write prompt blocks through the `@mastra/react` hooks, so render them inside `MastraReactProvider` and a React Query `QueryClientProvider`:
+
+  ```tsx
+  import {
+    usePromptBlockVersions,
+    useStoredPromptBlock,
+    useStoredPromptBlocks,
+  } from '@mastra/react/hooks/prompt-blocks';
+  import { PromptsList, PromptBlockEditContent } from '@mastra/playground-ui/domains/prompt-blocks';
+
+  function PromptsPage() {
+    const { data, isLoading } = useStoredPromptBlocks({ page: 0, perPage: 20 });
+    return <PromptsList promptBlocks={data?.promptBlocks ?? []} isLoading={isLoading} />;
+  }
+
+  function PromptEditPage({ blockId }: { blockId: string }) {
+    const { data: block } = useStoredPromptBlock({ blockId, status: 'draft' });
+    const { data: versions } = usePromptBlockVersions({ blockId });
+    const latestVersionId = versions?.versions?.[0]?.id;
+    if (!block) return null;
+    return (
+      <PromptBlockEditContent
+        block={block}
+        blockId={blockId}
+        selectedVersionId={null}
+        hasDraft={Boolean(latestVersionId && latestVersionId !== block.activeVersionId)}
+        latestVersionId={latestVersionId}
+        activeVersionId={block.activeVersionId}
+        onClearVersion={() => {}}
+      />
+    );
+  }
+  ```
+
+- The chat composer now stays one line until you use it, leaving more room for the conversation. Idle, it shows "+", the input, the model picker, voice and Send in a single row. Focusing the input or writing a draft (text, attachments or annotations) glides it open, giving the input its own row above the actions, and it glides back to one line when you leave it. "+" and Send stay on the same spot throughout, and the one-line composer is a full pill. ([#31088](https://github.com/mastra-ai/mastra/pull/31088))
+
+  - Wrap actions that should only show in the expanded composer, such as model settings, in `ComposerActionsDetail`.
+  - Mark text the one-line composer should drop on small screens with `data-composer-line-hidden`, such as the model name in the picker trigger. It grows back in when the composer opens and shrinks out in place when it closes.
+  - Icon buttons (`icon-sm`, `icon-md`, `icon-lg`) no longer shrink in a crowded row, and on a narrow screen `ComposerActionsEnd` truncates the model name instead of wrapping onto a second row.
+  - `ComposerStatus` now sits after `Composer` as a footer. Opening the composer never changes it. While nothing in it would be seen (screen-reader-only text doesn't count), it gives its row back, after a short pause so status that blinks out and back doesn't move the composer. Use `ComposerStatusStart` for session context and `ComposerStatusEnd` for runtime readings.
+  - The composer draws its edge and depth with shadow layers only, no border: a 1px rim and soft drops that brighten and lift on hover and focus, with a top-lit gradient on the rim and a faint top glow instead of an inner line, so it never shows a double edge. `ComposerRing` no longer follows the pointer; while `busy` faint mono threads of light wander its top edge around the centre, like a quiet loader, instead of a coloured arc spinning round it. Its `tone` prop is gone: the rim no longer takes a colour, so drop `tone` from `<ComposerRing>`. `ComposerToneLabel` keeps its tones.
+  - New `--ease-in-out-custom` motion token (`cubic-bezier(0.77, 0, 0.175, 1)`) for things that move or change shape on screen, such as the composer opening.
+
+  ```tsx
+  <Composer>
+    <ComposerRing>
+      <ComposerBox>
+        <ComposerInput placeholder="Ask anything" />
+        <ComposerActions>
+          <ComposerActionsStart>
+            <ComposerAttachMenu onFiles={addFiles} />
+          </ComposerActionsStart>
+          <ComposerActionsEnd>
+            <ModelPicker {...pickerProps} />
+            <ComposerActionsDetail>
+              <ModelSettingsButton />
+            </ComposerActionsDetail>
+            <SendButton />
+          </ComposerActionsEnd>
+        </ComposerActions>
+      </ComposerBox>
+    </ComposerRing>
+  </Composer>
+  <ComposerStatus>
+    <ComposerStatusStart>You're steering Sam's session</ComposerStatusStart>
+    <ComposerStatusEnd>42 tok/s</ComposerStatusEnd>
+  </ComposerStatus>
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`004f350`](https://github.com/mastra-ai/mastra/commit/004f35031e7419a16263f8641d43c9cd19275ae0), [`79a30b6`](https://github.com/mastra-ai/mastra/commit/79a30b6d5c758bf46f0633059eded42bffbeb443), [`fa2ea6d`](https://github.com/mastra-ai/mastra/commit/fa2ea6dfb5c13a5f9b4bdc99f332959f7b0f4209), [`679bf03`](https://github.com/mastra-ai/mastra/commit/679bf037e8db50357c183b8655114d3238d92018)]:
+  - @mastra/core@1.86.0-alpha.4
+  - @mastra/client-js@1.61.2-alpha.4
+  - @mastra/react@1.16.0-alpha.4
+
+## 71.0.0-alpha.3
+
+### Minor Changes
+
+- Share dataset edit, duplicate, schema and version-compare views from `@mastra/playground-ui/domains/datasets` (`EditDatasetForm`, `DuplicateDatasetDialog`, `DatasetSchemaDialog`, `DatasetCompareVersionToolbar`, `DatasetCompareVersionsList`, `ScorerSelector`), so apps other than Studio can render them. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Shared the dataset detail views (items list, item panel, add/import/export dialogs, version history) and experiment comparison components from `@mastra/playground-ui`, so apps other than Studio can render a dataset's items. These components take URL state (`searchParams`, `setSearchParams`, `currentItemId`) as props and navigate through the app's `paths.datasetLink`/`paths.datasetItemLink`. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Added `DatasetPage` to `@mastra/playground-ui/domains/datasets`: the full dataset detail page (dataset and version switcher crumbs, Schema and Edit/Duplicate/Delete actions, items list, dialogs). Studio now renders it, so other apps get the same page. `DatasetCombobox` and `DatasetVersions` also moved to playground-ui. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Share the dataset edit page, version compare pages and item side panel from `@mastra/playground-ui/domains/datasets`, so every app shows the same dataset screens. Item and version links now use the app's `paths.datasetItemLink` instead of hardcoded `/datasets` URLs. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Exported the datasets list building blocks from `@mastra/playground-ui/domains/datasets` (`DatasetsList`, `DatasetsToolbar`, `DatasetsFilterBar`, `CreateDatasetDialog`, `NoDatasetsInfo`, `DatasetsListSkeleton`, target filter helpers) and `ComputedTag` from `@mastra/playground-ui/domains/observability`, so apps other than Studio can render the datasets list. `CreateDatasetDialog` now opens the new dataset through the app's `paths.datasetLink`. ([#31087](https://github.com/mastra-ai/mastra/pull/31087))
+
+- Studio's agent chat now draws interfaces that agents compose with `studioCatalog` from `@mastra/json-render/studio`. Users can fill in and submit them; the values they enter are sent back to the agent with their next message. Interfaces are read-only while the reply streams and in read-only views. ([#31016](https://github.com/mastra-ai/mastra/pull/31016))
+
+### Patch Changes
+
+- Fixed the Traces page returning no traces, or the wrong traces, when a link or saved filter excluded a status or primitive type with "is not" (for example `?status=error&status.op=isNot`). On servers that support trace queries, these filters now hide only the excluded traces. Servers that only support the older trace list can't exclude values, so there the exclusion is ignored and traces matching your other filters are shown. ([#31044](https://github.com/mastra-ai/mastra/pull/31044))
+
+- Observability lists (traces, logs, and their filters) now keep live polling through a 429 rate-limit response, instead of stopping until the page is reloaded. Other 4xx responses still stop polling. ([#31049](https://github.com/mastra-ai/mastra/pull/31049))
+
+- Updated dependencies [[`f35fac5`](https://github.com/mastra-ai/mastra/commit/f35fac5b216214a6fc6407558f94fc2f4cbcc610), [`f2c23af`](https://github.com/mastra-ai/mastra/commit/f2c23af7f751a3e195d7bd52bd0377edb5f9072b), [`50e318b`](https://github.com/mastra-ai/mastra/commit/50e318bd77cc72ac0a148c900bb48b8f0b759b75), [`b008c95`](https://github.com/mastra-ai/mastra/commit/b008c95fa93c5a73ae08c4f86e99d7bd55bf3e78), [`6507fdc`](https://github.com/mastra-ai/mastra/commit/6507fdc6343363bc33eef8e30e83f50c50fc90ab), [`f77bcb1`](https://github.com/mastra-ai/mastra/commit/f77bcb1a5bcdfebda3df4b4adec8e6ac5f5f4e18), [`2ff45a1`](https://github.com/mastra-ai/mastra/commit/2ff45a18e335df452d1654ae3ce59b4b74844dfc)]:
+  - @mastra/core@1.86.0-alpha.3
+  - @mastra/json-render@0.2.0-alpha.0
+  - @mastra/client-js@1.61.2-alpha.3
+  - @mastra/react@1.16.0-alpha.3
+
+## 71.0.0-alpha.2
+
+### Minor Changes
+
+- Hosts other than Studio can now build an agent page from the same parts Studio uses: ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+  - Agent list and page: `AgentPage`, `AgentCombobox` and `AgentPageTabs`.
+  - Threads panel: `ThreadsPanelProvider` and `useThreadsPanel`.
+  - The agent thread page and chat integration.
+  - The memory sidebar (Observational Memory, memory details, thread cloning).
+  - The Config panel (memory settings, metadata badges, workspace tools).
+  - The skill create dialog.
+
+  Two options let a host fit the page to its own layout:
+
+  ```tsx
+  // Put your own close or collapse control in the Config panel header
+  <AgentConfigSurface actions={<Button onClick={close}>Close</Button>}>{children}</AgentConfigSurface>
+
+  // Hide the memory capability icons in the thread sidebar (shown by default)
+  <AgentThreadPage {...pageProps} sidebarExtensions={{ showConfigBadges: false }} />
+  ```
+
+  To clear saved drafts after a user signs out, await `clearDraftsOnLogout` with the API and user scope:
+
+  ```ts
+  import { clearDraftsOnLogout } from '@mastra/playground-ui/domains/agents/chat';
+
+  await clearDraftsOnLogout(JSON.stringify([client.options.baseUrl, client.options.apiPrefix, userId]));
+  ```
+
+- Add an optional `onEdit` callback to `StoredSkillsPicker` so hosts can open their own editor for an available skill without changing its selection. The Edit action appears only when the callback is provided. ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+  ```tsx
+  <StoredSkillsPicker
+    availableSkills={skills}
+    selectedSkillIds={selectedSkillIds}
+    onAttach={attachSkill}
+    onRemove={removeSkill}
+    onEdit={skillId => openSkillEditor(skillId)}
+  />
+  ```
+
+### Patch Changes
+
+- Fixed `Table.RowLink` and `Table.RowButton` in inset tables blocking clicks on other controls in Safari. The whole-row click area no longer comes from an overlay stretched over the row, which Safari let escape the row and cover the rest of the page. The row now hands plain clicks to its link or button itself. Tab and Enter still reach the real link, Cmd-click and middle-click on the link still open a new tab, and buttons, links, inputs and menus in the row keep their own clicks. ([#30985](https://github.com/mastra-ai/mastra/pull/30985))
+
+- A Traces explorer scoped to one entity, such as an agent's Traces tab, now shows its empty state when that entity has no runs. Before, it showed "No traces found for applied filters" because the hidden scope counted as an applied filter. ([#31002](https://github.com/mastra-ai/mastra/pull/31002))
+
+- Updated dependencies [[`3baa66d`](https://github.com/mastra-ai/mastra/commit/3baa66dfc785c222bb727a6da6012a0f28480b4a), [`2f85a55`](https://github.com/mastra-ai/mastra/commit/2f85a551a9fe308179bd96da49032259275cd850), [`d1f0a92`](https://github.com/mastra-ai/mastra/commit/d1f0a92ca41e1b725ed296abeb540908d09b5c64), [`4c71c2e`](https://github.com/mastra-ai/mastra/commit/4c71c2e776563852ef2301d674a1b8c70f511039)]:
+  - @mastra/core@1.86.0-alpha.2
+  - @mastra/react@1.16.0-alpha.2
+  - @mastra/client-js@1.61.2-alpha.2
+
+## 71.0.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13), [`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13), [`40e2880`](https://github.com/mastra-ai/mastra/commit/40e288024e8f7a1cda436ff37ae94d52cc597b13)]:
+  - @mastra/core@1.86.0-alpha.1
+  - @mastra/client-js@1.61.2-alpha.1
+  - @mastra/react@1.16.0-alpha.1
+
+## 71.0.0-alpha.0
+
+### Minor Changes
+
+- `TabList` takes `overflow="menu"`: tabs that don't fit fold into a "+N" menu after the last one that does, with the open tab always in the row. It was only available on contained tabs; the default still scrolls. ([#30833](https://github.com/mastra-ai/mastra/pull/30833))
+
+  ```tsx
+  <Tabs defaultTab="agents">
+    <TabList variant="pill" size="sm" overflow="menu">
+      <Tab value="agents">Agents</Tab>
+      <Tab value="tools">Tools</Tab>
+    </TabList>
+  </Tabs>
+  ```
+
+  Dashboard tables with several views, such as the Metrics page's Breakdown, now list them as pill tabs under the title ("Agents", "Tools", …) instead of a dropdown in the title: every view that fits is one click away, the rest are in the "+N" menu, and switching is instant. The standalone `BreakdownCard` keeps its title menu.
+
+- Added `CopyField` (`@mastra/playground-ui/components/CopyField`) for read-only values people copy, such as IDs, keys and URLs. It has the field look with an inset copy button, and long values are cut in the middle instead of clipped. The Copy button copies the whole value, and so does copying a selection inside a shortened value. ([#30510](https://github.com/mastra-ai/mastra/pull/30510))
+
+  `CopyInput` is deprecated and now renders a `CopyField`, which takes only `value`, `label` and `className`: drop `disabled` and other input props, and switch the import.
+
+  ```tsx
+  <SettingsItem title="Organization ID" description="Useful when contacting support.">
+    <CopyField value={organization.id} label="organization ID" />
+  </SettingsItem>
+  ```
+
+  ```tsx
+  // Before
+  const before = <CopyInput value={id} label="project ID" disabled={!canView} />;
+  // After: there's no disabled state, so render the field only when the value can be copied
+  const after = canView ? <CopyField value={id} label="project ID" /> : null;
+  ```
+
+- Added four `EmptyStateArt` drawings: `filesystems` (a folder tray), `sandboxes` (a sandbox with a sandcastle), `vault` (an access vault wired to services), and `secrets` (a cryptex). `connect` is now a switchboard where accounts plug into an agent, `alerts` is a phone that gets a notification, and the `models` cartridges light up in each provider's color on hover. Every drawing now stands on a soft hatched shadow instead of a base plate, and all drawings render at the same visual size. ([#30861](https://github.com/mastra-ai/mastra/pull/30861))
+
+  ```tsx
+  <EmptyState layout="split" iconSlot={<EmptyStateArt name="sandboxes" />} titleSlot="Give your agents a sandbox" />
+  ```
+
+- Added `CardIllustration`, a framed plate for a small drawing at the top of a card. It is the same plate the illustrated `InfoTooltip` panels use, and every plate in a set is the same size, so the drawings line up. The plate is hidden from screen readers, so the card's title and description name it. ([#30960](https://github.com/mastra-ai/mastra/pull/30960))
+
+  ```tsx
+  <CardLink href="/alerts/new?template=budget" className="block h-full">
+    <CardContent className="flex flex-col gap-3">
+      <CardIllustration>
+        <BudgetDrawing />
+      </CardIllustration>
+      <CardTitle>Daily cost budget</CardTitle>
+    </CardContent>
+  </CardLink>
+  ```
+
+  Tag the part of a drawing that matters with `data-emphasis="grow-x"` (a horizontal bar gets longer), `"grow-y"` (a vertical bar gets taller), or `"pop"` (an item grows in place). When the card is hovered or focused, that part moves, the same way on every card (no motion with reduced motion, on touch screens, or on cards that can't be clicked). Paint it with `bg-(--illustration-accent)`, and pick its color with `tone` on `CardIllustration`: `destructive` (default), `warning`, `info`, or `success`.
+
+  Interactive cards also mark `aria-current="true"` by lighting their rim in the focus color, so the card for the page or item already open stays visible in a set.
+
+- Added `MarkdownEditor`, a markdown field that reads like the rendered page. Headings, bold, links, lists and quotes show formatted, and their markdown appears only on the line or span the caret is in. The value you get back is exactly the markdown that was typed, never rewritten. ([#30893](https://github.com/mastra-ai/mastra/pull/30893))
+
+  - Select text to bold, italicize, format as code or link it, from a floating toolbar or with ⌘B, ⌘I, ⌘E and ⌘K (Ctrl on Windows and Linux).
+  - Type `/` at the start of a line to turn it into a heading, list, quote, code block or divider.
+  - Paste a URL over selected text to link it.
+
+  ```tsx
+  import { MarkdownEditor } from '@mastra/playground-ui/components/MarkdownEditor';
+
+  <MarkdownEditor aria-label="Instructions" value={instructions} onChange={setInstructions} variant="inline" />;
+  ```
+
+- The trace side panel and the thread side panel are now compound components. You build them from parts, give each part the data you loaded yourself, and decide what goes where. An app with its own transport (for example an MCP server app) can rebuild them, leave parts out, swap one part for its own, or add its own elements. No part fetches, except the `Live*` parts Studio composes them with (see `Added`): the spans, the open span, the full trace, scorers, scores, feedback and the thread's turns come in as props typed with the `@mastra/client-js` response types, and actions go out through callbacks. ([#30804](https://github.com/mastra-ai/mastra/pull/30804))
+
+  Every part except those `Live*` ones renders with no provider at all (no Mastra client, no React Query, no Studio router), so the panels work the same inside an app that has none of them. The turn messages and a span's tool calls are drawn from what the trace recorded: a sub-agent's answer comes from its call's output, a workflow's from its input and result.
+
+  Layout parts take named slots (`header`, `body`, `side`, `main`, `span`, `messages`, `feedback`…), so a slot you leave empty renders nothing, and an element you pass renders exactly there.
+
+  ```tsx
+  import { TracePanel } from '@mastra/playground-ui/domains/traces/components/trace-panel';
+
+  <TracePanel
+    traceId={trace.traceId}
+    spans={trace.spans}
+    selectedSpanId={spanId}
+    onSpanSelect={setSpanId}
+    onClose={close}
+  >
+    <TracePanel.Frame
+      variant="inline"
+      header={
+        <TracePanel.Header
+          title={<TracePanel.TraceId />}
+          actions={<TracePanel.DownloadButton onDownload={downloadTrace} />}
+        />
+      }
+      body={
+        <TracePanel.Body
+          side={<TracePanel.Side feedback={<MyFeedback traceId={trace.traceId} />} />}
+          main={<TracePanel.Main spans={<TracePanel.Spans traceSpans={trace.spans} />} />}
+          span={<TracePanel.SpanDetail span={selectedSpan} traceSpans={trace.spans} />}
+        />
+      }
+    />
+  </TracePanel>;
+  ```
+
+  ```tsx
+  import { ThreadTrace } from '@mastra/playground-ui/domains/traces/components/thread-trace';
+
+  <ThreadTrace traceIds={ids} spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />}>
+    {turns.map((turn, index) => (
+      <ThreadTrace.Row
+        key={turn.traceId}
+        traceId={turn.traceId}
+        label={`Turn ${index + 1}`}
+        messages={<ThreadTrace.TurnMessages spans={turn.spans} />}
+        scores={<MyScores traceId={turn.traceId} />}
+        spans={<ThreadTrace.Spans spans={turn.spans} />}
+      />
+    ))}
+  </ThreadTrace>;
+  ```
+
+  **Added**
+
+  - `TracePanel`, a state-only root. `TracePanel.Frame` (drawer or inline) takes `banner`, `header`, `summary`, `body` and `dialogs`. `TracePanel.Header` takes `navigation`, `title` and `actions`; `TracePanel.Summary` takes `entity`, `status` and `stats`; `TracePanel.Body` takes `side`, `main` and `span`; `TracePanel.Side` takes `messages`, `feedback`, `scores` (one tab per filled view) and `actions`; `TracePanel.Main` takes `toolbar`, `notices` and `spans`. Leaf parts cover the navigation, trace id, score, download, dataset, open page and close buttons, the search, the tree/timeline switch, the spans (with `leading` and `renderRowTrailing` for your own cells) and the open span.
+  - `SpanDataPanel`, the span detail as parts: `header`, `details`, `input`, `output` and `feedback` slots on the root, with `Header`, `Identity`, `ShowTraceButton`, `Navigation`, `CloseButton`, `Details`, `Input` and `Output` parts. A tab slot you leave empty drops that tab. `SpanDataPanelView` stays as the ready-made composition with every tab.
+  - `ThreadTrace`: the root takes a `spanDetail` slot and a controlled `selectedSpan`; `ThreadTrace.Row` takes `label`, `link`, `messages`, `feedback`, `scores`, `spans` and `detailsHeader`, plus a controlled `tab`. Parts: `TurnMessages`, `TraceLink`, `Spans`, `SpanDetail`, `Loading`, `Empty` and `Error`.
+  - `TraceThreadPanelView`, `TraceScoresListView` and `TraceScoresTabView`, and `FeedbackThread` is exported with its props.
+  - `useThreadTraceSpans` and `useTraceSearchResult` data hooks.
+  - `RecordedToolCard`, which draws a tool call read back from a record without any request or provider. The parts that draw tool calls (`TracePanel.Messages`, `ThreadTrace.TurnMessages`, `SpanDataPanel.Output`, `SpanDataPanelView`, `SpanDetailsView`) use it by default and take `renderToolCall` to draw richer cards, and `mcpAppTools` to tell MCP app calls apart. `useLiveToolCalls()` returns both for the chat's live cards (workflow graph, MCP app UI), as Studio uses them:
+
+  ```tsx
+  <TracePanel.Messages spans={trace.spans} {...useLiveToolCalls()} />
+  ```
+
+  - `navigation` on `TracePanel`, `ThreadTrace` and `SpanDataPanel` (and on `SpanDataPanelView`, `SpanDetailsView` and `TraceThreadItemView`): where the panels open things, as your callbacks. Every link of the panels (the entity, the trace page, each turn's trace, the tools a span offered, the agents and workflows it delegated to, workspaces and Knowledge pages in the turn) becomes a button that calls one of them, and text when you give none. No href, no link component, no `LinkComponentProvider`. `useStudioTraceNavigation()` builds it from Studio's router.
+
+  ```tsx
+  <TracePanel
+    traceId={trace.traceId}
+    spans={trace.spans}
+    onClose={close}
+    navigation={{
+      onOpenTrace: traceId => host.openLink(`${studioUrl}/traces/${traceId}`),
+      onOpenAgent: agentId => host.openLink(`${studioUrl}/agents/${agentId}`),
+    }}
+  >
+    …
+  </TracePanel>
+  ```
+
+  - `DataKeysAndValues.ValueButton`: a value drawn like `ValueLink` that acts through `onClick`.
+  - `SpanDataPanelView`, `TracePanel.SpanDetail` and `ThreadTrace.SpanDetail` take `input` and `output` to replace those tabs. Studio's own parts load what a view draws only once it shows: `LiveSpanInput` (the tool registry, for a span that offered tools), `LiveSpanOutput` (the trace's spans and the live tool cards, for a span that called tools), `LiveTraceMessages` and `LiveTurnMessages` (the MCP app tools, once messages show). `useLiveToolCalls({ enabled })` takes the same switch.
+
+  ```tsx
+  <TracePanel.SpanDetail span={selectedSpan} input={<LiveSpanInput />} output={<LiveSpanOutput />} />
+  ```
+
+  `TraceThreadPanel`, `ThreadViewByTrace`, `TraceScoresList` and `TraceScoresTab` keep their props.
+
+  **Changed**
+
+  `TraceSpanPanel` no longer renders the full-thread drawer. It hands the thread id to `onOpenFullThread`, and you render the thread wherever you want, or not at all. `isFullThreadOpen`, `onFullThreadOpenChange`, `withQueryTrace`, `withFeedback`, `feedbackOptions` and `onOpenScore` are gone from its props.
+
+  ```tsx
+  // Before
+  <TraceSpanPanel {...panelProps} isFullThreadOpen={open} onFullThreadOpenChange={setOpen} withQueryTrace withFeedback onOpenScore={openScore} />
+
+  // After
+  <TraceSpanPanel {...panelProps} onOpenFullThread={setThreadId} />
+  <TraceThreadPanel open={!!threadId} threadId={threadId ?? ''} onClose={() => setThreadId(undefined)} withQueryTrace withFeedback onOpenScore={openScore} />
+  ```
+
+  `MessageRow` no longer loads the MCP app tools itself: pass them in. It also takes `renderToolCard` to draw its tool calls with another card, and a read-only row no longer runs the live chat's tool call effects.
+
+  ```tsx
+  // Before
+  <MessageRow message={message} />;
+
+  // After
+  const { data: mcpAppTools } = useMcpAppTools({ queryOptions: { enabled: messages.length > 0 } });
+  <MessageRow message={message} mcpAppTools={mcpAppTools} />;
+  ```
+
+  Navigation in the panels goes through `navigation` instead of hrefs: `TracePanel.Entity`, `TracePanel.PageHeading` and `TracePanel.OpenPageButton` drop `entityHref`, `href` and `LinkComponent`, `ThreadTrace.TraceLink` drops `href`, and `TraceEntityMeta` / `TraceSummaryDescription` take `onOpenEntity` instead of `entityHref` and `LinkComponent`. Read back from a record, `WorkspaceLink` and `KnowledgePageLink` open through the record's navigation; `WorkspaceLink` takes `workspaceId` and `path` instead of an `href`.
+
+  ```tsx
+  // Before
+  <TracePanel.OpenPageButton href={`/traces/${traceId}`} LinkComponent={Link} />
+  <ThreadTrace.TraceLink href={`/traces/${traceId}`} />
+
+  // After
+  <TracePanel navigation={{ onOpenTrace: traceId => navigate(`/traces/${traceId}`) }} …>
+    <TracePanel.OpenPageButton />
+  </TracePanel>
+  ```
+
+  In Studio, those links are now buttons that navigate through the router: they go to the same pages, but a middle-click or Cmd/Ctrl-click no longer opens them in a new tab.
+
+  Without a `LinkComponentProvider`, links now render as plain anchors instead of nothing.
+
+  **Breaking:** `ThreadTrace` places its parts through slots instead of children. `ThreadTrace.List`, `ThreadTrace.Divider`, `ThreadTrace.RowBody`, `ThreadTrace.Messages`, `ThreadTrace.TabList`, `ThreadTrace.Tab`, `ThreadTrace.TabContent`, `ThreadTrace.Details`, `ThreadTrace.DetailsHeader`, `ThreadTrace.DetailsActions` and `ThreadTrace.SpanPanel` were removed, with their prop types (`ThreadTraceListProps`, `ThreadTraceDividerProps`, `ThreadTraceRowBodyProps`, `ThreadTraceMessagesProps`, `ThreadTraceTabListProps`, `ThreadTraceTabProps`, `ThreadTraceTabContentProps`, `ThreadTraceDetailsProps`, `ThreadTraceDetailsHeaderProps`, `ThreadTraceDetailsActionsProps` and `ThreadTraceSpanPanelProps`). Render the rows as the root's children and fill each `ThreadTrace.Row` slot (`label`, `link`, `messages`, `feedback`, `scores`, `spans`, `detailsHeader`); the row draws the divider, the tabs and the details card itself.
+
+  ```tsx
+  // Before
+  <ThreadTrace traceIds={ids}>
+    <ThreadTrace.List>
+      {ids.map((traceId, i) => (
+        <ThreadTrace.Row key={traceId} traceId={traceId}>
+          <ThreadTrace.Divider label={`Turn ${i + 1}`}>
+            <ThreadTrace.TabList>
+              <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+            </ThreadTrace.TabList>
+          </ThreadTrace.Divider>
+          <ThreadTrace.RowBody>
+            <ThreadTrace.Messages>
+              <ThreadTrace.TabContent value="messages">…</ThreadTrace.TabContent>
+            </ThreadTrace.Messages>
+            <ThreadTrace.Details>
+              <ThreadTrace.Spans />
+            </ThreadTrace.Details>
+          </ThreadTrace.RowBody>
+        </ThreadTrace.Row>
+      ))}
+    </ThreadTrace.List>
+    <ThreadTrace.SpanPanel />
+  </ThreadTrace>
+
+  // After
+  <ThreadTrace traceIds={ids} spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />}>
+    {turns.map((turn, i) => (
+      <ThreadTrace.Row
+        key={turn.traceId}
+        traceId={turn.traceId}
+        label={`Turn ${i + 1}`}
+        messages={<ThreadTrace.TurnMessages spans={turn.spans} />}
+        spans={<ThreadTrace.Spans spans={turn.spans} />}
+      />
+    ))}
+  </ThreadTrace>
+  ```
+
+  **Breaking:** `ThreadTrace.Spans` no longer loads the turn's spans: `spans` is required (and `isLoading` optional). `ThreadTrace.SpanPanel` no longer loads the open span either: pass the span you loaded to `ThreadTrace.SpanDetail` in the root's `spanDetail` slot, which shows beside the turns while a span is selected.
+
+  ```tsx
+  // Before
+  <ThreadTrace.Spans />
+  <ThreadTrace.SpanPanel />
+
+  // After
+  <ThreadTrace spanDetail={<ThreadTrace.SpanDetail span={selectedSpan} />} …>
+    <ThreadTrace.Row spans={<ThreadTrace.Spans spans={turn.spans} isLoading={turn.isLoading} />} … />
+  </ThreadTrace>
+  ```
+
+  `useTraceSearch` returns `payloadOnlyMatchIds` as a `ReadonlySet<string>` instead of a `Set<string>`: read it, copy it to change it.
+
+  These components used to load part of their data themselves; pass it in now:
+
+  - `SpanDataPanelView` and `SpanDetailsView`: pass `traceSpans` so tool calls show their results, and `registeredTools` so the tools a span offered open through `navigation.onOpenTool`.
+  - `SpanScoring`: takes `onTriggerScorer`, which starts the scorer and resolves once it started.
+  - `TraceThreadItemView`: takes the trace's `spans` instead of a `traceId`.
+
+  **Removed**
+
+  - `TraceDataPanelView`: compose `TracePanel` instead (it renders the same panel part by part).
+  - `TraceMessagesPanel`: use `TracePanel.Messages`.
+  - `TraceDataPanel`: compose `TracePanel.ScoreButton` in the header with `TracePanel.ScoreDialog` in the frame's `dialogs` slot.
+
+- The whole traces page, filters and histogram included, now renders from data you hand it. `TracesExplorer` and every part under it (`FilterBar`, `ColumnsMenu`, `Histogram`, `List`, `Body`, `Layout`, `Panel`) no longer fetch: they take records typed with the `@mastra/client-js` response types and report every action through a callback. An app with its own transport, for example an MCP server app, can now show the same page from its own queries, with no Mastra client, no React Query and no Studio router. ([#30935](https://github.com/mastra-ai/mastra/pull/30935))
+
+  Studio loads the same records through new data hooks, exported separately, so it shows the same page as before.
+
+  ```tsx
+  import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+
+  <TracesExplorer
+    selection={selection}
+    filters={filters}
+    onChange={setState}
+    sort={sort}
+    onSortChange={setSort}
+    columns={columns}
+    onColumnsChange={setColumns}
+    capabilities={{ data: capabilitiesResponse, isLoading: false }}
+    traces={{ rows, isLoading, isFetching, isFetchingNextPage, hasNextPage, onLoadMore, onRetry }}
+    discovery={{ fields, canonicalFields, isLoading: false }}
+    metricsSupport={{ supported: true, isLoading: false }}
+  >
+    <TracesExplorer.Body
+      toolbar={<TracesExplorer.FilterBar suggestions={{ rootEntityNames, environments }} />}
+      chart={<TracesExplorer.Histogram data={{ timeRange, rows: counts, isLoading, isError, isUpdating }} />}
+    >
+      <TracesExplorer.List usage={usageByTraceId} />
+      <TracesExplorer.Panel
+        trace={openTrace}
+        navigation={{ onOpenAgent, onOpenTrace }}
+        onDownload={downloadTrace}
+        renderThread={({ open, threadId, onClose }) => <MyThread open={open} threadId={threadId} onClose={onClose} />}
+      />
+    </TracesExplorer.Body>
+  </TracesExplorer>;
+  ```
+
+  **Added**
+
+  - Data contract types for the page: `TracesExplorerCapabilities`, `TracesExplorerTraces`, `TracesExplorerDiscovery`, `TracesExplorerFilterSuggestions`, `TracesExplorerHistogram`, `TracesExplorerUsage` and `TracesExplorerOpenTrace`.
+  - Studio data hooks that load those records through the Mastra client: `useTracesListQuery`, `useTracesDiscoveryQuery`, `useTracesFilterSuggestionsQuery`, `useTracesHistogramQuery`, `useTracesUsageQuery` and `useOpenTraceQuery`, exported from `domains/traces/hooks`.
+  - Helpers that build the same queries for any host: `buildTracesListQuery`, `buildTracesHistogramRequest`, `canShowTracesHistogram`, `resolveTracesSupport`, `resolveTracesSort` and `resolveTraceUsageColumns`.
+  - `TraceSpanPanelView`, the trace drawer drawn from the records you pass, with no fetching. `TraceSpanPanel` keeps loading them through the Mastra client.
+  - `ScoreDataPanelView`, the score drawer drawn from the score you pass: its trace and span open through `onOpenTrace`, and its dataset dialog is yours (`renderDatasetDialog`). `TracesExplorer.Panel` takes them as `onOpenScoreTrace` and `renderScoreDatasetDialog`. `ScoreDataPanel` keeps Studio's router and dataset dialog; its trace and span ids are now buttons that go to the same pages, so they no longer open in a new tab on middle-click.
+
+  **Breaking**
+
+  - `TracesExplorer` now requires `capabilities`, `traces`, `columns` and `onColumnsChange`, and takes `discovery`. It no longer reads the store's capabilities, lists traces, discovers fields or stores the column selection itself.
+  - `TracesExplorer.FilterBar` takes its suggestions as `suggestions`, `TracesExplorer.Histogram` its counts as `data`, and `TracesExplorer.List` its usage as `usage`. `useTracesFilterBarFields()` takes the suggestions as its argument.
+  - `TracesExplorer.Panel` takes the open trace as `trace` and its links as `navigation` callbacks. Its views that load their own data come in through `renderMessages`, `spanInput`, `spanOutput`, `renderFeedback`, `renderSpanFeedback`, `renderScores`, `renderThread` and `renderDatasetDialog`. `traceHref` is replaced by `navigation.onOpenTrace`, `withAddTraceToDataset` by `renderDatasetDialog`, and `onOpenScore` and `renderCreateDatasetDialog` move into your `renderThread` and `renderDatasetDialog`. The root's `feedbackOptions` reach your `renderFeedback`, `renderSpanFeedback` and `renderThread` in their arguments.
+  - `TracesExplorerErrorRenderArgs['refetch']` now calls your `traces.onRetry`.
+  - `useTracesDiscovery` is removed: use `useTracesDiscoveryQuery` and pass its result as `discovery`.
+  - `useTracesConfig()` no longer returns `withDeltaPolling`: no part reads it, since only the list query polls. Read it from `resolveTracesSupport(capabilities, features)`.
+  - `ObservabilityPageLayout` takes the views to offer as `views` instead of `features`. Pass the result of `useObservabilityViews({ current, features })`.
+
+  ```tsx
+  // Before
+  <TracesExplorer
+    metricsSupport={metrics}
+    selection={selection}
+    filters={filters}
+    onChange={setState}
+    sort={sort}
+    onSortChange={setSort}
+  >
+    <TracesExplorer.Body toolbar={<TracesExplorer.FilterBar />} chart={<TracesExplorer.Histogram />}>
+      <TracesExplorer.List />
+      <TracesExplorer.Panel onOpenScore={openScore} traceHref={traceId => `/traces/${traceId}`} />
+    </TracesExplorer.Body>
+  </TracesExplorer>;
+
+  // After (Studio)
+  const capabilities = useObservabilityCapabilities();
+  const columns = useTraceColumnPreferences();
+  const traces = useTracesListQuery({ filters, sort, columns: columns.preferences, capabilities });
+  const discovery = useTracesDiscoveryQuery({ filters, capabilities });
+
+  <TracesExplorer
+    metricsSupport={metrics}
+    selection={selection}
+    filters={filters}
+    onChange={setState}
+    sort={sort}
+    onSortChange={setSort}
+    columns={columns.preferences}
+    onColumnsChange={columns.setPreferences}
+    capabilities={capabilities}
+    traces={traces}
+    discovery={discovery}
+  >
+    <TracesExplorer.Body toolbar={<MyFilterBar />} chart={<MyHistogram />}>
+      <MyList />
+      <MyPanel />
+    </TracesExplorer.Body>
+  </TracesExplorer>;
+  ```
+
+  Each `My*` part calls its data hook (`useTracesFilterSuggestionsQuery`, `useTracesHistogramQuery`, `useTracesUsageQuery`, `useOpenTraceQuery`) and passes the result to its explorer part. Rendered inside the body, a part loads its records only once the body shows it, as before.
+
+- Added illustrated info tooltips, and info tooltips now open on a tap on touch screens. ([#30945](https://github.com/mastra-ai/mastra/pull/30945))
+
+  **Illustrated tooltips.** Pass `variant="illustrated"` to `InfoTooltip` and put one `InfoTooltip.Panel` per outcome inside it. Each panel takes a `title`, a `caption`, and a small drawing as children. Panels sit in equal columns that line up, and the drawing is hidden from screen readers, which read each title and caption instead.
+
+  ```tsx
+  <InfoTooltip aria-label="About alerting for each" variant="illustrated">
+    <InfoTooltip.Panel title="All traffic" caption="One failing agent can be hidden by healthy ones.">
+      <CombinedLevel />
+    </InfoTooltip.Panel>
+    <InfoTooltip.Panel title="Each agent" caption="The failing agent gets its own alert.">
+      <LevelPerAgent />
+    </InfoTooltip.Panel>
+  </InfoTooltip>
+  ```
+
+  **Touch.** Tapping the info icon opens the tooltip, and tapping it again or anywhere else closes it. Before, info tooltips never opened on phones. Hover and keyboard focus work as before. The info icon now shows the normal arrow cursor instead of the help cursor, since a mouse click doesn't open it.
+
+  See the Tooltip docs page in Storybook for when to use a text tooltip, an illustrated tooltip, or a popover, and a checklist for drawing the diagrams.
+
+### Patch Changes
+
+- If you import `AgentBadge` from `@mastra/playground-ui/domains/chat/tools/badges/agent-badge`, `renderToolCard` is now required. Pass the card you want nested tool calls drawn with: ([#30934](https://github.com/mastra-ai/mastra/pull/30934))
+
+  ```tsx
+  // Before
+  <AgentBadge {...props} />;
+
+  // After
+  import { ToolCard } from '@mastra/playground-ui/domains/chat/tools/tool-card';
+
+  <AgentBadge {...props} renderToolCard={cardProps => <ToolCard {...cardProps} />} />;
+  ```
+
+- Feedback threads now show "Deleting…" on a comment while its deletion is processed, and hide its actions. If the deletion does not finish, the comment comes back with a "Could not delete feedback" error. A failed delete request also shows this error in the confirmation dialog, only until the dialog is closed. ([#30733](https://github.com/mastra-ai/mastra/pull/30733))
+
+- Fixed Knowledge scope titles to use API display labels, with readable custom-kind fallbacks while preserving explicit names and importer titles. Empty scopes now use folder icons without becoming expandable. ([#30880](https://github.com/mastra-ai/mastra/pull/30880))
+
+- Fixed `EmptyStateArt` drawings looking different sizes. Each drawing now renders at the same visual area, so a small object like the alerts gauge no longer looks tiny next to a large one like the workspace desk. ([#30855](https://github.com/mastra-ai/mastra/pull/30855))
+
+- Added `CircleDotIcon`, a ring with a dot drawn on the Central Icons grid and stroke, for things that are open or made by hand. Use it where `IconCircleRecord` stood in for a ring with a dot: that icon is a voicemail mark. ([#30798](https://github.com/mastra-ai/mastra/pull/30798))
+
+  ```tsx
+  import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
+
+  <CircleDotIcon aria-hidden />;
+  ```
+
+- Fixed the `CodeEditor` suggestion list ignoring design-system styling: the highlighted suggestion now uses the neutral selection fill instead of a bright blue, and suggestions use the design-system monospace font. ([#30893](https://github.com/mastra-ai/mastra/pull/30893))
+
+- The Knowledge page panel's Preview now fills the panel's free height. A long page scrolls inside it instead of being cropped to a short 12rem strip. ([#30786](https://github.com/mastra-ai/mastra/pull/30786))
+
+- Shrank the observability explorer and trace viewer MCP Apps back under their size budget. A recorded sub-agent card no longer pulls in the live chat's tool card (and with it the MCP app viewer, form and workflow graph code), and the apps keep the trace panels' recorded tool cards instead of Studio's live ones. ([#30934](https://github.com/mastra-ai/mastra/pull/30934))
+
+- Fixed MCP App iframes so third-party app HTML cannot run with the Studio page's origin. Guest HTML loads in a nested frame that cannot read the parent page or call Studio with the viewer's cookies. ([#30593](https://github.com/mastra-ai/mastra/pull/30593))
+
+- Fixed settings rows in dialogs: a text field now sits beside its label, like a select does, instead of wrapping under it at a narrow width. ([#30940](https://github.com/mastra-ai/mastra/pull/30940))
+
+- A user message's footer now lines up on the right, like the message bubble above it. Before, a short footer line such as "Steered message" sat on the left when a longer line (for example "via Slack" with the sender's name) was shown under it. ([#30890](https://github.com/mastra-ai/mastra/pull/30890))
+
+- Share the Studio agent conversation shell and thread navigation with managed-agent hosts. `AgentConversationLayout` accepts host-provided content slots and panel registration; `AgentConversationSidebar` accepts host-owned navigation and collapse actions; `AgentConversationThreads` provides a controlled thread list without owning routing, data fetching, or mutations. ([#30982](https://github.com/mastra-ai/mastra/pull/30982))
+
+  ```tsx
+  import { AgentConversationLayout } from '@mastra/playground-ui/domains/agents/components/agent-conversation-layout';
+  import { AgentConversationThreads } from '@mastra/playground-ui/domains/agents/components/agent-conversation-threads';
+
+  <AgentConversationLayout
+    layoutId="managed-agent-layout"
+    leftSlot={
+      <AgentConversationThreads
+        threads={threads}
+        selectedThreadId={threadId}
+        onSelectThread={selectThread}
+        onNewThread={createThread}
+      />
+    }
+  >
+    {conversation}
+  </AgentConversationLayout>;
+  ```
+
+- Export a controlled stored-skills picker with host-supplied skill lists, selection, loading state, and attach/remove/create callbacks. ([#30983](https://github.com/mastra-ai/mastra/pull/30983))
+
+- Fixed live updates in the Spans and Threads lists stopping after the tab stays open for a while. With a preset range such as "Last 7 days", each poll now asks for a window of the same length ending now, instead of stretching the original window, so a server cap on the window length (such as the 7-day limit on word search) no longer refuses the poll. A custom start date with no end date is kept as picked. ([#30889](https://github.com/mastra-ai/mastra/pull/30889))
+
+  `useListAnchor` now returns `anchorWindow` instead of `anchorTo`, and `reanchor` takes the selected window (`ListWindow`, now exported along with `windowEndingAt`). Its new second argument, `fixedStart`, keeps the start of the window in place.
+
+- Export reusable conversation-memory sidebar, observational-memory display, memory detail panel, and clone-thread controls for host-driven Studio and managed-agent interfaces. ([#30980](https://github.com/mastra-ai/mastra/pull/30980))
+
+- The title of a view-only or disabled settings row is no longer dimmed, so it matches every other row. A disabled destructive row keeps its red title. The row's value and control look the same as before. ([#30830](https://github.com/mastra-ai/mastra/pull/30830))
+
+- Updated dependencies [[`d250e06`](https://github.com/mastra-ai/mastra/commit/d250e06d7c63b02aa0e5b7c61e1e54e07dcad13b), [`9315b28`](https://github.com/mastra-ai/mastra/commit/9315b2895a617947513be1f96d8964037b505f38), [`7c0c1cd`](https://github.com/mastra-ai/mastra/commit/7c0c1cdc9ed1211b3705554bf205a30ef05b0796), [`21a82af`](https://github.com/mastra-ai/mastra/commit/21a82af6e1c08daaa3c2700c98ac95a96e66399e), [`31f63a7`](https://github.com/mastra-ai/mastra/commit/31f63a75d2981793f1d1e9bcce375f999ead021e), [`0458fdc`](https://github.com/mastra-ai/mastra/commit/0458fdc0c19abc0359746247cb55b71dd4afaf6e), [`4b5c347`](https://github.com/mastra-ai/mastra/commit/4b5c347734329ff434d7cdcb6408c23dfe046540), [`b8af9e3`](https://github.com/mastra-ai/mastra/commit/b8af9e313eb446fadb24454dc18fa19aa08a8cea), [`0280c14`](https://github.com/mastra-ai/mastra/commit/0280c141dae50809cfc7f6bd7e27d1f65432121c), [`ad5059e`](https://github.com/mastra-ai/mastra/commit/ad5059e90c201279628a799f1434a8fe35140b55), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`0f098fe`](https://github.com/mastra-ai/mastra/commit/0f098fe2425bc467ff9a800c41433efe90c44e58), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72), [`389851e`](https://github.com/mastra-ai/mastra/commit/389851ef0380c222b6223148b8c070a6919b7a8e), [`9c4810b`](https://github.com/mastra-ai/mastra/commit/9c4810b48652bee44663452f136df5e9d9247d40), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`2f04296`](https://github.com/mastra-ai/mastra/commit/2f04296f9b815fde8395a32ddbabd214fdf2f914), [`00c269d`](https://github.com/mastra-ai/mastra/commit/00c269d99f693d4e62accfdc5368c87d5fa2c11c), [`4e0b782`](https://github.com/mastra-ai/mastra/commit/4e0b7820880774ed87c151d6575ba13820035773), [`a6a5b78`](https://github.com/mastra-ai/mastra/commit/a6a5b7808581c6e7dc086a165580b23138d5e441), [`8a0acd5`](https://github.com/mastra-ai/mastra/commit/8a0acd5ab9367a48d100b9c53eeb62362e6ddb72)]:
+  - @mastra/core@1.85.1-alpha.0
+  - @mastra/memory@1.41.3-alpha.0
+  - @mastra/react@1.16.0-alpha.0
+  - @mastra/client-js@1.61.2-alpha.0
+  - @mastra/ai-sdk@1.12.0
+
+## 70.1.0
+
+### Minor Changes
+
+- Added `EmptyStateArt`, 23 animated drawings for empty states where people create, set up, or upgrade something. Each drawing loops on hover, keeps looping while setup is running, and shows its own failure when setup fails. ([#30734](https://github.com/mastra-ai/mastra/pull/30734))
+
+  `EmptyState` also gets a `layout="split"` option that puts the drawing beside the text, and a `statusSlot` for a short line under the actions, such as a cost note or live import progress.
+
+  ```tsx
+  import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+  import { EmptyStateArt } from '@mastra/playground-ui/components/EmptyStateArt';
+
+  <EmptyState
+    layout="split"
+    titleSlot="Give your agents shared knowledge"
+    descriptionSlot="A store of pages your agents search, read and write."
+    iconSlot={<EmptyStateArt name="knowledge" state={setup.isPending ? 'working' : 'idle'} />}
+    actionSlot={<Button variant="primary">Set up knowledge</Button>}
+    statusSlot="Creates a dedicated Postgres database."
+  />;
+  ```
+
+### Patch Changes
+
+- Knowledge shows organization and project scopes by name (Organization) instead of their raw address, and a page's peek counts and lists its links from the server's link index, so Links in and Links out match the graph. ([#30724](https://github.com/mastra-ai/mastra/pull/30724))
+
+- Marker labels on `MetricsLineChart` stay inside the chart. A marker in the right half of the range now prints its label to the left of its line, so a label near the end is no longer cut off. ([#30781](https://github.com/mastra-ai/mastra/pull/30781))
+
+- Fixed `FormLayout` pages having two left edges. The back link, the page title and the section titles now line up with the field labels, instead of sitting 10px to the right of them. ([#30782](https://github.com/mastra-ai/mastra/pull/30782))
+
+- `SettingsRow` and `SettingsFieldsetRow` now move controls that are too wide to sit beside their label onto the next line, starting under the label, instead of squeezing the label. Put several controls straight in the row (no wrapper `div` or width classes); beside the label they end on the same right edge as every other row. ([#30352](https://github.com/mastra-ai/mastra/pull/30352))
+
+- Settings rows with their control beside the label now keep the same height with or without a description, so a card's rows stay even. A list's first row (`SettingsListHeader`, `SettingsEmptyRow`) is now as tall as those rows too, so "No request headers" lines up with the settings above it. Stacked rows on narrow screens and rows with the control below the label are unchanged. On narrow screens, a `SettingsItem`'s value or actions now sit on their own line under the title, as a `SettingsRow`'s control does, so a long value no longer squeezes the title. ([#30509](https://github.com/mastra-ai/mastra/pull/30509))
+
+- Added `createHoverCardHandle`, so several triggers can open one shared `HoverCard`. Moving from one trigger to the next swaps what the card shows instead of opening a second card. ([#30772](https://github.com/mastra-ai/mastra/pull/30772))
+
+- Fixed section titles (`SettingsTitle`, `SettingsDescription`) sitting 10px to the right of everything around them outside settings pages, such as field labels on Platform's create project forms and page titles on billing. Outside a `SettingsLayout`, section titles now line up with the page's left edge. Section titles also use the same primary color as field labels everywhere, settings pages included; on settings pages they keep their inset, in line with the inset page title. ([#30711](https://github.com/mastra-ai/mastra/pull/30711))
+
+- Settings rows center a control against its label, and keep the label at the top when the control grows (for example, an error line under a field). Pages no longer need their own alignment overrides. ([#30731](https://github.com/mastra-ai/mastra/pull/30731))
+
+- Empty settings lists now use the same white text as a list's count, so `SettingsEmptyRow` ("No join links") and `SettingsListHeader` ("2 members") read as the same row in every app. ([#30503](https://github.com/mastra-ai/mastra/pull/30503))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`998939a`](https://github.com/mastra-ai/mastra/commit/998939acc06a9d10f0c0aba21a36d3d21c8a08a3), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e), [`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1), [`00e2a36`](https://github.com/mastra-ai/mastra/commit/00e2a36a63153763efef33dee69753be5cdc85f0)]:
+  - @mastra/core@1.85.0
+  - @mastra/client-js@1.61.1
+  - @mastra/react@1.15.2
+  - @mastra/ai-sdk@1.12.0
+
+## 70.1.0-alpha.3
+
+### Patch Changes
+
+- `SettingsRow` and `SettingsFieldsetRow` now move controls that are too wide to sit beside their label onto the next line, starting under the label, instead of squeezing the label. Put several controls straight in the row (no wrapper `div` or width classes); beside the label they end on the same right edge as every other row. ([#30352](https://github.com/mastra-ai/mastra/pull/30352))
+
+- Settings rows center a control against its label, and keep the label at the top when the control grows (for example, an error line under a field). Pages no longer need their own alignment overrides. ([#30731](https://github.com/mastra-ai/mastra/pull/30731))
+
+- Updated dependencies [[`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1)]:
+  - @mastra/core@1.85.0-alpha.3
+  - @mastra/client-js@1.61.1-alpha.3
+  - @mastra/react@1.15.2-alpha.3
+
+## 70.1.0-alpha.2
+
+### Patch Changes
+
+- Marker labels on `MetricsLineChart` stay inside the chart. A marker in the right half of the range now prints its label to the left of its line, so a label near the end is no longer cut off. ([#30781](https://github.com/mastra-ai/mastra/pull/30781))
+
+- Fixed `FormLayout` pages having two left edges. The back link, the page title and the section titles now line up with the field labels, instead of sitting 10px to the right of them. ([#30782](https://github.com/mastra-ai/mastra/pull/30782))
+
+- Added `createHoverCardHandle`, so several triggers can open one shared `HoverCard`. Moving from one trigger to the next swaps what the card shows instead of opening a second card. ([#30772](https://github.com/mastra-ai/mastra/pull/30772))
+
+- Updated dependencies [[`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5)]:
+  - @mastra/core@1.85.0-alpha.2
+  - @mastra/client-js@1.61.1-alpha.2
+  - @mastra/react@1.15.2-alpha.2
+
+## 70.1.0-alpha.1
+
+### Minor Changes
+
+- Added `EmptyStateArt`, 23 animated drawings for empty states where people create, set up, or upgrade something. Each drawing loops on hover, keeps looping while setup is running, and shows its own failure when setup fails. ([#30734](https://github.com/mastra-ai/mastra/pull/30734))
+
+  `EmptyState` also gets a `layout="split"` option that puts the drawing beside the text, and a `statusSlot` for a short line under the actions, such as a cost note or live import progress.
+
+  ```tsx
+  import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+  import { EmptyStateArt } from '@mastra/playground-ui/components/EmptyStateArt';
+
+  <EmptyState
+    layout="split"
+    titleSlot="Give your agents shared knowledge"
+    descriptionSlot="A store of pages your agents search, read and write."
+    iconSlot={<EmptyStateArt name="knowledge" state={setup.isPending ? 'working' : 'idle'} />}
+    actionSlot={<Button variant="primary">Set up knowledge</Button>}
+    statusSlot="Creates a dedicated Postgres database."
+  />;
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e)]:
+  - @mastra/core@1.85.0-alpha.1
+  - @mastra/client-js@1.61.1-alpha.1
+  - @mastra/react@1.15.2-alpha.1
+
+## 70.0.1-alpha.0
+
+### Patch Changes
+
+- Knowledge shows organization and project scopes by name (Organization) instead of their raw address, and a page's peek counts and lists its links from the server's link index, so Links in and Links out match the graph. ([#30724](https://github.com/mastra-ai/mastra/pull/30724))
+
+- Settings rows with their control beside the label now keep the same height with or without a description, so a card's rows stay even. A list's first row (`SettingsListHeader`, `SettingsEmptyRow`) is now as tall as those rows too, so "No request headers" lines up with the settings above it. Stacked rows on narrow screens and rows with the control below the label are unchanged. On narrow screens, a `SettingsItem`'s value or actions now sit on their own line under the title, as a `SettingsRow`'s control does, so a long value no longer squeezes the title. ([#30509](https://github.com/mastra-ai/mastra/pull/30509))
+
+- Fixed section titles (`SettingsTitle`, `SettingsDescription`) sitting 10px to the right of everything around them outside settings pages, such as field labels on Platform's create project forms and page titles on billing. Outside a `SettingsLayout`, section titles now line up with the page's left edge. Section titles also use the same primary color as field labels everywhere, settings pages included; on settings pages they keep their inset, in line with the inset page title. ([#30711](https://github.com/mastra-ai/mastra/pull/30711))
+
+- Empty settings lists now use the same white text as a list's count, so `SettingsEmptyRow` ("No join links") and `SettingsListHeader` ("2 members") read as the same row in every app. ([#30503](https://github.com/mastra-ai/mastra/pull/30503))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c)]:
+  - @mastra/core@1.85.0-alpha.0
+  - @mastra/client-js@1.61.1-alpha.0
+  - @mastra/react@1.15.2-alpha.0
+
+## 70.0.0
+
+### Minor Changes
+
+- Central icons now draw at the size Lucide icons did. The icon sizes grow by 2px (`xs` 14px, `sm` 16px, `md` 18px, `lg` 22px) because Central leaves more room around each drawing, so an icon in the same slot keeps the size people are used to. Product icons, the remaining Lucide icons, brand logos and product marks keep their drawn size. Avatars no longer borrow the icon sizes: the `xs` and `inline` avatars use their own `--spacing-avatar-xs` (12px) and `--spacing-avatar-inline` (16px). ([#30555](https://github.com/mastra-ai/mastra/pull/30555))
+
+  A few Central shapes that run edge to edge, such as plain arrows and the `•••` dots, get an optical inset so they match the rest of the set, with their stroke thickened by the same factor so every icon keeps the same line weight. The inset lives in `central-icons.json` and the icon generator applies it.
+
+- Clicking a Knowledge page in the graph now shows a short peek with its link and note counts, a preview of the body, its connections and the latest note. The full page's side column adds On this page, built from the body's headings, and Connections, listing the pages it links to and the notes that mention it. ([#30706](https://github.com/mastra-ai/mastra/pull/30706))
+
+- Polished the shared sidebar so it looks the same in every app. ([#30204](https://github.com/mastra-ai/mastra/pull/30204))
+
+  - The sidebar is 232px wide by default (192px to 340px when dragged) and 60px collapsed. The defaults live in the component and `SIDEBAR_WIDTHS` exports them; pass `minWidth` only when a view needs more room.
+  - Rows sit 1px apart and 10px from the sidebar's edges, with 8px under the header. Groups sit 14px apart, with titles 4px above their rows, and the first group's title is kept for screen readers only.
+  - Filled product icons (Agent, Workflow, MCP Server) draw at the same size as the line icons beside them.
+  - The resize handle and the collapsed logo's toggle appear after a short hover delay, so passing over them doesn't flash them.
+  - The nav's scrollbar no longer stays on screen after you click a link, and expanding the sidebar onto an open sub-menu no longer moves focus to its Back button.
+
+  `Sidebar.Meter` keeps one layout in both states. It accepts `loading`, which shows the card at its loaded size, and `railValue`, a shorter amount for the rail:
+
+  ```tsx
+  <Sidebar.Meter label="Credits" value="$6,649.10" railValue="$7k" status="Auto top-up On" />
+  <Sidebar.Meter loading label="Credits" value="" status=" " />
+  ```
+
+- Opening a Knowledge page now shows it in a panel beside the Pages tree instead of replacing the graph, and the graph stops drawing while the page is open. The page's right column gains a Details list with its scope, last update, author, creation date and version. ([#30588](https://github.com/mastra-ai/mastra/pull/30588))
+
+- Added `unavailableReason` to `ModelPicker`. When set, the picker shows its usual trigger, disabled, and hovering or focusing it shows the reason in a tooltip. Use it when the current user can see the model but is not allowed to change it. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  ```tsx
+  <ModelPicker
+    providers={providers}
+    value={value}
+    onValueChange={setValue}
+    unavailableReason="Only the session owner can change the model."
+  />
+  ```
+
+- `LogDataPanel` accepts an `actions` prop to render extra controls in its header, next to the previous and next buttons. ([#30244](https://github.com/mastra-ai/mastra/pull/30244))
+
+  ```tsx
+  <LogDataPanel {...panelProps} actions={<Button onClick={() => askAbout(log)}>Ask about this log</Button>} />
+  ```
+
+  Fixed the Metrics page's model drilldown: clicking a model in the usage card now opens traces that used that model, instead of every trace in the time range.
+
+- `InputGroupAddon` now insets its icon like a Button does (the group's `--control-px` and `--control-gap`), so a leading or trailing icon in any field lines up with the icons of the controls beside it. A field built from `InputGroup` parts by hand gets the same inset as `SearchInput`. An icon `InputGroupButton` is now a chip inset in the field (8px shorter than it, with an even ring around it) instead of a full-height circle. ([#30062](https://github.com/mastra-ai/mastra/pull/30062))
+
+  `SearchInput` is now plain `InputGroup` composition (a search icon, the input and a clear button) with no styling of its own. Its clear button keeps its space while hidden, so the field doesn't resize when text appears. It takes over `ListSearch`'s behaviour. It is either controlled (`value`, following every change the parent makes, such as a Reset or a URL change) or keeps its own text (`defaultValue`). Both modes accept `debounceMs`, which delays `onValueChange` while typing; clearing reports right away. `shortcut` turns on the Cmd/Ctrl+Shift+F focus shortcut, and `listSearchProps` bundles a list page's `size`, `debounceMs` and `shortcut`. `ListSearch` and `SearchFieldBlock` are removed.
+
+  **Migrating**
+
+  ```tsx
+  // Before
+  <ListSearch onSearch={setSearch} label="Search agents" placeholder="Search by name" />
+
+  // After
+  <SearchInput {...listSearchProps} onValueChange={setSearch} label="Search agents" placeholder="Search by name" />
+  ```
+
+  - `ListSearch`'s `onSearch` → `onValueChange`, `value` → `defaultValue`, `shortcutDisabled` → leave out `shortcut`. It defaulted to `size="sm"` and a 300ms debounce; pass them. To reset a field that keeps its own text, remount it with a `key`.
+  - `SearchFieldBlock` → `SearchInput`, inside a `Field` when it needs a visible label.
+  - `SearchInput`'s `label` is now the input's `aria-label` instead of a visually hidden `<label>`.
+
+- The dashboards entry point (`@mastra/playground-ui/domains/dashboards`) now exports the schemas a widget is validated with, so an app that edits stored dashboard widgets can check its changes against the same rules the renderer uses. ([#30298](https://github.com/mastra-ai/mastra/pull/30298))
+
+  - Options schemas for each built-in widget kind: `kpisOptionsSchema`, `kpiItemSchema`, `tableOptionsSchema`, `tableColumnOptionsSchema`, `timeseriesOptionsSchema`, `timeseriesSeriesSchema` and `scoresOptionsSchema`, with their types.
+  - Value expression schemas and types: `valueExprSchema`, `valueRefSchema`, `queryRefSchema`, `ValueExpr`, `ValueRef` and `LabelledValue`.
+  - The allowed formats, colors and KPI icons: `VALUE_FORMATS`, `formatSchema`, `CHART_COLOR_NAMES`, `SERIES_COLORS`, `colorSchema`, `KPI_ICONS`, and the `ValueFormat`, `ChartColorName` and `KpiIcon` types.
+
+  ```ts
+  import { kpisOptionsSchema, valueExprSchema } from '@mastra/playground-ui/domains/dashboards';
+
+  kpisOptionsSchema.parse({ items: [{ label: 'Runs', format: 'count', value: { query: 'runs' } }] });
+  ```
+
+- Added `FormLayout`, the page frame for create and edit form pages. It shows a back link and the page title above a centered 640px column, lined up with each section title, with no breadcrumb bar. ([#30715](https://github.com/mastra-ai/mastra/pull/30715))
+
+  ```tsx
+  import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
+
+  <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert" LinkComponent={Link}>
+    <SettingsGroup>…</SettingsGroup>
+  </FormLayout>;
+  ```
+
+- On phones and tablets, the default sidebar (`mobileMode="takeover"`) now sits under the page instead of covering it. Opening it slides the whole page to the right, and the navigation underneath grows into place as it fades in, like the ChatGPT iOS app. While it moves, the page gets rounded corners, a thin edge and a soft shadow, so it reads as a card lifted above the navigation. ([#30440](https://github.com/mastra-ai/mastra/pull/30440))
+
+  - Swipe the page right to open the sidebar and swipe left to close it. The page follows your finger. When you let go, it finishes in the direction you were last moving: a short swipe is enough, swiping back partway cancels, and a nudge of a few pixels springs back. It keeps the speed of your swipe and eases to a stop. Dragging moves only the page and the sidebar, so it stays smooth on long pages.
+  - While the sidebar is open, a faint tint of the opposite colour (light in dark mode, dark in light mode) covers the strip of page still in view, setting it apart from the navigation. Tap that strip, or press Escape, to close the sidebar. Focus returns to the menu button. Until then, Tab and Shift+Tab cycle through the sidebar, and the page and toasts behind it are out of reach.
+  - Swipes that start in content that scrolls sideways, or on sliders and other controls that handle their own drags, are left to that content.
+  - With reduced motion turned on, the sidebar opens and closes without sliding.
+
+  `AppShell` slides its content automatically. A `Sidebar` rendered outside `AppShell` has no page to slide, so either move the page into `AppShell` or keep the previous drawer:
+
+  ```tsx
+  <AppShell sidebar={<Sidebar>{nav}</Sidebar>}>{page}</AppShell>
+
+  // or, without AppShell
+  <Sidebar mobileMode="drawer">{nav}</Sidebar>
+  ```
+
+  On desktop, dragging the sidebar's edge no longer restyles the whole page on every move, so resizing stays smooth beside long pages. The live width is set on the sidebar panel itself, so `var(--sidebar-width)` read outside the sidebar keeps the initial width.
+
+- Switched `@mastra/playground-ui` components from Lucide to Central Icons, and added Central Icons for your own UI. Each icon is its own module under `@mastra/playground-ui/icons/central/` and works inside `Icon` like any other icon. The icons are licensed under the Central Icons license, not Apache-2.0. See `CENTRAL-ICONS-LICENSE.md` in the package. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+  ```tsx
+  import { Icon } from '@mastra/playground-ui/icons/Icon';
+  import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+  <Icon size="sm">
+    <IconMagnifyingGlass />
+  </Icon>;
+  ```
+
+- Add a “Contains text” filter to the span and trace explorers for backends that support indexed search. Histograms are hidden while search is applied. ([#30299](https://github.com/mastra-ai/mastra/pull/30299))
+
+- Added content filters with matching histograms for supporting hosts. ([#30511](https://github.com/mastra-ai/mastra/pull/30511))
+
+- Added `CardInset`, a sunken panel for a list of rows inside a `Card` or a dialog. The panel pads each row and draws a divider between them, so plain elements and `SettingsRow`s both work as rows. ([#30699](https://github.com/mastra-ai/mastra/pull/30699))
+
+  ```tsx
+  <DialogBody>
+    <CardInset>
+      <div>Source</div>
+      <div>Schedule</div>
+    </CardInset>
+  </DialogBody>
+  ```
+
+  Removed `SectionCard` and `CardHeading`. Build settings sections with the settings components instead:
+
+  ```tsx
+  // Before
+  <SectionCard title="Channels" description="Providers available to publish flows">
+    {rows}
+  </SectionCard>
+
+  // After
+  <SettingsGroup>
+    <SettingsTitle info="Providers available to publish flows">Channels</SettingsTitle>
+    <SettingsContainer>{rows}</SettingsContainer>
+  </SettingsGroup>
+  ```
+
+### Patch Changes
+
+- Knowledge pages stay readable with long text: page descriptions and On this page headings are clamped, and search results show the matched text highlighted with a description line. ([#30719](https://github.com/mastra-ai/mastra/pull/30719))
+
+- Central Icons now cover every interface icon in Studio and Factory, and each icon family, such as speech bubbles, bells, folders and settings, uses one consistent shape. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- `CodeDiff` with a file header now shows its lines flush against the header and the card's bottom edge, so stacked diffs in a `CodeDiffList` read like a pull request with no blank band above the first line or below the last. The horizontal scrollbar only takes room when lines overflow, and none on platforms with overlay scrollbars. Diffs without a header keep their padding. ([#30668](https://github.com/mastra-ai/mastra/pull/30668))
+
+- Interface icons now use Central's Medium chevrons, which match the size of the icons around them, and one consistent shape for speech bubbles (Chat Bubble 7), thumbs up and down, and the settings gear. Central Icons are updated to 1.2.44. ([#30523](https://github.com/mastra-ai/mastra/pull/30523))
+
+- Connect providers that use OAuth client credentials (`OAUTH2_CC`) or no authentication (`NONE`) without leaving Studio. Client-credential providers ask for a client ID and secret in the connect dialog; providers with no authentication connect immediately instead of opening an OAuth popup. ([#30336](https://github.com/mastra-ai/mastra/pull/30336))
+
+  Providers whose catalog lists only connection settings (for example a subdomain) now also ask for their API key, username and password, or client ID and secret. Previously the dialog showed only the settings, and the connection failed.
+
+  The headless connect helpers in `@mastra/playground-ui/domains/connect` now return a fully resolved `HeadlessAuthField` and support conditional fields (`visibleWhen`), so other apps can import them instead of keeping their own copy.
+
+  ```ts
+  import {
+    headlessAuthFieldKey,
+    headlessAuthFields,
+    isHeadlessAuthFieldVisible,
+    splitHeadlessAuthValues,
+    startHeadlessAuth,
+  } from '@mastra/playground-ui/domains/connect';
+
+  // Every field comes back fully resolved: label, target, required, and so on are always set.
+  const fields = headlessAuthFields(provider);
+
+  // Render only the fields whose `visibleWhen` condition matches the current values.
+  const visible = fields.filter(field => isHeadlessAuthFieldVisible(fields, field, values));
+  const missingRequired = visible.some(field => field.required && !values[headlessAuthFieldKey(field)]);
+
+  // On submit, values for hidden fields are dropped.
+  const { credentials, params } = splitHeadlessAuthValues(fields, values);
+  await startHeadlessAuth({
+    sessionToken,
+    integrationId: provider.id,
+    authType: provider.authType,
+    credentials,
+    params,
+  }).result;
+  ```
+
+- Added the `playground-ui/icon-size-from-parent` lint rule. It flags an icon that sets its own size with `size`, `width`, `height` or a size class, so icons take their size from the component they sit in, an `<Icon size>` wrapper, or a `size-icon-*` token. Sizes relative to the text (`h-[1em]`) and sizes computed from data are allowed. ([#30542](https://github.com/mastra-ai/mastra/pull/30542))
+
+  ```tsx
+  // Before
+  <IconPlusMedium className="size-3.5" />
+
+  // After
+  <IconPlusMedium className="size-icon-sm" />
+  ```
+
+  Icons now sit on the four icon sizes everywhere, and the skill and prompt block pickers use `EmptyState` and `Spinner` for their empty and loading states.
+
+- New feedback comments now show up in the list as soon as you submit them, instead of after the next refresh. Lists from `useTraceFeedback` and `useSpanFeedback` show the comment right away, remove it if the submit fails, and keep showing it until the list returns the stored comment or 60 seconds pass, whichever comes first. While a comment is waiting to be stored, the list refreshes every 3 seconds instead of every 30 seconds. ([#30515](https://github.com/mastra-ai/mastra/pull/30515))
+
+  Comments that are not stored yet have `isPending: true`, so you can hide actions such as delete until the stored comment arrives:
+
+  ```tsx
+  const { data } = useTraceFeedback({ traceId });
+
+  data?.feedback.map(item => (item.isPending ? <span>Sending…</span> : <FeedbackActions item={item} />));
+  ```
+
+  In Studio, a comment that is not stored yet shows "Sending…" instead of its review status, and its Mark reviewed and Delete actions stay hidden until the stored comment arrives.
+
+  `useCreateFeedback` now runs your `onMutate`, `onError` and `onSuccess` options in addition to its own behavior. Before, passing `onSuccess` skipped the hook's list refresh.
+
+- Knowledge search results now show the part of a page description that matches the query, instead of a first line that can hide it. ([#30722](https://github.com/mastra-ai/mastra/pull/30722))
+
+- `CodeDiff` now paints its code on the card surface instead of the syntax theme's own background, so a diff matches the card around it in light and dark mode. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+- `Sidebar.NavShowMore` accepts a `ref` to its button, so an app can move focus to it, for example when the other toggle disappears after a click. ([#30475](https://github.com/mastra-ai/mastra/pull/30475))
+
+  ```tsx
+  const showLess = useRef<HTMLButtonElement>(null);
+
+  <Sidebar.NavShowMore ref={showLess} foldedCount={20} expanded onExpandedChange={collapse} />;
+
+  showLess.current?.focus();
+  ```
+
+- Added two empty-state illustrations, `no-alerts` and `no-destinations`, for pages that list alerts and their destinations. Use them with `<EmptyStateIllustration name="no-alerts" />`. ([#30354](https://github.com/mastra-ai/mastra/pull/30354))
+
+- Studio and Factory now use Central Icons for their interface icons. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+- Fixed the right padding of `Sidebar.CommandHeader`: its buttons now line up with the right edge of the nav rows below. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  A `Button` rendered as a link no longer puts its `type` on the anchor, so `Sidebar.NavAction` used as a link renders a valid `<a>`.
+
+- Fixed page scrolling getting stuck when the cursor is over a DataList. The page now keeps scrolling once the list has nothing left to scroll. ([#30333](https://github.com/mastra-ai/mastra/pull/30333))
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`175b4b5`](https://github.com/mastra-ai/mastra/commit/175b4b5194bd74d82a79c2567aec44ef0cfafa80), [`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806), [`5266060`](https://github.com/mastra-ai/mastra/commit/5266060ccd0766a14b94109dc4bc9c3d29a1b8f5), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`a21d692`](https://github.com/mastra-ai/mastra/commit/a21d69244449f1d478ccb4b7b548e0e0bd202947), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`83a6d17`](https://github.com/mastra-ai/mastra/commit/83a6d17903e678df0f0a788daf2d08c64cc0b7d5), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`3c1b528`](https://github.com/mastra-ai/mastra/commit/3c1b528b6eadf54528931e299e98f592a5d3e302), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`9abbec6`](https://github.com/mastra-ai/mastra/commit/9abbec671ccf0826550241d1f1c2d7ff89e5b95b), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`9eae968`](https://github.com/mastra-ai/mastra/commit/9eae9680d2be2c9596156c1426998c173f80618f), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`2087fdc`](https://github.com/mastra-ai/mastra/commit/2087fdccb8d7bfb609a1b5014b116fe188c5bfba), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`0d22884`](https://github.com/mastra-ai/mastra/commit/0d228849b8c6867938860fb19a1e92a0a8c77f27), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0
+  - @mastra/client-js@1.61.0
+  - @mastra/memory@1.41.2
+  - @mastra/react@1.15.1
+  - @mastra/ai-sdk@1.12.0
+
+## 70.0.0-alpha.7
+
+### Minor Changes
+
+- Clicking a Knowledge page in the graph now shows a short peek with its link and note counts, a preview of the body, its connections and the latest note. The full page's side column adds On this page, built from the body's headings, and Connections, listing the pages it links to and the notes that mention it. ([#30706](https://github.com/mastra-ai/mastra/pull/30706))
+
+- `LogDataPanel` accepts an `actions` prop to render extra controls in its header, next to the previous and next buttons. ([#30244](https://github.com/mastra-ai/mastra/pull/30244))
+
+  ```tsx
+  <LogDataPanel {...panelProps} actions={<Button onClick={() => askAbout(log)}>Ask about this log</Button>} />
+  ```
+
+  Fixed the Metrics page's model drilldown: clicking a model in the usage card now opens traces that used that model, instead of every trace in the time range.
+
+- Added `FormLayout`, the page frame for create and edit form pages. It shows a back link and the page title above a centered 640px column, lined up with each section title, with no breadcrumb bar. ([#30715](https://github.com/mastra-ai/mastra/pull/30715))
+
+  ```tsx
+  import { FormLayout } from '@mastra/playground-ui/components/FormLayout';
+
+  <FormLayout backHref="/alerts" backLabel="Alerts" title="New alert" LinkComponent={Link}>
+    <SettingsGroup>…</SettingsGroup>
+  </FormLayout>;
+  ```
+
+- Added content filters with matching histograms for supporting hosts. ([#30511](https://github.com/mastra-ai/mastra/pull/30511))
+
+- Added `CardInset`, a sunken panel for a list of rows inside a `Card` or a dialog. The panel pads each row and draws a divider between them, so plain elements and `SettingsRow`s both work as rows. ([#30699](https://github.com/mastra-ai/mastra/pull/30699))
+
+  ```tsx
+  <DialogBody>
+    <CardInset>
+      <div>Source</div>
+      <div>Schedule</div>
+    </CardInset>
+  </DialogBody>
+  ```
+
+  Removed `SectionCard` and `CardHeading`. Build settings sections with the settings components instead:
+
+  ```tsx
+  // Before
+  <SectionCard title="Channels" description="Providers available to publish flows">
+    {rows}
+  </SectionCard>
+
+  // After
+  <SettingsGroup>
+    <SettingsTitle info="Providers available to publish flows">Channels</SettingsTitle>
+    <SettingsContainer>{rows}</SettingsContainer>
+  </SettingsGroup>
+  ```
+
+### Patch Changes
+
+- Knowledge pages stay readable with long text: page descriptions and On this page headings are clamped, and search results show the matched text highlighted with a description line. ([#30719](https://github.com/mastra-ai/mastra/pull/30719))
+
+- `CodeDiff` with a file header now shows its lines flush against the header and the card's bottom edge, so stacked diffs in a `CodeDiffList` read like a pull request with no blank band above the first line or below the last. The horizontal scrollbar only takes room when lines overflow, and none on platforms with overlay scrollbars. Diffs without a header keep their padding. ([#30668](https://github.com/mastra-ai/mastra/pull/30668))
+
+- Knowledge search results now show the part of a page description that matches the query, instead of a first line that can hide it. ([#30722](https://github.com/mastra-ai/mastra/pull/30722))
+
+- Updated dependencies [[`5053f97`](https://github.com/mastra-ai/mastra/commit/5053f97664afec569f908f266e04865cbae51868), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`8ce66cf`](https://github.com/mastra-ai/mastra/commit/8ce66cf4a19e23d5bd73cd861465d89bd0ee8065), [`bf60feb`](https://github.com/mastra-ai/mastra/commit/bf60feb162e5a4482a7c6767d14a17f9dce212a8), [`984a8cf`](https://github.com/mastra-ai/mastra/commit/984a8cfd7bc751c3cd4421fb6516482fa863174b), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`189c5dd`](https://github.com/mastra-ai/mastra/commit/189c5ddc674843e4fa67ad8bf03c2c1b9ae7b658), [`d5f3546`](https://github.com/mastra-ai/mastra/commit/d5f35468273369ae7d4699d856f5db69e871c8db), [`bbc22ce`](https://github.com/mastra-ai/mastra/commit/bbc22ce1036a18c3d235a556883844b81fe2fecc), [`d5b0012`](https://github.com/mastra-ai/mastra/commit/d5b00123c6098104eda0eb8d39ef0e139a0fe3e3), [`1bae2df`](https://github.com/mastra-ai/mastra/commit/1bae2df59020ede9a2a6096e6bf24500b06a0a86), [`4e206cf`](https://github.com/mastra-ai/mastra/commit/4e206cf1d2e486be84e0de9a9c8dbfd8bedeb222)]:
+  - @mastra/core@1.84.0-alpha.7
+  - @mastra/client-js@1.61.0-alpha.7
+  - @mastra/react@1.15.1-alpha.7
+
+## 69.1.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0eb407e`](https://github.com/mastra-ai/mastra/commit/0eb407ebcce9d87e96cb399df5a3afb265fc2806)]:
+  - @mastra/core@1.84.0-alpha.6
+  - @mastra/client-js@1.60.1-alpha.6
+  - @mastra/react@1.15.1-alpha.6
+
+## 69.1.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`7518c05`](https://github.com/mastra-ai/mastra/commit/7518c05d6f24d37ccebed2a0667e6fe189c3c368), [`b07dd23`](https://github.com/mastra-ai/mastra/commit/b07dd2371304f688a117c441501130853293a14f), [`33fba78`](https://github.com/mastra-ai/mastra/commit/33fba789314c27a9c610095e75f3131ca92831c9), [`e110fa6`](https://github.com/mastra-ai/mastra/commit/e110fa681a156277eed427ecea7a7bf488b02d37), [`d0a2fa4`](https://github.com/mastra-ai/mastra/commit/d0a2fa4e34473a05a582af70270173747c93a938)]:
+  - @mastra/core@1.84.0-alpha.5
+  - @mastra/client-js@1.60.1-alpha.5
+  - @mastra/react@1.15.1-alpha.5
+
+## 69.1.0-alpha.4
+
+### Minor Changes
+
+- Central icons now draw at the size Lucide icons did. The icon sizes grow by 2px (`xs` 14px, `sm` 16px, `md` 18px, `lg` 22px) because Central leaves more room around each drawing, so an icon in the same slot keeps the size people are used to. Product icons, the remaining Lucide icons, brand logos and product marks keep their drawn size. Avatars no longer borrow the icon sizes: the `xs` and `inline` avatars use their own `--spacing-avatar-xs` (12px) and `--spacing-avatar-inline` (16px). ([#30555](https://github.com/mastra-ai/mastra/pull/30555))
+
+  A few Central shapes that run edge to edge, such as plain arrows and the `•••` dots, get an optical inset so they match the rest of the set, with their stroke thickened by the same factor so every icon keeps the same line weight. The inset lives in `central-icons.json` and the icon generator applies it.
+
+- Opening a Knowledge page now shows it in a panel beside the Pages tree instead of replacing the graph, and the graph stops drawing while the page is open. The page's right column gains a Details list with its scope, last update, author, creation date and version. ([#30588](https://github.com/mastra-ai/mastra/pull/30588))
+
+### Patch Changes
+
+- Interface icons now use Central's Medium chevrons, which match the size of the icons around them, and one consistent shape for speech bubbles (Chat Bubble 7), thumbs up and down, and the settings gear. Central Icons are updated to 1.2.44. ([#30523](https://github.com/mastra-ai/mastra/pull/30523))
+
+- Added the `playground-ui/icon-size-from-parent` lint rule. It flags an icon that sets its own size with `size`, `width`, `height` or a size class, so icons take their size from the component they sit in, an `<Icon size>` wrapper, or a `size-icon-*` token. Sizes relative to the text (`h-[1em]`) and sizes computed from data are allowed. ([#30542](https://github.com/mastra-ai/mastra/pull/30542))
+
+  ```tsx
+  // Before
+  <IconPlusMedium className="size-3.5" />
+
+  // After
+  <IconPlusMedium className="size-icon-sm" />
+  ```
+
+  Icons now sit on the four icon sizes everywhere, and the skill and prompt block pickers use `EmptyState` and `Spinner` for their empty and loading states.
+
+- New feedback comments now show up in the list as soon as you submit them, instead of after the next refresh. Lists from `useTraceFeedback` and `useSpanFeedback` show the comment right away, remove it if the submit fails, and keep showing it until the list returns the stored comment or 60 seconds pass, whichever comes first. While a comment is waiting to be stored, the list refreshes every 3 seconds instead of every 30 seconds. ([#30515](https://github.com/mastra-ai/mastra/pull/30515))
+
+  Comments that are not stored yet have `isPending: true`, so you can hide actions such as delete until the stored comment arrives:
+
+  ```tsx
+  const { data } = useTraceFeedback({ traceId });
+
+  data?.feedback.map(item => (item.isPending ? <span>Sending…</span> : <FeedbackActions item={item} />));
+  ```
+
+  In Studio, a comment that is not stored yet shows "Sending…" instead of its review status, and its Mark reviewed and Delete actions stay hidden until the stored comment arrives.
+
+  `useCreateFeedback` now runs your `onMutate`, `onError` and `onSuccess` options in addition to its own behavior. Before, passing `onSuccess` skipped the hook's list refresh.
+
+- `Sidebar.NavShowMore` accepts a `ref` to its button, so an app can move focus to it, for example when the other toggle disappears after a click. ([#30475](https://github.com/mastra-ai/mastra/pull/30475))
+
+  ```tsx
+  const showLess = useRef<HTMLButtonElement>(null);
+
+  <Sidebar.NavShowMore ref={showLess} foldedCount={20} expanded onExpandedChange={collapse} />;
+
+  showLess.current?.focus();
+  ```
+
+- Updated dependencies [[`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`88f94f2`](https://github.com/mastra-ai/mastra/commit/88f94f237acc406efb774367f5ba7bdeaac8e88d), [`7517474`](https://github.com/mastra-ai/mastra/commit/7517474b395a44ca6b7573a16d307ca7964ab3a8), [`83a6d17`](https://github.com/mastra-ai/mastra/commit/83a6d17903e678df0f0a788daf2d08c64cc0b7d5), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`d929736`](https://github.com/mastra-ai/mastra/commit/d9297364354b6a9c5dc0b870c2cea1e305f5faa1), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`037b9b7`](https://github.com/mastra-ai/mastra/commit/037b9b75a89388b5ecd7ca72799d29107180f211), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913), [`929c8ab`](https://github.com/mastra-ai/mastra/commit/929c8aba1e3af7bf246b0e8aecc03264730fb913)]:
+  - @mastra/core@1.84.0-alpha.4
+  - @mastra/react@1.15.1-alpha.4
+  - @mastra/client-js@1.60.1-alpha.4
+  - @mastra/ai-sdk@1.12.0
+
+## 69.1.0-alpha.3
+
+### Minor Changes
+
+- Added `unavailableReason` to `ModelPicker`. When set, the picker shows its usual trigger, disabled, and hovering or focusing it shows the reason in a tooltip. Use it when the current user can see the model but is not allowed to change it. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  ```tsx
+  <ModelPicker
+    providers={providers}
+    value={value}
+    onValueChange={setValue}
+    unavailableReason="Only the session owner can change the model."
+  />
+  ```
+
+- On phones and tablets, the default sidebar (`mobileMode="takeover"`) now sits under the page instead of covering it. Opening it slides the whole page to the right, and the navigation underneath grows into place as it fades in, like the ChatGPT iOS app. While it moves, the page gets rounded corners, a thin edge and a soft shadow, so it reads as a card lifted above the navigation. ([#30440](https://github.com/mastra-ai/mastra/pull/30440))
+
+  - Swipe the page right to open the sidebar and swipe left to close it. The page follows your finger. When you let go, it finishes in the direction you were last moving: a short swipe is enough, swiping back partway cancels, and a nudge of a few pixels springs back. It keeps the speed of your swipe and eases to a stop. Dragging moves only the page and the sidebar, so it stays smooth on long pages.
+  - While the sidebar is open, a faint tint of the opposite colour (light in dark mode, dark in light mode) covers the strip of page still in view, setting it apart from the navigation. Tap that strip, or press Escape, to close the sidebar. Focus returns to the menu button. Until then, Tab and Shift+Tab cycle through the sidebar, and the page and toasts behind it are out of reach.
+  - Swipes that start in content that scrolls sideways, or on sliders and other controls that handle their own drags, are left to that content.
+  - With reduced motion turned on, the sidebar opens and closes without sliding.
+
+  `AppShell` slides its content automatically. A `Sidebar` rendered outside `AppShell` has no page to slide, so either move the page into `AppShell` or keep the previous drawer:
+
+  ```tsx
+  <AppShell sidebar={<Sidebar>{nav}</Sidebar>}>{page}</AppShell>
+
+  // or, without AppShell
+  <Sidebar mobileMode="drawer">{nav}</Sidebar>
+  ```
+
+  On desktop, dragging the sidebar's edge no longer restyles the whole page on every move, so resizing stays smooth beside long pages. The live width is set on the sidebar panel itself, so `var(--sidebar-width)` read outside the sidebar keeps the initial width.
+
+- Switched `@mastra/playground-ui` components from Lucide to Central Icons, and added Central Icons for your own UI. Each icon is its own module under `@mastra/playground-ui/icons/central/` and works inside `Icon` like any other icon. The icons are licensed under the Central Icons license, not Apache-2.0. See `CENTRAL-ICONS-LICENSE.md` in the package. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+  ```tsx
+  import { Icon } from '@mastra/playground-ui/icons/Icon';
+  import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+  <Icon size="sm">
+    <IconMagnifyingGlass />
+  </Icon>;
+  ```
+
+### Patch Changes
+
+- Central Icons now cover every interface icon in Studio and Factory, and each icon family, such as speech bubbles, bells, folders and settings, uses one consistent shape. ([#30438](https://github.com/mastra-ai/mastra/pull/30438))
+
+- `CodeDiff` now paints its code on the card surface instead of the syntax theme's own background, so a diff matches the card around it in light and dark mode. ([#30388](https://github.com/mastra-ai/mastra/pull/30388))
+
+- Studio and Factory now use Central Icons for their interface icons. ([#29934](https://github.com/mastra-ai/mastra/pull/29934))
+
+- Fixed the right padding of `Sidebar.CommandHeader`: its buttons now line up with the right edge of the nav rows below. ([#30471](https://github.com/mastra-ai/mastra/pull/30471))
+
+  A `Button` rendered as a link no longer puts its `type` on the anchor, so `Sidebar.NavAction` used as a link renders a valid `<a>`.
+
+- Updated dependencies [[`88b4a97`](https://github.com/mastra-ai/mastra/commit/88b4a970426f48731a153e46ed228d0301da32a1), [`33eaa29`](https://github.com/mastra-ai/mastra/commit/33eaa293e28aa8cd86ad68e1eaf44b4929be818d), [`adc0a70`](https://github.com/mastra-ai/mastra/commit/adc0a70bf835d1f81f7bf0af11b247ca115a6683), [`1072f7c`](https://github.com/mastra-ai/mastra/commit/1072f7c6268db5fb515460fdcdda173592bce450), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`c8a35ac`](https://github.com/mastra-ai/mastra/commit/c8a35ac6243eaef8ef1d9e589a7b75bf44904d8b), [`b666fdb`](https://github.com/mastra-ai/mastra/commit/b666fdbf03a95a8fbe4cf02d150f4576dad6512f)]:
+  - @mastra/core@1.84.0-alpha.3
+  - @mastra/memory@1.41.2-alpha.2
+  - @mastra/client-js@1.60.1-alpha.3
+  - @mastra/ai-sdk@1.12.0
+  - @mastra/react@1.15.1-alpha.3
+
 ## 69.1.0-alpha.2
 
 ### Patch Changes

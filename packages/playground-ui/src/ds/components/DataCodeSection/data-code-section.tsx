@@ -217,7 +217,7 @@ export function DataCodeSection({
         <DialogContent size="full">
           <DialogHeader>
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-3.5">
+              <DialogTitle className="flex min-w-0 items-center gap-1.5 truncate [&>svg]:size-icon-sm">
                 {dialogTitle ?? (
                   <>
                     {icon}

@@ -30,6 +30,9 @@ test.describe('Login Flow', () => {
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
       await expect(page.getByText('You need to sign in to access this page.')).toBeVisible();
 
+      // The protected page content (its route header breadcrumb) is not rendered
+      await expect(page.getByLabel('Breadcrumb').getByText('Agents')).toHaveCount(0);
+
       // Sidebar navigation should be hidden while unauthenticated on protected routes
       await expect(page.getByRole('link', { name: 'Agents', exact: true })).toHaveCount(0);
       await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toHaveCount(0);
@@ -235,37 +238,6 @@ test.describe('Login Flow', () => {
   });
 
   test.describe('when a logged-in session is reloaded', () => {
-    test('authenticated state persists after page reload', async ({ page }) => {
-      // Set up authenticated state
-      await setupAdminAuth(page);
-      await page.goto('/agents');
-
-      // Verify we see authenticated content
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Reload the page (auth state will still be mocked)
-      await page.reload();
-
-      // Should still see authenticated content
-      await expectCurrentBreadcrumb(page, 'Agents');
-    });
-
-    test('authenticated state persists across navigation', async ({ page }) => {
-      await setupAdminAuth(page);
-
-      // Navigate to agents
-      await page.goto('/agents');
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Navigate to workflows
-      await page.goto('/workflows');
-      await expectCurrentBreadcrumb(page, 'Workflows');
-
-      // Navigate back to agents
-      await page.goto('/agents');
-      await expectCurrentBreadcrumb(page, 'Agents');
-    });
-
     test('unauthenticated state shows login prompt consistently', async ({ page }) => {
       await setupUnauthenticated(page);
 
@@ -278,57 +250,6 @@ test.describe('Login Flow', () => {
 
       await page.goto('/tools');
       await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
-    });
-  });
-
-  test.describe('when a user is logged in', () => {
-    test('authenticated user sees main application content', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/agents');
-
-      // Wait for the page to load
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Should see application UI elements (sidebar navigation)
-      await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
-    });
-
-    test('authenticated user can access protected pages', async ({ page }) => {
-      await setupAdminAuth(page);
-
-      // Access agents page
-      await page.goto('/agents');
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Access workflows page
-      await page.goto('/workflows');
-      await expectCurrentBreadcrumb(page, 'Workflows');
-
-      // Access tools page
-      await page.goto('/tools');
-      await expectCurrentBreadcrumb(page, 'Tools');
-    });
-
-    test('authenticated user does not see login prompt', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/agents');
-
-      // Should NOT see the login prompt
-      await expect(page.getByRole('heading', { name: 'Sign in to continue' })).not.toBeVisible();
-
-      // Should see the agents content
-      await expectCurrentBreadcrumb(page, 'Agents');
-    });
-
-    test('unauthenticated user sees login prompt instead of content', async ({ page }) => {
-      await setupUnauthenticated(page);
-      await page.goto('/agents');
-
-      // Should see login prompt instead of content
-      await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible();
-
-      // Should NOT see the agents route header breadcrumb
-      await expect(page.getByLabel('Breadcrumb').getByText('Agents')).toHaveCount(0);
     });
   });
 

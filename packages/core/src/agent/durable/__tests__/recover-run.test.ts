@@ -17,6 +17,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
+import { noopLogger } from '../../../logger/noop-logger';
 import { Mastra } from '../../../mastra';
 import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
 import { InMemoryStore } from '../../../storage';
@@ -27,6 +28,7 @@ import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
+import { DurableExecutionEngine } from '../execution-engine';
 import {
   EXECUTION_LEASE_RENEW_INTERVAL_MS,
   EXECUTION_LEASE_TTL_MS,
@@ -159,6 +161,61 @@ async function readThreadRun(stream: AsyncIterable<any>) {
   throw new Error('Thread subscription ended without a terminal event');
 }
 
+describe('Durable snapshot ownership across storage reads', () => {
+  it.each(['recover', 'saved context'] as const)(
+    '%s rejects a snapshot belonging to the previous identity',
+    async reader => {
+      const store = new InMemoryStore();
+      const workflows = (await store.getStore('workflows'))!;
+      await seed(store, 'changed-owner', 'running', 'agent-A');
+      const identity = { id: 'agent-A', name: 'Agent A' };
+      const engine = new DurableExecutionEngine(identity.id);
+
+      // Both readers must check ownership after the asynchronous storage read.
+      if (reader === 'recover') {
+        const result = engine.loadRecoverableSnapshot(workflows, 'changed-owner', identity);
+        identity.id = 'agent-B';
+        await expect(result).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_AGENT_MISMATCH' });
+      } else {
+        const result = engine.loadSuspendedRequestContextValue(workflows, 'changed-owner', identity, 'userId');
+        identity.id = 'agent-B';
+        expect(await result).toBeUndefined();
+      }
+    },
+  );
+
+  it.each(['recover', 'saved context'] as const)(
+    '%s accepts a snapshot belonging to the current identity',
+    async reader => {
+      const store = new InMemoryStore();
+      const workflows = (await store.getStore('workflows'))!;
+      await seed(store, 'current-owner', 'running', 'agent-B');
+      const identity = { id: 'agent-A', name: 'Agent A' };
+      const engine = new DurableExecutionEngine(identity.id);
+
+      if (reader === 'recover') {
+        const result = engine.loadRecoverableSnapshot(workflows, 'current-owner', identity);
+        identity.id = 'agent-B';
+        expect((await result).workflowInput.agentId).toBe('agent-B');
+      } else {
+        const result = engine.loadSuspendedRequestContextValue(workflows, 'current-owner', identity, 'userId');
+        identity.id = 'agent-B';
+        expect(await result).toBe('u-1');
+      }
+    },
+  );
+
+  it('reports the current name when a snapshot is missing', async () => {
+    const store = new InMemoryStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const identity = { id: 'agent-A', name: 'Agent A' };
+    const engine = new DurableExecutionEngine(identity.id);
+    const result = engine.loadRecoverableSnapshot(workflows, 'missing', identity);
+    identity.name = 'Renamed agent';
+    await expect(result).rejects.toMatchObject({ details: { agentName: 'Renamed agent' } });
+  });
+});
+
 describe('DurableAgent.recover(runId)', () => {
   let agent: DurableAgent;
   let store: InMemoryStore;
@@ -190,6 +247,49 @@ describe('DurableAgent.recover(runId)', () => {
 
     await entry?.workflowExecution;
     cleanup();
+  });
+
+  it('logs recovery history failures to the logger installed while the lookup was pending', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const recovery = createDurableWithStore('logger-recovery', new InMemoryStore(), pubsub);
+    const previousWarn = vi.fn();
+    const currentWarn = vi.fn();
+    const mastra = new Mastra({
+      agents: { agent: recovery.agent as any },
+      storage: recovery.store,
+      pubsub,
+      logger: { ...noopLogger, warn: previousWarn },
+    });
+    const runId = 'run-logger-recovery';
+    await seed(recovery.store, runId, 'running', recovery.agent.id);
+    const workflows = (await recovery.store.getStore('workflows'))!;
+    const snapshot = makeSnapshot(runId, 'running', recovery.agent.id);
+    snapshot.context.input.iterationCount = 0;
+    await workflows.persistWorkflowSnapshot({
+      workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      runId,
+      resourceId: 'r',
+      snapshot,
+    });
+    stubWorkflow(recovery.agent, 'success');
+    const lookupStarted = Promise.withResolvers<void>();
+    const history = Promise.withResolvers<never>();
+    vi.spyOn(pubsub, 'getHistory').mockImplementationOnce(() => {
+      lookupStarted.resolve();
+      return history.promise;
+    });
+    const recovering = recovery.agent.recover(runId);
+    await lookupStarted.promise;
+    mastra.setLogger({ logger: { ...noopLogger, warn: currentWarn } });
+    const error = new Error('history unavailable');
+    history.reject(error);
+    const recovered = await recovering;
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    recovered.cleanup();
+
+    const warning = `[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`;
+    expect(currentWarn).toHaveBeenCalledWith(warning, { error });
+    expect(previousWarn).not.toHaveBeenCalledWith(warning, { error });
   });
 
   it('restores the agent tools so the recovered model step is offered them (#25890)', async () => {
@@ -993,7 +1093,7 @@ describe('DurableAgent.recover(runId)', () => {
     await globalRunRegistry.get('run-ok')?.workflowExecution;
     cleanup();
 
-    expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-ok', { storageVersion: 1 });
+    expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-ok');
     expect(await readSnapshot(store, DurableStepIds.AGENTIC_EXECUTION, 'run-ok')).toBeNull();
   });
 

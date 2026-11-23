@@ -11,8 +11,8 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
-
 import { BoardWriteError, BoardWrites, issueMessage } from '../boards/board-writes.js';
+
 import type { BoardWriter } from '../boards/board-writes.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import { codeBehaviourOf } from '../boards/stored-board.js';
@@ -31,7 +31,10 @@ export interface BoardRoutesDeps extends RouteDependencies {
   workItems: Pick<WorkItemsStorage, 'listShared' | 'releaseReviewCards'>;
   storage: StoredBoardsStorage;
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
-  boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
+  boards: Pick<
+    ProjectBoardCache,
+    'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'projectSkillNames' | 'seedFor'
+  >;
 }
 
 type Resolved = StoredBoardScope & { userId: string };

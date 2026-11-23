@@ -72,8 +72,6 @@ export interface GitLabProject {
   connectionId?: string | null;
   accountLabel?: string | null;
   defaultBranch?: string | null;
-  sandboxProvider?: string;
-  sandboxWorkdir?: string;
 }
 
 export interface GitLabRepository {
@@ -88,12 +86,10 @@ export interface GitLabRepository {
   defaultBranch: string;
   private: boolean;
   installationStorageId?: string;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
 }
 
 export function gitLabProjectRepository(project: GitLabProject): GitLabRepository | null {
-  if (!project.projectId || !project.sandboxProvider || !project.sandboxWorkdir) return null;
+  if (!project.projectId) return null;
   const fullName = project.projectPath ?? project.name;
   const parts = fullName.split('/').filter(Boolean);
   return {
@@ -106,8 +102,6 @@ export function gitLabProjectRepository(project: GitLabProject): GitLabRepositor
     defaultBranch: project.defaultBranch ?? 'main',
     private: true,
     installationStorageId: project.installationStorageId,
-    sandboxProvider: project.sandboxProvider,
-    sandboxWorkdir: project.sandboxWorkdir,
   };
 }
 

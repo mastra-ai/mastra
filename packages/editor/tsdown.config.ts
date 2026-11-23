@@ -10,9 +10,8 @@ export default defineConfig({
   format: ['cjs', 'esm'],
   fixedExtension: false,
   nodeProtocol: 'strip',
-  dts: true,
+  dts: { sourcemap: false },
   clean: true,
-  sourcemap: true,
   onSuccess: async () => {
     await cp(join('src', 'ee', 'workspace'), join('dist', 'ee', 'workspace'), { recursive: true });
   },

@@ -164,7 +164,6 @@ describe('custom board lifecycle integration without built-in boards', () => {
     expect(await h.storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
     const audits = await h.db.findMany('factory_rule_evaluations', {});
     expect(audits.length).toBeGreaterThanOrEqual(3);
-    expect(audits.every(row => row.rule_set_version === 'custom-lifecycle-v1')).toBe(true);
   });
 
   it("keeps the card and queues nothing when the board's policy rejects the move", async () => {

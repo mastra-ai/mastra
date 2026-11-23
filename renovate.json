@@ -44,6 +44,12 @@
   ],
   "packageRules": [
     {
+      "description": "@mastra/mcp-legacy is the @mastra/mcp 1.x server that mcp-docs-server keeps for hosts using the legacy initialize handshake",
+      "matchDepNames": ["@mastra/mcp-legacy"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
       "description": "Disable all dependency updates in examples (Renovate previously ignored these via ignorePaths)",
       "matchFileNames": ["examples/**/package.json"],
       "enabled": false
@@ -92,6 +98,13 @@
       "matchDatasources": ["docker"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "dependencyDashboardApproval": false
+    },
+    {
+      "description": "Store tests pin mongo to 7.x: 8.x and 9.x refuse to start on the CI runners' Linux kernel (SERVER-121912).",
+      "matchDatasources": ["docker"],
+      "matchFileNames": ["stores/mongodb/docker-compose.yaml"],
+      "matchPackageNames": ["mongo"],
+      "allowedVersions": "<8"
     },
     {
       "groupName": "AI provider SDKs",
@@ -429,12 +442,18 @@
       "enabled": false
     },
     {
+      "description": "Keep the mongo Docker image used by stores/mongodb tests on 7.x. MongoDB 8.x and 9.0.8 refuse to start on Linux kernel 6.19.0 through 7.0.13 (SERVER-121912), which the CI runners run, so every MongoDB store job fails before any test. Remove once MongoDB ships a release that starts on those kernels.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mongo"],
+      "allowedVersions": "<8"
+    },
+    {
       "description": "Keep agent-browser below 0.20.0. From 0.20.0 it ships only a native CLI with no JavaScript entry point, so @mastra/agent-browser and @mastra/browser-firecrawl can no longer import BrowserManager from it.",
       "matchPackageNames": ["agent-browser"],
       "allowedVersions": "<0.20.0"
     },
     {
-      "description": "Keep the OTLP exporters in observability/* on the OpenTelemetry SDK 2 line. 0.300.0 is the SDK 3 exporter and needs @opentelemetry/api 1.10, while sdk-trace-base, core and resources 2.x need api below 1.10. npm then hoists api 1.9.1, `import` fails with \"does not provide an export named 'SeverityNumber'\", and @mastra/otel-exporter silently exports nothing. Renovate reads 0.22x to 0.300 as a minor update, so the major approval gate does not catch it. Remove when observability/* moves to SDK 3 together.",
+      "description": "Keep the OTLP exporters in observability/* on the OpenTelemetry SDK 2 line. 0.300.0 is the SDK 3 exporter and needs @opentelemetry/api 1.10, while sdk-trace-base, core and resources 2.x need api below 1.10. npm then hoists api 1.9.1, `import` fails with \"does not provide an export named 'SeverityNumber'\", and @mastra/otel-exporter silently exports nothing. Renovate reads 0.22x to 0.300 as a minor update, so the major approval gate does not catch it. @mastra/langfuse lists exporter-trace-otlp-http and otlp-exporter-base only because @langfuse/otel 5.x accepts any version below 1.0.0 as a peer, so npm would install the SDK 3 ones; drop both from it when it moves to @langfuse/otel 6.1.1 or later. Remove when observability/* moves to SDK 3 together.",
       "matchFileNames": ["observability/**/package.json"],
       "matchPackageNames": [
         "@opentelemetry/exporter-logs-otlp-grpc",
@@ -442,7 +461,8 @@
         "@opentelemetry/exporter-logs-otlp-proto",
         "@opentelemetry/exporter-trace-otlp-grpc",
         "@opentelemetry/exporter-trace-otlp-http",
-        "@opentelemetry/exporter-trace-otlp-proto"
+        "@opentelemetry/exporter-trace-otlp-proto",
+        "@opentelemetry/otlp-exporter-base"
       ],
       "allowedVersions": "<0.300.0"
     },

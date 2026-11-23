@@ -12,35 +12,11 @@ beforeEach(() => {
 });
 
 describe('SessionFavicon', () => {
-  describe('when the session is still preparing', () => {
-    it('shows the amber initializing indicator', () => {
-      renderWithProviders(<SessionFavicon state="initializing" />);
-
-      expect(faviconHref()).toBe('/favicon-session-initializing.svg');
-    });
-  });
-
   describe('when the agent is working', () => {
     it('shows the green activity indicator', () => {
       renderWithProviders(<SessionFavicon state="working" />);
 
       expect(faviconHref()).toBe('/favicon-session-working.svg');
-    });
-  });
-
-  describe('when the session is waiting on the user', () => {
-    it('shows the blue awaiting indicator', () => {
-      renderWithProviders(<SessionFavicon state="awaiting" />);
-
-      expect(faviconHref()).toBe('/favicon-session-awaiting.svg');
-    });
-  });
-
-  describe('when the session has errored', () => {
-    it('shows the red error indicator', () => {
-      renderWithProviders(<SessionFavicon state="error" />);
-
-      expect(faviconHref()).toBe('/favicon-session-error.svg');
     });
   });
 

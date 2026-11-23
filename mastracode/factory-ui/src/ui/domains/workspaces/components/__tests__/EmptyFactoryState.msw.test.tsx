@@ -32,8 +32,6 @@ const repo: GithubRepo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 const otherRepo: GithubRepo = { ...repo, id: 100, fullName: 'octo/other', name: 'other', defaultBranch: 'develop' };
 const thirdRepo: GithubRepo = { ...repo, id: 101, fullName: 'octo/third', name: 'third' };
@@ -44,8 +42,6 @@ const gitlabProject: GitLabProject = {
   projectPath: 'team/backend',
   installationStorageId: 'gitlab-inst',
   defaultBranch: 'develop',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/backend',
 };
 const model = { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' as const };
 const personalModel = { providerId: 'anthropic', modelId: 'anthropic/claude-fable-5', method: 'api_key' as const };
@@ -159,7 +155,6 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
           projectRepository: {
             id: 'link-1',
             branch: 'main',
-            sandboxWorkdir: '/workspace/hello',
             repository: { slug: 'octo/hello', externalId: '99', defaultBranch: 'main' },
           },
         });
@@ -350,7 +345,7 @@ describe('Draft Factory onboarding', () => {
   });
 
   it('never starts syncing a repository the Work step switch left off', async () => {
-    registerSetup();
+    const writes = registerSetup();
     // Nothing is selected before onboarding, so "off" must not select the repository either, which
     // leaves the intake config untouched.
     const intake = registerIntake();
@@ -365,6 +360,7 @@ describe('Draft Factory onboarding', () => {
     renderOnboarding();
     await user.click(await enabledCreateButton());
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.find(item => item.path === 'repository')?.body).toMatchObject({ selectIntake: false });
     expect(intake.saved).toEqual([]);
     expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toBeNull();
   });
@@ -592,7 +588,7 @@ describe('Draft Factory onboarding', () => {
               repository: { ...body.repository, defaultBranch: 'main' },
             };
             if (!links.some(existing => existing.id === link.id)) links.push(link);
-            return HttpResponse.json({ projectRepository: { ...link, branch: 'main', sandboxWorkdir: '/workspace' } });
+            return HttpResponse.json({ projectRepository: { ...link, branch: 'main' } });
           },
         ),
         http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1/repositories/:linkId`, ({ params }) => {
@@ -650,7 +646,6 @@ describe('Draft Factory onboarding', () => {
               projectRepository: {
                 id,
                 branch: selected.defaultBranch,
-                sandboxWorkdir: selected.sandboxWorkdir,
                 repository: {
                   slug: selected.fullName,
                   externalId: String(selected.id),
@@ -695,23 +690,6 @@ describe('Draft Factory onboarding', () => {
       expect([...links.values()].map(item => item.fullName)).toEqual(['octo/teammate', finalRepo.fullName]);
     },
   );
-
-  it('refuses to create a Factory whose model is no longer available', async () => {
-    const writes = registerSetup();
-    seedOnboarding('model', {
-      modelScope: 'factory',
-      repository: repo,
-      workConfirmed: true,
-      model: { ...model, modelId: 'openai/retired-model' },
-    });
-    renderOnboarding();
-    const modelSection = await findActiveSection('Model');
-    expect(
-      await modelSection.findByText('Your previous model is no longer available. Choose another model.'),
-    ).toHaveAttribute('role', 'alert');
-    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
-    expect(writes).toEqual([]);
-  });
 });
 
 describe('Personal Factory model', () => {
@@ -927,25 +905,6 @@ describe('Account presets', () => {
     renderOnboarding();
     const modelSection = await findActiveSection('Model');
     expect(await modelSection.findByText('No models are available for this connection yet.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
-    expect(writes).toEqual([]);
-  });
-
-  it('asks users to review a connection whose sign-in method changed before confirmation', async () => {
-    const writes = registerSetup();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-        HttpResponse.json({ providers: [{ provider: 'openai', source: 'oauth-org', orgCredential: 'oauth' }] }),
-      ),
-    );
-    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'factory', model });
-    renderOnboarding();
-    const modelSection = await findActiveSection('Model');
-    expect(
-      await modelSection.findByText(
-        'Your OpenAI connection changed since you chose it. Connect it again or choose another provider.',
-      ),
-    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
   });

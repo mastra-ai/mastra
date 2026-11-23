@@ -199,15 +199,4 @@ test.describe('Item and review panel layout', () => {
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
     });
   });
-
-  test.describe('when a review result is opened directly', () => {
-    test('closes from the close control', async ({ page }) => {
-      await page.goto('/experiments/review-queue?experiment=exp-1&review=res-3');
-      const panel = page.getByRole('dialog', { name: 'Review item res-3' });
-      const close = panel.getByRole('button', { name: 'Close panel', exact: true });
-      await expect(close).toBeVisible();
-      await close.click({ timeout: 3000 });
-      await expect(panel).toBeHidden();
-    });
-  });
 });

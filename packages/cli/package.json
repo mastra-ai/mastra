@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.39.1-alpha.2",
+  "version": "1.40.2-alpha.6",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -19,7 +19,8 @@
     ]
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata && pnpm --filter @mastra/factory generate:api-cli-route-metadata",
@@ -98,7 +99,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.83.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.85.1-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

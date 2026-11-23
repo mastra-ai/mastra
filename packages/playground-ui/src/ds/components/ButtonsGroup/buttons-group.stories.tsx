@@ -7,7 +7,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconScissors1 } from '@/ds/icons/central/IconScissors1';
@@ -66,7 +66,7 @@ export const Sizes: Story = {
             </SelectContent>
           </Select>
           <Button size="icon-lg" aria-label="More options">
-            <IconChevronBottom />
+            <IconChevronDownMedium />
           </Button>
         </ButtonsGroup>
       ))}
@@ -88,7 +88,7 @@ export const AsSplitButton: Story = {
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button size="icon-md" aria-label="More save options">
-            <IconChevronBottom />
+            <IconChevronDownMedium />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
@@ -107,7 +107,7 @@ export const PopoverFirstSegmentOpen: Story = {
       <Popover defaultOpen>
         <PopoverTrigger variant="ghost" size="sm">
           Claude Opus 5.5
-          <IconChevronBottom />
+          <IconChevronDownMedium />
         </PopoverTrigger>
         <PopoverContent align="start">Model menu</PopoverContent>
       </Popover>

@@ -1,5 +1,6 @@
-import type { MastraWorker } from '@mastra/core/worker';
+import { MastraConnectError } from '@mastra/connect';
 
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { IntegrationContext } from '../../base.js';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
@@ -7,17 +8,13 @@ import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { attachGitLabRules } from '../../gitlab/rules.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
-import type { PlatformApiClientConfig } from '../api-client.js';
-import { PlatformGitLabEventWorker } from './event-worker.js';
-import type { PlatformGitLabEventStorage } from './event-worker.js';
-
-interface PlatformIntegrationConnection {
-  id: string;
-  integrationId: string;
-  status: 'active' | 'needs_reauth';
-  accountLabel: string | null;
-}
+import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
+import type { PlatformConnectProviderRegistration, PlatformConnectProviderSource } from '../connect/routes.js';
+import { PlatformConnectBinding } from '../foundation/connect-binding.js';
+import type { PlatformConnection } from '../foundation/connect-binding.js';
+import type { PlatformConnectEventRoute, PlatformConnectEventSource } from '../foundation/connect-events.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
+import { handleGitLabConnectEvent } from './connect-events.js';
 
 interface PlatformGitLabContext {
   id: string;
@@ -28,15 +25,13 @@ interface PlatformGitLabContext {
   repositoryAccessToken: () => Promise<string>;
 }
 
-type PlatformGitLabCredential =
-  { type: 'oauth2'; accessToken: string; expiresAt: string | null } | { type: 'api_key'; apiKey: string };
-
 /** The Platform's GitLab (OAuth) integration. It is the only GitLab credential flow Factory discovers. */
 const GITLAB_INTEGRATION_ID = 'gitlab';
 
 export interface PlatformGitLabIntegrationConfig {
   rules?: GitLabRuleOverrides;
-  clientConfig?: PlatformApiClientConfig;
+  /** The Connect client, or options to build one; defaults to the platform environment. */
+  connect?: PlatformConnectOption;
   connectionId?: string;
   /**
    * Optional. Only a direct project webhook to `/web/gitlab/webhook` needs it;
@@ -45,25 +40,39 @@ export interface PlatformGitLabIntegrationConfig {
   webhookSecret?: string;
   /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`, and to true when that is unset. */
   pollingEnabled?: boolean;
-  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`, and to the worker's 20 s when unset. */
+  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`, and to the poller's 20 s when unset. */
   pollingIntervalMs?: number;
 }
 
-export class PlatformGitLabIntegration extends GitLabIntegrationBase {
-  readonly #client: PlatformApiClient;
+/**
+ * GitLab through Mastra Connect. It keeps `GitLabIntegrationBase`, which the
+ * self-hosted integration shares, and composes the Connect plumbing through a
+ * `PlatformConnectBinding`.
+ */
+export class PlatformGitLabIntegration
+  extends GitLabIntegrationBase
+  implements PlatformConnectProviderSource, PlatformConnectEventSource
+{
+  readonly binding: PlatformConnectBinding;
   readonly #connectionId: string | undefined;
   readonly #endpointHost: string;
   readonly #webhookSecret: string | undefined;
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
+  #reconcileWorker: IssueReconcileWorker | undefined;
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
     const connectionId = config.connectionId?.trim() || process.env.MASTRA_GITLAB_CONNECTION_ID?.trim() || undefined;
-    const clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(clientConfig);
+    this.binding = new PlatformConnectBinding({
+      integrationId: 'gitlab',
+      providerKeys: [GITLAB_INTEGRATION_ID],
+      ...(config.connect ? { connect: config.connect } : {}),
+      linkOrgConnectionsAtBoot: true,
+      ...(connectionId ? { filter: (connection: PlatformConnection) => connection.id === connectionId } : {}),
+    });
     this.#connectionId = connectionId;
-    this.#endpointHost = new URL(clientConfig.baseUrl).host;
+    this.#endpointHost = new URL(this.binding.connect.baseUrl).host;
     this.#webhookSecret = config.webhookSecret?.trim() || process.env.MASTRA_GITLAB_WEBHOOK_SECRET?.trim() || undefined;
     this.#pollingEnabled =
       config.pollingEnabled ?? process.env.MASTRA_PLATFORM_GITLAB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
@@ -71,18 +80,19 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       config.pollingIntervalMs ?? optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS');
   }
 
-  async listConnections(): Promise<PlatformIntegrationConnection[]> {
-    const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
-      'GET',
-      `/v2/connections?providerKey=${encodeURIComponent(GITLAB_INTEGRATION_ID)}`,
-    );
-    // The providerKey filter is applied server side; the exact ID check guards
-    // against a server that answers more loosely than asked.
-    return result.connections.filter(
-      connection =>
-        connection.integrationId === GITLAB_INTEGRATION_ID &&
-        (!this.#connectionId || connection.id === this.#connectionId),
-    );
+  listConnections(): Promise<PlatformConnection[]> {
+    return this.binding.listConnections();
+  }
+
+  platformConnectProviders(): PlatformConnectProviderRegistration[] {
+    return [
+      {
+        provider: 'gitlab',
+        integrationId: GITLAB_INTEGRATION_ID,
+        connectionIntegrationIds: [GITLAB_INTEGRATION_ID],
+        binding: this.binding,
+      },
+    ];
   }
 
   override async statusConnections(): Promise<GitLabStatusConnection[]> {
@@ -112,29 +122,38 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   }
 
   /**
-   * The reconcile sweeps from the base class plus, when polling is on, the
-   * Platform event poller. Polling replaces the direct project webhook: the
-   * webhook route stays mounted for deployments that also configured a secret,
-   * but nothing in Platform mode requires one.
+   * The reconcile sweeps from the base class. Events come through the
+   * deployment's Platform Connect event poller (`connectEventRoute`), which
+   * replaces the direct project webhook: the webhook route stays mounted for
+   * deployments that also configured a secret, but nothing in Platform mode
+   * requires one.
    */
   override workers(ctx: IntegrationContext): MastraWorker[] {
+    void this.binding.ensureBootLinked();
     const workers = super.workers(ctx);
-    if (!this.#pollingEnabled) return workers;
-    if (!ctx.controller) {
+    this.#reconcileWorker = workers.find(worker => worker instanceof IssueReconcileWorker);
+    return workers;
+  }
+
+  /** The route the Platform Connect event poller reads GitLab events through, unless polling is off. */
+  connectEventRoute(ctx: IntegrationContext): PlatformConnectEventRoute | null {
+    if (!this.#pollingEnabled) return null;
+    const controller = ctx.controller;
+    if (!controller) {
       throw new Error('Platform GitLab event polling requires the mounted Mastra Code controller.');
     }
-    return [
-      ...workers,
-      new PlatformGitLabEventWorker({
-        client: this.#client,
-        controller: ctx.controller,
-        gitlab: this,
-        storage: ctx.storage.generic as unknown as PlatformGitLabEventStorage,
-        listConnections: () => this.listConnections(),
-        ingestFactoryEvent: attachGitLabRules(this, ctx),
-        intervalMs: this.#pollingIntervalMs,
-      }),
-    ];
+    const ingestFactoryEvent = attachGitLabRules(this, ctx);
+    return {
+      binding: this.binding,
+      handle: event =>
+        handleGitLabConnectEvent(event, {
+          controller,
+          gitlab: this,
+          ingestFactoryEvent,
+        }),
+      reconcile: () => this.#reconcileWorker?.requestRun(),
+      ...(this.#pollingIntervalMs === undefined ? {} : { pollIntervalMs: this.#pollingIntervalMs }),
+    };
   }
 
   diagnostics(): Record<string, unknown> {
@@ -146,28 +165,29 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       webhookConfigured: Boolean(this.#webhookSecret),
       pollingEnabled: this.#pollingEnabled,
       ...(this.#pollingIntervalMs === undefined ? {} : { pollingIntervalMs: this.#pollingIntervalMs }),
+      ...(this.binding.needsLinking.length > 0 ? { needsLinking: this.binding.needsLinking } : {}),
     };
   }
 
-  async #activeConnections(): Promise<PlatformIntegrationConnection[]> {
+  async #activeConnections(): Promise<PlatformConnection[]> {
     return (await this.listConnections()).filter(connection => connection.status === 'active');
   }
 
-  #context(connection: PlatformIntegrationConnection): PlatformGitLabContext {
+  #context(connection: PlatformConnection): PlatformGitLabContext {
     return {
       id: connection.id,
       label: connection.accountLabel,
-      api: new GitLabApiClient({ client: this.#client, connectionId: connection.id }),
+      api: new GitLabApiClient({ client: this.binding, connectionId: connection.id }),
       connection: gitlabConnection(connection.id),
       // Platform does not currently expose the connected GitLab instance host.
       host: 'gitlab.com',
       repositoryAccessToken: async () => {
         // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
         // Never persist or log the returned credential.
-        const credential = await this.#client.request<PlatformGitLabCredential>(
-          'GET',
-          `/v2/connections/${encodeURIComponent(connection.id)}/credentials`,
-        );
+        const credential = await this.binding.connect.getCredential(connection.id).catch((error: unknown) => {
+          if (error instanceof MastraConnectError && error.code === 'unsupported_credential_type') return null;
+          throw error;
+        });
         const token =
           credential?.type === 'oauth2'
             ? credential.accessToken
