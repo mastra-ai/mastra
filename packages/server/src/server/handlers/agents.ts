@@ -17,6 +17,7 @@ import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -220,6 +221,23 @@ async function persistEditorOwnedModelList({
   return true;
 }
 
+/**
+ * Drop client-supplied authored-turn marks from every model-visible field of a
+ * request body: `messages`, `context`, `resumeData` and `streamOptions.context`.
+ * Approval, decline and resume routes forward these to the agent, so a client
+ * must not be able to mark its own text as an application-written turn there.
+ */
+function stripClientAuthoredTurnMarksFromBody(body: object): void {
+  const record = body as Record<string, unknown>;
+  stripClientAuthoredTurnMarks(record.messages);
+  stripClientAuthoredTurnMarks(record.context);
+  stripClientAuthoredTurnMarks(record.resumeData);
+  const streamOptions = record.streamOptions;
+  if (streamOptions && typeof streamOptions === 'object' && !Array.isArray(streamOptions)) {
+    stripClientAuthoredTurnMarks((streamOptions as Record<string, unknown>).context);
+  }
+}
+
 function normalizePublicExecutionOptions(
   options: Record<string, unknown> | undefined,
   serverRequestContext: RequestContext,
@@ -228,6 +246,7 @@ function normalizePublicExecutionOptions(
 
   const { actor: _actor, scopes: _scopes, requestContext, ...normalized } = options;
   stripClientCredentialHeaders(normalized);
+  stripClientAuthoredTurnMarks(normalized.context);
   mergeBodyRequestContext(serverRequestContext, requestContext);
   return { ...normalized, requestContext: serverRequestContext };
 }
@@ -1779,6 +1798,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -1894,6 +1916,9 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -1965,6 +1990,9 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
@@ -2186,6 +2214,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const versionOptions = extractVersionOptions(
         serverRequestContext,
@@ -2561,7 +2592,11 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
       return await handleAgentMessageRoute({
         ...params,
         methodName: 'sendMessage',
-        invoke: (agent, target) => agent.sendMessage(params.message, target),
+        invoke: (agent, target) => {
+          const sanitized = [params.message];
+          stripClientAuthoredTurnMarks(sanitized);
+          return agent.sendMessage(sanitized[0] as typeof params.message, target);
+        },
       });
     } catch (error) {
       return handleSignalRoutingError(error, 'error sending agent message');
@@ -2587,7 +2622,11 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
       return await handleAgentMessageRoute({
         ...params,
         methodName: 'queueMessage',
-        invoke: (agent, target) => agent.queueMessage(params.message, target),
+        invoke: (agent, target) => {
+          const sanitized = [params.message];
+          stripClientAuthoredTurnMarks(sanitized);
+          return agent.queueMessage(sanitized[0] as typeof params.message, target);
+        },
       });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent message');
@@ -3076,6 +3115,9 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((rest as { context?: unknown }).context);
 
       const agent = await getAgentFromSystem({
         mastra,
@@ -3374,6 +3416,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3458,6 +3501,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
       const normalizedStreamOptions = normalizePublicExecutionOptions(
         params.streamOptions as Record<string, unknown> | undefined,
         serverRequestContext,
@@ -3582,6 +3626,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3628,6 +3673,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const {
         resumeData,
@@ -3727,6 +3773,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         options.untilIdle = untilIdle;
       }
 
+      stripClientAuthoredTurnMarks(resumeData);
       const streamResult = structuredOutput
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
         : await agent.resumeStream(resumeData, options);
@@ -3839,6 +3886,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const {
         resumeData,
@@ -3940,6 +3988,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         _detachObserverOnCancel: hasResumableStreams(agent),
       };
 
+      stripClientAuthoredTurnMarks(resumeData);
       const streamResult = structuredOutput
         ? await agent.resumeStreamUntilIdle(resumeData, { ...options, structuredOutput })
         : await agent.resumeStreamUntilIdle(resumeData, options);
@@ -3983,6 +4032,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -4038,6 +4088,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -4088,6 +4139,9 @@ export const STREAM_NETWORK_ROUTE = createRoute({
       stripClientCredentialHeaders(params);
 
       validateBody({ messages });
+      // A client must not be able to mark its own message as an authored turn.
+      stripClientAuthoredTurnMarks(messages);
+      stripClientAuthoredTurnMarks((params as { context?: unknown }).context);
 
       // Authorization: context values take precedence over client-provided values
       let authorizedMemoryOption = params.memory;
@@ -4138,6 +4192,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const streamResult = await agent.approveNetworkToolCall({
         ...params,
@@ -4179,6 +4234,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
+      stripClientAuthoredTurnMarksFromBody(params);
 
       const streamResult = await agent.declineNetworkToolCall({
         ...params,

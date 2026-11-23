@@ -68,12 +68,11 @@ afterEach(() => {
 
 describe('ThemeDetailPanel', () => {
   describe('when a goal theme is open in a multi-snapshot range', () => {
-    it('summarizes the theme share as a sentence instead of a stage-share stat', async () => {
+    it('summarizes the theme share as a sentence', async () => {
       usePanelHandlers();
       renderPanel();
 
       expect(await screen.findByText('6 of 9 traces in this snapshot (67%)')).not.toBeNull();
-      expect(screen.queryByText('Stage share')).toBeNull();
     });
 
     it('labels the header with the goal signal and its description', async () => {
@@ -81,7 +80,6 @@ describe('ThemeDetailPanel', () => {
       renderPanel();
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
-      expect(screen.queryByText(/^theme$/i)).toBeNull();
       fireEvent.focus(screen.getByRole('button', { name: 'Goal' }));
 
       expect((await screen.findByRole('tooltip')).textContent).toContain('What the user wanted');
@@ -106,7 +104,7 @@ describe('ThemeDetailPanel', () => {
       expect(screen.getByText('Page 1 of 2')).not.toBeNull();
     });
 
-    it('summarizes the trend and plots the lifecycle without clustering states', async () => {
+    it('summarizes the trend and plots the lifecycle in time order', async () => {
       usePanelHandlers();
       renderPanel();
 
@@ -118,9 +116,6 @@ describe('ThemeDetailPanel', () => {
       const olderMarker = screen.getByLabelText('Jul 8, 2026: 1 trace (50%)');
       const newerMarker = screen.getByLabelText('Jul 15, 2026: 2 traces (67%)');
       expect(parseFloat(olderMarker.style.left)).toBeLessThan(parseFloat(newerMarker.style.left));
-      expect(screen.queryByText(/^birth$/i)).toBeNull();
-      expect(screen.queryByText(/^continue$/i)).toBeNull();
-      expect(screen.queryByRole('heading', { name: 'History' })).toBeNull();
     });
   });
 

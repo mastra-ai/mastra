@@ -11,12 +11,21 @@ import {
   EMPTY_TRACES_SELECTION,
   TRACES_SORT_FIELDS,
   TracesExplorer,
+  useTraceUsageColumns,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
+  TracesExplorerCapabilities,
   TracesExplorerState,
+  TracesExplorerTraces,
   TracesFilters,
   TracesSort,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
+import { useTracesDiscoveryQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-discovery-query';
+import { useTracesFilterSuggestionsQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-filter-suggestions-query';
+import { useTracesHistogramQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-histogram-query';
+import { useTracesListQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-query';
+import { useTracesUsageQuery } from '@mastra/playground-ui/domains/traces/hooks/use-traces-usage-query';
 import { MastraReactProvider } from '@mastra/react';
 import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import type { App } from '@modelcontextprotocol/ext-apps';
@@ -183,30 +192,83 @@ function TracesTab({
     <AppState context={context} studioPath={query ? null : `/traces?${params}`}>
       <div className="flex min-h-0 flex-1 flex-col">
         {query && <OpenedQueryBar query={query} onClear={onClearQuery} />}
-        <TracesExplorer
-          metricsSupport={NO_METRICS}
-          selection={state.selection}
-          filters={state.filters}
-          onChange={setState}
-          sort={sort}
-          onSortChange={setSort}
-          features={FEATURES}
-        >
-          <TracesExplorer.Body
-            toolbar={
-              <div className="flex items-center justify-between gap-2">
-                <TracesExplorer.FilterBar />
-                <TracesExplorer.ColumnsMenu />
-              </div>
-            }
-            chart={<TracesExplorer.Histogram />}
-          >
-            <TracesExplorer.List />
-          </TracesExplorer.Body>
-        </TracesExplorer>
+        <TracesList state={state} onChange={setState} sort={sort} onSortChange={setSort} />
       </div>
     </AppState>
   );
+}
+
+/**
+ * The traces explorer, fed through the built-in MCP server's tools: the app's client calls them through
+ * `createMcpFetch`, and the explorer's parts draw the records the Studio data hooks load with it.
+ */
+function TracesList({
+  state,
+  onChange,
+  sort,
+  onSortChange,
+}: {
+  state: TracesExplorerState;
+  onChange: (next: TracesExplorerState) => void;
+  sort: TracesSort;
+  onSortChange: (next: TracesSort) => void;
+}) {
+  const { data, isLoading } = useObservabilityCapabilities();
+  const capabilities = { data, isLoading };
+  const columns = useTraceColumnPreferences();
+  const traces = useTracesListQuery({
+    filters: state.filters,
+    sort,
+    columns: columns.preferences,
+    capabilities,
+    features: FEATURES,
+  });
+  const discovery = useTracesDiscoveryQuery({ filters: state.filters, capabilities, features: FEATURES });
+  return (
+    <TracesExplorer
+      metricsSupport={NO_METRICS}
+      selection={state.selection}
+      filters={state.filters}
+      onChange={onChange}
+      sort={sort}
+      onSortChange={onSortChange}
+      columns={columns.preferences}
+      onColumnsChange={columns.setPreferences}
+      capabilities={capabilities}
+      traces={traces}
+      discovery={discovery}
+      features={FEATURES}
+    >
+      <TracesExplorer.Body
+        toolbar={
+          <div className="flex items-center justify-between gap-2">
+            <TracesFilterBar filters={state.filters} capabilities={capabilities} />
+            <TracesExplorer.ColumnsMenu />
+          </div>
+        }
+        chart={<TracesHistogram filters={state.filters} capabilities={capabilities} />}
+      >
+        <TracesRows rows={traces.rows} />
+      </TracesExplorer.Body>
+    </TracesExplorer>
+  );
+}
+
+type TracesQueryProps = { filters: TracesFilters; capabilities: TracesExplorerCapabilities };
+
+function TracesFilterBar({ filters, capabilities }: TracesQueryProps) {
+  const suggestions = useTracesFilterSuggestionsQuery({ filters, capabilities, features: FEATURES });
+  return <TracesExplorer.FilterBar suggestions={suggestions} />;
+}
+
+function TracesHistogram({ filters, capabilities }: TracesQueryProps) {
+  return <TracesExplorer.Histogram data={useTracesHistogramQuery({ filters, capabilities, features: FEATURES })} />;
+}
+
+function TracesRows({ rows }: { rows: TracesExplorerTraces['rows'] }) {
+  const { usageEnabled } = useTraceUsageColumns();
+  const usage = useTracesUsageQuery({ traceIds: rows.map(row => row.traceId), enabled: usageEnabled });
+  return <TracesExplorer.List usage={usage} />;
 }
 
 function SpansTab({ app }: { app: App }) {

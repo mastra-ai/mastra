@@ -357,7 +357,7 @@ function platformBackend(): Backend {
   const { apiUrl, instanceId, token } = JSON.parse(readFileSync(envFile, 'utf8'));
   const client = new PlatformMemoryClient({ apiUrl, accessToken: token, instanceId });
   return {
-    memory: new PlatformMemory({ client, workingMemory: 'off' }),
+    memory: new PlatformMemory({ client }),
     observations: async (threadId, resourceId) => (await client.getContext(threadId, resourceId)).system,
     messages: async threadId => {
       const { messages } = await client.listMessages(threadId, { perPage: 100 });

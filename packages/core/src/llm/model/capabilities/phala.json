@@ -49,31 +49,18 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "moonshotai/kimi-k3": [
-      {
-        "type": "toggle"
-      },
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "moonshotai/kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31b-it": [
+    "qwen/qwen3.6-35b-a3b": [
       {
         "type": "toggle"
       }
     ],
     "qwen/qwen3.5-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       }
@@ -90,15 +77,24 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-35b-a3b": [
+    "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4.1-flash-1017": [
+    "z-ai/glm-5.3-flash": [
       {
-        "type": "toggle"
-      },
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -118,28 +114,32 @@
         "type": "toggle"
       }
     ],
-    "openai/gpt-oss-120b": [
+    "deepseek/deepseek-v4.1-flash-1017": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3": [
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/kimi-k3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ]
   }

@@ -10,6 +10,22 @@ import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic
 
 export class EventedExecutionEngine extends DurableExecutionEngine {
   #warnedUnfencedSharedExecution = false;
+
+  override get executionMode(): 'blocking' | 'background' {
+    return 'background';
+  }
+
+  // Evented execution can return before the suspended snapshot lands.
+  override get suspendPersistedOnReturn(): boolean {
+    return false;
+  }
+
+  // Workers elsewhere run the steps when this instance runs none (e.g. `MASTRA_WORKERS=false`).
+  // Read after the run started its local workers, if it has any.
+  override get executesStepsLocally(): boolean {
+    return this.mastra?.__hasLocalWorkflowExecution() ?? true;
+  }
+
   override prepareExecution(
     pubsub: PubSub | undefined,
     fence: ExecutionFence | undefined,

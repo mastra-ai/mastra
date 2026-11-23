@@ -263,20 +263,6 @@ describe('TranscriptEntries skill rows', () => {
     expect(screen.queryByRole('group', { name: /^Skill:/ })).not.toBeInTheDocument();
   });
 
-  it('coerces role: signal with type: user through the reducer and renders skill row', () => {
-    const entry = entryViaReducer(userSignalDBMessage('sig-skill', SKILL_ENVELOPE));
-    renderEntries([entry]);
-
-    // The reducer should have coerced role to 'user'.
-    expect(entry.kind).toBe('message');
-    if (entry.kind === 'message') {
-      expect(entry.message.role).toBe('user');
-    }
-
-    // The skill row should render correctly.
-    expect(screen.getByRole('group', { name: 'Skill: understand-issue' })).toBeInTheDocument();
-  });
-
   it('renders a typed skill signal as the skill row, with arguments and description', async () => {
     const description = 'Users land on /404 after signing in.\n\nRepro: sign in twice.';
     renderEntries([

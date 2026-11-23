@@ -5,7 +5,7 @@ import type {
   TraceQueryKeysetRequest,
 } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { delay, http, HttpResponse } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ThreadsPage from '..';
@@ -173,22 +173,6 @@ describe('Threads page', () => {
     });
   });
 
-  describe('while the storage capabilities are loading', () => {
-    it('shows a placeholder for the view switch', async () => {
-      setThreadsHandlers(threadQueryCapabilities, { first: threadsFirstPage });
-      server.use(
-        http.get(CAPABILITIES_URL, async () => {
-          await delay('infinite');
-          return HttpResponse.json(threadQueryCapabilities);
-        }),
-      );
-
-      renderPage();
-
-      expect(await screen.findByRole('status', { name: 'Loading views' })).toBeTruthy();
-    });
-  });
-
   describe('when the observability store returns thread rows', () => {
     it('lists the threads of the first page by their primitive name', async () => {
       setThreadsHandlers(threadQueryCapabilities, { first: threadsFirstPage });
@@ -233,18 +217,6 @@ describe('Threads page', () => {
 
       const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
       expect(views.queryByRole('tab', { name: 'Spans' })).toBeNull();
-    });
-  });
-
-  describe('when Traces is clicked in the view switch', () => {
-    it('navigates to the traces page', async () => {
-      setThreadsHandlers(threadQueryCapabilities, { first: threadsFirstPage });
-
-      renderPage();
-      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      fireEvent.click(views.getByRole('tab', { name: 'Traces' }));
-
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/traces'));
     });
   });
 

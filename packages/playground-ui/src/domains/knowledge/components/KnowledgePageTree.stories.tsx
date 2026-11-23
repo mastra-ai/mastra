@@ -62,3 +62,33 @@ type Story = StoryObj<typeof Tree>;
 export const Default: Story = {};
 
 export const DeepSelection: Story = { args: { initiallySelected: 'gateway' } };
+
+export const ScopeLabels: StoryObj<typeof KnowledgePageTree> = {
+  render: () => (
+    <div className="w-72 max-w-full rounded-xl border border-border bg-card p-1">
+      <KnowledgePageTree
+        pages={[
+          page('org', null, { name: 'org:org_01', address: 'org:org_01', displayLabel: 'Acme' }),
+          page('project', 'org', {
+            isScope: true,
+            scopeId: 'project',
+            name: 'project:proj_01',
+            address: 'project:proj_01',
+            displayLabel: 'Roadmap',
+          }),
+          page('custom', null, {
+            name: 'customer:c42',
+            address: 'customer:c42',
+            displayLabel: 'Customer success',
+            position: 'a1',
+          }),
+          page('region', null, { name: 'region:eu', address: 'region:eu', position: 'a2' }),
+          page('notion', null, { name: 'notion:acme:n1', address: 'notion:acme:n1', position: 'a3' }),
+          page('overview', 'project', { name: 'Overview', key: 'overview' }),
+        ]}
+        initiallyExpanded={['org', 'project']}
+        onSelect={() => {}}
+      />
+    </div>
+  ),
+};

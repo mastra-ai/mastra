@@ -123,6 +123,17 @@ describe('CompletenessMetric', () => {
       expect(result.score).toBeGreaterThan(0.7);
     });
 
+    it('should score a question that starts with "will"', async () => {
+      const question = 'will Acme Box crash after the update?';
+
+      const inputMessages = [createTestMessage({ content: question, role: 'user', id: 'test-input' })];
+      const outputMessages = [createTestMessage({ content: question, role: 'assistant', id: 'test-output' })];
+
+      const run = createAgentTestRun({ inputMessages, output: outputMessages });
+      const result = await scorer.run(run);
+      expect(result.score).toBeCloseTo(1.0);
+    });
+
     it('should handle long and multi-paragraph text', async () => {
       const original = `First paragraph about AI.
         Second paragraph about ML.

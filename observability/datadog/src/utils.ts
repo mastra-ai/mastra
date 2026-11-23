@@ -2,9 +2,61 @@
  * Utility functions for Datadog LLM Observability Exporter
  */
 
+import type { ExportedFeedback } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import tracer from 'dd-trace';
 import { isModelInferenceEnabled } from './features';
+
+/** Propagated dd-trace tag that dd-trace uses as the LLM Observability trace ID. */
+export const LLMOBS_TRACE_ID_TAG = '_dd.p.llmobs_trace_id';
+
+export function toLlmObsTraceId(traceId: string): string | undefined {
+  return /^[0-9a-f]{1,32}$/i.test(traceId) ? traceId.toLowerCase().padStart(32, '0') : undefined;
+}
+
+/** Datadog span ID (decimal) for a 16-character hex span ID. Other IDs are returned unchanged. */
+export function toDatadogSpanId(spanId: string): string {
+  return /^[0-9a-f]{16}$/i.test(spanId) ? BigInt(`0x${spanId}`).toString(10) : spanId;
+}
+
+/**
+ * `LLMOBS_TRACE_ID_TAG` value for an LLM Observability trace ID. dd-trace reads
+ * a value of only digits that does not start with 0 as a decimal number, so
+ * that value is sent in decimal.
+ */
+export function toLlmObsTraceIdTag(llmObsTraceId: string): string {
+  return /^[1-9]\d*$/.test(llmObsTraceId) ? BigInt(`0x${llmObsTraceId}`).toString(10) : llmObsTraceId;
+}
+
+/** Mastra feedback types whose value is free text. */
+const TEXT_FEEDBACK_TYPES = new Set(['comment', 'correction']);
+
+function feedbackMetricType(feedback: ExportedFeedback): 'score' | 'text' | 'categorical' {
+  if (typeof feedback.value === 'number') return 'score';
+  return TEXT_FEEDBACK_TYPES.has(feedback.feedbackType) ? 'text' : 'categorical';
+}
+
+export function toFeedbackOptions(feedback: ExportedFeedback, mlApp: string) {
+  // A `null` feedbackUserId means no signed-in user gave the feedback. Then the
+  // `userId` in the metadata copied from the rated span is not the submitter.
+  const submitterId =
+    feedback.feedbackUserId !== undefined ? feedback.feedbackUserId : (feedback.userId ?? feedback.metadata?.userId);
+  const source = feedback.feedbackSource ?? feedback.source;
+  const { assessment } = (feedback.metadata?.datadog ?? {}) as { assessment?: unknown };
+  return {
+    // dd-trace rejects a feedback label that contains a dot.
+    label: feedback.feedbackType.replaceAll('.', '_'),
+    metricType: feedbackMetricType(feedback),
+    value: feedback.value,
+    submitter: { id: submitterId ? String(submitterId) : 'anonymous', type: 'user' },
+    mlApp,
+    timestampMs: new Date(feedback.timestamp).getTime() || Date.now(),
+    ...(feedback.comment ? { reasoning: feedback.comment } : {}),
+    ...(source ? { tags: { feedback_source: source } } : {}),
+    // dd-trace rejects any other assessment.
+    ...(assessment === 'pass' || assessment === 'fail' ? ({ assessment } as const) : {}),
+  };
+}
 
 /**
  * Datadog span links for Mastra span links, such as the caller of a served MCP

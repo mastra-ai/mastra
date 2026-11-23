@@ -1,5 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { defineCatalog } from '@json-render/core';
+import type { Catalog } from '@json-render/core';
 import { schema } from '@json-render/react/schema';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
@@ -93,9 +94,9 @@ export function modelSaw(prompt: unknown) {
 export type Turn = string | { text: string; state: Record<string, unknown> };
 
 /** The agent an app would run: the json-render processor on both sides, with memory. */
-export function createAgent(model: MockLanguageModelV2, tools: ToolsInput = {}) {
+export function createAgent(model: MockLanguageModelV2, tools: ToolsInput = {}, uiCatalog: Catalog = catalog) {
   const memory = new Memory({ storage: new InMemoryStore() });
-  const processor = new JsonRenderProcessor({ catalog });
+  const processor = new JsonRenderProcessor({ catalog: uiCatalog });
   const agent = new Agent({
     id: 'ui',
     name: 'ui',
@@ -112,10 +113,11 @@ export function createAgent(model: MockLanguageModelV2, tools: ToolsInput = {}) 
 
 /** Sends each turn on one thread; returns what the last turn streamed and the saved thread. */
 export async function chat(
-  model: MockLanguageModelV2 | { model: MockLanguageModelV2; tools: ToolsInput },
+  model: MockLanguageModelV2 | { model: MockLanguageModelV2; tools?: ToolsInput; catalog?: Catalog },
   ...turns: Turn[]
 ) {
-  const { agent, memory } = 'tools' in model ? createAgent(model.model, model.tools) : createAgent(model);
+  const { agent, memory } =
+    'doStream' in model ? createAgent(model) : createAgent(model.model, model.tools, model.catalog);
   let streamed: { type: string; payload?: any; data?: unknown }[] = [];
   for (const turn of turns) {
     const { text, state } = typeof turn === 'string' ? { text: turn, state: undefined } : turn;

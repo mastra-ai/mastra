@@ -44,10 +44,10 @@ export const greetingApp: McpAppResource = {
 };
 
 /**
- * Draws a Studio dashboard. The tool that opens it returns `{ dashboard, datePreset? }` as
+ * Draws a Studio dashboard. The tool that opens it returns `{ dashboard, datePreset?, project? }` as
  * structured content, where `dashboard` passes `dashboardDefinitionSchema` (build it with
  * `toObservabilityDashboard`); the app reads every metric, score and aggregate through the server's
- * app-only `queryObservability` tool (`{ action, args }` in, where `action` is one of
+ * app-only `queryObservability` tool (`{ action, args, project? }` in, where `action` is one of
  * `OBSERVABILITY_READ_ACTIONS`, and `{ data }` out).
  */
 export const observabilityDashboardApp: McpAppResource = {

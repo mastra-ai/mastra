@@ -7,7 +7,15 @@ import { Button } from './ui/button'
 import { cn } from '@site/src/lib/utils'
 import { SITE_SECTION_ROOTS } from '@site/src/utils/canonical-url'
 
-const docsTabs = [
+type DocsTab = {
+  id: string
+  label: string
+  href: string
+  basePath: string
+  badge?: string
+}
+
+const docsTabs: DocsTab[] = [
   {
     id: 'Docs',
     label: 'Docs',
@@ -65,7 +73,7 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
         >
           <span className="flex items-center gap-1.5">
             {activeTab.label}
-            {'badge' in activeTab && activeTab.badge && <span className="learn-tab-badge">{activeTab.badge}</span>}
+            {activeTab.badge && <span className="learn-tab-badge">{activeTab.badge}</span>}
           </span>
           <ChevronDown
             className={cn(
@@ -93,7 +101,7 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
               >
                 <span className="flex items-center gap-1.5">
                   {tab.label}
-                  {'badge' in tab && tab.badge && <span className="learn-tab-badge">{tab.badge}</span>}
+                  {tab.badge && <span className="learn-tab-badge">{tab.badge}</span>}
                 </span>
                 {isActive && <Check className="size-4 text-(--mastra-green-accent-2)" />}
               </Link>

@@ -59,10 +59,9 @@ describe('board person filters', () => {
     expect([...stored.author]).toEqual(['factory:user-octo']);
   });
 
-  it('offers Review requested only on boards holding pull requests and ignores the retired relevance parameter', () => {
+  it('offers Review requested only on boards holding pull requests', () => {
     const params: [string, string][] = [
       ['reviewer', 'github:monalisa'],
-      ['relevance', 'assigned'],
       ['teammate', 'github:octocat'],
     ];
 
