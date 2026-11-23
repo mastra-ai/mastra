@@ -87,6 +87,10 @@ const inputNumberButtonClassName = cn(
 const inputNumberPairClassName =
   '[[data-variant=default]>[data-slot=input-number-decrement]+&]:-ml-1 [[data-variant=default]>[data-slot=input-number-decrement]+&]:pointer-coarse:ml-1';
 
+// A flush pair has no gap to share, so neither hit area reaches past the edge they meet at.
+const flushDecrementClassName = '[[data-variant=flush]>&]:before:-right-px';
+const flushIncrementClassName = '[[data-variant=flush]>&]:before:-left-px';
+
 type InputNumberDecrementProps = Omit<NumberFieldPrimitive.Decrement.Props, 'className'> & {
   className?: string;
 };
@@ -96,7 +100,7 @@ function InputNumberDecrement({ className, children, ...props }: InputNumberDecr
     <NumberFieldPrimitive.Decrement
       data-slot="input-number-decrement"
       data-shape="icon"
-      className={cn(inputNumberButtonClassName, className)}
+      className={cn(inputNumberButtonClassName, flushDecrementClassName, className)}
       {...props}
     >
       <Icon size="sm">{children ?? <IconMinusMedium />}</Icon>
@@ -113,7 +117,7 @@ function InputNumberIncrement({ className, children, ...props }: InputNumberIncr
     <NumberFieldPrimitive.Increment
       data-slot="input-number-increment"
       data-shape="icon"
-      className={cn(inputNumberButtonClassName, inputNumberPairClassName, className)}
+      className={cn(inputNumberButtonClassName, inputNumberPairClassName, flushIncrementClassName, className)}
       {...props}
     >
       <Icon size="sm">{children ?? <IconPlusMedium />}</Icon>
