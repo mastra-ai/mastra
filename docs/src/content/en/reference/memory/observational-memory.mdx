@@ -872,7 +872,7 @@ OM decides when to observe from local token estimates, not from the provider's u
 OM caches estimates in message metadata so threshold checks don't recount the same content:
 
 - Per-part estimates are stored on `part.providerMetadata.mastra.tokenEstimate` and are saved with the message. A later request reads them back instead of counting the part again.
-- The estimate for a text part or a plain-JSON tool call is read back as stored, without checking it against the part's content. If you edit a message part in place (in a processor or anywhere else), delete `part.providerMetadata.mastra.tokenEstimate` so OM counts it again. Otherwise OM keeps the old count for that part. Mastra's own APIs and built-in processors clear it for you.
+- The estimate for a text part or a tool call is read back as stored, without checking it against the part's content. If you edit a message part in place (in a processor or anywhere else), delete `part.providerMetadata.mastra.tokenEstimate` so OM counts it again. Otherwise OM keeps the old count for that part. Mastra's own APIs and built-in processors clear it for you.
 - Messages with string-only content (no parts) use a message-level cache.
 - Message and conversation overhead is recalculated every pass. Only payload estimates are cached.
 - `data-*` and `reasoning` parts are skipped and not cached.
