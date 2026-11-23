@@ -23,6 +23,13 @@ function InputNumber({ className, ...props }: InputNumberProps) {
   return <NumberFieldPrimitive.Root data-slot="input-number" className={cn('w-full', className)} {...props} />;
 }
 
+// From the field's edge to a stepper's box, so its icon's ink starts 12px in, like the text (`px-3`).
+const stepperInset: Record<ControlSize, string> = {
+  sm: '[--stepper-inset:7px]',
+  md: '[--stepper-inset:6px]',
+  lg: '[--stepper-inset:5px]',
+};
+
 type InputNumberGroupProps = Omit<NumberFieldPrimitive.Group.Props, 'className'> & {
   className?: string;
   size?: ControlSize;
@@ -41,9 +48,10 @@ function InputNumberGroup({ className, size, ...props }: InputNumberGroupProps) 
         controlSpacing[resolved],
         'has-[>[data-slot=input-number-decrement]]:[&>[data-slot=input-group-control]]:pl-0',
         'has-[>[data-slot=input-number-increment]]:[&>[data-slot=input-group-control]]:pr-0',
-        // A stepper at the group's own end sits in the same ring as one in an addon.
-        '[&>[data-slot=input-number-decrement]]:mr-(--control-gap) [&>[data-slot=input-number-decrement]]:ml-[3px]',
-        '[&>[data-slot=input-number-increment]]:mr-[3px] [&>[data-slot=input-number-increment]]:ml-(--control-gap)',
+        stepperInset[resolved],
+        '[&>[data-slot=input-number-decrement]]:mr-(--control-gap) [&>[data-slot=input-number-decrement]]:ml-(--stepper-inset)',
+        '[&>[data-slot=input-number-increment]]:mr-(--stepper-inset) [&>[data-slot=input-number-increment]]:ml-(--control-gap)',
+        '[&>[data-slot=input-group-addon]:has(>[data-slot=input-number-increment])]:pr-(--stepper-inset)',
         className,
       )}
       {...props}
