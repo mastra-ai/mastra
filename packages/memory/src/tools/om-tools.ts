@@ -444,6 +444,8 @@ export async function searchMessagesForResource({
   };
   // A search that keeps failing is an operational fault the agent can't fix, so it's logged as an error.
   const logError = (message: string) => (logger ? logger.error(message) : console.error(message));
+  // One budget covers the first search and the deeper one, so a recall never waits longer than searchTimeoutMs.
+  const deadline = Date.now() + searchTimeoutMs;
   let results: RecallSearchResult[];
   try {
     ({ results } = await searchWithTimeout(
@@ -458,12 +460,13 @@ export async function searchMessagesForResource({
     // slow, browsing still works, so point the agent there instead of failing the tool call. The error
     // can carry provider details, so it goes to the log, not to the model.
     logError(`[recall] Search failed, so recall suggested browsing instead (${describeSearchFailure(error)}).`);
-    return {
-      results: `Search is unavailable right now. Browse instead: use mode="messages" to page through messages${
-        includeThreadId ? ', and mode="threads" to find other threads' : ''
-      }.`,
-      count: 0,
-    };
+    // Keep a search scoped to one thread on that thread; thread-scope recall can only browse its own thread anyway.
+    const browse = !includeThreadId
+      ? 'use mode="messages" to page through messages'
+      : threadScope
+        ? `use mode="messages" with threadId="${threadScope}" to page through that thread's messages`
+        : 'use mode="messages" to page through messages, and mode="threads" to find other threads';
+    return { results: `Search is unavailable right now. Browse instead: ${browse}.`, count: 0 };
   }
 
   if (results.length === 0) {
@@ -595,12 +598,13 @@ export async function searchMessagesForResource({
       }
     };
     await addCandidates(filteredMatches.slice(limitedMatches.length));
-    if (freshCount < clampedTopK && seen.size < candidateLimit && searchTopK < candidateLimit) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0 && freshCount < clampedTopK && seen.size < candidateLimit && searchTopK < candidateLimit) {
       // The first search already produced results, so a failed deeper search only means fewer of them.
       const deeper = await searchWithTimeout(
         memory,
         { query, resourceId, topK: candidateLimit, filter },
-        searchTimeoutMs,
+        remainingMs,
         abortSignal,
       ).catch(error => {
         if (abortSignal?.aborted) throw error;

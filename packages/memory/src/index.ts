@@ -1614,6 +1614,8 @@ ${workingMemory}`;
       await gate;
       if (this.firstEmbed === gate) break;
     }
+    // A caller that gave up while waiting doesn't get an embed it no longer wants.
+    abortSignal?.throwIfAborted();
 
     const options = { values, maxRetries: 3, ...(abortSignal ? { abortSignal } : {}) };
     // Options share a public union; select the SDK-specific options alongside the model version.

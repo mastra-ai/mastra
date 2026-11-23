@@ -550,6 +550,25 @@ describe('recall search when the search itself fails', () => {
     expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Incorrect API key provided'));
   });
 
+  it('keeps a search scoped to one thread on that thread when suggesting browsing', async () => {
+    const { memory } = setup([]);
+    memory.searchMessages = vi.fn(async () => {
+      throw new Error('Incorrect API key provided: sk-…1234');
+    });
+
+    const result = await searchMessagesForResource({
+      memory,
+      resourceId,
+      query: 'topic',
+      threadScope: 'thread-a',
+      logger: logger(),
+    });
+
+    expect(result.results).toBe(
+      'Search is unavailable right now. Browse instead: use mode="messages" with threadId="thread-a" to page through that thread\'s messages.',
+    );
+  });
+
   it('keeps the first results when only the deeper search fails', async () => {
     const source = [message('start'), message('end', 1)];
     const known = hit('known', 'summary', 'start:end');
@@ -634,5 +653,76 @@ describe('recall search when the search itself fails', () => {
       add.mockRestore();
       remove.mockRestore();
     }
+  });
+
+  it('gives the deeper search only the time left in the budget', async () => {
+    const source = [message('start'), message('end', 1)];
+    const known = hit('known', 'summary', 'start:end');
+    const { memory } = setup([known], source);
+    memory.searchMessages = vi.fn(async ({ topK }) => {
+      if (topK !== 10) return new Promise<never>(() => {});
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return { results: [known] };
+    });
+    const log = logger();
+    const started = Date.now();
+
+    const result = await searchMessagesForResource({
+      memory,
+      resourceId,
+      query: 'topic',
+      currentMessages: source,
+      searchTimeoutMs: 400,
+      logger: log,
+    });
+
+    // A fresh 400 ms timer for the deeper search would finish at ~600 ms.
+    expect(Date.now() - started).toBeLessThan(550);
+    expect(result.count).toBe(1);
+    expect(log.error).toHaveBeenCalledWith(expect.stringMatching(/^\[recall\] Deeper search failed/));
+  });
+
+  it('skips the deeper search when the first one used up the budget', async () => {
+    const source = [message('start'), message('end', 1)];
+    const known = hit('known', 'summary', 'start:end');
+    const { memory } = setup([known], source);
+    const now = vi.spyOn(Date, 'now');
+    memory.searchMessages = vi.fn(async () => {
+      now.mockReturnValue(Number.MAX_SAFE_INTEGER);
+      return { results: [known] };
+    });
+
+    const result = await searchMessagesForResource({
+      memory,
+      resourceId,
+      query: 'topic',
+      currentMessages: source,
+      logger: logger(),
+    });
+    now.mockRestore();
+
+    expect(vi.mocked(memory.searchMessages!)).toHaveBeenCalledTimes(1);
+    expect(result.count).toBe(1);
+  });
+
+  it.each([
+    ['succeeds', async () => ({ results: [] })],
+    [
+      'fails',
+      async () => {
+        throw new Error('vector store timed out');
+      },
+    ],
+  ])('stops listening for the deadline once a search %s', async (_, answer) => {
+    const { memory } = setup([]);
+    let removeListener: ReturnType<typeof vi.spyOn> | undefined;
+    memory.searchMessages = vi.fn(({ abortSignal }) => {
+      removeListener = vi.spyOn(abortSignal!, 'removeEventListener');
+      return answer();
+    });
+
+    await searchMessagesForResource({ memory, resourceId, query: 'topic', logger: logger() });
+
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 });
