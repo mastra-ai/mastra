@@ -1665,8 +1665,19 @@ ${toolEntries}
 `;
 }
 
+/**
+ * Other platform catalog ids whose connections use a provider's toolset.
+ * `gitlab-self-hosted` connects a self-managed instance with an access token
+ * and its hostname; the proxy sends the same `/api/v4` calls there.
+ */
+const PROVIDER_ALIAS_INTEGRATION_IDS: Readonly<Record<string, readonly string[]>> = {
+  gitlab: ['gitlab-self-hosted'],
+};
+
 function emitIndexFile(integrationId: string, pin: TemplatePin): string {
   const envVar = providerConnectionEnvVar(integrationId);
+  const aliases = PROVIDER_ALIAS_INTEGRATION_IDS[integrationId];
+  const aliasLine = aliases ? `\n  aliasIntegrationIds: [${aliases.map(alias => `'${alias}'`).join(', ')}],` : '';
   const factoryName = `create${toPascal(integrationId)}Tools`;
   // Shared with updateProviderIndex so the emitted export always matches the
   // import the provider index writes (including leading-digit normalization).
@@ -1677,7 +1688,7 @@ import { ${factoryName} } from './tools.js';
 
 export const ${registrationName}: ProviderRegistration = {
   integrationId: '${integrationId}',
-  envVar: '${envVar}',
+  envVar: '${envVar}',${aliasLine}
   createTools: ${factoryName},
 };
 
