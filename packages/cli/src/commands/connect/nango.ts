@@ -20,7 +20,19 @@ import type { IntegrationAuthField } from './api.js';
  * the session's `connectUrl`.
  */
 
-export const NANGO_HOST = process.env.MASTRA_NANGO_HOST || 'https://api.nango.dev';
+const DEFAULT_NANGO_HOST = 'https://api.nango.dev';
+
+/**
+ * Nango API host for a connect session. `MASTRA_NANGO_HOST` stays an explicit
+ * override; otherwise the host the platform returned with the session
+ * (self-hosted Nango), falling back to Nango Cloud for platforms that don't
+ * return one.
+ */
+function nangoHost(apiBaseUrl?: string | null): string {
+  let host = process.env.MASTRA_NANGO_HOST || apiBaseUrl || DEFAULT_NANGO_HOST;
+  while (host.endsWith('/')) host = host.slice(0, -1);
+  return host;
+}
 
 const OAUTH_AUTH_TYPES = new Set(['OAUTH1', 'OAUTH2', 'MCP_OAUTH2', 'MCP_OAUTH2_GENERIC']);
 
@@ -143,8 +155,13 @@ function connectQuery(sessionToken: string, params?: Record<string, string>): st
  * detected by polling the platform's connection list rather than the SDK's
  * websocket channel.
  */
-export function oauthConnectUrl(integrationId: string, sessionToken: string, params?: Record<string, string>): string {
-  return `${NANGO_HOST}/oauth/connect/${encodeURIComponent(integrationId)}${connectQuery(sessionToken, params)}`;
+export function oauthConnectUrl(
+  integrationId: string,
+  sessionToken: string,
+  params?: Record<string, string>,
+  apiBaseUrl?: string | null,
+): string {
+  return `${nangoHost(apiBaseUrl)}/oauth/connect/${encodeURIComponent(integrationId)}${connectQuery(sessionToken, params)}`;
 }
 
 /**
@@ -155,11 +172,13 @@ export async function submitCredentialAuth(input: {
   integrationId: string;
   authType: string | null;
   sessionToken: string;
+  /** Nango host returned with the connect session, if any. */
+  apiBaseUrl?: string | null;
   credentials: Record<string, string>;
   params?: Record<string, string>;
 }): Promise<void> {
   const path = input.authType === 'API_KEY' ? 'api-auth/api-key' : 'api-auth/basic';
-  const url = `${NANGO_HOST}/${path}/${encodeURIComponent(input.integrationId)}${connectQuery(input.sessionToken, input.params)}`;
+  const url = `${nangoHost(input.apiBaseUrl)}/${path}/${encodeURIComponent(input.integrationId)}${connectQuery(input.sessionToken, input.params)}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

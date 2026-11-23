@@ -252,6 +252,8 @@ export class HeadlessAuthError extends Error {
  */
 export function startHeadlessAuth(input: {
   sessionToken: string;
+  /** Nango API host from the connect session; omitted means Nango Cloud. */
+  apiBaseUrl?: string | null;
   integrationId: string;
   authType?: string | null;
   credentials?: Record<string, string>;
@@ -265,7 +267,10 @@ export function startHeadlessAuth(input: {
       close: () => {},
     };
   }
-  const nango = new Nango({ connectSessionToken: input.sessionToken });
+  const nango = new Nango({
+    connectSessionToken: input.sessionToken,
+    ...(input.apiBaseUrl ? { host: input.apiBaseUrl } : {}),
+  });
   const request =
     input.authType != null && UNAUTHENTICATED_AUTH_TYPES.has(input.authType)
       ? nango.create(input.integrationId, input.params ? { params: input.params } : {})
