@@ -231,9 +231,8 @@ describe('getProvidersHandler', () => {
     expect(openaiProvider?.models).toBeDefined();
     expect(openaiProvider?.models.length).toBeGreaterThan(0);
 
-    // Model IDs come from the generated registry, so check their shape rather than specific names.
-    expect(openaiProvider?.models.every(model => typeof model === 'string' && model.length > 0)).toBe(true);
-    expect(new Set(openaiProvider?.models).size).toBe(openaiProvider?.models.length);
+    // The registry is generated from upstream, so compare to it rather than pinning model names.
+    expect(openaiProvider?.models).toEqual([...PROVIDER_REGISTRY.openai.models]);
   });
 
   it('should match the structure of PROVIDER_REGISTRY', async () => {
