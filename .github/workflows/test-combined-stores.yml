@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
     outputs:
       stores: ${{ steps.set-stores.outputs.stores }}
       light_stores: ${{ steps.set-stores.outputs.light_stores }}
@@ -46,6 +47,11 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@v0
+        with:
+          git-mirror: true
       - id: set-stores
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,6 +129,12 @@ jobs:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@v0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
@@ -170,6 +182,12 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@v0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         timeout-minutes: 10
@@ -349,6 +367,12 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@v0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
