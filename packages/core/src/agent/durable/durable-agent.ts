@@ -659,8 +659,8 @@ export class DurableAgent<
   }
 
   /** @internal Forced strategy, without resolving host/storage fallback. */
-  __getExecutionEngineStrategy(): 'durable' | 'evented' {
-    return this.workflowEngine === 'evented' ? 'evented' : 'durable';
+  __getExecutionEngineStrategy(): 'default' | 'evented' {
+    return this.workflowEngine === 'evented' ? 'evented' : 'default';
   }
 
   /** The wrapped agent */

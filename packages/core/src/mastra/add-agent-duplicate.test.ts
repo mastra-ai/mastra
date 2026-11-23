@@ -49,7 +49,7 @@ describe('Mastra.addAgent with agents from an older @mastra/core copy', () => {
   }
 
   it('registers and re-registers the agent without an engine-policy hook', () => {
-    const mastra = new Mastra({ logger: false, durable: { executionEngine: 'durable' } });
+    const mastra = new Mastra({ logger: false, durable: { executionEngine: 'default' } });
     const agent = makeAgentWithoutPolicyHook('legacy');
 
     expect(() => mastra.addAgent(agent, 'legacy')).not.toThrow();

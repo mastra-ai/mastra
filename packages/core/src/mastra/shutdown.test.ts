@@ -381,7 +381,7 @@ describe('Mastra shutdown lifecycle', () => {
         name: 'late-native',
         instructions: 'test',
         model: 'openai/gpt-4o',
-        durable: { executionEngine: 'durable' },
+        durable: { executionEngine: 'default' },
       });
       vi.spyOn(agent, '__hasDurableExecution').mockReturnValue(true);
       vi.spyOn(agent, '__initializeDurableExecution').mockImplementation(async () => {
@@ -420,7 +420,7 @@ describe('Mastra shutdown lifecycle', () => {
         name: id,
         instructions: 'test',
         model: 'openai/gpt-4o',
-        durable: { executionEngine: 'durable' },
+        durable: { executionEngine: 'default' },
       });
       vi.spyOn(agent, '__hasDurableExecution').mockReturnValue(true);
       return agent;
@@ -516,7 +516,7 @@ describe('Mastra shutdown lifecycle', () => {
           name: 'late-native',
           instructions: 'test',
           model: 'openai/gpt-4o',
-          durable: { executionEngine: 'durable' },
+          durable: { executionEngine: 'default' },
         });
         vi.spyOn(late, '__hasDurableExecution').mockReturnValue(true);
         vi.spyOn(late, '__initializeDurableExecution').mockImplementation(async () => {

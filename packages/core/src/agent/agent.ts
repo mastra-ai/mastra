@@ -15134,7 +15134,7 @@ export class Agent<
       id: 'AGENT_DURABLE_METHOD_NOT_AVAILABLE',
       domain: ErrorDomain.AGENT,
       category: ErrorCategory.USER,
-      text: `Agent.${method}() requires durable execution. Set durable.executionEngine to 'durable' or 'evented', or use createDurableAgent({ agent }).`,
+      text: `Agent.${method}() requires durable execution. Set durable.executionEngine to 'default' or 'evented', or use createDurableAgent({ agent }).`,
       details: { agentId: this.id, method },
     });
   }

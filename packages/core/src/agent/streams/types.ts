@@ -51,8 +51,8 @@ export interface AgentStreamEvent<T = unknown> {
  * are published on and the replay cache that lets readers reconnect.
  */
 export interface AgentStreamsConfig {
-  /** Select durable or evented execution, or false for the plain Agent loop. */
-  executionEngine?: 'durable' | 'evented' | false;
+  /** Select the default (in-process) or evented durable engine, or false for the plain Agent loop. */
+  executionEngine?: 'default' | 'evented' | false;
 
   /** Snapshot persistence policy for durable execution. */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;

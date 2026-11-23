@@ -122,7 +122,7 @@ describe('Configured native engines preserve Agent outputs', () => {
     },
   );
 
-  for (const executionEngine of ['durable', 'evented'] as const) {
+  for (const executionEngine of ['default', 'evented'] as const) {
     for (const method of ['resumeStream', 'resumeStreamUntilIdle'] as const) {
       it(`${executionEngine}/${method}: keeps lifecycle controls when resuming a suspended tool`, async () => {
         const llm = getMock();
@@ -206,7 +206,7 @@ describe('Configured native engines preserve Agent outputs', () => {
 
   // COR-1563: observe() can initialize streams before stored registration supplies host defaults.
   // Wrappers do not inherit these selectors.
-  for (const executionEngine of [false, 'durable', 'evented'] as const) {
+  for (const executionEngine of [false, 'default', 'evented'] as const) {
     for (const registration of ['constructor', 'addAgent'] as const) {
       const replayPolicyCase = async (explicit: boolean) => {
         const llm = getMock();
@@ -304,13 +304,13 @@ describe('Configured native engines preserve Agent outputs', () => {
     }
   }
 
-  for (const strategy of ['durable', 'evented'] as const) {
+  for (const strategy of ['default', 'evented'] as const) {
     for (const method of ['stream', 'generate'] as const) {
       it.each([
         undefined,
         false,
         { executionEngine: false },
-        { executionEngine: 'durable' },
+        { executionEngine: 'default' },
         { executionEngine: 'evented' },
       ] as const)(`${strategy}/${method}: wrapping leaves direct runs unchanged with durable=%j`, async durable => {
         const llm = getMock();
@@ -345,7 +345,7 @@ describe('Configured native engines preserve Agent outputs', () => {
     }
   }
 
-  it.each(['durable', 'evented'] as const)(
+  it.each(['default', 'evented'] as const)(
     '%s wrapping preserves an already-running native tool loop',
     async executionEngine => {
       const llm = getMock();
@@ -417,7 +417,7 @@ describe('Configured native engines preserve Agent outputs', () => {
         model: openai('gpt-4o'),
         defaultOptions: () => ({ eagerToolExecution: ++calls > 1 }),
       });
-      const mastra = new Mastra({ agents: { dynamic: agent }, durable: { executionEngine: 'durable' } });
+      const mastra = new Mastra({ agents: { dynamic: agent }, durable: { executionEngine: 'default' } });
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
       try {
         for (let turn = 0; turn < 3; turn++) {
@@ -441,7 +441,7 @@ describe('Configured native engines preserve Agent outputs', () => {
     },
   );
 
-  it.each(['durable', 'evented'] as const)(
+  it.each(['default', 'evented'] as const)(
     'recoverResume() reports the %s engine as unsupported instead of a missing suspension',
     async executionEngine => {
       const agent = new Agent({

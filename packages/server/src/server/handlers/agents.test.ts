@@ -2827,7 +2827,7 @@ describe('Agent Routes Authorization', () => {
           instructions: 'test-instructions',
           model: {} as any,
           memory: mockMemory,
-          durable: { executionEngine: 'durable' },
+          durable: { executionEngine: 'default' },
         });
         mastra = new Mastra({ agents: { 'test-agent': mockAgent }, storage, logger: false });
       });
@@ -3043,7 +3043,7 @@ describe('Agent Routes Authorization', () => {
           instructions: 'test-instructions',
           model: { specificationVersion: 'v2' } as any,
           memory: mockMemory,
-          durable: { executionEngine: 'durable' },
+          durable: { executionEngine: 'default' },
         });
         mastra = new Mastra({ agents: { 'native-durable-agent': nativeAgent }, storage, logger: false });
       });

@@ -11,7 +11,7 @@ const config = { id: 'policy', name: 'Policy', instructions: 'Help the user.', m
 
 describe('execution engine configuration contracts', () => {
   it('preserves call-specific structured output inference for native engines', async () => {
-    for (const executionEngine of ['durable', 'evented', false] as const) {
+    for (const executionEngine of ['default', 'evented', false] as const) {
       const agent = new Agent({ ...config, durable: { executionEngine } });
       const schema = z.object({ status: z.string() });
       const streamed = await agent.stream('Check my order', { structuredOutput: { schema } });
@@ -31,7 +31,7 @@ describe('execution engine configuration contracts', () => {
   it('accepts Agent boolean forms and object policies without accepting Mastra booleans', () => {
     new Agent({ ...config, durable: true });
     new Agent({ ...config, durable: false });
-    for (const executionEngine of ['durable', 'evented', false] as const) {
+    for (const executionEngine of ['default', 'evented', false] as const) {
       new Agent({ ...config, durable: { executionEngine } });
       new Mastra({ durable: { executionEngine } });
     }
@@ -39,8 +39,8 @@ describe('execution engine configuration contracts', () => {
     new Mastra({ durable: false });
     // @ts-expect-error Mastra defaults must be an object, not a boolean opt-in
     new Mastra({ durable: true });
-    // @ts-expect-error internal workflow-engine names are not public policies
-    new Agent({ ...config, durable: { executionEngine: 'default' } });
+    // @ts-expect-error the prerelease 'durable' value was renamed to 'default'
+    new Agent({ ...config, durable: { executionEngine: 'durable' } });
     // @ts-expect-error invalid engine literal
     new Mastra({ durable: { executionEngine: 'plain' } });
     // @ts-expect-error shared transport remains a top-level Mastra option
