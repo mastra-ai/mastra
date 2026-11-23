@@ -20,6 +20,12 @@ export class EventedExecutionEngine extends DurableExecutionEngine {
     return false;
   }
 
+  // Workers elsewhere run the steps when this instance runs none (e.g. `MASTRA_WORKERS=false`).
+  // Read after the run started its local workers, if it has any.
+  override get executesStepsLocally(): boolean {
+    return this.mastra?.__hasLocalWorkflowExecution() ?? true;
+  }
+
   override prepareExecution(
     pubsub: PubSub | undefined,
     fence: ExecutionFence | undefined,

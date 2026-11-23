@@ -345,7 +345,7 @@ function EditLayoutWrapper() {
   );
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <h1 className="sr-only">{agentId}</h1>
       {isNotFound ? (
         <>

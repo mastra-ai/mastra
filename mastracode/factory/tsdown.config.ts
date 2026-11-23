@@ -33,7 +33,6 @@ export default defineConfig({
   unbundle: true,
   clean: true,
   dts: false,
-  sourcemap: true,
   deps: {
     alwaysBundle: ['@mastra/libsql', '@internal/workspace'],
     neverBundle: [/^@mastra\//, '@octokit/auth-app', '@octokit/rest', 'chat', 'hono', /^hono\//, 'zod'],

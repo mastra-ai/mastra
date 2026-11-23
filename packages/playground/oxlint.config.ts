@@ -1,4 +1,4 @@
-import { copyRuleExclusions, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, pageRules, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
 
@@ -93,6 +93,14 @@ export default defineConfig({
       rules: playgroundUiRules,
     },
     copyRuleExclusions,
+    {
+      files: ['src/pages/**/*.tsx'],
+      rules: pageRules,
+    },
+    {
+      files: ['src/pages/agent-builder/skills/view.tsx'],
+      rules: { 'playground-ui/no-page-width': 'off' },
+    },
     {
       files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
       rules: {

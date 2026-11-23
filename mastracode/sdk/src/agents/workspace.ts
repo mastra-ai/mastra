@@ -220,10 +220,13 @@ export async function getDynamicWorkspace({
   // `activeTools` on the AgentController, not by mutating workspace capabilities.
   const workspaceTools = createMastraCodeWorkspaceTools(backgroundToolsEnabled, plansDir);
 
-  // Reuse existing workspace if already registered (preserves ProcessManager state)
+  // Reuse existing workspace if already registered (preserves ProcessManager state).
+  // `optional` skips the error log on a miss; older cores ignore it and throw instead.
   let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
   try {
-    existing = mastra?.getWorkspaceById(workspaceId) as Workspace<LocalFilesystem, LocalSandbox>;
+    existing = mastra?.getWorkspaceById(workspaceId, { optional: true }) as
+      | Workspace<LocalFilesystem, LocalSandbox>
+      | undefined;
   } catch {
     // Not registered yet
   }

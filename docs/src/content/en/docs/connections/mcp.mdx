@@ -92,7 +92,13 @@ export const mcp = new MCPClient<MCPServers>({
 })
 ```
 
-Set `WEATHER_MCP_URL` and configure any required authentication before running the command from your project root:
+Set `WEATHER_MCP_URL` and configure any required authentication before running the command from your project root. The command needs `tsx` and `json-schema-to-typescript-lite`, which `@mastra/mcp` doesn't install for you. Add them as development dependencies first:
+
+```bash npm2yarn
+npm install --save-dev tsx@4 json-schema-to-typescript-lite@15
+```
+
+Then run the command:
 
 ```bash npm2yarn
 npx @mastra/mcp generate ./src/mcp/client.ts
