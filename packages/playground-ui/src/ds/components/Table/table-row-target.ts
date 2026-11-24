@@ -4,8 +4,8 @@ import type { TableVariant } from './table-context';
 const rowTargetStyles = ['outline-none'];
 
 export function tableRowTargetStyles(variant: TableVariant) {
-  if (variant === 'inset') return rowTargetStyles;
-  return [];
+  if (variant === 'default') return [];
+  return rowTargetStyles;
 }
 
 // Things in a row that take their own clicks.

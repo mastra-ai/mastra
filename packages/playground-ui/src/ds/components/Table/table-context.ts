@@ -1,6 +1,6 @@
 import { createContext, use } from 'react';
 
-export type TableVariant = 'default' | 'inset';
+export type TableVariant = 'default' | 'inset' | 'nested';
 
 export const TableVariantContext = createContext<TableVariant>('default');
 
@@ -9,6 +9,6 @@ export function useTableVariant() {
 }
 
 export function insetSlot(variant: TableVariant, slot: string) {
-  if (variant === 'inset') return slot;
-  return undefined;
+  if (variant === 'default') return undefined;
+  return slot;
 }

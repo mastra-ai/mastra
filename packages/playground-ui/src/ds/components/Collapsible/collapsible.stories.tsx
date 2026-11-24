@@ -226,9 +226,9 @@ function AllowanceRow({ allowance }: { allowance: AllowanceUsage }) {
         </span>
         <DisclosureChevron direction="right" className="size-icon-sm self-center" />
       </CollapsibleTrigger>
-      <CollapsibleContent className="px-2 pb-2">
-        <Table variant="inset" aria-label={`${name} by project`}>
-          <Table.Header placement="inside">
+      <CollapsibleContent className="px-3 pb-3">
+        <Table variant="nested" aria-label={`${name} by project`}>
+          <Table.Header>
             <Table.Row>
               <Table.Head className="w-full">Project</Table.Head>
               <Table.Head align="end">Used</Table.Head>
@@ -274,7 +274,7 @@ export const ExpandableRows: Story = {
     docs: {
       description: {
         story:
-          'Rows that open in place, as on the Usage page: a `SettingsContainer` of `Collapsible`s, each trigger a full-width row with its reading and `Meter`, each panel an inset `Table` whose header and closing link sit inside the inset with the rows (`Table.Header placement="inside"`). Any number can be open at once, and the chevron is the only change on an open row.',
+          'Rows that open in place, as on the Usage page: a `SettingsContainer` of `Collapsible`s, each trigger a full-width row with its reading and `Meter`, each panel a nested `Table` whose header and closing link sit inside the box with the rows. Any number can be open at once, and the chevron is the only change on an open row.',
       },
     },
   },

@@ -217,6 +217,27 @@ describe('Table', () => {
     portal.remove();
   });
 
+  it('follows the row link when a plain cell of a nested table is clicked', () => {
+    const onFollow = vi.fn((event: MouseEvent) => event.preventDefault());
+    render(
+      <Table variant="nested" aria-label="Projects">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowLink href="/projects/support-agent">support-agent</Table.RowLink>
+            </Table.Cell>
+            <Table.Cell>$10</Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+    const link = screen.getByRole('link', { name: 'support-agent' });
+    link.addEventListener('click', onFollow);
+
+    fireEvent.click(secondCell(link));
+    expect(onFollow).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the row link through a router link component', () => {
     const RouterLink = ({ to, ...props }: { to: string } & ComponentProps<'a'>) => <a href={to} {...props} />;
     render(

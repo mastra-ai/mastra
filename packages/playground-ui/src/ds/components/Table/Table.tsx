@@ -10,7 +10,7 @@ import { TableRowButton } from './table-row-button';
 import { TableRowLink } from './table-row-link';
 import { forwardRowClick, isForwardedRowClick } from './table-row-target';
 import { TableSortButton } from './table-sort-button';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { fieldsOnNested, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -30,12 +30,19 @@ const rowSize = {
 
 type TableFrameProps = Omit<TableProps, 'variant'> & { variant: TableVariant };
 
-function InsetTable({ className, columnDividers, ...props }: Omit<TableProps, 'variant' | 'size'>) {
+const tableSurface = {
+  inset: cn('rounded-xl p-1', raisedSurfaceStyle),
+  nested: cn('rounded-lg bg-nested', fieldsOnNested),
+};
+
+type InsetTableProps = Omit<TableProps, 'variant' | 'size'> & { variant: keyof typeof tableSurface };
+
+function InsetTable({ variant, className, columnDividers, ...props }: InsetTableProps) {
   return (
     <div
       data-slot="table-container"
       data-column-dividers={columnDividers || undefined}
-      className={cn('group/table w-full rounded-xl p-1', raisedSurfaceStyle, className)}
+      className={cn('group/table w-full', tableSurface[variant], className)}
     >
       <div data-slot="table-scroll" className="overflow-x-auto rounded-lg">
         <div className="group-data-column-dividers/table:-ml-px">
@@ -52,8 +59,8 @@ function InsetTable({ className, columnDividers, ...props }: Omit<TableProps, 'v
 }
 
 function TableFrame({ variant, size = 'default', className, columnDividers, ...props }: TableFrameProps) {
-  if (variant === 'inset') return <InsetTable className={className} columnDividers={columnDividers} {...props} />;
-  return <table className={cn('w-full', rowSize[size], className)} {...props} />;
+  if (variant === 'default') return <table className={cn('w-full', rowSize[size], className)} {...props} />;
+  return <InsetTable variant={variant} className={className} columnDividers={columnDividers} {...props} />;
 }
 
 export function Table({ variant = 'default', ...props }: TableProps) {
@@ -116,19 +123,24 @@ export interface ThProps extends Omit<ComponentProps<'th'>, 'align'> {
 
 const insetHeadClass = cn(
   'group/head h-10 px-2 align-middle text-column whitespace-nowrap text-muted-foreground first:pl-3 last:pr-3',
-  'border-transparent group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
+  'group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
 );
+
+const headBorderClass = {
+  inset: 'border-transparent',
+  nested: 'border-x-transparent border-b border-b-separator',
+};
 
 const legacyHeadClass =
   'h-full text-left text-meta tracking-wide whitespace-nowrap text-muted-foreground uppercase first:pl-3 last:pr-3';
 
 export const Th = ({ className, children, align, ...props }: ThProps) => {
   const variant = useTableVariant();
-  if (variant === 'inset') {
+  if (variant !== 'default') {
     const insetAlign = resolveTableAlign(align);
     return (
       <th
-        className={cn(insetHeadClass, tableAlignClasses[insetAlign], className)}
+        className={cn(insetHeadClass, headBorderClass[variant], tableAlignClasses[insetAlign], className)}
         data-slot="table-head"
         data-align={insetAlign}
         {...props}
@@ -144,8 +156,9 @@ export const Th = ({ className, children, align, ...props }: ThProps) => {
   );
 };
 
-const tableBodyStyles = [
-  '[&>tr+tr>td]:border-t',
+const rowDividers = '[&>tr+tr>td]:border-t';
+
+const insetBodyStyles = [
   '[&>tr:first-child>td:first-child]:rounded-tl-lg',
   '[&>tr:first-child>td:last-child]:rounded-tr-lg',
   '[thead[data-placement=inside]+&>tr:first-child>td]:rounded-none',
@@ -161,7 +174,7 @@ export const Tbody = ({ className, children, ...props }: TbodyProps) => {
   return (
     <tbody
       data-slot={insetSlot(variant, 'table-body')}
-      className={cn(variant === 'inset' && tableBodyStyles, className)}
+      className={cn(variant !== 'default' && rowDividers, variant === 'inset' && insetBodyStyles, className)}
       {...props}
     >
       {children}
@@ -223,9 +236,15 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
           variant === 'default' && 'focus:bg-fill-subtle',
           variant === 'default' && focusRingInset,
           variant === 'inset' && [
-            'has-[[data-row-target]]:cursor-pointer',
             'has-[[data-row-target]]:hover:*:bg-surface-panel',
             'has-[[data-row-target]:focus-visible]:*:bg-surface-panel',
+          ],
+          variant === 'nested' && [
+            'has-[[data-row-target]]:hover:*:bg-fill-subtle',
+            'has-[[data-row-target]:focus-visible]:*:bg-fill-subtle',
+          ],
+          variant !== 'default' && [
+            'has-[[data-row-target]]:cursor-pointer',
             'has-[[data-row-target]:focus-visible]:outline-1 has-[[data-row-target]:focus-visible]:-outline-offset-1',
             'has-[[data-row-target]:focus-visible]:outline-border-focus has-[[data-row-target]:focus-visible]:outline-solid',
           ],
@@ -235,7 +254,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
         )}
         data-slot={insetSlot(variant, 'table-row')}
         style={style}
-        onClick={variant === 'inset' ? handleInsetClick : onClick}
+        onClick={variant === 'default' ? onClick : handleInsetClick}
         ref={internalRef}
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}

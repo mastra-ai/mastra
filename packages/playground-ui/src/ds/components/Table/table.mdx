@@ -5,7 +5,7 @@ import * as TableStories from './table.stories';
 
 # Table
 
-`Table` has two visual variants. The existing `default` variant is unchanged; `variant="inset"` gives it the raised DataList surface and content-sized rows. Both variants are built from the native table elements: `table`, `thead`, `tbody`, `tr`, `th`, and `td`. The compound parts render those elements and accept their native props. What goes inside a cell is up to you.
+`Table` has three visual variants. The existing `default` variant is unchanged; `variant="inset"` gives it the raised DataList surface and content-sized rows; `variant="nested"` draws the same rows as a borderless box for use inside a card or dialog. All variants are built from the native table elements: `table`, `thead`, `tbody`, `tr`, `th`, and `td`. The compound parts render those elements and accept their native props. What goes inside a cell is up to you.
 
 ```tsx
 import { Table } from '@mastra/playground-ui/components/Table';
@@ -47,11 +47,12 @@ Choose `DataList` when the rendered view needs its list-specific navigation, sti
 
 ## Variants and compatibility
 
-Import both variants from the existing `@mastra/playground-ui/components/Table` entrypoint. There is no separate table package or new entrypoint.
+Import every variant from the existing `@mastra/playground-ui/components/Table` entrypoint. There is no separate table package or new entrypoint.
 
 - **`variant="default"`**, or omit `variant`: keeps the existing table markup, sizing, styling, selection, and row keyboard behavior. `size="default"` and `size="small"` keep their existing meaning.
 - **`variant="inset"`**: adds the raised surface and horizontal scroll area. Rows have a 36px minimum and grow with their contents. `size` does not change inset row density; use content composition rather than a fixed height.
-- **`columnDividers`** is off by default and applies only to inset tables. It separates body columns, not the header labels. It is not a horizontal-border variant.
+- **`variant="nested"`**: the inset table as a `bg-nested` box with no border or shadow, for use inside a `Card`, dialog, or drawer. Rows, columns, and parts work as in an inset table. A line separates the header from the rows, so `placement` has no effect.
+- **`columnDividers`** is off by default and applies only to inset and nested tables. It separates body columns, not the header labels. It is not a horizontal-border variant.
 
 Existing imports (`Thead`, `Th`, `Tbody`, `Row`, `Cell`, `TxtCell`, `EntryCell`, and `DateTimeCell`) keep working. These parts also read the inset variant from the table, so opting into it does not require switching to compound names.
 
@@ -89,7 +90,7 @@ The recipes below use `variant="inset"`. Every compound part spreads the rest of
 
 Renders a `table`. The inset variant adds a raised card and horizontal scroll area around it.
 
-- `variant?: 'default' | 'inset'`, default `'default'`.
+- `variant?: 'default' | 'inset' | 'nested'`, default `'default'`.
 - `size?: 'default' | 'small'`, default `'default'`; applies to the default variant.
 - In inset mode, `className` applies to the outer card, while `style`, `ref`, events, and native table attributes apply to the `table`. In default mode, both `className` and `style` apply to the `table`.
 - `columnDividers?: boolean` draws a 1px line between columns.
@@ -246,6 +247,23 @@ Keep one row per record. `columnDividers` draws a 1px line between columns. Inpu
 ```
 
 Avoid `rowSpan` for grouping. Merged cells are hard to scan and read out of order. Repeat the value on each row, or move the detail to its own table.
+
+### Inside a card or dialog
+
+Use `variant="nested"` where the surface is already there. With 12px around it (`CardContent`), the table's text lines up with card text at 24px (`px-6`). In a dialog body it needs no padding of its own.
+
+<Canvas of={TableStories.NestedInCard} />
+
+```tsx
+<Card>
+  <div className="flex flex-col gap-1 px-6 pt-5 pb-3">…</div>
+  <CardContent className="pt-0">
+    <Table variant="nested" aria-label="Gateway models">
+      …
+    </Table>
+  </CardContent>
+</Card>
+```
 
 ### Rows that link
 
@@ -493,6 +511,6 @@ When the table is the only thing on the page and there has never been any data, 
 ## Avoid
 
 - Restyling a part with `className`: colors, text sizes, padding, heights, borders, radius, or shadows. Use `align`, `tone`, and `columnDividers`, or compose the content. If a table needs a look the props do not cover, ask for a new prop.
-- Wrapping an inset `Table` in a `Card`. The table already draws its own raised surface.
+- Wrapping an inset `Table` in a `Card` or dialog. It draws its own raised surface, so use `variant="nested"` there.
 - Joining several facts in one cell with `·`. Give each fact its own column.
 - Adding TanStack Table to sort or filter a few dozen rows. In the caller that is a `.toSorted()` and a `.filter()`.

@@ -266,7 +266,7 @@ export function CreditHistory({ credits }: { credits: Credit[] }) {
 }
 ```
 
-- `Table` takes `variant="inset"` for the DataList surface. Omit `variant` to preserve the existing default appearance and sizing. `columnDividers` draws lines between columns in inset mode.
+- `Table` takes `variant="inset"` for the DataList surface. Omit `variant` to preserve the existing default appearance and sizing. Inside a card or dialog use `variant="nested"`: the same table as a `bg-nested` box with no border. `columnDividers` draws lines between columns in both.
 - `Table.Head` takes `align` (`start`, `center`, or `end`).
 - `Table.Cell` takes `align` and `tone` (`ink` or `muted`).
 - Every column is the same color. Use `Txt tone="muted"` only for secondary text inside a cell, such as a second line, or mute every column except the first.

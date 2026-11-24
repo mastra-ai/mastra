@@ -23,18 +23,24 @@ export interface CellProps extends Omit<React.ComponentProps<'td'>, 'align'> {
 }
 
 const insetCellClass = cn(
-  'h-9 border-transparent bg-row bg-clip-padding px-2 py-1 align-middle whitespace-nowrap first:pl-3 last:pr-3',
+  'h-9 bg-clip-padding px-2 py-1 align-middle whitespace-nowrap first:pl-3 last:pr-3',
   'group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
 );
 
+const cellFillClass = {
+  inset: 'border-transparent bg-row',
+  nested: 'border-separator',
+};
+
 export const Cell = ({ className, children, tone = 'ink', align, ...props }: CellProps) => {
   const variant = useTableVariant();
-  if (variant === 'inset') {
+  if (variant !== 'default') {
     return (
       <td
         data-slot="table-cell"
         className={cn(
           insetCellClass,
+          cellFillClass[variant],
           tableAlignClasses[resolveTableAlign(align)],
           tableCellToneClasses[tone],
           className,

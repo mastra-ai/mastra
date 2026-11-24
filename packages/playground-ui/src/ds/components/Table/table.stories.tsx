@@ -6,6 +6,7 @@ import { Cell, TxtCell, DateTimeCell, EntryCell } from './Cells';
 import { Table, Thead, Th, Tbody, Row } from './Table';
 import { ActionRow } from '@/ds/components/ActionRow';
 import { Button } from '@/ds/components/Button/Button';
+import { Card, CardContent } from '@/ds/components/Card';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import {
   Drawer,
@@ -41,7 +42,7 @@ const meta: Meta<typeof Table> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'inset'],
+      options: ['default', 'inset', 'nested'],
     },
     size: {
       control: { type: 'select' },
@@ -573,6 +574,52 @@ const PROJECTS = [
   { id: 'research-workflows', size: 'Small', price: '$50 / month' },
   { id: 'billing-bot', size: 'Medium', price: '$150 / month' },
 ];
+
+export const NestedInCard: Story = {
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        story:
+          'A table inside a card is a box with no border of its own. With 12px around it, its text lines up with the text above. Hover a row to see the row link state.',
+      },
+    },
+  },
+  render: () => (
+    <Card className="max-w-3xl">
+      <div className="flex flex-col gap-1 px-6 pt-5 pb-3">
+        <Txt variant="caption" tone="muted">
+          Spent this period
+        </Txt>
+        <Txt variant="display-lg" className="tabular-nums">
+          $200
+        </Txt>
+      </div>
+      <CardContent className="pt-0">
+        <Table variant="nested" aria-label="Spend by project">
+          <Table.Header>
+            <Table.Row>
+              <Table.Head className="w-full">Project</Table.Head>
+              <Table.Head>Size</Table.Head>
+              <Table.Head align="end">Price</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {PROJECTS.map(project => (
+              <Table.Row key={project.id}>
+                <Table.Cell>
+                  <Table.RowLink href={`#projects/${project.id}`}>{project.id}</Table.RowLink>
+                </Table.Cell>
+                <Table.Cell>{project.size}</Table.Cell>
+                <Table.Cell align="end">{project.price}</Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
+      </CardContent>
+    </Card>
+  ),
+};
 
 export const InsetLinkedRows: Story = {
   parameters: {
