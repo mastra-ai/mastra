@@ -299,6 +299,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     ],
   },
   {
+    name: 'durable',
+    type: 'ExecutionEngineDefaults',
+    isOptional: true,
+    description:
+      'Default durable settings for native agents registered through `agents` or `addAgent()`. Set `executionEngine` to `"default"` for in-process checkpoints, `"evented"` for event-driven execution, or `false` for the plain loop. Explicit agent options override defaults field by field. `durable: false` on an agent also disables run-frame publication. Registration or first execution fixes the engine choice for that agent instance; wrapper factories keep their own engine and options. Set the shared transport and replay cache with the top-level `pubsub` and `cache` options. See [native agent execution](/reference/agents/durable-agent#native-agent-execution) and [transport and cache precedence](/docs/agents/resumable-streams#defaults).',
+  },
+  {
     name: 'workers',
     type: 'MastraWorker[] | false',
     description:
