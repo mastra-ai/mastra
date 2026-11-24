@@ -37,6 +37,9 @@ const isFinal = (error: unknown) =>
 
 const retryUnlessFinal = (failures: number, error: unknown) => !isFinal(error) && failures < 2;
 
+const pollUnlessTooExpensive = (error: unknown, live: boolean) =>
+  error instanceof MastraClientError && error.status === 422 ? false : pollUnless(live);
+
 function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>(resolve => {
     const timer = setTimeout(resolve, ms);
@@ -121,8 +124,7 @@ export function useKnowledgePageGraph(knowledgeKey: string | undefined, live: bo
     queryKey: ['knowledge', knowledgeKey, 'graph'],
     queryFn: knowledgeKey ? () => client.getKnowledge(knowledgeKey).graph() : skipToken,
     retry: retryUnlessFinal,
-    refetchInterval: ({ state }) =>
-      state.error instanceof MastraClientError && state.error.status === 422 ? false : pollUnless(live),
+    refetchInterval: ({ state }) => pollUnlessTooExpensive(state.error, live),
   });
 }
 
@@ -174,7 +176,9 @@ export function useKnowledgeTreeLevels(
             client.getKnowledge(knowledgeKey).tree({ parentId: request.parentId ?? undefined, cursor: request.cursor })
         : skipToken,
       // A level's first chunk polls, so new children appear in the tree and the page's child list.
-      refetchInterval: request.cursor ? false : pollUnless(live),
+      refetchInterval: ({ state }: { state: { error: unknown } }) =>
+        request.cursor ? false : pollUnlessTooExpensive(state.error, live),
+      retry: retryUnlessFinal,
     })),
   });
 }

@@ -267,6 +267,38 @@ describe('Factory Knowledge routes on the page store', () => {
     expect(graph.body.grants).toHaveLength(2);
   });
 
+  it('refuses as too expensive a graph whose grant lookup is still running at the deadline', async () => {
+    const h = await createHarness({
+      declarations: {
+        ...scopes,
+        'role:$orgId:admin': {},
+        'project:$projectId': {
+          ...scopes['project:$projectId'],
+          access: [
+            ...scopes['project:$projectId'].access,
+            { principal: 'role:$orgId:admin' as const, role: 'owner' as const },
+          ],
+        },
+      },
+    });
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    const getScopesByAddress = h.store.getScopesByAddress.bind(h.store);
+    vi.spyOn(h.store, 'getScopesByAddress').mockImplementation(addresses => {
+      if (addresses.includes(`role:${ORG}:admin`)) {
+        deadline.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+      }
+      return getScopesByAddress(addresses);
+    });
+    try {
+      const graph = await h.get('/graph');
+      expect(graph.status).toBe(422);
+      expect(graph.body).toMatchObject({ error: 'query_too_expensive' });
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it('rejects out-of-range limits', async () => {
     const h = await createHarness();
     expect((await h.get('/tree?limit=0')).status).toBe(400);

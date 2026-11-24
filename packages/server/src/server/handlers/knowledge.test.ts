@@ -196,6 +196,26 @@ describe('Knowledge read routes', () => {
       expect(graph.grants).toHaveLength(4);
     });
 
+    it('refuses with 422 a graph whose grant lookup is still running at the deadline', async () => {
+      const { mastra } = await setup(declarations);
+      const store = await mastra.getKnowledge('main')!.getStorage();
+      const deadline = new AbortController();
+      const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+      const getScopesByAddress = store.getScopesByAddress.bind(store);
+      vi.spyOn(store, 'getScopesByAddress').mockImplementation(addresses => {
+        deadline.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+        return getScopesByAddress(addresses);
+      });
+      try {
+        await expect(call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, knowledgeKey: 'main' })).rejects.toMatchObject({
+          status: 422,
+          message: expect.stringContaining('ran out of time'),
+        });
+      } finally {
+        timeout.mockRestore();
+      }
+    });
+
     it("sends the store's declared grants and labels on the first request, before anything else resolved them", async () => {
       const { mastra, support, eng } = await setup();
       const store = await mastra.getKnowledge('main')!.getStorage();

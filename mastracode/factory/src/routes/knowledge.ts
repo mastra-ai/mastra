@@ -242,7 +242,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const maxPages = boundedLimit(c.req.query('maxPages'), MAX_GRAPH_PAGES);
           if (maxPages === null) return badRequest(c, `maxPages must be an integer from 1 to ${MAX_GRAPH_PAGES}.`);
           let graph;
+          let grants;
           try {
+            const signal = AbortSignal.timeout(READ_DEADLINE_MS);
             graph = await readKnowledgePageGraph(
               view.store,
               {
@@ -250,19 +252,19 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 rootId: boundedId(c.req.query('rootId')) ?? null,
                 ...(maxPages ? { limits: { maxPages } } : {}),
               },
-              { signal: AbortSignal.timeout(READ_DEADLINE_MS) },
+              { signal },
+            );
+            if (!graph) return c.json({ error: 'page_not_found' }, 404);
+            // Declared grants between the scopes shown, limited to principal scopes this caller can read.
+            grants = await readKnowledgeScopeGrants(
+              view.store,
+              { pages: graph.pages, read: view.read, grantsFor: scope => view.knowledge.scopeGrants(scope) },
+              { signal },
             );
           } catch (error) {
             if (isOverReadBudget(error)) return tooExpensive(c);
             throw error;
           }
-          if (!graph) return c.json({ error: 'page_not_found' }, 404);
-          // Declared grants between the scopes shown, limited to principal scopes this caller can read.
-          const grants = await readKnowledgeScopeGrants(view.store, {
-            pages: graph.pages,
-            read: view.read,
-            grantsFor: scope => view.knowledge.scopeGrants(scope),
-          });
           return c.json({
             ...graph,
             pages: graph.pages.map(page => withDisplayLabel(view.knowledge, page)),

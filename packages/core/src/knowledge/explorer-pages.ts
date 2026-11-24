@@ -37,7 +37,10 @@ function scopeVisible(page: KnowledgePage, read: KnowledgeReadScope): boolean {
 }
 
 export interface KnowledgeReadOptions {
-  /** Once it aborts, the read makes no further store call and rejects with its reason, e.g. `AbortSignal.timeout(ms)`. */
+  /**
+   * Once it aborts, the read starts no further store call, drops the answer of the call in flight, and
+   * rejects with its reason, e.g. `AbortSignal.timeout(ms)`.
+   */
   signal?: AbortSignal;
 }
 
@@ -47,9 +50,11 @@ function untilAborted<S extends object>(store: S, signal: AbortSignal | undefine
     get(target, key) {
       const member: unknown = Reflect.get(target, key, target);
       if (typeof member !== 'function') return member;
-      return (...args: unknown[]) => {
+      return async (...args: unknown[]) => {
         signal.throwIfAborted();
-        return Reflect.apply(member, target, args);
+        const answer: unknown = await Reflect.apply(member, target, args);
+        signal.throwIfAborted();
+        return answer;
       };
     },
   });
@@ -607,7 +612,7 @@ export interface KnowledgeGraphScopeGrant {
  * a declared principal with no scope page yet comes back without `principalId`.
  */
 export async function readKnowledgeScopeGrants(
-  store: KnowledgePageStore,
+  source: KnowledgePageStore,
   input: {
     pages: readonly KnowledgePage[];
     read: KnowledgeReadScope;
@@ -616,7 +621,9 @@ export async function readKnowledgeScopeGrants(
       role: KnowledgeRole;
     }>;
   },
+  { signal }: KnowledgeReadOptions = {},
 ): Promise<KnowledgeGraphScopeGrant[]> {
+  const store = untilAborted(source, signal);
   const { pages, read } = input;
   const byId = new Map(pages.map(page => [page.id, page]));
   const wanted: Array<{ principal: string; target: string; role: KnowledgeRole }> = [];

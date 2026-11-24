@@ -150,11 +150,12 @@ async function graphGrants(
   store: KnowledgeStorage,
   pages: readonly coreKnowledge.KnowledgePage[],
   read: KnowledgeReadScope,
+  signal: AbortSignal,
 ): Promise<Array<coreKnowledge.KnowledgeGraphScopeGrant & { principalLabel?: string }> | undefined> {
   const readGrants = (coreKnowledge as Partial<typeof coreKnowledge>).readKnowledgeScopeGrants;
   const scopeGrants = (instance as Partial<Knowledge>).scopeGrants?.bind(instance);
   if (!readGrants || !scopeGrants) return undefined;
-  const grants = await readGrants(store, { pages, read, grantsFor: scopeGrants });
+  const grants = await readGrants(store, { pages, read, grantsFor: scopeGrants }, { signal });
   return grants.map(grant => {
     const principalLabel = instance.scopeLabel?.(grant.principal);
     return principalLabel ? { ...grant, principalLabel } : grant;
@@ -374,13 +375,14 @@ export const GET_KNOWLEDGE_GRAPH_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, knowledgeKey, rootId, maxPages }) => {
     try {
       const { instance, store, read, readers } = await resolveStore(mastra, requestContext, knowledgeKey);
+      const signal = AbortSignal.timeout(KNOWLEDGE_READ_DEADLINE_MS);
       const graph = await readers.readKnowledgePageGraph(
         store,
         { read, rootId: rootId ?? null, ...(maxPages ? { limits: { maxPages } } : {}) },
-        { signal: AbortSignal.timeout(KNOWLEDGE_READ_DEADLINE_MS) },
+        { signal },
       );
       if (!graph) throw new HTTPException(404, { message: 'Knowledge page not found' });
-      const grants = await graphGrants(instance, store, graph.pages, read);
+      const grants = await graphGrants(instance, store, graph.pages, read, signal);
       return {
         ...graph,
         pages: graph.pages.map(page => withDisplayLabel(instance, page)),

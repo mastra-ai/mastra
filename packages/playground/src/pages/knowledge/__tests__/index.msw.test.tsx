@@ -175,6 +175,26 @@ describe('Knowledge page', () => {
     }
   });
 
+  it('stops polling tree levels after the server refuses their read budget', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const requested: string[] = [];
+      withInstance();
+      server.use(
+        http.get(`${api}/main/tree`, ({ request }) => {
+          requested.push(request.url);
+          return HttpResponse.json({ error: 'Reduce the graph limits' }, { status: 422 });
+        }),
+      );
+      renderPage();
+      await waitFor(() => expect(requested.length).toBeGreaterThan(0));
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(requested).toEqual([...new Set(requested)]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the last graph and says it could not refresh when a later read is refused', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     try {

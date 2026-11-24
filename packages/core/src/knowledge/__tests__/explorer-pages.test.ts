@@ -11,6 +11,7 @@ import {
   readKnowledgePageGraph,
   readKnowledgePageLinkCounts,
   readKnowledgePageLinks,
+  readKnowledgeScopeGrants,
   searchKnowledgeExplorerPages,
 } from '../explorer-pages';
 
@@ -512,6 +513,38 @@ describe('a read whose signal aborts', () => {
 
     await expect(read(counted, deadline.signal)).rejects.toBe(timedOut);
     expect(late.calls).toBe(0);
+  });
+
+  it('drops a hosted graph that comes back after the abort, and rejects with the reason', async () => {
+    const { store } = await seed();
+    const deadline = new AbortController();
+    const timedOut = new DOMException('The operation timed out.', 'TimeoutError');
+    const hosted = Object.assign(store, {
+      readPageGraph: async () => {
+        deadline.abort(timedOut);
+        return { pages: [], outsideIds: [], edges: [], pinnedIds: [], truncated: false };
+      },
+    });
+
+    await expect(readKnowledgePageGraph(hosted, { read: 'all' }, { signal: deadline.signal })).rejects.toBe(timedOut);
+  });
+
+  it('drops scope grants that come back after the abort, and rejects with the reason', async () => {
+    const { store, acme } = await seed();
+    const deadline = new AbortController();
+    const timedOut = new DOMException('The operation timed out.', 'TimeoutError');
+    const getScopesByAddress = store.getScopesByAddress.bind(store);
+    vi.spyOn(store, 'getScopesByAddress').mockImplementation(addresses => {
+      deadline.abort(timedOut);
+      return getScopesByAddress(addresses);
+    });
+    const reading = readKnowledgeScopeGrants(
+      store,
+      { pages: [acme], read: 'all', grantsFor: () => [{ principal: 'team:acme:eng', role: 'viewer' }] },
+      { signal: deadline.signal },
+    );
+
+    await expect(reading).rejects.toBe(timedOut);
   });
 });
 
