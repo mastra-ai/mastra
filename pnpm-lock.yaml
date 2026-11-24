@@ -4037,6 +4037,9 @@ importers:
 
   packages/_types-builder:
     dependencies:
+      '@babel/core':
+        specifier: ^8.0.9
+        version: 8.1.0
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.60.1(@types/node@22.19.15)
