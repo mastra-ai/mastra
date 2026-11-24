@@ -179,8 +179,21 @@ describe('Observational Memory token counts for stored history', () => {
     ['returns an object with its own toJSON()', () => ({ toJSON: () => ({ report, toJSON: () => 'small' }) })],
     ['is nested in the result', () => ({ summary: 'Q3', when: new Date(0), body: { toJSON: () => report } })],
   ];
-  it.each(serializers)(
-    'stores the same count a fresh count of the stored message gives, for a tool result whose toJSON() %s',
+  // Boxed primitives, typed arrays and Maps hold no toJSON() but still serialize differently from their own entries.
+  const nonPlainValues: [string, () => unknown][] = [
+    ['a boxed string', () => new String(report)],
+    ['a nested boxed string', () => ({ body: new String(report) })],
+    ['a nested boxed number and boolean', () => ({ body: report, pages: new Number(12), draft: new Boolean(false) })],
+    [
+      'a nested Map and typed array',
+      () => ({ body: report, index: new Map([['a', 1]]), bytes: new Uint8Array([1, 2]) }),
+    ],
+  ];
+  it.each([
+    ...serializers.map(([name, make]) => [`whose toJSON() ${name}`, make] as const),
+    ...nonPlainValues.map(([name, make]) => [`that is ${name}`, make] as const),
+  ])(
+    'stores the same count a fresh count of the stored message gives, for a tool result %s',
     async (_name, makeResult) => {
       const { storage, memory } = open(join(dbDir, `to-json-${randomUUID()}.db`));
       const threadId = randomUUID();

@@ -11,8 +11,19 @@ function isObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/** Thrown by {@link sanitizeToolResultValue} when the value holds a `toJSON()`, so the caller can serialize it natively. */
-const SERIALIZES_THROUGH_TO_JSON = Symbol('serializes-through-toJSON');
+/**
+ * Thrown by {@link sanitizeToolResultValue} when the value holds something the walk would serialize differently
+ * from `JSON.stringify` (a `toJSON()`, a boxed primitive, a class instance), so the caller serializes it natively.
+ */
+const NEEDS_NATIVE_JSON = Symbol('needs-native-json');
+
+/** An array or plain object with no `toJSON()`: walking its own entries gives what `JSON.stringify` writes. */
+function isPlainJsonContainer(value: object): boolean {
+  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return false;
+  if (Array.isArray(value)) return true;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
 
 function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> = new WeakMap()): unknown {
   if (!isObjectLike(value)) {
@@ -23,8 +34,8 @@ function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> 
     return seen.get(value);
   }
 
-  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') {
-    throw SERIALIZES_THROUGH_TO_JSON;
+  if (!isPlainJsonContainer(value)) {
+    throw NEEDS_NATIVE_JSON;
   }
 
   if (Array.isArray(value)) {
@@ -84,7 +95,7 @@ function stringifyToolResult(value: unknown): string {
   try {
     sanitized = sanitizeToolResultValue(value);
   } catch (error) {
-    if (error !== SERIALIZES_THROUGH_TO_JSON) throw error;
+    if (error !== NEEDS_NATIVE_JSON) throw error;
     // Count what storage holds and a reload reads back: the value as JSON.stringify writes it.
     let json: string | undefined;
     try {
