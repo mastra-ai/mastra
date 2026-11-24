@@ -8,12 +8,15 @@ import type {
   KnowledgePageSearchHit,
   KnowledgePinKind,
   KnowledgeStorage,
+  KnowledgeTimelineEntryRecord,
 } from '../storage/domains/knowledge';
 import {
   KnowledgePageHasChildrenError,
   knowledgeScopeReadable,
   KnowledgeUnsupportedCapabilityError,
   MAX_KNOWLEDGE_PIN_LIST_DEPTH,
+  MAX_KNOWLEDGE_TIMELINE_READ_LIMIT,
+  parseKnowledgeTimelineTime,
 } from '../storage/domains/knowledge';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
@@ -154,6 +157,37 @@ function pageSummary(page: KnowledgePage, { refs, scopes }: KnowledgePageRefs) {
 function searchPageSummary(page: KnowledgePage, refs: KnowledgePageRefs, words: string) {
   const hit = knowledgeBodyHit(page.body, words);
   return { ...pageSummary(page, refs), ...(hit ?? {}) };
+}
+
+/** A timeline entry's ref: its timeline page's ref, `@`, and the entry's store id (a ULID). */
+const ENTRY_REF = /^(.+)@([0-9A-HJKMNP-TV-Z]{26})$/;
+/** Entries a whole read of a timeline page brings along. */
+const TIMELINE_READ_ENTRIES = 20;
+
+function entrySummary(entry: KnowledgeTimelineEntryRecord, pageRef: string) {
+  return {
+    ref: `${pageRef}@${entry.id}`,
+    externalId: entry.externalId,
+    occurredAt: entry.occurredAt.toISOString(),
+    ...(entry.editedAt ? { editedAt: entry.editedAt.toISOString() } : {}),
+    ...(entry.deletedAt ? { deleted: true as const } : {}),
+    ...(entry.author ? { author: entry.author.name ?? entry.author.sourceId } : {}),
+    ...(entry.threadExternalId ? { thread: entry.threadExternalId } : {}),
+    body: entry.body,
+  };
+}
+
+function timelineTime(tool: string, field: string, value: string | undefined): Date | undefined {
+  if (value === undefined) return undefined;
+  const time = parseKnowledgeTimelineTime(value);
+  if (!time) throw new Error(`${tool}: ${field} must be an ISO 8601 date-time with a zone, e.g. 2026-11-23T12:00:00Z.`);
+  return time;
+}
+
+/** Whether the page is a timeline: always false on a store without timelines. */
+async function isTimeline(run: KnowledgeRun, page: KnowledgePage): Promise<boolean> {
+  const timelines = run.storage.timelines;
+  return !!timelines && (await timelines.listTimelineIds({ pageIds: [page.id] })).length > 0;
 }
 
 function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
@@ -298,34 +332,108 @@ async function requireAudienceAuthority(run: KnowledgeRun, audience: string[]): 
   }
 }
 
+type SearchHit = KnowledgePageSearchHit | { type: 'entry'; entry: KnowledgeTimelineEntryRecord; page: KnowledgePage };
+
+const hitKey = (hit: SearchHit) =>
+  hit.type === 'page' ? `page:${hit.page.id}` : hit.type === 'note' ? `note:${hit.note.id}` : `entry:${hit.entry.id}`;
+
+/** Reciprocal rank fusion of ranked lists, best `max` first. */
+function fuse(lists: SearchHit[][], max: number): SearchHit[] {
+  const fused = new Map<string, { hit: SearchHit; score: number }>();
+  for (const list of lists) {
+    list.forEach((hit, rank) => {
+      const key = hitKey(hit);
+      const entry = fused.get(key) ?? { hit, score: 0 };
+      entry.score += 1 / (RRF_K + rank + 1);
+      fused.set(key, entry);
+    });
+  }
+  return [...fused.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map(entry => entry.hit);
+}
+
 function searchTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_search',
     description:
-      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit whose body contains a matched word carries a short `snippet` around it, numbered line by line like knowledge_read (with the heading it sits under when that is out of view), the `line` the snippet is centred on and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes.',
+      'Search the knowledge this run can read: page names, descriptions, bodies, notes and timeline entries (dated messages, e.g. a Slack channel). A page hit whose body contains a matched word carries a short `snippet` around it, numbered line by line like knowledge_read (with the heading it sits under when that is out of view), the `line` the snippet is centred on and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes. ' +
+      'Entries match by keyword only, not by meaning. `in` (a timeline page), `since` or `until` search entries alone. ' +
+      'Results are the best matches up to `limit`; more may match, so narrow the query or raise `limit` when a list looks short.',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', minLength: 1, description: 'What to look for.' },
         scope: { ...scopeListSchema, description: 'Only search pages in these scopes (addresses).' },
         limit: { ...limitSchema, description: 'Maximum results. Defaults to 10.' },
+        in: { type: 'string', minLength: 1, description: 'Only entries of this timeline page (a page ref).' },
+        since: {
+          type: 'string',
+          minLength: 1,
+          description: 'Only entries that happened at or after this ISO 8601 date-time.',
+        },
+        until: {
+          type: 'string',
+          minLength: 1,
+          description: 'Only entries that happened before this ISO 8601 date-time.',
+        },
       },
       required: ['query'],
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const { query, scope, limit } = input as { query: string; scope?: string[]; limit?: number };
+      const {
+        query,
+        scope,
+        limit,
+        in: inRef,
+        since: sinceInput,
+        until: untilInput,
+      } = input as { query: string; scope?: string[]; limit?: number; in?: string; since?: string; until?: string };
+      const since = timelineTime('knowledge_search', 'since', sinceInput);
+      const until = timelineTime('knowledge_search', 'until', untilInput);
       const run = await start(host, context);
       const scopeIds = scope ? (await readableScopes(run, scope)).map(page => page.id) : undefined;
       const max = limitOf(limit);
+      const entriesOnly = !!(inRef || since || until);
+      let timelineIds: string[] | undefined;
+      if (inRef) {
+        const page = await run.pageOrCloseMatches(inRef);
+        if (!(await isTimeline(run, page))) throw new Error(`knowledge_search: "${inRef}" is not a timeline.`);
+        timelineIds = [page.id];
+      }
       // Keyword search has no quoting: a quote mark would be matched as a literal character, so
       // `"api" "responses"` would find nothing. Search the quoted words instead.
       const words = knowledgeSearchQuery(query);
-      const lexical = words
-        ? await run.storage.searchPages({ query: words, read: run.read, scopeIds, limit: max })
-        : [];
+      const timelines = run.storage.timelines;
+      const entryRecords =
+        words && timelines
+          ? await timelines.searchEntries({
+              query: words,
+              read: run.read,
+              timelineIds,
+              scopeIds,
+              since,
+              until,
+              limit: max,
+            })
+          : [];
+      const timelinePages = new Map<string, KnowledgePage>();
+      for (const id of new Set(entryRecords.map(entry => entry.timelineId))) {
+        const page = await run.storage.getPage({ id, read: run.read });
+        if (page) timelinePages.set(id, page);
+      }
+      const entryHits: SearchHit[] = entryRecords.flatMap(entry => {
+        const page = timelinePages.get(entry.timelineId);
+        return page ? [{ type: 'entry' as const, entry, page }] : [];
+      });
+      const lexical: SearchHit[] =
+        words && !entriesOnly
+          ? await run.storage.searchPages({ query: words, read: run.read, scopeIds, limit: max })
+          : [];
       let hits = lexical;
-      if (host.semantic) {
+      if (host.semantic && !entriesOnly) {
         const inScope = (page: KnowledgePage) => !scopeIds || scopeIds.includes(page.scopeId);
         // Every vector hit is re-read under the run's read scope before it can take a slot.
         const semantic = await host.semantic
@@ -344,20 +452,11 @@ function searchTool(host: KnowledgePageToolHost) {
             host.warn?.(`Knowledge semantic search failed; returning keyword results only: ${String(error)}`);
             return [];
           });
-        const fused = new Map<string, { hit: KnowledgePageSearchHit; score: number }>();
-        for (const list of [lexical, semantic]) {
-          list.forEach((hit, rank) => {
-            const key = hit.type === 'page' ? `page:${hit.page.id}` : `note:${hit.note.id}`;
-            const entry = fused.get(key) ?? { hit, score: 0 };
-            entry.score += 1 / (RRF_K + rank + 1);
-            fused.set(key, entry);
-          });
-        }
-        hits = [...fused.values()]
-          .sort((a, b) => b.score - a.score)
-          .slice(0, max)
-          .map(entry => entry.hit);
+        hits = fuse([lexical, semantic], max);
       }
+      // Entries are found by keyword alone, so they join as one more ranked list.
+      if (entriesOnly) hits = entryHits;
+      else if (entryHits.length) hits = fuse([hits, entryHits], max);
       const addresses = await pageRefs(
         run,
         hits.map(hit => hit.page),
@@ -367,11 +466,17 @@ function searchTool(host: KnowledgePageToolHost) {
         hits.map(async hit =>
           hit.type === 'page'
             ? { type: 'page' as const, page: searchPageSummary(hit.page, addresses, words) }
-            : {
-                type: 'note' as const,
-                page: pageSummary(hit.page, addresses),
-                note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
-              },
+            : hit.type === 'entry'
+              ? {
+                  type: 'entry' as const,
+                  page: pageSummary(hit.page, addresses),
+                  entry: entrySummary(hit.entry, addresses.refs.get(hit.page.id) ?? hit.page.id),
+                }
+              : {
+                  type: 'note' as const,
+                  page: pageSummary(hit.page, addresses),
+                  note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
+                },
         ),
       );
       const matched = results.some(result => result.type === 'page' && 'line' in result.page);
@@ -577,8 +682,10 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
       `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read of a long page shows every heading with its line number and the first lines under it, so you can pick the part to read. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
-      'Those part reads return just that part of the body.' +
-      (canEdit ? ' To edit part of a long body, pass the `range` a read gave you to knowledge_page.' : ''),
+      'Those part reads return just that part of the body. ' +
+      (canEdit ? 'To edit part of a long body, pass the `range` a read gave you to knowledge_page. ' : '') +
+      `A timeline page (dated entries, e.g. a Slack channel) comes with its latest ${TIMELINE_READ_ENTRIES} entries, newest first. Read more of them with \`timeline\`: a \`cursor\`, a time range, oldest first, or one thread. ` +
+      'An entry ref (`<page ref>@<entry id>`, from a read or a search) reads that one entry.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -635,6 +742,41 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
           description:
             'Maximum notes, children and mentioning notes. Defaults to 10. Not a line count: how much of the body comes back is set by the token cap.',
         },
+        timeline: {
+          type: 'object',
+          description:
+            "Read a timeline page's entries instead of the page: returns them with a nextCursor when more remain.",
+          properties: {
+            since: {
+              type: 'string',
+              minLength: 1,
+              description: 'Entries that happened at or after this ISO 8601 date-time.',
+            },
+            until: {
+              type: 'string',
+              minLength: 1,
+              description: 'Entries that happened before this ISO 8601 date-time.',
+            },
+            order: { type: 'string', enum: ['desc', 'asc'], description: 'desc (newest first, the default) or asc.' },
+            thread: {
+              type: 'string',
+              minLength: 1,
+              description: "One thread: the root entry's externalId. Returns the root and its replies.",
+            },
+            cursor: {
+              type: 'string',
+              minLength: 1,
+              description: "The previous timeline read's nextCursor, with the same other arguments.",
+            },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: MAX_KNOWLEDGE_TIMELINE_READ_LIMIT,
+              description: `Maximum entries. Defaults to ${TIMELINE_READ_ENTRIES}.`,
+            },
+          },
+          additionalProperties: false,
+        },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
@@ -651,6 +793,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         context: matchContext = KNOWLEDGE_READ_MATCH_CONTEXT,
         from,
         limit: requested,
+        timeline: timelineArgs,
       } = input as {
         page?: string;
         notes?: boolean;
@@ -663,6 +806,14 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         context?: number;
         from?: KnowledgeLinePosition;
         limit?: number;
+        timeline?: {
+          since?: string;
+          until?: string;
+          order?: 'asc' | 'desc';
+          thread?: string;
+          cursor?: string;
+          limit?: number;
+        };
       };
       const match = matchInput === undefined ? undefined : typeof matchInput === 'string' ? [matchInput] : matchInput;
       if ([outline, section, match].filter(Boolean).length > 1) {
@@ -676,6 +827,13 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         );
       }
       if (outline && from) throw new Error('knowledge_read: an outline covers the whole body; pass it without from.');
+      if (timelineArgs && (outline || section || match || from || wantNotes || wantMentions)) {
+        throw new Error(
+          'knowledge_read: read a timeline on its own, without outline, section, match, from, notes or mentionedIn.',
+        );
+      }
+      const timelineSince = timelineTime('knowledge_read', 'timeline.since', timelineArgs?.since);
+      const timelineUntil = timelineTime('knowledge_read', 'timeline.until', timelineArgs?.until);
       const run = await start(host, context);
       const limit = limitOf(requested);
       if (!ref) {
@@ -691,7 +849,53 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         };
       }
 
+      const entryRef = ENTRY_REF.exec(ref);
+      if (entryRef && run.storage.timelines && !timelineArgs) {
+        const timelinePage = await run.page(entryRef[1]!).catch(error => {
+          if (error instanceof KnowledgeNotFoundError) return null;
+          throw error;
+        });
+        if (timelinePage && (await isTimeline(run, timelinePage))) {
+          const entry = await run.storage.timelines.getEntry({
+            timelineId: timelinePage.id,
+            id: entryRef[2]!,
+            read: run.read,
+          });
+          if (!entry) throw new KnowledgeNotFoundError(ref);
+          const addresses = await pageRefs(run, [timelinePage]);
+          return {
+            page: pageSummary(timelinePage, addresses),
+            entry: entrySummary(entry, addresses.refs.get(timelinePage.id) ?? timelinePage.id),
+          };
+        }
+      }
+
       const page = await run.pageOrCloseMatches(ref);
+      const timeline = await isTimeline(run, page);
+      const readEntries = (args: NonNullable<typeof timelineArgs>, entries: number) =>
+        run.storage.timelines!.listEntries({
+          timelineId: page.id,
+          read: run.read,
+          since: timelineSince,
+          until: timelineUntil,
+          order: args.order,
+          threadExternalId: args.thread,
+          cursor: args.cursor,
+          limit: entries,
+        });
+      if (timelineArgs) {
+        if (!timeline) throw new Error(`knowledge_read: "${ref}" is not a timeline.`);
+        const read = await readEntries(timelineArgs, timelineArgs.limit ?? TIMELINE_READ_ENTRIES);
+        const addresses = await pageRefs(run, [page]);
+        const ownRef = addresses.refs.get(page.id) ?? page.id;
+        return {
+          page: pageSummary(page, addresses),
+          timeline: {
+            entries: read.entries.map(entry => entrySummary(entry, ownRef)),
+            ...(read.nextCursor ? { nextCursor: read.nextCursor } : {}),
+          },
+        };
+      }
       // A part of the body (outline, section, matches, or a later window) comes alone: the notes,
       // children and mentions came with the first read and would only repeat.
       if (outline || section || match || from) {
@@ -749,10 +953,11 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
           ...(more.length ? { more } : {}),
         };
       }
-      const [notes, children, mentioning] = await Promise.all([
+      const [notes, children, mentioning, latest] = await Promise.all([
         run.storage.listNotes({ pageId: page.id, read: run.read, limit }),
         run.storage.listChildPages({ parentId: page.id, read: run.read, limit }),
         run.storage.listNotesMentioning({ pageId: page.id, read: run.read, limit }),
+        timeline ? readEntries({}, TIMELINE_READ_ENTRIES) : undefined,
       ]);
       let childScopesCut = false;
       let childScopes: Array<{ address?: string; name: string; description?: string; restricted?: true }> = [];
@@ -815,12 +1020,27 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
       } else if (mentioning.nextCursor) {
         more.push(`mentionedIn: more than ${limit}. Read again with mentionedInCursor: "${mentioning.nextCursor}".`);
       }
+      if (latest) {
+        more.push(
+          latest.nextCursor
+            ? `timeline: this page is a timeline; these are its latest ${TIMELINE_READ_ENTRIES} entries. Read older ones with timeline: { cursor: "${latest.nextCursor}" }, or a range with timeline: { since, until, order, thread }.`
+            : 'timeline: this page is a timeline; these are all its entries. Read a range with timeline: { since, until, order, thread }.',
+        );
+      }
       return {
         page: {
           ...pageSummary(page, addresses),
           version: page.version,
           ...view,
         },
+        ...(latest
+          ? {
+              timeline: {
+                entries: latest.entries.map(entry => entrySummary(entry, ownRef)),
+                ...(latest.nextCursor ? { nextCursor: latest.nextCursor } : {}),
+              },
+            }
+          : {}),
         ...(notesInline
           ? { notes: noteList, ...(notes.nextCursor ? { nextCursor: notes.nextCursor } : {}) }
           : { notesLeftOut: noteList.length }),

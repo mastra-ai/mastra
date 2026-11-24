@@ -56,7 +56,7 @@ A read of a page that doesn't exist lists up to three close matches by `ref`.
 
 ## `knowledge_search`
 
-Searches the pages and notes the run can read.
+Searches the pages, notes and timeline entries the run can read. A timeline is a page that holds dated entries, such as the messages of a Slack channel.
 
 The query is split into words, and quote marks are ignored. Each word matches case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description or body contains at least one of the words. A note matches when its own text does.
 
@@ -68,6 +68,8 @@ Keyword results are ranked in this order:
 
 Access checks and `scope` filter results before ranking. `limit` applies after it. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so this order no longer holds.
 
+Timeline entries match by keyword only, never by meaning. An entry matches when its body contains at least one of the words; entries rank by how many words they contain, then newest first, and join the page and note results by rank. With `in`, `since` or `until`, a search returns only entries.
+
 <PropertiesTable
   content={[
   {
@@ -78,10 +80,23 @@ Access checks and `scope` filter results before ranking. `limit` applies after i
   },
   { name: 'scope', type: 'string[]', description: 'Only search pages in these scope addresses.', isOptional: true },
   { name: 'limit', type: 'number', description: 'Maximum results, 1 to 50.', isOptional: true, defaultValue: '10' },
+  { name: 'in', type: 'string', description: 'Only entries of this timeline page.', isOptional: true },
+  {
+    name: 'since',
+    type: 'string',
+    description: 'Only entries that happened at or after this ISO 8601 date-time, with a zone.',
+    isOptional: true,
+  },
+  {
+    name: 'until',
+    type: 'string',
+    description: 'Only entries that happened before this ISO 8601 date-time, with a zone.',
+    isOptional: true,
+  },
 ]}
 />
 
-Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. A page result's `page` can also include body matches: a `snippet` of about 60 tokens around the words that matched, not counting the `…` it puts where the body was cut; the `line` the snippet is centred on, numbered as `knowledge_read` numbers lines; and `matchingLines`, how many lines contain a matched word. Every line of the snippet carries its line number, as in `knowledge_read` (`9│Any reimbursement over $500 needs a manager.`), and a line cut at either end keeps its number and the `…`. When the nearest markdown heading above the snippet isn't in it, the snippet starts with that heading line and its number (`6│## Expenses`), then the excerpt. The matching is the search's own (quote marks removed, case-insensitive), so these fields are included only when the body contains at least one of the words, and left out when only the name or description matched. When any page result has them, `more` says how to read on from `line` with `knowledge_read` (`from`) or see every match (`match`). Snippets are built only for pages the run can read.
+Returns `{ results }`, each `{ type: 'page', page }`, `{ type: 'note', page, note }` or `{ type: 'entry', page, entry }`. An entry is `{ ref, externalId, occurredAt, editedAt?, deleted?, author?, thread?, body }`, and `page` is its timeline. A page result's `page` can also include body matches: a `snippet` of about 60 tokens around the words that matched, not counting the `…` it puts where the body was cut; the `line` the snippet is centred on, numbered as `knowledge_read` numbers lines; and `matchingLines`, how many lines contain a matched word. Every line of the snippet carries its line number, as in `knowledge_read` (`9│Any reimbursement over $500 needs a manager.`), and a line cut at either end keeps its number and the `…`. When the nearest markdown heading above the snippet isn't in it, the snippet starts with that heading line and its number (`6│## Expenses`), then the excerpt. The matching is the search's own (quote marks removed, case-insensitive), so these fields are included only when the body contains at least one of the words, and left out when only the name or description matched. When any page result has them, `more` says how to read on from `line` with `knowledge_read` (`from`) or see every match (`match`). Snippets are built only for pages the run can read.
 
 These searches also return `more`:
 
@@ -134,6 +149,8 @@ A result stops at `limit` entries or at the read cap (about 1,000 tokens of entr
 ## `knowledge_read`
 
 Reads a page: its body, notes, child pages, and the notes on other pages that mention it. A scope address reads that scope's page, which lists its pages and child scopes. Without `page`, it returns `{ scopes }`: every scope the run holds, including scopes before any pages exist. Each scope is `{ address, name, description?, role?, can, empty? }`. `role` is there when the run has one. `can` says what the run may do there: `write`, `read` or `none`. A scope with no page the run can read yet has `empty: true`, and its `name` is the scope address. A held scope the run can't read shows only its address, not its stored name or description.
+
+A timeline page also returns its latest 20 entries, newest first, as `timeline: { entries, nextCursor? }`. Pass `timeline` to read more of them instead of the page. An entry ref, `<page ref>@<entry id>`, reads that one entry as `{ page, entry }`. A deleted entry reads with `deleted: true` and an empty body.
 
 <PropertiesTable
   content={[
@@ -202,6 +219,13 @@ Reads a page: its body, notes, child pages, and the notes on other pages that me
     description: 'Maximum notes, child pages and mentioning notes, 1 to 50.',
     isOptional: true,
     defaultValue: '10',
+  },
+  {
+    name: 'timeline',
+    type: '{ since?: string; until?: string; order?: "desc" | "asc"; thread?: string; cursor?: string; limit?: number }',
+    description:
+      "Read a timeline page's entries instead of the page. `since` and `until` are ISO 8601 date-times; `order` defaults to `desc`; `thread` is the root entry's `externalId` and returns the root and its replies; `cursor` is the previous read's `nextCursor`, with the same other arguments; `limit` is 1 to 100, default 20. Can't be combined with `outline`, `section`, `match`, `from`, `notes` or `mentionedIn`.",
+    isOptional: true,
   },
 ]}
 />
