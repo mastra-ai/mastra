@@ -610,3 +610,4 @@ jobs:
 
       - name: Test client-js zod-v4
         run: pnpm --filter "client-js-e2e-tests-zod-v4" test
+# ci benchmark

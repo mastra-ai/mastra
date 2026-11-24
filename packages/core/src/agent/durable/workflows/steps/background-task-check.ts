@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { checkBackgroundTasks } from '../../../../loop/shared/steps/background-task-check-core';
+import { waitMs } from '../../../../utils/test-waits';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { DurableStepIds } from '../../constants';
@@ -72,7 +73,7 @@ export function createDurableBackgroundTaskCheckStep() {
         resourceId: initData.state?.resourceId,
         skipWait: initData.options?.skipBgTaskWait,
         retryCount,
-        resolveWaitMs: rc => (rc === 0 && waitTimeoutMs ? undefined : (waitTimeoutMs ?? 1000)),
+        resolveWaitMs: rc => (rc === 0 && waitTimeoutMs ? undefined : (waitTimeoutMs ?? waitMs(1000, 250))),
         emitChunk: chunk => {
           if (!pubsub) return;
           return emitChunkEvent(pubsub, runId, chunk as any);
