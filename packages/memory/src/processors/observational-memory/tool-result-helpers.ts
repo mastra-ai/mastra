@@ -7,12 +7,24 @@ const ENCRYPTED_CONTENT_REDACTION_THRESHOLD = 256;
 
 export const DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS = 5_000;
 
+/** The string a boxed `String` serializes to; JSON.stringify unboxes it only after the replacer has run. */
+function unboxedString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object' || value === null) return undefined;
+  try {
+    String.prototype.valueOf.call(value);
+  } catch {
+    return undefined;
+  }
+  return String(value);
+}
+
 /** Redacts long `encryptedContent` strings: opaque provider data that would otherwise dominate the count. */
 function redactEncryptedContent(key: string, value: unknown): unknown {
-  return key === ENCRYPTED_CONTENT_KEY &&
-    typeof value === 'string' &&
-    value.length > ENCRYPTED_CONTENT_REDACTION_THRESHOLD
-    ? `[stripped encryptedContent: ${value.length} characters]`
+  if (key !== ENCRYPTED_CONTENT_KEY) return value;
+  const text = unboxedString(value);
+  return text !== undefined && text.length > ENCRYPTED_CONTENT_REDACTION_THRESHOLD
+    ? `[stripped encryptedContent: ${text.length} characters]`
     : value;
 }
 

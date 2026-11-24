@@ -188,6 +188,8 @@ describe('Observational Memory token counts for stored history', () => {
       'a nested Map and typed array',
       () => ({ body: report, index: new Map([['a', 1]]), bytes: new Uint8Array([1, 2]) }),
     ],
+    // Redaction must see the boxed string: storage unboxes it to a plain string, which a fresh count redacts.
+    ['a boxed encryptedContent', () => ({ summary: 'ok', encryptedContent: new String(report) })],
     // JSON.stringify reads an array by index; a custom iterator must not change what is counted.
     [
       'an array with a custom iterator',
