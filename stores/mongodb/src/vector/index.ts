@@ -3075,12 +3075,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // applied sends nothing, so racing identical refreshes don't hit Atlas's "indexes had
         // duplicate ids" rejection of concurrent updates of one id. Refreshes that both list the
         // index before either update lands can still both update and one of them fails.
-        // latestDefinition is the last requested mapping, so a FAILED build of it still needs the
-        // update, the only request that rebuilds it.
+        // latestDefinition is the last requested mapping, so only a PENDING, BUILDING or READY index
+        // is building or has applied it; any other status (FAILED, STALE, unknown or missing) still
+        // needs the update, the only request that rebuilds it.
         const row = created.outcome === 'attached' ? created.row : undefined;
         const applied =
-          row?.status !== 'FAILED' &&
-          !!row?.latestDefinition &&
+          (row?.status === 'PENDING' || row?.status === 'BUILDING' || row?.status === 'READY') &&
+          !!row.latestDefinition &&
           searchDefinitionsEquivalent(row.latestDefinition, definition);
         if (!applied) {
           await this.runSearchIndexCommand({ updateSearchIndex: collection.collectionName, id: listedId, definition });

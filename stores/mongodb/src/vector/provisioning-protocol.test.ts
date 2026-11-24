@@ -1427,22 +1427,37 @@ describe('provisioning protocol', () => {
         const events = captureCommands(a);
         await a.createSearchIndex({ indexName: coll, searchIndexName: 'T' });
         expect(events.filter(e => e.commandName === 'updateSearchIndex')).toEqual([]);
-        // latestDefinition is the last requested mapping, not an applied one: a FAILED build with the
-        // same mapping still needs the update, the only request that rebuilds it.
+        // latestDefinition is the last requested mapping, not an applied one. Only a READY index has
+        // applied it and only a PENDING or BUILDING one is applying it; every other status (a FAILED
+        // build, a STALE index that stopped replicating, an unknown or missing status) still needs the
+        // update, the only request that rebuilds it.
         const listed = (await db.collection(coll).listSearchIndexes('T').toArray()) as Document[];
-        await withHooks(
-          [a],
-          {
-            listSearchIndexesStub: (name: string) =>
-              name === 'T' ? listed.map(r => ({ ...r, name: 'T', status: 'FAILED' })) : undefined,
-          },
-          () => a.createSearchIndex({ indexName: coll, searchIndexName: 'T' }),
-        );
-        expect(events.filter(e => e.commandName === 'updateSearchIndex').map(e => String(e.command.id))).toEqual([t]);
+        const sendsUpdate: Array<[string | undefined, boolean]> = [
+          ['READY', false],
+          ['PENDING', false],
+          ['BUILDING', false],
+          ['FAILED', true],
+          ['STALE', true],
+          ['SOME_FUTURE_STATUS', true],
+          [undefined, true],
+        ];
+        for (const [status, expected] of sendsUpdate) {
+          const before = events.filter(e => e.commandName === 'updateSearchIndex').length;
+          await withHooks(
+            [a],
+            {
+              listSearchIndexesStub: (name: string) =>
+                name === 'T' ? listed.map(r => ({ ...r, name: 'T', status })) : undefined,
+            },
+            () => a.createSearchIndex({ indexName: coll, searchIndexName: 'T' }),
+          );
+          const sent = events.filter(e => e.commandName === 'updateSearchIndex').slice(before);
+          expect({ status, ids: sent.map(e => String(e.command.id)) }).toEqual({ status, ids: expected ? [t] : [] });
+        }
         // A different mapping on the same recorded index still updates it in place.
         await a.createSearchIndex({ indexName: coll, searchIndexName: 'T', fields: ['title'] });
         const updates = events.filter(e => e.commandName === 'updateSearchIndex');
-        expect(updates.map(e => String(e.command.id))).toEqual([t, t]);
+        expect(updates.map(e => String(e.command.id))).toEqual([t, t, t, t, t]);
         await a.deleteIndex({ indexName: coll });
       });
 
