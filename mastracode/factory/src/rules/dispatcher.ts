@@ -2306,11 +2306,15 @@ export class FactoryDecisionDispatcher {
       const filedHere =
         result.created || result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
       if (filedHere && outcome === 'skipped') {
+        // Guarded by the card as this decision filed it. A retry no longer has that read, so it
+        // deletes only a card untouched since creation: first revision, never updated.
         await this.#storage.delete({
           orgId: record.orgId,
           id: result.item.id,
           purgeRuleState: false,
-          expectedRevision: result.item.revision,
+          ...(result.created
+            ? { expectedRevision: result.item.revision, expectedUpdatedAt: result.item.updatedAt }
+            : { expectedRevision: 1, expectedUpdatedAt: result.item.createdAt }),
         });
         throw new FactoryRuleRejectedError('forbidden', `The board engine refused to file the card on ${board}.`);
       }
