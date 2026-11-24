@@ -139,7 +139,7 @@ const dataListGridStyles = [
   '[&_.data-list-top]:bg-(--data-list-background)',
   // Sticky cells stay opaque over horizontally scrolled cells, the header's included.
   '[&_.data-list-top>.data-list-sticky-start]:bg-(--data-list-background)',
-  '[&_.data-list-row>.data-list-sticky-start]:bg-background',
+  '[&_.data-list-row>.data-list-sticky-start]:bg-row',
   // A sticky cell cannot show the hover layer through; it takes the opaque twin
   // of a fill rung over the row well instead, the same level a selected row rests on.
   '[&_.data-list-row-interactive:not(:disabled):hover>.data-list-sticky-start]:bg-surface-panel',
@@ -164,7 +164,7 @@ const dataListTopFadeStyles = [
  * it never scrolls. `top-11` clears the root's inset plus the `h-10` header.
  */
 const dataListWellStyles =
-  "before:pointer-events-none before:absolute before:inset-1 before:rounded-lg before:bg-background before:content-[''] has-[.data-list-top]:before:top-11";
+  "before:pointer-events-none before:absolute before:inset-1 before:rounded-lg before:bg-row before:content-[''] has-[.data-list-top]:before:top-11";
 
 /**
  * Scrollbars sit beside the rows: below the header and clear of the rounded corners, instead of
@@ -177,7 +177,8 @@ const dataListScrollbarStyles = [
 
 const dataListVariantClasses: Record<DataListVariant, string> = {
   default: raisedSurfaceStyle,
-  light: '',
+  // No panel, so rows rest on the page and only show on hover.
+  light: '[--row:var(--background)]',
 };
 
 // The sticky header reads this so it stays opaque while scrolling: the panel

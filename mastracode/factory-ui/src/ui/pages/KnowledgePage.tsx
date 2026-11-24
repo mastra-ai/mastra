@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { KnowledgeGraphLoader } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeGraphLoader';
 import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import type {
   KnowledgeExplorerSource,
@@ -19,7 +20,6 @@ import {
   useKnowledgeTreeLevels,
 } from '../../hooks/useKnowledgeGraph';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
-import { KnowledgeLoadingSkeleton } from '../domains/factory/components/knowledge/KnowledgeLoadingSkeleton';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
 /**
@@ -33,9 +33,7 @@ export function KnowledgePage() {
   const slots = useSidebarHeaderSlots();
   return (
     <PageLayout variant="page" body="fixed" {...slots}>
-      <div className="flex min-h-0 flex-col p-4">
-        <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
-      </div>
+      <KnowledgeContent key={factory.id} factoryProjectId={factory.id} />
     </PageLayout>
   );
 }
@@ -82,11 +80,17 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) return <KnowledgeLoadingSkeleton label="Loading knowledge" layout="graph" />;
-  if (graph.isError) return <Notice variant="destructive">{graph.error.message}</Notice>;
+  if (graph.isPending) return <KnowledgeGraphLoader />;
+  if (graph.isError) {
+    return (
+      <div className="p-4">
+        <Notice variant="destructive">{graph.error.message}</Notice>
+      </div>
+    );
+  }
   if (graph.data.pages.length === 0) {
     return (
-      <Txt tone="muted" as="p" variant="body">
+      <Txt tone="muted" as="p" variant="body" className="p-4">
         No knowledge in this project yet. Pages appear here as factory sessions write them.
       </Txt>
     );
@@ -100,6 +104,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
         onSelect={pageId => update({ page: pageId })}
         view={view}
         onViewChange={next => update({ view: next })}
+        fullBleedGraph
       />
     </div>
   );

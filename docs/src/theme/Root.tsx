@@ -24,6 +24,11 @@ export default function Root({ children }: { children: React.ReactNode }) {
       apiKey={posthogApiKey}
       options={{
         api_host: posthogHost,
+        loaded: client => {
+          // GTM reads only the visitor and session IDs for the app handoff.
+          const w: Window & { mastraDocsPosthog?: typeof client } = window
+          w.mastraDocsPosthog = client
+        },
       }}
     >
       <CookieConsent />

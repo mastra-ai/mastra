@@ -15,16 +15,10 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "qwen/qwen3.8-2.4t-a95b": [
+    "moonshotai/kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "z-ai/glm-5.3-flash": [
@@ -51,10 +45,16 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "moonshotai/kimi-k3.1-pro": [
+    "qwen/qwen3.8-2.4t-a95b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

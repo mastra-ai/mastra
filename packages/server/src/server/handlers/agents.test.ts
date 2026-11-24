@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent, MessageList } from '@mastra/core/agent';
@@ -3323,6 +3324,155 @@ describe('Agent Routes Authorization', () => {
       vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({});
     });
 
+    it('still fences a wrapper from a @mastra/core that predates engine selection', async () => {
+      // Older cores have no engine check; their wrappers are recognized by shape alone.
+      const subscribe = vi.fn(async (_runId: string, options: { onComplete?: () => void }) => {
+        options.onComplete?.();
+        return async () => {};
+      });
+      // Shaped like a pre-engine-selection DurableAgent: the wrapper contract and its fenced
+      // subscribe, everything else forwarded to the agent it wraps, and no engine check.
+      const target = {
+        id: 'test-durable-agent',
+        name: 'test-durable-agent',
+        agent: mockAgent,
+        pubsub: new EventEmitterPubSub(),
+        stream: vi.fn(),
+        recover: vi.fn(),
+        recoverActiveRuns: vi.fn(),
+        __getRunOwner: () => ({}),
+        __subscribeToRunStream: subscribe,
+      };
+      const oldCoreWrapper = new Proxy(target, {
+        get(t, prop, receiver) {
+          if (prop === '__hasDurableExecution') return undefined;
+          if (prop in t) return Reflect.get(t, prop, receiver);
+          const value = (mockAgent as any)[prop];
+          return typeof value === 'function' ? value.bind(mockAgent) : value;
+        },
+        has: (t, prop) => prop !== '__hasDurableExecution' && (prop in t || prop in mockAgent),
+      });
+      mastra = new Mastra({ agents: { 'test-durable-agent': oldCoreWrapper as any }, storage, logger: false });
+      const runId = 'observe-old-core-wrapper';
+
+      await collectWithDeadline(await observe(runId));
+
+      expect(subscribe).toHaveBeenCalledWith(runId, expect.anything(), expect.any(Function));
+    });
+
+    it.each([
+      ['no execution engine', undefined],
+      ['the default execution engine', 'default'],
+      ['the evented execution engine', 'evented'],
+    ] as const)(
+      'observes an adapter proxy (Inngest) through its own pubsub when the wrapped agent has %s',
+      async (_, executionEngine) => {
+        const inner = new Agent({
+          id: 'adapter-inner',
+          name: 'adapter-inner',
+          instructions: 'test-instructions',
+          model: { specificationVersion: 'v2' } as any,
+          ...(executionEngine ? { durable: { executionEngine } } : {}),
+        });
+        const adapterPubsub = new EventEmitterPubSub();
+        // Shaped like createInngestAgent: own durable surface, everything else forwarded to the wrapped agent.
+        const target = {
+          id: 'adapter-agent',
+          name: 'adapter-agent',
+          agent: inner,
+          pubsub: adapterPubsub,
+          stream: vi.fn(),
+          recover: vi.fn(),
+          recoverActiveRuns: vi.fn(),
+          getDurableWorkflows: () => [],
+          __getRunOwner: () => ({}),
+        };
+        const adapter = new Proxy(target, {
+          get(t, prop, receiver) {
+            if (prop in t) return Reflect.get(t, prop, receiver);
+            const value = (inner as any)[prop];
+            return typeof value === 'function' ? value.bind(inner) : value;
+          },
+          has: (t, prop) => prop in t || prop in inner,
+        });
+        mastra = new Mastra({ agents: { 'adapter-agent': adapter as any }, storage, logger: false });
+        const runId = 'observe-adapter';
+        const subscribed = vi.spyOn(adapterPubsub, 'subscribeWithReplay');
+
+        const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'adapter-agent',
+          runId,
+          requestContext: new RequestContext(),
+        } as any)) as ReadableStream<any>;
+        await vi.waitFor(() => expect(subscribed).toHaveBeenCalled());
+        await adapterPubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          runId,
+          type: 'chunk',
+          data: { type: 'text-delta', payload: { text: 'from adapter' } },
+        } as any);
+        await adapterPubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'finish', data: {} } as any);
+
+        expect((await collectWithDeadline(stream)).map((event: any) => event.payload?.text ?? event.type)).toEqual([
+          'from adapter',
+          'finish',
+        ]);
+      },
+    );
+
+    it.each([
+      ['native default', 'default', false],
+      ['native evented', 'evented', false],
+      ['durable wrapper', 'default', true],
+      ['evented wrapper', 'evented', true],
+    ] as const)('fences a CommonJS %s when observing from the ESM server', async (_, executionEngine, wrapped) => {
+      const require = createRequire(import.meta.url);
+      const { Agent: CommonJSAgent } = require('@mastra/core/agent') as typeof import('@mastra/core/agent');
+      const { createDurableAgent, createEventedAgent } =
+        require('@mastra/core/agent/durable') as typeof import('@mastra/core/agent/durable');
+      const id = 'cross-copy-agent';
+      const inner = new CommonJSAgent({
+        id,
+        name: id,
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+        ...(wrapped ? {} : { durable: { executionEngine } }),
+      });
+      const createWrapper = executionEngine === 'default' ? createDurableAgent : createEventedAgent;
+      const agent = wrapped ? createWrapper({ agent: inner }) : inner;
+      expect(agent).not.toBeInstanceOf(Agent);
+      mastra = new Mastra({ agents: { [id]: agent }, storage, logger: false });
+      vi.spyOn(agent, '__getRunOwner').mockReturnValue({});
+
+      const runId = crypto.randomUUID();
+      const pubsub = agent.__getStreamBus(true)!.pubsub;
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await pubsub.publish(topic, {
+        runId,
+        type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
+        generation: 2,
+        data: {},
+      } as any);
+      await pubsub.publish(topic, { runId, type: 'finish', generation: 1, data: {} } as any);
+      await pubsub.publish(topic, {
+        runId,
+        type: 'chunk',
+        generation: 2,
+        data: { type: 'text-delta', payload: { text: 'recovered' } },
+      } as any);
+      await pubsub.publish(topic, { runId, type: 'finish', generation: 2, data: {} } as any);
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: id,
+        runId,
+      } as any)) as ReadableStream<any>;
+      expect((await collectWithDeadline(stream)).map(event => event.payload?.text ?? event.type)).toEqual([
+        'recovered',
+        'finish',
+      ]);
+    });
+
     describe.each(['default', 'evented'] as const)('native Agent on the %s execution engine', executionEngine => {
       let nativeAgent: Agent<any, any, any, any>;
 
@@ -3369,6 +3519,40 @@ describe('Agent Routes Authorization', () => {
         await retainReplay(runId, 'user-a');
 
         await expect(observeAs(runId, 'user-b')).rejects.toMatchObject({ status: 403 });
+      });
+
+      it('drops what a superseded execution publishes after another execution claims the run', async () => {
+        const runId = 'native-observe-takeover-run';
+        // Stream-mechanics only: the run is tracked here with no owner.
+        vi.spyOn(nativeAgent, '__getRunOwner').mockReturnValue({});
+        const pubsub = nativeAgent.__getStreamBus(true)!.pubsub;
+        const publish = (event: Record<string, unknown>) =>
+          pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+        const text = (value: string, generation: number) =>
+          publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+        await text('before takeover ', 1);
+        await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
+        await text('stale', 1);
+        await publish({ type: 'finish', data: {}, generation: 1 });
+        await text('recovered', 2);
+        await publish({ type: 'finish', data: {}, generation: 2 });
+
+        const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'native-durable-agent',
+          runId,
+          abortSignal: new AbortController().signal,
+        } as any)) as ReadableStream<any>;
+
+        const events: any[] = [];
+        for await (const event of stream as any) events.push(event);
+
+        expect(events.map(event => [event.type, event.payload?.text])).toEqual([
+          ['text-delta', 'before takeover '],
+          ['text-delta', 'recovered'],
+          ['finish', undefined],
+        ]);
       });
     });
 
