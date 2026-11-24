@@ -64,7 +64,7 @@ import {
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
-import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
   legacyGithubWorkItemBranch,
   pullRequestBranch,
@@ -339,7 +339,7 @@ function restingExitLane(board: InstalledBoard | undefined, role: string, hasPul
 
 /** What the autonomous start reads to decide who a phase session runs as. */
 export interface PhaseSessionOwnerSources extends OrganizationModelSources {
-  workItems?: Pick<WorkItemsStorage, 'findRunBindingById'>;
+  workItems?: Pick<WorkItemsStorage, 'findRunBindingById'> & Partial<Pick<WorkItemsStorage, 'get'>>;
 }
 
 /**
@@ -371,6 +371,34 @@ async function phaseSessionOwner(args: {
     return approver;
   }
   return isHumanActorId(project.createdBy) ? project.createdBy : undefined;
+}
+
+/**
+ * The person a run's source-control writes are attributed to: whoever approved the run, the
+ * user of the session whose agent moved the card, or the person a moving phase run was
+ * itself attributed to. `undefined` when no person started it — never the Factory's creator
+ * or the repository's connector, who did not ask for this run.
+ */
+async function runInitiator(args: {
+  sourceControl: SourceControlStorageHandle;
+  workItems: PhaseSessionOwnerSources['workItems'];
+  project: Pick<FactoryProject, 'id' | 'orgId'>;
+  approver: string | undefined;
+  item: Card;
+}): Promise<string | undefined> {
+  const { sourceControl, workItems, project, approver, item } = args;
+  if (!approver?.startsWith('agent:')) return isHumanActorId(approver) ? approver : undefined;
+  const ref = approver.slice('agent:'.length);
+  if (ref.startsWith('session:')) {
+    const session = await sourceControl.sessions.getBySessionId(ref.slice('session:'.length));
+    return session && session.orgId === project.orgId && isHumanActorId(session.userId) ? session.userId : undefined;
+  }
+  const binding = await workItems?.findRunBindingById({ orgId: project.orgId, factoryProjectId: project.id, id: ref });
+  if (!binding) return undefined;
+  const card =
+    binding.workItemId === item.id ? item : await workItems?.get?.({ orgId: project.orgId, id: binding.workItemId });
+  const initiatedBy = card?.sessions[binding.role]?.initiatedBy;
+  return isHumanActorId(initiatedBy) ? initiatedBy : undefined;
 }
 
 /**
@@ -532,10 +560,18 @@ export async function prepareFactoryRuleBinding(
       }));
 
     const modelScope = effectiveModelScope(project.modelScope, 'run');
+    const initiatedBy = await runInitiator({
+      sourceControl,
+      workItems: owner?.workItems,
+      project,
+      approver,
+      item: input.item,
+    });
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
       ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
+      ...(initiatedBy ? { initiatedBy } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       expectedBindingId: input.expectedBindingId,

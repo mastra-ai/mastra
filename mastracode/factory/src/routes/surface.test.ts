@@ -368,7 +368,7 @@ describe('prepareFactoryRuleBinding', () => {
     }
 
     /** A phase run of a card `requester-1` asked for, whose agent then moves the card on. */
-    async function phaseRunOf(seed: Seed) {
+    async function phaseRunOf(seed: Seed, initiatedBy?: string) {
       const triage = await sessionOf(seed, 'requester-1');
       const { binding } = await seed.seeded.workItems.prepareRunStart({
         orgId: 'org-1',
@@ -389,6 +389,7 @@ describe('prepareFactoryRuleBinding', () => {
         resourceId: triage.sessionId,
         kickoffKey: 'kickoff-1',
         kickoffMessage: null,
+        ...(initiatedBy ? { initiatedBy } : {}),
       });
       return binding;
     }
@@ -621,6 +622,81 @@ describe('prepareFactoryRuleBinding', () => {
         const seed = await seedPersonal('system');
 
         await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe('user-1');
+      });
+    });
+
+    // The owner runs the phase; the person who asked for it is credited on what it writes.
+    describe('who a phase run is attributed to', () => {
+      async function initiatorOf(seed: Seed, approvedBy: string | undefined) {
+        const { prepare, started } = start(seed, approvedBy);
+        await started;
+        return prepare.mock.calls[0]![0] as unknown as { userId: string; initiatedBy?: string };
+      }
+
+      async function seedFactoryScope() {
+        const seed = await seedFactoryWithRepository({
+          createdBy: 'factory-creator',
+          modelScope: 'factory',
+          defaultModelId: 'openai/gpt-5.5',
+        });
+        await addOrganizationKey(seed);
+        return seed;
+      }
+
+      it('credits the person who approved a run the Factory owns', async () => {
+        const seed = await seedFactoryScope();
+
+        await expect(initiatorOf(seed, 'approver-1')).resolves.toMatchObject({
+          userId: `factory-project:${seed.project.id}`,
+          initiatedBy: 'approver-1',
+        });
+      });
+
+      it("credits the person whose own session's agent moved the card", async () => {
+        const seed = await seedFactoryScope();
+        const chat = await sessionOf(seed, 'requester-1');
+
+        await expect(initiatorOf(seed, `agent:session:${chat.sessionId}`)).resolves.toMatchObject({
+          userId: `factory-project:${seed.project.id}`,
+          initiatedBy: 'requester-1',
+        });
+      });
+
+      it('carries the person an earlier phase run was credited to into the next phase', async () => {
+        const seed = await seedFactoryScope();
+        const binding = await phaseRunOf(seed, 'requester-1');
+
+        await expect(initiatorOf(seed, `agent:${binding.id}`)).resolves.toMatchObject({
+          userId: `factory-project:${seed.project.id}`,
+          initiatedBy: 'requester-1',
+        });
+      });
+
+      it('credits nobody when an earlier phase run nobody started moves the card', async () => {
+        const seed = await seedFactoryScope();
+        const binding = await phaseRunOf(seed);
+
+        const call = await initiatorOf(seed, `agent:${binding.id}`);
+        expect(call).not.toHaveProperty('initiatedBy');
+      });
+
+      it('credits nobody for a session the Factory owns, even when its agent moves the card', async () => {
+        const seed = await seedFactoryScope();
+        const factorySession = await sessionOf(seed, `factory-project:${seed.project.id}`);
+
+        const call = await initiatorOf(seed, `agent:session:${factorySession.sessionId}`);
+        expect(call).not.toHaveProperty('initiatedBy');
+      });
+
+      it('never credits the Factory creator or the repository connector when nobody is behind the move', async () => {
+        const factoryScope = await seedFactoryScope();
+        expect(await initiatorOf(factoryScope, undefined)).not.toHaveProperty('initiatedBy');
+
+        // A personal Factory still runs it as its creator, but does not credit them with asking.
+        const personal = await seedFactoryWithRepository({ createdBy: 'factory-creator', modelScope: 'user' });
+        const call = await initiatorOf(personal, undefined);
+        expect(call.userId).toBe('factory-creator');
+        expect(call).not.toHaveProperty('initiatedBy');
       });
     });
   });

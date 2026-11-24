@@ -105,7 +105,7 @@ async function setup() {
     sourceControl() as never,
   );
 
-  return { controller, coordinator };
+  return { controller, coordinator, workItems: seed.workItems };
 }
 
 describe('scenario: concurrent runs in one Factory', () => {
@@ -144,6 +144,21 @@ describe('scenario: concurrent runs in one Factory', () => {
     expect((await listFactorySessionThreads(controller, runSession('run-b'), RUNS)).map(thread => thread.id)).toEqual([
       'run-b',
     ]);
+  });
+
+  it('records who asked for a run on its card without changing who runs it', async () => {
+    const { coordinator, workItems } = await setup();
+    const prepared = await coordinator.prepare({
+      ...runRequest('run-credited', '7'),
+      initiatedBy: 'person-1',
+    });
+
+    const item = await workItems.get({ orgId: 'org-1', id: prepared.workItemId });
+    expect(item?.sessions.work).toMatchObject({
+      sessionId: 'run-credited',
+      startedBy: 'user-1',
+      initiatedBy: 'person-1',
+    });
   });
 
   it('keeps a run on untrusted content off the shared Factory memory', async () => {
