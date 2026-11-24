@@ -54,6 +54,7 @@ import {
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
+import type { FactoryOpenRun, OpenRunLedger } from '../session/run-audit.js';
 import { sessionHoldsWork } from '../session/session-unloader.js';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
@@ -553,6 +554,8 @@ export type FactoryReviewStatusReporter = (event: FactoryReviewStatusEvent) => P
 
 export interface FactoryDecisionDispatcherOptions {
   audit?: AuditRecorder;
+  /** The shared open-run ledger. Without it, runs are neither recorded on it nor resumed from it. */
+  openRuns?: OpenRunLedger;
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   /** The engine the dispatcher's own stage moves go through; defaults to one over `transitionService`. */
@@ -809,6 +812,7 @@ function linkFacts(card: Card, trusted: boolean, trustKey: string): LinkFacts {
 
 export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
+  readonly #openRuns?: OpenRunLedger;
   readonly #controller: FactoryController;
   readonly #boardEngine: FactoryBoardEngine;
   readonly #boards: ProjectBoardSource;
@@ -875,6 +879,7 @@ export class FactoryDecisionDispatcher {
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#audit = options.audit;
+    this.#openRuns = options.openRuns;
     this.#controller = options.controller;
     this.#boardEngine =
       options.boardEngine ?? new DispatcherBoardEngine({ transitionService: options.transitionService });
@@ -1823,7 +1828,7 @@ export class FactoryDecisionDispatcher {
             storedRunEnd: async () => {
               // The ledger first: a run's end is recorded before it leaves the ledger, so once the
               // ledger read misses it, the end read after it cannot.
-              const open = await listThreadOpenRuns(session, binding.threadId);
+              const open = this.#openRuns ? await listThreadOpenRuns(session, this.#openRuns, binding.threadId) : [];
               const entry = open.find(run => run.kickoffId === deliveryId);
               const ended = await readThreadRunEnd(session, binding.threadId, deliveryId);
               if (ended) return ended.reason;
@@ -1918,7 +1923,7 @@ export class FactoryDecisionDispatcher {
                     (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role)),
                 },
                 async () => {
-                  await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
+                  await this.#withOpenRunHeartbeat(deliveryId, () => run.settle());
                   if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
                     return;
                   // A final tool result can persist after agent_end. Read this binding's trailing
@@ -3220,7 +3225,11 @@ export class FactoryDecisionDispatcher {
    * binding's own thread, which the session may have switched away from.
    */
   async #hasRunInFlight(session: BoundDispatcherSession, binding: FactoryRunBindingRecord): Promise<boolean> {
-    const open = (await listThreadOpenRuns(session, binding.threadId)).filter(entry => entry.bindingId === binding.id);
+    const open = this.#openRuns
+      ? (await listThreadOpenRuns(session, this.#openRuns, binding.threadId)).filter(
+          entry => entry.bindingId === binding.id,
+        )
+      : [];
     if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) return true;
     // A run with no ledger entry (one the dispatcher didn't record) is still live here.
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
@@ -3257,7 +3266,9 @@ export class FactoryDecisionDispatcher {
         runStillActive,
       });
       try {
-        const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+        const open = this.#openRuns
+          ? (await listSessionOpenRuns(session, this.#openRuns)).filter(entry => entry.bindingId === binding.id)
+          : [];
         const waitsOnLiveRun = afterOwnMove && runStillActive();
         if (open.length === 0 && !waitsOnLiveRun) break;
         if (!waitsOnLiveRun && open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
@@ -3335,14 +3346,11 @@ export class FactoryDecisionDispatcher {
   }
 
   /** Keep this process's claim on an open run fresh for as long as it is watching the run. */
-  async #withOpenRunHeartbeat<T>(
-    session: BoundDispatcherSession,
-    kickoffId: string,
-    effect: () => Promise<T>,
-  ): Promise<T> {
-    if (!this.#audit) return effect();
+  async #withOpenRunHeartbeat<T>(kickoffId: string, effect: () => Promise<T>): Promise<T> {
+    const openRuns = this.#openRuns;
+    if (!this.#audit || !openRuns) return effect();
     const timer = setInterval(
-      () => void heartbeatSessionOpenRun(session, kickoffId),
+      () => void heartbeatSessionOpenRun(openRuns, { kickoffId, ownerId: this.#ownerId }),
       Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3),
     );
     timer.unref?.();
@@ -3430,10 +3438,11 @@ export class FactoryDecisionDispatcher {
     observedEnd: ReturnType<typeof watchRun>['endReason'],
     workItemName: string | undefined,
   ): Promise<void> {
-    if (!this.#audit) return;
+    if (!this.#audit || !this.#openRuns) return;
     const humanApproved = isHumanActorId(approvedBy);
     await recordSessionRunStart(session, {
       audit: this.#audit,
+      openRuns: this.#openRuns,
       actorType: humanApproved ? 'human' : 'system',
       observedEnd,
       run: {

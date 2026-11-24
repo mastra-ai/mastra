@@ -3,35 +3,19 @@ import { z } from 'zod';
 
 import type { AuditActorType } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import { factoryOpenRunSchema } from '../storage/domains/open-runs/base.js';
+import type { FactoryOpenRun, OpenRunsStorage } from '../storage/domains/open-runs/base.js';
 
+/**
+ * The thread setting that held the open-run ledger before it moved to Factory storage. Runs still
+ * in it are copied to storage on first read and then dropped from it.
+ */
 export const FACTORY_OPEN_RUNS_SETTING = 'factoryOpenRuns';
 
-const factoryOpenRunSchema = z.object({
-  kickoffId: z.string(),
-  bindingId: z.string(),
-  role: z.string(),
-  startedBy: z.string(),
-  orgId: z.string(),
-  factoryProjectId: z.string(),
-  workItemId: z.string(),
-  workItemName: z.string().optional(),
-  sessionId: z.string(),
-  threadId: z.string(),
-  branch: z.string(),
-  /**
-   * Which dispatcher process is watching this run, and when it last said so
-   * (epoch ms). The ledger is a thread setting shared by every replica, so a
-   * remote reader needs these to tell a run that is live elsewhere from one
-   * that died with its process. Absent on entries written before ownership
-   * was recorded; those read as stale.
-   */
-  ownerId: z.string().optional(),
-  heartbeatAt: z.number().optional(),
-  /** When the kickoff was accepted (epoch ms), so the run's end record spans the whole run. Absent on older entries. */
-  startedAt: z.number().optional(),
-});
+export type { FactoryOpenRun };
 
-export type FactoryOpenRun = z.infer<typeof factoryOpenRunSchema>;
+/** Where open runs are kept; every write touches only its own run. */
+export type OpenRunLedger = Pick<OpenRunsStorage, 'listByThread' | 'open' | 'heartbeat' | 'close' | 'importLegacy'>;
 
 /**
  * How each recent run on a thread ended, keyed by kickoff id. A run can end in a process other
@@ -75,6 +59,7 @@ export function isOpenRunLiveElsewhere(run: FactoryOpenRun, ownerId: string, now
 
 export interface RunEndCaptureSession {
   readonly thread: {
+    getId(): string | null;
     getSetting(args: { key: string }): Promise<unknown>;
     setSetting(args: { key: string; value: unknown }): Promise<void>;
   };
@@ -188,18 +173,55 @@ function serializeRunAudit(session: RunEndCaptureSession, write: () => Promise<v
   return pending;
 }
 
-export async function listSessionOpenRuns(session: RunEndCaptureSession): Promise<FactoryOpenRun[]> {
-  const stored = await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING });
-  return z.array(factoryOpenRunSchema).parse(stored ?? []);
+const legacyOpenRunsSchema = z.array(factoryOpenRunSchema);
+
+/**
+ * The open runs of `threadId`, after copying any a release before the storage ledger left in the
+ * thread's setting. Copied runs are dropped from the setting; a copy is never repeated, so a run
+ * that ended after its copy stays ended even if dropping it from the setting failed.
+ */
+async function openRunsOn(
+  openRuns: OpenRunLedger,
+  threadId: string,
+  legacy: { read(): Promise<unknown>; write(value: FactoryOpenRun[]): Promise<void> },
+): Promise<FactoryOpenRun[]> {
+  const stored = legacyOpenRunsSchema.parse((await legacy.read()) ?? []);
+  if (stored.length > 0) {
+    const copied = new Set(await openRuns.importLegacy(stored));
+    const remaining = legacyOpenRunsSchema.parse((await legacy.read()) ?? []);
+    await legacy.write(remaining.filter(run => !copied.has(run.kickoffId)));
+  }
+  return openRuns.listByThread(threadId);
 }
 
-/** The open-run ledger of `threadId`, whichever thread the session is on now. */
-export async function listThreadOpenRuns(
-  session: { readonly thread: { getSettingOn(args: { threadId: string; key: string }): Promise<unknown> } },
+/** The open runs of the thread the session is on. */
+export function listSessionOpenRuns(
+  session: Pick<RunEndCaptureSession, 'thread'>,
+  openRuns: OpenRunLedger,
+): Promise<FactoryOpenRun[]> {
+  const threadId = session.thread.getId();
+  if (!threadId) return Promise.resolve([]);
+  return openRunsOn(openRuns, threadId, {
+    read: () => session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING }),
+    write: value => session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value }),
+  });
+}
+
+/** The open runs of `threadId`, whichever thread the session is on now. */
+export function listThreadOpenRuns(
+  session: {
+    readonly thread: {
+      getSettingOn(args: { threadId: string; key: string }): Promise<unknown>;
+      setSettingOn(args: { threadId: string; key: string; value: unknown }): Promise<void>;
+    };
+  },
+  openRuns: OpenRunLedger,
   threadId: string,
 ): Promise<FactoryOpenRun[]> {
-  const stored = await session.thread.getSettingOn({ threadId, key: FACTORY_OPEN_RUNS_SETTING });
-  return z.array(factoryOpenRunSchema).parse(stored ?? []);
+  return openRunsOn(openRuns, threadId, {
+    read: () => session.thread.getSettingOn({ threadId, key: FACTORY_OPEN_RUNS_SETTING }),
+    write: value => session.thread.setSettingOn({ threadId, key: FACTORY_OPEN_RUNS_SETTING, value }),
+  });
 }
 
 export async function waitForSessionRunAudit(session: object): Promise<void> {
@@ -223,13 +245,14 @@ function runAuditInput(run: FactoryOpenRun) {
 async function recordRunEnds(
   session: RunEndCaptureSession,
   audit: AuditRecorder,
+  openRuns: OpenRunLedger,
   reason: RunEndReason,
   kickoffId?: string,
   endedTurn?: EndedTurn,
 ): Promise<void> {
   if (!reason || reason === 'suspended') return;
   const usage = usageFor(session);
-  const runs = await listSessionOpenRuns(session);
+  const runs = await listSessionOpenRuns(session, openRuns);
   if (runs.length === 0) return;
   const ending = runs.filter(run => !kickoffId || run.kickoffId === kickoffId);
   // An end event bills the turn it closed. A run whose ledger entry lands after its turn ended
@@ -254,12 +277,7 @@ async function recordRunEnds(
       ].slice(-FACTORY_RUN_ENDS_KEPT),
     });
   }
-  const remaining = [];
-  for (const run of runs) {
-    if (!ending.includes(run)) {
-      remaining.push(run);
-      continue;
-    }
+  for (const run of ending) {
     let runUsageRecord = usage.held.get(run.kickoffId);
     if (!runUsageRecord) {
       const shared = ending.filter(other => other !== run).map(other => other.kickoffId);
@@ -279,66 +297,60 @@ async function recordRunEnds(
     });
     if (recorded) {
       usage.held.delete(run.kickoffId);
+      await openRuns.close(run.kickoffId);
     } else {
       console.warn(
         `[Factory run audit] Token usage for run ${run.kickoffId} (${run.role}) was not persisted; keeping it for the next attempt.`,
         runUsageRecord,
       );
-      remaining.push(run);
     }
   }
-  await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: remaining });
 }
 
 export function recordSessionRunStart(
   session: RunEndCaptureSession,
   {
     audit,
+    openRuns,
     run,
     actorType,
     observedEnd,
   }: {
     audit: AuditRecorder;
+    openRuns: OpenRunLedger;
     run: FactoryOpenRun;
     actorType: AuditActorType;
     observedEnd: () => RunEndReason;
   },
 ): Promise<void> {
   return serializeRunAudit(session, async () => {
-    const runs = await listSessionOpenRuns(session);
-    if (!runs.some(existing => existing.kickoffId === run.kickoffId)) {
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: [...runs, { startedAt: Date.now(), ...run }],
-      });
-    }
+    await openRuns.open({ startedAt: Date.now(), ...run });
     await audit.record({
       ...runAuditInput(run),
       actorId: run.startedBy,
       actorType,
       action: 'factory.run.started',
     });
-    await recordRunEnds(session, audit, observedEnd(), run.kickoffId);
+    await recordRunEnds(session, audit, openRuns, observedEnd(), run.kickoffId);
   });
 }
 
-/** Renew this process's claim on an open run so other replicas keep treating it as live. */
-export function heartbeatSessionOpenRun(
-  session: RunEndCaptureSession,
-  kickoffId: string,
-  at = Date.now(),
+/** Renew `ownerId`'s claim on an open run so other replicas keep treating it as live. */
+export async function heartbeatSessionOpenRun(
+  openRuns: OpenRunLedger,
+  { kickoffId, ownerId, at = Date.now() }: { kickoffId: string; ownerId: string; at?: number },
 ): Promise<void> {
-  return serializeRunAudit(session, async () => {
-    const runs = await listSessionOpenRuns(session);
-    if (!runs.some(run => run.kickoffId === kickoffId)) return;
-    await session.thread.setSetting({
-      key: FACTORY_OPEN_RUNS_SETTING,
-      value: runs.map(run => (run.kickoffId === kickoffId ? { ...run, heartbeatAt: at } : run)),
-    });
-  });
+  try {
+    await openRuns.heartbeat(kickoffId, ownerId, at);
+  } catch (error) {
+    console.warn('[Factory run audit] Unable to renew an open run.', error);
+  }
 }
 
-export function observeSessionRunEnd(session: RunEndCaptureSession, { audit }: { audit: AuditRecorder }): () => void {
+export function observeSessionRunEnd(
+  session: RunEndCaptureSession,
+  { audit, openRuns }: { audit: AuditRecorder; openRuns: OpenRunLedger },
+): () => void {
   const usage = usageFor(session);
   return session.subscribe(event => {
     if (event.type === 'usage_update') {
@@ -350,6 +362,6 @@ export function observeSessionRunEnd(session: RunEndCaptureSession, { audit }: {
     const turn: EndedTurn = { steps: usage.current, claimed: false };
     usage.current = [];
     usage.lastTurn = turn;
-    void serializeRunAudit(session, () => recordRunEnds(session, audit, event.reason, undefined, turn));
+    void serializeRunAudit(session, () => recordRunEnds(session, audit, openRuns, event.reason, undefined, turn));
   });
 }

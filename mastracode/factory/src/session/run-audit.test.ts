@@ -14,7 +14,7 @@ import {
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from './run-audit.js';
-import type { RunEndCaptureSession } from './run-audit.js';
+import type { FactoryOpenRun, RunEndCaptureSession } from './run-audit.js';
 
 const OPEN_RUN = {
   kickoffId: 'kickoff-1',
@@ -29,11 +29,12 @@ const OPEN_RUN = {
   branch: 'factory/issue-1',
 };
 
-function makeSession() {
+function makeSession(threadId = 'thread-1') {
   const settings: Record<string, unknown> = {};
   const listeners = new Set<Parameters<RunEndCaptureSession['subscribe']>[0]>();
   const session: RunEndCaptureSession = {
     thread: {
+      getId: () => threadId,
       getSetting: async ({ key }) => settings[key],
       setSetting: async ({ key, value }) => {
         settings[key] = value;
@@ -58,36 +59,70 @@ function makeSession() {
 }
 
 async function setup() {
-  const { audit } = await createFactoryStorageForTests();
+  const { audit, openRuns } = await createFactoryStorageForTests();
   const capture = makeSession();
-  observeSessionRunEnd(capture.session, { audit });
-  const start = (run = OPEN_RUN, reason?: 'complete' | 'error') =>
-    recordSessionRunStart(capture.session, { audit, run, actorType: 'human', observedEnd: () => reason });
+  observeSessionRunEnd(capture.session, { audit, openRuns });
+  const start = (run: FactoryOpenRun = OPEN_RUN, reason?: 'complete' | 'error') =>
+    recordSessionRunStart(capture.session, { audit, openRuns, run, actorType: 'human', observedEnd: () => reason });
   const events = async () => (await audit.list({ orgId: 'org-1' })).events;
-  return { ...capture, audit, start, events };
+  const ledger = () => openRuns.listByThread('thread-1');
+  return { ...capture, audit, openRuns, start, events, ledger };
 }
 
 describe('Factory run lifecycle audit', () => {
-  it('exposes the validated open runs used by dispatch admission', async () => {
-    const { session, settings } = makeSession();
-    settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
+  it('exposes the open runs of the thread the session is on, used by dispatch admission', async () => {
+    const { session, openRuns, start } = await setup();
+    await start();
+    await openRuns.open({ ...OPEN_RUN, kickoffId: 'elsewhere', threadId: 'thread-2' });
 
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([OPEN_RUN]);
+    await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([
+      { ...OPEN_RUN, startedAt: expect.any(Number) },
+    ]);
   });
 
-  it('given a run opened before modes were removed, when the ledger is read, then the entry still parses', async () => {
-    const { session, settings } = makeSession();
-    settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'plan agent' }];
+  describe('runs left in the thread setting by a release before the storage ledger', () => {
+    it('moves them to the ledger on first read, dropping only what it moved', async () => {
+      const { session, settings, openRuns } = await setup();
+      settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'plan agent' }];
 
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([OPEN_RUN]);
-  });
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([OPEN_RUN]);
+      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([OPEN_RUN]);
+    });
 
-  it('accepts ledger entries written before ownership was recorded', async () => {
-    const { session, settings } = makeSession();
-    settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
+    it('ends a moved run like any other', async () => {
+      const { session, settings, openRuns, emit, events, ledger } = await setup();
+      settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, ownerId: 'old-release', heartbeatAt: 1 }];
 
-    const [entry] = await listSessionOpenRuns(session);
-    expect(isOpenRunLiveElsewhere(entry!, 'worker-2')).toBe(false);
+      emit('complete');
+
+      await vi.waitFor(async () => expect(await events()).toHaveLength(1));
+      expect((await events())[0]).toMatchObject({ action: 'factory.run.ended', metadata: { kickoffId: 'kickoff-1' } });
+      await expect(ledger()).resolves.toEqual([]);
+      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([]);
+    });
+
+    it('does not bring back a moved run that ended when the setting still lists it', async () => {
+      const { session, settings, openRuns, ledger } = await setup();
+      const stale = [OPEN_RUN];
+      settings[FACTORY_OPEN_RUNS_SETTING] = stale;
+      await listSessionOpenRuns(session, openRuns);
+      await openRuns.close('kickoff-1');
+      // Dropping it from the setting failed, or another replica read the setting before it was dropped.
+      settings[FACTORY_OPEN_RUNS_SETTING] = stale;
+
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([]);
+      await expect(ledger()).resolves.toEqual([]);
+    });
+
+    it('still counts entries written before ownership was recorded as stale', async () => {
+      const { session, settings, openRuns } = await setup();
+      settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
+
+      const [entry] = await listSessionOpenRuns(session, openRuns);
+      expect(isOpenRunLiveElsewhere(entry!, 'worker-2')).toBe(false);
+    });
   });
 
   it('treats only a fresh heartbeat from a different owner as live elsewhere', () => {
@@ -100,12 +135,13 @@ describe('Factory run lifecycle audit', () => {
   });
 
   it('renews the heartbeat of an open run and keeps ownership out of the audit record', async () => {
-    const { session, start, settings, events } = await setup();
+    const { openRuns, start, events, ledger } = await setup();
     await start({ ...OPEN_RUN, ownerId: 'worker-1', heartbeatAt: 1 });
-    await heartbeatSessionOpenRun(session, 'kickoff-1', 2);
-    await heartbeatSessionOpenRun(session, 'someone-else', 3);
+    await heartbeatSessionOpenRun(openRuns, { kickoffId: 'kickoff-1', ownerId: 'worker-1', at: 2 });
+    await heartbeatSessionOpenRun(openRuns, { kickoffId: 'kickoff-1', ownerId: 'someone-else', at: 3 });
+    await heartbeatSessionOpenRun(openRuns, { kickoffId: 'someone-else', ownerId: 'worker-1', at: 3 });
 
-    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([
+    expect(await ledger()).toEqual([
       expect.objectContaining({ kickoffId: 'kickoff-1', ownerId: 'worker-1', heartbeatAt: 2 }),
     ]);
     const [started] = await events();
@@ -114,7 +150,7 @@ describe('Factory run lifecycle audit', () => {
   });
 
   it('retains both kickoffs when roles hand off within the same agent turn', async () => {
-    const { start, emit, events, settings } = await setup();
+    const { start, emit, events, ledger } = await setup();
     await start({ ...OPEN_RUN, kickoffId: 'plan', role: 'plan' });
     await start({ ...OPEN_RUN, kickoffId: 'work', role: 'work' });
     emit('complete');
@@ -123,7 +159,7 @@ describe('Factory run lifecycle audit', () => {
     const ended = (await events()).filter(event => event.action === 'factory.run.ended');
     expect(ended.map(event => event.metadata.kickoffId).sort()).toEqual(['plan', 'work']);
     expect(ended.every(event => event.metadata.startedBy === 'approver-2')).toBe(true);
-    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+    expect(await ledger()).toEqual([]);
   });
 
   it('deduplicates concurrent starts and duplicate terminal events', async () => {
@@ -141,11 +177,11 @@ describe('Factory run lifecycle audit', () => {
   });
 
   it('keeps a suspended kickoff open until it resumes and ends', async () => {
-    const { start, emit, events, settings } = await setup();
+    const { start, emit, events, ledger } = await setup();
     await start();
     emit('suspended');
     expect(await events()).toHaveLength(1);
-    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toHaveLength(1);
+    expect(await ledger()).toHaveLength(1);
 
     emit('error');
     await vi.waitFor(async () => expect(await events()).toHaveLength(2));
@@ -174,7 +210,7 @@ describe('Factory run lifecycle audit', () => {
   });
 
   it('records how a run ended on the thread, before the run leaves the ledger', async () => {
-    const { session, start, emit, settings } = await setup();
+    const { session, start, emit, settings, openRuns } = await setup();
     await start();
     const order: string[] = [];
     const setSetting = session.thread.setSetting;
@@ -182,11 +218,15 @@ describe('Factory run lifecycle audit', () => {
       order.push(args.key);
       await setSetting(args);
     };
+    const close = openRuns.close.bind(openRuns);
+    vi.spyOn(openRuns, 'close').mockImplementation(async kickoffId => {
+      order.push(`close:${kickoffId}`);
+      await close(kickoffId);
+    });
     emit('error');
     await waitForSessionRunAudit(session);
 
-    expect(order).toEqual([FACTORY_RUN_ENDS_SETTING, FACTORY_OPEN_RUNS_SETTING]);
-    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+    expect(order).toEqual([FACTORY_RUN_ENDS_SETTING, `close:${OPEN_RUN.kickoffId}`]);
     const reader = { thread: { getSettingOn: async ({ key }: { key: string }) => settings[key] } };
     await expect(readThreadRunEnd(reader, 'thread-1', OPEN_RUN.kickoffId)).resolves.toMatchObject({
       kickoffId: OPEN_RUN.kickoffId,
@@ -196,11 +236,11 @@ describe('Factory run lifecycle audit', () => {
   });
 
   it('keeps only the latest run ends on a thread', async () => {
-    const { start, emit, settings } = await setup();
+    const { start, emit, settings, ledger } = await setup();
     for (let run = 0; run < 25; run += 1) {
       await start({ ...OPEN_RUN, kickoffId: `kickoff-${run}` });
       emit('complete');
-      await vi.waitFor(() => expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]));
+      await vi.waitFor(async () => expect(await ledger()).toEqual([]));
     }
 
     const ends = settings[FACTORY_RUN_ENDS_SETTING] as Array<{ kickoffId: string }>;
@@ -209,13 +249,13 @@ describe('Factory run lifecycle audit', () => {
   });
 
   it('leaves an end recoverable when the audit store is temporarily unavailable', async () => {
-    const { start, emit, events, audit, settings } = await setup();
+    const { start, emit, events, audit, ledger } = await setup();
     await start();
     const failure = vi.spyOn(audit, 'record').mockRejectedValueOnce(new Error('store unavailable'));
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     emit('complete');
     await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
-    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toHaveLength(1);
+    expect(await ledger()).toHaveLength(1);
     failure.mockRestore();
     emit('complete');
     await vi.waitFor(async () => expect(await events()).toHaveLength(2));
@@ -249,16 +289,17 @@ describe('Factory run lifecycle audit', () => {
     });
 
     it('keeps each role run to its own usage', async () => {
-      const { audit } = await createFactoryStorageForTests();
-      const work = makeSession();
-      const review = makeSession();
+      const { audit, openRuns } = await createFactoryStorageForTests();
+      const work = makeSession('thread-work');
+      const review = makeSession('thread-review');
       for (const [capture, role] of [
         [work, 'work'],
         [review, 'review'],
       ] as const) {
-        observeSessionRunEnd(capture.session, { audit });
+        observeSessionRunEnd(capture.session, { audit, openRuns });
         await recordSessionRunStart(capture.session, {
           audit,
+          openRuns,
           run: { ...OPEN_RUN, kickoffId: `kickoff-${role}`, role, threadId: `thread-${role}` },
           actorType: 'human',
           observedEnd: () => undefined,
@@ -362,7 +403,7 @@ describe('Factory run lifecycle audit', () => {
     });
 
     it('warns when a run end cannot persist its usage, and persists the same usage on the retry', async () => {
-      const { start, emit, step, events, audit, settings } = await setup();
+      const { start, emit, step, events, audit, ledger } = await setup();
       await start();
       step(100, 50);
       const failure = vi.spyOn(audit, 'record').mockResolvedValueOnce(null);
@@ -375,14 +416,14 @@ describe('Factory run lifecycle audit', () => {
           expect.objectContaining({ status: 'recorded', totals: expect.objectContaining({ totalTokens: 150 }) }),
         ),
       );
-      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toHaveLength(1);
+      expect(await ledger()).toHaveLength(1);
       failure.mockRestore();
       warning.mockRestore();
 
       emit('complete');
       await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
       expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 150 } });
-      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+      expect(await ledger()).toEqual([]);
     });
 
     it('keeps a long run inside the audit metadata bound: drops late steps, totals every step', async () => {

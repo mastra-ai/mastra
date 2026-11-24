@@ -1054,6 +1054,7 @@ describe('MastraFactory.prepare', () => {
       'channel-identity',
       'skill-overrides',
       'voice-settings',
+      'open-runs',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });

@@ -36,6 +36,8 @@ import {
   observeSessionRunEnd,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
+import { factoryOpenRunSchema } from '../storage/domains/open-runs/base.js';
+import type { OpenRunsStorage } from '../storage/domains/open-runs/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
@@ -204,6 +206,9 @@ function createSession(
       getSetting: vi.fn(async ({ key }: { key: string }) => settings[key]),
       getSettingOn: vi.fn(async ({ key }: { threadId: string; key: string }) => settings[key]),
       setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+        settings[key] = value;
+      }),
+      setSettingOn: vi.fn(async ({ key, value }: { threadId: string; key: string; value: unknown }) => {
         settings[key] = value;
       }),
       rename: vi.fn(async () => {}),
@@ -467,6 +472,11 @@ async function decisionByKey(storage: WorkItemsStorage, idempotencyKey: string) 
   return rows.find(row => row.idempotencyKey === idempotencyKey);
 }
 
+/** Open runs a dispatcher recorded on the shared ledger. */
+async function seedOpenRuns(seed: { openRuns: OpenRunsStorage }, runs: Array<Record<string, unknown>>) {
+  for (const run of runs) await seed.openRuns.open(factoryOpenRunSchema.parse(run));
+}
+
 describe('FactoryDecisionDispatcher', () => {
   it.each(['complete', 'suspended'] as const)(
     'audits an approved kickoff on an existing session through %s',
@@ -481,13 +491,14 @@ describe('FactoryDecisionDispatcher', () => {
       });
       await bindWorkRun(storage, item.id);
       const { controller, session, emitAgentEnd } = createSession(undefined, { agentEndReason: reason });
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const prepareBinding = vi.fn();
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         storage,
         transitionService,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         prepareBinding,
       });
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -550,6 +561,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       transitionService,
       audit: seed.audit,
+      openRuns: seed.openRuns,
       boards: autoStartingBoards(),
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -3220,6 +3232,7 @@ describe('FactoryDecisionDispatcher', () => {
       },
       storage,
       audit: seed.audit,
+      openRuns: seed.openRuns,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -3254,31 +3267,29 @@ describe('FactoryDecisionDispatcher', () => {
       agentEndReason: 'complete',
       streamActive: true,
     });
-    await session.thread.setSetting({
-      key: FACTORY_OPEN_RUNS_SETTING,
-      value: [
-        {
-          kickoffId: 'earlier-kickoff',
-          bindingId: binding.id,
-          role: binding.role,
-          startedBy: 'factory-rule-dispatcher',
-          orgId: binding.orgId,
-          factoryProjectId: binding.factoryProjectId,
-          workItemId: binding.workItemId,
-          sessionId: binding.sessionId,
-          threadId: binding.threadId,
-          branch: binding.branch,
-        },
-      ],
-    });
+    await seedOpenRuns(seed, [
+      {
+        kickoffId: 'earlier-kickoff',
+        bindingId: binding.id,
+        role: binding.role,
+        startedBy: 'factory-rule-dispatcher',
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        sessionId: binding.sessionId,
+        threadId: binding.threadId,
+        branch: binding.branch,
+      },
+    ]);
     controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-    observeSessionRunEnd(session, { audit: seed.audit });
+    observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       boards: autoStartingBoards(),
       transitionService,
       storage,
       audit: seed.audit,
+      openRuns: seed.openRuns,
       ownerId: 'worker-1',
     });
 
@@ -3375,33 +3386,31 @@ describe('FactoryDecisionDispatcher', () => {
         streamActive: true,
       });
       if (ledger !== 'none') {
-        await session.thread.setSetting({
-          key: FACTORY_OPEN_RUNS_SETTING,
-          value: [
-            {
-              kickoffId: 'previous-kickoff',
-              bindingId: previous.id,
-              role: previous.role,
-              startedBy: 'factory-rule-dispatcher',
-              orgId: previous.orgId,
-              factoryProjectId: previous.factoryProjectId,
-              workItemId: previous.workItemId,
-              sessionId: previous.sessionId,
-              threadId: previous.threadId,
-              branch: previous.branch,
-              ...(ledger === 'elsewhere' ? { ownerId: 'factory-tools:other', heartbeatAt: Date.now() } : {}),
-            },
-          ],
-        });
+        await seedOpenRuns(seed, [
+          {
+            kickoffId: 'previous-kickoff',
+            bindingId: previous.id,
+            role: previous.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: previous.orgId,
+            factoryProjectId: previous.factoryProjectId,
+            workItemId: previous.workItemId,
+            sessionId: previous.sessionId,
+            threadId: previous.threadId,
+            branch: previous.branch,
+            ...(ledger === 'elsewhere' ? { ownerId: 'factory-tools:other', heartbeatAt: Date.now() } : {}),
+          },
+        ]);
       }
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'previous-run', threadId: previous.threadId }]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
         storage,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
 
@@ -3438,25 +3447,22 @@ describe('FactoryDecisionDispatcher', () => {
       const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
         streamActive: true,
       });
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: [
-          {
-            kickoffId: 'running-kickoff',
-            bindingId: binding.id,
-            role: binding.role,
-            startedBy: 'factory-rule-dispatcher',
-            orgId: binding.orgId,
-            factoryProjectId: binding.factoryProjectId,
-            workItemId: binding.workItemId,
-            sessionId: binding.sessionId,
-            threadId: binding.threadId,
-            branch: binding.branch,
-          },
-        ],
-      });
+      await seedOpenRuns(seed, [
+        {
+          kickoffId: 'running-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+        },
+      ]);
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const running = (await storage.get({ orgId: 'org-1', id: item.id }))!;
       await storage.commitRuleEvaluation({
         ...scope,
@@ -3534,24 +3540,21 @@ describe('FactoryDecisionDispatcher', () => {
       const item = await createItem(storage);
       const binding = await bindWorkRun(storage, item.id);
       const { controller, session } = createSession(undefined, { streamActive: live });
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: [
-          {
-            kickoffId: 'running-kickoff',
-            bindingId: binding.id,
-            role: binding.role,
-            startedBy: 'factory-rule-dispatcher',
-            orgId: binding.orgId,
-            factoryProjectId: binding.factoryProjectId,
-            workItemId: binding.workItemId,
-            sessionId: binding.sessionId,
-            threadId: binding.threadId,
-            branch: binding.branch,
-            ...entry,
-          },
-        ],
-      });
+      await seedOpenRuns(seed, [
+        {
+          kickoffId: 'running-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          ...entry,
+        },
+      ]);
       controller.listActiveThreadRuns.mockReturnValue(live ? [{ runId: 'run-1', threadId: binding.threadId }] : []);
       // The transition service asks the dispatcher, as the Factory wires them.
       let dispatcher: FactoryDecisionDispatcher | undefined;
@@ -3566,6 +3569,7 @@ describe('FactoryDecisionDispatcher', () => {
         transitionService,
         storage,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       const card = (await storage.get({ orgId: 'org-1', id: item.id }))!;
@@ -3590,11 +3594,8 @@ describe('FactoryDecisionDispatcher', () => {
         false,
       );
       // The session's current thread is another one: only the binding's thread holds the run.
-      const ledger = await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING });
-      session.thread.getSetting.mockImplementation(async () => undefined);
-      session.thread.getSettingOn.mockImplementation(async ({ threadId }: { threadId: string; key: string }) =>
-        threadId === binding.threadId ? ledger : undefined,
-      );
+      session.thread.getId.mockReturnValue('another-thread');
+      expect(session.thread.getId()).not.toBe(binding.threadId);
 
       await expect(personMoves('planning', 'other-thread')).resolves.toMatchObject({
         status: 'rejected',
@@ -3672,9 +3673,9 @@ describe('FactoryDecisionDispatcher', () => {
       );
       const { controller, session, emitAgentEnd } = createSession(undefined, { streamActive: true });
       // Without a ledger entry: a run the dispatcher didn't record, as one a person starts in the session.
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: ledger
+      await seedOpenRuns(
+        seed,
+        ledger
           ? [
               {
                 kickoffId: 'running-kickoff',
@@ -3690,9 +3691,9 @@ describe('FactoryDecisionDispatcher', () => {
               },
             ]
           : [],
-      });
+      );
       controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       let deliveries = 0;
       const update = async (added: string[], removed: string[], at: string, fromCardSession: boolean) => {
         deliveries += 1;
@@ -3818,34 +3819,32 @@ describe('FactoryDecisionDispatcher', () => {
         emitAgentEndDuringSignal: true,
         agentEndReason: 'complete',
       });
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUNS_SETTING,
-        value: [
-          {
-            kickoffId: 'earlier-kickoff',
-            bindingId: binding.id,
-            role: binding.role,
-            startedBy: 'factory-rule-dispatcher',
-            orgId: binding.orgId,
-            factoryProjectId: binding.factoryProjectId,
-            workItemId: binding.workItemId,
-            sessionId: binding.sessionId,
-            threadId: binding.threadId,
-            branch: binding.branch,
-            ...entry,
-          },
-        ],
-      });
+      await seedOpenRuns(seed, [
+        {
+          kickoffId: 'earlier-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          ...entry,
+        },
+      ]);
       // Nothing live in this process's registry: the entry is either an orphan
       // or a run another replica is hosting.
       controller.listActiveThreadRuns.mockReturnValue([]);
-      observeSessionRunEnd(session, { audit: seed.audit });
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
         storage,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       return { storage, session, dispatcher };
@@ -3895,13 +3894,14 @@ describe('FactoryDecisionDispatcher', () => {
           streamActive: true,
         });
         controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
-        observeSessionRunEnd(session, { audit: seed.audit });
+        observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
         const dispatcher = new FactoryDecisionDispatcher({
           controller: controller as never,
           boards: autoStartingBoards(),
           transitionService,
           storage,
           audit: seed.audit,
+          openRuns: seed.openRuns,
           ownerId: 'worker-1',
         });
 
@@ -3909,7 +3909,7 @@ describe('FactoryDecisionDispatcher', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(session.sendSignal).toHaveBeenCalledTimes(1);
         const startedAt = Date.now();
-        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([
+        expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([
           expect.objectContaining({ bindingId: binding.id, ownerId: 'worker-1', heartbeatAt: startedAt }),
         ]);
 
@@ -3921,18 +3921,16 @@ describe('FactoryDecisionDispatcher', () => {
         const heartbeatPeriodMs = Math.floor(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs / 3);
         await vi.waitFor(async () => {
           await vi.advanceTimersByTimeAsync(heartbeatPeriodMs);
-          const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
-            heartbeatAt: number;
-          }>;
-          expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
-          expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+          const [entry] = await seed.openRuns.listByThread(session.thread.getId());
+          expect(entry?.heartbeatAt).toBeGreaterThan(startedAt);
+          expect(Date.now() - entry!.heartbeatAt!).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
         });
 
         controller.listActiveThreadRuns.mockReturnValue([]);
         emitAgentEnd('complete');
         await dispatch;
         await waitForSessionRunAudit(session);
-        expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
+        expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([]);
       } finally {
         vi.useRealTimers();
       }
@@ -3996,7 +3994,8 @@ describe('FactoryDecisionDispatcher', () => {
 
   describe('a run that ends in another process', () => {
     async function remoteRun(key: string) {
-      const storage = (await createFactoryStorageForTests()).workItems;
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
       const { item, transitionService } = await queueDecision(storage, {
         type: 'invokeSkill',
         role: 'work',
@@ -4013,10 +4012,26 @@ describe('FactoryDecisionDispatcher', () => {
         boards: autoStartingBoards(),
         transitionService,
         storage,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-      return { storage, session, dispatcher, binding, kickoffId: record!.id };
+      const openRunOf = (kickoffId: string) => ({
+        kickoffId,
+        bindingId: binding.id,
+        role: binding.role,
+        startedBy: 'factory-rule-dispatcher',
+        orgId: binding.orgId,
+        factoryProjectId: binding.factoryProjectId,
+        workItemId: binding.workItemId,
+        sessionId: binding.sessionId,
+        threadId: binding.threadId,
+        branch: binding.branch,
+        ownerId: 'worker-2',
+        // The other worker renews every few seconds; stamp the beat it sends just before this check.
+        heartbeatAt: Date.now() + FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs - 1_000,
+      });
+      return { storage, openRuns: seed.openRuns, session, dispatcher, kickoffId: record!.id, openRunOf };
     }
 
     it('settles the run from its recorded end', async () => {
@@ -4071,33 +4086,19 @@ describe('FactoryDecisionDispatcher', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
       try {
-        const { storage, session, dispatcher, binding, kickoffId } = await remoteRun('remote-live');
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf } = await remoteRun('remote-live');
 
         const dispatch = dispatcher.runOnce();
         await vi.advanceTimersByTimeAsync(0);
-        const liveEntry = () => ({
-          kickoffId,
-          bindingId: binding.id,
-          role: binding.role,
-          startedBy: 'factory-rule-dispatcher',
-          orgId: binding.orgId,
-          factoryProjectId: binding.factoryProjectId,
-          workItemId: binding.workItemId,
-          sessionId: binding.sessionId,
-          threadId: binding.threadId,
-          branch: binding.branch,
-          ownerId: 'worker-2',
-          // The other worker renews every few seconds; stamp the beat it sends just before this check.
-          heartbeatAt: Date.now() + FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs - 1_000,
-        });
+        await openRuns.open(openRunOf(kickoffId));
         for (let beat = 0; beat < 3; beat += 1) {
-          await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [liveEntry()] });
+          await openRuns.heartbeat(kickoffId, 'worker-2', openRunOf(kickoffId).heartbeatAt);
           await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
         }
         const pending = (await storage.listDeferredDecisions('org-1', PROJECT_ID))[0];
         expect(pending).toMatchObject({ status: 'leased', lastError: null });
 
-        await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [] });
+        await openRuns.close(kickoffId);
         await session.thread.setSetting({
           key: FACTORY_RUN_ENDS_SETTING,
           value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
@@ -4114,44 +4115,27 @@ describe('FactoryDecisionDispatcher', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
       try {
-        const { storage, session, dispatcher, binding, kickoffId } = await remoteRun('remote-end-between-reads');
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf } =
+          await remoteRun('remote-end-between-reads');
 
         const dispatch = dispatcher.runOnce();
         await vi.advanceTimersByTimeAsync(0);
-        await session.thread.setSetting({
-          key: FACTORY_OPEN_RUNS_SETTING,
-          value: [
-            {
-              kickoffId,
-              bindingId: binding.id,
-              role: binding.role,
-              startedBy: 'factory-rule-dispatcher',
-              orgId: binding.orgId,
-              factoryProjectId: binding.factoryProjectId,
-              workItemId: binding.workItemId,
-              sessionId: binding.sessionId,
-              threadId: binding.threadId,
-              branch: binding.branch,
-              ownerId: 'worker-2',
-              heartbeatAt: Date.now() + FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs - 1_000,
-            },
-          ],
-        });
-        // The other worker finishes right after the dispatcher's first read: it records the end,
+        await openRuns.open(openRunOf(kickoffId));
+        // The other worker finishes right after the dispatcher's ledger read: it records the end,
         // then drops the run from the ledger.
-        const read = session.thread.getSettingOn.getMockImplementation()!;
+        const listByThread = openRuns.listByThread.bind(openRuns);
         let finished = false;
-        session.thread.getSettingOn.mockImplementation(async (args: { threadId: string; key: string }) => {
-          const value = await read(args);
-          if (!finished && (args.key === FACTORY_OPEN_RUNS_SETTING || args.key === FACTORY_RUN_ENDS_SETTING)) {
+        vi.spyOn(openRuns, 'listByThread').mockImplementation(async threadId => {
+          const runs = await listByThread(threadId);
+          if (!finished) {
             finished = true;
             await session.thread.setSetting({
               key: FACTORY_RUN_ENDS_SETTING,
               value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
             });
-            await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [] });
+            await openRuns.close(kickoffId);
           }
-          return value;
+          return runs;
         });
         await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
         await dispatch;

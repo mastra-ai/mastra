@@ -229,6 +229,7 @@ import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
+import { OpenRunsStorage } from './storage/domains/open-runs/base.js';
 import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SandboxEnvsStorage } from './storage/domains/sandbox-envs/base.js';
@@ -1089,6 +1090,7 @@ export class MastraFactory {
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
+    const openRunsStorage = storage.registerDomain(new OpenRunsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -2444,6 +2446,7 @@ export class MastraFactory {
                 boardEngine: runtimeBoardEngine,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
+                openRuns: openRunsStorage,
                 boards: boards,
                 // Kept without stored boards too, so intake order defers arrivals it can't decide.
                 intakeEvaluator: this.#forcedIntake,
@@ -2632,7 +2635,7 @@ export class MastraFactory {
       observeSessionThreadTitle(session, {
         sourceControl: { sessions: sourceControlSessions },
       });
-      observeSessionRunEnd(session, { audit: auditDomain });
+      observeSessionRunEnd(session, { audit: auditDomain, openRuns: openRunsStorage });
       // Every run end of a work or side session, and every tool call it holds for
       // approval, reaches whoever follows it, however the run started;
       // re-attached when a session is created again.
