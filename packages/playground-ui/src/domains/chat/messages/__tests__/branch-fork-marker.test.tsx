@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
+import type { ThreadBranchesInfo } from '@mastra/react/hooks/memory';
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
 
+import { afterEach, describe, expect, it } from 'vitest';
 import { BranchForkMarker } from '../branch-fork-marker';
 import { buildBranchForkMarkers } from '../build-branch-fork-markers';
-import type { ThreadBranchesInfo } from '@mastra/react/hooks/memory';
 import {
   branchHistoryFromChild,
   branchHistoryOfRoot,

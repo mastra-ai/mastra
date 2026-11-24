@@ -1,7 +1,7 @@
-import { Txt } from '@/ds/components/Txt';
 import { GitFork } from 'lucide-react';
-
 import type { BranchForkMarkerData } from './build-branch-fork-markers';
+
+import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 
 export const BranchForkMarker = ({ marker, agentId }: { marker: BranchForkMarkerData; agentId: string }) => {
@@ -13,7 +13,7 @@ export const BranchForkMarker = ({ marker, agentId }: { marker: BranchForkMarker
   return (
     <div className="flex items-center gap-2 py-1" data-testid={`branch-marker-${marker.kind}`}>
       <div className="bg-border1 h-px flex-1" aria-hidden />
-      <GitFork className="text-neutral3 h-3 w-3 shrink-0" aria-hidden />
+      <GitFork className="text-neutral3 size-icon-xs shrink-0" aria-hidden />
       <Txt as="span" variant="meta" className="text-neutral3 max-w-96 min-w-0 truncate" title={label}>
         {label}
       </Txt>

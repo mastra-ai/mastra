@@ -134,7 +134,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
       {/* Shared-history Branches Section */}
       {threadId && <AgentMemoryBranches agentId={agentId} threadId={threadId} />}
 
-      <div className="border-border border-b p-4">
+      <div className="border-b border-border p-4">
         <Txt as="h3" variant="subheading" tone="ink">
           Recent Messages
         </Txt>

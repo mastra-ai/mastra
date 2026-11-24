@@ -1,5 +1,5 @@
-import { Button } from '@/ds/components/Button';
 import { GitFork } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
 
 export const BranchFromMessageAction = ({ onBranch, disabled }: { onBranch: () => void; disabled?: boolean }) => (
   <Button
