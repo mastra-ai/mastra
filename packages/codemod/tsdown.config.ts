@@ -10,7 +10,6 @@ export default defineConfig([
     nodeProtocol: 'strip',
     dts: false,
     clean: true,
-    sourcemap: true,
   },
   {
     entry: ['src/codemods/**/*.ts'],
@@ -18,6 +17,5 @@ export default defineConfig([
     format: ['esm'],
     dts: false,
     clean: true,
-    sourcemap: true,
   },
 ]);

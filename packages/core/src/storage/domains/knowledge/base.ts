@@ -18,6 +18,11 @@ export interface KnowledgeStorageCapabilities {
    * pin kinds don't report it, and core refuses listing pins on them rather than store a page pin.
    */
   supportsPinKinds?: boolean;
+  /**
+   * `listPageActivity` accepts `since`, `until` and `before` (dated mode). Adapters without it don't
+   * report it, and core refuses dated activity reads on them rather than return unbounded history.
+   */
+  supportsActivityDateRange?: boolean;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */

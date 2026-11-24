@@ -172,7 +172,7 @@ function AllowanceBar({
   const { used, over, within, rest } = reading;
   return (
     <span data-slot="meter-bar" className={cn('flex size-full gap-0.5', className)}>
-      {within > 0 && <MeterSegment slot="meter-used" grow={within} className="bg-foreground" />}
+      {within > 0 && <MeterSegment slot="meter-used" grow={within} className="bg-fill-inverse" />}
       {over > 0 && <MeterSegment slot="meter-over" grow={over} className={overClassName} />}
       {(rest > 0 || used === 0) && <MeterSegment slot="meter-rest" grow={rest || 1} className="bg-fill-strong" />}
     </span>

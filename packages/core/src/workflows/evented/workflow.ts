@@ -35,20 +35,15 @@ import { executionFailureTermination } from '../../observability/execution-outco
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
 import {
+  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
   ProcessorRunner,
   ProcessorState,
-  ProcessorStepOutputSchema,
-  ProcessorStepSchema,
-  createProcessorSendSignal,
-} from '../../processors';
-import {
-  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
   endOutputStreamSpanAtStepEnd,
   endOutputStreamSpanOutsideStep,
   findOwnModelStepSpan,
 } from '../../processors/runner';
 import type { ProcessorLateSignalSink } from '../../processors/send-signal';
-import { PROCESSOR_LATE_SIGNAL_SINK } from '../../processors/send-signal';
+import { PROCESSOR_LATE_SIGNAL_SINK, createProcessorSendSignal } from '../../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -62,6 +57,7 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors/step-schema';
 import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';

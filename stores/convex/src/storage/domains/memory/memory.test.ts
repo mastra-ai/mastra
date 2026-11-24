@@ -818,6 +818,46 @@ describe('MemoryConvex observational memory', () => {
     });
   });
 
+  // The flag only travels on the swap's response, so the client must keep it on the parsed record
+  // for the processor to publish the values staged for that buffer. (#27262)
+  it.each([true, undefined])(
+    'swapBufferedReflectionToActive keeps the server verification flag (%s)',
+    async bufferedReflectionVerified => {
+      const { memory } = createMemoryDomain(() => ({
+        ...storedOMDoc({ id: 'om-2', originType: 'reflection', generationCount: 1 }),
+        ...(bufferedReflectionVerified ? { bufferedReflectionVerified } : {}),
+      }));
+      const record = await memory.swapBufferedReflectionToActive({
+        currentRecord: {
+          id: 'om-1',
+          scope: 'resource',
+          threadId: null,
+          resourceId: 'resource-1',
+          createdAt: new Date('2026-06-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-06-02T00:00:00.000Z'),
+          originType: 'initial',
+          generationCount: 0,
+          activeObservations: 'line 1\nline 2',
+          bufferedReflection: 'the reflection',
+          reflectedObservationLineCount: 1,
+          totalTokensObserved: 900,
+          observationTokenCount: 100,
+          pendingMessageTokens: 0,
+          isReflecting: false,
+          isObserving: false,
+          isBufferingObservation: false,
+          isBufferingReflection: true,
+          lastBufferedAtTokens: 0,
+          lastBufferedAtTime: null,
+          config: {},
+        },
+        tokenCount: 42,
+      });
+      expect(record.id).toBe('om-2');
+      expect(record.bufferedReflectionVerified).toBe(bufferedReflectionVerified);
+    },
+  );
+
   it('clearObservationalMemory deletes every generation for the lookup key', async () => {
     const { calls, memory } = createMemoryDomain(request =>
       request.op === 'queryTable' ? [storedOMDoc({ id: 'om-1' }), storedOMDoc({ id: 'om-2' })] : undefined,

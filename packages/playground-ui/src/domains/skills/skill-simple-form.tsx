@@ -70,7 +70,7 @@ export function SkillSimpleForm({
         <FieldLabel>Instructions</FieldLabel>
 
         {readOnly ? (
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-background p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-nested p-4">
             {instructions ? (
               <MarkdownRenderer>{instructions}</MarkdownRenderer>
             ) : (

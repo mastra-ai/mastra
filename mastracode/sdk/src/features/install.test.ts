@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { FastembedWorker } from '../agents/fastembed-subprocess.js';
 import { closedPortUrl, isolatedNpmEnv, startLocalRegistry } from './__tests__/local-registry.js';
 import type { LocalRegistry } from './__tests__/local-registry.js';
+import { getFeaturePackages } from './catalog.js';
 import { runFeaturesCommand } from './cli.js';
 import { FeatureNotInstalledError } from './events.js';
 import { findInstalledFeature, getFeatureDir, installFeature, resolveFromFeatureDir } from './install.js';
@@ -24,7 +25,8 @@ const FAKE_FASTEMBED = {
     } } };\n`,
   },
 };
-const PINNED = '1.4.0-alpha.0';
+/** The version this build pins, which `mastracode features install` asks the registry for. */
+const PINNED = getFeaturePackages('embeddings')['@mastra/fastembed']!;
 
 let registry: LocalRegistry;
 let npm: ReturnType<typeof isolatedNpmEnv>;

@@ -49,6 +49,8 @@ interface Endpoint {
   origin: string;
   /** The `Authorization` header of every request received, in order. */
   authorizations: Array<string | undefined>;
+  /** The `model` field of every request body received, in order. */
+  models: unknown[];
   close(): Promise<void>;
 }
 
@@ -57,10 +59,13 @@ const endpoints: Endpoint[] = [];
 /** An endpoint answering every request with a chat completion, or with a redirect to `redirectTo`'s origin. */
 async function startEndpoint(redirectTo?: Endpoint): Promise<Endpoint> {
   const authorizations: Array<string | undefined> = [];
+  const models: unknown[] = [];
   const server = createServer((req, res) => {
     authorizations.push(req.headers.authorization);
-    req.resume();
+    let body = '';
+    req.on('data', chunk => (body += chunk));
     req.on('end', () => {
+      if (body) models.push(JSON.parse(body).model);
       if (redirectTo) {
         res.writeHead(307, { location: `${redirectTo.origin}${req.url}` });
         res.end();
@@ -76,6 +81,7 @@ async function startEndpoint(redirectTo?: Endpoint): Promise<Endpoint> {
     url: `${origin}/v1`,
     origin,
     authorizations,
+    models,
     close: () =>
       new Promise(resolve => {
         server.closeAllConnections();
@@ -188,6 +194,29 @@ describe('custom provider credentials', () => {
           routerId: 'mastracode/openai/gpt-test',
         })?.apiKey,
       ).toBeUndefined();
+    });
+  });
+
+  // `:fast` asks for Codex Fast only on the built-in OpenAI provider. On a
+  // custom endpoint that is also named OpenAI, it is part of the model name.
+  describe('a model name ending in :fast on an endpoint named OpenAI', () => {
+    it('reaches the endpoint with its full name', async () => {
+      const endpoint = await startEndpoint();
+      writeSettings({ customProviders: [{ name: 'OpenAI', url: endpoint.url, models: ['local:fast'] }] });
+
+      await sendPrompt('openai/local:fast');
+
+      expect(endpoint.models).toEqual(['local:fast']);
+    });
+
+    it('keeps its full name when the gateway resolves it', async () => {
+      const endpoint = await startEndpoint();
+      const gateway = createGateway([{ name: 'OpenAI', url: endpoint.url, models: ['gpt-6.2-sol:fast'] }]);
+
+      const model = gateway.resolveLanguageModel({ providerId: 'openai', modelId: 'gpt-6.2-sol:fast', apiKey: '' });
+      await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] } as never);
+
+      expect(endpoint.models).toEqual(['gpt-6.2-sol:fast']);
     });
   });
 

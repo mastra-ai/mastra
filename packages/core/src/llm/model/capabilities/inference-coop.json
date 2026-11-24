@@ -24,6 +24,12 @@
     "tinfoil/gpt-oss-120b"
   ],
   "reasoning": {
+    "tinfoil/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "tinfoil/deepseek-v4-1-flash": [
       {
         "type": "effort",
@@ -36,13 +42,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "tinfoil/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "greenpt/glm-5.3": [
+    "greenpt/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -54,7 +54,7 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "greenpt/glm-5.3-flash": [
+    "greenpt/glm-5.3": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]

@@ -131,7 +131,7 @@ import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.j
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { createGoogleVertexGateway } from './providers/google-vertex-gateway.js';
 import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
-
+import { parseCodexModelSelection } from './providers/model-ids.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 import {
@@ -1916,7 +1916,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     modelUseCountTracker: modelId => {
       try {
         const settings = loadSettings();
-        settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
+        const { modelId: canonicalModelId } = parseCodexModelSelection(modelId);
+        settings.modelUseCounts[canonicalModelId] = (settings.modelUseCounts[canonicalModelId] ?? 0) + 1;
         saveSettings(settings);
       } catch (error) {
         console.error('Failed to persist model usage count', error);

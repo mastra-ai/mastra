@@ -221,6 +221,10 @@ throw new Error('@opentelemetry/api is not installed');
           enabled: true,
         },
       },
+      // The Worker's source text is held in the V8 heap, so minifying lowers memory use as well as upload size.
+      // Wrangler keeps function and class names (`keep_names` defaults to true) and uploads source maps by default,
+      // so Cloudflare can map minified stack traces in Workers Logs back to readable files and lines.
+      minify: true,
       ...userConfig,
       main: './index.mjs',
       vars: envsAsObject,

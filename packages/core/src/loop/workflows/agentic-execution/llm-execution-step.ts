@@ -37,7 +37,7 @@ import type {
   OutputProcessorOrWorkflow,
   ProcessorStreamWriter,
 } from '../../../processors/index';
-import { isProcessorWorkflow } from '../../../processors/index';
+import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';

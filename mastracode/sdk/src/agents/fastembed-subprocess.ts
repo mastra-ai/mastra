@@ -1,14 +1,22 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { MastraEmbeddingModel } from '@mastra/core/vector';
-import { FeatureNotInstalledError, isFeatureNotInstalledError } from '../features/events.js';
+import { isFeatureNotInstalledError } from '../features/events.js';
+import type { FeatureUnavailableReason } from '../features/events.js';
 import { resolveFeatureModule } from '../features/load.js';
 
 /** `fastembed.small`'s shape, without importing `@mastra/fastembed`: an optional peer must not appear in published types. */
 export type FastembedModel = Extract<MastraEmbeddingModel<string>, { specificationVersion: 'v3' }>;
 type DoEmbedOptions = Parameters<FastembedModel['doEmbed']>[0];
 type DoEmbedResult = Awaited<ReturnType<FastembedModel['doEmbed']>>;
-type WorkerReply = { id: number; embeddings?: number[][]; warnings?: DoEmbedResult['warnings']; error?: string };
+type WorkerReply = {
+  id: number;
+  embeddings?: number[][];
+  warnings?: DoEmbedResult['warnings'];
+  error?: string;
+  /** Set when importing `@mastra/fastembed` failed, before any embedding ran. */
+  loadError?: { code?: string; message: string };
+};
 
 type Job = {
   id: number;
@@ -21,6 +29,48 @@ type Job = {
 /** How long a worker with no active or queued work keeps the model loaded before it exits. */
 export const WORKER_IDLE_TIMEOUT_MS = 5 * 60_000;
 
+/** `code` of {@link EmbedderPackageMissingError}. */
+export const EMBEDDER_PACKAGE_MISSING = 'MASTRACODE_EMBEDDER_PACKAGE_MISSING';
+
+/**
+ * The default recall embedder can't run because `@mastra/fastembed` is not installed and could not be
+ * installed (see `installReason`), or because it, or a package it imports, could not be loaded. Other
+ * embedder failures (model download, worker crash) are plain errors. Detect it with
+ * {@link isEmbedderPackageMissingError}, which also matches errors from another copy of this module.
+ */
+export class EmbedderPackageMissingError extends Error {
+  readonly code = EMBEDDER_PACKAGE_MISSING;
+  readonly packageName = '@mastra/fastembed';
+  /**
+   * Set when the package was never installed (local embeddings install on first use) and installing it was
+   * turned off or failed. `onFeatureInstall` has already reported that. Unset when an install is broken.
+   */
+  readonly installReason?: FeatureUnavailableReason;
+
+  constructor(cause: unknown) {
+    const consequence = 'New observations are not indexed for search, and recall search fails until it is fixed.';
+    if (isFeatureNotInstalledError(cause)) {
+      const why = cause.message.replace(/\.$/, '');
+      super(`Memory recall is off: local embeddings are not installed (${why}). ${consequence} ${cause.remedy}`, {
+        cause,
+      });
+      this.installReason = cause.reason;
+    } else {
+      const reason = (cause instanceof Error ? cause.message : String(cause)).split('\n')[0];
+      super(
+        `Memory recall is off: the local embedder package @mastra/fastembed could not be loaded (${reason}). ` +
+          `${consequence} Reinstall Mastra Code to restore it (for example \`npm install -g mastracode\`).`,
+        { cause },
+      );
+    }
+    this.name = 'EmbedderPackageMissingError';
+  }
+}
+
+export function isEmbedderPackageMissingError(error: unknown): error is EmbedderPackageMissingError {
+  return error instanceof Error && (error as { code?: unknown }).code === EMBEDDER_PACKAGE_MISSING;
+}
+
 /**
  * Run with `node -e`. Loads `@mastra/fastembed` on the first request, keeps the model for later ones, and
  * replies to each over IPC. It exits when the parent disconnects, so it never outlives the agent. It raises
@@ -31,11 +81,17 @@ try { require('node:fs').writeFileSync('/proc/self/oom_score_adj', '500'); } cat
 let model;
 process.on('disconnect', () => process.exit(0));
 process.on('message', async ({ id, entry, values }) => {
-  try {
-    if (!model) {
+  if (!model) {
+    try {
       const mod = await import(entry);
       model = (mod.fastembed ?? mod.default.fastembed).small;
+    } catch (error) {
+      const loadError = { code: error && error.code, message: String((error && error.message) || error) };
+      process.send({ id, error: String((error && error.stack) || error), loadError });
+      return;
     }
+  }
+  try {
     const { embeddings, warnings } = await model.doEmbed({ values });
     process.send({ id, embeddings, warnings });
   } catch (error) {
@@ -153,6 +209,10 @@ export class FastembedWorker {
     if (reply.embeddings) {
       const result = { embeddings: reply.embeddings, warnings: reply.warnings ?? [] };
       this.#settle(job, () => job.resolve(result));
+    } else if (reply.loadError?.code === 'ERR_MODULE_NOT_FOUND' || reply.loadError?.code === 'MODULE_NOT_FOUND') {
+      // `@mastra/fastembed` resolved but a package it imports (ESM) or requires (CommonJS) did not.
+      const error = new EmbedderPackageMissingError(new Error(reply.loadError.message));
+      this.#settle(job, () => job.reject(error));
     } else {
       this.#settle(job, () => job.reject(new Error(reply.error ?? 'fastembed worker returned no embeddings')));
     }
@@ -217,22 +277,6 @@ export class FastembedWorker {
   }
 }
 
-/**
- * `@mastra/fastembed` is not installed and could not be installed. A `FeatureNotInstalledError` for the
- * `embeddings` feature, so callers can tell it apart from an embedding that failed.
- */
-export class EmbedderPackageMissingError extends FeatureNotInstalledError {
-  constructor(cause: FeatureNotInstalledError) {
-    super(
-      cause.feature,
-      cause.reason,
-      `Local embeddings for memory recall are unavailable: ${cause.message} ${cause.remedy}`,
-      { remedy: cause.remedy, logPath: cause.logPath, cause },
-    );
-    this.name = 'EmbedderPackageMissingError';
-  }
-}
-
 let defaultWorker: Promise<FastembedWorker> | undefined;
 
 /** The shared worker, once `@mastra/fastembed` is resolvable (installing it on first use when allowed). */
@@ -259,8 +303,60 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): 
   });
 }
 
+type EmbedderPackageMissingListener = (error: EmbedderPackageMissingError) => void;
+/** Each listener hears about the missing package at most once, however many embeds fail. */
+const packageMissingListeners = new Map<EmbedderPackageMissingListener, { heard: boolean }>();
+let unheardPackageMissing: EmbedderPackageMissingError | undefined;
+let warnedWithoutListener = false;
+
+/**
+ * Called once, on the first embed that fails with {@link EmbedderPackageMissingError} after subscribing.
+ * Memory catches that failure (indexing is best-effort and Mastra Code silences `console.warn`), so this is
+ * how a UI learns about it. With no listener the error goes to `console.warn` and is handed to the first
+ * listener that subscribes later.
+ */
+export function onEmbedderPackageMissing(listener: EmbedderPackageMissingListener): () => void {
+  const state = { heard: false };
+  packageMissingListeners.set(listener, state);
+  const unheard = unheardPackageMissing;
+  unheardPackageMissing = undefined;
+  if (unheard) {
+    state.heard = true;
+    notify(listener, unheard);
+  }
+  return () => packageMissingListeners.delete(listener);
+}
+
+function reportPackageMissing(error: EmbedderPackageMissingError): void {
+  if (packageMissingListeners.size === 0) {
+    if (!warnedWithoutListener) console.warn(error.message);
+    warnedWithoutListener = true;
+    unheardPackageMissing ??= error;
+    return;
+  }
+  for (const [listener, state] of packageMissingListeners) {
+    if (state.heard) continue;
+    state.heard = true;
+    notify(listener, error);
+  }
+}
+
+/** A listener that throws must not replace the embed error or break subscribing. */
+function notify(listener: EmbedderPackageMissingListener, error: EmbedderPackageMissingError): void {
+  try {
+    listener(error);
+  } catch (listenerError) {
+    console.warn(`Embedder notice listener failed: ${String(listenerError)}`);
+  }
+}
+
 /** Embeds with `fastembed.small` in the shared worker process (see `FastembedWorker`). */
 export async function embedInSubprocess(options: DoEmbedOptions): Promise<DoEmbedResult> {
-  const worker = await untilAborted(getDefaultWorker(), options.abortSignal);
-  return worker.embed(options);
+  try {
+    const worker = await untilAborted(getDefaultWorker(), options.abortSignal);
+    return await worker.embed(options);
+  } catch (error) {
+    if (isEmbedderPackageMissingError(error)) reportPackageMissing(error);
+    throw error;
+  }
 }

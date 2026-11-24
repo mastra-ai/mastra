@@ -1,3 +1,4 @@
+import { withBufferedReflectionVerified } from '@internal/core/memory';
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
@@ -45,6 +46,7 @@ import {
   compareObservationalMemoryHeadOrder,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
 } from './observational-memory-lifecycle';
@@ -1329,6 +1331,11 @@ export class InMemoryMemory extends MemoryStorage {
     if (!isAppendOnlySince(record.activeObservations, currentRecord.activeObservations)) {
       return record;
     }
+    // The swap must consume the buffer and reflected line count the caller read; another
+    // writer may have extended both since, which the activated text alone cannot reveal.
+    if (!isBufferedReflectionUnchangedSince(record, currentRecord)) {
+      return record;
+    }
 
     const bufferedReflection = record.bufferedReflection;
     const reflectedLineCount = record.reflectedObservationLineCount ?? 0;
@@ -1348,6 +1355,9 @@ export class InMemoryMemory extends MemoryStorage {
     const tokenCount =
       input.tokenCount + Math.max(0, (record.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
     const newRecord = this.rollOverObservationalMemory(record, newObservations, tokenCount, input.newRecordId);
+    // Mark the successor before clearing the retired record: a caller holding the live stored
+    // record (as getObservationalMemory returns it) passes that same object as currentRecord.
+    const result = withBufferedReflectionVerified(newRecord, currentRecord);
 
     // Clear buffered state on old record
     record.bufferedReflection = undefined;
@@ -1355,7 +1365,7 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedReflectionInputTokens = undefined;
     record.reflectedObservationLineCount = undefined;
 
-    return newRecord;
+    return result;
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {

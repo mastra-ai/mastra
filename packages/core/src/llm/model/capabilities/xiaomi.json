@@ -15,17 +15,12 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
     "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.5": [
       {
         "type": "toggle"
       }
@@ -36,6 +31,11 @@
       }
     ],
     "mimo-v2.6-pro-ultraspeed": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-pro": [
       {
         "type": "toggle"
       }

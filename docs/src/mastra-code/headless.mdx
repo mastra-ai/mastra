@@ -69,6 +69,8 @@ When an [optional feature](/configuration#optional-features) installs on first u
 | `1` | Error, aborted, or max turns reached |
 | `2` | Timeout |
 
+Warnings go to stderr in every output mode and don't change the exit code. For example, if local embeddings can't be used, the run still completes, but Mastra Code prints one `Warning: Memory recall is off: ...` line explaining that recall search won't work until it is fixed. If they were never installed and couldn't be installed on first use, the line tells you to run `mastracode features install embeddings`. If the installed package is broken, it tells you to reinstall Mastra Code.
+
 ### Examples
 
 ```sh

@@ -10,6 +10,17 @@ interface ProviderRegistrationBase {
   integrationId: string;
   /** Legacy connection-id env fallback; kept working but intentionally undocumented. */
   envVar: string;
+  /**
+   * Other platform catalog ids whose connections use this toolset, such as
+   * `gitlab-self-hosted` for `gitlab`. Their connections resolve, are pinned,
+   * and are configured under `integrationId`.
+   */
+  aliasIntegrationIds?: readonly string[];
+}
+
+/** Every catalog id whose connections resolve to this registration. */
+export function registrationIntegrationIds(registration: ProviderRegistrationBase): string[] {
+  return [registration.integrationId, ...(registration.aliasIntegrationIds ?? [])];
 }
 
 /** A provider whose checked-in tools call the Platform HTTP proxy. */

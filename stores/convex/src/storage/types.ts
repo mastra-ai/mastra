@@ -69,6 +69,10 @@ export type SerializedOMCurrentRecord = {
   activeObservations?: string;
   /** The snapshot's observation token count; tokens appended since are added to the new generation. */
   observationTokenCount?: number;
+  /** The snapshot's buffered reflection; a buffered-reflection swap only applies if it is still stored. */
+  bufferedReflection?: string | null;
+  /** The snapshot's reflected line count; a buffered-reflection swap only applies if it is still stored. */
+  reflectedObservationLineCount?: number | null;
 };
 
 export type StorageRequest =

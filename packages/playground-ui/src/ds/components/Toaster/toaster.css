@@ -45,7 +45,8 @@
 
 [data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] {
   --field: var(--field-on-surface);
-  --field-rim: var(--field-rim-on-surface);
+  --field-hover: var(--field-hover-on-surface);
+  --field-open: var(--field-open-on-surface);
   align-items: start;
   align-content: start;
   flex-wrap: wrap;

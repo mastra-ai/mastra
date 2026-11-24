@@ -35,7 +35,6 @@ export default defineConfig({
   unbundle: true,
   clean: true,
   dts: false,
-  sourcemap: true,
   define: {
     __MASTRACODE_FEATURE_PINS__: JSON.stringify(featurePins),
   },
