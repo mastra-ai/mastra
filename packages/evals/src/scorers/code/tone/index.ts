@@ -36,10 +36,7 @@ export function createToneScorer(config: ToneScorerConfig = {}) {
       }
 
       // Evaluate sentiment stability across response
-      const sentences =
-        agentMessage
-          .replace(/\([^()\n]*\n[^()\n]*\)/g, group => group.replace('\n', ' '))
-          .match(/[^.!?\n]+(?:\.(?=\d|\p{Ll}{2}|\p{Lu}{2})[^.!?\n]*)*[.!?]*/gu) || [];
+      const sentences = agentMessage.match(/[^.!?\n]+(?:\.(?=\d|\p{Ll}{2}|\p{Lu}{2})[^.!?\n]*)*[.!?]*/gu) || [];
       const sentiments = sentences.flatMap(sentence => {
         const { score, tokens } = sentiment.analyze(sentence);
         const words = tokens.filter(token => /\p{L}/u.test(token)).length;
