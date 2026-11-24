@@ -353,6 +353,67 @@ describe('Observational Memory token counts for stored history', () => {
     },
   );
 
+  it('saves a message marked for resave whole when it is not stored yet', async () => {
+    const { storage, memory } = open(join(dbDir, 'resave-unstored.db'));
+    const threadId = randomUUID();
+    const id = `${threadId}-unstored`;
+    await memory.saveThread({
+      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const live: MastraDBMessage = {
+      id,
+      threadId,
+      resourceId: RESOURCE,
+      role: 'user',
+      createdAt: new Date(0),
+      content: { format: 2, parts: [{ type: 'text', text: 'Never stored. '.repeat(40) }] },
+    };
+    new TokenCounter().countMessage(live);
+    const om = (await memory.omEngine)!;
+    await om.persistMessages([live], threadId, RESOURCE, new Set([id]));
+
+    const memoryStore = (await storage.getStore('memory'))!;
+    const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+    expect(saved).toBeDefined();
+    expect(trustedEntries(saved!.content.parts[0])).toHaveLength(1);
+  });
+
+  it('saves a sealed message holding a completed boundary whole, so its end marker and count both reach storage', async () => {
+    const { storage, memory } = open(join(dbDir, 'resave-boundary.db'));
+    const threadId = randomUUID();
+    const id = `${threadId}-boundary`;
+    await memory.saveThread({
+      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const sealed = { mastra: { sealed: true } };
+    await memory.saveMessages({
+      messages: [
+        {
+          id,
+          threadId,
+          resourceId: RESOURCE,
+          role: 'assistant',
+          createdAt: new Date(0),
+          content: { format: 2, parts: [{ type: 'text', text: 'Observed words. '.repeat(40) }], metadata: sealed },
+        },
+      ],
+    });
+    const memoryStore = (await storage.getStore('memory'))!;
+    const [live] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+    // The end marker exists only on the in-memory copy, which then gains a count.
+    live!.content.parts.push({
+      type: 'data-om-observation-end',
+      data: { cycleId: 'c', operationType: 'observation' },
+    } as any);
+    new TokenCounter().countMessage(live!);
+    const om = (await memory.omEngine)!;
+    await om.persistMessages([live!], threadId, RESOURCE, new Set([id]));
+
+    const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+    expect(saved!.content.parts.some(part => part.type === 'data-om-observation-end')).toBe(true);
+    expect(trustedEntries(saved!.content.parts[0])).toHaveLength(1);
+  });
+
   it('patches the counts onto stored history instead of saving it whole', async () => {
     const { storage, memory, agent } = open(join(dbDir, 'normal-save.db'));
     const threadId = randomUUID();

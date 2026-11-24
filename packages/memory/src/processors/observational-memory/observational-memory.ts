@@ -2215,7 +2215,7 @@ export class ObservationalMemory {
    * Messages with observation markers are always saved (upserted) even if sealed,
    * because the markers need to be persisted to storage. A stored message in `resaveIds` gained token
    * counts after it was stored, whether or not it is sealed: only those counts are copied onto the stored
-   * copy, see {@link persistTokenEstimatesOntoStored}. Ids in `resaveIds` must not be this turn's own
+   * copy, see {@link persistTokenEstimatesOntoStored}; one with no stored row is saved whole. Ids in `resaveIds` must not be this turn's own
    * input or output, which are saved whole.
    */
   async persistMessages(
@@ -2227,19 +2227,13 @@ export class ObservationalMemory {
     const filteredMessages: MastraDBMessage[] = [];
     const storedWithNewCounts: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
-      // A stored message that only gained counts is patched, sealed or not: its stored copy can hold
-      // markers written after this copy was loaded, which a whole save would overwrite.
-      if (resaveIds?.has(msg.id)) {
-        storedWithNewCounts.push(msg);
-        continue;
-      }
       const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
-      if (isSealed) {
-        // Sealed messages were already persisted by buffer(). Only re-save if they
-        // now have observation markers (need to upsert the markers to storage).
-        if (findLastCompletedObservationBoundary(msg) !== -1) {
-          filteredMessages.push(msg);
-        }
+      if (isSealed && findLastCompletedObservationBoundary(msg) === -1 && !resaveIds?.has(msg.id)) continue;
+      // Markers are parts that may exist only in this copy, so a message holding a completed boundary is
+      // saved whole, counts included. Otherwise a stored message that only gained counts is patched, sealed
+      // or not: its stored copy can hold markers written after this copy was loaded.
+      if (resaveIds?.has(msg.id) && findLastCompletedObservationBoundary(msg) === -1) {
+        storedWithNewCounts.push(msg);
       } else {
         filteredMessages.push(msg);
       }
@@ -2255,7 +2249,11 @@ export class ObservationalMemory {
 
     // A missed count write only costs a recount on the next request, so it must never fail the save.
     try {
-      await this.persistTokenEstimatesOntoStored(storedWithNewCounts);
+      const notStored = await this.persistTokenEstimatesOntoStored(storedWithNewCounts);
+      // A message with no stored row has nothing to patch, so it is saved whole.
+      if (notStored.length > 0) {
+        await this.messageHistory.persistMessages({ messages: notStored, threadId, resourceId });
+      }
     } catch (error) {
       omError('[OM] Failed to save token counts for stored messages', error);
     }
@@ -2267,8 +2265,8 @@ export class ObservationalMemory {
    * instead of saved whole. Each count goes to the first stored part whose content matches the counted
    * part, so a part that changed in storage keeps no count and is counted again on read.
    */
-  private async persistTokenEstimatesOntoStored(messages: MastraDBMessage[]): Promise<void> {
-    if (messages.length === 0) return;
+  private async persistTokenEstimatesOntoStored(messages: MastraDBMessage[]): Promise<MastraDBMessage[]> {
+    if (messages.length === 0) return [];
     type Part = MastraDBMessage['content']['parts'][number] & { providerMetadata?: Record<string, any> };
     // Everything but the count itself is compared: `providerMetadata.mastra.modelOutput` changes what the model
     // sees, so two parts with the same raw result but different model outputs must not share a count.
@@ -2302,6 +2300,8 @@ export class ObservationalMemory {
       if (changed) updates.push({ id: row.id, content: { ...row.content, parts } as MastraDBMessage['content'] });
     }
     if (updates.length > 0) await this.storage.updateMessages({ messages: updates });
+    const storedIds = new Set(stored.map(row => row.id));
+    return messages.filter(message => !storedIds.has(message.id));
   }
 
   /**
