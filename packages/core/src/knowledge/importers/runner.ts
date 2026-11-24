@@ -40,8 +40,8 @@ export interface RunKnowledgeImportOptions {
   bufferSize?: number;
   /**
    * How long the oldest buffered op may wait before it is sent without waiting for a full buffer.
-   * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. Default 30
-   * seconds.
+   * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. A positive,
+   * finite number of milliseconds. Default 30 seconds.
    */
   flushAfterMs?: number;
   /** Default 30 seconds. */
@@ -100,7 +100,7 @@ const isRetryable = (error: unknown) =>
 
 /** The run ended for a reason that decides its outcome; buffered ops after it are dropped. */
 class RunStop extends Error {
-  constructor(readonly reason: 'canceled' | 'stopped' | 'host') {
+  constructor(readonly reason: 'canceled' | 'stopped' | 'flush') {
     super(`importer run ${reason}`);
   }
 }
@@ -135,6 +135,9 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     hostCallTimeoutMs = 60_000,
     retryDelayMs = (attempt: number) => Math.min(250 * 2 ** attempt, 10_000),
   } = options;
+  if (!Number.isFinite(flushAfterMs) || flushAfterMs <= 0) {
+    throw new TypeError(`flushAfterMs must be a positive number of milliseconds, got ${flushAfterMs}`);
+  }
 
   // Bounded but never resent: a start that timed out may have opened a run, which the host's
   // liveness check reclaims.
@@ -159,7 +162,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     clearTimeout(flushTimer);
     flushTimer = undefined;
   };
-  let hostFailure: KnowledgeImporterRunError | undefined;
+  /** Why a flush ended the run. Every later flush is refused, so no cursor is saved past its ops. */
+  let flushFailure: KnowledgeImporterRunError | undefined;
   const controller = new AbortController();
   let deadlineHit!: () => void;
   /** Settles at the hard deadline; never otherwise. */
@@ -210,7 +214,16 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       if (ops.length === 0 && !staged && !settle) return;
       const body = { ops, ...(staged ? { state: staged } : {}) };
       const seq = lastSeq + 1;
-      const digest = await knowledgeImporterFlushDigest(body);
+      let digest: string;
+      try {
+        digest = await knowledgeImporterFlushDigest(body);
+      } catch (error) {
+        // Ops the host can't take are dropped from the buffer: end the run here, however the flush
+        // was triggered and whether or not the importer catches the error.
+        flushFailure = { code: 'importer_error' };
+        halt('flush');
+        throw error;
+      }
       // A stop that arrived while the digest was computed: send nothing.
       if (stop) throw stop;
       const request = { runId, generation, seq, digest, ...body };
@@ -222,8 +235,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       } catch (error) {
         // A refusal (409) or a 4xx means nothing was applied; a retryable failure may have committed.
         if (!isRetryable(error)) unsettledSeq = undefined;
-        hostFailure = { code: 'importer_error', retryable: isRetryable(error) };
-        halt('host');
+        flushFailure = { code: 'importer_error', retryable: isRetryable(error) };
+        halt('flush');
         throw stop;
       }
       unsettledSeq = undefined;
@@ -240,7 +253,11 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     if (buffer.length >= bufferSize) await flush();
     // Queued behind any flush in flight, like every flush. A failure halts the run, which the
     // importer sees on its next call.
-    else if (!flushTimer) flushTimer = setTimeout(() => flush().catch(() => {}), flushAfterMs);
+    else if (!flushTimer) {
+      flushTimer = setTimeout(() => flush().catch(() => {}), flushAfterMs);
+      // A pending timed flush doesn't keep the process alive; the run's own awaits do.
+      flushTimer.unref?.();
+    }
   };
 
   const finish = async (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) => {
@@ -375,7 +392,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
 
   if (stop?.reason === 'canceled') return finish({ outcome: 'canceled', backlog: false });
   if (stop?.reason === 'stopped') return finish({ outcome: 'failed', backlog: false, error: { code: 'stopped' } });
-  const error = stop?.reason === 'host' ? hostFailure : failure;
+  const error = stop?.reason === 'flush' ? flushFailure : failure;
   if (error) return finish({ outcome: 'failed', backlog: false, error });
   return finish({ outcome: 'succeeded', backlog });
 }

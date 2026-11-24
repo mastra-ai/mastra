@@ -888,6 +888,71 @@ describe('runKnowledgeImport', () => {
       expect(result).toMatchObject({ outcome: 'succeeded', lastSeq: 2 });
     });
 
+    it('fails the run when a timed flush is rejected, so no later cursor skips its items', async () => {
+      const host = new RecordingHost();
+      host.state = { cursor: 'c0' };
+      const after = gate();
+      let pushed = false;
+      let setError: unknown;
+      const run = runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            await ctx.items.upsert({ ...item(2), sourceId: '' }); // the host can't take this batch
+            pushed = true;
+            await after.opened;
+            await ctx.items.upsert(item(3)).catch(() => {});
+            await ctx.state.set('cursor', 'c3').catch(error => (setError = error));
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        flushAfterMs: 30_000,
+      });
+      await until(() => pushed);
+      await vi.advanceTimersByTimeAsync(30_000);
+      for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
+      after.open();
+      const result = await run;
+      // The run ends without waiting on the importer; its cursor save is refused when it gets there.
+      await until(() => setError !== undefined);
+      expect(host.attempts).toEqual([]);
+      expect(host.state).toEqual({ cursor: 'c0' });
+      expect(result).toMatchObject({ outcome: 'failed', error: { code: 'importer_error' }, lastSeq: 0 });
+    });
+
+    it('fails the run when a batch the importer waited on is rejected, even if the importer catches it', async () => {
+      const host = new RecordingHost();
+      host.state = { cursor: 'c0' };
+      const result = await runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert({ ...item(1), sourceId: '' });
+            await ctx.state.set('cursor', 'c1').catch(() => {});
+            await ctx.state.set('cursor', 'c2').catch(() => {});
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        flushAfterMs: 30_000,
+      });
+      expect(host.attempts).toEqual([]);
+      expect(host.state).toEqual({ cursor: 'c0' });
+      expect(result).toMatchObject({ outcome: 'failed', error: { code: 'importer_error' }, lastSeq: 0 });
+    });
+
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+      'rejects flushAfterMs %s before starting a run',
+      async ms => {
+        const host = new RecordingHost();
+        const startRun = vi.spyOn(host, 'startRun');
+        await expect(
+          runKnowledgeImport({ importers: [importer(async () => {})], host, bindingId: 'b1', flushAfterMs: ms }),
+        ).rejects.toThrow(/flushAfterMs/);
+        expect(startRun).not.toHaveBeenCalled();
+      },
+    );
+
     it('fires nothing after the run finishes', async () => {
       const host = new RecordingHost();
       const result = await runKnowledgeImport({
