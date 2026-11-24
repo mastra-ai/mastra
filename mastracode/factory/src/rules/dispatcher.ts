@@ -1736,7 +1736,9 @@ export class FactoryDecisionDispatcher {
               ownerId: this.#ownerId,
             });
             if (!tookOver) {
-              throw new Error(`Factory could not record the interrupted run of binding ${binding.id} as aborted.`);
+              throw new Error(
+                `Factory could not take over the interrupted run of binding ${binding.id}: recording it as aborted failed, or another worker took it over first.`,
+              );
             }
             deliveryId = resumeId;
           }
@@ -2143,10 +2145,16 @@ export class FactoryDecisionDispatcher {
     }
     if (!existing && requested.closesIssue && (await this.#linkClosedIssue(record, requested, causalChain))) return;
     const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
-    // Filing the card *was* the placement, so a retry of the same decision has
-    // nothing left to apply — and must not drag a card that has since moved
-    // back down to the stage this decision filed it at.
-    if (materializedHere && requested.skipRules === true) return;
+    // Filing the card *was* the placement, so a retry of the same decision must not drag a card
+    // that has since moved back down to the stage this decision filed it at. A card still where
+    // this decision filed it goes on below, so the board engine answers for it even when an
+    // earlier attempt stopped before asking.
+    if (
+      materializedHere &&
+      requested.skipRules === true &&
+      !(existing.board === requested.board && existing.stages.length === 1 && existing.stages[0] === requested.stage)
+    )
+      return;
     const boards = await this.#boards.load(record);
     // A Linear identifier changes when its issue moves teams; the card filed
     // under the old one is still this issue's card.
@@ -2293,9 +2301,17 @@ export class FactoryDecisionDispatcher {
         const fresh = await this.#storage.get({ orgId: record.orgId, id: item.id });
         item = fresh && fresh.revision !== item.revision ? fresh : null;
       }
-      // A card this decision created and the engine would not file is not left filed.
-      if (result.created && outcome === 'skipped') {
-        await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
+      // A card this decision created and the engine would not file is not left filed, unless
+      // something else changed it since; the refusal stands either way.
+      const filedHere =
+        result.created || result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
+      if (filedHere && outcome === 'skipped') {
+        await this.#storage.delete({
+          orgId: record.orgId,
+          id: result.item.id,
+          purgeRuleState: false,
+          expectedRevision: result.item.revision,
+        });
         throw new FactoryRuleRejectedError('forbidden', `The board engine refused to file the card on ${board}.`);
       }
       await filed();

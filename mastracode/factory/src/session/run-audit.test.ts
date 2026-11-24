@@ -125,6 +125,31 @@ describe('Factory run lifecycle audit', () => {
     ]);
   });
 
+  it('steps aside when another worker took the lost run over first', async () => {
+    const { session, settings } = makeSession();
+    const lost = { ...OPEN_RUN, ownerId: 'lost-worker', heartbeatAt: 1 };
+    const theirs = { ...OPEN_RUN, kickoffId: 'kickoff-1:resume:3', ownerId: 'worker-3', heartbeatAt: 2 };
+    settings[FACTORY_OPEN_RUNS_SETTING] = [lost];
+    // The other worker swaps the lost entry for its continuation while this one records the end.
+    const audit = {
+      record: async () => {
+        settings[FACTORY_OPEN_RUNS_SETTING] = [theirs];
+        return {} as never;
+      },
+    };
+
+    await expect(
+      takeOverInterruptedSessionRuns(session, {
+        audit,
+        kickoffIds: ['kickoff-1'],
+        resumeKickoffId: 'kickoff-1:resume:2',
+        ownerId: 'worker-2',
+      }),
+    ).resolves.toBe(false);
+
+    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([theirs]);
+  });
+
   it('renews the heartbeat of an open run and keeps ownership out of the audit record', async () => {
     const { session, start, settings, events } = await setup();
     await start({ ...OPEN_RUN, ownerId: 'worker-1', heartbeatAt: 1 });
