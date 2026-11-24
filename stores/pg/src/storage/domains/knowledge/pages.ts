@@ -1439,6 +1439,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
              AND n."deletedAt" IS NULL AND n."pageId" = requested.id
            ORDER BY n."createdAt", n."id" LIMIT ${take}
          ) n ON true
+         -- Let PostgreSQL skip pages without live notes before evaluating note visibility for each page.
+         WHERE EXISTS (SELECT 1 FROM ${this.#notes} candidate WHERE candidate."pageId" = requested.id AND candidate."deletedAt" IS NULL)
          ORDER BY requested.position, n."createdAt", n."id" LIMIT ${take}
        ) picked ORDER BY picked.position, picked."createdAt", picked."id"`,
       params.values,

@@ -1,3 +1,4 @@
+import { readKnowledgePageGraph } from '@mastra/core/knowledge';
 import {
   KnowledgeConflictError,
   KnowledgePageKeyConflictError,
@@ -7,13 +8,14 @@ import {
   MAX_KNOWLEDGE_MOVE_PAGES,
 } from '@mastra/core/storage';
 import type { KnowledgeReadScope } from '@mastra/core/storage';
-import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Client, Pool } from 'pg';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PoolAdapter } from '../../client';
 import { connectionString as defaultConnectionString } from '../../test-utils';
 import { PgKnowledgePages } from './pages';
 import { initPgKnowledgePagesSchema, PgKnowledgeResetRequiredError, resetPgKnowledgePagesSchema } from './pages-schema';
+import { KnowledgePG } from './index';
 
 const connectionString = process.env.KNOWLEDGE_PG_URL ?? defaultConnectionString;
 const schemaName = 'knowledge_pages_test';
@@ -41,6 +43,51 @@ describe('PgKnowledgePages (schema 4)', () => {
   afterAll(async () => {
     await pool.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
     await pool.end();
+  });
+
+  describe('when each page links back to its scope through a note', () => {
+    it('returns every mention edge without adding round trips as more leaves are added', async ({ onTestFinished }) => {
+      const graphStore = new KnowledgePG({ pool, schemaName });
+      const address = 'team:graph-round-trips';
+      const { scope } = await graphStore.materializeScope({
+        address,
+        declaration: 'team:$id',
+        name: 'Team',
+        provenance,
+      });
+      const input = { rootId: scope.id, read: readOf(address) };
+      async function addLinkedLeaf(name: string) {
+        const page = await graphStore.createPage({ parentId: scope.id, name, provenance });
+        await graphStore.addNote({
+          pageId: page.id,
+          text: 'See team',
+          mentions: [scope.id],
+          stampScopeIds: [scope.id],
+          provenance,
+        });
+        return page.id;
+      }
+
+      const leaves = [await addLinkedLeaf('First')];
+      const queries = vi.spyOn(Client.prototype, 'query');
+      onTestFinished(() => queries.mockRestore());
+      const first = await readKnowledgePageGraph(graphStore, input);
+      const initialReads = queries.mock.calls.length;
+      expect(initialReads).toBeGreaterThan(0);
+      expect(first?.edges.filter(edge => edge.kind === 'mention')).toEqual([
+        { source: leaves[0], target: scope.id, kind: 'mention', count: 1 },
+      ]);
+
+      for (let i = 1; i < 12; i++) leaves.push(await addLinkedLeaf(`Page ${i}`));
+      queries.mockClear();
+      const expanded = await readKnowledgePageGraph(graphStore, input);
+      const mentions = expanded?.edges.filter(edge => edge.kind === 'mention');
+      expect(mentions).toHaveLength(leaves.length);
+      expect(mentions).toEqual(
+        expect.arrayContaining(leaves.map(source => ({ source, target: scope.id, kind: 'mention', count: 1 }))),
+      );
+      expect(queries.mock.calls.length).toBeLessThanOrEqual(initialReads);
+    });
   });
 
   it('limits graph mentions across pages in traversal order after applying note visibility', async () => {

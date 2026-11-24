@@ -133,13 +133,31 @@ describe('KnowledgePage', () => {
   });
 
   describe('when the tree arrives before the graph', () => {
-    it('lets the member browse pages while the graph request is pending', async () => {
+    it('keeps the selected tree page when the overview supplies its pins', async ({ onTestFinished }) => {
       stubKnowledge();
-      server.use(http.get(`${KNOWLEDGE}/graph`, () => new Promise<Response>(() => {})));
-      renderRoute();
+      let releaseOverview!: () => void;
+      const pending = new Promise<void>(resolve => {
+        releaseOverview = resolve;
+      });
+      onTestFinished(releaseOverview);
+      server.use(
+        http.get(`${KNOWLEDGE}/graph`, async () => {
+          await pending;
+          return HttpResponse.json(graphFixture);
+        }),
+      );
+      const { router } = renderRoute();
       const tree = await screen.findByRole('tree', {}, { timeout: 5_000 });
       fireEvent.click(await within(tree).findByRole('button', { name: 'Expand Acme Factory' }));
-      expect(await within(tree).findByText('Deploy runbook')).toBeInTheDocument();
+      fireEvent.click(await within(tree).findByText('Deploy runbook'));
+      const runbookRow = () => screen.getByRole('treeitem', { name: /Deploy runbook/ });
+      await waitFor(() => expect(runbookRow()).toHaveAttribute('aria-selected', 'true'));
+      expect(within(runbookRow()).queryByLabelText('Pinned')).toBeNull();
+
+      releaseOverview();
+      await waitFor(() => expect(within(runbookRow()).getByLabelText('Pinned')).toBeInTheDocument());
+      expect(runbookRow()).toHaveAttribute('aria-selected', 'true');
+      expect(router.state.location.search).toContain('page=runbook');
     });
   });
 
