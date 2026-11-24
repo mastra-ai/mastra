@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
+import { LogsListRow } from './logs-list-row';
 import { useDataListKeyboard } from '@/ds/components/DataList';
 import { LogsDataList } from '@/ds/components/LogsDataList';
 import { SkeletonText } from '@/ds/components/Skeleton';
@@ -20,7 +21,7 @@ export interface LogsStreamViewProps {
   hasNextPage?: boolean;
   logIdMap: Map<LogRecord, string>;
   featuredLogId?: string;
-  onLogClick: (log: LogRecord) => void;
+  onLogClick?: (log: LogRecord) => void;
   order?: LogsStreamOrder;
   onFetchNextPage?: () => void;
 }
@@ -40,16 +41,6 @@ function LogsStreamSkeleton() {
       {SKELETON_WIDTHS.map(width => (
         <SkeletonText key={width} className={width} />
       ))}
-    </div>
-  );
-}
-
-function LoadingOlderLogs() {
-  return (
-    <div role="status" className="px-3 py-1">
-      <Txt as="span" variant="caption" tone="muted">
-        Loading older logs
-      </Txt>
     </div>
   );
 }
@@ -100,15 +91,14 @@ function LogsStreamList({
   }, [lastRenderedIndex, lastLogIndex, virtualizer]);
 
   const firstLogId = logs[0] && logIdMap.get(logs[0]);
-  const prependAnchorRef = useRef<{ firstLogId?: string; totalSize: number }>({ totalSize: 0 });
+  const prependAnchorRef = useRef<{ firstLogId?: string; scrollHeight: number }>({ scrollHeight: 0 });
   useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
     const previous = prependAnchorRef.current;
-    const totalSize = virtualizer.getTotalSize();
     const previousFirstIndex = logs.findIndex(log => logIdMap.get(log) === previous.firstLogId);
-    if (isOldestFirst && previousFirstIndex > 0 && scrollRef.current) {
-      scrollRef.current.scrollTop += totalSize - previous.totalSize;
-    }
-    prependAnchorRef.current = { firstLogId, totalSize };
+    if (isOldestFirst && previousFirstIndex > 0) element.scrollTop += element.scrollHeight - previous.scrollHeight;
+    prependAnchorRef.current = { firstLogId, scrollHeight: element.scrollHeight };
   });
 
   const observeOlderEdge = (node: HTMLDivElement | null) => {
@@ -127,11 +117,18 @@ function LogsStreamList({
 
   const paddingTop = virtualItems[0]?.start ?? 0;
   const paddingBottom = Math.max(0, virtualizer.getTotalSize() - (virtualItems.at(-1)?.end ?? 0));
-  const olderEdge = hasNextPage && <div ref={observeOlderEdge} aria-hidden className="col-span-full" />;
+  const olderEdge = hasNextPage && (
+    <div ref={observeOlderEdge} role="status" className="col-span-full flex min-h-6 items-center px-3">
+      {isFetchingNextPage && (
+        <Txt as="span" variant="caption" tone="muted">
+          Loading older logs
+        </Txt>
+      )}
+    </div>
+  );
 
   return (
     <>
-      {isOldestFirst && isFetchingNextPage && <LoadingOlderLogs />}
       <LogsDataList
         columns={COLUMNS}
         scrollRef={scrollRef}
@@ -154,14 +151,14 @@ function LogsStreamList({
           const id = log && logIdMap.get(log);
           if (!log || !id) return null;
           return (
-            <LogsDataList.RowButton
+            <LogsListRow
               key={id}
-              ref={virtualizer.measureElement}
-              data-index={item.index}
-              {...getRowProps(item.index)}
-              onClick={() => onLogClick(log)}
+              log={log}
+              index={item.index}
               featured={id === featuredLogId}
-              variant={log.level === 'error' || log.level === 'fatal' ? 'error' : 'default'}
+              measureRef={virtualizer.measureElement}
+              keyboardProps={getRowProps(item.index)}
+              onLogClick={onLogClick}
             >
               <LogsDataList.LineCell
                 timestamp={log.timestamp}
@@ -169,13 +166,12 @@ function LogsStreamList({
                 message={log.message}
                 fields={log.data ?? undefined}
               />
-            </LogsDataList.RowButton>
+            </LogsListRow>
           );
         })}
         <LogsDataList.Spacer height={paddingBottom} />
         {!isOldestFirst && olderEdge}
       </LogsDataList>
-      {!isOldestFirst && isFetchingNextPage && <LoadingOlderLogs />}
     </>
   );
 }

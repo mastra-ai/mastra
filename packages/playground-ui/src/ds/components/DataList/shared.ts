@@ -15,6 +15,13 @@ export const dataListRowOuterStyles = [
   "before:absolute before:inset-0 before:-z-2 before:rounded-[inherit] before:bg-row before:content-['']",
 ] as const;
 
+const dataListRowToneStyles = [
+  'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle',
+  // Info is a faint translucent tint on the row element, so the surface below it (resting or selected) and the
+  // hover layer still read through.
+  'data-[variant=info]:bg-info-subtle/50 has-data-[variant=info]:bg-info-subtle/50',
+] as const;
+
 /**
  * Interactive state fills for the outer row element. Applied to standalone
  * `RowButton` / `RowLink` and to `RowWrapper`. The `has-*` forms let a wrapper
@@ -36,10 +43,8 @@ export const dataListRowStateStyles = [
   'active:bg-fill',
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
-  'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
-  // Info is a faint translucent tint on the row element, so the surface below it (resting or selected) and the
-  // hover layer still read through.
-  'data-[variant=info]:bg-info-subtle/50 has-data-[variant=info]:bg-info-subtle/50',
+  'data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
+  ...dataListRowToneStyles,
 ] as const;
 
 /**
@@ -57,7 +62,11 @@ export const dataListRowStyles = [
   ...dataListRowStateStyles,
 ] as const;
 
-export const dataListRowStaticStyles = ['grid grid-cols-subgrid gap-4 px-3', ...dataListRowOuterStyles] as const;
+export const dataListRowStaticStyles = [
+  'grid grid-cols-subgrid gap-4 px-3',
+  ...dataListRowOuterStyles,
+  ...dataListRowToneStyles,
+] as const;
 
 /**
  * Row actions that stay out of the way until the row is hovered or focused.

@@ -4,6 +4,7 @@ import { DataListNoMatch } from '../DataList/data-list-no-match';
 import { DataListRoot } from '../DataList/data-list-root';
 import { DataListRowButton } from '../DataList/data-list-row-button';
 import { DataListRowLink } from '../DataList/data-list-row-link';
+import { DataListRowStatic } from '../DataList/data-list-row-static';
 import { DataListRowWrapper } from '../DataList/data-list-row-wrapper';
 import { DataListSortableTopCell } from '../DataList/data-list-sortable-top-cell';
 import { DataListSpacer } from '../DataList/data-list-spacer';
@@ -26,6 +27,7 @@ export const LogsDataList = Object.assign(DataListRoot, {
   RowWrapper: DataListRowWrapper,
   RowButton: DataListRowButton,
   RowLink: DataListRowLink,
+  RowStatic: DataListRowStatic,
   Spacer: DataListSpacer,
   NoMatch: DataListNoMatch,
   DateCell: DataListDateCell,

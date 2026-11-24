@@ -4,7 +4,7 @@
 
 Added a stream view to the shared log viewer, for plain log lines such as sandbox and deploy output.
 
-`LogsListView` takes `density="stream"` with an `order` of `newest-first` (the default, as in an audit log) or `oldest-first` (as in a terminal, opening on the newest line). Each line shows its time, level and message under a column header, with a level-colored bar and a red tint on errors. Long lines wrap, JSON messages show as `key: value` fields, stack traces show their first three lines with a count of the rest, and `onFetchNextPage` loads older logs when the older end scrolls into view. A log only needs `timestamp`, `level` and `message`; `data` shows as `key: value` fields after the message.
+`LogsListView` takes `density="stream"` with an `order` of `newest-first` (the default, as in an audit log) or `oldest-first` (as in a terminal, opening on the newest line). Each line shows its time, level and message under a column header, with a level-colored bar and a red tint on errors. Long lines wrap, JSON messages show as `key: value` fields, stack traces show their first three lines with a count of the rest, and `onFetchNextPage` loads older logs when the older end scrolls into view. Leave out `onLogClick` for read-only lines that open nothing. A log only needs `timestamp`, `level` and `message`; `data` shows as `key: value` fields after the message.
 
 ```tsx
 <LogsListView

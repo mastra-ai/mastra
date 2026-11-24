@@ -272,6 +272,26 @@ describe('LogsListView stream density', () => {
       const firstLine = screen.getByRole('button', { name: /Memory usage above 80% of limit/ });
       expect(status.compareDocumentPosition(firstLine)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
+
+    it('keeps the loading line in place before and after a page loads, so the lines do not shift', () => {
+      const props = {
+        density: 'stream',
+        order: 'oldest-first',
+        logs: sandboxLines,
+        logIdMap: idMap,
+        onLogClick: vi.fn(),
+        hasNextPage: true,
+        onFetchNextPage: vi.fn(),
+      } as const;
+      const { rerender } = render(<LogsListView {...props} />);
+      const reserved = screen.getByRole('status');
+      expect(reserved.textContent).toBe('');
+
+      rerender(<LogsListView {...props} isFetchingNextPage />);
+
+      expect(screen.getByRole('status')).toBe(reserved);
+      expect(reserved.textContent).toBe('Loading older logs');
+    });
   });
 
   describe('newest first, like an audit log', () => {
@@ -312,6 +332,13 @@ describe('LogsListView stream density', () => {
       const lastLine = screen.getByRole('button', { name: /Process.Start stream ended/ });
       expect(lastLine.compareDocumentPosition(screen.getByRole('status'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
+  });
+
+  it('shows lines that open nothing when no click handler is given', () => {
+    render(<LogsListView density="stream" logs={sandboxLines} logIdMap={idMap} />);
+
+    expect(screen.getByText('Process.Start stream ended')).toBeTruthy();
+    expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
   it('opens the clicked line', () => {

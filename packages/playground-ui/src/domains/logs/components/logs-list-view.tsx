@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
+import { LogsListRow } from './logs-list-row';
 import { LogsStreamView } from './logs-stream-view';
 import type { LogsStreamOrder } from './logs-stream-view';
 import { useDataListKeyboard } from '@/ds/components/DataList';
@@ -25,7 +26,7 @@ export interface LogsListViewProps {
   /** Currently featured/selected log — its row gets the highlighted background. */
   featuredLogId?: string | null;
   /** Called when a row is clicked. The current toggle + trace-sync logic is the consumer's call. */
-  onLogClick: (log: LogRecord) => void;
+  onLogClick?: (log: LogRecord) => void;
   /** Current timestamp sort direction. When `onSortChange` is provided the Date/Time headers become sortable. */
   timestampSort?: DataListSort;
   onSortChange?: (direction: DataListSort, key: 'timestamp') => void;
@@ -149,14 +150,14 @@ function LogsTableView({
             const isFeatured = id === featuredLogId;
 
             return (
-              <LogsDataList.RowButton
+              <LogsListRow
                 key={id}
-                ref={virtualizer.measureElement}
-                data-index={vi.index}
-                {...getRowProps(vi.index)}
-                onClick={() => onLogClick(log)}
+                log={log}
+                index={vi.index}
                 featured={isFeatured}
-                variant={log.level === 'error' || log.level === 'fatal' ? 'error' : 'default'}
+                measureRef={virtualizer.measureElement}
+                keyboardProps={getRowProps(vi.index)}
+                onLogClick={onLogClick}
               >
                 <LogsDataList.DateCell timestamp={log.timestamp} />
                 <LogsDataList.TimeCell timestamp={log.timestamp} />
@@ -164,7 +165,7 @@ function LogsTableView({
                 <LogsDataList.EntityCell entityType={log.entityType} entityName={log.entityName} />
                 <LogsDataList.MessageCell message={log.message} />
                 <LogsDataList.DataCell data={log.data} />
-              </LogsDataList.RowButton>
+              </LogsListRow>
             );
           })}
           <LogsDataList.Spacer height={paddingBottom} />
