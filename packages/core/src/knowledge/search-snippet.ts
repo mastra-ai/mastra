@@ -158,27 +158,25 @@ const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
 const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
 const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
 
-/** The first line a search hit's body has with a matched word, and how many lines have one. */
+/** How many lines of a search hit's body have a matched word. */
 function matchingLines(body: string, words: string[], lowered: string | undefined) {
   // Lowercasing never adds or removes a `\n`, so line numbers are the same in the lowered copy.
   const pattern = lowered
     ? undefined
     : new RegExp(words.map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'iu');
-  let first = 0;
   let count = 0;
   (lowered ?? body).split('\n').forEach((line, i) => {
     if (!(pattern ? pattern.test(line) : words.some(word => line.includes(word)))) return;
-    if (!first) first = i + 1;
     count++;
   });
-  return { first, count };
+  return count;
 }
 
 /**
  * The nearest markdown heading above body offset `at`, as `12│## Heading` with its `knowledge_read`
  * line number, unless the heading starts inside the excerpt that begins at `windowStart`.
  */
-function headingAbove(body: string, at: number, windowStart: number): string | undefined {
+function headingAbove(body: string, at: number, windowStart: number, width: number): string | undefined {
   let nearest: { start: number } | undefined;
   for (const section of knowledgeBodySections(body)) {
     if (section.start > at) break;
@@ -188,7 +186,7 @@ function headingAbove(body: string, at: number, windowStart: number): string | u
   const lines = new KnowledgeBodyLines(body);
   const line = lines.lineAt(nearest.start);
   const text = body.slice(nearest.start, lines.lineEnd(line));
-  return `${line}│${
+  return `${String(line).padStart(width)}│${
     text.length > HEADING_CHARS
       ? `${Array.from(text)
           .slice(0, HEADING_CHARS - 1)
@@ -199,9 +197,9 @@ function headingAbove(body: string, at: number, windowStart: number): string | u
 
 /** A search hit's view of a page body: an excerpt around the matched words, and where the matches are. */
 export interface KnowledgeBodyHit {
-  /** An excerpt of {@link KNOWLEDGE_SNIPPET_TOKENS} tokens, with the heading it sits under first when that is out of view. */
+  /** An excerpt of {@link KNOWLEDGE_SNIPPET_TOKENS} tokens, every line numbered as `knowledge_read` numbers lines, with the heading it sits under first when that is out of view. */
   snippet: string;
-  /** The first line (as `knowledge_read` numbers lines) that contains a matched word. */
+  /** The line (as `knowledge_read` numbers lines) of the match the excerpt is centred on. */
   line: number;
   /** How many lines contain a matched word. */
   matchingLines: number;
@@ -270,8 +268,17 @@ export function knowledgeBodyHit(body: string | undefined, query: string): Knowl
   if (start < body.length && isLowSurrogate(body.charCodeAt(start))) start++;
   if (end > start && isHighSurrogate(body.charCodeAt(end - 1))) end--;
 
-  const heading = headingAbove(body, anchor, start);
-  const excerpt = `${start > 0 ? '…' : ''}${body.slice(start, end)}${end < body.length ? '…' : ''}`;
-  const lines = matchingLines(body, words, lowercase?.text);
-  return { snippet: heading ? `${heading}\n${excerpt}` : excerpt, line: lines.first, matchingLines: lines.count };
+  // Number every line the way `knowledge_read` does; a cut first or last line keeps its number and gets the `…`.
+  const lines = new KnowledgeBodyLines(body);
+  const rows = lines.numbered(start, end > start && body[end - 1] === '\n' ? end - 1 : end).split('\n');
+  const width = rows[0]!.indexOf('│');
+  if (start > 0) rows[0] = `${rows[0]!.slice(0, width + 1)}…${rows[0]!.slice(width + 1)}`;
+  if (end < body.length) rows[rows.length - 1] += '…';
+  const heading = headingAbove(body, anchor, start, width);
+  const matches = matchingLines(body, words, lowercase?.text);
+  return {
+    snippet: heading ? `${heading}\n${rows.join('\n')}` : rows.join('\n'),
+    line: lines.lineAt(anchor),
+    matchingLines: matches,
+  };
 }

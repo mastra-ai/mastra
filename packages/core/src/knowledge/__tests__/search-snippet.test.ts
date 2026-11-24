@@ -3,7 +3,9 @@ import { estimateTokenCount } from 'tokenx';
 import { describe, expect, it } from 'vitest';
 import { KNOWLEDGE_SNIPPET_TOKENS, knowledgeBodyHit, knowledgeSearchQuery } from '../search-snippet';
 
-const knowledgeBodySnippet = (body: string | undefined, query: string) => knowledgeBodyHit(body, query)?.snippet;
+// The excerpt's text without the `N│` line numbers (covered in search-snippet-centre.test.ts).
+const knowledgeBodySnippet = (body: string | undefined, query: string) =>
+  knowledgeBodyHit(body, query)?.snippet.replace(/^ *\d+│/gm, '');
 
 const filler = (words: number, word = 'lorem') => Array.from({ length: words }, () => word).join(' ');
 const text = (snippet: string | undefined) => snippet!.replace(/^…|…$/g, '');

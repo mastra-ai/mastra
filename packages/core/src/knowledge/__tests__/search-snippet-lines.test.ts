@@ -5,8 +5,12 @@ import { KnowledgeBodyLines } from '../page-body';
 import { KNOWLEDGE_SNIPPET_TOKENS, knowledgeBodyHit, knowledgeSearchQuery } from '../search-snippet';
 
 const filler = (words: number, word = 'lorem') => Array.from({ length: words }, () => word).join(' ');
-// The excerpt after an optional `N│## Heading` first line, without the `…` cut markers.
-const excerpt = (snippet: string) => snippet.replace(/^\s*\d+│[^\n]*\n/, '').replace(/^…|…$/g, '');
+// The excerpt's text: no `N│` line numbers, no optional `N│## Heading` first line, no `…` cut markers.
+const excerpt = (snippet: string) =>
+  snippet
+    .replace(/^ *\d+│#[^\n]*\n/, '')
+    .replace(/^ *\d+│/gm, '')
+    .replace(/^…|…$/g, '');
 
 describe('knowledgeBodyHit: token window', () => {
   it('names one token budget and keeps the excerpt inside it', () => {
@@ -43,18 +47,18 @@ describe('knowledgeBodyHit: heading above a far match', () => {
     const hit = knowledgeBodyHit(body, 'manager')!;
     const heading = new KnowledgeBodyLines(body).lineAt(body.indexOf('## Refunds'));
     expect(heading).toBe(6);
-    expect(hit.snippet.startsWith('6│## Refunds\n')).toBe(true);
+    expect(hit.snippet).toMatch(/^ *6│## Refunds\n/);
     expect(hit.snippet).toContain('refund over $500 needs a manager');
   });
 
   it('adds no heading when the heading is inside the excerpt', () => {
     const near = '## Refunds\nA refund needs a manager.';
-    expect(knowledgeBodyHit(near, 'manager')!.snippet).toBe(near);
+    expect(knowledgeBodyHit(near, 'manager')!.snippet).toBe('1│## Refunds\n2│A refund needs a manager.');
   });
 
   it('adds no heading when there is none above the match', () => {
     const hit = knowledgeBodyHit(`${filler(300)} manager ${filler(300)}`, 'manager')!;
-    expect(hit.snippet).not.toMatch(/^\d+│/);
+    expect(hit.snippet.split('\n')).toHaveLength(1);
   });
 
   it('ignores a heading-looking line inside fenced code', () => {
@@ -127,7 +131,7 @@ describe('knowledgeBodyHit: line and matching lines', () => {
 // The reference is keyword search's own rule: lowercase the body, and a word matches where the
 // lowercased body contains it. Line numbers split on `\n`, which lowercasing never changes.
 describe('knowledgeBodyHit: 20,000 random bodies against the keyword-search rule', () => {
-  it('agrees on whether a body matches, on its first matching line and on how many lines match', () => {
+  it('agrees on whether a body matches, on the matching line it centres on and on how many lines match', () => {
     let seed = 20_261_124;
     const next = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
     const pick = <T>(list: T[]): T => list[Math.floor(next() * list.length)]!;
@@ -171,7 +175,11 @@ describe('knowledgeBodyHit: 20,000 random bodies against the keyword-search rule
       expect(Boolean(hit), label).toBe(expectedWhole);
       if (!hit) continue;
       matched++;
-      expect(hit.line, label).toBe(matching[0]);
+      expect(matching, label).toContain(hit.line);
+      expect(
+        hit.snippet.split('\n').some(row => row.replace(/^ */, '').startsWith(`${hit.line}│`)),
+        label,
+      ).toBe(true);
       expect(hit.matchingLines, label).toBe(matching.length);
       expect(estimateTokenCount(excerpt(hit.snippet)), label).toBeLessThanOrEqual(KNOWLEDGE_SNIPPET_TOKENS);
     }

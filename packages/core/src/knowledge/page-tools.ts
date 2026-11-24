@@ -148,7 +148,7 @@ function pageSummary(page: KnowledgePage, { refs, scopes }: KnowledgePageRefs) {
 
 /**
  * A page search hit: its summary, plus, when the body contains a matched word, a short excerpt around
- * it, the first line that has one, and how many lines do.
+ * it with every line numbered, the line it is centred on, and how many lines have a match.
  */
 function searchPageSummary(page: KnowledgePage, refs: KnowledgePageRefs, words: string) {
   const hit = knowledgeBodyHit(page.body, words);
@@ -271,7 +271,7 @@ function searchTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_search',
     description:
-      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit whose body contains a matched word carries a short `snippet` around it (with the heading it sits under, numbered, when that is out of view), the `line` of the first match and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes.',
+      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit whose body contains a matched word carries a short `snippet` around it, numbered line by line like knowledge_read (with the heading it sits under when that is out of view), the `line` the snippet is centred on and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -351,7 +351,7 @@ function searchTool(host: KnowledgePageToolHost) {
           : `${JSON.stringify(readWords.slice(0, READ_MATCH_MAX_WORDS))} (the first ${READ_MATCH_MAX_WORDS} of your ${readWords.length} search words; search again with fewer words to see the rest)`;
       const readOn = matched
         ? [
-            `snippet: each page hit's \`line\` is the first line of its body with a matched word, and \`matchingLines\` how many lines have one. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${readMatch} }.`,
+            `snippet: each page hit's \`line\` is the line its snippet is centred on (numbered as in the snippet), and \`matchingLines\` how many lines have a matched word. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${readMatch} }.`,
           ]
         : [];
       const more = [

@@ -60,7 +60,7 @@ describe('knowledge_search body snippets (r397, in-memory store)', () => {
     const page = result.results[0].page;
     expect(page.line).toBe(9);
     expect(page.matchingLines).toBe(2);
-    expect(page.snippet.startsWith('6│## Expenses\n')).toBe(true);
+    expect(page.snippet).toMatch(/^ *6│## Expenses\n/);
     expect(page.snippet).toContain('reimbursement over $500 needs a manager');
     expect(result.more).toHaveLength(1);
     expect(result.more[0]).toContain('knowledge_read { page, from: { line } }');
@@ -119,7 +119,7 @@ describe('knowledge_search body snippets (r397, in-memory store)', () => {
       body: 'Our refund policy is simple.',
     });
     const result = await mine('knowledge_search', { query: '"refund"' });
-    expect(result.results[0].page.snippet).toBe('Our refund policy is simple.');
+    expect(result.results[0].page.snippet).toBe('1│Our refund policy is simple.');
   });
 
   // The snippet matches exactly as keyword search does (`toLowerCase()` substrings), so a body the
@@ -138,7 +138,7 @@ describe('knowledge_search body snippets (r397, in-memory store)', () => {
         result.results.map((hit: Result) => hit.page.name),
         query,
       ).toEqual(['Turkey']);
-      expect(result.results[0].page.snippet, query).toBe('Flew to İSTANBUL in May.');
+      expect(result.results[0].page.snippet, query).toBe('1│Flew to İSTANBUL in May.');
     }
   });
 

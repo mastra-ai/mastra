@@ -45,7 +45,7 @@ export function createKnowledgeSearchSnippetTests(
       const { page } = result.results[0];
       expect(page.name).toBe('Finance handbook');
       expect(page.snippet).toContain("reimbursement over $500 needs a manager's sign-off");
-      expect(page.snippet.replace(/^…|…$/g, '').length).toBeLessThanOrEqual(240);
+      expect(page.snippet.replace(/^ *\d+│/gm, '').replace(/^…|…$/g, '').length).toBeLessThanOrEqual(240);
       expect(page.body).toBeUndefined();
     });
 
@@ -87,11 +87,29 @@ export function createKnowledgeSearchSnippetTests(
       const page = result.results[0].page;
       expect(page.line).toBe(9);
       expect(page.matchingLines).toBe(2);
-      expect(page.snippet.startsWith('6│## Expenses\n')).toBe(true);
+      expect(page.snippet).toMatch(/^ *6│## Expenses\n/);
       expect(page.snippet).toContain('reimbursement over $500 needs a manager');
       expect(result.more).toHaveLength(1);
       expect(result.more[0]).toContain('knowledge_read { page, from: { line } }');
       expect(result.more[0]).toContain('knowledge_read { page, match: ["reimbursement"] }');
+    });
+
+    it('reports the line its excerpt is centred on, with every excerpt line numbered like knowledge_read', async () => {
+      const { mine, me } = await run();
+      const body = [
+        'alpha is mentioned alone up here',
+        ...Array.from({ length: 30 }, (_, i) => `Filler line number ${i} about nothing much at all.`),
+        'The dense part: alpha beta gamma are together here',
+        'closing line',
+      ].join('\n');
+      await mine('knowledge_page', { op: 'write', scope: me, name: 'Dense page', body });
+      const result = await mine('knowledge_search', { query: 'alpha beta gamma' });
+      const page = result.results[0].page;
+      expect(page.line).toBe(32);
+      expect(page.matchingLines).toBe(2);
+      const rows = page.snippet.split('\n');
+      for (const row of rows) expect(row).toMatch(/^ *\d+│/);
+      expect(rows.some((row: string) => /^ *32│.*alpha beta gamma/.test(row))).toBe(true);
     });
 
     it('omits the snippet when only the name or description matches', async () => {
