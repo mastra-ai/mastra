@@ -94,7 +94,7 @@ const workspace = new Workspace({
     name: 'embedder',
     type: 'Embedder',
     description:
-      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/sandbox/search#batch-embedding).',
+      'Function that turns text into vectors. Required when `vectorStore` is set, unless the store generates embeddings itself (see [Server-side embeddings](/docs/sandbox/search#server-side-embeddings)). Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/sandbox/search#batch-embedding).',
     isOptional: true,
   },
   {
@@ -793,7 +793,7 @@ Added when a sandbox is configured:
 | Tool | Description |
 | - | - |
 | `mastra_workspace_execute_command` | Execute a shell command. Returns stdout, stderr, and exit code. When the sandbox has a process manager, accepts `background: true` to spawn a long-running process and return a PID. |
-| `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
+| `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `waitSeconds` (1 to 300) to wait for the exit. When the wait runs out first, returns the output so far and says the process is still running. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
 With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/sandbox/overview#sandboxes-per-user-or-thread), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
@@ -815,19 +815,21 @@ The `execute_command` tool accepts these options:
           {
             name: 'onStdout',
             type: '(data: string, meta: BackgroundProcessMeta) => void',
-            description: 'Callback for stdout chunks from background processes.',
+            description:
+              'Callback for stdout chunks from background processes. Meta includes pid, toolCallId, agentId, threadId, resourceId, and runId of the call that started the process.',
             isOptional: true,
           },
           {
             name: 'onStderr',
             type: '(data: string, meta: BackgroundProcessMeta) => void',
-            description: 'Callback for stderr chunks from background processes.',
+            description: 'Callback for stderr chunks from background processes. Meta matches onStdout.',
             isOptional: true,
           },
           {
             name: 'onExit',
             type: '(meta: BackgroundProcessExitMeta) => void',
-            description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
+            description:
+              'Callback when a background process exits. Meta includes the onStdout fields plus exitCode, stdout, stderr, and killedByAbort (true when the abort signal killed the process, false for a normal exit or kill_process).',
             isOptional: true,
           },
           {
@@ -883,7 +885,7 @@ Added when skills are configured:
 | Tool | Description |
 | - | - |
 | `skill` | Activate a skill by name or path. Returns the skill's full instructions, references, scripts, and assets. |
-| `skill_search` | Search across skill content. Accepts an optional list of skill names to filter and a `topK` parameter. |
+| `skill_search` | Search skill names, descriptions, and content. Accepts an optional list of skill names to filter and a `topK` parameter. |
 | `skill_read` | Read a specific file (reference, script, or asset) from a skill directory. |
 
 When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name and source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Skills with the same name](/docs/sandbox/skills#same-named-skills) for details.

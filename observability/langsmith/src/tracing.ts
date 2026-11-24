@@ -599,7 +599,14 @@ export class LangSmithExporter extends TrackingExporter<
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'provider', 'usage', 'parameters', 'completionStartTime']);
+      const otherAttributes = omitKeys(attributes, [
+        'model',
+        'provider',
+        'usage',
+        'parameters',
+        'completionStartTime',
+        'timeToFirstTokenMs',
+      ]);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,
@@ -608,7 +615,7 @@ export class LangSmithExporter extends TrackingExporter<
       // For non-LLM spans, put all attributes in metadata
       payload.metadata = {
         ...payload.metadata,
-        ...attributes,
+        ...omitKeys(attributes, ['timeToFirstTokenMs']),
       };
     }
 

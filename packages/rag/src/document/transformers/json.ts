@@ -3,13 +3,15 @@ import type { JsonChunkOptions } from '../types';
 
 export class RecursiveJsonTransformer {
   private maxSize: number;
-  private minSize: number;
   private ensureAscii: boolean;
   private convertLists: boolean;
 
-  constructor({ maxSize = 2000, minSize, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
+  constructor({ maxSize = 2000, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
+    if (!Number.isFinite(maxSize) || maxSize < 21) {
+      throw new RangeError('JSON maxSize must be at least 21');
+    }
+
     this.maxSize = maxSize;
-    this.minSize = minSize ?? Math.max(maxSize - 200, 50);
     this.ensureAscii = ensureAscii;
     this.convertLists = convertLists;
   }
@@ -138,12 +140,7 @@ export class RecursiveJsonTransformer {
         chunks: [...chunks, currentChunk],
       };
     } else if (typeof value === 'string') {
-      const stringChunks = this.splitLongString(value);
-      const newChunks = stringChunks
-        .map(chunk => {
-          return this.createChunk(chunk, fullPath);
-        })
-        .filter(chunk => RecursiveJsonTransformer.jsonSize(chunk) <= this.maxSize);
+      const newChunks = this.splitStringForPath(value, fullPath).map(chunk => this.createChunk(chunk, fullPath));
 
       return {
         currentChunk,
@@ -154,7 +151,7 @@ export class RecursiveJsonTransformer {
     const newChunk = this.createChunk(value, fullPath);
     return {
       currentChunk,
-      chunks: RecursiveJsonTransformer.jsonSize(newChunk) <= this.maxSize ? [...chunks, newChunk] : chunks,
+      chunks: [...chunks, newChunk],
     };
   }
 
@@ -202,15 +199,12 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentGroup = () => {
       if (currentGroup.length > 0) {
-        const groupChunk = this.createChunk(currentGroup, path);
-        if (RecursiveJsonTransformer.jsonSize(groupChunk) >= this.minSize) {
-          chunks.push(groupChunk);
-          currentGroup = [];
-        }
+        chunks.push(this.createChunk(currentGroup, path));
+        currentGroup = [];
       }
     };
 
-    for (const item of value) {
+    for (const [itemIndex, item] of value.entries()) {
       // Try adding item to current group
       const testGroup = [...currentGroup, item];
       const testChunk = this.createChunk(testGroup, path);
@@ -231,7 +225,7 @@ export class RecursiveJsonTransformer {
         if (this.isWithinSizeLimit(singleItemChunk)) {
           currentGroup = singleItemArray;
         } else {
-          const itemPath = [...path, String(chunks.length)];
+          const itemPath = [...path, String(itemIndex)];
           const nestedChunks = this.handleNestedObject(item, itemPath, depth + 1, maxDepth);
           chunks.push(...nestedChunks);
         }
@@ -273,11 +267,8 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentChunk = () => {
       if (Object.keys(currentChunk).length > 0) {
-        const objChunk = this.createChunk(currentChunk, path);
-        if (RecursiveJsonTransformer.jsonSize(objChunk) >= this.minSize) {
-          chunks.push(objChunk);
-          currentChunk = {};
-        }
+        chunks.push(this.createChunk(currentChunk, path));
+        currentChunk = {};
       }
     };
 
@@ -316,30 +307,66 @@ export class RecursiveJsonTransformer {
   }
 
   /**
-   * Splits long strings into smaller chunks at word boundaries
-   * Ensures each chunk is within maxSize limit
+   * Splits a string so that each produced chunk, serialized with its full field
+   * path, fits within maxSize. Pieces are cut on code-point boundaries and no
+   * content is discarded: when the field path alone leaves no room for a
+   * character, the remainder is emitted as one oversized chunk.
    */
-  private splitLongString(value: string): string[] {
-    const chunks: string[] = [];
+  private splitStringForPath(value: string, path: string[]): string[] {
+    const pieces: string[] = [];
     let remaining = value;
 
-    while (remaining.length > 0) {
-      const overhead = 20;
-      const chunkSize = Math.floor(this.maxSize - overhead);
+    const fits = (candidate: string) =>
+      RecursiveJsonTransformer.jsonSize(this.createChunk(candidate, path)) <= this.maxSize;
 
-      if (remaining.length <= chunkSize) {
-        chunks.push(remaining);
+    const splitsSurrogatePair = (index: number) => {
+      if (index <= 0 || index >= remaining.length) return false;
+      const previous = remaining.charCodeAt(index - 1);
+      const next = remaining.charCodeAt(index);
+      return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+    };
+
+    // JSON.stringify escapes a lone surrogate to six characters, so a prefix
+    // ending mid-pair can serialize larger than the pair-inclusive prefix.
+    // Measure and cut only at code-point boundaries.
+    const alignDown = (index: number) => (splitsSurrogatePair(index) ? index - 1 : index);
+
+    while (remaining.length > 0) {
+      let low = 0;
+      // Serialization never shortens a string, so a prefix that fits cannot be
+      // longer than maxSize. Bounding the search there keeps each piece's work
+      // proportional to maxSize instead of the whole remaining value.
+      let high = Math.min(remaining.length, this.maxSize);
+
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (fits(remaining.slice(0, alignDown(mid)))) {
+          low = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      let end = alignDown(low);
+
+      // The serialized field path alone exceeds maxSize: keep the remainder
+      // instead of dropping it.
+      if (end === 0) {
+        pieces.push(remaining);
         break;
       }
 
-      const lastSpace = remaining.slice(0, chunkSize).lastIndexOf(' ');
-      const splitAt = lastSpace > 0 ? lastSpace + 1 : chunkSize;
+      // Prefer splitting after a space, as the previous implementation did.
+      const lastSpace = remaining.lastIndexOf(' ', end - 1);
+      if (lastSpace > 0) {
+        end = lastSpace + 1;
+      }
 
-      chunks.push(remaining.slice(0, splitAt));
-      remaining = remaining.slice(splitAt);
+      pieces.push(remaining.slice(0, end));
+      remaining = remaining.slice(end);
     }
 
-    return chunks;
+    return pieces;
   }
 
   /**
@@ -423,27 +450,6 @@ export class RecursiveJsonTransformer {
   }
 
   /**
-   * Converts Unicode characters to their escaped ASCII representation
-   * e.g., 'café' becomes 'caf\u00e9'
-   */
-  private escapeNonAscii(obj: any): any {
-    if (typeof obj === 'string') {
-      return obj.replace(/[\u0080-\uffff]/g, char => {
-        return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
-      });
-    }
-
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.escapeNonAscii(item));
-    }
-
-    if (typeof obj === 'object' && obj !== null) {
-      return Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, this.escapeNonAscii(value)]));
-    }
-
-    return obj;
-  }
-  /**
    * Splits JSON into a list of JSON formatted strings
    */
   splitText({
@@ -457,20 +463,16 @@ export class RecursiveJsonTransformer {
   }): string[] {
     const chunks = this.splitJson({ jsonData, convertLists });
 
-    if (ensureAscii) {
-      const escapedChunks = chunks.map(chunk => this.escapeNonAscii(chunk));
-      return escapedChunks.map(chunk => JSON.stringify(chunk));
+    const serialized = chunks.map(chunk => JSON.stringify(chunk));
+
+    if (!ensureAscii) {
+      return serialized;
     }
 
-    return chunks.map(chunk =>
-      JSON.stringify(chunk, (key, value) => {
-        // Convert escaped Unicode sequences back to actual characters
-        // e.g., '\u00e9' -> 'é'
-        if (typeof value === 'string') {
-          return value.replace(/\\u[\da-f]{4}/gi, match => String.fromCharCode(parseInt(match.slice(2), 16)));
-        }
-        return value;
-      }),
+    // Non-ASCII characters only appear inside JSON string literals, so escaping each
+    // UTF-16 code unit keeps the output valid JSON that parses back to the original.
+    return serialized.map(text =>
+      text.replace(/[\u0080-\uffff]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`),
     );
   }
 

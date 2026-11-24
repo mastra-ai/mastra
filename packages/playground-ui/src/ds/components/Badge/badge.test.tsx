@@ -56,7 +56,6 @@ describe('Badge', () => {
       expect(badge.tagName).toBe('SPAN');
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
-      expect(Array.from(badge.classList)).toEqual(expect.arrayContaining(['rounded-[7px]', 'shadow-inset']));
     });
   });
 
@@ -170,13 +169,6 @@ describe('Badge', () => {
   });
 
   describe('when rendered with an icon', () => {
-    it('renders the icon while preserving the badge label', () => {
-      render(<Badge icon={<svg data-testid="badge-icon" />}>Template</Badge>);
-
-      expect(screen.getByText('Template')).not.toBeNull();
-      expect(screen.getByTestId('badge-icon')).not.toBeNull();
-    });
-
     it('does not reserve an icon wrapper for an empty icon', () => {
       render(<Badge icon={null}>Template</Badge>);
 

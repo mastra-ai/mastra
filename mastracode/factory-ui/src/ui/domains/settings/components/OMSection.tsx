@@ -11,7 +11,7 @@ import {
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -138,30 +138,7 @@ export function OMSection({
   };
 
   if (omQuery.isPending) {
-    return (
-      <div role="status" aria-label="Loading observational-memory settings">
-        <div aria-hidden className="@container flex flex-col gap-3">
-          <ol className="flex flex-col">
-            <OMRow as="li" rail="node" label="Messages" />
-            <OMRow as="li" rail="edge" label="Observe after">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-            <OMRow as="li" rail="node" label="Observer">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-            <OMRow as="li" rail="edge" label="Reflect after">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-            <OMRow as="li" rail="node" label="Reflector">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-          </ol>
-          <OMRow rail="none" label="Attachments">
-            <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-          </OMRow>
-        </div>
-      </div>
-    );
+    return <SettingsSkeleton label="Loading observational-memory settings" rows={5} />;
   }
 
   if (omQuery.data === undefined) {
@@ -210,7 +187,7 @@ export function OMSection({
               models={models}
               value={config.observer.model}
               auto={{ effectiveModelId: config.observer.effectiveModelId }}
-              placeholder="Select observer model…"
+              placeholder="Select observer model"
               aria-label="Observer model"
               size="sm"
               disabled={busy}
@@ -233,7 +210,7 @@ export function OMSection({
               models={models}
               value={config.reflector.model}
               auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-              placeholder="Select reflector model…"
+              placeholder="Select reflector model"
               aria-label="Reflector model"
               size="sm"
               disabled={busy}

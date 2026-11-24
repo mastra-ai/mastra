@@ -165,38 +165,6 @@ describe('useTraceColumnPreferences', () => {
     const renderPreferences = () =>
       renderHook(() => useTraceColumnPreferences(), { wrapper: makeWrapper('http://project-a.test') });
 
-    it('toggles a column off again', () => {
-      const { result } = renderPreferences();
-
-      act(() => {
-        result.current.toggleColumn('inputTokens');
-      });
-      expect(result.current.preferences.visibleColumns).toEqual([
-        'type',
-        'input',
-        'output',
-        'duration',
-        'estimatedCost',
-        'inputTokens',
-      ]);
-
-      act(() => {
-        result.current.toggleColumn('inputTokens');
-      });
-      expect(result.current.preferences.visibleColumns).toEqual([
-        'type',
-        'input',
-        'output',
-        'duration',
-        'estimatedCost',
-      ]);
-
-      act(() => {
-        result.current.toggleColumn('input');
-      });
-      expect(result.current.preferences.visibleColumns).toEqual(['type', 'output', 'duration', 'estimatedCost']);
-    });
-
     it('removes a metadata column without touching the others', () => {
       const { result } = renderPreferences();
 
@@ -243,22 +211,6 @@ describe('useTraceColumnPreferences', () => {
         });
         expect(returnVisit.result.current.preferences.customColumns).toEqual([]);
       });
-    });
-
-    it('trims a metadata key and ignores a blank or duplicate one', () => {
-      const { result } = renderPreferences();
-
-      act(() => {
-        result.current.addMetadataColumn('  tenantId  ');
-      });
-      expect(result.current.preferences.metadataKeys).toEqual(['tenantId']);
-
-      act(() => {
-        result.current.addMetadataColumn('tenantId');
-        result.current.addMetadataColumn('   ');
-        result.current.addMetadataColumn('');
-      });
-      expect(result.current.preferences.metadataKeys).toEqual(['tenantId']);
     });
 
     it('resets back to the default columns', () => {

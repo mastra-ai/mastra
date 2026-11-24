@@ -101,16 +101,21 @@ export const previousAgentUsage: BreakdownResponse = {
 /** Tokens and cost per model. */
 export const usageByModel: BreakdownResponse = {
   groups: [
-    { dimensions: { model: 'gpt-5' }, value: 2_000_000, estimatedCost: 12, costUnit: 'USD' },
-    { dimensions: { model: 'claude-haiku-4-5' }, value: 5_000_000, estimatedCost: 4, costUnit: 'USD' },
+    { dimensions: { provider: 'openai', model: 'gpt-5' }, value: 2_000_000, estimatedCost: 12, costUnit: 'USD' },
+    {
+      dimensions: { provider: 'anthropic', model: 'claude-haiku-4-5' },
+      value: 5_000_000,
+      estimatedCost: 4,
+      costUnit: 'USD',
+    },
   ],
 };
 
 /** Model calls per model (counted input-token events): Haiku is called more, for less. */
 export const modelSpansByModel: BreakdownResponse = {
   groups: [
-    { dimensions: { model: 'claude-haiku-4-5' }, value: 900 },
-    { dimensions: { model: 'gpt-5' }, value: 120 },
+    { dimensions: { provider: 'anthropic', model: 'claude-haiku-4-5' }, value: 900 },
+    { dimensions: { provider: 'openai', model: 'gpt-5' }, value: 120 },
   ],
 };
 

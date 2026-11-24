@@ -10,6 +10,7 @@
 
 import fs from 'node:fs';
 import type { PathLike } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -64,6 +65,14 @@ export interface InitOptionsBase {
   maxLength?: number;
   cacheDir?: string;
   showDownloadProgress?: boolean;
+  /**
+   * Threads ONNX Runtime uses to run this model. Each model has its own pool, so models loaded side by side add up.
+   * Defaults to the `MASTRA_FASTEMBED_THREADS` environment variable. Without either, a process under a CPU limit gets
+   * one thread per CPU it may use (`os.availableParallelism()`), and otherwise ONNX Runtime's default applies (one
+   * thread per physical core). Set it lower to leave CPU for the rest of the process, or when the CPU limit isn't
+   * visible to the process (e.g. a Kubernetes CPU request without a limit).
+   */
+  threads?: number;
 }
 
 interface ModelInfo {
@@ -198,10 +207,11 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
   const tokenizer = Tokenizer.fromFile(tokenizerPath);
 
   tokenizer.setTruncation(maxLength);
+  const padToken = tokenizerConfig['pad_token'];
   tokenizer.setPadding({
     maxLength,
     padId: config['pad_token_id'],
-    padToken: tokenizerConfig['pad_token'],
+    padToken: isAddedTokenMap(padToken) ? padToken.content : padToken,
   });
 
   for (const token of Object.values(tokensMap)) {
@@ -232,6 +242,16 @@ function assertValidMaxLength(maxLength: number): void {
   }
 }
 
+function resolveThreads(threads: number | undefined): number | undefined {
+  const fromEnv = process.env.MASTRA_FASTEMBED_THREADS?.trim();
+  const value = threads ?? (fromEnv ? Number(fromEnv) : undefined);
+  if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
+    const source = threads === undefined ? 'MASTRA_FASTEMBED_THREADS' : 'threads';
+    throw new RangeError(`${source} must be a positive integer, received ${threads ?? fromEnv}`);
+  }
+  return value;
+}
+
 function getRequiredOutput(outputs: Record<string, ort.Tensor>, outputName: string): ort.Tensor {
   const tensor = outputs[outputName];
   if (!tensor) {
@@ -242,12 +262,43 @@ function getRequiredOutput(outputs: Record<string, ort.Tensor>, outputName: stri
   return tensor;
 }
 
-// Pooling indexes token-level [batch, sequence, features] output; other ranks would silently yield empty vectors.
-function getOutputDimensions(outputName: string, tensor: ort.Tensor): [number, number, number] {
+// Pooling indexes token-level [batch, sequence, features] output with one row per input text; other ranks would
+// silently yield empty vectors, and other batch sizes would yield the wrong number of vectors or read missing masks.
+function getOutputDimensions(
+  outputName: string,
+  tensor: ort.Tensor,
+  expectedBatchSize: number,
+): [number, number, number] {
   if (tensor.dims.length !== 3) {
     throw new Error(`Expected model output "${outputName}" to have 3 dimensions, received [${tensor.dims.join(', ')}]`);
   }
+  if (tensor.dims[0] !== expectedBatchSize) {
+    throw new Error(
+      `Expected model output "${outputName}" to have batch size ${expectedBatchSize}, received ${tensor.dims[0]}`,
+    );
+  }
   return tensor.dims as [number, number, number];
+}
+
+/**
+ * ONNX Runtime sizes its thread pool from the machine's cores and keeps threads busy-waiting between pieces of work.
+ * Under a CPU limit (a container quota or a restricted core set) both overrun the limit, and the kernel then pauses
+ * every thread in the process, the caller's included. So the pool is sized from the cores this process may use, unless
+ * the caller set a thread count, and threads with nothing to do sleep.
+ */
+function sessionOptions(
+  executionProviders: ExecutionProvider[],
+  threads: number | undefined,
+): ort.InferenceSession.SessionOptions {
+  const usableCores = os.availableParallelism();
+  return {
+    executionProviders,
+    graphOptimizationLevel: 'all',
+    ...(threads !== undefined
+      ? { intraOpNumThreads: threads }
+      : usableCores < os.cpus().length && { intraOpNumThreads: usableCores }),
+    extra: { session: { intra_op: { allow_spinning: '0' } } },
+  };
 }
 
 export class FlagEmbedding extends Embedding {
@@ -269,8 +320,10 @@ export class FlagEmbedding extends Embedding {
     showDownloadProgress = true,
     modelAbsoluteDirPath = '',
     modelName = '',
+    threads,
   }: Partial<InitOptions> = {}) {
     assertValidMaxLength(maxLength);
+    const threadCount = resolveThreads(threads);
     if (model === EmbeddingModel.CUSTOM) {
       if (!modelAbsoluteDirPath) {
         throw new Error('For custom model, modelAbsoluteDirPath is required in FlagEmbedding.init');
@@ -294,10 +347,7 @@ export class FlagEmbedding extends Embedding {
     if (!fs.existsSync(modelPath)) {
       throw new Error(`Model file not found at ${modelPath}`);
     }
-    const session = await ort.InferenceSession.create(modelPath, {
-      executionProviders,
-      graphOptimizationLevel: 'all',
-    });
+    const session = await ort.InferenceSession.create(modelPath, sessionOptions(executionProviders, threadCount));
     return new FlagEmbedding(tokenizer, session, model);
   }
 
@@ -422,7 +472,7 @@ export class FlagEmbedding extends Embedding {
       const lastHiddenState = getRequiredOutput(output, 'last_hidden_state');
       const embeddings = getEmbeddings(
         lastHiddenState.data as unknown[] as number[],
-        getOutputDimensions('last_hidden_state', lastHiddenState),
+        getOutputDimensions('last_hidden_state', lastHiddenState, batchTexts.length),
         this.model === EmbeddingModel.AllMiniLML6V2 || this.model === EmbeddingModel.MLE5Large ? maskArray : undefined,
       );
 
@@ -475,8 +525,10 @@ export class SparseTextEmbedding extends SparseEmbedding {
     showDownloadProgress = true,
     modelAbsoluteDirPath = '',
     modelName = '',
+    threads,
   }: Partial<InitSparseOptions> = {}) {
     assertValidMaxLength(maxLength);
+    const threadCount = resolveThreads(threads);
     if (model === SparseEmbeddingModel.CUSTOM) {
       if (!modelAbsoluteDirPath) {
         throw new Error('For custom model, modelAbsoluteDirPath is required in SparseTextEmbedding.init');
@@ -500,10 +552,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
       throw new Error(`Model file not found at ${modelPath}`);
     }
 
-    const session = await ort.InferenceSession.create(modelPath, {
-      executionProviders,
-      graphOptimizationLevel: 'all',
-    });
+    const session = await ort.InferenceSession.create(modelPath, sessionOptions(executionProviders, threadCount));
 
     return new SparseTextEmbedding(tokenizer, session);
   }
@@ -611,7 +660,11 @@ export class SparseTextEmbedding extends SparseEmbedding {
       const outputTensor = getRequiredOutput(output, 'output');
       // @ts-expect-error cpuData exists at runtime on onnxruntime Tensor
       const logits = outputTensor.cpuData as Float32Array;
-      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions('output', outputTensor);
+      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions(
+        'output',
+        outputTensor,
+        batchTexts.length,
+      );
 
       const sparseVectors: SparseVector[] = [];
 

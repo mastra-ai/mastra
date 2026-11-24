@@ -228,6 +228,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId,
   requestContext,
   respondFn,
+  abortSignal,
 }: {
   params: StreamParams<OUTPUT>;
   response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
@@ -236,6 +237,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId?: string;
   requestContext?: RequestContext<any>;
   respondFn: ToolCallRespondFn<OUTPUT>;
+  abortSignal?: AbortSignal;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -256,7 +258,13 @@ async function executeToolCallAndRespond<OUTPUT>({
       return response;
     }
 
+    // Run every client tool the model called, then send all results back in one turn.
+    const toolResults: Record<string, unknown>[] = [];
     for (const toolCall of toolCalls) {
+      // Don't start more client tools once the caller has cancelled.
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
@@ -299,32 +307,36 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolResultContent.__mastraObservability = observability;
         }
 
-        // Build updated messages from the response, adding the tool result
-        // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-        // When no threadId (stateless), include full conversation history for context
-        const newMessages = [
-          ...(response.response.messages || []),
-          {
-            role: 'tool',
-            content: [toolResultContent],
-          },
-        ];
-
-        const updatedMessages = threadId
-          ? newMessages
-          : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
-
-        const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
-          structuredOutput?: StructuredOutputOptions<OUTPUT>;
-        } = {
-          ...params,
-          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
-        };
-
-        delete (respondOptions as { messages?: MessageListInput }).messages;
-
-        return respondFn(updatedMessages as MessageListInput, respondOptions);
+        toolResults.push(toolResultContent);
       }
+    }
+
+    if (toolResults.length > 0) {
+      // Build updated messages from the response, adding the tool results
+      // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+      // When no threadId (stateless), include full conversation history for context
+      const newMessages = [
+        ...(response.response.messages || []),
+        {
+          role: 'tool',
+          content: toolResults,
+        },
+      ];
+
+      const updatedMessages = threadId
+        ? newMessages
+        : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
+
+      const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+        structuredOutput?: StructuredOutputOptions<OUTPUT>;
+      } = {
+        ...params,
+        clientTools: params.clientToolsResolver?.() ?? params.clientTools,
+      };
+
+      delete (respondOptions as { messages?: MessageListInput }).messages;
+
+      return respondFn(updatedMessages as MessageListInput, respondOptions);
     }
   }
 
@@ -1253,13 +1265,12 @@ export class Agent extends BaseResource {
   async generateLegacy(
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
-  // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
   async generateLegacy<Output extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, any, any>>;
+  ): Promise<GenerateReturn<any, Output, undefined>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodSchema>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, any, any>>;
+  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodSchema | undefined = undefined,
     _StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
@@ -1299,7 +1310,12 @@ export class Agent extends BaseResource {
         return response;
       }
 
+      const toolResults: Record<string, unknown>[] = [];
       for (const toolCall of toolCalls) {
+        // Don't start more client tools once the caller has cancelled.
+        if (abortSignal?.aborted) {
+          throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+        }
         const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
@@ -1322,30 +1338,29 @@ export class Agent extends BaseResource {
             },
           });
 
-          // Build updated messages from the response, adding the tool result
-          // Do NOT re-include the original user message to avoid storage duplicates
-          const updatedMessages = [
-            ...(response.response as unknown as { messages: CoreMessage[] }).messages,
-            {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result,
-                  ...(observability ? { __mastraObservability: observability } : {}),
-                },
-              ],
-            },
-          ];
-          // Recursive call to generateLegacy with updated messages
-          // Using type assertion to handle the complex overload types
-          return (this.generateLegacy as any)({
-            ...params,
-            messages: updatedMessages,
+          toolResults.push({
+            type: 'tool-result',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            result,
+            ...(observability ? { __mastraObservability: observability } : {}),
           });
         }
+      }
+
+      if (toolResults.length > 0) {
+        // Build updated messages from the response, adding the tool results
+        // Do NOT re-include the original user message to avoid storage duplicates
+        const updatedMessages = [
+          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          { role: 'tool', content: toolResults },
+        ];
+        // Recursive call to generateLegacy with updated messages
+        // Using type assertion to handle the complex overload types
+        return (this.generateLegacy as any)({
+          ...params,
+          messages: updatedMessages,
+        });
       }
     }
 
@@ -1416,6 +1431,7 @@ export class Agent extends BaseResource {
         threadId,
         requestContext: requestContext as RequestContext<any>,
         respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
+        abortSignal,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
@@ -2676,7 +2692,7 @@ export class Agent extends BaseResource {
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   input: toolCall.args,
-                  result,
+                  output: { type: 'json', value: result as JSONValue },
                   ...(modelOutput != null
                     ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
                     : {}),
@@ -3414,20 +3430,27 @@ export class Agent extends BaseResource {
    * Use this to resume receiving events after a disconnection.
    *
    * @param params.runId - The run ID to observe
-   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @param params.offset - Run-log position to resume from. Chunks from `observe()`, and from `stream()` on
+   *   durable and evented agents, carry an `index`; pass the `index + 1` of the last chunk that has one. Chunks without an `index`
+   *   (`abort` and structured-output `object` chunks) are skipped when choosing the offset. If omitted,
+   *   replays the chunks still cached for the run, or only live chunks if the server's transport can't replay.
    * @returns Promise containing a streaming Response
    *
    * @example
    * ```typescript
-   * // Reconnect to a stream from a specific position
-   * const response = await client.agents('my-agent').observe({
-   *   runId: 'run-123',
-   *   offset: 42, // Resume from event 42
-   * });
+   * const agent = client.getAgent('my-agent');
+   * let offset = 0;
+   * const trackOffset = async (chunk: { index?: number }) => {
+   *   if (chunk.index === undefined) return;
+   *   offset = chunk.index + 1;
+   * };
    *
-   * await response.processDataStream({
-   *   onChunk: (chunk) => console.log('Received:', chunk),
-   * });
+   * const stream = await agent.stream(messages, { runId: 'run-123' });
+   * await stream.processDataStream({ onChunk: trackOffset });
+   *
+   * // After a dropped connection, resume where the last indexed chunk left off
+   * const response = await agent.observe({ runId: 'run-123', offset });
+   * await response.processDataStream({ onChunk: trackOffset });
    * ```
    */
   async observe(params: { runId: string; offset?: number }): Promise<

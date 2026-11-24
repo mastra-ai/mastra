@@ -15,6 +15,7 @@ import {
   nestedMetadataFields,
   noSpanQueryCapabilities,
   noTimeToFirstChunkCapabilities,
+  noTimeToFirstTokenCapabilities,
   noTraceQueryCapabilities,
 } from './fixtures/columns-menu';
 import { server } from '@/test/msw-server';
@@ -90,12 +91,61 @@ describe('ColumnsMenu', () => {
   });
 
   describe('when the scope is threads', () => {
-    it('renders nothing and asks the server for nothing', async () => {
-      // No handlers: MSW fails any request, so a capability or discovery call would throw.
-      const { container } = renderMenu({ scope: 'threads' });
+    it('offers the thread columns, including the message count and both streaming timings', async () => {
+      setHandlers();
+      renderMenu({ scope: 'threads', value: TRACE_COLUMN_CATALOGS.threads.defaults });
 
-      expect(container.innerHTML).toBe('');
-      expect(screen.queryByRole('button', { name: 'Columns' })).toBeNull();
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Messages' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Time to first token' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Model' })).toBeNull();
+    });
+
+    it('offers neither usage nor metadata columns, and runs no discovery', async () => {
+      setHandlers();
+      renderMenu({ scope: 'threads', value: TRACE_COLUMN_CATALOGS.threads.defaults });
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Input tokens' })).toBeNull();
+      expect(screen.queryByRole('menuitem', { name: 'Add metadata column' })).toBeNull();
+      expect(onFieldsRequest).not.toHaveBeenCalled();
+    });
+
+    it('does not offer the streaming timings when the store does not record them', async () => {
+      setHandlers({
+        capabilities: {
+          ...allCapabilities,
+          capabilities: {
+            ...allCapabilities.capabilities,
+            traceQueryTimeToFirstChunk: false,
+            traceQueryTimeToFirstToken: false,
+          },
+        },
+      });
+      renderMenu({ scope: 'threads', value: TRACE_COLUMN_CATALOGS.threads.defaults });
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Messages' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeNull();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first token' })).toBeNull();
+    });
+
+    it('hands the host the thread defaults on reset', async () => {
+      setHandlers();
+      renderMenu({
+        scope: 'threads',
+        value: { visibleColumns: ['timeToFirstToken'], customColumns: [], metadataKeys: [] },
+      });
+
+      await openMenuWhenReady();
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset to defaults' }));
+
+      expect(onChange).toHaveBeenCalledWith(TRACE_COLUMN_CATALOGS.threads.defaults);
     });
   });
 
@@ -284,14 +334,79 @@ describe('ColumnsMenu', () => {
       expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeNull();
     });
 
-    it('is not a span column', async () => {
+    it('is offered for spans too, whose rows carry it', async () => {
       setHandlers();
+      renderMenu({ scope: 'spans', value: TRACE_COLUMN_CATALOGS.spans.defaults });
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeTruthy();
+    });
+
+    it('is not offered for spans when the store does not record it', async () => {
+      setHandlers({ capabilities: noTimeToFirstChunkCapabilities });
       renderMenu({ scope: 'spans', value: TRACE_COLUMN_CATALOGS.spans.defaults });
 
       await openMenuWhenReady();
 
       expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
       expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeNull();
+    });
+  });
+
+  describe('time to first token column', () => {
+    it('offers it when the store records it, and hands the host the selection with it', async () => {
+      setHandlers();
+      renderMenu();
+
+      await openMenuWhenReady();
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first token' }));
+
+      expect(onChange).toHaveBeenCalledWith({
+        ...DEFAULT_TRACE_COLUMN_PREFERENCES,
+        visibleColumns: [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns, 'timeToFirstToken'],
+      });
+    });
+
+    it('does not offer it when the store does not record it, but keeps time to first chunk', async () => {
+      setHandlers({ capabilities: noTimeToFirstTokenCapabilities });
+      renderMenu();
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first token' })).toBeNull();
+    });
+
+    it('does not offer it without the trace query API, whose rows are the only ones that carry it', async () => {
+      setHandlers();
+      renderMenu({ queryEnabled: false });
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first token' })).toBeNull();
+    });
+
+    it('is offered for spans too, right after time to first chunk', async () => {
+      setHandlers();
+      renderMenu({ scope: 'spans', value: TRACE_COLUMN_CATALOGS.spans.defaults });
+
+      await openMenuWhenReady();
+      await screen.findByRole('menuitemcheckbox', { name: 'Time to first token' });
+
+      const names = screen.getAllByRole('menuitemcheckbox').map(item => item.textContent);
+      expect(names.indexOf('Time to first token')).toBe(names.indexOf('Time to first chunk') + 1);
+    });
+
+    it('is not offered for spans when the store does not record it', async () => {
+      setHandlers({ capabilities: noTimeToFirstTokenCapabilities });
+      renderMenu({ scope: 'spans', value: TRACE_COLUMN_CATALOGS.spans.defaults });
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first token' })).toBeNull();
     });
   });
 

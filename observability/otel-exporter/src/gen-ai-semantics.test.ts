@@ -159,7 +159,7 @@ describe('getAttributes - token usage', () => {
       usage: { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } },
     });
     const attrs = getAttributes(span);
-    expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(400);
+    expect(attrs['gen_ai.usage.reasoning.output_tokens']).toBe(400);
   });
 
   it('should extract model, provider, usage, and RAG metadata for embedding spans', () => {
@@ -181,6 +181,25 @@ describe('getAttributes - token usage', () => {
     expect(attrs['mastra.rag_embedding.mode']).toBe('ingest');
     expect(attrs['mastra.rag_embedding.dimensions']).toBe(1536);
     expect(attrs['mastra.rag_embedding.input_count']).toBe(3);
+  });
+});
+
+describe('getAttributes - provider name', () => {
+  it.each([
+    ['openai', 'openai'],
+    ['openai.responses', 'openai'],
+    ['anthropic.messages', 'anthropic'],
+    ['google', 'gcp.gemini'],
+    ['google.generative-ai', 'gcp.gemini'],
+    ['google.vertex.chat', 'gcp.vertex_ai'],
+    ['vertex.anthropic.messages', 'gcp.vertex_ai'],
+    ['azure.responses', 'azure.ai.openai'],
+    ['amazon-bedrock', 'aws.bedrock'],
+    ['acme.chat', 'acme.chat'],
+  ])('reports AI SDK provider %s as %s', (provider, expected) => {
+    const attrs = getAttributes(createModelInferenceSpan({ model: 'test-model', provider }));
+
+    expect(attrs['gen_ai.provider.name']).toBe(expected);
   });
 });
 
@@ -219,7 +238,8 @@ describe('formatUsageMetrics', () => {
   it('should extract reasoning from outputDetails', () => {
     const usage: UsageStats = { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } };
     const result = formatUsageMetrics(usage);
-    expect(result['gen_ai.usage.reasoning_tokens']).toBe(400);
+    expect(result['gen_ai.usage.reasoning.output_tokens']).toBe(400);
+    expect(result).not.toHaveProperty('gen_ai.usage.reasoning_tokens');
   });
 
   it('should not emit non-spec cache attribute names that older versions used', () => {
@@ -428,6 +448,12 @@ describe('getAttributes - workflow attributes', () => {
     expect(getAttributes(span)['mastra.workflow_run.status']).toBe('success');
   });
 
+  it('names the workflow on its run span', () => {
+    const span = createWorkflowSpan(SpanType.WORKFLOW_RUN, { entityId: 'order-flow', entityName: 'order-flow' });
+
+    expect(getAttributes(span)['gen_ai.workflow.name']).toBe('order-flow');
+  });
+
   it('adds no workflow-specific keys when a workflow span carries no attributes', () => {
     const span = createWorkflowSpan(SpanType.WORKFLOW_PARALLEL, { attributes: {} });
     const attrs = getAttributes(span);
@@ -539,7 +565,7 @@ describe('getAttributes - one span per model call', () => {
       'gen_ai.usage.input_tokens': 61,
       'gen_ai.usage.output_tokens': 14,
       'gen_ai.usage.cache_read.input_tokens': 40,
-      'gen_ai.response.finish_reasons': JSON.stringify(['tool-calls']),
+      'gen_ai.response.finish_reasons': ['tool-calls'],
       'gen_ai.response.model': 'gpt-5-2025-08-07',
       'gen_ai.response.id': 'resp-1',
       'gen_ai.agent.name': 'weather-agent',
@@ -547,6 +573,30 @@ describe('getAttributes - one span per model call', () => {
     expect(attrs).toHaveProperty('gen_ai.input.messages');
     expect(attrs).toHaveProperty('gen_ai.output.messages');
     expect(getSpanName(span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o' }))).toBe('chat gpt-4o');
+  });
+
+  it('gives each output message the finish reason in the output messages schema spelling', () => {
+    const outputMessages = (finishReason?: string) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason }),
+          output: { text: 'Checking.', toolCalls: [{ toolCallId: 'call-1', toolName: 'get_weather', args: {} }] },
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    expect(outputMessages('tool-calls')).toEqual([
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'text', content: 'Checking.' },
+          { type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: '{}' },
+        ],
+        finish_reason: 'tool_call',
+      },
+    ]);
+    expect(outputMessages('content-filter')[0].finish_reason).toBe('content_filter');
+    expect(outputMessages('length')[0].finish_reason).toBe('length');
+    expect(outputMessages(undefined)[0].finish_reason).toBe('unknown');
   });
 
   it('exports the generation span as a parent without model or usage so backends do not count it twice', () => {

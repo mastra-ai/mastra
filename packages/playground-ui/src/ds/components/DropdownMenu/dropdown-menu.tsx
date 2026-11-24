@@ -1,9 +1,10 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
-import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
   MENU_SIDE_OFFSET,
   menuItemCheckClass,
@@ -63,7 +64,7 @@ type DropdownMenuSubTriggerProps = MenuPrimitive.SubmenuTrigger.Props & {
 const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubTriggerProps>(
   ({ className, inset, hint, children, ...props }, ref) => (
     <MenuPrimitive.SubmenuTrigger
-      ref={useFluidMenuItemRef(ref)}
+      ref={ref}
       className={cn(menuItemClass, inset && menuItemInsetClass, className)}
       {...props}
     >
@@ -74,7 +75,7 @@ const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubT
         </span>
       )}
       <span className={cn(menuItemTrailingIconClass, hint != null && 'ml-0')}>
-        <ChevronDown className="-rotate-90" />
+        <IconChevronDownMedium className="-rotate-90" />
       </span>
     </MenuPrimitive.SubmenuTrigger>
   ),
@@ -114,7 +115,6 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
     // Default to the nearest SideDialog/Drawer popup so the submenu stays
     // interactive inside a modal drawer.
     const resolvedContainer = usePortalContainer();
-    const menu = useFluidMenu();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
       alignOffset,
@@ -140,7 +140,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
             {...props}
           >
             {header && <div className="shrink-0">{header}</div>}
-            <MenuScrollArea menu={menu}>{children}</MenuScrollArea>
+            <MenuScrollArea>{children}</MenuScrollArea>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>
@@ -181,7 +181,6 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
     // Default to the nearest SideDialog/Drawer popup so the menu stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu();
     const positionerProps: DropdownMenuContentPositionerProps = {
       align,
       alignOffset,
@@ -211,9 +210,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
             )}
             {...props}
           >
-            <MenuScrollArea menu={menu} size={size}>
-              {children}
-            </MenuScrollArea>
+            <MenuScrollArea size={size}>{children}</MenuScrollArea>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>
@@ -233,7 +230,7 @@ type DropdownMenuItemProps = MenuPrimitive.Item.Props & {
 const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>(
   ({ className, inset, variant = 'default', size = 'default', onSelect, onClick, ...props }, ref) => (
     <MenuPrimitive.Item
-      ref={useFluidMenuItemRef(ref)}
+      ref={ref}
       data-inset={inset ? '' : undefined}
       data-variant={variant}
       onClick={event => {
@@ -252,17 +249,20 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
 );
 DropdownMenuItem.displayName = 'DropdownMenuItem';
 
+/** A menu row that navigates. Pass `render` to route it through your framework's link. */
+const DropdownMenuLinkItem = React.forwardRef<HTMLAnchorElement, MenuPrimitive.LinkItem.Props>(
+  ({ className, ...props }, ref) => (
+    <MenuPrimitive.LinkItem ref={ref} className={cn(menuItemClass, className)} {...props} />
+  ),
+);
+DropdownMenuLinkItem.displayName = 'DropdownMenuLinkItem';
+
 const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.CheckboxItem.Props>(
   ({ className, children, checked, ...props }, ref) => (
-    <MenuPrimitive.CheckboxItem
-      ref={useFluidMenuItemRef(ref)}
-      className={cn(menuItemClass, className)}
-      checked={checked}
-      {...props}
-    >
+    <MenuPrimitive.CheckboxItem ref={ref} className={cn(menuItemClass, className)} checked={checked} {...props}>
       {children}
       <MenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </MenuPrimitive.CheckboxItemIndicator>
     </MenuPrimitive.CheckboxItem>
   ),
@@ -271,10 +271,10 @@ DropdownMenuCheckboxItem.displayName = 'DropdownMenuCheckboxItem';
 
 const DropdownMenuRadioItem = React.forwardRef<HTMLDivElement, MenuPrimitive.RadioItem.Props>(
   ({ className, children, ...props }, ref) => (
-    <MenuPrimitive.RadioItem ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
+    <MenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
       {children}
       <MenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </MenuPrimitive.RadioItemIndicator>
     </MenuPrimitive.RadioItem>
   ),
@@ -299,8 +299,12 @@ const DropdownMenuSeparator = React.forwardRef<HTMLDivElement, MenuPrimitive.Sep
 );
 DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';
 
-const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn(menuShortcutClass, className)} {...props} />;
+const DropdownMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span className={cn(menuShortcutClass, className)} {...props}>
+      <KeyLabel>{children}</KeyLabel>
+    </span>
+  );
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 
@@ -395,6 +399,7 @@ DropdownMenu.Content = DropdownMenuContent;
 DropdownMenu.Group = DropdownMenuGroup;
 DropdownMenu.Portal = DropdownMenuPortal;
 DropdownMenu.Item = DropdownMenuItem;
+DropdownMenu.LinkItem = DropdownMenuLinkItem;
 DropdownMenu.CheckboxItem = DropdownMenuCheckboxItem;
 DropdownMenu.RadioItem = DropdownMenuRadioItem;
 DropdownMenu.Label = DropdownMenuLabel;

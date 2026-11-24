@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import type { BuilderSettingsResponse, DatasetRecord, GetScoresScorers_Response } from '@mastra/client-js';
+import { datasetVersionsResponse } from '@mastra/playground-ui/domains/datasets';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { datasetVersionsResponse } from '../../__tests__/fixtures/dataset-versions';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDataset, buildListDatasetsResponse } from '../../__tests__/fixtures/datasets';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import {
@@ -153,7 +153,8 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
-      expect(await screen.findByText('3 items · latest')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('latest')).toBeDefined();
       expect(runButton().disabled).toBe(true);
 
       await pickAgentOne();
@@ -208,7 +209,8 @@ describe('ExperimentTriggerDialog', () => {
 
       await waitFor(() => expect(targetField().value).toBe('Agent One'));
       expect(datasetField().value).toBe('Dataset 1');
-      expect(await screen.findByText('3 items · v11')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('v11')).toBeDefined();
       await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
       // The pinned version shows in the dataset hint; Advanced stays closed.
       expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');

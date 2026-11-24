@@ -29,6 +29,7 @@ import {
   surfaceShade,
   getContrastText,
 } from '../theme.js';
+import { appendBoundedOutput } from '../utils/bounded-output.js';
 import { truncateAnsi } from './ansi.js';
 import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -302,7 +303,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     ) {
       return;
     }
-    this.streamingOutput += sanitizeAnsiForRendering(output);
+    this.streamingOutput = appendBoundedOutput(this.streamingOutput, sanitizeAnsiForRendering(output));
     this.rebuild();
   }
 

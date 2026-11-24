@@ -592,6 +592,143 @@ describe('Span', () => {
 
       expect(instance.rebuildSpan(span.exportSpan()).exportSpan().links).toEqual([callerSpan]);
     });
+
+    it('exports native span fields only when set and keeps them when a span is rebuilt', () => {
+      const instance = tracing();
+      const fields = {
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        outcome: 'limit' as const,
+        stopReason: 'max_steps' as const,
+        stopReasonContext: { maxSteps: 10 },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
+      const bare = instance.startSpan({ type: SpanType.GENERIC, name: 'bare' });
+
+      expect(span.exportSpan()).toMatchObject(fields);
+      expect(instance.rebuildSpan(span.snapshot()).exportSpan()).toMatchObject(fields);
+      for (const key of Object.keys(fields)) {
+        expect(bare.exportSpan()).not.toHaveProperty(key);
+      }
+    });
+
+    it('preserves custom producer values through update, end and rebuild', () => {
+      const instance = tracing();
+      const fields = {
+        outcome: 'custom_result',
+        stopReason: 'custom_policy',
+        stopReasonContext: { ticket: 'SUP-123', details: { retry: true } },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'custom', ...fields });
+      expect(span.exportSpan()).toMatchObject(fields);
+      const rebuilt = instance.rebuildSpan(span.snapshot());
+      expect(rebuilt.exportSpan()).toMatchObject(fields);
+      rebuilt.update({ stopReasonContext: { custom: 'updated' } });
+      rebuilt.end();
+      expect(rebuilt.exportSpan()).toMatchObject({ ...fields, stopReasonContext: { custom: 'updated' } });
+      const knownReason = instance.startSpan({ type: SpanType.GENERIC, name: 'custom guardrail' });
+      knownReason.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { custom: 'retained' } });
+      expect(knownReason.exportSpan().stopReasonContext).toEqual({ custom: 'retained' });
+    });
+  });
+
+  describe('time to first token', () => {
+    const at = (ms: number) => new Date(Date.parse('2026-01-01T00:00:00Z') + ms);
+
+    it('exports the number the tracker stored in the attributes', () => {
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const step = instance.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'step: 0',
+        startTime: at(0),
+        attributes: { timeToFirstTokenMs: 210, completionStartTime: at(250) },
+      });
+      const inference = step.createChildSpan({
+        type: SpanType.MODEL_INFERENCE,
+        name: 'inference: 0',
+        startTime: at(40),
+        attributes: { timeToFirstTokenMs: 210, completionStartTime: at(250) },
+      });
+      const noChunk = instance.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'step: 1',
+        startTime: at(0),
+        attributes: { streaming: true },
+      });
+
+      expect(inference.exportSpan().timeToFirstTokenMs).toBe(210);
+      expect(step.exportSpan().timeToFirstTokenMs).toBe(210);
+      expect(noChunk.exportSpan()).not.toHaveProperty('timeToFirstTokenMs');
+    });
+  });
+
+  describe('model and provider', () => {
+    const nativePair = (span: { exportSpan(): object }) => {
+      const exported = span.exportSpan();
+      return Object.fromEntries(Object.entries(exported).filter(([key]) => key === 'model' || key === 'provider'));
+    };
+
+    it('exports the model and provider of the span itself, never of a parent or child', () => {
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const run = instance.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run', attributes: {} });
+      const generation = run.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'generation',
+        attributes: { model: 'gpt-4o', provider: 'openai', responseModel: 'gpt-4o-2024-08-06' },
+      });
+      const step = generation.createChildSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'step: 0',
+        attributes: { model: 'claude-sonnet-4-5', provider: 'anthropic' },
+      });
+      const tool = step.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool', attributes: {} });
+
+      expect(nativePair(run)).toStrictEqual({});
+      expect(nativePair(generation)).toStrictEqual({ model: 'gpt-4o', provider: 'openai' });
+      expect(nativePair(step)).toStrictEqual({ model: 'claude-sonnet-4-5', provider: 'anthropic' });
+      expect(nativePair(tool)).toStrictEqual({});
+      expect(generation.exportSpan().attributes).toMatchObject({ model: 'gpt-4o', provider: 'openai' });
+    });
+
+    it('exports neither field when the span has only half a pair, an empty string, or a non-string model', () => {
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const generationWith = (attributes: Record<string, unknown>) =>
+        instance.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation', attributes: attributes as never });
+
+      expect(nativePair(generationWith({ model: 'gpt-4o' }))).toStrictEqual({});
+      expect(nativePair(generationWith({ provider: 'openai' }))).toStrictEqual({});
+      expect(nativePair(generationWith({ model: '', provider: 'openai' }))).toStrictEqual({});
+      expect(nativePair(generationWith({ model: 'gpt-4o', provider: '' }))).toStrictEqual({});
+      expect(nativePair(generationWith({ model: { modelId: 'gpt-4o' }, provider: 'openai' }))).toStrictEqual({});
+    });
+
+    it('exports the pair set by a later update', () => {
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const step = instance.startSpan({ type: SpanType.MODEL_STEP, name: 'step: 0', attributes: {} });
+      expect(nativePair(step)).toStrictEqual({});
+
+      step.update({ attributes: { model: 'gpt-4o-mini', provider: 'openai' } });
+      expect(nativePair(step)).toStrictEqual({ model: 'gpt-4o-mini', provider: 'openai' });
+    });
   });
 
   describe('getExternalParentId', () => {

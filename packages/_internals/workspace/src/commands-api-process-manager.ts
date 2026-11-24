@@ -16,6 +16,24 @@ export interface CommandsApiStreamOptions {
   timeoutMs?: number;
 }
 
+const KILL_DESCENDANTS_TIMEOUT_MS = 10_000;
+
+/**
+ * A shell command that kills every process `pid` started, at any depth, but
+ * not `pid` itself. It pauses `pid` first: a wrapper like npm exits on its own
+ * once its child dies, and `kill(pid)` would then report it wasn't running.
+ */
+function killDescendants(pid: number): string {
+  return [
+    `kill -STOP ${pid}`,
+    // Pause each child before going deeper, so nothing can start new processes
+    // meanwhile. The recursion runs in a subshell so it can't overwrite `child`.
+    'kill_children() { for child in $(pgrep -P "$1"); do kill -STOP "$child"; (kill_children "$child"); kill -KILL "$child"; done; }',
+    `kill_children ${pid}`,
+    'true',
+  ].join('\n');
+}
+
 /** The envd commands calls the process manager makes (E2B's `sandbox.commands`). */
 export interface CommandsApi {
   run(
@@ -25,6 +43,8 @@ export interface CommandsApi {
       stdin?: boolean;
       cwd?: string;
       envs?: Record<string, string>;
+      /** OS user to run the command as. Omitted when the provider has no user configured. */
+      user?: string;
     },
   ): Promise<CommandsApiHandle>;
   connect(pid: number, opts?: CommandsApiStreamOptions): Promise<CommandsApiHandle>;
@@ -162,7 +182,23 @@ export class CommandsApiProcessHandle extends ProcessHandle {
 
   async kill(): Promise<boolean> {
     if (this.exitCode !== undefined) return false;
-    return this.manager.runCommands('kill', commands => commands.kill(this.inner.pid));
+    return this.manager.runCommands('kill', async commands => {
+      // envd signals only the process itself, so a wrapper like `npm run dev`
+      // would leave the dev server it started running. Take those down first.
+      // Best effort: failing to reach them mustn't stop the kill itself.
+      try {
+        const descendants = await commands.run(killDescendants(this.inner.pid), {
+          background: true,
+          stdin: false,
+          timeoutMs: KILL_DESCENDANTS_TIMEOUT_MS,
+          // Signal the tree as the same user that started it: a different user
+          // cannot signal these processes, and the tree would be left running.
+          ...(this.manager.defaultUser !== undefined && { user: this.manager.defaultUser }),
+        });
+        await descendants.wait();
+      } catch {}
+      return commands.kill(this.inner.pid);
+    });
   }
 
   async sendStdin(data: string): Promise<void> {
@@ -186,6 +222,12 @@ export interface CommandsApiProcessManagerOptions {
   env?: Record<string, string | undefined>;
   /** Default timeout in milliseconds for commands that don't specify one. */
   defaultTimeout?: number;
+  /**
+   * OS user every command this manager starts runs as. Providers pass the user
+   * their sandbox is configured with; leaving it unset keeps the provider's own
+   * default user.
+   */
+  user?: string;
 }
 
 /**
@@ -196,10 +238,13 @@ export abstract class CommandsApiProcessManager<
   TSandbox extends MastraSandbox = MastraSandbox,
 > extends SandboxProcessManager<TSandbox> {
   protected readonly defaultTimeout?: number;
+  /** Read by {@link CommandsApiProcessHandle.kill}, which must run as the same user. */
+  readonly defaultUser?: string;
 
-  constructor({ defaultTimeout, ...options }: CommandsApiProcessManagerOptions = {}) {
+  constructor({ defaultTimeout, user, ...options }: CommandsApiProcessManagerOptions = {}) {
     super(options);
     this.defaultTimeout = defaultTimeout;
+    this.defaultUser = user;
   }
 
   /** Run `fn` against the provider's current commands handle. */
@@ -236,6 +281,8 @@ export abstract class CommandsApiProcessManager<
         // Without this the SDK falls back to its own 60s connection deadline,
         // which bounds the whole command and kills anything that runs longer.
         timeoutMs: options.timeout ?? this.defaultTimeout,
+        // Left off entirely when unset, so the provider keeps its own default user.
+        ...(this.defaultUser !== undefined && { user: this.defaultUser }),
         onStdout: output.onStdout,
         onStderr: output.onStderr,
       });

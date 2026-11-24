@@ -11,8 +11,9 @@
  * - Thread-scoped browser isolation
  */
 
-import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
+import { DEFAULT_THREAD_ID, MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
 import type {
+  BrowserCookie,
   BrowserState,
   BrowserTabState,
   ScreencastOptions,
@@ -85,18 +86,62 @@ export class BrowserViewer extends MastraBrowser {
       browserConfig: { ...config, headless: this.headless },
       logger: this.logger,
       onSessionCreated: session => {
-        // Notify listeners so screencast can start for this thread
-        this.notifyBrowserReady(session.threadId);
+        // Add waiting cookies first, so a ready listener that navigates is already signed in.
+        // Then notify listeners so screencast can start for this thread.
+        // Until then hasThreadSession() is false, so listeners registered meanwhile wait too.
+        // If they can't be added, launch() rejects and the browser closes without being reported ready.
+        const { threadId } = session;
+        this.cookiesNotAdded.add(threadId);
+        const adding = this.addPendingCookies(threadId);
+        this.cookieAdds.set(threadId, adding);
+        void adding.then(
+          () => {
+            this.cookiesNotAdded.delete(threadId);
+            this.notifyBrowserReady(threadId);
+          },
+          async error => {
+            this.logger?.warn?.(`Couldn't add cookies for thread ${threadId}: ${error}`);
+            await (
+              threadId === DEFAULT_THREAD_ID
+                ? this.threadManager.closeSharedBrowser()
+                : this.threadManager.closeThreadBrowser(threadId)
+            ).catch(() => {});
+            this.cookiesNotAdded.delete(threadId);
+          },
+        );
       },
       onBrowserCreated: (_browser, threadId, _cdpUrl) => {
         this.logger?.debug?.(`Browser created for thread ${threadId}`);
       },
       onBrowserClosed: threadId => {
         this.logger?.debug?.(`Browser closed for thread ${threadId}`);
+        this.cookieAdds.delete(threadId);
+        this.cookiesNotAdded.delete(threadId);
         // Notify base class callbacks so ViewerRegistry gets notified
         this.notifyBrowserClosed(threadId);
       },
     });
+  }
+
+  /** Threads whose browser is open but whose waiting cookies aren't added yet. */
+  private readonly cookiesNotAdded = new Set<string>();
+
+  /** Each new browser's cookie adding, so launch() and friends share its result instead of trying again. */
+  private readonly cookieAdds = new Map<string, Promise<void>>();
+
+  /** Wait for the new browser's cookies (rejecting if they failed), then add any queued since. */
+  private async addWaitingCookies(threadId: string): Promise<void> {
+    await this.cookieAdds.get(this.threadManager.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId);
+    await this.addPendingCookies(threadId);
+  }
+
+  private addingCookies(threadId: string): boolean {
+    return this.cookiesNotAdded.has(this.threadManager.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId);
+  }
+
+  /** A thread's browser isn't ready for listeners until its waiting cookies are added. */
+  override hasThreadSession(threadId: string): boolean {
+    return !this.addingCookies(threadId) && super.hasThreadSession(threadId);
   }
 
   // ---------------------------------------------------------------------------
@@ -131,6 +176,8 @@ export class BrowserViewer extends MastraBrowser {
       // Shared mode: launch single browser
       await this.threadManager.createSharedSession();
     }
+    // Before launch() reports the browser ready, so ready listeners that navigate are signed in.
+    await this.addWaitingCookies(this.getCurrentThread());
     // For thread scope, browsers are launched lazily per thread via ensureReady()
   }
 
@@ -164,13 +211,16 @@ export class BrowserViewer extends MastraBrowser {
     }
 
     await super.ensureReady();
+    await this.addWaitingCookies(threadId);
   }
 
   /**
    * Check if browser is running (for current thread in thread scope).
    */
   override isBrowserRunning(threadId?: string): boolean {
-    return this.threadManager.isBrowserRunning(threadId ?? this.getCurrentThread());
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    // Not ready for listeners (or screencasts) until its waiting cookies are added.
+    return !this.addingCookies(effectiveThreadId) && this.threadManager.isBrowserRunning(effectiveThreadId);
   }
 
   /**
@@ -195,6 +245,14 @@ export class BrowserViewer extends MastraBrowser {
       // (base class launch() does this, but we bypass it for thread scope)
       this.status = 'ready';
     }
+    await this.addWaitingCookies(effectiveThreadId);
+  }
+
+  protected override async addCookiesToOpenBrowser(cookies: BrowserCookie[], threadId: string): Promise<boolean> {
+    const context = this.threadManager.getContextForThread(threadId);
+    if (!context) return false;
+    await context.addCookies(cookies);
+    return true;
   }
 
   /**
@@ -219,6 +277,7 @@ export class BrowserViewer extends MastraBrowser {
   override async connectToExternalCdp(cdpUrl: string, threadId?: string): Promise<void> {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     await this.threadManager.connectToExternalCdp(cdpUrl, effectiveThreadId);
+    await this.addWaitingCookies(effectiveThreadId);
     // Mark as ready
     this.status = 'ready';
   }

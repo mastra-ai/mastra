@@ -10,14 +10,29 @@ const responsesServerErrorFrame = JSON.stringify({
 
 describe('describeRunError', () => {
   it.each([
-    ['Error', responsesServerErrorFrame, 'Model provider temporarily unavailable'],
-    ['AI_APICallError', 'Request timed out.', 'Request timed out'],
-    ['AI_APICallError', 'ThrottlingException', 'Provider rate limit reached'],
-    ['AI_APICallError', 'You exceeded your request size limit', 'Model request failed'],
-  ])('%s %s → %s, nothing to change', (name, message, title) => {
-    const description = describeRunError({ name, message });
-    expect(description.title).toBe(title);
-    expect(description.recoveries).toEqual([]);
+    ['AI_APICallError', 'Request timed out.', 'Request timed out', ['continue']],
+    ['AI_APICallError', 'ThrottlingException', 'Provider rate limit reached', ['continue', 'credentials', 'model']],
+    ['Error', responsesServerErrorFrame, 'Model provider temporarily unavailable', ['continue', 'model']],
+  ])('%s %s → %s, continued once the provider recovers', (name, message, title, recoveries) => {
+    expect(describeRunError({ name, message })).toMatchObject({ title, recoveries });
+  });
+
+  it.each([
+    ['AI_APICallError', 'You exceeded your request size limit', 'Model request failed', ['model']],
+    [
+      'AI_APICallError',
+      'prompt is too long: 210345 tokens > 200000 maximum',
+      'Conversation exceeds the model’s limit',
+      ['model', 'new_session'],
+    ],
+    [
+      'AI_APICallError',
+      'No tool output found for function call call_abc123.',
+      'Conversation history rejected',
+      ['new_session'],
+    ],
+  ])('%s %s → %s, never offering to resend the same request', (name, message, title, recoveries) => {
+    expect(describeRunError({ name, message })).toMatchObject({ title, recoveries });
   });
 
   it.each([
@@ -48,6 +63,56 @@ describe('describeRunError', () => {
     });
   });
 
+  it('names the Mastra Gateway and offers to add credits when its credits run out', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
+      statusCode: 402,
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({
+      title: 'Out of Mastra Gateway credits',
+      recoveries: ['credits', 'continue', 'model'],
+    });
+  });
+
+  it('recognizes the gateway by the host it called when its reply names no gateway', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left.",
+      statusCode: 402,
+      url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      requestBodyValues: { model: 'anthropic/claude-opus-5-5' },
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({
+      title: 'Out of Mastra Gateway credits',
+      recoveries: ['credits', 'continue', 'model'],
+    });
+  });
+
+  it('recognizes the gateway host on a provider error the run wrapped', () => {
+    const wrapped = {
+      name: 'Error',
+      message: "You don't have inference credits left.",
+      cause: {
+        name: 'AI_APICallError',
+        message: "You don't have inference credits left.",
+        statusCode: 402,
+        url: 'https://gateway-api.mastra.ai/v1/chat/completions',
+      },
+    };
+    expect(describeRunError(wrapped)).toMatchObject({ title: 'Out of Mastra Gateway credits' });
+  });
+
+  it('keeps a look-alike host a provider quota error', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left.",
+      statusCode: 402,
+      url: 'https://gateway-api.mastra.ai.example.com/v1/chat/completions',
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({ title: 'Provider quota exhausted' });
+  });
+
   it('quotes a plain-text body the provider sent instead of JSON', () => {
     const textBody = {
       name: 'AI_APICallError',
@@ -58,7 +123,7 @@ describe('describeRunError', () => {
     expect(describeRunError(textBody)).toEqual({
       title: 'Model request rejected',
       message: 'Invalid schema for function search.',
-      recoveries: [],
+      recoveries: ['model'],
     });
   });
 
@@ -87,10 +152,30 @@ describe('describeRunError', () => {
     });
   });
 
-  it('offers a larger model when the conversation overflows', () => {
-    expect(
-      describeRunError({ name: 'AI_APICallError', message: 'prompt is too long: 210345 tokens > 200000 maximum' }),
-    ).toMatchObject({ title: 'Conversation exceeds the model’s limit', recoveries: ['model'] });
+  it.each([
+    ['model_rejected', "The 'gpt-5.4-mini' model is not supported when using Codex with a ChatGPT account: HTTP 400"],
+    ['quota', 'You exceeded your current quota, please check your plan and billing details: HTTP 429'],
+    ['gateway credits', 'Insufficient credits. Add more at https://gateway.mastra.ai'],
+    ['auth', 'Incorrect API key provided: HTTP 401'],
+    ['context_overflow', 'prompt is too long: 250000 tokens > 200000 maximum'],
+    ['rate_limited', 'Rate limit reached for requests: HTTP 429'],
+    ['unavailable', 'Service Unavailable: HTTP 503'],
+  ])('points a %s memory model failure at Memory settings, not the session model', (_kind, reason) => {
+    const { message, recoveries } = describeRunError({
+      name: 'Error',
+      message: `Observational memory observation run failed: ${reason}`,
+    });
+    expect(recoveries).toContain('memory_model');
+    expect(recoveries).not.toContain('model');
+    expect(message).toContain('Memory settings');
+    expect(message).not.toMatch(/this session|choose another model|use another credential or model/i);
+  });
+
+  it('offers to continue, switch credential, or switch model when the provider throttles the run', () => {
+    expect(describeRunError({ name: 'AI_APICallError', message: 'ThrottlingException' })).toMatchObject({
+      title: 'Provider rate limit reached',
+      recoveries: ['continue', 'credentials', 'model'],
+    });
   });
 
   it('keeps a rejected parameter terminal even when its name mentions a timeout', () => {
@@ -103,7 +188,7 @@ describe('describeRunError', () => {
     expect(description).toEqual({
       title: 'Model request rejected',
       message: 'Invalid value for parameter timeout.',
-      recoveries: [],
+      recoveries: ['model'],
     });
   });
 

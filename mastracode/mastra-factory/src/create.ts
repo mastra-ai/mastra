@@ -21,8 +21,9 @@ import {
   PlatformApiError,
   waitForDatabaseReady,
 } from './platform.js';
-import { cloneTemplate, renameProject } from './utils/clone.js';
+import { canScaffoldInto, cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
+import { pinMastraPackages, versionTagForAnalytics } from './utils/versions.js';
 
 export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
 export const SELF_HOSTED_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory-self-hosted';
@@ -48,6 +49,12 @@ export interface CreateArgs {
    * equals the value. If no match, provisioning fails with a clear message.
    */
   org?: string;
+  /**
+   * Pin the template's `mastra` / `@mastra/*` packages to the exact versions
+   * this npm dist-tag points at (e.g. `alpha` for prereleases). Omitted → the
+   * template's own version specs are installed as-is.
+   */
+  versionTag?: string;
   analytics: PosthogAnalytics;
 }
 
@@ -58,11 +65,6 @@ interface PlatformProvisionResult {
   secretKey: string;
   databaseUrl: string;
 }
-
-const PROJECT_REGION_OPTIONS = [
-  { value: 'eu', label: '🇪🇺 eu' },
-  { value: 'us', label: '🇺🇸 us' },
-] as const satisfies ReadonlyArray<{ value: ProjectRegion; label: string }>;
 
 const NEON_REGION_BY_PROJECT_REGION = {
   eu: 'aws-eu-central-1',
@@ -78,29 +80,43 @@ export async function create(args: CreateArgs): Promise<void> {
   p.intro(color.inverse(' Mastra Factory '));
 
   const requestedRegion = args.region ? parseProjectRegion(args.region) : undefined;
-  const projectName =
+  const cwd = process.cwd();
+  const cwdIsUsable = canScaffoldInto(cwd);
+  const nameInput =
     args.projectName ??
     (await p.text({
-      message: 'What do you want to name your project?',
-      placeholder: 'my-mastra-factory',
+      // An empty current directory is the default: pressing Enter scaffolds into it.
+      message: cwdIsUsable
+        ? `What do you want to name your project? Press Enter to use the current directory (${path.basename(cwd)}).`
+        : 'What do you want to name your project?',
+      placeholder: cwdIsUsable ? path.basename(cwd) : 'my-mastra-factory',
       validate: value => {
-        if (!value?.trim()) return `Project name can't be empty`;
-        if (fs.existsSync(path.resolve(value.trim()))) return `Directory ${value.trim()} already exists`;
+        const name = value?.trim() ?? '';
+        if (!name && !cwdIsUsable) return `The current directory isn't empty. Enter a name for a new directory.`;
+        try {
+          if (!canScaffoldInto(path.resolve(name))) return `Directory ${name || '.'} already exists and isn't empty`;
+        } catch {
+          return `${name || '.'} can't be used as a project directory`;
+        }
         return undefined;
       },
     }));
 
-  if (p.isCancel(projectName)) {
+  if (p.isCancel(nameInput)) {
     p.cancel('Operation cancelled');
     process.exit(0);
   }
 
-  const projectPath = path.resolve(projectName);
+  // A blank name or "." means the current directory.
+  const projectPath = path.resolve(nameInput.trim());
+  const projectName = path.basename(projectPath);
+  const cdStep = projectPath === cwd ? '' : `cd ${path.relative(cwd, projectPath)} && `;
   const packageManager = detectPackageManager();
 
   args.analytics.trackEvent('sf_create_started', {
     package_manager: packageManager,
     no_platform: Boolean(args.noPlatform),
+    version_tag: versionTagForAnalytics(args.versionTag),
   });
 
   // ── Clone template ───────────────────────────────────────────────────────
@@ -130,6 +146,50 @@ export async function create(args: CreateArgs): Promise<void> {
     throw err;
   }
 
+  // ── Pin Mastra packages to a release channel ─────────────────────────────
+  if (args.versionTag) {
+    const tag = args.versionTag;
+    const pinSpinner = p.spinner();
+    pinSpinner.start(`Resolving the "${tag}" Mastra packages...`);
+    let pinResult: Awaited<ReturnType<typeof pinMastraPackages>>;
+    try {
+      pinResult = await pinMastraPackages(projectPath, tag);
+    } catch (err) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw err;
+    }
+    const { pinned, unresolved, failed } = pinResult;
+    // Run the check from the project so npm reads the same .npmrc as the lookup.
+    const checkTag = (name: string) => `${cdStep}npm view ${name} dist-tags`;
+    if (failed.length > 0) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw new Error(
+        `Could not look up the "${tag}" versions of ${failed.join(', ')}. Run \`${checkTag(failed[0]!)}\` to check that the registry is reachable and the tag exists.`,
+      );
+    }
+    if (Object.keys(pinned).length === 0 && unresolved.length > 0) {
+      pinSpinner.stop(`Could not resolve "${tag}" Mastra packages.`);
+      throw new Error(
+        `No Mastra packages are published under the "${tag}" tag. Run \`${checkTag(unresolved[0]!)}\` to see the available tags.`,
+      );
+    }
+    // Mastra peer ranges like `>=1.83.0-0` don't match a newer prerelease
+    // (`1.84.0-alpha.3`) under semver's prerelease rules, so npm refuses to
+    // install prereleases together. Persist the override so later
+    // `npm install`s in the project keep working too.
+    const hasPrerelease = Object.values(pinned).some(version => version.includes('-'));
+    if (hasPrerelease && packageManager === 'npm') {
+      const npmrcPath = path.join(projectPath, '.npmrc');
+      const existing = fs.existsSync(npmrcPath) ? fs.readFileSync(npmrcPath, 'utf8') : '';
+      const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
+      fs.writeFileSync(npmrcPath, `${existing}${prefix}legacy-peer-deps=true\n`);
+    }
+    pinSpinner.stop(`Using "${tag}" Mastra packages.`);
+    if (unresolved.length > 0) {
+      p.log.warn(`No "${tag}" release found for ${unresolved.join(', ')}; keeping the template's version.`);
+    }
+  }
+
   // ── Install dependencies ─────────────────────────────────────────────────
   const installSpinner = p.spinner();
   installSpinner.start(`Installing dependencies...`);
@@ -142,7 +202,7 @@ export async function create(args: CreateArgs): Promise<void> {
   } catch (err) {
     installSpinner.stop('Dependency install failed.');
     throw new Error(
-      `${err instanceof Error ? err.message : String(err)}\nYou can retry manually: cd ${projectName} && ${packageManager} install`,
+      `${err instanceof Error ? err.message : String(err)}\nYou can retry manually: ${cdStep}${packageManager} install`,
     );
   }
 
@@ -211,7 +271,7 @@ export async function create(args: CreateArgs): Promise<void> {
   const lines: string[] = [
     color.green('Your Mastra Factory is ready!'),
     '',
-    `${color.cyan('cd')} ${projectName}`,
+    ...(projectPath === cwd ? [] : [`${color.cyan('cd')} ${path.relative(cwd, projectPath)}`]),
     color.cyan(`${packageManager} run dev`),
     '',
     `Factory UI     ${color.underline('http://localhost:4111')}`,
@@ -296,16 +356,7 @@ async function runPlatformProvisioning({
     p.log.info(`Using organization ${color.cyan(orgName)}.`);
     envAccumulator.MASTRA_ORGANIZATION_ID = orgId;
 
-    const projectRegion =
-      region ??
-      (await p.select({
-        message: 'Where should your Factory project run?',
-        options: [...PROJECT_REGION_OPTIONS],
-      }));
-    if (p.isCancel(projectRegion)) {
-      p.cancel('Operation cancelled');
-      process.exit(0);
-    }
+    const projectRegion = region ?? 'us';
 
     // 3. Project — session-auth POST /v1/server/projects.
     const projectSpinner = p.spinner();

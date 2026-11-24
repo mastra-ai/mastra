@@ -4,6 +4,7 @@ import type { LoggerAdapterContext } from './adapter';
 import { buildLogRecordData, exportTrackedException } from './adapter';
 
 export * from './adapter';
+export * from './noop-logger';
 
 export const RegisteredLogger = {
   AGENT: 'AGENT',

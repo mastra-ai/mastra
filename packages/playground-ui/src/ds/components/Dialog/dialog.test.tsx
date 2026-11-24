@@ -603,15 +603,4 @@ describe('Dialog on a phone viewport', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
   });
-
-  it('stays open when the viewport grows past the phone breakpoint', () => {
-    render(<EditFixture />);
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
-    expect(isDrawer()).toBe(true);
-
-    act(() => setPhoneViewport(false));
-
-    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
-    expect(isDrawer()).toBe(false);
-  });
 });

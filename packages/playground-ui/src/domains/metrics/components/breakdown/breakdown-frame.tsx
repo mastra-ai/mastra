@@ -2,28 +2,17 @@ import type { ReactNode } from 'react';
 import type { DrilldownScope } from '../../drilldown';
 import type { BreakdownTab } from '../../lib/breakdown';
 import { ChartCard } from '../chart-card';
-import { MetricsCard } from '@/ds/components/MetricsCard';
 
 export const BREAKDOWN_TITLE = 'Breakdown';
 
-const TAB_LABEL: Record<BreakdownTab, string> = {
-  projects: 'Projects',
-  agents: 'Agents',
-  workflows: 'Workflows',
-  tools: 'Tools',
-  models: 'Models',
-  threads: 'Threads',
-  environments: 'Environments',
-};
-
-const DESCRIPTION: Record<BreakdownTab, string> = {
-  projects: 'Traces, errors, latency and spend per project.',
-  agents: 'Traces each agent ran in, nested runs included, with errors, latency and spend.',
-  workflows: 'Traces each workflow ran in, nested runs included, with errors and latency.',
-  tools: 'Every tool call, MCP tools included, with errors and latency.',
-  models: 'Model calls, tokens and spend per model.',
-  threads: 'Traces, errors, latency and spend per thread.',
-  environments: 'Traces, errors, latency and spend per environment.',
+const TAB_TITLE: Record<BreakdownTab, string> = {
+  projects: 'Breakdown by project',
+  agents: 'Breakdown by agent',
+  workflows: 'Breakdown by workflow',
+  tools: 'Breakdown by tool',
+  models: 'Breakdown by model',
+  threads: 'Breakdown by thread',
+  environments: 'Breakdown by environment',
 };
 
 /** What every tab passes down: the tab list, and what a tab change or row click does. */
@@ -44,21 +33,18 @@ export function BreakdownFrame({
 }: BreakdownFrameProps & { tab: BreakdownTab; isUpdating?: boolean; children: ReactNode }) {
   return (
     <ChartCard
-      title={BREAKDOWN_TITLE}
-      description={DESCRIPTION[tab]}
+      title={TAB_TITLE[tab]}
+      titleMenu={
+        tabs.length > 1
+          ? {
+              value: tab,
+              onValueChange: onTabChange,
+              options: tabs.map(t => ({ value: t, label: TAB_TITLE[t] })),
+            }
+          : undefined
+      }
       isUpdating={isUpdating}
       bodyHeight="fit"
-      toolbar={
-        <MetricsCard.Toolbar>
-          <MetricsCard.Tabs<BreakdownTab> value={tab} onValueChange={onTabChange}>
-            {tabs.map(t => (
-              <MetricsCard.Tab key={t} value={t}>
-                {TAB_LABEL[t]}
-              </MetricsCard.Tab>
-            ))}
-          </MetricsCard.Tabs>
-        </MetricsCard.Toolbar>
-      }
     >
       {children}
     </ChartCard>

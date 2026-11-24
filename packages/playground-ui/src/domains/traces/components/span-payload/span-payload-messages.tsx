@@ -21,6 +21,7 @@ import { parseSkillMarkup } from '@/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@/domains/chat/messages/skill-message';
 import { ReasoningActivity } from '@/ds/components/ai/activity';
 import { Message } from '@/ds/components/Message';
+import { Metadata } from '@/ds/components/Metadata';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -223,7 +224,16 @@ function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode
   return (
     <div data-role={role} className="flex min-w-0 flex-col gap-2">
       <SpanPayloadLabel>
-        {hasToolResultLabels ? 'Tool result' : skills ? `${role} · Skills (${skills.length})` : role}
+        {hasToolResultLabels ? (
+          'Tool result'
+        ) : skills ? (
+          <Metadata>
+            <Metadata.Item>{role}</Metadata.Item>
+            <Metadata.Item>Skills ({skills.length})</Metadata.Item>
+          </Metadata>
+        ) : (
+          role
+        )}
       </SpanPayloadLabel>
       {skills ? <SkillList skills={skills} /> : body}
     </div>

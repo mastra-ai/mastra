@@ -223,25 +223,6 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
     return rows.map(toEntry);
   }
 
-  /** All links bound to an organization, for the mention-roster fallback. */
-  async listAccountLinksForOrg(
-    orgId: string,
-    { limit = 200 }: { limit?: number } = {},
-  ): Promise<ChannelAccountLinkEntry[]> {
-    const rows = await this.#db.findMany<ChannelAccountLinkDbRow>(
-      'channel_account_links',
-      { org_id: orgId },
-      {
-        orderBy: [
-          ['linked_at', 'desc'],
-          ['id', 'desc'],
-        ],
-        limit,
-      },
-    );
-    return rows.map(toEntry);
-  }
-
   /**
    * Remove one of the tenant user's own links, addressed by its sender key.
    * The `userId` guard makes the delete self-service only: a caller can never

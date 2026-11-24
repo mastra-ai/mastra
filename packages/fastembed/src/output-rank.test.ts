@@ -62,6 +62,30 @@ beforeEach(() => {
   );
 });
 
+// Valid rank-three graphs with fixed output batch sizes, independent of the input batch.
+const fixedBatchModels = {
+  dense: {
+    1: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0OugBCiQKBWZpeGVkEhFsYXN0X2hpZGRlbl9zdGF0ZSIISWRlbnRpdHkSC2ZpeGVkLWJhdGNoKjEIAQgECAIQAUIFZml4ZWRKIAAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/WigKCWlucHV0X2lkcxIbChkIBxIVCgcSBWJhdGNoCgoSCHNlcXVlbmNlWi0KDmF0dGVudGlvbl9tYXNrEhsKGQgHEhUKBxIFYmF0Y2gKChIIc2VxdWVuY2ViJwoRbGFzdF9oaWRkZW5fc3RhdGUSEgoQCAESDAoCCAEKAggECgIIAkICEA0=',
+      'base64',
+    ),
+    3: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0OqgCCiQKBWZpeGVkEhFsYXN0X2hpZGRlbl9zdGF0ZSIISWRlbnRpdHkSC2ZpeGVkLWJhdGNoKnEIAwgECAIQAUIFZml4ZWRKYAAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAP1ooCglpbnB1dF9pZHMSGwoZCAcSFQoHEgViYXRjaAoKEghzZXF1ZW5jZVotCg5hdHRlbnRpb25fbWFzaxIbChkIBxIVCgcSBWJhdGNoCgoSCHNlcXVlbmNlYicKEWxhc3RfaGlkZGVuX3N0YXRlEhIKEAgBEgwKAggDCgIIBAoCCAJCAhAN',
+      'base64',
+    ),
+  },
+  sparse: {
+    1: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0Os4BChkKBWZpeGVkEgZvdXRwdXQiCElkZW50aXR5EgtmaXhlZC1iYXRjaCoxCAEIBAgCEAFCBWZpeGVkSiAAAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAP1ooCglpbnB1dF9pZHMSGwoZCAcSFQoHEgViYXRjaAoKEghzZXF1ZW5jZVopCgppbnB1dF9tYXNrEhsKGQgHEhUKBxIFYmF0Y2gKChIIc2VxdWVuY2ViHAoGb3V0cHV0EhIKEAgBEgwKAggBCgIIBAoCCAJCAhAN',
+      'base64',
+    ),
+    3: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0Oo4CChkKBWZpeGVkEgZvdXRwdXQiCElkZW50aXR5EgtmaXhlZC1iYXRjaCpxCAMIBAgCEAFCBWZpeGVkSmAAAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD9aKAoJaW5wdXRfaWRzEhsKGQgHEhUKBxIFYmF0Y2gKChIIc2VxdWVuY2VaKQoKaW5wdXRfbWFzaxIbChkIBxIVCgcSBWJhdGNoCgoSCHNlcXVlbmNlYhwKBm91dHB1dBISChAIARIMCgIIAwoCCAQKAggCQgIQDQ==',
+      'base64',
+    ),
+  },
+};
+
 describe.each(['dense', 'sparse'] as const)('%s model output', kind => {
   async function initialize() {
     const options = { modelAbsoluteDirPath: modelDir, modelName: 'model.onnx', maxLength: 4 };
@@ -127,6 +151,18 @@ describe.each(['dense', 'sparse'] as const)('%s model output', kind => {
       expect(vectors[0]!.values).toHaveLength(1);
       expect(vectors[0]!.values[0]).toBeCloseTo(Math.log(4));
     }
+  });
+
+  it.each([1, 3] as const)('rejects %s output rows for two input texts', async outputBatchSize => {
+    fs.writeFileSync(
+      path.join(modelDir, kind === 'dense' ? 'model.onnx' : 'onnx/model.onnx'),
+      fixedBatchModels[kind][outputBatchSize],
+    );
+    const embedding = await initialize();
+    const outputName = kind === 'dense' ? 'last_hidden_state' : 'output';
+    await expect(embedding.embed(['one', 'two three']).next()).rejects.toThrow(
+      `Expected model output "${outputName}" to have batch size 2, received ${outputBatchSize}`,
+    );
   });
 
   it('embeds a batch with a valid three-dimensional output', async () => {

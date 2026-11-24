@@ -1,0 +1,11 @@
+{
+  "targets": [
+    {
+      "name": "mastracode",
+      "source": "docs/src/mastra-code",
+      "repo": "mastra-ai/mastracode-website",
+      "branch": "main",
+      "dest": "src/docs"
+    }
+  ]
+}

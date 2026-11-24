@@ -13,6 +13,13 @@
 //   playground-ui/txt-tone           ink on <Txt> is its `tone` prop, not a text-* colour class
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
 //   playground-ui/no-barrel-imports  import from an exact @mastra/playground-ui subpath, not a broad barrel
+//   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
+//   playground-ui/no-text-separators      metadata uses separate elements and a gap, not · — | • between fields
+//   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
+//   playground-ui/no-page-width      a page takes its width from PageLayout, not a centred max-w-* column
+//   playground-ui/page-layout-props  every PageLayout names a variant and passes only the props that variant takes
+
+import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
 // Each option is { selector, message }: report every node an esquery selector matches.
 function selectorRule(selectors) {
@@ -118,6 +125,56 @@ function iconButtonSize(context) {
   };
 }
 
+const ICON_SIZE_CLASS = /(^|\s|:)(size|h|w)-(?!(icon-(xs|sm|md|lg)|full|auto|\[[\d.]+em\])(\s|$))\S+/;
+const ICON_SIZE_MESSAGE =
+  'Size an icon from its parent component or an <Icon size> wrapper, or with a size-icon-* class, not a size of its own.';
+
+function classValues(node) {
+  if (!node) return [];
+  switch (node.type) {
+    case 'Literal':
+      return [String(node.value)];
+    case 'TemplateLiteral':
+      return [...node.quasis.map(quasi => quasi.value.raw), ...node.expressions.flatMap(classValues)];
+    case 'JSXExpressionContainer':
+      return classValues(node.expression);
+    case 'CallExpression':
+      return node.arguments.flatMap(classValues);
+    case 'ArrayExpression':
+      return node.elements.flatMap(classValues);
+    case 'ObjectExpression':
+      return node.properties.flatMap(property => (property.type === 'Property' ? classValues(property.key) : []));
+    case 'ConditionalExpression':
+      return [...classValues(node.consequent), ...classValues(node.alternate)];
+    case 'LogicalExpression':
+      return [...classValues(node.left), ...classValues(node.right)];
+    default:
+      return [];
+  }
+}
+
+function iconSizeFromParent(context) {
+  const iconImports = new Set();
+  return {
+    ImportDeclaration(node) {
+      if (!iconModulePattern.test(node.source.value)) return;
+      for (const specifier of node.specifiers)
+        if (specifier.local.name !== 'Icon') iconImports.add(specifier.local.name);
+    },
+    JSXOpeningElement(node) {
+      if (node.name.type !== 'JSXIdentifier' || !iconImports.has(node.name.name)) return;
+      for (const attribute of node.attributes) {
+        if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
+        const name = attribute.name.name;
+        const sized =
+          (['size', 'width', 'height'].includes(name) && literalAttribute(attribute.value) !== undefined) ||
+          (name === 'className' && classValues(attribute.value).some(value => ICON_SIZE_CLASS.test(value)));
+        if (sized) context.report({ node: attribute, message: ICON_SIZE_MESSAGE });
+      }
+    },
+  };
+}
+
 // --- text-role -----------------------------------------------------------------------------------------
 // Typography must come from a DS text role (text-title, text-body, text-label…, or <Txt>). Tailwind's own
 // sizes stay defined as a safety net only; the roles live in playground-ui's theme/typography.css.
@@ -178,25 +235,179 @@ const noBarrelImports = selectorRule(() =>
   ]).map(selector => ({ selector, message: BARREL_MESSAGE })),
 );
 
+// --- placeholder-text ----------------------------------------------------------------------------------
+// Placeholders read like the system search field on macOS and iOS: "Search agents", "Search by name". No
+// trailing ellipsis (`…` or `...`): the dimmed text already says the field is empty. Placeholders that give
+// an instruction (start with Search, Filter, Select…) also use sentence case. Example values ("My Agent",
+// "e.g. Production alerts") keep their capitals.
+// Checks string `placeholder` / `*Placeholder` values in JSX attributes, object properties, default
+// parameters and variables, including each branch of a ternary. Strings built at runtime are only partly seen.
+// Options: { properNouns?: string[] } words that stay capitalized after the first, added to the defaults.
+const PLACEHOLDER_NAME = /^placeholder$|Placeholder$/;
+const INSTRUCTION_VERBS =
+  /^(Search|Filter|Find|Select|Choose|Pick|Enter|Type|Paste|Add|Write|Describe|Leave|Ask|Send|Name)\b/;
+const PLACEHOLDER_PROPER_NOUNS = [
+  'Mastra Code',
+  'Mastra',
+  'Studio',
+  'Factory',
+  'Factories',
+  'MastraCode',
+  'GitHub',
+  'GitLab',
+  'Google',
+  'Slack',
+  'Linear',
+  'Vercel',
+  'Stripe',
+];
+
+// The string values a placeholder expression can take: literals, static template parts, ternary branches.
+function placeholderStrings(node) {
+  if (!node) return [];
+  if (node.type === 'JSXExpressionContainer') return placeholderStrings(node.expression);
+  if (node.type === 'Literal' && typeof node.value === 'string') return [{ node, head: node.value, tail: node.value }];
+  if (node.type === 'TemplateLiteral') {
+    const { quasis } = node;
+    return [{ node, head: quasis[0].value.cooked, tail: quasis[quasis.length - 1].value.cooked }];
+  }
+  if (node.type === 'ConditionalExpression')
+    return [...placeholderStrings(node.consequent), ...placeholderStrings(node.alternate)];
+  if (node.type === 'LogicalExpression') return placeholderStrings(node.right);
+  return [];
+}
+
+function placeholderText(context) {
+  const nouns = [...PLACEHOLDER_PROPER_NOUNS, ...(context.options[0]?.properNouns ?? [])];
+  const properNouns = new RegExp(`\\b(?:${nouns.sort((a, b) => b.length - a.length).join('|')})\\b`, 'g');
+  // The first capitalized word that doesn't start a sentence and isn't (part of) a proper noun.
+  const titleCaseWord = text => {
+    let sentenceStart = true;
+    for (const word of text.replace(properNouns, 'x').trim().split(/\s+/)) {
+      if (!sentenceStart && /^[A-Z][a-z]/.test(word)) return word;
+      sentenceStart = /[.!?:]$/.test(word);
+    }
+    return null;
+  };
+  const check = value => {
+    for (const { node, head, tail } of placeholderStrings(value)) {
+      // A progress state shown in the field ("Loading agents…") keeps its ellipsis.
+      if (/(…|\.\.\.)\s*$/.test(tail) && !/^\s*\w+ing\b/.test(head)) {
+        context.report({ node, message: 'Drop the trailing ellipsis from this placeholder ("Search agents").' });
+      }
+      if (!INSTRUCTION_VERBS.test(head)) continue;
+      const word = titleCaseWord(head);
+      if (word) {
+        context.report({
+          node,
+          message: `Use sentence case in this placeholder: lowercase "${word.replace(/[^A-Za-z]+$/, '')}" unless it's a proper noun (add it to properNouns).`,
+        });
+      }
+    }
+  };
+  const keyName = key => (key?.type === 'Identifier' ? key.name : key?.type === 'Literal' ? key.value : '');
+  return {
+    JSXAttribute(node) {
+      if (node.name.type === 'JSXIdentifier' && PLACEHOLDER_NAME.test(node.name.name)) check(node.value);
+    },
+    Property(node) {
+      if (PLACEHOLDER_NAME.test(keyName(node.key))) check(node.value);
+    },
+    AssignmentPattern(node) {
+      if (node.left.type === 'Identifier' && PLACEHOLDER_NAME.test(node.left.name)) check(node.right);
+    },
+    VariableDeclarator(node) {
+      if (node.id.type === 'Identifier' && PLACEHOLDER_NAME.test(node.id.name)) check(node.init);
+    },
+  };
+}
+
+// How to pick a PageLayout variant, shared by every message that sends someone to one.
+const PICK_PAGE_VARIANT =
+  'variant="form" for a create or edit form (title and back link, no breadcrumbs), variant="settings" for a settings page (breadcrumbs, title, sections), variant="page" for anything else, adding body="fixed" when its panels scroll on their own (chat, board, editor, graph).';
+
+const PAGE_WIDTH_MESSAGE = `Let PageLayout set the page width instead of building a centred max-w-* column. Use ${PICK_PAGE_VARIANT}`;
+
+const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
+const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
+
+const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
+// The variants PageLayout used to take, and what each became.
+const REMOVED_PAGE_LAYOUT_VARIANTS = {
+  container: `PageLayout has no container variant. Use ${PICK_PAGE_VARIANT}`,
+  fit: 'PageLayout has no fit variant. Use variant="page" body="fixed": the page stays put and its panels scroll on their own.',
+  narrow:
+    'PageLayout has no narrow variant. Use variant="form" for a create or edit form (title and back link, no breadcrumbs) or variant="settings" for a settings page (breadcrumbs, title, sections). A list or dashboard takes variant="page".',
+};
+// Props a variant does not take. TypeScript rejects these too, but its union error does not say what to do instead.
+const PROPS_OFF_VARIANT = [
+  [
+    'form',
+    'breadcrumbs|headerActions|actionRow|header',
+    'A form has no breadcrumbs, header actions or header: its way out is the back link (backHref, backLabel) and its title is `title`. If this is not a create or edit form, use variant="settings" or variant="page".',
+  ],
+  ['form', 'body', 'Only variant="page" takes body. A form is a 640px column that scrolls with the page.'],
+  ['settings', 'body', 'Only variant="page" takes body. A settings page is a 640px column that scrolls with the page.'],
+];
+const pageLayoutProps = selectorRule(() => [
+  {
+    selector: `${PAGE_LAYOUT}:not(:has(> JSXAttribute[name.name='variant'], > JSXSpreadAttribute))`,
+    message: `PageLayout needs a variant. Use ${PICK_PAGE_VARIANT}`,
+  },
+  ...Object.entries(REMOVED_PAGE_LAYOUT_VARIANTS).map(([value, message]) => ({
+    selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='variant'][value.value='${value}']`,
+    message,
+  })),
+  ...PROPS_OFF_VARIANT.map(([variant, props, message]) => ({
+    selector: `${PAGE_LAYOUT}:has(> JSXAttribute[name.name='variant'][value.value='${variant}']) > JSXAttribute[name.name=/^(${props})$/]`,
+    message,
+  })),
+  { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
+]);
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
     'icon-button-size': { meta: { type: 'suggestion', schema: false }, create: iconButtonSize },
+    'icon-size-from-parent': { meta: { type: 'suggestion', schema: false }, create: iconSizeFromParent },
     'text-role': { meta: { type: 'suggestion', schema: false }, create: textRole },
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
     'no-barrel-imports': { meta: { type: 'suggestion', schema: false }, create: noBarrelImports },
+    'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
+    'no-text-separators': noTextSeparators,
+    'no-text-layout-spacing': noTextLayoutSpacing,
+    'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
+    'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
   },
+};
+
+export const copyRules = {
+  'playground-ui/no-text-separators': 'error',
+  'playground-ui/no-text-layout-spacing': 'error',
+};
+
+export const pageRules = {
+  'playground-ui/no-page-width': 'error',
+};
+
+export const copyRuleExclusions = {
+  files: ['**/*.{test,spec,stories,story}.*', '**/{test,tests,__tests__,__mocks__,__fixtures__,fixtures,generated}/**'],
+  rules: Object.fromEntries(Object.keys(copyRules).map(rule => [rule, 'off'])),
 };
 
 // Every rule at its default options. Spread into `rules`, then turn rules off per glob in `overrides`
 // (tests and stories, for example).
 export const recommended = {
   'playground-ui/icon-button-size': 'error',
+  'playground-ui/icon-size-from-parent': 'error',
   'playground-ui/text-role': 'error',
   'playground-ui/txt-tone': 'error',
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
+  'playground-ui/placeholder-text': 'error',
+  'playground-ui/page-layout-props': 'error',
+  ...copyRules,
 };
 
 export default plugin;

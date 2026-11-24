@@ -147,6 +147,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * (cache warmup, query, upsert, updateVector, setupIndex). Also memoizes the promise.
    */
   private indexMetadataCache: Map<string, Promise<PGIndexMetadata>> = new Map();
+  /** Indexes invalidated while the startup cache warmup runs; `null` once it has settled. */
+  private warmupInvalidations: Set<string> | null = null;
   private createdIndexes = new Map<string, number>();
   private namespaceReadyIndexes = new Set<string>();
   /** In-flight lazy namespace migrations, keyed by index name (see {@link ensureNamespaceReady}). */
@@ -224,11 +226,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
+      // deleteIndex() or an index rebuild can run while the warmup's listing or metadata reads are in
+      // flight; caching what the warmup read for an index invalidated since then would hand later
+      // calls the old table's metadata.
+      const invalidated = new Set<string>();
+      this.warmupInvalidations = invalidated;
       this.cacheWarmupPromise = (async () => {
+        const reads: Promise<void>[] = [];
         try {
           const existingIndexes = await this.listIndexes();
-          await Promise.all(
-            existingIndexes.map(async indexName => {
+          reads.push(
+            ...existingIndexes.map(async indexName => {
+              if (invalidated.has(indexName)) return;
               const info = await this.getIndexMetadata({ indexName });
               const key = await this.getIndexCacheKey({
                 indexName,
@@ -237,14 +246,20 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 type: info.type,
                 vectorType: info.vectorType,
               });
+              if (invalidated.has(indexName)) return;
               this.createdIndexes.set(indexName, key);
               this.indexVectorTypes.set(indexName, info.vectorType);
             }),
           );
+          await Promise.all(reads);
         } catch (error) {
           // Don't throw - cache warming is optional optimization
           // If it fails (e.g., pool closed early), just log and continue
           this.logger?.debug('Cache warming skipped or failed', { error });
+        } finally {
+          // One rejected read ends Promise.all early; keep recording until every read has settled.
+          await Promise.allSettled(reads);
+          this.warmupInvalidations = null;
         }
       })();
     } catch (error) {
@@ -704,6 +719,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private invalidateIndexCaches(indexName: string) {
     this.describeIndexCache.delete(indexName);
     this.indexMetadataCache.delete(indexName);
+    this.warmupInvalidations?.add(indexName);
   }
 
   async query({
@@ -842,53 +858,58 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage.
-      // Only safe when minScore won't filter out candidates (minScore <= 0), otherwise the inner LIMIT
-      // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
-      // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
-      // vectors in other clusters, returning fewer results than expected.
       const filterClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
       const hasFilter = filterClause.length > 0;
-      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
       const namespaceParam = filterValues.length + 1;
+      const queryValues = [...filterValues, namespace];
+      const selectColumns = `vector_id as id, ${scoreExpr} as score, metadata${includeVector ? ', embedding' : ''}`;
+      const whereClause = `WHERE namespace = $${namespaceParam}${filterClause ? ` AND (${filterClause})` : ''}`;
 
-      const query = useIndexedOrder
-        ? `
+      // IVFFlat stays on the exact query because Mastra builds it on an empty table, so its lists don't
+      // match the data (#28949). Filtered HNSW searches need pgvector >= 0.8 iterative scans to find enough rows.
+      const useIndexedOrder = indexInfo.type === 'hnsw' && (!hasFilter || this.supportsIterativeScan());
+
+      let rows: any[] | undefined;
+      if (useIndexedOrder) {
+        // Rows are ordered best-first and minScore keeps the best side, so applying it after LIMIT
+        // returns the same rows as applying it before.
+        const indexedQuery = `
         WITH vector_scores AS (
-          SELECT
-            vector_id as id,
-            ${scoreExpr} as score,
-            metadata
-            ${includeVector ? ', embedding' : ''}
+          SELECT ${selectColumns}
           FROM ${tableName}
-          WHERE namespace = $${namespaceParam}
+          ${whereClause}
           ORDER BY ${distanceExpr}
           LIMIT $2
         )
-        SELECT *
+        SELECT *, score > $1 AS above_min_score
         FROM vector_scores
-        WHERE score > $1
-        ORDER BY score DESC`
-        : `
+        ORDER BY score DESC`;
+        const candidates = (await client.query(indexedQuery, queryValues)).rows;
+
+        // Fewer than topK candidates means fewer rows match or the index walk stopped early
+        // (hnsw.max_scan_tuples). The exact query is correct in both cases and cheap in the first (#28949).
+        if (candidates.length >= topK) {
+          rows = candidates.filter(row => row.above_min_score);
+        }
+      }
+
+      if (!rows) {
+        const exactQuery = `
         WITH vector_scores AS (
-          SELECT
-            vector_id as id,
-            ${scoreExpr} as score,
-            metadata
-            ${includeVector ? ', embedding' : ''}
+          SELECT ${selectColumns}
           FROM ${tableName}
-          WHERE namespace = $${namespaceParam}
-          ${filterClause ? `AND (${filterClause})` : ''}
+          ${whereClause}
         )
         SELECT *
         FROM vector_scores
         WHERE score > $1
         ORDER BY score DESC
         LIMIT $2`;
-      const result = await client.query(query, [...filterValues, namespace]);
+        rows = (await client.query(exactQuery, queryValues)).rows;
+      }
       await client.query('COMMIT');
 
-      return result.rows.map(({ id, score, metadata, embedding }) => ({
+      return rows.map(({ id, score, metadata, embedding }) => ({
         id,
         score,
         metadata,
@@ -1320,7 +1341,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           }
 
           if (metadataIndexes?.length) {
-            await this.createMetadataIndexes(tableName, indexName, metadataIndexes);
+            await this.createMetadataIndexes(client, tableName, indexName, metadataIndexes);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
@@ -1527,7 +1548,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     });
   }
 
-  private async createMetadataIndexes(tableName: string, indexName: string, metadataFields: string[]) {
+  private async createMetadataIndexes(
+    client: pg.PoolClient,
+    tableName: string,
+    indexName: string,
+    metadataFields: string[],
+  ) {
     const hasher = await this.hasher;
     for (const field of metadataFields) {
       // Hash the field to produce a safe, fixed-length suffix for the index name.
@@ -1539,9 +1565,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // DDL statements don't support bind parameters, so we must interpolate
       // the field name as a literal. Escape single quotes to prevent SQL injection.
       const escapedField = field.replace(/'/g, "''");
-      // Use CONCURRENTLY to avoid blocking writers on large existing tables.
-      // This must run outside a transaction, so we use pool.query() directly.
-      await this.pool.query(
+      // CONCURRENTLY avoids blocking writers on large tables. It can't run inside a transaction, and the
+      // caller's client isn't in one. Reusing it keeps a single-connection pool from deadlocking.
+      await client.query(
         `
         CREATE INDEX CONCURRENTLY IF NOT EXISTS ${metadataIdxName}
         ON ${tableName} ((metadata->>'${escapedField}'))

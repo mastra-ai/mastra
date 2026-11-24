@@ -1,0 +1,51 @@
+Compatible with the OpenAI Chat Completions API. Works with every chat model in the catalog, including non-OpenAI providers.
+
+```bash
+curl https://gateway-api.mastra.ai/v1/chat/completions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "__GATEWAY_ANTHROPIC_MODEL_HAIKU__",
+    "messages": [
+      { "role": "system", "content": "Answer in one sentence." },
+      { "role": "user", "content": "What is a gateway?" }
+    ],
+    "max_tokens": 100
+  }'
+```
+
+Gateway validates the request before routing. Unknown top-level fields are ignored. A body that doesn't match the schema returns `422`.
+
+## Streaming
+
+```typescript
+import OpenAI from 'openai'
+
+const client = new OpenAI({
+  apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+  baseURL: 'https://gateway-api.mastra.ai/v1',
+})
+
+const stream = await client.chat.completions.create({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  messages: [{ role: 'user', content: 'Count to five.' }],
+  stream: true,
+  stream_options: { include_usage: true },
+})
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content ?? '')
+}
+```
+
+Gateway fails over only before the first chunk is sent. After streaming starts, an upstream error ends the stream. See [Models and routing](/docs/mastra-platform/gateway/models-and-routing#failover).
+
+## Response headers
+
+| Header | Description |
+| - | - |
+| `x-request-id` | Unique request ID. Matches the entry in your usage logs. |
+| `x-gateway-provider` | The provider that served the request. |
+| `x-gateway-project` | The project the key belongs to. Sent for project keys only. |
+
+See [Usage, pricing, and limits](/docs/mastra-platform/gateway/usage-and-limits#errors) for error codes.

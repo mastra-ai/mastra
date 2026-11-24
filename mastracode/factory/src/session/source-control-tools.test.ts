@@ -6,10 +6,14 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/registry.js';
+import { selfReviewWorkBoard } from '../boards/test-utils.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
-import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { selfReviewApprovedHead } from './self-review-gate.js';
+import { createSourceControlTools, resolveReviewedChangeRequest } from './source-control-tools.js';
 
 function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
   const requestContext = new RequestContext();
@@ -73,7 +77,6 @@ async function fixture(integrationId = 'gitlab') {
     repositoryId,
     createdByUserId: 'user-1',
     branch: null,
-    sandboxProvider: 'custom',
     sandboxWorkdir: '/workspace/repo',
     setupCommand: null,
     teardownCommand: null,
@@ -235,7 +238,7 @@ describe('createSourceControlTools', () => {
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
-        selfReviewApprovedHead: async () => approvedHead,
+        workItem: { selfReviewApprovedHead: async () => approvedHead, recordRepository: async () => {} },
       });
       const run = () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' });
       return { setup, run };
@@ -257,6 +260,104 @@ describe('createSourceControlTools', () => {
       const { setup, run } = await gated(approved, approved.toUpperCase());
       await expect(run()).resolves.toMatchObject({ id: '17' });
       expect(setup.closePullRequest).not.toHaveBeenCalled();
+    });
+
+    // The gate as the Factory wires it, reading the bound card and its board from real storage.
+    // `olderWork`: the project's Work was stored while Work still had its `review` self-review phase.
+    const boundTo = async (
+      source: 'github-issue' | 'github-pr',
+      role: 'work' | 'review',
+      olderWork = true,
+      cardRepository?: string,
+    ) => {
+      const seeded = await createFactoryStorageForTests();
+      const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
+      await seeded.workItems.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        workItem: {
+          input: {
+            board: 'work',
+            externalSource: {
+              integrationId: 'github',
+              type: source === 'github-pr' ? 'pull-request' : 'issue',
+              externalId: `${source}:1`,
+            },
+            title: 'Factory item',
+            stages: [olderWork ? 'review' : 'execute'],
+            sessions: {},
+            metadata: { authorTrusted: true, ...(cardRepository ? { repository: cardRepository } : {}) },
+          },
+        },
+        role,
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: 'project-1',
+        kickoffKey: 'kickoff-1',
+        kickoffMessage: null,
+      });
+      const setup = await fixture();
+      setup.storage.connectionsRows[0]!.factoryProjectId = project.id;
+      for (const row of setup.storage.sessionsRows) row.factoryProjectId = project.id;
+      const context = requestContext();
+      const controller = context.get('controller') as AgentControllerRequestContext;
+      context.set('controller', {
+        ...controller,
+        getState: () => ({ factoryProjectId: project.id, projectRepositoryId: 'repo-link-1' }),
+      } as AgentControllerRequestContext);
+      const tools = await createSourceControlTools({
+        requestContext: context,
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+        workItem: {
+          selfReviewApprovedHead: target =>
+            selfReviewApprovedHead({
+              requestContext: context,
+              workItems: seeded.workItems,
+              boards: olderWork ? new Map([['work', selfReviewWorkBoard]]) : createBoardRegistry(),
+              target,
+            }),
+          recordRepository: async () => {},
+        },
+      });
+      return {
+        setup,
+        run: (repository?: string) =>
+          (tools.source_control_create_change_request!.execute as any)({
+            title: 'Ship it',
+            ...(repository ? { repository } : {}),
+          }),
+      };
+    };
+
+    it("leaves a pull request card's reviewer on Work free to open a change request", async () => {
+      const { setup, run } = await boundTo('github-pr', 'review');
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
+    });
+
+    it("still holds an older Work's issue card to self-review in the same project", async () => {
+      const { setup, run } = await boundTo('github-issue', 'work');
+      await expect(run()).rejects.toThrow('Self-review has not approved');
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it('holds a change request in the repository the card names to self-review, even outside the session repository', async () => {
+      const { setup, run } = await boundTo('github-issue', 'work', true, 'acme/other');
+      await expect(run('acme/other')).rejects.toThrow('Self-review has not approved');
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it("leaves a change request in a repository the card doesn't name ungated", async () => {
+      const { setup, run } = await boundTo('github-issue', 'work', true, 'acme/other');
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
+    });
+
+    it("lets the builder on a new project's Work, which has no self-review phase, open its change request", async () => {
+      const { setup, run } = await boundTo('github-issue', 'work', false);
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
     });
   });
 
@@ -416,17 +517,60 @@ describe('createSourceControlTools', () => {
     expect(setup.createPullRequest).not.toHaveBeenCalled();
   });
 
-  it('rejects checkout refresh outside a bound GitLab MR review session', async () => {
-    const setup = await fixture();
+  it('offers checkout refresh only in a bound GitLab merge-request review session', async () => {
+    const build = async (integrationId: string, branch?: string) => {
+      const setup = await fixture(integrationId);
+      if (branch) setup.storage.sessionsRows[0]!.branch = branch;
+      return createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: integrationId, storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+    };
+    const mrBranch = 'factory/gitlab-mr-17-abc123';
+
+    expect(await build('gitlab')).not.toHaveProperty('source_control_refresh_change_request_checkout');
+    expect(await build('github', mrBranch)).not.toHaveProperty('source_control_refresh_change_request_checkout');
+    const review = await build('gitlab', mrBranch);
+    expect(review).toHaveProperty('source_control_refresh_change_request_checkout');
+    expect(review).toHaveProperty('source_control_push_branch');
+  });
+
+  it('refreshes a bound GitLab merge-request checkout to the provider-reported head', async () => {
+    const branch = 'factory/gitlab-mr-17-abc123';
+    const newHead = 'b'.repeat(40);
+    const setup = await fixture('gitlab');
+    setup.storage.sessionsRows[0]!.branch = branch;
+    setup.getPullRequest.mockResolvedValue({ id: '17', state: 'open', merged: false, headSha: newHead } as never);
+    const executions: string[][] = [];
+    const sandbox = {
+      id: 'sandbox-1',
+      provider: 'custom',
+      workingDirectory: '/workspace',
+      executeCommand: vi.fn(async (_command: string, args: string[]) => {
+        executions.push(args);
+        if (args.includes('--show-current')) return { exitCode: 0, stdout: `${branch}\n`, stderr: '' };
+        if (args.includes('FETCH_HEAD') && args.includes('rev-parse')) {
+          return { exitCode: 0, stdout: `${newHead}\n`, stderr: '' };
+        }
+        if (args.includes('rev-parse')) return { exitCode: 0, stdout: `${'a'.repeat(40)}\n`, stderr: '' };
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+    };
     const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
-    await expect((tools.source_control_refresh_change_request_checkout!.execute as any)({})).rejects.toThrow(
-      'only available in a bound GitLab merge-request review session',
+
+    const result = await (tools.source_control_refresh_change_request_checkout!.execute as any)(
+      {},
+      { workspace: { sandbox } },
     );
-    expect(setup.getRepositoryTarget).not.toHaveBeenCalled();
+
+    expect(result).toEqual({ headSha: newHead, changed: true });
+    expect(setup.getPullRequest).toHaveBeenCalledWith(expect.objectContaining({ pullRequestId: '17' }));
+    expect(executions).toContainEqual(expect.arrayContaining(['fetch', 'origin', 'refs/merge-requests/17/head']));
   });
 
   it('fails closed when a session exists in more than one provider partition', async () => {
@@ -472,6 +616,7 @@ describe('createSourceControlTools', () => {
           if (args.includes('show-ref')) {
             return { exitCode: checkouts.missingBranch?.includes(workdir) ? 1 : 0, stdout: '', stderr: '' };
           }
+          if (args.includes('rev-parse')) return { exitCode: 0, stdout: 'abc123\n', stderr: '' };
           if (args.includes('get-url')) {
             const remote = checkouts.remotes?.[workdir] ?? `https://gitlab.com/acme/${workdir.split('/').pop()}.git`;
             return { exitCode: 0, stdout: `${remote}\n`, stderr: '' };
@@ -548,9 +693,23 @@ describe('createSourceControlTools', () => {
 
       const result = await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/repo' });
+      expect(result).toEqual({
+        pushed: true,
+        branch: 'factory/issue-1',
+        repository: 'acme/repo',
+        commit: 'abc123',
+        upToDate: false,
+      });
       expect(pushes()).toHaveLength(1);
-      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1']);
+      expect(pushes()[0]!.args).toEqual([
+        '-C',
+        '/home/user/repo',
+        'push',
+        '--porcelain',
+        '-u',
+        'origin',
+        'factory/issue-1',
+      ]);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-1' });
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
         { projectRepositoryId: 'repo-link-1', branch: 'factory/issue-1', changeRequestUrl: null },
@@ -575,7 +734,13 @@ describe('createSourceControlTools', () => {
         { workspace: { sandbox } },
       );
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/other' });
+      expect(result).toEqual({
+        pushed: true,
+        branch: 'factory/issue-1',
+        repository: 'acme/other',
+        commit: 'abc123',
+        upToDate: false,
+      });
       expect(executions.map(entry => entry.args)).toContainEqual([
         '-C',
         '/home/user/other',
@@ -583,7 +748,15 @@ describe('createSourceControlTools', () => {
         '-c',
         'factory/issue-1',
       ]);
-      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1']);
+      expect(pushes()[0]!.args).toEqual([
+        '-C',
+        '/home/user/other',
+        'push',
+        '--porcelain',
+        '-u',
+        'origin',
+        'factory/issue-1',
+      ]);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
       expect(JSON.stringify(executions)).not.toContain('glpat-secret');
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
@@ -834,158 +1007,106 @@ describe('createSourceControlTools', () => {
     });
   });
 
-  describe('publishing the review test check', () => {
+  describe('the change request a Review run reviews', () => {
     const head = 'cd1e5903851234567890abcdef1234567890abcd';
+    const check = {
+      name: 'Review / tests',
+      status: 'success',
+      title: 'All planned tests passed',
+      summary: '3 passed',
+    } as const;
 
-    async function publish(
-      input: Record<string, unknown>,
-      overrides: {
-        publishCommitCheck?: unknown;
-        pullRequest?: unknown;
-        testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-        boundChangeRequestId?: () => Promise<string | undefined>;
-      } = {},
+    async function reviewed(
+      overrides: { publishCommitCheck?: unknown; pullRequest?: unknown; boundChangeRequestId?: string } = {},
     ) {
       const setup = await fixture();
       const publishCommitCheck =
         'publishCommitCheck' in overrides
           ? overrides.publishCommitCheck
-          : vi.fn(async () => ({
-              id: '9',
-              name: FACTORY_TEST_CHECK_NAME,
-              headSha: head,
-              status: 'success',
-              url: null,
-            }));
+          : vi.fn(async () => ({ id: '9', name: check.name, headSha: head, status: 'success', url: null }));
       setup.getPullRequest.mockResolvedValue(
         ('pullRequest' in overrides
           ? overrides.pullRequest
           : { id: '17', state: 'open', headSha: head, headBranch: 'factory/issue-1' }) as any,
       );
       const versionControl = { ...setup.versionControl, publishCommitCheck } as VersionControl;
-      const tools = await createSourceControlTools({
-        requestContext: requestContext(),
-        providers: [{ id: 'gitlab', storage: setup.storage, versionControl }],
-        audit: setup.audit,
-        ...(overrides.testChecksEnabled ? { testChecksEnabled: overrides.testChecksEnabled } : {}),
-        ...('boundChangeRequestId' in overrides
-          ? overrides.boundChangeRequestId
-            ? { boundChangeRequestId: overrides.boundChangeRequestId }
-            : {}
-          : { boundChangeRequestId: async () => '17' }),
-      });
-      const tool = tools.source_control_publish_test_check!;
+      const providers = [{ id: 'gitlab', storage: setup.storage, versionControl }];
       return {
+        setup,
+        providers,
         publishCommitCheck: publishCommitCheck as ReturnType<typeof vi.fn>,
-        parse: (value: Record<string, unknown>) => (tool.inputSchema as any).safeParse(value),
-        run: () =>
-          (tool.execute as any)({
-            changeRequestId: 17,
-            headSha: head,
-            status: 'success',
-            title: 'All planned tests passed',
-            summary: '3 commands passed',
-            ...input,
+        resolve: () =>
+          resolveReviewedChangeRequest({
+            requestContext: requestContext(),
+            providers,
+            boundChangeRequestId: async () =>
+              'boundChangeRequestId' in overrides ? overrides.boundChangeRequestId : '17',
           }),
       };
     }
 
-    it('refuses to publish when the project turned test checks off', async () => {
-      const testChecksEnabled = vi.fn(async () => false);
-      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled });
-      await expect(run()).rejects.toThrow(/turned off for this Factory project/);
-      expect(testChecksEnabled).toHaveBeenCalledWith({ orgId: expect.any(String), factoryProjectId: 'project-1' });
-      expect(publishCommitCheck).not.toHaveBeenCalled();
+    it('offers sessions no tool to publish a test check', async () => {
+      const { setup, providers } = await reviewed();
+      const tools = await createSourceControlTools({ requestContext: requestContext(), providers, audit: setup.audit });
+      expect(tools).not.toHaveProperty('source_control_publish_test_check');
+      expect(Object.keys(tools).filter(name => /publish|commit_check/.test(name))).toEqual([]);
     });
 
-    it('refuses to publish on a change request other than the one the session reviews', async () => {
-      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => '18' });
-      await expect(run()).rejects.toThrow(/reviews change request 18, not 17/);
-      expect(publishCommitCheck).not.toHaveBeenCalled();
+    it('is undefined for a run that is not bound to a change request, such as a builder', async () => {
+      const { resolve, setup } = await reviewed({ boundChangeRequestId: undefined });
+      await expect(resolve()).resolves.toBeUndefined();
+      expect(setup.getPullRequest).not.toHaveBeenCalled();
     });
 
-    it('refuses to publish from a session that is not Review-bound, such as a builder', async () => {
-      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => undefined });
-      await expect(run()).rejects.toThrow(/Only a Review session bound to this change request/);
-      expect(publishCommitCheck).not.toHaveBeenCalled();
+    it('names the repository, change request, and head the run reviews', async () => {
+      const { resolve } = await reviewed();
+      await expect(resolve()).resolves.toMatchObject({
+        provider: 'gitlab',
+        repository: 'acme/repo',
+        changeRequestId: '17',
+        headSha: head,
+        headBranch: 'factory/issue-1',
+      });
     });
 
-    it('refuses to publish when the host cannot say which change request the session reviews', async () => {
-      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: undefined });
-      await expect(run()).rejects.toThrow(/Only a Review session bound to this change request/);
-      expect(publishCommitCheck).not.toHaveBeenCalled();
-    });
-
-    it('publishes on the change request the session reviews', async () => {
-      const { run } = await publish({}, { boundChangeRequestId: async () => '17' });
-      await expect(run()).resolves.toMatchObject({ id: '9' });
-    });
-
-    it('publishes when the project keeps test checks on', async () => {
-      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled: async () => true });
-      await expect(run()).resolves.toMatchObject({ id: '9' });
-      expect(publishCommitCheck).toHaveBeenCalledOnce();
-    });
-
-    it('publishes under the fixed Factory check name on the current head', async () => {
-      const { run, publishCommitCheck } = await publish({ headSha: head.toUpperCase(), details: '| cmd | ok |' });
-      await expect(run()).resolves.toMatchObject({ id: '9', name: FACTORY_TEST_CHECK_NAME });
+    it('publishes a commit check on the current head', async () => {
+      const { resolve, publishCommitCheck } = await reviewed();
+      const changeRequest = await resolve();
+      await expect(
+        changeRequest!.publishCommitCheck({ ...check, headSha: head.toUpperCase(), details: '| cmd | ok |' }),
+      ).resolves.toMatchObject({ id: '9' });
       expect(publishCommitCheck).toHaveBeenCalledWith({
         connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
         sourceId: 'acme/repo',
         actingUserId: 'user-1',
         headSha: head,
         ref: 'factory/issue-1',
-        name: FACTORY_TEST_CHECK_NAME,
-        status: 'success',
-        title: 'All planned tests passed',
-        summary: '3 commands passed',
+        ...check,
         details: '| cmd | ok |',
       });
     });
 
-    it('does not let the agent choose the check name', async () => {
-      const { parse } = await publish({});
-      const parsed = parse({
-        changeRequestId: 17,
-        headSha: head,
-        status: 'success',
-        title: 't',
-        summary: 's',
-        name: 'CI',
-      });
-      expect(parsed.success).toBe(true);
-      expect(parsed.data).not.toHaveProperty('name');
-    });
-
-    it('rejects an abbreviated head SHA in the schema', async () => {
-      const { parse } = await publish({});
-      expect(
-        parse({ changeRequestId: 17, headSha: 'cd1e590', status: 'success', title: 't', summary: 's' }).success,
-      ).toBe(false);
-    });
-
     it('refuses to publish for a head that is no longer current', async () => {
-      const { run, publishCommitCheck } = await publish(
-        {},
-        { pullRequest: { id: '17', state: 'open', headSha: 'f'.repeat(40) } },
+      const { resolve, setup, publishCommitCheck } = await reviewed();
+      const changeRequest = await resolve();
+      setup.getPullRequest.mockResolvedValue({ id: '17', state: 'open', headSha: 'f'.repeat(40) } as any);
+      await expect(changeRequest!.publishCommitCheck({ ...check, headSha: head })).rejects.toThrow(
+        /not the current change-request head/,
       );
-      await expect(run()).rejects.toThrow(/not the current change-request head/);
       expect(publishCommitCheck).not.toHaveBeenCalled();
     });
 
-    it('refuses to publish on a closed change request', async () => {
-      const { run, publishCommitCheck } = await publish(
-        {},
-        { pullRequest: { id: '17', state: 'closed', headSha: head } },
-      );
-      await expect(run()).rejects.toThrow(/is not open/);
-      expect(publishCommitCheck).not.toHaveBeenCalled();
+    it('refuses a change request that is not open', async () => {
+      const { resolve } = await reviewed({ pullRequest: { id: '17', state: 'closed', headSha: head } });
+      await expect(resolve()).rejects.toThrow(/is not open/);
     });
 
     it('reports providers that cannot publish commit checks', async () => {
-      const { run } = await publish({}, { publishCommitCheck: undefined });
-      await expect(run()).rejects.toThrow('gitlab does not support publishing commit checks; nothing was published.');
+      const { resolve } = await reviewed({ publishCommitCheck: undefined });
+      const changeRequest = await resolve();
+      await expect(changeRequest!.publishCommitCheck({ ...check, headSha: head })).rejects.toThrow(
+        'gitlab does not support publishing commit checks; nothing was published.',
+      );
     });
   });
 });
@@ -1130,8 +1251,15 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       await push();
       expect(git('symbolic-ref', '--short', 'HEAD')).toBe(branch);
       const next = commit('next change');
-      await push();
+      await expect(push()).resolves.toMatchObject({ commit: next, upToDate: false });
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(next);
+    });
+
+    it('reports a push that sent nothing new as up to date', async () => {
+      const { commit, push } = await checkoutFixture(repository);
+      const head = commit('agent change');
+      await expect(push()).resolves.toMatchObject({ commit: head, upToDate: false });
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository, commit: head, upToDate: true });
     });
 
     it('pushes an ahead session branch without moving the active checkout', async () => {
@@ -1142,7 +1270,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted main work');
       const dirty = git('status', '--porcelain');
 
-      await expect(push()).resolves.toEqual({ pushed: true, branch, repository });
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository, commit: sessionHead, upToDate: false });
 
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(sessionHead);
       expect(remote('show', `${branch}:tracked.txt`)).toBe('session work');

@@ -12,40 +12,41 @@ import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
 import { useChatSessionContext } from './useChatSessionContext';
 
-interface ChatModelsProviderProps {
+/** One provider for a draft and its thread, so a Start keeps the picked model on screen. */
+export function ChatModelsProvider({
+  children,
+  initialDraftModelId,
+}: {
   children: ReactNode;
-}
-
-export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
+  initialDraftModelId?: string;
+}) {
   const { draftSessionId } = useChatSessionContext();
-  return draftSessionId ? (
-    <DraftChatModelsProvider>{children}</DraftChatModelsProvider>
-  ) : (
-    <LiveChatModelsProvider>{children}</LiveChatModelsProvider>
-  );
+  const [draftModelId, setDraftModelId] = useState(initialDraftModelId);
+  const draft = useDraftModels(draftModelId, setDraftModelId);
+  const live = useLiveModels(draftModelId);
+  return <ChatModelsContext.Provider value={draftSessionId ? draft : live}>{children}</ChatModelsContext.Provider>;
 }
 
-function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { projectQuery: factoryProjectQuery, modelScope, catalogTarget } = useChatModelScope();
+function useDraftModels(draftModelId: string | undefined, setDraftModelId: (modelId: string) => void): ChatModelsApi {
+  const { projectQuery, modelScope, catalogTarget } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
   const fallbackModelQuery = useFallbackModelQuery(catalogTarget);
-  const [draftModelId, setDraftModelId] = useState<string>();
   const defaultModelId = routedDefaultModelId(modelScope, {
-    factory: factoryProjectQuery.data?.defaultModelId,
+    factory: projectQuery.data?.defaultModelId,
     personal: defaultModelQuery.data?.modelId,
   });
   const personalDefaultUsed = modelScope !== 'factory';
   const usesFallback = !defaultModelId;
-  const value: ChatModelsApi = {
+  return {
     activeModelId: draftModelId ?? defaultModelId ?? fallbackModelQuery.data,
     defaultModelId,
     pendingModelId: undefined,
     isLoading:
-      factoryProjectQuery.isPending ||
+      projectQuery.isPending ||
       (personalDefaultUsed && defaultModelQuery.isPending) ||
       (usesFallback && fallbackModelQuery.isPending),
     error:
-      factoryProjectQuery.error ??
+      projectQuery.error ??
       (personalDefaultUsed ? defaultModelQuery.error : null) ??
       (usesFallback ? fallbackModelQuery.error : null) ??
       undefined,
@@ -54,11 +55,9 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
       return Promise.resolve();
     },
   };
-
-  return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
 }
 
-function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
+function useLiveModels(draftModelId: string | undefined): ChatModelsApi {
   const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
   const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
@@ -81,14 +80,12 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     baseUrl,
     enabled: sessionEnabled,
   });
-  const value: ChatModelsApi = {
-    activeModelId: state?.modelId,
+  return {
+    activeModelId: state?.modelId ?? draftModelId,
     defaultModelId,
     pendingModelId: switching ? switchingTo?.modelId : undefined,
     isLoading: sessionModelsQuery.isPending,
     error: sessionModelsQuery.error ?? undefined,
     setModel: modelId => switchModel({ modelId }),
   };
-
-  return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
 }

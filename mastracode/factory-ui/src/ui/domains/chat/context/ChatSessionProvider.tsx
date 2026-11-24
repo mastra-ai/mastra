@@ -1,17 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ChatAnnotationsProvider } from '@mastra/playground-ui/components/ai/annotations';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { readFailedDraft } from '../services/handoffFiles';
+import { opensWithPrompt } from '../services/promptHandoff';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -21,8 +25,9 @@ import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
-import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
+import { TranscriptLoading } from '../components/TranscriptLoading';
 import { useChatSessionContext } from './useChatSessionContext';
+import { TranscriptContinuationContext, useTranscriptKey } from './transcriptKey';
 
 function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
   if (session?.capabilities?.switchModel !== false) return undefined;
@@ -42,9 +47,10 @@ export function ChatSessionConfigProvider({
   draftSessionId?: string;
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
+  const location = useLocation();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
-  const isUserDraft = userScoped && Boolean(draftSessionId);
+  const isDraft = Boolean(draftSessionId);
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
@@ -86,7 +92,7 @@ export function ChatSessionConfigProvider({
   // added router dependency.
   const entryParams = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
   const addressOverride = userScoped ? null : (entryParams.get('sessionId') ?? entryParams.get('resourceId'));
-  const routedSessionId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId);
+  const routedSessionId = draftSessionId ?? (userScoped ? threadId : (storedSession?.sessionId ?? sessionId));
   const chatSessionId = addressOverride ?? routedSessionId ?? factory?.id;
   const resourceId =
     addressOverride ?? (inSession ? (storedSession?.resourceId ?? storedSession?.userId) : factory?.id);
@@ -102,9 +108,8 @@ export function ChatSessionConfigProvider({
   // server materializes sandboxes lazily on first use (and revives dead ones),
   // so nothing here waits on a sandbox existing.
   const sandboxReady = addressOverride ? Boolean(addressOverride) : Boolean(storedSession) && !resolvingSession;
-  // A denied or missing session (404 from the session query) is fatal and must
-  // surface the error state, not the eternal preparing loader.
-  const sessionError = sessionQuery.error ?? undefined;
+  // An unreadable session must surface its error, not the eternal preparing loader.
+  const sessionError = sessionUnavailableError(sessionQuery);
   // `resourceReady` — safe to address the agent-controller session by its
   // session id for reads/streaming as soon as server-side session metadata
   // resolves (that is when its memory resource is known). The endpoints are
@@ -116,7 +121,10 @@ export function ChatSessionConfigProvider({
   // for an in-session mount. Distinct from `!sandboxReady`, which is also
   // false outside any session. Track the pending query (not `!sandboxReady`)
   // so a denied/missing session cannot keep the preparing loader up forever.
-  const sandboxPreparing = resolvingSession && !addressOverride;
+  // A thread opened with its first prompt is mid-create: it shows that prompt,
+  // not the preparing steps, and sends it once the session exists.
+  const openingWithPrompt = opensWithPrompt(location.state);
+  const sandboxPreparing = resolvingSession && !addressOverride && !openingWithPrompt;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one it becomes addressable as soon as
   // session metadata resolves — same as `resourceReady`.
@@ -124,7 +132,7 @@ export function ChatSessionConfigProvider({
     userScoped || !inSession
       ? Boolean(chatSessionId)
       : Boolean(addressOverride) || (Boolean(storedSession) && !resolvingSession);
-  const resourceEnabled = !isUserDraft && resourceAddressable;
+  const resourceEnabled = !isDraft && resourceAddressable;
   const value = {
     sessionId: chatSessionId ?? '',
     resourceId: resourceId ?? '',
@@ -144,7 +152,7 @@ export function ChatSessionConfigProvider({
       : undefined,
     sessionThreadId: storedSession?.sessionId ?? undefined,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
-    draftSessionId: isUserDraft ? draftSessionId : undefined,
+    draftSessionId,
     factorySessionState:
       factory && repository
         ? {
@@ -174,7 +182,10 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { sessionId, resourceReady, baseUrl, sessionThreadId } = useChatSessionContext();
+  const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
+  const location = useLocation();
+  const failedDraft = readFailedDraft(location.state, draftSessionId);
+  const transcript = useTranscriptKey({ sessionId, threadId });
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -200,24 +211,29 @@ export function ChatSessionBoundary({
   // Above the transcript so the favicon and the stepper read one pending state.
   return (
     <ChatThreadMessagesContext.Provider value={messages}>
-      <ChatTranscriptProvider
-        // No `isPending` segment: remounting on the pending -> ready flip would drop
-        // the live SSE listener. Results merge into the reducer instead.
-        key={`${sessionId}:${threadId ?? 'draft'}`}
-        threadId={threadId}
-        initialMessages={messagesQuery.data}
-        hasMoreHistory={messagesQuery.hasMore}
-        isLoadingMoreHistory={messagesQuery.isLoadingMore}
-        loadMoreHistory={messagesQuery.loadMore}
-      >
-        <ChatModelsProvider>
-          <ChatThinkingProvider>
-            <ChatCommandsProvider>
-              <ComposerImagesProvider>{children}</ComposerImagesProvider>
-            </ChatCommandsProvider>
-          </ChatThinkingProvider>
-        </ChatModelsProvider>
-      </ChatTranscriptProvider>
+      <TranscriptContinuationContext.Provider value={transcript.continueInto}>
+        <ChatTranscriptProvider
+          // No `isPending` segment: remounting on the pending -> ready flip would drop
+          // the live SSE listener. Results merge into the reducer instead.
+          key={transcript.key}
+          threadId={threadId}
+          initialMessages={messagesQuery.data}
+          hasMoreHistory={messagesQuery.hasMore}
+          isLoadingMoreHistory={messagesQuery.isLoadingMore}
+          loadMoreHistory={messagesQuery.loadMore}
+        >
+          <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
+            <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
+              <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+                <ComposerImagesProvider initialImages={failedDraft?.files}>
+                  {/* Below the keyed transcript, so each thread starts with no annotations. */}
+                  <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
+                </ComposerImagesProvider>
+              </ChatCommandsProvider>
+            </ChatThinkingProvider>
+          </ChatModelsProvider>
+        </ChatTranscriptProvider>
+      </TranscriptContinuationContext.Provider>
     </ChatThreadMessagesContext.Provider>
   );
 }
@@ -233,12 +249,12 @@ export function ChatMessageBoundary({
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
   const { sessionError } = useChatSessionContext();
-  const { historyInitializing, preparing } = useChatMessagePreparation();
+  const { preparing } = useChatMessagePreparation();
 
   if (sessionError) return <ChatMessageFeedback error={sessionError} />;
 
   if (preparing) {
-    return showPreparation ? <SessionPrepareSteps historyInitializing={historyInitializing} /> : null;
+    return showPreparation ? <TranscriptLoading /> : null;
   }
 
   if (value.threadId && value.error) {
@@ -250,9 +266,7 @@ export function ChatMessageBoundary({
 
 function ChatMessageFeedback({ error }: { error: Error }) {
   const { retrySession } = useChatSessionContext();
-  // The server intentionally returns the same 404 for a missing session and a
-  // private one owned by someone else, so the message covers both.
-  const notFound = (error as { status?: number }).status === 404;
+  const notFound = isSessionNotFound(error);
   return (
     <div className="flex flex-col items-stretch gap-4">
       <Notice variant="destructive">

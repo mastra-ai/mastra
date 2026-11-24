@@ -14,9 +14,17 @@ export function usePinnedSessions(): ReadonlySet<string> {
   return useLocalStorageStore(pinnedSessionsStore);
 }
 
+export function readPinnedSessions(): ReadonlySet<string> {
+  return pinnedSessionsStore.read();
+}
+
 export function setSessionPinned(sessionId: string, pinned: boolean) {
   const next = new Set(pinnedSessionsStore.read());
   if (pinned) next.add(sessionId);
   else next.delete(sessionId);
   pinnedSessionsStore.write(next);
+}
+
+export function updatePinnedSessions(update: (pinned: ReadonlySet<string>) => ReadonlySet<string>) {
+  pinnedSessionsStore.write(update(pinnedSessionsStore.read()));
 }

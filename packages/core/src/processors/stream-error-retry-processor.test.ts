@@ -10,6 +10,10 @@ import {
 } from './stream-error-retry-processor';
 import type { ProcessAPIErrorArgs } from './index';
 
+// These tests pin the backoff timing itself with fake timers, so they need the
+// real waitDelay rather than the instant one from @internal/test-utils/setup.
+vi.unmock('../utils/retry-after');
+
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
   const messageList = new MessageList({ threadId: 'test-thread' });
   messageList.add({ role: 'user', content: 'hello' }, 'input');
@@ -246,6 +250,20 @@ describe('StreamErrorRetryProcessor', () => {
     );
     expect(isBadRequestError(anthropicRejection('Your weekly limit has been reached, try again later'))).toBe(false);
     expect(isBadRequestError({ statusCode: 400, message: 'Incorrect API key provided.' })).toBe(false);
+  });
+
+  it('isBadRequestError never matches a 400 that rejects the model, since a retry fails identically', () => {
+    const message = "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account.";
+    const error = new APICallError({
+      message,
+      url: 'https://chatgpt.com/backend-api/codex/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { type: 'invalid_request_error', code: 'model_not_found', message } }),
+      isRetryable: false,
+    });
+
+    expect(isBadRequestError(error)).toBe(false);
   });
 
   it('isBadRequestError returns false for non-400 errors', () => {

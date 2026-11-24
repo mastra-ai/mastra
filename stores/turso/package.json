@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turso",
-  "version": "0.1.18-alpha.1",
+  "version": "0.1.24-alpha.1",
   "description": "Turso Database storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -46,10 +46,11 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.76.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.86.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

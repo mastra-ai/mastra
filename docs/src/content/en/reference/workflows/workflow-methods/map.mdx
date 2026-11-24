@@ -21,8 +21,9 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`)
   content={[
   {
     name: 'mappingFunction',
-    type: '(params: { inputData: any }) => any',
-    description: 'Function that transforms input data and returns the mapped result',
+    type: '(params: { inputData: any }) => Promise<any>',
+    description:
+      'Async function that transforms input data and returns the mapped result. The function must return a Promise, so declare it with `async`.',
     isOptional: false,
   },
   {
@@ -74,21 +75,23 @@ Use `inputData` to access the full output of the previous step.
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" oxfmt:false
   .then(step1)
-  .map(({ inputData }) => {
+  .map(async ({ inputData }) => {
     console.log(inputData);
   })
 ```
 
-## Using `getStepResult()`
+## Using `getStepResultAsync()`
 
-Use `getStepResult()` to access the full output of a specific step by referencing the step's instance.
+Use `getStepResultAsync()` to access the full output of a specific step by referencing the step's instance or its ID.
 
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts" oxfmt:false
   .then(step1)
-  .map(async ({ getStepResult }) => {
-    console.log(getStepResult(step1));
+  .map(async ({ getStepResultAsync }) => {
+    console.log(await getStepResultAsync(step1));
   })
 ```
+
+`getStepResultAsync()` replaces the deprecated `getStepResult()`, which returns the same value synchronously.
 
 ## Using `getInitData()`
 

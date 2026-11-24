@@ -37,18 +37,39 @@ export type ExecuteFunctionParams<
   requestContext: RequestContext<TRequestContext>;
   actor?: ActorSignal;
   inputData: TStepInput;
+  /** The run's state. On runs with `storageVersion: 2`, reading it throws: use `await getState()` instead. */
   state: TState;
+  /** Resolves to the run's state, or only its named top-level keys, with this step's `setState` changes. */
+  getState(): Promise<unknown extends TState ? Record<string, any> : TState>;
+  getState<K extends (unknown extends TState ? string : keyof TState & string)>(
+    keys: readonly K[],
+  ): Promise<unknown extends TState ? Record<string, any> : Pick<TState, K & keyof TState>>;
   setState(state: TState): Promise<void>;
+  /**
+   * Merges the top-level keys it's given into the run's state and validates the merged state.
+   * Keys you don't pass keep their current value; a key set to `undefined` is removed.
+   */
+  updateState(state: Partial<TState>): Promise<void>;
   resumeData?: TResume;
   suspendData?: TSuspend;
   retryCount: number;
   getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any, any>
     ? InferStandardSchemaOutput<T['inputSchema']>
     : T;
+  /**
+   * @deprecated Use `await getStepResultAsync(step)` instead. `getStepResult` will be removed in a future major release.
+   */
   getStepResult<TOutput>(step: string): TOutput;
+  /**
+   * @deprecated Use `await getStepResultAsync(step)` instead. `getStepResult` will be removed in a future major release.
+   */
   getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
     step: TStep,
   ): InferStandardSchemaOutput<TStep['outputSchema']>;
+  getStepResultAsync<TOutput>(step: string): Promise<TOutput>;
+  getStepResultAsync<TStep extends Step<string, any, any, any, any, any, EngineType>>(
+    step: TStep,
+  ): Promise<InferStandardSchemaOutput<TStep['outputSchema']>>;
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
@@ -81,7 +102,7 @@ export type ConditionFunctionParams<
   TRequestContext extends Record<string, any> | unknown = unknown,
 > = Omit<
   ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
-  'setState' | 'suspend'
+  'setState' | 'updateState' | 'suspend'
 >;
 
 export type ExecuteFunction<
@@ -191,3 +212,6 @@ export const getStepResult = (stepResults: Record<string, StepResult<any, any, a
 
   return result?.status === 'success' ? result.output : null;
 };
+
+export const getStepResultAsync = async (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) =>
+  getStepResult(stepResults, step);

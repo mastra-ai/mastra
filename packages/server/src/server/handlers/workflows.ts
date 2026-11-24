@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { Mastra } from '@mastra/core';
 import type { MastraServerCache } from '@mastra/core/cache';
 import type { RequestContext } from '@mastra/core/di';
@@ -50,6 +51,15 @@ import { getEffectiveResourceId, getHandlerFGAProvider, getPublicWorkflowById, v
  * in the workflow's run map, and a finished run has already been dropped from it.
  */
 const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
+
+/**
+ * A run's result with its step results read: a storage v2 result's `steps` is a loader that
+ * reads them from storage, which a response can't carry, so it answers with them as for v1.
+ */
+async function withLoadedSteps<T extends { steps?: unknown }>(result: T): Promise<T> {
+  const steps: unknown = result.steps;
+  return typeof steps === 'function' ? { ...result, steps: await steps() } : result;
+}
 
 /**
  * Runs whose chunks are already being written to the cache in this process,
@@ -112,7 +122,7 @@ export interface WorkflowContext extends Context {
   requestContext?: RequestContext;
 }
 
-async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
+export async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   const logger = mastra.getLogger();
 
   if (!workflowId) {
@@ -122,7 +132,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   let workflow;
 
   // First check registry for temporary workflows
-  workflow = WorkflowRegistry.getWorkflow(workflowId);
+  workflow = WorkflowRegistry.getWorkflow(workflowId, mastra);
 
   if (!workflow) {
     workflow = getPublicWorkflowById(mastra, workflowId);
@@ -170,6 +180,11 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   summary: 'List all workflows',
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'list_workflows',
+    description: 'List the workflows you can run, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, partial, requestContext }: any) => {
     try {
@@ -321,6 +336,11 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   summary: 'Get workflow by ID',
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow',
+    description: 'Get details for one workflow, including its input schema and steps.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, workflowId }: any) => {
     try {
@@ -449,6 +469,11 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   description:
     'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=result,steps). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow_run',
+    description: 'Get the status and result of a workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows, requestContext }) => {
     try {
@@ -709,6 +734,12 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Start workflow asynchronously',
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'start_workflow',
+    description:
+      'Run a workflow and wait for it to finish or suspend. Returns the run id and the result, or the suspend payload.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
@@ -735,7 +766,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         );
       }
       const _run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
-      const result = await _run.start({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.start({ ...params, requestContext }));
       return result;
     } catch (error) {
       return handleError(error, 'Error starting async workflow');
@@ -870,6 +901,11 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow asynchronously',
   description: 'Resumes a suspended workflow execution asynchronously without streaming',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'resume_workflow_run',
+    description: 'Resume a suspended workflow run with resume data and wait for it to finish or suspend again.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
@@ -898,7 +934,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.resume({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.resume({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1058,7 +1094,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.restart({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.restart({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1237,7 +1273,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.timeTravel({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.timeTravel({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1360,6 +1396,11 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Cancel workflow run',
   description: 'Cancels an in-progress workflow execution',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'cancel_workflow_run',
+    description: 'Cancel an in-progress workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext }) => {
     try {
@@ -1559,6 +1600,7 @@ const stepExecutionBodySchema = z.object({
   format: z.enum(['legacy', 'vnext']).optional(),
   perStep: z.boolean().optional(),
   validateInputs: z.boolean().optional(),
+  storageVersion: z.union([z.literal(1), z.literal(2)]).optional(),
 });
 
 type StepExecutionBody = z.infer<typeof stepExecutionBodySchema>;
@@ -1642,6 +1684,7 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
         format: body.format,
         perStep: body.perStep,
         validateInputs: body.validateInputs,
+        storageVersion: body.storageVersion,
       });
 
       return result;
@@ -1665,6 +1708,58 @@ const workflowEventSchema = z.object({
   index: z.number().optional(),
   deliveryAttempt: z.number().optional(),
 });
+
+/** Core's internal durable-experiment workflow (`EXPERIMENT_WORKFLOW_ID`, not exported from `@mastra/core`). */
+const EXPERIMENT_WORKFLOW_ID = '__mastra-experiment';
+
+/** The only events a durable experiment run sends. It never suspends, resumes or time travels. */
+const EXPERIMENT_EVENT_TYPES = new Set([
+  'workflow.start',
+  'workflow.step.run',
+  'workflow.step.end',
+  'workflow.end',
+  'workflow.fail',
+  'workflow.cancel',
+]);
+
+/**
+ * The experiment workflow's steps read the dataset, experiment and request context from the run
+ * input, so a pushed event must belong to a run Mastra started, be an event such a run sends, and
+ * carry that run's stored input wherever it carries one. Starting a durable experiment saves the
+ * run before publishing its start event.
+ */
+function assertExperimentEventMatchesRun(
+  event: Event,
+  run: { snapshot: WorkflowRunState | string } | null | undefined,
+): void {
+  if (!run) throw new HTTPException(404, { message: 'Workflow run not found' });
+  const data = event.data as {
+    runId?: unknown;
+    prevResult?: { output?: unknown };
+    stepResults?: { input?: unknown };
+    restart?: { stepResults?: { input?: unknown } };
+    timeTravel?: unknown;
+  };
+  const snapshot = (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot) as WorkflowRunState;
+  const storedInput = asJson(snapshot.context?.input);
+  const carriedInputs = [
+    ...(event.type === 'workflow.start' ? [data.prevResult?.output] : []),
+    ...(data.stepResults && 'input' in data.stepResults ? [data.stepResults.input] : []),
+    ...(data.restart?.stepResults && 'input' in data.restart.stepResults ? [data.restart.stepResults.input] : []),
+  ];
+  if (
+    !EXPERIMENT_EVENT_TYPES.has(event.type) ||
+    data.timeTravel !== undefined ||
+    data.runId !== event.runId ||
+    carriedInputs.some(input => !isDeepStrictEqual(asJson(input), storedInput))
+  ) {
+    throw new HTTPException(400, { message: 'Workflow event does not match its run' });
+  }
+}
+
+function asJson(value: unknown): unknown {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
 
 const receiveWorkflowEventBodySchema = z.object({
   event: workflowEventSchema.passthrough(),
@@ -1720,6 +1815,7 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
         runId: event.runId,
         ...(typeof workflowName === 'string' ? { workflowName } : {}),
       });
+      if (workflowName === EXPERIMENT_WORKFLOW_ID) assertExperimentEventMatchesRun(event, existingRun);
       await validateRunOwnership(
         existingRun,
         getEffectiveResourceId(requestContext, undefined),

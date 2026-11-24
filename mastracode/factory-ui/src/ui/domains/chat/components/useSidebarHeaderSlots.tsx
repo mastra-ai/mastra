@@ -1,33 +1,26 @@
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import type { PageLayoutProps } from '@mastra/playground-ui/components/PageLayout';
+import type { PageLayoutPageProps } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 
-import { GlobalSearchButton } from '../../search/components/GlobalSearchButton';
 import { ChatHeaderSidebarTrigger } from './ChatHeaderSidebarTrigger';
 
+/**
+ * Page header slots for while the desktop sidebar is collapsed: the sidebar trigger goes in front of the breadcrumbs.
+ * On mobile the app's header holds the trigger.
+ */
 export function useSidebarHeaderSlots({
   breadcrumbs,
-  headerActions,
-}: { breadcrumbs?: ReactNode; headerActions?: ReactNode } = {}): Pick<
-  PageLayoutProps,
-  'breadcrumbs' | 'headerActions'
-> {
+  triggerClassName,
+}: { breadcrumbs?: ReactNode; triggerClassName?: string } = {}): Pick<PageLayoutPageProps, 'breadcrumbs'> {
   const { isMobile, desktopState } = useSidebar();
-  const collapsed = !isMobile && desktopState === 'collapsed';
+  const showTrigger = !isMobile && desktopState === 'collapsed';
 
   return {
     breadcrumbs:
-      collapsed || breadcrumbs ? (
+      showTrigger || breadcrumbs ? (
         <>
-          {collapsed && <ChatHeaderSidebarTrigger />}
+          {showTrigger && <ChatHeaderSidebarTrigger className={triggerClassName} />}
           {breadcrumbs}
-        </>
-      ) : undefined,
-    headerActions:
-      collapsed || headerActions ? (
-        <>
-          {headerActions}
-          {collapsed && <GlobalSearchButton id="global-search-collapsed-trigger" />}
         </>
       ) : undefined,
   };

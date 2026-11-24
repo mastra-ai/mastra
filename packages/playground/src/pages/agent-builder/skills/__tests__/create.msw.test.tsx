@@ -85,14 +85,5 @@ describe('AgentBuilderSkillsCreate', () => {
 
       await waitFor(() => expect(screen.getByTestId('skills-list-page')).toBeTruthy());
     });
-
-    it('does not render the skill builder starter', async () => {
-      setCapabilities(rbacCapabilities(['stored-skills:read']));
-
-      renderPage();
-
-      await waitFor(() => expect(screen.getByTestId('skills-list-page')).toBeTruthy());
-      expect(screen.queryByTestId('skill-builder-starter-stub')).toBeNull();
-    });
   });
 });

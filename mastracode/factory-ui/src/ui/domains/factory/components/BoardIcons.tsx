@@ -1,56 +1,38 @@
 import type { BoardPhaseKind } from '@mastra/factory/boards';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  CheckCircle2,
-  CircleDashed,
-  CircleDot,
-  CircleX,
-  ClipboardCheck,
-  Eye,
-  GitPullRequest,
-  Hammer,
-  Play,
-  Search,
-} from 'lucide-react';
-import type { ComponentType, SVGProps } from 'react';
+import type { ComponentType } from 'react';
 
+import { phaseKindOf } from '../boardFlow';
+import type { BoardInfo } from '../boardFlow';
+import { CARD_SOURCES } from '../cardSources';
 import type { WorkItemSource } from '../services/workItems';
 import { boardStage, stageTone } from '../stages';
 import type { BuiltinStageId, StageTone } from '../stages';
-import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
-
-// GitHub keeps issue vs PR distinct — card meta shows #N for both
-const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
-  'github-issue': { icon: GithubIcon, className: 'text-foreground' },
-  'github-pr': { icon: GitPullRequest, className: 'text-badge-green-indicator' },
-  'gitlab-issue': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
-  'gitlab-pr': { icon: GitLabIcon, className: 'text-badge-red-indicator' },
-  'linear-issue': { icon: LinearIcon, className: 'text-badge-blue-indicator' },
-  'jira-issue': { icon: JiraIcon, className: 'text-badge-blue-indicator' },
-  'incidentio-follow-up': { icon: IncidentIoIcon, className: 'text-badge-red-indicator' },
-  'slack-thread': { icon: SlackIcon, className: '' },
-  manual: { icon: CircleDot, className: 'text-muted-foreground' },
-};
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
+import { IconHammer } from '@mastra/playground-ui/icons/central/IconHammer';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
 
 export function SourceIcon({ source, className }: { source: WorkItemSource; className?: string }) {
-  const { icon: Icon, className: sourceClassName } = SOURCE_ICONS[source];
-  return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
+  const { Icon, iconClassName } = CARD_SOURCES[source];
+  return <Icon data-source={source} className={cn('size-4 shrink-0', iconClassName, className)} aria-hidden />;
 }
 
 /** Icon for each known run-action label; `Play` is the fallback for anything else. */
 const ACTION_ICONS: Record<string, ComponentType> = {
-  Investigate: Search,
-  Build: Hammer,
-  'Prepare approval': ClipboardCheck,
-  Review: Eye,
+  Investigate: IconMagnifyingGlass,
+  Build: IconHammer,
+  'Prepare approval': IconClipboard2,
+  Review: IconEyeOpen,
 };
 
 export function actionIcon(label: string) {
-  const Icon = ACTION_ICONS[label] ?? Play;
+  const Icon = ACTION_ICONS[label] ?? IconPlay;
   return <Icon aria-hidden />;
 }
 
@@ -62,27 +44,55 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
   terminal: 'success',
 };
 
-const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string }> = {
-  neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle', strongTint: 'bg-fill-strong' },
+const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string; gradientFrom: string }> = {
+  neutral: {
+    icon: 'text-muted-foreground',
+    tint: 'bg-fill-subtle',
+    strongTint: 'bg-fill-strong',
+    gradientFrom: 'from-fill-subtle',
+  },
   orange: {
     icon: 'text-(--orange-500) dark:text-(--orange-400)',
     tint: 'bg-badge-orange-subtle',
     strongTint: 'bg-badge-orange-strong',
+    gradientFrom: 'from-badge-orange-subtle',
   },
   cyan: {
     icon: 'text-(--cyan-500) dark:text-(--cyan-400)',
     tint: 'bg-badge-cyan-subtle',
     strongTint: 'bg-badge-cyan-strong',
+    gradientFrom: 'from-badge-cyan-subtle',
   },
-  info: { icon: 'text-info-indicator', tint: 'bg-info-subtle', strongTint: 'bg-badge-blue-strong' },
-  green: { icon: 'text-badge-green-indicator', tint: 'bg-badge-green-subtle', strongTint: 'bg-badge-green-strong' },
-  purple: { icon: 'text-badge-purple-indicator', tint: 'bg-badge-purple-subtle', strongTint: 'bg-badge-purple-strong' },
+  info: {
+    icon: 'text-info-indicator',
+    tint: 'bg-info-subtle',
+    strongTint: 'bg-badge-blue-strong',
+    gradientFrom: 'from-badge-blue-subtle',
+  },
+  green: {
+    icon: 'text-badge-green-indicator',
+    tint: 'bg-badge-green-subtle',
+    strongTint: 'bg-badge-green-strong',
+    gradientFrom: 'from-badge-green-subtle',
+  },
+  purple: {
+    icon: 'text-badge-purple-indicator',
+    tint: 'bg-badge-purple-subtle',
+    strongTint: 'bg-badge-purple-strong',
+    gradientFrom: 'from-badge-purple-subtle',
+  },
   success: {
     icon: 'text-(--green-500) dark:text-(--green-400)',
     tint: 'bg-success-subtle',
     strongTint: 'bg-badge-green-strong',
+    gradientFrom: 'from-badge-green-subtle',
   },
-  destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-subtle', strongTint: 'bg-badge-red-strong' },
+  destructive: {
+    icon: 'text-destructive-indicator',
+    tint: 'bg-destructive-subtle',
+    strongTint: 'bg-badge-red-strong',
+    gradientFrom: 'from-badge-red-subtle',
+  },
 };
 
 function MaskedArt({ source, className }: { source: string; className: string }) {
@@ -120,6 +130,16 @@ function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId |
   return kind ? undefined : boardStage(stage);
 }
 
+/** The `kind` to draw a phase with: built-in boards get each phase's own art, other boards are drawn by kind. */
+export function phaseIconKind(boardId: string, kind: BoardPhaseKind): BoardPhaseKind | undefined {
+  return boardId === 'work' || boardId === 'review' ? undefined : kind;
+}
+
+export function boardPhaseIconKind(board: BoardInfo | undefined, stage: string): BoardPhaseKind | undefined {
+  const kind = phaseKindOf(board, stage);
+  return board && kind ? phaseIconKind(board.id, kind) : undefined;
+}
+
 function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
   return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
@@ -138,14 +158,15 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
     case 'working':
       return <ProgressPieIcon progress={0.5} className={className} />;
     case 'review':
+    case 'pr-review':
       return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
     case 'done':
     case 'terminal':
-      return <CheckCircle2 width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleCheck aria-hidden className={cn('size-icon-md', lucideClassName)} />;
     case 'canceled':
-      return <CircleX width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleX aria-hidden className={cn('size-icon-md', lucideClassName)} />;
     case 'resting':
-      return <CircleDashed width={16} height={16} aria-hidden className={lucideClassName} />;
+      return <IconCircleDashed aria-hidden className={cn('size-icon-md', lucideClassName)} />;
   }
 }
 
@@ -153,9 +174,23 @@ export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].tint;
 }
 
+/** Lane headers fade a translucent status tint into a band: raised card in dark, a fill in light where card is white. */
+export function stageHeaderTintClass(stage: string, kind?: BoardPhaseKind): string {
+  return cn(
+    'bg-fill-subtle dark:bg-card bg-linear-to-r to-transparent',
+    TONE_CLASSES[stageToneFor(stage, kind)].gradientFrom,
+  );
+}
+
 export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].strongTint;
 }
+
+export function stageColorClass(stage: string, kind?: BoardPhaseKind): string {
+  return TONE_CLASSES[stageToneFor(stage, kind)].icon;
+}
+
+export const unfocusedStageClass = 'opacity-30';
 
 export function BoardStageIcon({
   stage,

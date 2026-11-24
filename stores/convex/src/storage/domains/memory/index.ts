@@ -138,6 +138,8 @@ type StoredOMRecord = {
   supersededBy?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Only on the record `omSwapBufferedReflection` returns; never stored. */
+  bufferedReflectionVerified?: boolean;
 };
 
 function toISO(value: Date | string): string {
@@ -1215,6 +1217,8 @@ export class MemoryConvex extends MemoryStorage {
       generationCount: currentRecord.generationCount,
       activeObservations: currentRecord.activeObservations ?? '',
       observationTokenCount: currentRecord.observationTokenCount ?? 0,
+      bufferedReflection: currentRecord.bufferedReflection ?? null,
+      reflectedObservationLineCount: currentRecord.reflectedObservationLineCount ?? null,
     };
   }
 
@@ -1254,7 +1258,10 @@ export class MemoryConvex extends MemoryStorage {
       },
     );
     // No stored record: nothing was created.
-    return doc ? parseStoredOMRecord(doc) : input.currentRecord;
+    if (!doc) return input.currentRecord;
+    const record = parseStoredOMRecord(doc);
+    // Set by the server only on a generation created after it checked the snapshot's buffer.
+    return doc.bufferedReflectionVerified === true ? { ...record, bufferedReflectionVerified: true } : record;
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {

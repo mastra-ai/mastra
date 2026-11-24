@@ -19,6 +19,8 @@ export function threadToListRow(thread: ThreadRow): TracesListViewTrace {
     startedAt: thread.startedAt,
     endedAt: thread.endedAt,
     traceCount: thread.traceCount,
+    timeToFirstChunkMs: thread.timeToFirstChunkMs,
+    timeToFirstTokenMs: thread.timeToFirstTokenMs,
     createdAt: thread.startedAt,
   };
 }

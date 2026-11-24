@@ -214,6 +214,22 @@ describe('TestLangSmithExporter', () => {
       expect(mockRunTree.postRun).toHaveBeenCalled();
     });
 
+    it('keeps timeToFirstTokenMs out of metadata on non-LLM spans', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span-id',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'agent-123', timeToFirstTokenMs: 42 } as any,
+      });
+
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: rootSpan });
+
+      const { metadata } = MockRunTreeClass.mock.calls.at(-1)![0];
+      expect(metadata).toMatchObject({ agentId: 'agent-123' });
+      expect(metadata).not.toHaveProperty('timeToFirstTokenMs');
+    });
+
     it('should create child RunTree for child spans', async () => {
       // First create root span
       const rootSpan = createMockSpan({

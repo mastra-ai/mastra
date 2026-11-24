@@ -29,7 +29,7 @@ const THINKING_URL = `${DEFAULT_MODEL_URL}/thinking`;
 const MODELS_URL = `${TEST_BASE_URL}/web/config/models`;
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 const UNAVAILABLE_WARNING = /None of your connected accounts can run/;
-const FOLLOWING_BUILT_IN = 'Thinking: Medium · Built-in default';
+const FOLLOWING_BUILT_IN = 'Thinking: Medium (Built-in default)';
 
 const models: AvailableModelOption[] = [
   { id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true },
@@ -98,10 +98,33 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: 'Apply to running sessions' }));
+    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
     await waitForMutationsIdle(client);
 
     expect(screen.getByText(/Switched 1 session/)).toHaveTextContent('Switched 1 session. 1 skipped: not running (1)');
+  });
+
+  it('does not claim nothing was running when every running chat failed to switch', async () => {
+    stubPersonalCatalog(models);
+    server.use(
+      http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null })),
+      http.post(`${DEFAULT_MODEL_URL}/apply`, () =>
+        HttpResponse.json({
+          modelId: 'openai/gpt-5',
+          applied: [],
+          skipped: [{ sessionId: 'running-session', reason: 'apply-failed' }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderInField();
+
+    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
+    await waitForMutationsIdle(client);
+
+    expect(screen.getByText(/No sessions switched/)).toHaveTextContent(
+      'No sessions switched. 1 skipped: apply failed (1)',
+    );
   });
 
   it('clears the personal default', async () => {
@@ -176,7 +199,7 @@ describe('PersonalDefaultModel', () => {
 
     renderInField();
 
-    expect(await screen.findByPlaceholderText('GPT-5 · Built-in default')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('GPT-5 (Built-in default)')).toBeInTheDocument();
   });
 
   it('follows the built-in level, never the Factory level, until a personal level is saved, and hands back to it', async () => {

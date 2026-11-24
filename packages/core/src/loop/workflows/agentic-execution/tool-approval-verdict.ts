@@ -19,6 +19,32 @@ import { validateToolInput } from '../../../tools/validation';
 
 type ToolInputValidator = (input: unknown) => { data?: unknown; error?: unknown };
 
+/**
+ * Set to `true` next to a function-form `requireToolApproval`. The function is dropped when the
+ * run's request context is stored, so a resume that doesn't pass it again falls back to this
+ * JSON-safe stand-in and requires approval for every call, the safe default the durable agent's
+ * boolean shadow also uses.
+ */
+export const REQUIRE_TOOL_APPROVAL_FALLBACK_KEY = '__mastra_requireToolApprovalFallback';
+
+/** Request-context keys that carry the run's approval policy; approval policies never see them. */
+export const INTERNAL_APPROVAL_KEYS: ReadonlySet<string> = new Set([
+  '__mastra_requireToolApproval',
+  REQUIRE_TOOL_APPROVAL_FALLBACK_KEY,
+]);
+
+/** The run's approval policy: the live option, else what the request context carries for it. */
+export function resolveRunToolApprovalPolicy(
+  live: RequireToolApproval | undefined,
+  requestContext: RequestContext | undefined,
+): RequireToolApproval | undefined {
+  return (
+    live ??
+    (requestContext?.get('__mastra_requireToolApproval') as RequireToolApproval | undefined) ??
+    (requestContext?.get(REQUIRE_TOOL_APPROVAL_FALLBACK_KEY) === true ? true : undefined)
+  );
+}
+
 type BeforeApprovalWithRuntime = (
   input: unknown,
   ctx: BeforeApprovalContext,
@@ -39,9 +65,9 @@ export function buildToolApprovalContext({
   return {
     toolName,
     args,
-    // Exclude the internal approval hook so policies only see public request-context entries.
+    // Exclude the internal approval keys so policies only see public request-context entries.
     requestContext: requestContext
-      ? Object.fromEntries([...requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'))
+      ? Object.fromEntries([...requestContext.entries()].filter(([key]) => !INTERNAL_APPROVAL_KEYS.has(key)))
       : {},
     workspace,
   };

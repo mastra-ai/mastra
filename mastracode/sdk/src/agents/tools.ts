@@ -13,6 +13,7 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { ToolAfterHookContext, ToolHooks } from '@mastra/core/tools';
+import { jsonSchema } from 'ai';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
 import type { MastraCodeComposedState } from '../schema.js';
@@ -24,6 +25,8 @@ import { getWorkflowTool } from '../tools/workflows/get-workflow.js';
 import { listWorkflowsTool } from '../tools/workflows/list-workflows.js';
 import { runWorkflowTool } from '../tools/workflows/run-workflow.js';
 import { WORKFLOW_MANAGEMENT_TOOL_IDS } from '../tools/workflows/tool-ids.js';
+import { prepareProviderWebSearchRoute, resolveProviderWebSearchRoute } from './model.js';
+import type { ProviderWebSearchRoute } from './model.js';
 
 /** Minimal shape for tools passed to createDynamicTools. */
 export type ToolLike = {
@@ -123,6 +126,28 @@ type DynamicToolProvider =
       requestContext: RequestContext;
     }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
 
+/**
+ * The provider-executed search tool for a route. The Mastra gateway's OpenRouter
+ * chat endpoint takes `openrouter:web_search` (the OpenRouter provider sends a
+ * provider tool `openrouter.web_search` with that type), as Mastra's own
+ * templates use against the gateway.
+ */
+function createProviderWebSearchTool(route: ProviderWebSearchRoute): ToolLike {
+  switch (route) {
+    case 'anthropic':
+      return createAnthropic({}).tools.webSearch_20250305();
+    case 'openai':
+      return createOpenAI({}).tools.webSearch();
+    case 'mastra-gateway':
+      return {
+        type: 'provider',
+        id: 'openrouter.web_search',
+        args: {},
+        inputSchema: jsonSchema({ type: 'object', properties: {} }),
+      } as unknown as ToolLike;
+  }
+}
+
 export function createDynamicTools(
   mcpManager?: McpManager,
   extraTools?: DynamicToolProvider,
@@ -140,9 +165,10 @@ export function createDynamicTools(
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
-    const modelId = ctx?.session?.modelId;
-    const isAnthropicModel = modelId?.startsWith('anthropic/');
-    const isOpenAIModel = modelId?.startsWith('openai/');
+    // In deployed Factory, the search route reads tenant credentials; prepare them first if needed.
+    const preparing = prepareProviderWebSearchRoute(ctx?.session?.modelId, { requestContext });
+    if (preparing) return preparing.then(() => getDynamicTools({ requestContext }));
+    const webSearchRoute = resolveProviderWebSearchRoute(ctx?.session?.modelId, { requestContext });
 
     // Filesystem, grep, glob, edit, write, execute_command, and process
     // management tools are now provided by the workspace (see workspace.ts).
@@ -170,14 +196,8 @@ export function createDynamicTools(
 
     // Async only when a Tavily/Parallel key is set; otherwise the tool list stays synchronous.
     const configuredWebTools = createConfiguredWebTools();
-    if (!configuredWebTools) {
-      if (isAnthropicModel) {
-        const anthropic = createAnthropic({});
-        tools.web_search = anthropic.tools.webSearch_20250305();
-      } else if (isOpenAIModel) {
-        const openai = createOpenAI({});
-        tools.web_search = openai.tools.webSearch();
-      }
+    if (!configuredWebTools && webSearchRoute) {
+      tools.web_search = createProviderWebSearchTool(webSearchRoute);
     }
 
     const mcpTools = mcpManager?.getTools();

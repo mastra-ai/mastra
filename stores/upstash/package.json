@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "1.5.5-alpha.1",
+  "version": "1.6.3-alpha.1",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
@@ -52,7 +52,8 @@
     "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

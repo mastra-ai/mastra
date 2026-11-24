@@ -108,13 +108,14 @@
  * once here, under the same rule.
  */
 import { isDeepStrictEqual } from 'node:util';
-import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2Content } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { Agent } from '../../../agent/agent';
 import type { AgentExecutionOptions } from '../../../agent/agent.types';
 import { createDurableAgent } from '../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../agent/durable/create-evented-agent';
-import type { DurableAgent, DurableAgentStreamOptions } from '../../../agent/durable/durable-agent';
+import type { DurableAgent } from '../../../agent/durable/durable-agent';
+import type { DurableAgentStreamOptions } from '../../../agent/durable/types';
 import type { MessageListInput } from '../../../agent/message-list/types';
 import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
 import type { PubSub } from '../../../events/pubsub';
@@ -298,10 +299,12 @@ export function normalizeChunkPayload(type: string, payload: unknown): unknown {
   const normalized = normalizePayload(payload);
   if (normalized === null || typeof normalized !== 'object') return normalized;
 
-  // Only the plain loop puts the suspended step's usage on these chunks yet (#27440).
-  // suspended-step-usage.scenario.test.ts tracks that gap per engine.
+  // Engines differ on which of these chunks carry the suspended step's usage
+  // (suspended-step-usage.scenario.test.ts tracks it per engine). Only the plain loop
+  // adds the step's provider metadata, which its MODEL_GENERATION cost reads.
   if (type === 'tool-call-approval' || type === 'tool-call-suspended') {
     delete (normalized as Record<string, unknown>).usage;
+    delete (normalized as Record<string, unknown>).providerMetadata;
     return normalized;
   }
   if (type !== 'tool-error') return normalized;
@@ -608,14 +611,13 @@ function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModel
     .filter(part => part.type === 'text-delta')
     .map(part => String(part.delta ?? ''))
     .join('');
-  const toolCalls = tape
-    .filter(part => part.type === 'tool-call')
-    .map(part => ({
-      type: 'tool-call' as const,
-      toolCallId: String(part.toolCallId),
-      toolName: String(part.toolName),
-      input: String(part.input ?? '{}'),
-    }));
+  // A streamed `tool-call` part has the same shape as a `doGenerate` tool-call
+  // content part. Passing it through whole keeps fields such as
+  // `providerExecuted`, so `generate()` and `stream()` replay the same
+  // assistant message on the next request.
+  const toolCalls = tape.filter(part => part.type === 'tool-call') as Array<
+    Extract<LanguageModelV2Content, { type: 'tool-call' }>
+  >;
   const finish = tape.find(part => part.type === 'finish');
 
   return {

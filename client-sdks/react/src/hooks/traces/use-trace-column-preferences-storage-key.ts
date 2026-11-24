@@ -1,10 +1,10 @@
 import { useMastraClient } from '../../mastra-client-context';
 
-export type TraceColumnPreferencesScope = 'traces' | 'spans';
+export type TraceColumnPreferencesScope = 'traces' | 'spans' | 'threads';
 
 /**
  * Storage key for the trace list column preferences, scoped to the Mastra server the client
- * talks to so each project keeps its own column layout, and to the list (traces or spans)
+ * talks to so each project keeps its own column layout, and to the list (traces, spans or threads)
  * so each list keeps its own selection.
  */
 export function useTraceColumnPreferencesStorageKey(scope: TraceColumnPreferencesScope = 'traces'): string {

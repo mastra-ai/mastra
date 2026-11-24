@@ -7,6 +7,7 @@ export type {
   ToolsResolverContext,
   ToolsWithInput,
 } from './tools.js';
+export type { CodeModeOptions, ConnectCodeMode } from './code-mode.js';
 export { channels } from './channels.js';
 export type {
   ChannelsOptions,
@@ -20,9 +21,28 @@ export { credential } from './credential.js';
 export { userConnectRoutes } from './user-connect-routes.js';
 export type { UserConnectRoutesOptions, UserConnectIdentityContext } from './user-connect-routes.js';
 export { CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
-export type { ConnectPromptPayload, ConnectPromptProvider } from './connect-prompt-tool.js';
+export type { ConnectPromptPayload, ConnectPromptProvider, ConnectPromptResume } from './connect-prompt-tool.js';
 export { MastraConnectError } from './errors.js';
-export type { MastraConnectErrorCode } from './errors.js';
-export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';
+export type { MastraConnectErrorCode, MastraConnectErrorSource } from './errors.js';
+export { ConnectClient, DEFAULT_CONNECT_CLIENT_TIMEOUT_MS } from './connect-client.js';
+export type {
+  ConnectClientConfig,
+  ConnectRequestInit,
+  ConnectRequestMethod,
+  ListConnectionsInput,
+} from './connect-client.js';
+export { ConnectEvents } from './events.js';
+export type { ConnectEvent, ConnectEventsOptions, EventCursor, EventCursorStore, EventStreamGap } from './events.js';
+export type {
+  ConnectClientOptions,
+  ConnectionContext,
+  ConnectionCredential,
+  ConnectSession,
+  ConnectUrl,
+  IntegrationCatalogEntry,
+  ProjectConnection,
+  ProxyRequestOptions,
+  ProxyResponse,
+} from './client.js';
 export { PROVIDERS, CHANNELS } from './registry.js';
 export type { ProviderRegistration } from './registry.js';

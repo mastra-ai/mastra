@@ -1,5 +1,6 @@
 import type {
   AgentExecutionOptions,
+  AgentExecutionOptionsBase,
   MultiPrimitiveExecutionOptions,
   AgentGenerateOptions,
   AgentStreamOptions,
@@ -79,7 +80,8 @@ type OptionalizeUndefined<T> = T extends Date
           >
         : T;
 
-type Serialized<T> = T extends Date
+/** A server payload type as it arrives over JSON: `Date` fields become ISO strings. */
+export type Serialized<T> = T extends Date
   ? string
   : T extends readonly (infer U)[]
     ? Serialized<U>[]
@@ -100,6 +102,8 @@ type WithoutIndexSignatures<T> = {
   [K in keyof T as string extends K ? never : number extends K ? never : symbol extends K ? never : K]: T[K];
 };
 
+export type GetScoreResponse = GeneratedResponse<'GET /observability/scores/:scoreId'>;
+export type GetFeedbackResponse = GeneratedResponse<'GET /observability/feedback/:feedbackId'>;
 export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
 export type FeedbackItem = ListFeedbackResponse['feedback'][number];
 export type GetMetricTimeSeriesResponse = GeneratedResponse<'POST /observability/metrics/timeseries'>;
@@ -109,7 +113,12 @@ export interface ClientOptions {
   baseUrl: string;
   /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
   apiPrefix?: string;
-  /** Number of retry attempts for failed requests */
+  /**
+   * Number of retry attempts for failed requests. Defaults to 3 for read requests
+   * (GET, HEAD, OPTIONS). Write requests (POST, PUT, PATCH, DELETE) are not retried
+   * unless this or a per-request `retries` count is set, so a failed attempt cannot
+   * repeat a state-changing request.
+   */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */
   backoffMs?: number;
@@ -193,7 +202,11 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
-  /** Overrides the client's configured retry count for this request. */
+  /**
+   * Overrides the client's configured retry count for this request. Also opts a write
+   * request (POST, PUT, PATCH, DELETE) back into retrying, since writes are not retried
+   * by default.
+   */
   retries?: number;
   /** Per-request abort signal. Merged with the client-wide `abortSignal` from `ClientOptions`. */
   signal?: AbortSignal;
@@ -414,10 +427,13 @@ export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
 > & {
   schema: PublicSchema<OUTPUT>;
 };
+// Built on `AgentExecutionOptionsBase`, not `AgentExecutionOptions`: omitting from the full type,
+// which adds `structuredOutput` through a conditional, made inferring OUTPUT from a zod v3 schema
+// fail with TS2590. See https://github.com/mastra-ai/mastra/issues/29574
 export type StreamParamsBase<OUTPUT = undefined> = {
   model?: string;
   tracingOptions?: TracingOptions;
-  requestContext?: RequestContext;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
   clientToolsResolver?: ClientToolsResolver;
   /**
@@ -426,10 +442,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
    */
   abortSignal?: AbortSignal;
 } & WithoutMethods<
-  Omit<
-    AgentExecutionOptions<OUTPUT>,
-    'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput' | 'scopes'
-  >
+  Omit<AgentExecutionOptionsBase<OUTPUT>, 'model' | 'requestContext' | 'clientTools' | 'options' | 'scopes'>
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -661,6 +674,9 @@ export interface LoopVNextNetworkResponse {
 
 export type McpServerListResponse = GeneratedResponse<'GET /mcp/v0/servers'>;
 
+/** The built-in Mastra MCP server (`server.mcp`) as described by `GET /mcp/builtin`. */
+export type GetBuiltinMcpServerResponse = GeneratedResponse<'GET /mcp/builtin'>;
+
 /** MCP server registry entry plus the transports served under `/mcp/:serverId`. */
 export type McpServerInfo = McpServerListResponse['servers'][number];
 
@@ -693,6 +709,21 @@ export type McpServerEventOccurrence = McpServerEventPollResponse['events'][numb
 
 /** A frame yielded by `streamMcpServerEvent` (experimental). */
 export type McpServerEventStreamFrame = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/stream'>;
+
+/** Task surfaces of an MCP server and its recent tasks across principals (experimental). */
+export type McpServerTaskListResponse = GeneratedResponse<'GET /mcp/:serverId/tasks'>;
+
+/** A tool, workflow or agent an MCP server runs as a task (experimental). */
+export type McpServerTaskSurface = McpServerTaskListResponse['surfaces'][number];
+
+/**
+ * One MCP server task as Studio sees it: identified by `taskKey` (a hash of the task id) and a
+ * hashed principal, never by the task id itself (experimental).
+ */
+export type McpServerTask = McpServerTaskListResponse['tasks'][number];
+
+/** Answers to a task's open input requests, keyed by request (experimental). */
+export type McpServerTaskInputResponses = Body<'POST /mcp/:serverId/tasks/:taskKey/input'>['inputResponses'];
 
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
@@ -1461,7 +1492,14 @@ export interface MastraPackage {
 
 export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'>;
 
-export type GetObservabilityCapabilitiesResponse = GeneratedResponse<'GET /observability/capabilities'>;
+type BaseObservabilityCapabilitiesResponse = GeneratedResponse<'GET /observability/capabilities'>;
+export type GetObservabilityCapabilitiesResponse = Omit<BaseObservabilityCapabilitiesResponse, 'capabilities'> & {
+  capabilities: BaseObservabilityCapabilitiesResponse['capabilities'] & {
+    /** Optional capabilities advertised by Platform's trace page endpoint. */
+    tracePage?: boolean;
+    tracePageSearch?: boolean;
+  };
+};
 
 // ============================================================================
 // Workspace Types
@@ -2564,3 +2602,22 @@ export type SendNotificationInput = GeneratedRequest<
 
 export type SendNotificationResult =
   GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>;
+
+// Saved views: a named copy of an observability list page's URL state.
+export type {
+  FilterGroup,
+  FilterNode,
+  FilterToken,
+  SavedViewColumn,
+  SavedViewDateRange,
+  SavedViewPage,
+  SavedViewSort,
+  SavedViewState,
+} from '@mastra/core/storage';
+
+export type {
+  GetTracePageArgs,
+  TracePageRequest,
+  TracePageResponse,
+  TracePageNode,
+} from './resources/observability-route-types';

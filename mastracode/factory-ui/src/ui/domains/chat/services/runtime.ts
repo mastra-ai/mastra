@@ -1,6 +1,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { TokenUsage } from '@mastra/core/agent-controller';
+import { replaceEqualDeep } from '@tanstack/react-query';
 
 import type { OMBudgets } from './om';
 
@@ -19,6 +20,7 @@ export interface ChatRuntimeState {
   bufferingMessages: boolean;
   bufferingObservations: boolean;
   goal?: GoalSnapshot;
+  runsStarted: number;
   tokensPerSec: number;
   /** Assistant message the decode window measures; a different message starts a new window. */
   _decodeMessageId?: string;
@@ -29,6 +31,7 @@ export interface ChatRuntimeState {
 
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
+  runsStarted: 0,
   omPhase: 'idle',
   bufferingMessages: false,
   bufferingObservations: false,
@@ -107,6 +110,7 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     case 'agent_start':
       return {
         ...state,
+        runsStarted: state.runsStarted + 1,
         tokensPerSec: 0,
         _decodeMessageId: undefined,
         _decodeStartedAt: 0,
@@ -171,7 +175,7 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
       }
       return {
         ...state,
-        usage,
+        usage: event.total ?? state.usage,
         tokensPerSec,
         _decodeMessageId: undefined,
         _decodeStartedAt: 0,
@@ -179,33 +183,78 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
         _decodeHasReasoning: false,
       };
     }
-    case 'display_state_changed':
-      return {
+    case 'display_state_changed': {
+      // Snapshots arrive many times a second and mostly repeat what is shown; the same state lets React skip the chat.
+      return replaceEqualDeep(state, {
         ...state,
         omProgress: event.displayState.omProgress ?? state.omProgress,
         usage: event.displayState.tokenUsage ?? state.usage,
         bufferingMessages: event.displayState.bufferingMessages ?? false,
         bufferingObservations: event.displayState.bufferingObservations ?? false,
-      };
+      });
+    }
     case 'goal_evaluation':
       return { ...state, goal: event.payload };
     case 'follow_up_queued':
       return { ...state, followUpCount: event.count };
+    case 'om_status': {
+      const { active, buffered } = event.windows;
+      return replaceEqualDeep(state, {
+        ...state,
+        omProgress: {
+          pendingTokens: active.messages.tokens,
+          threshold: active.messages.threshold,
+          observationTokens: active.observations.tokens,
+          reflectionThreshold: active.observations.threshold,
+        },
+        bufferingMessages: buffered.observations.status === 'running',
+        bufferingObservations: buffered.reflection.status === 'running',
+      });
+    }
+    case 'state_changed': {
+      const { observationThreshold, reflectionThreshold } = event.state;
+      return patchOMBudgets(state, {
+        ...(event.changedKeys.includes('observationThreshold') && typeof observationThreshold === 'number'
+          ? { threshold: observationThreshold }
+          : {}),
+        ...(event.changedKeys.includes('reflectionThreshold') && typeof reflectionThreshold === 'number'
+          ? { reflectionThreshold }
+          : {}),
+      });
+    }
     case 'om_observation_start':
       return { ...state, omPhase: 'observing' };
     case 'om_reflection_start':
-      return { ...state, omPhase: 'reflecting' };
+      return patchOMBudgets({ ...state, omPhase: 'reflecting' }, { observationTokens: event.tokensToReflect });
     case 'om_buffering_start':
-      return { ...state, omPhase: 'buffering' };
+      return { ...state, omPhase: 'buffering', ...bufferingFlag(event.operationType, true) };
     case 'om_observation_end':
-    case 'om_observation_failed':
+      return patchOMBudgets(
+        { ...state, omPhase: 'idle' },
+        { observationTokens: event.observationTokens, pendingTokens: 0 },
+      );
     case 'om_reflection_end':
-    case 'om_reflection_failed':
+      return patchOMBudgets({ ...state, omPhase: 'idle' }, { observationTokens: event.compressedTokens });
     case 'om_buffering_end':
     case 'om_buffering_failed':
     case 'om_activation':
+      return { ...state, omPhase: 'idle', ...bufferingFlag(event.operationType, false) };
+    case 'om_observation_failed':
+    case 'om_reflection_failed':
       return { ...state, omPhase: 'idle' };
     default:
       return state;
   }
+}
+
+/** Without a full reading yet, the view keeps showing the session snapshot rather than a partial one. */
+function patchOMBudgets(state: ChatRuntimeState, patch: Partial<OMBudgets>): ChatRuntimeState {
+  return state.omProgress ? { ...state, omProgress: { ...state.omProgress, ...patch } } : state;
+}
+
+function bufferingFlag(
+  operationType: 'observation' | 'reflection',
+  running: boolean,
+): Pick<ChatRuntimeState, 'bufferingMessages'> | Pick<ChatRuntimeState, 'bufferingObservations'> {
+  return operationType === 'observation' ? { bufferingMessages: running } : { bufferingObservations: running };
 }

@@ -64,7 +64,7 @@ export function CommandComposer({
           {...commandMenu.inputProps}
           ref={inputRef}
           aria-label="Message"
-          placeholder="Type / for commands…"
+          placeholder="Type / for commands"
           onKeyDown={handleComposerKeyDown}
         />
         <ComposerActions>

@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
@@ -13,36 +14,28 @@ import { environmentPayload, environmentRepository, FACTORY_ID } from './fixture
 
 const ENVIRONMENT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`;
 
-function useFactory() {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] }),
-    ),
-  );
-}
-
 function useEnvironment(environment: FactoryEnvironmentPayload) {
   server.use(
     http.get(ENVIRONMENT_URL, () => HttpResponse.json({ environment })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            integrationId: 'github',
-            installationId: 'inst-1',
-            repositories: environment.repositories.map(repository => ({
-              id: repository.projectRepositoryId,
-              branch: repository.defaultBranch,
-              sandboxWorkdir: '/workspace',
-              repository: repository.slug
-                ? {
-                    externalId: repository.repositoryId,
-                    slug: repository.slug,
-                    defaultBranch: repository.defaultBranch,
-                  }
-                : null,
-            })),
+            id: FACTORY_ID,
+            name: 'Acme',
+            repositories: environment.repositories.map(({ projectRepositoryId, repositoryId, slug, defaultBranch }) =>
+              slug
+                ? listedRepository(projectRepositoryId, slug, {
+                    externalId: repositoryId,
+                    defaultBranch,
+                    branch: defaultBranch,
+                  })
+                : listedRepository(projectRepositoryId, projectRepositoryId, {
+                    slug: null,
+                    defaultBranch: null,
+                    branch: defaultBranch,
+                  }),
+            ),
           },
         ],
       }),
@@ -74,7 +67,6 @@ function renderRepositoriesSettings() {
 
 describe('Repository environment settings', () => {
   it('opens settings from the keyboard and explains pre-cloning without changing the selection', async () => {
-    useFactory();
     useEnvironment(environmentPayload());
     const user = userEvent.setup();
 
@@ -94,7 +86,6 @@ describe('Repository environment settings', () => {
   });
 
   it('shows ordered live repositories, their commands and their last build failure', async () => {
-    useFactory();
     useEnvironment(
       environmentPayload({
         repositories: [
@@ -131,7 +122,6 @@ describe('Repository environment settings', () => {
   });
 
   it('offers a drag handle per live repository and none for a dead link', async () => {
-    useFactory();
     useEnvironment(
       environmentPayload({
         repositories: [
@@ -150,7 +140,6 @@ describe('Repository environment settings', () => {
   });
 
   it('removes a dead link whose repository is gone', async () => {
-    useFactory();
     let environment = environmentPayload({
       repositories: [
         environmentRepository({ projectRepositoryId: 'link-web', position: 1 }),
@@ -185,24 +174,7 @@ describe('Repository environment settings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
   });
 
-  it('toggles a repository out of the environment', async () => {
-    useFactory();
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderRepositoriesSettings();
-
-    await user.click(await screen.findByRole('button', { name: 'Show settings for acme/api' }));
-    await user.click(screen.getByRole('switch', { name: 'Clone acme/api into every session' }));
-
-    await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-api', inEnvironment: false }] });
-  });
-
   it('keeps the controls usable while the environment refreshes after a save', async () => {
-    useFactory();
     const environment = environmentPayload();
     useEnvironment(environment);
     const patches = recordPatches(environment);
@@ -235,7 +207,6 @@ describe('Repository environment settings', () => {
   });
 
   it('saves only the changed setup command without overwriting another repository', async () => {
-    useFactory();
     const environment = environmentPayload();
     useEnvironment(environment);
     const patches = recordPatches(environment);
@@ -252,7 +223,6 @@ describe('Repository environment settings', () => {
   });
 
   it('saves teardown without resending setup or another repository', async () => {
-    useFactory();
     const environment = environmentPayload();
     useEnvironment(environment);
     const patches = recordPatches(environment);
@@ -268,7 +238,6 @@ describe('Repository environment settings', () => {
   });
 
   it('surfaces a failed save as a toast and shows the stored value again', async () => {
-    useFactory();
     const environment = environmentPayload();
     useEnvironment(environment);
     server.use(http.patch(ENVIRONMENT_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));

@@ -99,7 +99,9 @@ export function tryRepairJson(input: string): Record<string, any> | null {
 }
 
 export type StreamPart =
-  | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
+  | Exclude<LanguageModelV2StreamPart, { type: 'finish' | 'tool-result' }>
+  // V3+ provider specs (AI SDK v6+) stream partial provider-executed results flagged `preliminary`.
+  | (Extract<LanguageModelV2StreamPart, { type: 'tool-result' }> & { preliminary?: boolean })
   // Present on newer AI SDK provider specs (V4 / AI SDK v7) but absent from the V2 union.
   | {
       type: 'reasoning-file';
@@ -294,6 +296,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           isError: value.isError,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
+          ...(value.preliminary ? { preliminary: true } : {}),
         },
       };
 
@@ -608,6 +611,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
         output: chunk.payload.result,
+        ...(chunk.payload.preliminary ? { preliminary: true } : {}),
         // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
       };
     case 'tool-error':

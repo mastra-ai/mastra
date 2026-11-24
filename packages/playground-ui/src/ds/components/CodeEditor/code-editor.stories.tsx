@@ -32,7 +32,7 @@ const meta: Meta<typeof CodeEditor> = {
     },
     variant: {
       control: { type: 'select' },
-      options: ['default', 'embedded'],
+      options: ['default', 'embedded', 'inline'],
     },
   },
 };
@@ -361,5 +361,13 @@ export const Prose: Story = {
     showCopyButton: false,
     'aria-label': 'Instructions',
     className: 'w-80 max-w-full',
+  },
+};
+
+export const Inline: Story = {
+  args: {
+    ...Prose.args,
+    variant: 'inline',
+    'aria-label': 'Skill instructions',
   },
 };

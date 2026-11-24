@@ -54,7 +54,7 @@ afterEach(() => {
 describe('S4 — token leak negative scenarios on failure paths', () => {
   it('pushBranch: a failed push never exposes credentials or rewrites the remote', async () => {
     const sandbox = new RecordingSandbox(script =>
-      script.includes('push -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected: non-fast-forward' } : OK,
+      script.includes('push --porcelain -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected: non-fast-forward' } : OK,
     );
 
     const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', TOKEN, 'octocat/hello').catch(e => e);
@@ -73,7 +73,7 @@ describe('S4 — token leak negative scenarios on failure paths', () => {
 
   it('pushBranch: an egress failure remains classified without exposing credentials', async () => {
     const sandbox = new RecordingSandbox(script =>
-      script.includes('push -u origin')
+      script.includes('push --porcelain -u origin')
         ? { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' }
         : OK,
     );

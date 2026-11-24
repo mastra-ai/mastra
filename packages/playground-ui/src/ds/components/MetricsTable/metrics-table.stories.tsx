@@ -98,7 +98,7 @@ export const ChartLegend: Story = {
           rows={models}
           getRowKey={m => m.key}
           sort={sort}
-          onSortChange={setSort}
+          onSortChange={next => setSort(next ?? { column: 'spend', direction: 'desc' })}
           onRowHover={m => setHover(m?.key)}
           onRowClick={m => setHidden(h => (h.includes(m.key) ? h.filter(k => k !== m.key) : [...h, m.key]))}
           isRowDimmed={m => hidden.includes(m.key)}
@@ -121,9 +121,8 @@ const agents: AgentRow[] = [
 
 const num = (v: string) => <span className="text-muted-foreground tabular-nums">{v}</span>;
 
-/** A plain data table under a chart: no marks or row actions, uncontrolled sort. */
-export const DataTable: Story = {
-  render: () => (
+function AgentRunsTable() {
+  return (
     <div className="w-[min(56rem,calc(100vw-3rem))]">
       <MetricsTable
         aria-label="Agent runs"
@@ -161,5 +160,8 @@ export const DataTable: Story = {
         ]}
       />
     </div>
-  ),
-};
+  );
+}
+
+/** A plain data table under a chart: no marks or row actions, uncontrolled sort. */
+export const DataTable: Story = { render: () => <AgentRunsTable /> };

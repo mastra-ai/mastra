@@ -17,4 +17,12 @@ describe('SeriesMark', () => {
     expect(box?.style.color).toBe('rgb(1, 2, 3)');
     expect(box?.querySelector('[data-testid="logo"]')).not.toBeNull();
   });
+
+  it('paints nothing in a series color without one', () => {
+    const { container } = render(<SeriesMark icon={<svg data-testid="glyph" />} />);
+    const box = container.querySelector<HTMLElement>('[data-slot="series-mark"]');
+    expect(box?.style.color).toBe('');
+    expect(box?.style.background).toBe('');
+    expect(box?.querySelector('[data-testid="glyph"]')).not.toBeNull();
+  });
 });

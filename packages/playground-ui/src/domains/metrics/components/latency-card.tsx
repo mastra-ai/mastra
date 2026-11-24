@@ -28,11 +28,17 @@ const SERIES: MetricsLineChartSeries[] = [
   { dataKey: 'p99', label: 'P99', color: CHART_COLORS.violet },
 ];
 
-const EMPTY_NOUN: Record<LatencyEntity, string> = {
-  agents: 'agent runs',
-  workflows: 'workflow runs',
-  tools: 'tool calls',
+const TITLE: Record<LatencyEntity, string> = {
+  agents: 'Agent latency',
+  workflows: 'Workflow latency',
+  tools: 'Tool latency',
 };
+
+const VIEWS = [
+  { value: 'agents', label: TITLE.agents },
+  { value: 'workflows', label: TITLE.workflows },
+  { value: 'tools', label: TITLE.tools },
+] as const;
 
 /** P50, P95 and P99 durations of agent runs, workflow runs or tool calls; a point opens its traces. */
 export type LatencyCardProps = {
@@ -51,17 +57,12 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
   const peak = Math.max(0, ...data.map(b => b.p95 ?? 0));
 
   const layout = {
-    title: 'Latency',
-    description: 'Duration percentiles.',
+    title: TITLE[entity],
+    titleMenu: { value: entity, onValueChange: setEntity, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(ROOT_ENTITY[entity])} />,
     toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={SERIES} />
-        <MetricsCard.Tabs<LatencyEntity> value={entity} onValueChange={setEntity}>
-          <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
-          <MetricsCard.Tab value="workflows">Workflows</MetricsCard.Tab>
-          <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
-        </MetricsCard.Tabs>
       </MetricsCard.Toolbar>
     ),
   };
@@ -75,15 +76,10 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
   }
 
   return (
-    <ChartCard
-      {...layout}
-      summary={
-        <MetricsCard.Summary value={peak > 0 ? formatDuration(peak) : '—'} label="peak P95" isLoading={isLoading} />
-      }
-      isUpdating={isPlaceholderData}
-    >
-      <ChartArea isEmpty={!isLoading && peak === 0} emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}>
+    <ChartCard {...layout} total={formatDuration(peak)} isLoading={isLoading} isUpdating={isPlaceholderData}>
+      <ChartArea isEmpty={!isLoading && peak === 0}>
         <MetricsLineChart
+          lineStyle="thin"
           data={data}
           series={SERIES}
           height="fill"

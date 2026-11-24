@@ -2,21 +2,8 @@
 title: "Retrieval, semantic search, reranking | RAG"
 description: "After storing embeddings, you need to retrieve relevant chunks to answer user queries."
 packages:
-  - "@mastra/astra"
-  - "@mastra/chroma"
   - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/mongodb"
-  - "@mastra/opensearch"
-  - "@mastra/oracledb"
-  - "@mastra/pg"
-  - "@mastra/pinecone"
-  - "@mastra/qdrant"
   - "@mastra/rag"
-  - "@mastra/s3vectors"
-  - "@mastra/upstash"
-  - "@mastra/vectorize"
-  - "@mastra/voyageai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -27,6 +14,8 @@ import TabItem from "@theme/TabItem";
 After storing embeddings, you need to retrieve relevant chunks to answer user queries.
 
 Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
+
+For an agent that answers from your docs or policies, with each customer or team limited to its own content, use [Knowledge](/docs/knowledge/overview) and its [scopes](/docs/knowledge/scopes-and-access) instead. The [RAG overview](/reference/rag/overview) explains when to use each.
 
 ## How retrieval works
 
@@ -91,7 +80,7 @@ Results can also include `vector` when you set `includeVector: true`, and `docum
 
 ## Advanced retrieval options
 
-### Metadata Filtering
+### Metadata filtering
 
 Filter results based on metadata fields to narrow down the search space. This approach - combining vector similarity search with metadata filters - is sometimes called hybrid vector search, as it merges semantic search with structured filtering criteria.
 
@@ -273,9 +262,13 @@ const results = await pgVector.query({
 })
 ```
 
-Postgres vector indexes (HNSW and IVFFlat) can't restrict that search to rows matching a condition. When a filter is present, pgVector instead compares the query vector against every matching row and returns the closest `topK`. Results are exact, but the work grows with the number of rows the filter matches. Indexing the metadata column speeds up row retrieval. The distance comparisons still happen per row.
+With an HNSW index on pgvector 0.8.0 or newer, PostgreSQL searches the index and skips rows that don't match the filter. When the index search can't fill `topK`, pgVector reruns the query as an exact search.
 
-### Vector Query Tool
+With IVFFlat, or HNSW on older pgvector versions, pgVector compares the query vector against every matching row. Results are exact, but the work grows with the number of matching rows.
+
+Indexing the metadata fields you filter on speeds up both cases and gives PostgreSQL the row counts it needs to choose between them.
+
+### Vector query tool
 
 Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
 
@@ -290,7 +283,7 @@ const vectorQueryTool = createVectorQueryTool({
 })
 ```
 
-When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
+When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search the documentation to find relevant information about X topic."
 
 This is particularly useful when:
 
@@ -298,7 +291,7 @@ This is particularly useful when:
 - The retrieval process requires complex decision-making
 - You want the agent to combine multiple retrieval strategies based on context
 
-#### Database-Specific Configurations
+#### Database-specific configurations
 
 The Vector Query Tool supports database-specific configurations that enable you to use unique features and optimizations of different vector stores.
 
@@ -398,7 +391,7 @@ await pineconeQueryTool.execute({ queryText: 'search query' }, { mastra, request
 
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
 
-### Vector Store Prompts
+### Vector store prompts
 
 Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
@@ -669,7 +662,7 @@ The weights control how different factors influence the final ranking:
 - `position`: Higher values help maintain the original ordering of results
 
 :::note
-For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+For semantic scoring to work during re-ranking, each result must include the text content in its `metadata.text` field.
 :::
 
 You can also use other relevance score providers like Voyage AI, Cohere, or ZeroEntropy:
@@ -688,7 +681,35 @@ const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5')
 const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1')
 ```
 
-Voyage AI provides dedicated reranking models: `rerank-2.5` and `rerank-2.5-lite` both allow up to 32,000 tokens for the query and any single document combined, and up to 600,000 tokens across a request. `VoyageRelevanceScorer` reads `VOYAGE_API_KEY` from the environment, or accepts an `apiKey` in its config.
+Voyage AI provides dedicated reranking models. `rerank-2.5` is the default. `rerank-3` and `rerank-3-lite` are out of Preview in the Voyage AI API. `rerank-2.5`, `rerank-2.5-lite`, `rerank-3` and `rerank-3-lite` all allow up to 8,000 tokens for the query, up to 32,000 tokens for the query and any single document combined, and up to 600,000 tokens across a request. The request total counts the query once per document: query tokens × number of documents + tokens in all documents. By default, a query or document longer than its limit is truncated. Keep each request within the 600,000-token total yourself. `VoyageRelevanceScorer` reads `VOYAGE_API_KEY` from the environment, or accepts an `apiKey` in its config.
+
+`createVoyageReranker()` creates a `VoyageRelevanceScorer` from a model name or a config object. `voyageReranker()` is an alias for it. The `voyage` export also has preconfigured scorers, which read `VOYAGE_API_KEY` and use the default endpoint:
+
+- `voyage.reranker` and `voyage.reranker25`: `rerank-2.5`
+- `voyage.reranker25lite`: `rerank-2.5-lite`
+- `voyage.reranker2`: `rerank-2`
+- `voyage.reranker2lite`: `rerank-2-lite`
+
+```ts
+import { voyage, createVoyageReranker } from '@mastra/voyageai'
+
+const liteProvider = createVoyageReranker('rerank-2.5-lite')
+const defaultProvider = voyage.reranker
+```
+
+The scorer sends requests to the Voyage AI platform endpoint, `https://api.voyageai.com/v1`, by default. A model API key created in MongoDB Atlas only works with the Atlas Embedding and Reranking API, so set `baseUrl` to `https://ai.mongodb.com/v1` when you use one. A key scoped to a geography needs that geography's endpoint, such as `https://eu.ai.mongodb.com/v1`. Geography endpoints don't serve every model: of the Atlas endpoints, only `https://ai.mongodb.com/v1` serves `rerank-2` and `rerank-2-lite`, so use `rerank-2.5` or `rerank-2.5-lite` with a scoped key. See MongoDB's [model lifecycle page](https://www.mongodb.com/docs/voyageai/models/lifecycle/) for which endpoints serve each model.
+
+```ts
+import { createVoyageReranker } from '@mastra/voyageai'
+
+const relevanceProvider = createVoyageReranker({
+  model: 'rerank-2.5',
+  apiKey: process.env.VOYAGE_API_KEY,
+  baseUrl: 'https://ai.mongodb.com/v1',
+})
+```
+
+Use `createVoyageReranker()` or `VoyageRelevanceScorer` to set `apiKey`, `baseUrl`, or `truncation`. `truncation` defaults to `true`, which shortens inputs that exceed the model's context length instead of failing the request.
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 

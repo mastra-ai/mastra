@@ -7,7 +7,7 @@
       "headers": [
         {
           "key": "Link",
-          "value": "</llms.txt>; rel=\"llms-txt\""
+          "value": "</llms.txt>; rel=\"llms-txt\", <https://mastra.ai/.well-known/ard.json>; rel=\"ard\", <https://mastra.ai/.well-known/ai-catalog.json>; rel=\"ai-catalog\""
         },
         {
           "key": "X-Llms-Txt",
@@ -18,8 +18,93 @@
   ],
   "redirects": [
     {
+      "source": "/learn",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/learn/what-is-an-agent",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/run-your-first-agent",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/learn/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/learn/create-an-agent",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/create-a-tool",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/build-with-ai",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/learn/fetch-live-data",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/connect-to-mcp",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/learn/build-a-workflow",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/agents-vs-workflows",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/agents-in-workflows",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/how-memory-works",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/observational-memory",
+      "destination": "/docs/memory/observational-memory",
+      "permanent": true
+    },
+    {
+      "source": "/learn/guardrails-with-processors",
+      "destination": "/docs/agents/guardrails",
+      "permanent": true
+    },
+    {
+      "source": "/learn/deploy-to-mastra-platform",
+      "destination": "/docs/mastra-platform/deploy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/chat-with-agent-in-slack",
+      "destination": "/integrations/channels/slack",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections",
-      "destination": "/docs/mastra-platform/connect/overview",
+      "destination": "/docs/mastra-platform/connect",
       "permanent": false
     },
     {
@@ -59,7 +144,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -123,11 +208,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/observability/tracing/exporters/:path*",
-      "destination": "/docs/observability/integrations/exporters/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/observability/tracing/bridges/datadog",
       "destination": "/integrations/observability/datadog",
       "permanent": true
@@ -135,11 +215,6 @@
     {
       "source": "/docs/observability/tracing/bridges/otel",
       "destination": "/integrations/observability/opentelemetry",
-      "permanent": true
-    },
-    {
-      "source": "/docs/observability/tracing/processors/:path*",
-      "destination": "/docs/observability/integrations/processors/:path*",
       "permanent": true
     },
     {
@@ -153,16 +228,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/v1/:path*",
-      "destination": "/docs/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/models/v1/:path*",
-      "destination": "/models/:path*",
-      "permanent": true
-    },
-    {
       "source": "/models/providers/neon",
       "destination": "/models/gateways/neon",
       "permanent": true
@@ -173,13 +238,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/v1/:path*",
-      "destination": "/guides/:path*",
-      "permanent": true
-    },
-    {
-      "source": "/reference/v1/:path*",
-      "destination": "/reference/:path*",
+      "source": "/models/providers/requesty",
+      "destination": "/models/gateways/requesty",
       "permanent": true
     },
     {
@@ -1213,18 +1273,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/rag/:path*",
-      "destination": "/guides/rag/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/voice",
       "destination": "/reference/voice/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/voice/:path*",
-      "destination": "/reference/voice/:path*",
       "permanent": true
     },
     {
@@ -1913,18 +1963,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/migrations/:path*",
-      "destination": "/reference/migrations/:path*",
-      "permanent": true
-    },
-    {
       "source": "/reference/storage/neon",
       "destination": "/integrations/databases/neon",
-      "permanent": true
-    },
-    {
-      "source": "/guides/concepts/:path*",
-      "destination": "/docs/guides/:path*",
       "permanent": true
     },
     {
@@ -2019,7 +2059,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/mastra-platform",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -2030,11 +2070,6 @@
     {
       "source": "/guides/voice",
       "destination": "/reference/voice/overview",
-      "permanent": true
-    },
-    {
-      "source": "/guides/voice/:path*",
-      "destination": "/reference/voice/:path*",
       "permanent": true
     },
     {
@@ -2084,6 +2119,11 @@
     },
     {
       "source": "/docs/mcp/overview",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/mcp-guide",
       "destination": "/docs/connections/mcp",
       "permanent": true
     },
@@ -2188,11 +2228,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/server/auth/:path*",
-      "destination": "/docs/auth/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/auth/index",
       "destination": "/docs/auth/overview",
       "permanent": true
@@ -2215,11 +2250,6 @@
     {
       "source": "/docs/datasets/running-experiments",
       "destination": "/docs/evals/experiments",
-      "permanent": true
-    },
-    {
-      "source": "/docs/datasets/:path*",
-      "destination": "/docs/evals/datasets",
       "permanent": true
     },
     {
@@ -2273,8 +2303,143 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/connect/overview",
+      "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/providers",
+      "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/tools",
+      "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/channels",
+      "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/overview",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/providers",
+      "destination": "/models/providers",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/openrouter",
+      "destination": "/models/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/stream",
+      "destination": "/reference/streaming/agents/stream",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/streaming",
+      "destination": "/docs/guides/streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/pausing-execution",
+      "destination": "/docs/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/memory",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing",
+      "destination": "/docs/observability/tracing/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/traces",
+      "destination": "/docs/observability/tracing/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloudflare",
+      "destination": "/integrations/deploy/cloudflare",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/vercel",
+      "destination": "/integrations/deploy/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/deploy",
+      "destination": "/docs/mastra-platform/deploy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/gateway",
+      "destination": "/docs/mastra-platform/gateway/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/trace-intelligence",
+      "destination": "/docs/mastra-platform/observability/trace-intelligence",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/server",
+      "destination": "/docs/mastra-platform/deploy/server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/studio",
+      "destination": "/docs/mastra-platform/deploy/studio",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/github",
+      "destination": "/docs/mastra-platform/deploy/github",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/environments",
+      "destination": "/docs/mastra-platform/deploy/environments",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/regions",
+      "destination": "/docs/mastra-platform/deploy/regions",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
-      "destination": "/docs/mastra-platform/connect/overview/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
       "permanent": false
     },
     {
@@ -2314,7 +2479,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
-      "destination": "/docs/mastra-platform/observability/llms.txt",
+      "destination": "/docs/mastra-platform/observability/overview/llms.txt",
       "permanent": true
     },
     {
@@ -2425,6 +2590,11 @@
     {
       "source": "/models/providers/merge-gateway/llms.txt",
       "destination": "/models/gateways/merge-gateway/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/requesty/llms.txt",
+      "destination": "/models/gateways/requesty/llms.txt",
       "permanent": true
     },
     {
@@ -3099,6 +3269,11 @@
     },
     {
       "source": "/docs/frameworks/agents/llms.txt",
+      "destination": "/docs/agents/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/:path*/llms.txt",
       "destination": "/docs/agents/overview/llms.txt",
       "permanent": true
     },
@@ -3884,7 +4059,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
-      "destination": "/docs/mastra-platform/observability/llms.txt",
+      "destination": "/docs/mastra-platform/observability/overview/llms.txt",
       "permanent": true
     },
     {
@@ -3949,6 +4124,11 @@
     },
     {
       "source": "/docs/mcp/overview/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/mcp-guide/llms.txt",
       "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     },
@@ -4135,6 +4315,226 @@
     {
       "source": "/docs/harness/signal-providers/llms.txt",
       "destination": "/docs/signals/signal-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/vectors/:path*/llms.txt",
+      "destination": "/integrations/vectors/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/overview/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/providers/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/tools/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/channels/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/overview/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/models/providers/llms.txt",
+      "destination": "/models/providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/openrouter/llms.txt",
+      "destination": "/models/gateways/openrouter/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/stream/llms.txt",
+      "destination": "/reference/streaming/agents/stream/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/streaming/llms.txt",
+      "destination": "/docs/guides/streaming/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/llms.txt",
+      "destination": "/docs/workflows/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/pausing-execution/llms.txt",
+      "destination": "/docs/workflows/suspend-and-resume/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/llms.txt",
+      "destination": "/docs/memory/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/memory/llms.txt",
+      "destination": "/docs/memory/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/llms.txt",
+      "destination": "/docs/observability/tracing/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/traces/llms.txt",
+      "destination": "/docs/observability/tracing/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloudflare/llms.txt",
+      "destination": "/integrations/deploy/cloudflare/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/vercel/llms.txt",
+      "destination": "/integrations/deploy/vercel/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/deploy/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/gateway/llms.txt",
+      "destination": "/docs/mastra-platform/gateway/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/observability/llms.txt",
+      "destination": "/docs/mastra-platform/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/trace-intelligence/llms.txt",
+      "destination": "/docs/mastra-platform/observability/trace-intelligence/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/server/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/server/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/studio/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/studio/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/github/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/github/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/environments/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/environments/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/regions/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/regions/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/learn/:path*",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/:path*",
+      "destination": "/docs/observability/integrations/exporters/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/processors/:path*",
+      "destination": "/docs/observability/integrations/processors/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/:path*",
+      "destination": "/docs/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/models/v1/:path*",
+      "destination": "/models/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/:path*",
+      "destination": "/guides/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/:path*",
+      "destination": "/reference/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents/:path*",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*",
+      "destination": "/guides/rag/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*",
+      "destination": "/reference/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/migrations/:path*",
+      "destination": "/reference/migrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/concepts/:path*",
+      "destination": "/docs/guides/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/:path*",
+      "destination": "/reference/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*",
+      "destination": "/docs/auth/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/datasets/:path*",
+      "destination": "/docs/evals/datasets",
+      "permanent": true
+    },
+    {
+      "source": "/reference/vectors/:path*",
+      "destination": "/integrations/vectors/:path*",
       "permanent": true
     }
   ]

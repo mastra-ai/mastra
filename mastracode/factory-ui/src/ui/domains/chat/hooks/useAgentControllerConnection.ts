@@ -1,6 +1,6 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
@@ -9,6 +9,7 @@ import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
 import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
 import type { AgentControllerLiveState } from '../../../../hooks/useAgentControllerSessionSync';
+import { switchThreadMutationKey } from '../../../../hooks/useAgentControllerThreadMutations';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -29,7 +30,7 @@ interface UseAgentControllerConnectionArgs {
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
-  onEvent: (event: AgentControllerEvent) => void;
+  onEvent: (event: AgentControllerEvent, opensStream: boolean) => void;
 }
 
 export function useAgentControllerConnection({
@@ -108,17 +109,15 @@ export function useAgentControllerConnection({
       queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
       predicate: query => reconnected || query.state.status === 'error',
     });
-    // The gap can also have eaten agent_start/agent_end, so the cached state
-    // snapshot is refetched the same way.
-    if (reconnected) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId),
-        exact: true,
-      });
-    }
+    // The gap, or the moment before a first stream opened, can also hold agent_start/agent_end,
+    // which the stream does not replay, so the state snapshot is refetched on every connect.
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId),
+      exact: true,
+    });
   };
 
-  const handleEvent = (event: AgentControllerEvent) => {
+  const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => {
     const displayStateRunning =
       isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
         ? event.displayState.isRunning
@@ -152,7 +151,7 @@ export function useAgentControllerConnection({
         { updatedAt },
       );
     }
-    onEvent(event);
+    onEvent(event, opensStream);
   };
 
   useAgentControllerEvents({
@@ -171,11 +170,16 @@ export function useAgentControllerConnection({
     hasEverConnected,
     syncFailureCount: syncQuery.failureCount,
   });
+  // State is read for the session's primary thread and echoes it back, so only a switch moves the binding.
+  const switchedThreadId = useMutationState({
+    filters: { mutationKey: switchThreadMutationKey(agentControllerId, sessionId), status: 'success' },
+    select: mutation => (typeof mutation.state.variables === 'string' ? mutation.state.variables : undefined),
+  }).at(-1);
 
   return {
     status,
     state: syncQuery.data,
-    threadId: syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
+    threadId: switchedThreadId ?? syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
   };
 }
 

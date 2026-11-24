@@ -107,14 +107,15 @@ export class MarkdownHeaderTransformer {
 
       // Handle code blocks
       if (!inCodeBlock) {
-        if (
-          (strippedLine.startsWith('```') && strippedLine.split('```').length === 2) ||
-          strippedLine.startsWith('~~~')
-        ) {
+        const fence = strippedLine.match(/^(`{3,}|~{3,})/);
+        if (fence && (fence[1]![0] !== '`' || !strippedLine.slice(fence[1]!.length).includes('`'))) {
           inCodeBlock = true;
-          openingFence = strippedLine.startsWith('```') ? '```' : '~~~';
+          openingFence = fence[1]!;
         }
-      } else if (strippedLine.startsWith(openingFence)) {
+      } else if (
+        strippedLine.startsWith(openingFence) &&
+        new RegExp(`^${openingFence[0]}{${openingFence.length},}\\s*$`).test(strippedLine)
+      ) {
         inCodeBlock = false;
         openingFence = '';
       }
@@ -124,24 +125,15 @@ export class MarkdownHeaderTransformer {
         continue;
       }
 
-      // Handle markdown tables
-      // A table line must contain at least one pipe character and not be empty
-      const isTableLine = strippedLine.includes('|') && strippedLine.length > 0;
-
-      if (isTableLine) {
-        if (!inTable) {
-          inTable = true;
-        }
-        currentContent.push(line);
-        continue;
-      } else if (inTable) {
-        // We were in a table but this line is not a table line, so the table has ended
-        inTable = false;
-      }
-
+      // Preserve existing matching of indented headings without pipes.
+      const isIndentedCode = strippedLine.includes('|') && /^(?: {4}|\t)/.test(line);
       let headerMatched = false;
       for (const [sep, name] of this.headersToSplitOn) {
-        if (strippedLine.startsWith(sep) && (strippedLine.length === sep.length || strippedLine[sep.length] === ' ')) {
+        if (
+          !isIndentedCode &&
+          strippedLine.startsWith(sep) &&
+          (strippedLine.length === sep.length || strippedLine[sep.length] === ' ')
+        ) {
           headerMatched = true;
 
           // If we have existing content, save it before processing the header
@@ -185,7 +177,19 @@ export class MarkdownHeaderTransformer {
         }
       }
 
-      if (!headerMatched) {
+      if (headerMatched) {
+        inTable = false;
+      } else {
+        // Handle table rows only after checking for configured headings containing pipes.
+        if (strippedLine.includes('|')) {
+          inTable = true;
+          currentContent.push(line);
+          continue;
+        }
+        if (inTable) {
+          inTable = false;
+        }
+
         if (strippedLine || this.returnEachLine) {
           currentContent.push(line);
 

@@ -98,7 +98,11 @@ describe('SignalsEmptyState', () => {
       expect(screen.getByText('Analyzing traces for Trace Intelligence.')).not.toBeNull();
       expect(screen.getByText('87')).not.toBeNull();
       expect(screen.getByText('1 of 4')).not.toBeNull();
-      expect(screen.getByText('87 generated · 84 embedded')).not.toBeNull();
+      const progressList = within(screen.getByRole('list', { name: 'Trace signal processing progress' }));
+      const goal = progressList.getByText('Goal').closest('li');
+      if (!goal) throw new Error('Goal progress row is missing');
+      expect(within(goal).getByText('87 generated')).not.toBeNull();
+      expect(within(goal).getByText('84 embedded')).not.toBeNull();
     });
   });
 

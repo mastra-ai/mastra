@@ -1,4 +1,5 @@
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { createSlackAdapter } from '@mastra/slack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/slack', () => ({
@@ -13,6 +14,67 @@ function ctxWith(overrides: Record<string, unknown> = {}) {
     runtime: { workItems: { findRunBindingByThread: async () => null } },
   } as any;
 }
+
+const createSlackAdapterMock = vi.mocked(createSlackAdapter);
+
+beforeEach(() => {
+  createSlackAdapterMock.mockClear();
+});
+
+describe('SlackIntegration transport configuration', () => {
+  it('requires a signing secret in webhook mode', () => {
+    expect(() => new SlackIntegration({})).toThrow("'signingSecret' is required");
+    expect(() => new SlackIntegration({ mode: 'webhook' })).toThrow("'signingSecret' is required");
+  });
+
+  it('requires an app token and bot token in socket mode', () => {
+    expect(() => new SlackIntegration({ mode: 'socket' })).toThrow("'appToken' is required");
+    expect(() => new SlackIntegration({ mode: 'socket', appToken: 'xapp-test' })).toThrow("'botToken' is required");
+  });
+
+  it('keeps account-link credentials out of the socket mode adapter configuration', () => {
+    const integration = new SlackIntegration({
+      mode: 'socket',
+      appToken: 'xapp-test',
+      botToken: 'xoxb-test',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
+
+    integration.channels(ctxWith());
+
+    const adapterConfig = createSlackAdapterMock.mock.calls[0]?.[0];
+    expect(adapterConfig).toEqual(
+      expect.objectContaining({
+        mode: 'socket',
+        appToken: 'xapp-test',
+        botToken: 'xoxb-test',
+      }),
+    );
+    expect(adapterConfig).not.toHaveProperty('clientId');
+    expect(adapterConfig).not.toHaveProperty('clientSecret');
+  });
+
+  it('preserves webhook mode and forwards its transport and OAuth credentials', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
+
+    integration.channels(ctxWith());
+
+    expect(createSlackAdapterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: undefined,
+        signingSecret: 'secret',
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+      }),
+    );
+  });
+
+});
 
 describe('SlackIntegration.channels', () => {
   it('returns a channels config (not a built instance) with the slack adapter entry in config form', () => {
@@ -89,7 +151,8 @@ describe('SlackIntegration.channels', () => {
     );
     // Long descriptions are clipped so Slack's inline status stays one line.
     const long = 'A'.repeat(200);
-    expect(status({ description: long })).toHaveLength('is '.length + 80);
+    // Slack rejects a loading message of 51 characters or more.
+    expect(status({ description: long })).toHaveLength(50);
     expect(status({ description: long })!.endsWith('…')).toBe(true);
     // No usable description falls back to the generic status.
     expect(status({ command: 'ls' })).toBe('is working...');
@@ -243,6 +306,7 @@ describe('SlackIntegration.channels', () => {
         getId: () => 'us-1',
         getById: vi.fn(async () => ({ metadata: {} })),
         getSetting: vi.fn(async () => null),
+        getSettingOn: vi.fn(async () => null),
         setSetting: vi.fn(async () => {}),
         setSettingOn: vi.fn(async () => {}),
       },
@@ -280,7 +344,7 @@ describe('SlackIntegration.postToolObserver', () => {
     const post = vi.fn(async () => ({ id: 'reply-ts' }));
     const addReaction = vi.fn(async () => {});
     const channels = {
-      buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform } } : null)),
+      buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform }, render: { chatThread: { id: `${platform}:C1:171.1` } } } : null)),
       buildRenderContextForThread: vi.fn(async () =>
         platform ? { platform, chatThread: { id: 'slack:C123:1792771853.363419', post }, adapter: { addReaction } } : null,
       ),

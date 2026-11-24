@@ -18,6 +18,8 @@ export const allCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootDuration: true,
     traceQueryTimeToFirstChunk: true,
     traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
@@ -44,6 +46,16 @@ export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesRespons
     ...allCapabilities.capabilities,
     traceQueryTimeToFirstChunk: false,
     traceQueryTimeToFirstChunkSort: false,
+  },
+};
+
+/** A store that runs trace queries but does not record when the root's model produced its first token. */
+export const noTimeToFirstTokenCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...allCapabilities,
+  capabilities: {
+    ...allCapabilities.capabilities,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
   },
 };
 

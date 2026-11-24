@@ -103,7 +103,7 @@ for await (const chunk of stream.fullStream) {
 
 #### Explaining a decline
 
-`declineToolCall()`, `declineToolCallGenerate()`, and `declineNetworkToolCall()` accept an optional `reason`. The reason is returned to the model in place of the tool result, so the model can adjust instead of retrying blindly. It's also stored on the tool call's `approval` metadata, so it's still there when the conversation is recalled.
+`declineToolCall()`, `declineToolCallGenerate()`, and `declineNetworkToolCall()` accept an optional `reason`. The reason is returned to the model in place of the tool result, so the model can adjust instead of retrying the same way. It's also stored on the tool call's `approval` metadata, so it's still there when the conversation is recalled.
 
 ```typescript
 const declined = await agent.declineToolCall({
@@ -125,7 +125,7 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-The function can be asynchronous. For decisions that depend on the tool name and arguments, use a [classifier](/reference/classifier/classifier) to estimate whether the call needs human review:
+The function can be asynchronous. For decisions that depend on the tool name and arguments, use a [classifier](/docs/classifier) to estimate whether the call needs human review:
 
 ```typescript title="src/mastra/agents/run-with-approval.ts"
 import { Classifier } from '@mastra/core/classifier'
@@ -175,7 +175,7 @@ Function-based `requireToolApproval` is only available on regular `stream()` / `
 
 For sensitive tools, bind the approval to the exact tool name and arguments that were shown to the reviewer. If those arguments drift before execution, the tool shouldn't run under the old approval.
 
-The `tool-call-approval` chunk already includes `toolName`, `toolCallId`, and `args`. You can fingerprint those fields when the approval request is shown. The example below uses a JSON string as the fingerprint, but in production you should use a stable hash of the tool name and arguments:
+The `tool-call-approval` chunk already includes `toolName`, `toolCallId`, and `args`. You can fingerprint those fields when the approval request is shown. The example below uses a JSON string as the fingerprint, but in production, use a stable hash of the tool name and arguments:
 
 ```typescript title="src/mastra/agents/approval-bound-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -600,6 +600,24 @@ Suspended runs only survive restarts when your Mastra instance is configured wit
 
 :::
 
+### Recovering a decision after a crash
+
+When `approveToolCall()`, `declineToolCall()`, or `resumeStream()` runs, the run is claimed in storage together with the decision or resume data and the targeted `toolCallId`. If the process handling the resume stops before the run finishes, call `recoverResume()` from any process to finish the run with that stored decision:
+
+```typescript
+const stream = await agent.recoverResume({ runId })
+
+for await (const chunk of stream.textStream) process.stdout.write(chunk)
+```
+
+`recoverResume()` takes over a claim once it's abandoned: claimed but not started for 60 seconds, or, on storage with run fencing, started and its lease not renewed for 60 seconds. Before that, it rejects with `AGENT_RESUME_ALREADY_CLAIMED`. For a run that no resume has claimed, it rejects with `AGENT_RESUME_NOTHING_TO_RECOVER`.
+
+:::warning
+
+The resumed tool call runs again. A claim counts as abandoned by its age, so a process that stalled for 60 seconds may still be running the tool when the recovery runs it. Make tools with side effects safe to repeat, for example with an idempotency key.
+
+:::
+
 ## Tool approval: Supervisor agents
 
 A [supervisor agent](/docs/subagents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
@@ -611,6 +629,31 @@ A [supervisor agent](/docs/subagents) coordinates multiple subagents using `.str
 1. The decision propagates back down to the subagent.
 
 Tool approvals also propagate through multiple levels of delegation. If a supervisor delegates to subagent A, which delegates to subagent B that has a tool with `requireApproval: true`, the approval request still surfaces at the top-level supervisor.
+
+### Identify which subagent tool paused
+
+The supervisor raises a subagent's pause on its own delegation call, so `toolCallId` on the `tool-call-approval` or `tool-call-suspended` chunk is the supervisor's call to the subagent. Always pass that `toolCallId` when you approve, decline, or resume.
+
+To show which of the subagent's tool calls paused, read these fields from the same payload:
+
+- `delegatedToolCallId`: The ID of the subagent's tool call that paused. Use it to tell apart two pauses from the same delegation, such as a question followed by an approval.
+- `delegatedToolName`: The name of the subagent's tool that paused.
+
+With several levels of delegation, both fields name the deepest tool call, the one that actually paused. Memory saves them with the pause, so they're still there when you reload the conversation, and `generate()` returns them on `suspendPayload`.
+
+```typescript
+const stream = await supervisorAgent.stream('Draft and publish the report')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+    // Label the pause with the subagent tool call that caused it
+    console.log('Paused:', chunk.payload.delegatedToolName, chunk.payload.delegatedToolCallId)
+
+    // Pass the supervisor's delegation call when you approve, decline, or resume
+    console.log('Resume with:', chunk.payload.toolCallId)
+  }
+}
+```
 
 ### Approve and decline in supervisor agents
 

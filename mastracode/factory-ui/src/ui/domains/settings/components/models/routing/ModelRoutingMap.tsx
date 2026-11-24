@@ -1,7 +1,6 @@
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
-import { AppWindow } from 'lucide-react';
 import { useState } from 'react';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
@@ -13,6 +12,7 @@ import { DefaultsCard } from './DefaultsCard';
 import { LaneCard, LaneSource } from './LaneCard';
 import { MODEL_ROUTES, defaultsInUse } from './model-routes';
 import { RoutingMapLayout, createConnectorAnchors } from './RoutingMapLayout';
+import { IconWindow } from '@mastra/playground-ui/icons/central/IconWindow';
 
 export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; modelScope: FactoryModelScope }) {
   const routes = MODEL_ROUTES[modelScope];
@@ -26,7 +26,7 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
         <>
           <LaneCard lane="chats" destination={routes.chats} anchorRef={anchors.chats}>
             <LaneSource label="Web app">
-              <AppWindow />
+              <IconWindow />
             </LaneSource>
             <LaneSource label="Slack">
               <SlackIcon />

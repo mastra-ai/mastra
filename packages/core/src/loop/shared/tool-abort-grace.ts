@@ -8,5 +8,8 @@
  */
 export const TOOL_ABORT_GRACE_MS = 250;
 
+/** Time past the grace window for an aborted tool's step to record its result. */
+export const TOOL_SETTLE_MARGIN_MS = 250;
+
 export const TOOL_ABORT_NOTICE =
   'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.';

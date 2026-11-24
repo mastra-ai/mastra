@@ -4,7 +4,7 @@ import type { ScoringHookInput } from '../evals/types';
 import { getScorerHookEntry, isScorerHookForMastra } from '../hooks/scorer-owner';
 import type { Mastra } from '../mastra';
 import { resolveAgentById } from '../mastra/resolve-agent';
-import { EntityType, resolveExportedSpanId } from '../observability';
+import { EntityType, resolveExportedSpanId, resolveObservabilityContext } from '../observability';
 import type { MastraStorage } from '../storage';
 
 function toScorerTargetEntityType(entityType: string): EntityType | undefined {
@@ -64,7 +64,7 @@ export function createOnScorerHook(mastra: Mastra) {
 
       const { structuredOutput, ...rest } = hookData;
 
-      const currentSpan = hookData.tracingContext?.currentSpan;
+      const currentSpan = resolveObservabilityContext(hookData).tracing.currentSpan;
       const traceId = currentSpan?.isValid ? currentSpan.traceId : undefined;
       // Scores are an observability signal, so they must name a span that reached
       // exporters. Durable agents run their scorers inside a workflow whose spans
@@ -73,6 +73,10 @@ export function createOnScorerHook(mastra: Mastra) {
       const spanId = currentSpan?.isValid ? resolveExportedSpanId(currentSpan) : undefined;
       const targetCorrelationContext = currentSpan?.isValid ? currentSpan.getCorrelationContext?.() : undefined;
       const targetMetadata = currentSpan?.isValid && currentSpan.metadata ? { ...currentSpan.metadata } : undefined;
+      // A target traced with `tracingOptions.hideInput`/`hideOutput` must not have that data
+      // stored again through its scores, so the flags carry over to the scorer.
+      const hideInput = currentSpan?.isValid === true && currentSpan.traceState?.hideInput === true;
+      const hideOutput = currentSpan?.isValid === true && currentSpan.traceState?.hideOutput === true;
       const runResult = await scorerToUse.scorer.run({
         ...rest,
         input,
@@ -84,6 +88,7 @@ export function createOnScorerHook(mastra: Mastra) {
         targetSpanId: spanId,
         targetCorrelationContext,
         targetMetadata,
+        ...(hideInput || hideOutput ? { _internal: { hideInput, hideOutput } } : {}),
       } as any);
 
       if (runResult.notScorable) {
@@ -119,7 +124,7 @@ export function createOnScorerHook(mastra: Mastra) {
       // ScoreEvent emission already happens inside MastraScorer.run() (see
       // packages/core/src/evals/base.ts). The hook must not republish or every
       // exporter would receive the same score twice.
-      await validateAndSaveScore(storage, payload);
+      await validateAndSaveScore(storage, redactScorePayload(payload, { hideInput, hideOutput }));
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -138,6 +143,48 @@ export function createOnScorerHook(mastra: Mastra) {
       mastra.getLogger()?.trackException(mastraError);
     }
   };
+}
+
+/** Stored in place of hidden values; `input` and `output` are non-nullable score columns. */
+export const REDACTED_SCORE_VALUE = '[REDACTED]';
+
+/**
+ * Score fields derived from the scored data. Step results and prompts are built from the
+ * input and output together, and a judge's reason routinely quotes them, so these are hidden
+ * when either side is.
+ */
+const DERIVED_SCORE_FIELDS = [
+  'preprocessStepResult',
+  'extractStepResult',
+  'analyzeStepResult',
+  'preprocessPrompt',
+  'extractPrompt',
+  'analyzePrompt',
+  'generateScorePrompt',
+  'generateReasonPrompt',
+  'reasonPrompt',
+  'reason',
+] as const;
+
+export function redactScorePayload<T extends Record<string, any>>(
+  payload: T,
+  { hideInput, hideOutput }: { hideInput: boolean; hideOutput: boolean },
+): T {
+  if (!hideInput && !hideOutput) {
+    return payload;
+  }
+
+  const redacted: Record<string, any> = {
+    ...payload,
+    input: REDACTED_SCORE_VALUE,
+    output: REDACTED_SCORE_VALUE,
+  };
+  for (const field of DERIVED_SCORE_FIELDS) {
+    if (redacted[field] !== undefined) {
+      redacted[field] = typeof redacted[field] === 'string' ? REDACTED_SCORE_VALUE : undefined;
+    }
+  }
+  return redacted as T;
 }
 
 /**

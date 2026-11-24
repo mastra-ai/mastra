@@ -46,6 +46,11 @@ const renderRoutingSection = (entry = '/factories/fp-1/settings/models') =>
 const routing = (label: string) => screen.getByRole('radio', { name: label });
 const region = (label: string) => screen.getByRole('region', { name: label });
 
+async function confirmSwitch(user: ReturnType<typeof userEvent.setup>) {
+  const dialog = await screen.findByRole('alertdialog');
+  await user.click(within(dialog).getByRole('button', { name: 'Switch for everyone' }));
+}
+
 describe('ModelRoutingSection', () => {
   it('routes chats to personal defaults and work-item runs to Factory defaults in a hybrid Factory', async () => {
     stubFactory('hybrid');
@@ -72,15 +77,129 @@ describe('ModelRoutingSection', () => {
     expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));
+    await confirmSwitch(user);
     await waitForMutationsIdle(client);
 
     expect(patchedBodies).toEqual([{ modelScope: 'factory' }]);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(routing('Factory')).toBeChecked();
     expect(within(region('Chats')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(within(region('Personal defaults')).getByText('Not used in this scope')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Personal default model' })).not.toBeInTheDocument();
     expect(within(region('Factory defaults')).getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
     expect(within(region('Factory defaults')).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+
+  it('warns that a routing change affects everyone and lists the lanes it reroutes', async () => {
+    stubFactory('hybrid');
+    const user = userEvent.setup();
+    renderRoutingSection();
+
+    await waitFor(() => expect(routing('Hybrid')).toBeChecked());
+    await user.click(routing('Factory'));
+
+    const dialog = await screen.findByRole('alertdialog', { name: 'Switch model routing to Factory?' });
+    expect(dialog).toHaveTextContent('not just you');
+    const changes = within(dialog).getByRole('list', { name: 'What changes' });
+    expect(
+      within(changes)
+        .getAllByRole('listitem')
+        .map(item => item.textContent),
+    ).toEqual(['Chats:Personal defaultsFactory defaults']);
+  });
+
+  it('keeps the saved routing when the switch is cancelled', async () => {
+    const patchedBodies = stubFactory('user');
+    const user = userEvent.setup();
+    renderRoutingSection();
+
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
+    await user.click(routing('Hybrid'));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(patchedBodies).toEqual([]);
+    expect(routing('Personal')).toBeChecked();
+    expect(within(region('Work-item runs')).getByText('Uses Personal defaults')).toBeInTheDocument();
+  });
+
+  it('drops an open routing request when the page moves to another Factory', async () => {
+    const patchedBodies = stubFactory('user');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2`, () =>
+        HttpResponse.json({ project: { id: 'fp-2', name: 'Other', modelScope: 'user' } }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { rerender } = renderRoutingSection();
+
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
+    await user.click(routing('Factory'));
+    await screen.findByRole('alertdialog');
+
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-2/settings/models']}>
+        <ModelRoutingSection factoryId="fp-2" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
+        <ModelRoutingSection factoryId="fp-1" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(patchedBodies).toEqual([]);
+  });
+
+  it('keeps a save in flight guarded after the page leaves the Factory and comes back', async () => {
+    const patchedBodies: unknown[] = [];
+    let releasePatch!: () => void;
+    const patchHeld = new Promise<void>(resolve => (releasePatch = resolve));
+    stubFactory('user');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2`, () =>
+        HttpResponse.json({ project: { id: 'fp-2', name: 'Other', modelScope: 'user' } }),
+      ),
+      http.patch<never, { modelScope?: FactoryModelScope }>(FACTORY_URL, async ({ request }) => {
+        patchedBodies.push(await request.json());
+        await patchHeld;
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory' } });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client, rerender } = renderRoutingSection();
+
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
+    await user.click(routing('Factory'));
+    await confirmSwitch(user);
+    await waitFor(() => expect(patchedBodies).toHaveLength(1));
+
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-2/settings/models']}>
+        <ModelRoutingSection factoryId="fp-2" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
+        <ModelRoutingSection factoryId="fp-1" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'Factory' })).toBeChecked();
+    await user.click(routing('Hybrid'));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+
+    releasePatch();
+    await waitForMutationsIdle(client);
+    expect(patchedBodies).toEqual([{ modelScope: 'factory' }]);
+    expect(routing('Factory')).toBeChecked();
   });
 
   it('lets an admin change the Factory default from the unused Factory card in Personal routing', async () => {
@@ -114,6 +233,7 @@ describe('ModelRoutingSection', () => {
 
     await waitFor(() => expect(routing('Hybrid')).toBeChecked());
     await user.click(routing('Factory'));
+    await confirmSwitch(user);
     await waitForMutationsIdle(client);
 
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to update Factory model scope (403)');

@@ -52,11 +52,11 @@ describe('mode availableTools configuration', () => {
 
     it('allows plan-mode writes to any .md file inside .mastracode/plans/', () => {
       const projectPath = '/tmp/mastracode-plan-guard';
-      // Mirror the real HarnessRequestContext shape: session.modeId is a string
-      // property and live state is read via session.state.get() (see harness/types.ts).
+      // Mirror the AgentControllerRequestContext the controller sets under 'controller':
+      // session.modeId is a string property and live state is read via session.state.get().
       const context = {
         requestContext: {
-          harness: {
+          controller: {
             session: {
               modeId: 'plan',
               state: { get: () => ({ projectPath }) },
@@ -103,7 +103,7 @@ describe('mode availableTools configuration', () => {
       const projectPath = '/tmp/mastracode-factory-plan-guard';
       const context = {
         requestContext: {
-          harness: {
+          controller: {
             session: {
               modeId: 'plan',
               state: { get: () => ({ projectPath, factoryProjectId: 'factory-123' }) },
@@ -155,7 +155,7 @@ describe('mode availableTools configuration', () => {
       const projectPath = '/tmp/mastracode-plan-guard';
       const context = {
         requestContext: {
-          harness: {
+          controller: {
             session: {
               modeId: 'plan',
               state: { get: () => ({ projectPath }) },
@@ -191,7 +191,7 @@ describe('mode availableTools configuration', () => {
           input: { path: 'src/index.ts' },
           context: {
             requestContext: {
-              harness: {
+              controller: {
                 session: {
                   modeId: 'build',
                   state: { get: () => ({ projectPath: '/tmp/mastracode-plan-guard' }) },

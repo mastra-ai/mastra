@@ -46,6 +46,20 @@ describe('ConnectedAccountsSection', () => {
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });
 
+  it('given Slack is not set up, when rendered, then it links to the guide for creating a Slack app', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
+      ),
+    );
+
+    renderSection();
+
+    const link = await screen.findByRole('link', { name: /Set up Slack/ });
+    expect(link).toHaveAttribute('href', 'https://factory.mastra.ai/configure/slack#create-your-own-slack-app');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
   it('given an old server with no channel route, when rendered, then it shows the not-configured card instead of a parse error', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
@@ -66,7 +80,8 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Test User · Example Workspace')).toBeInTheDocument();
+    const workspace = await screen.findByText('Example Workspace');
+    expect(workspace.closest('[data-slot="metadata"]')).toHaveTextContent('Test User');
     expect(screen.getByRole('link', { name: 'Configure Slack' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/connections/slack',
@@ -82,8 +97,11 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Test User · Example Workspace')).toBeInTheDocument();
-    expect(screen.getByText('Test User · Other Workspace')).toBeInTheDocument();
+    expect((await screen.findByText('Example Workspace')).closest('[data-slot="metadata"]')).toHaveTextContent(
+      'Test User',
+    );
+    expect(screen.getByText('Other Workspace').closest('[data-slot="metadata"]')).toHaveTextContent('Test User');
+    expect(screen.getAllByText('Test User')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: 'Configure Slack' })).toHaveLength(1);
   });
 

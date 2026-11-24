@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-speechify",
-  "version": "0.15.0-alpha.1",
+  "version": "0.15.1-alpha.0",
   "description": "Mastra Speechify voice integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

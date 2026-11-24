@@ -69,6 +69,23 @@ describe('SandboxExecutionBadge', () => {
     });
   });
 
+  describe('when a command runs past its timeout', () => {
+    it('says it timed out, not that something killed it', () => {
+      renderBadge({
+        dataParts: [
+          {
+            type: 'data',
+            name: 'sandbox-exit',
+            data: { exitCode: 124, success: false, killed: true, timedOut: true, toolCallId: 'call-command' },
+          },
+        ],
+      });
+
+      expect(screen.getByText('timed out')).not.toBeNull();
+      expect(screen.queryByText('killed')).toBeNull();
+    });
+  });
+
   describe('when a command started but failed before any exit event arrived', () => {
     it('reads as failed rather than still running', () => {
       renderBadge({

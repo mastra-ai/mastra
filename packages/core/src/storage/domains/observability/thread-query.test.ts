@@ -5,7 +5,8 @@ import {
   threadQueryRequestSchema,
   threadQueryRowSchema,
 } from './thread-query';
-import { planThreadQuery, queryThreadsInputSchema } from './trace-query';
+import { queryThreadsInputSchema } from './trace-query';
+import { planThreadQuery } from './trace-query-plan';
 
 const range = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
 const request = { timeRange: { traces: range } };
@@ -70,6 +71,48 @@ describe('thread row contract', () => {
       traceCount: 1,
     };
     expect(threadQueryRowSchema.parse({ ...row, model: 'gpt-4o', provider: 'openai' })).toEqual(row);
+  });
+
+  it('accepts time to first token as an optional row field and a numeric predicate', () => {
+    const row = threadQueryRowSchema.parse({
+      organizationId: 'org',
+      threadId: 'thread',
+      firstTraceId: 'first',
+      lastTraceId: 'last',
+      ...Object.fromEntries(
+        [
+          'resourceId',
+          'userId',
+          'entityType',
+          'entityId',
+          'entityName',
+          'entityVersionId',
+          'runId',
+          'sessionId',
+          'requestId',
+          'serviceName',
+          'experimentId',
+          'environment',
+          'executionSource',
+          'timeToFirstChunkMs',
+          'inputPreview',
+          'outputPreview',
+          'errorPreview',
+        ].map(field => [field, null]),
+      ),
+      status: 'success',
+      startedAt: range.from,
+      endedAt: range.to,
+      traceCount: 1,
+    });
+    expect(threadQueryRowSchema.parse({ ...row, timeToFirstTokenMs: 120 }).timeToFirstTokenMs).toBe(120);
+    expect(threadQueryRowSchema.safeParse({ ...row, timeToFirstTokenMs: -1 }).success).toBe(false);
+    expect(
+      planThreadRowsQuery({
+        ...request,
+        where: { op: 'gte', left: { path: 'timeToFirstTokenMs' }, right: { literal: 500 } },
+      }).where,
+    ).toMatchObject({ field: 'timeToFirstTokenMs', operator: 'gte', value: 500 });
   });
 
   it('keeps legacy identity planning separate from full-history row requests', () => {

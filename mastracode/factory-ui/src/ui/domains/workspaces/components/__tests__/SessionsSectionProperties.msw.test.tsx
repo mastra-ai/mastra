@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
@@ -85,21 +86,15 @@ beforeEach(() => {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'factory-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'connection-1',
-            installationId: 'installation-1',
+            id: 'factory-1',
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'mastra-ai/mastra', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace',
-                repository: { slug: 'mastra-ai/mastra', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -152,9 +147,47 @@ describe('Sessions properties', () => {
 
     await openSessionProperties(user);
     expect(screen.getByRole('menuitem', { name: /^Owner\s*All owners$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Source\s*All sources$/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /^Group\s*None$/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Reset to default' })).toHaveAttribute('aria-disabled', 'true');
     await closeSessionProperties(user);
+  });
+
+  it('lists a Slack session among the others, and narrows the list to Slack with the Source filter', async () => {
+    const slackSession: FactoryUserSession = {
+      ...sessions[0],
+      id: 'row-slack',
+      sessionId: 'session-slack',
+      userId: 'user-grace',
+      owner: { id: 'user-grace', name: 'Grace Hopper' },
+      title: 'Answer the deploy question',
+      branch: 'slack/1794960854.774509',
+      updatedAt: '2026-09-04T11:30:00.000Z',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
+        HttpResponse.json({ sessions: [...sessions, slackSession] }),
+      ),
+    );
+    const user = userEvent.setup();
+    await renderSection();
+
+    const all = await screen.findByRole('region', { name: 'All sessions' });
+    expect(await within(all).findByRole('link', { name: 'Answer the deploy question' })).toBeInTheDocument();
+    expect(within(all).getByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
+
+    await pickSessionProperty(user, 'Source', 'Slack');
+
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Fix authentication' })).not.toBeInTheDocument());
+    expect(within(screen.getByRole('region', { name: 'All sessions' })).getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Answer the deploy question' })).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionFilters') ?? '{}')).toEqual({ source: 'slack' });
+
+    await pickSessionProperty(user, 'Source', 'User');
+
+    expect(await screen.findByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Answer the deploy question' })).not.toBeInTheDocument();
   });
 
   it('says so when the viewer owns no sessions and picks Mine', async () => {

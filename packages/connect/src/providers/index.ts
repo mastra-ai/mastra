@@ -5,8 +5,10 @@ import type { ProviderRegistration } from '../registry.js';
 import { anthropicProvider } from './anthropic/index.js';
 import { clerkProvider } from './clerk/index.js';
 import { discordProvider } from './discord/index.js';
+import { elevenlabsProvider } from './elevenlabs/index.js';
 import { firefliesProvider } from './fireflies/index.js';
 import { githubProvider } from './github/index.js';
+import { gitlabProvider } from './gitlab/index.js';
 import { googleAnalyticsProvider } from './google-analytics/index.js';
 import { googleCalendarProvider } from './google-calendar/index.js';
 import { googleDocsProvider } from './google-docs/index.js';
@@ -17,13 +19,18 @@ import { hubspotProvider } from './hubspot/index.js';
 import { incidentIoProvider } from './incident-io/index.js';
 import { jiraProvider } from './jira/index.js';
 import { linearProvider } from './linear/index.js';
+import { microsoftExcelProvider } from './microsoft-excel/index.js';
 import { microsoftPowerpointProvider } from './microsoft-powerpoint/index.js';
 import { microsoftTeamsProvider } from './microsoft-teams/index.js';
+import { microsoftWordProvider } from './microsoft-word/index.js';
 import { notionProvider } from './notion/index.js';
 import { oneDriveProvider } from './one-drive/index.js';
 import { openaiProvider } from './openai/index.js';
+import { outlookProvider } from './outlook/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
+import { sendgridProvider } from './sendgrid/index.js';
+import { sharepointOnlineProvider } from './sharepoint-online/index.js';
 import { slackProvider } from './slack/index.js';
 import { snowflakeProvider } from './snowflake/index.js';
 import { stripeProvider } from './stripe/index.js';
@@ -35,8 +42,10 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   anthropicProvider,
   clerkProvider,
   discordProvider,
+  elevenlabsProvider,
   firefliesProvider,
   githubProvider,
+  gitlabProvider,
   googleAnalyticsProvider,
   googleCalendarProvider,
   googleDocsProvider,
@@ -47,13 +56,18 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   incidentIoProvider,
   jiraProvider,
   linearProvider,
+  microsoftExcelProvider,
   microsoftPowerpointProvider,
   microsoftTeamsProvider,
+  microsoftWordProvider,
   notionProvider,
   oneDriveProvider,
   openaiProvider,
+  outlookProvider,
   posthogProvider,
   resendProvider,
+  sendgridProvider,
+  sharepointOnlineProvider,
   slackProvider,
   snowflakeProvider,
   stripeProvider,

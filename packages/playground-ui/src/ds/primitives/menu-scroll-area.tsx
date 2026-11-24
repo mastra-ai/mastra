@@ -2,8 +2,6 @@ import * as React from 'react';
 
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaViewportProps } from '@/ds/components/ScrollArea';
-import { FluidMenuItems } from '@/ds/primitives/fluid-menu';
-import type { FluidMenu } from '@/ds/primitives/fluid-menu';
 import { cn } from '@/lib/utils';
 
 // For a popup that scrolls its items through `MenuScrollArea`: the popup only clips, and its
@@ -12,8 +10,7 @@ import { cn } from '@/lib/utils';
 export const menuScrollPopupClass = 'flex flex-col overflow-hidden p-0';
 
 type MenuScrollAreaProps = {
-  menu: FluidMenu<HTMLDivElement>;
-  /** `sm` pairs with a `rounded-md` popup: tighter padding and highlight radius. */
+  /** `sm` pairs with a `rounded-md` popup: tighter padding. */
   size?: 'default' | 'sm';
   /** Renders the scrolling element as the library's list, e.g. `<SelectPrimitive.List />`. */
   viewportRender?: ScrollAreaViewportProps['render'];
@@ -30,7 +27,7 @@ type MenuScrollAreaProps = {
  * body fill a popup whose height is set outright (Select aligned with its trigger).
  * Flex shrinking also keeps the viewport within the space left by a fixed popup header.
  */
-export function MenuScrollArea({ menu, size = 'default', viewportRender, children }: MenuScrollAreaProps) {
+export function MenuScrollArea({ size = 'default', viewportRender, children }: MenuScrollAreaProps) {
   return (
     <ScrollArea className="flex h-full max-h-[inherit] min-h-0 flex-col">
       {/* Keeps a row scrolled into view by the keyboard clear of the 2rem edge fade. */}
@@ -38,14 +35,7 @@ export function MenuScrollArea({ menu, size = 'default', viewportRender, childre
         {/* A one-column grid stacks rows like a block, and lets a row share a cell with another
             (Tabs' overflow menu lays each tab's close button over its row). `minmax(0,1fr)` keeps
             long rows truncating instead of widening the popup. */}
-        <div
-          className={cn(menu.containerClassName, 'grid grid-cols-[minmax(0,1fr)]', size === 'sm' ? 'p-0.5' : 'p-1')}
-          {...menu.getContainerProps({})}
-        >
-          <FluidMenuItems menu={menu} className={size === 'sm' ? 'rounded-sm' : undefined}>
-            {children}
-          </FluidMenuItems>
-        </div>
+        <div className={cn('grid grid-cols-[minmax(0,1fr)]', size === 'sm' ? 'p-0.5' : 'p-1')}>{children}</div>
       </ScrollAreaViewport>
     </ScrollArea>
   );

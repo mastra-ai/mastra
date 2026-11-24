@@ -1,0 +1,10 @@
+import { createCentralIcon } from './create-central-icon';
+
+export const IconVideoClip = createCentralIcon('IconVideoClip', () => (
+  <path
+    d="M4 12H8M4 12V8M4 12V16M8 12H16M8 12V16M8 12V8M16 12H20M16 12V16.4444M16 12V8M20 12V8M20 12V16.4444M16 20H18C19.1046 20 20 19.1046 20 18V16.4444M16 20V16.4444M16 20H8M16 4H18C19.1046 4 20 4.89543 20 6V8M16 4V8M16 4H8M16 8H20M16 16.4444H20M8 20H6C4.89543 20 4 19.1046 4 18V16M8 20V16M8 4H6C4.89543 4 4 4.89543 4 6V8M8 4V8M4 8H8M4 16H8"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="square"
+  />
+));

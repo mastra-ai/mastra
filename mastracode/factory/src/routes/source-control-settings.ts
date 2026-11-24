@@ -3,11 +3,14 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { ProjectRepository, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 
 interface SourceControlSettingsRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
+  /** Called with the link's project after a saved command; setup commands are part of the environment template. */
+  onEnvironmentSaved?: (projectId: string) => void;
 }
 
 async function loadRepository(
@@ -54,7 +57,7 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
       method: 'GET',
       requiresAuth: false,
       handler: async raw => {
-        const c = raw as Context;
+        const c = loose(raw);
         const loaded = await loadRepository(c, options);
         if (loaded instanceof Response) return loaded;
         return c.json({
@@ -67,7 +70,7 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
       method: 'POST',
       requiresAuth: false,
       handler: async raw => {
-        const c = raw as Context;
+        const c = loose(raw);
         const loaded = await loadRepository(c, options);
         if (loaded instanceof Response) return loaded;
         let body: Record<string, unknown>;
@@ -90,6 +93,10 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
 
         const setupCommand = commandFromBody(body, 'setupCommand');
         const teardownCommand = commandFromBody(body, 'teardownCommand');
+        // Resolved before the save, so a failed lookup never fails a save that persisted.
+        const connection = options.onEnvironmentSaved
+          ? await loaded.sourceControl.connections.get({ orgId: loaded.orgId, id: loaded.repository.connectionId })
+          : null;
         const saved = await loaded.sourceControl.projectRepositories.update({
           orgId: loaded.orgId,
           id: loaded.repository.id,
@@ -99,6 +106,7 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
           },
         });
         if (!saved) return c.json({ error: 'project_repository_not_found' }, 404);
+        if (connection) options.onEnvironmentSaved?.(connection.factoryProjectId);
         return c.json({ setupCommand: saved.setupCommand, teardownCommand: saved.teardownCommand });
       },
     }),

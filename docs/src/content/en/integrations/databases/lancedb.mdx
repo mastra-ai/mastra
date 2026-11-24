@@ -2,7 +2,6 @@
 title: "LanceDB | Database"
 description: "Use LanceDB for Mastra application storage and vector operations, configure tables and initialization, and account for its observability limitations."
 packages:
-  - "@mastra/core"
   - "@mastra/lance"
 ---
 
@@ -24,7 +23,7 @@ npm install @mastra/lance@latest
 
 ## Usage
 
-### Basic Storage Usage
+### Basic storage usage
 
 ```typescript
 import { LanceStorage } from '@mastra/lance'
@@ -70,7 +69,7 @@ const storage = await LanceStorage.create('my-storage', 's3://bucket/db', {
 
 ## Additional notes
 
-### Schema Management
+### Schema management
 
 The LanceStorage implementation automatically handles schema creation and updates. It maps Mastra's schema types to Apache Arrow data types, which are used by LanceDB internally:
 
@@ -114,24 +113,24 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
-### Deployment Options
+### Deployment options
 
 LanceDB storage can be configured for different deployment scenarios:
 
 - **Local Development**: Use a local file path for development and testing
-  ```
+  ```text
   /path/to/db
   ```
 - **Cloud Deployment**: Connect to a hosted LanceDB instance
-  ```
+  ```text
   db://host:port
   ```
 - **S3 Storage**: Use Amazon S3 for high-capacity cloud storage
-  ```
+  ```text
   s3://bucket/db
   ```
 
-### Table Management
+### Table management
 
 LanceStorage provides methods for managing tables:
 
