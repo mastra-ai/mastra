@@ -527,8 +527,6 @@ If render_card returns issues, fix the spec and call it again. Keep every compon
 })
 ```
 
-With `createSlackAdapter()`, keep the `channels.adapters` config from [the adapter example](#enable-with-createslackadapter).
-
 ### How cards look in Slack
 
 `@chat-adapter/slack` renders a `Card` as a header block and a context block, followed by the blocks for its children. It doesn't use Slack's [card block](https://docs.slack.dev/reference/block-kit/blocks/card-block), so the card has no visible container or border around it.
