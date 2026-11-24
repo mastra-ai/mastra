@@ -26,7 +26,12 @@ describe('RedisStreamsPubSub reclaim loop', () => {
   let pubsubs: RedisStreamsPubSub[] = [];
 
   function createPubSub(
-    extra: { inFlightTimeoutMs?: number; maxDeliveryAttempts?: number; reclaimIdleMs?: number } = {},
+    extra: {
+      inFlightTimeoutMs?: number;
+      maxDeliveryAttempts?: number;
+      reclaimIdleMs?: number;
+      reclaimIntervalMs?: number;
+    } = {},
   ): RedisStreamsPubSub {
     const ps = new RedisStreamsPubSub({
       url: REDIS_URL,
@@ -142,6 +147,40 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     expect(seenB[0]!.type).toBe('sticky');
     expect(deliveriesA).toBe(1);
   });
+
+  // Workflow recovery leaves evented runs to the broker only when `redeliversUnacked` is true, so the
+  // getter must match whether a sibling actually gets a dead consumer's message.
+  it.each([
+    { reclaimIntervalMs: 100, redelivers: true },
+    { reclaimIntervalMs: 0, redelivers: false },
+  ])(
+    'redeliversUnacked is $redelivers when reclaimIntervalMs is $reclaimIntervalMs',
+    async ({ reclaimIntervalMs, redelivers }) => {
+      const psA = createPubSub({ reclaimIntervalMs });
+      const psB = createPubSub({ reclaimIntervalMs });
+      const topic = `t-${randomUUID()}`;
+      const group = `redeliver-${randomUUID()}`;
+
+      let deliveriesA = 0;
+      // A never settles the message, as a worker that died mid-step.
+      await psA.subscribe(topic, () => void deliveriesA++, { group });
+      await psA.publish(topic, makeEvent({ type: 'abandoned' }));
+      await waitFor(() => deliveriesA === 1, 5000);
+
+      let deliveriesB = 0;
+      await psB.subscribe(topic, () => void deliveriesB++, { group });
+
+      if (redelivers) {
+        await waitFor(() => deliveriesB === 1, 3000);
+      } else {
+        // Five times reclaimIdleMs: a running reclaim loop would have handed the message over by now.
+        await sleep(1000);
+      }
+
+      expect(psB.redeliversUnacked).toBe(redelivers);
+      expect(deliveriesB).toBe(redelivers ? 1 : 0);
+    },
+  );
 
   it('does not let a sibling reclaim an entry whose handler keeps extending it', async () => {
     const psA = createPubSub({ inFlightTimeoutMs: 300 });

@@ -26,8 +26,9 @@ export function SidebarRoot({
           <div
             data-slot="sidebar-surface"
             className={cn(
-              '-mr-2 -ml-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-r-xl py-1.5',
-              sidebar?.state === 'collapsed' ? 'pr-2 pl-4' : 'pr-3.5 pl-5.5',
+              // 16px on the left (half of it off-screen) and 8px on the right: rows sit 10px from both visible edges,
+              // like every other sidebar, and the scrollbar hugs the card's edge.
+              '-mr-2 -ml-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-r-xl py-1.5 pr-2 pl-4',
               frameSurfaceStyle,
             )}
           >

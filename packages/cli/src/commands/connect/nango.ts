@@ -20,7 +20,40 @@ import type { IntegrationAuthField } from './api.js';
  * the session's `connectUrl`.
  */
 
-export const NANGO_HOST = process.env.MASTRA_NANGO_HOST || 'https://api.nango.dev';
+const DEFAULT_NANGO_HOST = 'https://api.nango.dev';
+
+/**
+ * Nango API host for a connect session. `MASTRA_NANGO_HOST` stays an explicit
+ * override; otherwise the host the platform returned with the session
+ * (self-hosted Nango), falling back to Nango Cloud for platforms that don't
+ * return one.
+ *
+ * Session tokens and credentials go to this host, so a platform-supplied host
+ * must use HTTPS (plain HTTP only for loopback). The env override is the
+ * user's explicit choice and is not checked.
+ */
+function nangoHost(apiBaseUrl?: string | null): string {
+  const override = process.env.MASTRA_NANGO_HOST;
+  if (!override && apiBaseUrl) assertSecureHost(apiBaseUrl);
+  let host = override || apiBaseUrl || DEFAULT_NANGO_HOST;
+  while (host.endsWith('/')) host = host.slice(0, -1);
+  return host;
+}
+
+function assertSecureHost(value: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (cause) {
+    throw new Error('The platform returned an invalid Nango host.', { cause });
+  }
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    throw new Error(
+      'The platform returned a Nango host that does not use HTTPS. Set MASTRA_NANGO_HOST to override it.',
+    );
+  }
+}
 
 const OAUTH_AUTH_TYPES = new Set(['OAUTH1', 'OAUTH2', 'MCP_OAUTH2', 'MCP_OAUTH2_GENERIC']);
 
@@ -143,8 +176,13 @@ function connectQuery(sessionToken: string, params?: Record<string, string>): st
  * detected by polling the platform's connection list rather than the SDK's
  * websocket channel.
  */
-export function oauthConnectUrl(integrationId: string, sessionToken: string, params?: Record<string, string>): string {
-  return `${NANGO_HOST}/oauth/connect/${encodeURIComponent(integrationId)}${connectQuery(sessionToken, params)}`;
+export function oauthConnectUrl(
+  integrationId: string,
+  sessionToken: string,
+  params?: Record<string, string>,
+  apiBaseUrl?: string | null,
+): string {
+  return `${nangoHost(apiBaseUrl)}/oauth/connect/${encodeURIComponent(integrationId)}${connectQuery(sessionToken, params)}`;
 }
 
 /**
@@ -155,11 +193,13 @@ export async function submitCredentialAuth(input: {
   integrationId: string;
   authType: string | null;
   sessionToken: string;
+  /** Nango host returned with the connect session, if any. */
+  apiBaseUrl?: string | null;
   credentials: Record<string, string>;
   params?: Record<string, string>;
 }): Promise<void> {
   const path = input.authType === 'API_KEY' ? 'api-auth/api-key' : 'api-auth/basic';
-  const url = `${NANGO_HOST}/${path}/${encodeURIComponent(input.integrationId)}${connectQuery(input.sessionToken, input.params)}`;
+  const url = `${nangoHost(input.apiBaseUrl)}/${path}/${encodeURIComponent(input.integrationId)}${connectQuery(input.sessionToken, input.params)}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

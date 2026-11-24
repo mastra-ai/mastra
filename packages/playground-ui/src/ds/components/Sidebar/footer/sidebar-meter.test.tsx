@@ -1,38 +1,26 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Search } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from '..';
 import { SidebarMeter } from './sidebar-meter';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
 afterEach(() => cleanup());
 
 describe('SidebarMeter', () => {
-  it('exposes the tone and keeps grain to the neutral tone', () => {
-    const { container } = render(<SidebarMeter label="Credits" value="$4" status="Credits are low" tone="warning" />);
-
+  it('exposes the tone and blooms only when the card needs attention', () => {
+    const { container, rerender } = render(
+      <SidebarMeter label="Credits" value="$4" status="Credits are low" tone="warning" />,
+    );
     const card = container.querySelector('[data-slot="sidebar-meter"]');
     expect(card?.getAttribute('data-tone')).toBe('warning');
+    expect(container.querySelector('[data-slot="sidebar-meter-bloom"]')).not.toBeNull();
 
-    const bloom = container.querySelector<HTMLElement>('[data-slot="sidebar-meter-bloom"]');
-    expect(bloom?.querySelector('span')).toBeNull();
+    rerender(<SidebarMeter label="Credits" value="$275" status="Auto top-up Off" />);
+    expect(container.querySelector('[data-slot="sidebar-meter-bloom"]')).toBeNull();
   });
 
-  it('keeps one card height across tones', () => {
-    const { container: neutral } = render(<SidebarMeter label="Credits" value="$26" />);
-    const neutralHeight = neutral.querySelector<HTMLElement>('[data-slot="sidebar-meter"]')?.style.height;
-
-    cleanup();
-
-    const { container: danger } = render(
-      <SidebarMeter label="Credits" value="$0" status="Out of credits" tone="danger" />,
-    );
-    const dangerHeight = danger.querySelector<HTMLElement>('[data-slot="sidebar-meter"]')?.style.height;
-
-    expect(neutralHeight).toBe(dangerHeight);
-  });
-
-  it('drops the label and covers the card with the link when collapsed', () => {
+  it('folds the label away and covers the card with the link when collapsed', () => {
     render(
       <SidebarMeter
         label="Credits"
@@ -42,11 +30,22 @@ describe('SidebarMeter', () => {
         state="collapsed"
         href="/billing"
         linkLabel="Credit balance"
+        action={<button type="button">What are credits?</button>}
       />,
     );
+    // Folded away, the action can't be reached with the keyboard either.
+    expect(screen.getByRole('button', { name: 'What are credits?', hidden: true }).closest('[inert]')).not.toBeNull();
 
-    expect(screen.queryByText('Credits')).toBeNull();
+    // The label and its action stay in the card so the collapse can fold them away, out of reach meanwhile.
+    expect(screen.getByText('Credits').closest('[inert]')).not.toBeNull();
     expect(screen.getByLabelText('Credit balance').getAttribute('href')).toBe('/billing');
+  });
+
+  it('keeps the full amount beside the rail amount, for the stylesheet to pick by state', () => {
+    render(<SidebarMeter label="Credits" value="$6,649.10" railValue="$7K" state="collapsed" />);
+
+    expect(screen.getByText('$6,649.10').hasAttribute('data-meter-full')).toBe(true);
+    expect(screen.getByText('$7K').hasAttribute('data-meter-rail')).toBe(true);
   });
 
   it('renders the action outside the card link', () => {
@@ -93,7 +92,7 @@ describe('Sidebar command header', () => {
           <Sidebar.CommandHeader>
             <Sidebar.Brand title="Mastra" />
             <Sidebar.SearchTrigger aria-label="Search" shortcut="⌘ K" onClick={onSearch}>
-              <Search />
+              <IconMagnifyingGlass />
             </Sidebar.SearchTrigger>
           </Sidebar.CommandHeader>
           <Sidebar.Nav>Navigation</Sidebar.Nav>

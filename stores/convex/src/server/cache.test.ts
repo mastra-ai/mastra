@@ -306,6 +306,36 @@ describe('mastraCache server handler', () => {
     ).resolves.toEqual({ ok: false, error: 'mastra:cache:list exists but is not a number' });
   });
 
+  it('reads counters back as numbers', async () => {
+    const ctx = createCtx();
+    const get = (key: string) => handleCacheOperation(ctx as any, { op: 'get', key });
+
+    await expect(get('mastra:cache:counter')).resolves.toEqual({ ok: true, result: null });
+    for (let i = 0; i < 2; i++) {
+      await handleCacheOperation(ctx as any, {
+        op: 'increment',
+        key: 'mastra:cache:counter',
+        keyPrefix: 'mastra:cache:',
+        expiresAt: null,
+      });
+    }
+    await expect(get('mastra:cache:counter')).resolves.toEqual({ ok: true, result: 2 });
+
+    for (let i = 0; i < 3; i++) {
+      await handleCacheOperation(ctx as any, {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:log',
+        counterKey: 'mastra:cache:log:counter',
+        keyPrefix: 'mastra:cache:',
+        value: { id: `frame-${i}` },
+        expiresAt: null,
+      });
+    }
+    await expect(get('mastra:cache:log:counter')).resolves.toEqual({ ok: true, result: 3 });
+    // Lists still read as null through `get`.
+    await expect(get('mastra:cache:log')).resolves.toEqual({ ok: true, result: null });
+  });
+
   it('clears metadata and list rows by prefix', async () => {
     const ctx = createCtx();
 
@@ -709,18 +739,56 @@ describe('CachingPubSub replay over ConvexServerCache', () => {
     const options = { failListItemInsert: false };
     const ctx = createCtx(options);
     const { client, faults } = createTransactionalClient(ctx);
-    const pubsub = new CachingPubSub(new EventEmitterPubSub(), new ConvexServerCache({ client }));
+    const cache = new ConvexServerCache({ client });
+    const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
     const publish = (n: number) => pubsub.publish(topic, { type: 'frame', data: { n }, runId: 'run-1' });
+    const frames = (events: Event[]) =>
+      events.map(event => ({ index: event.index, n: (event.data as { n: number }).n }));
     const replay = async (offset: number) => {
       const received: Event[] = [];
       await pubsub.subscribeFromOffset(topic, offset, event => {
         received.push(event);
       });
       await vi.waitFor(() => expect(received.length).toBeGreaterThan(0));
-      return received.map(event => ({ index: event.index, n: (event.data as { n: number }).n }));
+      return frames(received);
     };
-    return { options, faults, publish, replay };
+    return { options, faults, cache, pubsub, publish, frames, replay };
   }
+
+  it('reads only the tail of the log when resuming from an offset', async () => {
+    const { cache, publish, replay } = await setup();
+    for (let n = 0; n < 6; n++) await publish(n);
+    const listFromTo = vi.spyOn(cache, 'listFromTo');
+
+    await expect(replay(4)).resolves.toEqual([
+      { index: 4, n: 4 },
+      { index: 5, n: 5 },
+    ]);
+    // The counter reads back as a number, so the replay slices the log at the
+    // offset instead of reading it from the start. (`[key, 0, 0]` is the
+    // single-entry read of frame 0's id for restart detection.)
+    expect(listFromTo.mock.calls).toEqual([
+      ['pubsub:workflow.events.v2.run-1', 0, 0],
+      ['pubsub:workflow.events.v2.run-1', 4],
+    ]);
+  });
+
+  it('resyncs a resumed subscriber when the log restarts at 0', async () => {
+    const { cache, pubsub, publish, frames } = await setup();
+    for (let n = 0; n < 3; n++) await publish(n);
+
+    const received: Event[] = [];
+    await pubsub.subscribeFromOffset(topic, 3, event => {
+      received.push(event);
+    });
+
+    // The retained log expires and the run publishes a new segment.
+    await cache.delete('pubsub:workflow.events.v2.run-1');
+    await cache.delete('pubsub:workflow.events.v2.run-1:counter');
+    await publish(100);
+
+    await vi.waitFor(() => expect(frames(received)).toEqual([{ index: 0, n: 100 }]));
+  });
 
   it('resumes from an offset without skipping frames after a publish fails to cache', async () => {
     const { options, publish, replay } = await setup();

@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- the parts are exported together as one compound component
 import { cn } from '@/lib/utils';
 
 export interface DataDetailsPanelKeyValueListProps {
@@ -15,7 +16,7 @@ export interface DataDetailsPanelKeyValueListKeyProps {
 }
 
 function Key({ className, children }: DataDetailsPanelKeyValueListKeyProps) {
-  return <dt className={cn('shrink-0 py-0.5 text-body-sm text-placeholder', className)}>{children}</dt>;
+  return <dt className={cn('shrink-0 py-0.5 text-body-sm text-muted-foreground', className)}>{children}</dt>;
 }
 
 export interface DataDetailsPanelKeyValueListValueProps {
@@ -24,7 +25,7 @@ export interface DataDetailsPanelKeyValueListValueProps {
 }
 
 function Value({ className, children }: DataDetailsPanelKeyValueListValueProps) {
-  return <dd className={cn('min-w-0 truncate py-0.5 text-body-sm text-muted-foreground', className)}>{children}</dd>;
+  return <dd className={cn('min-w-0 truncate py-0.5 text-body-sm text-foreground', className)}>{children}</dd>;
 }
 
 export interface DataDetailsPanelKeyValueListHeaderProps {
@@ -34,7 +35,7 @@ export interface DataDetailsPanelKeyValueListHeaderProps {
 
 function Header({ className, children }: DataDetailsPanelKeyValueListHeaderProps) {
   return (
-    <dt className={cn('col-span-2 py-3 text-caption tracking-widest text-placeholder uppercase', className)}>
+    <dt className={cn('col-span-2 py-3 text-caption tracking-widest text-muted-foreground uppercase', className)}>
       {children}
     </dt>
   );

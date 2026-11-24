@@ -1,7 +1,7 @@
-import { ExternalLinkIcon } from 'lucide-react';
 import type { LogsDatePreset } from '../log-filters';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { formatDate } from '@/utils/date-format';
 
 const PRESET_LABELS: Record<Exclude<LogsDatePreset, 'all' | 'custom'>, string> = {
@@ -57,7 +57,7 @@ export const NoLogsInfo = ({ datePreset, dateFrom, dateTo }: NoLogsInfoProps = {
           render={
             <a href="https://mastra.ai/en/docs/observability/logging" target="_blank" rel="noopener noreferrer" />
           }
-          icon={<ExternalLinkIcon />}
+          icon={<IconSquareArrowTopRight />}
         >
           Logging documentation
         </Button>

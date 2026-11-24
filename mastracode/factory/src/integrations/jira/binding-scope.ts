@@ -4,8 +4,8 @@ import type { JiraIntakeScope } from './intake-jql.js';
 
 /** The selected Jira projects that feed one Factory project, and the slice of each it takes. */
 export interface JiraProjectScope {
-  /** Bound board per source id, for the rules that land new cards. */
-  intakeBoards: Record<string, string>;
+  /** The selected Jira projects bound to this Factory project. */
+  sourceIds: string[];
   /** One JQL scope per bound source, narrowed to this Factory's label slice. */
   scopes: JiraIntakeScope[];
   /** Whether an issue from `sourceId` carrying `labels` belongs to this Factory. */
@@ -19,10 +19,9 @@ export interface JiraProjectScope {
  * A Jira issue carries no Factory project of its own, so without a binding
  * every board view would ingest every selected project's issues into whichever
  * Factory happened to be on screen. Routing is explicit: a project feeds this
- * Factory only when its binding names both the Factory project and a board.
- * Several Factories may share a project; their slices are disjoint, so each
- * issue feeds exactly one of them. A sibling binding without a board does not
- * poll, so it takes nothing from the others' slices until its board is set.
+ * Factory only when it is bound to the Factory project. Several Factories may
+ * share a project; their slices are disjoint, so each issue feeds exactly one
+ * of them.
  */
 export async function scopeJiraSourcesToProject({
   intake,
@@ -40,19 +39,18 @@ export async function scopeJiraSourcesToProject({
   for (const binding of await intake.listBindings({ orgId, integrationId: 'jira' })) {
     bySource.set(binding.sourceId, [...(bySource.get(binding.sourceId) ?? []), binding]);
   }
-  const intakeBoards: Record<string, string> = {};
+  const sourceIds: string[] = [];
   const scopes: JiraIntakeScope[] = [];
   const owned = new Map<string, { binding: IntakeSourceBinding; siblings: IntakeSourceBinding[] }>();
   for (const [sourceId, siblings] of bySource) {
     const binding = siblings.find(candidate => candidate.factoryProjectId === factoryProjectId);
-    if (!binding?.board || !selected.has(sourceId)) continue;
-    const active = siblings.filter(sibling => sibling.board);
-    intakeBoards[sourceId] = binding.board;
-    scopes.push({ projectId: sourceId, ...bindingLabelSlice(binding, active) });
-    owned.set(sourceId, { binding, siblings: active });
+    if (!binding || !selected.has(sourceId)) continue;
+    sourceIds.push(sourceId);
+    scopes.push({ projectId: sourceId, ...bindingLabelSlice(binding, siblings) });
+    owned.set(sourceId, { binding, siblings });
   }
   return {
-    intakeBoards,
+    sourceIds,
     scopes,
     takes(sourceId, labels) {
       const entry = owned.get(sourceId);

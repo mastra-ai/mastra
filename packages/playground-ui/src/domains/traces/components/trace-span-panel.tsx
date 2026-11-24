@@ -1,243 +1,99 @@
-import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
-import { MessagesSquareIcon } from 'lucide-react';
-import type { ComponentProps, ReactNode } from 'react';
-import type { FeedbackOptions } from './feedback-options';
-import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
-import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
-import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
-import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
-import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
-import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
-import { Button } from '@/ds/components/Button';
+import { useScorers, useTriggerScorer } from '@mastra/react/hooks/scores';
+import { useSpanDetail, useThreadHasOtherTraces, useTraceSpans } from '@mastra/react/hooks/traces';
+import { useMemo } from 'react';
+import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
+import { useStudioTraceNavigation } from '../hooks/use-studio-trace-navigation';
+import { TraceSpanPanelView } from './trace-span-panel-view';
+import type { TraceSpanPanelViewProps } from './trace-span-panel-view';
+import { LiveSpanInput, LiveSpanOutput, LiveTraceMessages } from '@/domains/traces/components/live-parts';
+import { getTraceRootSpan, getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { useLinkComponent } from '@/lib/framework';
-import type { LinkComponentPaths } from '@/lib/framework';
 
-type TraceDataPanelViewProps = ComponentProps<typeof TraceDataPanelView>;
-
-function getEntityHref(
-  paths: LinkComponentPaths,
-  entityType: string | null | undefined,
-  entityId: string | null | undefined,
-) {
-  if (!entityId || !entityType) return undefined;
-  const normalizedEntityType = entityType.toLowerCase();
-  if (normalizedEntityType.includes('workflow')) return paths.workflowLink(entityId) || undefined;
-  if (normalizedEntityType.includes('agent')) return paths.agentLink(entityId) || undefined;
-  return undefined;
-}
-type SpanDataPanelViewProps = ComponentProps<typeof SpanDataPanelView>;
-
-export interface TraceSpanPanelProps {
-  /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
-  traceId?: string;
-  /** Spans returned by `useTraceOrBranchSpans` — the page owns the fetch, the panel renders it. */
-  spans: TraceDataPanelViewProps['spans'];
-  isLoadingSpans: boolean;
-  /** Controlled span selection (URL state on the traces page, local state in the chat aside). */
-  selectedSpanId: string | null;
-  onSpanSelect: (spanId: string | undefined) => void;
-  onClose: () => void;
-
-  // Trace-panel pass-through.
-  anchorSpanId?: string;
-  entityType?: TraceDataPanelViewProps['entityType'];
-  initialSpanId?: string | null;
-  onPrevious?: () => void;
-  onNext?: () => void;
-  onSaveAsDatasetItem?: TraceDataPanelViewProps['onSaveAsDatasetItem'];
-  feedbackTabBadge?: ReactNode;
-  feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
-  /** Enables the "Messages" column (reconstructed turn) when the displayed root is a complete agent trace with a thread id. */
-  showPartialThread?: boolean;
-  /** Span ids featured in the timeline (non-featured spans are faded). */
-  featuredSpanIds?: string[];
-  /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
-  onHighlightSpans?: (spanIds: string[]) => void;
-  /** When true, opens the trace's thread (every turn) in a stacked drawer above the trace panel. */
-  isFullThreadOpen?: boolean;
-  /** Enables the in-place "Open full thread" swap; without it the action falls back to a link. */
-  onFullThreadOpenChange?: (open: boolean) => void;
-  /** Full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
-  withQueryTrace: boolean;
-  /** Full-thread view: shows the per-trace Feedback tab. */
-  withFeedback: boolean;
-  feedbackOptions?: FeedbackOptions;
-  /** Full-thread view: opens a score of one of the thread's traces (the app owns routing). */
-  onOpenScore: (traceId: string, scoreId: string) => void;
-  scoresTabBadge?: ReactNode;
-  scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
-  usage?: TraceDataPanelViewProps['usage'];
-  rootStreamingTimings?: TraceDataPanelViewProps['rootStreamingTimings'];
+export interface TraceSpanPanelProps extends Omit<
+  TraceSpanPanelViewProps,
+  | 'navigation'
+  | 'fullTrace'
+  | 'selectedSpan'
+  | 'threadHasOtherTraces'
+  | 'scorers'
+  | 'isLoadingScorers'
+  | 'onTriggerScorer'
+  | 'onDownload'
+  | 'isDownloading'
+  | 'renderMessages'
+  | 'spanInput'
+  | 'spanOutput'
+> {
+  /** The trace page the drawer's "Open trace page" goes to, through Studio's router; without it, it offers none. */
   traceHref?: string;
-  /** Drawer width; defaults to `wide`. */
-  size?: TraceDataPanelViewProps['size'];
-  /** Sibling-drawer elevation (see `DataPanel`). */
-  depth?: TraceDataPanelViewProps['depth'];
-  /** Rendered inside the drawer above the trace header (e.g. feedback context). */
-  headerSlot?: ReactNode;
-  /** Integration actions displayed alongside the trace controls. */
-  headerActionsSlot?: ReactNode;
-  /** Accessible drawer name; defaults to the trace id. */
-  title?: string;
-  showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
-  spanView?: TraceDataPanelViewProps['spanView'];
-  onSpanViewChange?: TraceDataPanelViewProps['onSpanViewChange'];
-
-  // Span-panel pass-through.
-  spanActiveTab?: SpanDataPanelViewProps['activeTab'];
-  onSpanTabChange?: SpanDataPanelViewProps['onTabChange'];
-  spanFeedbackTabBadge?: ReactNode;
-  spanFeedbackTabSlot?: SpanDataPanelViewProps['feedbackTabSlot'];
+  /** @deprecated No longer used: Studio always offers scoring, so the notice never shows. */
+  showUnavailableFeaturesMsg?: boolean;
 }
 
 /**
- * Shared trace → span drilldown drawer: `TraceDataPanel` with a nested `SpanDataPanelView`.
- * Encapsulates the span-detail fetch and prev/next span navigation that the traces page
- * and the agent chat traces aside used to duplicate.
+ * Studio's trace → span drilldown drawer: a {@link TraceSpanPanelView} fed through the Mastra client. It
+ * only loads data and hands it to the view; the trace's full thread is the host's to show. A host with
+ * its own transport renders `TraceSpanPanelView` (or composes `TracePanel`) with its own data.
  */
 export function TraceSpanPanel({
-  traceId,
-  spans,
-  isLoadingSpans,
-  selectedSpanId,
-  onSpanSelect,
-  onClose,
-  anchorSpanId,
-  entityType,
-  initialSpanId,
-  onPrevious,
-  onNext,
-  onSaveAsDatasetItem,
-  feedbackTabBadge,
-  feedbackTabSlot,
-  showPartialThread,
-  featuredSpanIds,
-  onHighlightSpans,
-  isFullThreadOpen,
-  onFullThreadOpenChange,
-  withQueryTrace,
-  withFeedback,
-  feedbackOptions,
-  onOpenScore,
-  scoresTabBadge,
-  scoresTabSlot,
-  usage,
-  rootStreamingTimings,
   traceHref,
-  size,
-  depth,
-  headerSlot,
-  headerActionsSlot,
-  title,
-  showUnavailableFeaturesMsg,
-  spanView,
-  onSpanViewChange,
-  spanActiveTab,
-  onSpanTabChange,
-  spanFeedbackTabBadge,
-  spanFeedbackTabSlot,
+  selectedSpanId,
+  showPartialThread,
+  showUnavailableFeaturesMsg: _showUnavailableFeaturesMsg,
+  ...props
 }: TraceSpanPanelProps) {
-  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail({
-    traceId: traceId,
+  const { traceId, spans, anchorSpanId } = props;
+  const { navigate } = useLinkComponent();
+  // Studio opens the entity, tools and delegated agents through its router; the trace page is the caller's.
+  const studioNavigation = useStudioTraceNavigation();
+  const navigation = useMemo(
+    () => ({ ...studioNavigation, onOpenTrace: traceHref ? () => navigate(traceHref) : undefined }),
+    [studioNavigation, traceHref, navigate],
+  );
+
+  const selectedSpanDetail = useSpanDetail({
+    traceId,
     spanId: selectedSpanId ?? '',
     queryOptions: { enabled: !!traceId && !!selectedSpanId },
   });
-  const { Link, paths } = useLinkComponent();
+  // Passive: the full trace backs the Messages column, the signal labels and the tool results, and is
+  // shared with the list's export; the trace list drives its refreshes.
+  const fullTrace = useTraceSpans({ traceId, passive: true, queryOptions: { enabled: !!traceId } });
+  const scorers = useScorers();
+  const triggerScorer = useTriggerScorer();
+  const download = useDownloadTraceJson();
 
-  // The trace summary links the entity to its page; the app's link provider owns the routes.
-  const rootSpan = anchorSpanId
-    ? spans?.find(s => s.spanId === anchorSpanId)
-    : spans?.find(s => s.parentSpanId == null);
-  const entityHref = getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId);
-  const threadId = getTraceThreadId(rootSpan, anchorSpanId);
-  const hasMessagesPanel = !!(traceId && showPartialThread && threadId);
+  const threadId = getTraceThreadId(getTraceRootSpan(spans, anchorSpanId), anchorSpanId);
+  const hasMessages = !!(traceId && showPartialThread && threadId);
   // A single-trace thread would show exactly what the Messages column already shows.
-  const hasOtherTraces = useThreadHasOtherTraces({
-    threadId: hasMessagesPanel ? threadId : undefined,
-    queryOptions: { enabled: !!(hasMessagesPanel ? threadId : undefined) },
+  const threadHasOtherTraces = useThreadHasOtherTraces({
+    threadId: hasMessages ? threadId : undefined,
+    queryOptions: { enabled: hasMessages },
   });
-  const showFullThreadAction = hasMessagesPanel && hasOtherTraces && !!onFullThreadOpenChange;
 
   return (
-    <>
-      <TraceDataPanel
-        traceId={traceId}
-        spans={spans}
-        anchorSpanId={anchorSpanId}
-        entityType={entityType}
-        entityHref={entityHref}
-        usage={usage}
-        rootStreamingTimings={rootStreamingTimings}
-        isLoading={isLoadingSpans}
-        onClose={onClose}
-        onSpanSelect={onSpanSelect}
-        onSaveAsDatasetItem={onSaveAsDatasetItem}
-        initialSpanId={initialSpanId ?? selectedSpanId}
-        onPrevious={onPrevious}
-        onNext={onNext}
-        placement="traces-list"
-        LinkComponent={Link}
-        traceHref={traceHref}
-        size={size}
-        depth={depth}
-        headerSlot={headerSlot}
-        headerActionsSlot={headerActionsSlot}
-        title={title}
-        showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
-        spanView={spanView}
-        onSpanViewChange={onSpanViewChange}
-        feedbackTabBadge={feedbackTabBadge}
-        feedbackTabSlot={feedbackTabSlot}
-        featuredSpanIds={featuredSpanIds}
-        messagesPanelSlot={
-          hasMessagesPanel ? <TraceMessagesPanel traceId={traceId} onHighlightSpans={onHighlightSpans} /> : undefined
-        }
-        sideHeaderActions={
-          showFullThreadAction
-            ? ({ compact }) => (
-                <Button
-                  tooltip={compact ? 'Open full thread' : undefined}
-                  icon={<MessagesSquareIcon />}
-                  variant="ghost"
-                  size="sm"
-                  // At a side column of 500px or less, collapse to a round icon button; the label stays for screen readers.
-                  className="@max-[501px]:w-control-sm @max-[501px]:rounded-full @max-[501px]:px-0 @max-[501px]:[&>[data-slot=button-icon]]:ml-0"
-                  onClick={() => onFullThreadOpenChange(true)}
-                >
-                  <span className="@max-[501px]:sr-only">Open full thread</span>
-                </Button>
-              )
-            : undefined
-        }
-        scoresTabBadge={scoresTabBadge}
-        scoresTabSlot={scoresTabSlot}
-        spanPanelSlot={
-          traceId && selectedSpanId ? (
-            <SpanDataPanelView
-              traceId={traceId}
-              spanId={selectedSpanId}
-              span={spanDetailData?.span}
-              isLoading={isLoadingSpanDetail}
-              onClose={() => onSpanSelect(undefined)}
-              activeTab={spanActiveTab}
-              onTabChange={onSpanTabChange}
-              feedbackTabBadge={spanFeedbackTabBadge}
-              feedbackTabSlot={spanFeedbackTabSlot}
-            />
-          ) : null
-        }
-      />
-      {/* Rendered after the trace panel: DataPanel stacking follows DOM order. */}
-      <TraceThreadPanel
-        open={!!(traceId && isFullThreadOpen && threadId)}
-        depth={depth && depth > 1 ? 3 : 2}
-        threadId={threadId ?? ''}
-        onOpenScore={onOpenScore}
-        withQueryTrace={withQueryTrace}
-        withFeedback={withFeedback}
-        feedbackOptions={feedbackOptions}
-        onClose={() => onFullThreadOpenChange?.(false)}
-      />
-    </>
+    <TraceSpanPanelView
+      {...props}
+      selectedSpanId={selectedSpanId}
+      showPartialThread={showPartialThread}
+      navigation={navigation}
+      fullTrace={{
+        spans: fullTrace.data?.spans,
+        isLoading: fullTrace.isLoading,
+        error: fullTrace.error ?? undefined,
+      }}
+      selectedSpan={{ span: selectedSpanDetail.data?.span, isLoading: selectedSpanDetail.isLoading }}
+      threadHasOtherTraces={threadHasOtherTraces}
+      scorers={scorers.data}
+      isLoadingScorers={scorers.isLoading}
+      onTriggerScorer={triggerScorer.mutateAsync}
+      onDownload={download.download}
+      isDownloading={download.isPending}
+      // Loads the MCP app tools for the live tool cards once the messages show.
+      renderMessages={messagesProps => <LiveTraceMessages {...messagesProps} />}
+      // Each tab loads what it draws when it opens: the tool registry, the live tool cards.
+      spanInput={<LiveSpanInput />}
+      spanOutput={<LiveSpanOutput />}
+    />
   );
 }

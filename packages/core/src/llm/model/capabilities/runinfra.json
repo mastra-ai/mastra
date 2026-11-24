@@ -1,5 +1,10 @@
 {
-  "attachment": ["Qwen/Qwen3.8-27B", "ornith-ai/Ornith-1.5-35B-A3B", "zai-org/GLM-5.3-Flash"],
+  "attachment": [
+    "Qwen/Qwen3.8-27B",
+    "ornith-ai/Ornith-1.5-35B-A3B",
+    "stepfun-ai/Step-5-Preview",
+    "zai-org/GLM-5.3-Flash"
+  ],
   "temperature": [
     "Inferact/Qwen3.8-2.4T-A95B-NVFP4",
     "Qwen/Qwen3.8-27B",
@@ -7,6 +12,7 @@
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
     "ornith-ai/Ornith-1.5-35B-A3B",
+    "stepfun-ai/Step-5-Preview",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
@@ -17,24 +23,15 @@
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
     "ornith-ai/Ornith-1.5-35B-A3B",
+    "stepfun-ai/Step-5-Preview",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "ornith-ai/Ornith-1.5-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
-      {
-        "type": "toggle"
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [
@@ -43,10 +40,26 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "ornith-ai/Ornith-1.5-35B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "stepfun-ai/Step-5-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
@@ -60,10 +73,10 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.8-27B": [
+    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

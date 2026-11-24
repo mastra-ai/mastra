@@ -45,7 +45,7 @@ export const mouseInputModeScenario = {
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
-    await runtime.waitForScreenText(/\bbuild · pointer-e2e\/alpha-model/i, terminal, 10_000);
+    await runtime.waitForScreenText(/\bbuild · (pointer-e2e\/)?alpha-model/i, terminal, 10_000);
     await terminal.flushInput?.();
 
     // Off by default: typing leaves the mouse with the terminal and no indicator shows.
@@ -102,6 +102,21 @@ export const mouseInputModeScenario = {
       throw new Error(`Expected "brave" copied through OSC 52, got ${JSON.stringify(copied)}`);
     terminal.write('bold');
     await runtime.waitForScreenText(/hello bold big world/, terminal, 8_000);
+
+    // A double click selects and copies the word under the pointer.
+    await terminal.clickText?.('bold');
+    await terminal.clickText?.('bold');
+    await runtime.sleep(300);
+    if (terminal.clipboardWrites?.().at(-1) !== 'bold')
+      throw new Error(`Expected "bold" copied by a double click, got ${JSON.stringify(terminal.clipboardWrites?.())}`);
+    terminal.write('calm');
+    await runtime.waitForScreenText(/hello calm big world/, terminal, 8_000);
+
+    // Shift+Alt+← selects the word before the cursor, and typing replaces it.
+    terminal.write('\x1b[1;4D');
+    await terminal.flushInput?.();
+    terminal.write('warm');
+    await runtime.waitForScreenText(/hello warm big world/, terminal, 8_000);
     runtime.printScreen('after editing with the mouse', terminal);
 
     // The first wheel tick hands the wheel back to the terminal; typing takes the mouse again.
@@ -117,7 +132,7 @@ export const mouseInputModeScenario = {
     await runtime.waitForScreenText(OFF, terminal, 8_000);
     await terminal.flushInput?.();
     expectTracking(terminal, 'none', 'after clicking outside the input box');
-    await runtime.waitForScreenText(/hello bold! big world/, terminal, 8_000);
+    await runtime.waitForScreenText(/hello warm! big world/, terminal, 8_000);
     terminal.write('\x1b[D');
     await runtime.waitForScreenText(AUTO, terminal, 8_000);
 

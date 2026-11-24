@@ -14,15 +14,44 @@ Unlike other providers that have fixed model names, Azure uses **deployment name
 
 ## Usage
 
-```typescript
+The Azure OpenAI gateway isn't registered by default. Register it on your Mastra instance, and register the agents that use it on the same instance. Otherwise `azure-openai/...` model IDs fail with `Could not find config for provider azure-openai`.
+
+Reference your Azure deployment name in the agent's model ID:
+
+```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
-const agent = new Agent({
+export const myAgent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "azure-openai/my-gpt-5-4-deployment"  // Use your Azure deployment name (autocompleted in dev mode)
+  model: "azure-openai/my-gpt-5-4-deployment", // Use your Azure deployment name (autocompleted in dev mode)
 });
+```
+
+Register the gateway and the agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+import { myAgent } from "./agents/my-agent";
+
+export const mastra = new Mastra({
+  gateways: {
+    "azure-openai": new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      deployments: ["my-gpt-5-4-deployment"],
+    }),
+  },
+  agents: { myAgent },
+});
+```
+
+Get the agent from the Mastra instance and call it:
+
+```typescript
+const agent = mastra.getAgent("myAgent");
 
 // Generate a response
 const response = await agent.generate("Hello!");
@@ -33,6 +62,8 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+See [Configuration](#configuration) for other authentication and deployment discovery options.
 
 Check [Azure OpenAI model availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific options.
 
@@ -220,6 +251,34 @@ stream.transport?.close();
 Set `closeOnFinish: false` when you want to keep the socket open across follow-up turns. Azure keeps one response chain in connection-local memory, so continuing from the most recent `previous_response_id` can reduce continuation latency. The connection runs one response at a time and does not multiplex parallel runs.
 
 Do not send overlapping follow-up requests with `previous_response_id` on the same WebSocket transport. Mastra rejects overlapping continuation requests because Azure only keeps one in-flight response per connection. Wait for the active stream to finish before continuing the response chain.
+
+### Strict structured output
+
+The gateway sends [structured output](/docs/agents/structured-output) schemas and tool schemas without strict mode by default. Without strict mode the model can leave out keys, and Mastra then fails validation when a required key is missing.
+
+Set `providerOptions.azure.strictJsonSchema: true` to have Azure enforce your schema:
+
+```typescript
+import { z } from "zod";
+
+const response = await agent.generate("Summarize the ticket.", {
+  structuredOutput: {
+    schema: z.object({
+      summary: z.string(),
+      priority: z.enum(["low", "medium", "high"]).optional(),
+    }),
+  },
+  providerOptions: {
+    azure: { strictJsonSchema: true },
+  },
+});
+```
+
+With strict mode on, Mastra prepares the schemas before sending them so Azure accepts them. Every key is listed as required, optional keys accept `null` and come back as `undefined`, and validation keywords such as `uniqueItems`, `pattern`, and `minimum` move into the field description. Mastra still validates the result against your original schema.
+
+The setting covers the output schema and every tool in the request, because the gateway's AI SDK 5 Azure provider uses one flag for both. Azure strict mode can't express objects with free-form keys, such as `z.record()`, so keep strict mode off for agents whose output or tool schemas use them.
+
+The `azure` key applies when `useResponsesAPI` is `true`. On the chat completions route, set `providerOptions.openai.strictJsonSchema` instead.
 
 ## Configuration Reference
 

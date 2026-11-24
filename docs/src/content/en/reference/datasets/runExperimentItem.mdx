@@ -33,7 +33,9 @@ console.log(result.output)
 console.log(scores)
 ```
 
-Each call executes the item exactly once, with no internal retry loop. Calling it on a target-less experiment throws `EXPERIMENT_HAS_NO_TARGET`. Use [`submitExperimentResult()`](/reference/datasets/submitExperimentResult) for those. Calls after finalization throw `EXPERIMENT_ALREADY_FINALIZED`, and an `itemId` that isn't visible at the pinned dataset version throws `DATASET_ITEM_NOT_FOUND`.
+Each call executes the item once, retrying up to `maxRetries` times when you pass it, and you pass run options such as `agentModel` or `itemTimeout` on every call because the experiment record doesn't store them.
+
+Calling it on a target-less experiment throws `EXPERIMENT_HAS_NO_TARGET`. Use [`submitExperimentResult()`](/reference/datasets/submitExperimentResult) for those. Calls after finalization throw `EXPERIMENT_ALREADY_FINALIZED`, and an `itemId` that isn't visible at the pinned dataset version throws `DATASET_ITEM_NOT_FOUND`.
 
 ## Parameters
 
@@ -61,6 +63,40 @@ Each call executes the item exactly once, with no internal retry loop. Calling i
     type: 'Record<string, unknown>',
     isOptional: true,
     description: "Request context merged with the item's own request context (item values win).",
+  },
+  {
+    name: 'agentModel',
+    type: 'string | object',
+    isOptional: true,
+    description:
+      "Model to run an agent target with, instead of the agent's own model. Accepts the same values as `agentModel` in [`startExperiment()`](/reference/datasets/startExperiment). Throws for non-agent targets.",
+  },
+  {
+    name: 'itemTimeout',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Timeout in milliseconds for the item, covering every retry. A timed-out item records an error and isn't retried.",
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Retries after a failed execution. Defaults to `0`. Uses exponential backoff. Aborts, timeouts, and tool mock errors aren't retried. The result row records `retryCount`.",
+  },
+  {
+    name: 'unmockedToolPolicy',
+    type: "'allow' | 'deny'",
+    isOptional: true,
+    description:
+      "Handling for agent tool calls that the item's `toolMocks` don't declare. Defaults to `'allow'`. The item's own `unmockedToolPolicy` wins.",
+  },
+  {
+    name: 'versions',
+    type: 'VersionOverrides',
+    isOptional: true,
+    description: 'Version overrides for sub-agents the target delegates to.',
   },
 ]}
 />

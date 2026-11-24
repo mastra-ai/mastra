@@ -2,7 +2,14 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atomicWriteFile, generateTypesContent, writeRegistryFiles } from './registry-generator.js';
+import { ModelsDevGateway } from './gateways/models-dev.js';
+import { NetlifyGateway } from './gateways/netlify.js';
+import {
+  atomicWriteFile,
+  fetchProvidersFromGateways,
+  generateTypesContent,
+  writeRegistryFiles,
+} from './registry-generator.js';
 
 const tempDirs: string[] = [];
 
@@ -181,6 +188,60 @@ describe('registry-generator', () => {
       const groq = JSON.parse(await fs.readFile(path.join(dir, 'capabilities', 'groq.json'), 'utf8'));
       expect(openai).toEqual({ attachment: ['gpt-5.5'], reasoning });
       expect(groq).toEqual({ reasoning: { 'qwen3-32b': [{ type: 'toggle' }] } });
+    });
+  });
+
+  describe('registry JSON model lists', () => {
+    // The registry used to store every provider's model list twice: under providers[id].models and
+    // in a top-level `models` map. Readers now derive the map from providers, so the file must still
+    // carry exactly the lists the map held, for every provider, including gateway-prefixed ones.
+    async function generateRegistry(options?: { includeModelsKey?: boolean }) {
+      vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+        openai: { name: 'OpenAI', models: ['gpt-5', 'gpt-4o', 'gpt-4.1'], gateway: 'models.dev' },
+        anthropic: { name: 'Anthropic', models: ['claude-sonnet-4-5', 'claude-opus-4-1'], gateway: 'models.dev' },
+      });
+      vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
+        anthropic: { name: 'Anthropic', models: ['claude-sonnet-4-5', 'claude-haiku-4-5'], gateway: 'netlify' },
+      });
+
+      const generated = await fetchProvidersFromGateways([new ModelsDevGateway({}), new NetlifyGateway()]);
+      vi.restoreAllMocks();
+
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-registry-models-'));
+      tempDirs.push(dir);
+      const jsonPath = path.join(dir, 'provider-registry.json');
+      await writeRegistryFiles(
+        jsonPath,
+        path.join(dir, 'provider-types.generated.d.ts'),
+        generated.providers,
+        generated.models,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        options,
+      );
+
+      return { generated, written: JSON.parse(await fs.readFile(jsonPath, 'utf8')) };
+    }
+
+    it('stores each model list once, under its provider, with the lists the top-level map used to hold', async () => {
+      const { generated, written } = await generateRegistry();
+
+      expect(Object.keys(written)).toEqual(['providers', 'version']);
+      expect(Object.keys(written.providers)).toEqual(Object.keys(generated.models));
+      for (const [providerId, models] of Object.entries(generated.models)) {
+        expect(written.providers[providerId].models).toEqual(models);
+      }
+      expect(written.providers['netlify/anthropic'].models).toEqual(['claude-haiku-4-5', 'claude-sonnet-4-5']);
+      expect(written.providers.openai.models).toEqual(['gpt-4.1', 'gpt-4o', 'gpt-5']);
+    });
+
+    it('keeps the top-level map when asked, for registry files that older versions read', async () => {
+      const { generated, written } = await generateRegistry({ includeModelsKey: true });
+
+      expect(Object.keys(written)).toEqual(['providers', 'models', 'version']);
+      expect(written.models).toEqual(generated.models);
     });
   });
 });

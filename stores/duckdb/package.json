@@ -1,6 +1,6 @@
 {
   "name": "@mastra/duckdb",
-  "version": "1.19.0-alpha.1",
+  "version": "1.19.2-alpha.0",
   "description": "DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing",
   "type": "module",
   "main": "dist/index.js",
@@ -49,7 +49,8 @@
     "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

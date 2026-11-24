@@ -4,7 +4,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
+import { createIsolatedFactoryPostgresForTests, createLegacyCardTablesForTests } from '../../test-utils.js';
 import { WorkItemsStorage } from './base.js';
 import type { Card, ExternalWorkItemSource } from './base.js';
 import { Cards } from './cards.js';
@@ -21,6 +21,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('legacy cards co
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: `legacy-${randomUUID()}`, url: ':memory:' });
+    // A database an older Factory wrote cards to.
+    await createLegacyCardTablesForTests(storage);
     const workItems = storage.registerDomain(new WorkItemsStorage());
     await storage.init();
     onTestFinished(() => storage.close());
@@ -53,6 +55,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('legacy cards co
         const legacy = await new Cards(storage.ops).findOne({ id: card.id });
         delete legacy!.work_item;
         delete legacy!.work_item_sources;
+        delete legacy!.changed_at;
         await storage.ops.insertOne('work_items', legacy!);
         await storage.ops.deleteMany('factory_board_items', { id: card.id });
         await storage.ops.deleteMany('factory_work_item_sources', { work_item_id: card.workItemId });
@@ -129,8 +132,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('legacy cards co
       expectedRevision: updated!.item.revision,
       destinationStage: 'planning',
       actorId: USER,
-      ingress: { identity: `reopen-${card.id}`, triggerType: 'manual', transitionId: `reopen-${card.id}` },
-      configVersion: 'legacy',
+      ingress: { identity: `reopen-${card.id}`, transitionId: `reopen-${card.id}` },
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
     });

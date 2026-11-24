@@ -14,7 +14,7 @@ import {
   OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY,
   observabilityWidgetHost,
 } from '../host';
-import type { McpAppRef, ObservabilityWidgetPin, ObservabilityWidgetView } from '../host';
+import type { McpAppRef, ObservabilityWidgetConfigure, ObservabilityWidgetPin, ObservabilityWidgetView } from '../host';
 import type { ObservabilityDashboardInput } from '../observability-dashboard';
 import { serveAndConnect } from './greeting-server';
 import { agentRunsChart, agentRunsKpi, draftOf, observabilityServer } from './observability-server';
@@ -27,6 +27,15 @@ afterEach(async () => {
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   await Promise.all(hosts.splice(0).map(host => host.close()));
 });
+
+/** Whether `value` is made only of JSON values, as a tool call's arguments must be (no `Date`). */
+const isJson = (value: unknown): boolean =>
+  value === null ||
+  ['string', 'number', 'boolean'].includes(typeof value) ||
+  (Array.isArray(value) && value.every(isJson)) ||
+  (typeof value === 'object' &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    Object.values(value).every(isJson));
 
 /**
  * Calls the opening tool on a real MCP server, then renders the app as an iframe would run it, with
@@ -60,6 +69,11 @@ async function openWidget(
   const bridge = new AppBridge(client, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
   bridge.oninitialized = () => void bridge.sendToolResult(result as Parameters<AppBridge['sendToolResult']>[0]);
   await bridge.connect(hostTransport);
+  // Like Codex, refuse a call whose arguments aren't JSON instead of serializing them on the way.
+  bridge.oncalltool = async params => {
+    if (params.arguments !== undefined && !isJson(params.arguments)) throw new Error('Invalid MCP tool call params');
+    return (await client.callTool(params)) as Awaited<ReturnType<NonNullable<AppBridge['oncalltool']>>>;
+  };
 
   render(<ObservabilityWidget />);
   return bridge;
@@ -156,6 +170,205 @@ it('shows the widget as failed, without retrying, when the tool fails the read',
   expect(mcp.calls).toHaveLength(1);
 });
 
+/** Whether `call` reads the window before the page's, which ends where the page's starts. */
+const readsPreviousWindow = (call: { args: Record<string, unknown> }) =>
+  Date.parse((call.args as { timeRange: { to: string } }).timeRange.to) < Date.now() - 60_000;
+
+it('draws KPIs combining trace measures, each compared with the window before', async () => {
+  const mcp = observabilityServer({
+    answers: {
+      aggregateTraces: call => ({
+        data: {
+          rows: [
+            {
+              measures: readsPreviousWindow(call)
+                ? { count: 100, errorCount: 10, 'duration.p95': 1200 }
+                : { count: 200, errorCount: 10, 'duration.p95': 1500 },
+            },
+          ],
+          truncated: false,
+        },
+      }),
+    },
+  });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Health',
+              kpis: {
+                items: [
+                  {
+                    label: 'p95 latency',
+                    format: 'duration',
+                    value: { traceAggregate: { measure: 'duration.p95', compare: 'previousWindow' } },
+                  },
+                  {
+                    label: 'Error rate',
+                    format: 'percent',
+                    lowerIsBetter: true,
+                    value: {
+                      ratio: {
+                        of: { traceAggregate: { measure: 'errorCount', compare: 'previousWindow' } },
+                        over: { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  expect(await screen.findByText('1.50s')).toBeTruthy();
+  expect(screen.getByText('5.00%')).toBeTruthy();
+  // The p95 rose from 1.2s, the error rate fell from 10%: each change is its own figure's.
+  await waitFor(() => expect(document.body.textContent).toContain('+25% vs previous 24h (1.20s)'));
+  expect(document.body.textContent).toContain('-50% vs previous 24h (10.0%)');
+  // Both KPIs read one ungrouped trace aggregate, once per window.
+  expect(mcp.calls.map(call => call.action)).toEqual(['aggregateTraces', 'aggregateTraces']);
+  expect(mcp.calls[0]!.args).toMatchObject({ measures: ['duration.p95', 'errorCount', 'count'] });
+  expect(mcp.calls.filter(readsPreviousWindow)).toHaveLength(1);
+});
+
+it('shows no change for a KPI whose parts do not all compare with the window before', async () => {
+  const mcp = observabilityServer({
+    answers: {
+      aggregateTraces: call => ({
+        data: {
+          rows: [{ measures: readsPreviousWindow(call) ? { count: 100 } : { count: 200, errorCount: 10 } }],
+          truncated: false,
+        },
+      }),
+    },
+  });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Runs',
+              kpis: {
+                items: [
+                  {
+                    label: 'Runs',
+                    format: 'count',
+                    value: { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                  },
+                  {
+                    label: 'Successful runs',
+                    format: 'count',
+                    value: {
+                      minus: [
+                        { traceAggregate: { measure: 'count', compare: 'previousWindow' } },
+                        // Read over the page's window only: nothing to set against the 100 runs before.
+                        { traceAggregate: { measure: 'errorCount' } },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  // Runs' change shows once the previous window has answered, so Successful runs has it too.
+  await waitFor(() => expect(document.body.textContent).toContain('+100% vs previous 24h (100)'));
+  expect(screen.getByText('190')).toBeTruthy();
+  expect(document.body.textContent?.match(/vs previous/g)).toHaveLength(1);
+});
+
+it('counts a window with no traces as 0, and leaves its percentiles without a figure', async () => {
+  const mcp = observabilityServer({ answers: { aggregateTraces: { data: { rows: [], truncated: false } } } });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Quiet',
+              kpis: {
+                items: [
+                  { label: 'Errors', format: 'count', value: { traceAggregate: { measure: 'errorCount' } } },
+                  { label: 'p95 latency', format: 'duration', value: { traceAggregate: { measure: 'duration.p95' } } },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  await waitFor(() => expect(document.body.textContent).toContain('Errors0'));
+  expect(document.body.textContent).toContain('p95 latency—');
+});
+
+it('draws a line chart of scores and a table, with the colors and empty message they leave out', async () => {
+  const mcp = observabilityServer({
+    answers: {
+      getScoreTimeSeries: { data: { series: [{ name: 'relevance', points: [] }] } },
+      aggregateTraces: { data: { rows: [], truncated: false } },
+    },
+  });
+
+  await openWidget(mcp, {
+    dashboard: {
+      rows: [
+        {
+          widgets: [
+            {
+              title: 'Relevance over time',
+              timeseries: {
+                chart: 'line',
+                format: 'score',
+                series: [
+                  {
+                    label: 'Relevance',
+                    value: { scoreTimeSeries: { scorerId: 'relevance', aggregation: 'avg' } },
+                  },
+                ],
+              },
+            },
+            {
+              title: 'Runs by agent',
+              table: {
+                groupBy: ['entityName'],
+                columns: [
+                  { dimension: { dimension: 'entityName' } },
+                  { label: 'Runs', value: { format: 'count', traceAggregate: {} } },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  expect(await screen.findByText('Relevance over time')).toBeTruthy();
+  expect(await screen.findByText('No data')).toBeTruthy();
+  expect(screen.queryByText("Couldn't load")).toBeNull();
+  await waitFor(() =>
+    expect(mcp.calls.find(call => call.action === 'getScoreTimeSeries')?.args).toMatchObject({
+      scorerId: 'relevance',
+      aggregation: 'avg',
+    }),
+  );
+});
+
 it('says so when the tool returns no dashboard, e.g. because it rejected the one it was given', async () => {
   await openWidget(observabilityServer(), {
     dashboard: { rows: [{ widgets: [{ id: 'broken', kpis: {} } as never] }] },
@@ -174,6 +387,7 @@ it("follows the host's theme, so a light host doesn't get dark-theme text", asyn
   await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, { theme: 'light' });
 
   await screen.findByText('Agent runs');
+  // Checked as soon as the dashboard shows: its first frame must not be in the dark theme.
   expect(document.documentElement.classList.contains('light')).toBe(true);
 });
 
@@ -277,7 +491,7 @@ it("reads over the host page's date preset, filters and project instead of the d
     resourceUri: APP.resourceUri,
     datePreset: '14d',
     filters: HOST_FILTERS,
-    projectId: 'project-1',
+    project: 'project-1',
   });
 
   await openWidget(
@@ -295,7 +509,7 @@ it("reads over the host page's date preset, filters and project instead of the d
 
   expect(await screen.findByText('5')).toBeTruthy();
   const [call] = mcp.calls;
-  expect(call).toMatchObject({ projectId: 'project-1', args: { filters: { environment: 'staging' } } });
+  expect(call).toMatchObject({ project: 'project-1', args: { filters: { environment: 'staging' } } });
   expect(windowOf(call)).toBe(14 * DAY);
   expect(screen.queryByRole('button', { name: 'Pin agent-runs' })).toBeNull();
 });
@@ -310,7 +524,7 @@ it('reads again when the host page changes its date preset, filters or project',
   );
   await screen.findByText('5');
   expect(mcp.calls).toHaveLength(1);
-  expect(mcp.calls[0]!.projectId).toBeUndefined();
+  expect(mcp.calls[0]!.project).toBeUndefined();
   expect(windowOf(mcp.calls[0])).toBe(DAY);
 
   bridge.setHostContext(
@@ -318,12 +532,12 @@ it('reads again when the host page changes its date preset, filters or project',
       resourceUri: APP.resourceUri,
       datePreset: '30d',
       filters: HOST_FILTERS,
-      projectId: 'project-2',
+      project: 'project-2',
     }).hostContext!(APP)!,
   );
 
   await waitFor(() => expect(mcp.calls).toHaveLength(2));
-  expect(mcp.calls[1]).toMatchObject({ projectId: 'project-2', args: { filters: { environment: 'staging' } } });
+  expect(mcp.calls[1]).toMatchObject({ project: 'project-2', args: { filters: { environment: 'staging' } } });
   expect(windowOf(mcp.calls[1])).toBe(30 * DAY);
 });
 
@@ -365,13 +579,52 @@ it("draws the org's widgets without a project, and the project's once the host p
   expect(mcp.calls.map(call => call.action)).toEqual(['getMetricAggregate']);
 
   bridge.setHostContext(
-    observabilityWidgetHost({ resourceUri: APP.resourceUri, projectId: 'project-1' }).hostContext!(APP)!,
+    observabilityWidgetHost({ resourceUri: APP.resourceUri, project: 'project-1' }).hostContext!(APP)!,
   );
 
   expect(await screen.findByText('Agent runs over time')).toBeTruthy();
   expect(widgetIds()).toEqual([agentRunsChart.id]);
   await waitFor(() => expect(mcp.calls).toHaveLength(2));
-  expect(mcp.calls[1]).toMatchObject({ action: 'getMetricTimeSeries', projectId: 'project-1' });
+  expect(mcp.calls[1]).toMatchObject({ action: 'getMetricTimeSeries', project: 'project-1' });
+});
+
+// Claude and ChatGPT set no host view, so without the dashboard's own project every read would cover
+// the whole org (OBS-967).
+it("reads the opened dashboard's project, and draws its project widgets, in a host that sets none", async () => {
+  const mcp = observabilityServer({
+    project: 'project-2',
+    answers: { getMetricAggregate: { data: { value: 5 } }, getMetricTimeSeries: { data: { series: [] } } },
+  });
+
+  await openWidget(
+    mcp,
+    { dashboard: dashboardOf(agentRunsKpi, agentRunsChart) },
+    {},
+    undefined,
+    scoped({ [agentRunsKpi.id]: 'org', [agentRunsChart.id]: 'project' }),
+  );
+
+  expect(await screen.findByText('Agent runs over time')).toBeTruthy();
+  expect(screen.queryByText('Agent runs')).toBeNull();
+  await waitFor(() => expect(mcp.calls).toHaveLength(1));
+  expect(mcp.calls[0]).toMatchObject({ action: 'getMetricTimeSeries', project: 'project-2' });
+});
+
+it("reads the host page's project over the opened dashboard's, and the dashboard's once the host sets none", async () => {
+  const mcp = observabilityServer({ project: 'project-2', answers: { getMetricAggregate: { data: { value: 5 } } } });
+
+  const bridge = await openWidget(
+    mcp,
+    { dashboard: dashboardOf(agentRunsKpi) },
+    observabilityWidgetHost({ resourceUri: APP.resourceUri, project: 'project-1' }).hostContext!(APP),
+  );
+
+  await screen.findByText('5');
+  expect(mcp.calls[0]!.project).toBe('project-1');
+
+  bridge.setHostContext(observabilityWidgetHost({ resourceUri: APP.resourceUri }).hostContext!(APP)!);
+  await waitFor(() => expect(mcp.calls).toHaveLength(2));
+  expect(mcp.calls[1]!.project).toBe('project-2');
 });
 
 it("reads over the host page's custom date range, as the Metrics page passes it", async () => {
@@ -458,9 +711,9 @@ it("pins a widget with the host page's custom date range", async () => {
   expect(host.pins).toEqual([{ widget: expect.objectContaining(agentRunsKpi), datePreset: 'custom', customRange }]);
 });
 
-it("pins a widget with the host page's date preset and filters, without reading it again", async () => {
+it("pins a widget with the host page's date preset, filters and project, without reading it again", async () => {
   const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
-  const host = pinningHost({ datePreset: '3d', filters: HOST_FILTERS, projectId: 'project-1' });
+  const host = pinningHost({ datePreset: '3d', filters: HOST_FILTERS, project: 'project-1' });
 
   host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, host.hostContext(), PINNING));
   await screen.findByText('1');
@@ -468,10 +721,25 @@ it("pins a widget with the host page's date preset and filters, without reading 
   fireEvent.click(screen.getByRole('button', { name: 'Pin agent-runs' }));
   await screen.findByRole('button', { name: 'Unpin agent-runs' });
   expect(host.pins).toEqual([
-    { widget: expect.objectContaining(agentRunsKpi), datePreset: '3d', filters: HOST_FILTERS },
+    { widget: expect.objectContaining(agentRunsKpi), datePreset: '3d', filters: HOST_FILTERS, project: 'project-1' },
   ]);
   // The view didn't change, so the pin's new host context leaves the window and its reads alone.
   expect(mcp.calls).toHaveLength(1);
+});
+
+// Pinned without its project, the host couldn't tell which project's data the widget showed.
+it("pins a widget with the opened dashboard's project when the host sets none", async () => {
+  const mcp = observabilityServer({ project: 'project-2', answers: { getMetricAggregate: { data: { value: 1 } } } });
+  const host = pinningHost();
+
+  host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, host.hostContext(), PINNING));
+  await screen.findByText('1');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Pin agent-runs' }));
+  await screen.findByRole('button', { name: 'Unpin agent-runs' });
+  expect(host.pins).toEqual([
+    { widget: expect.objectContaining(agentRunsKpi), datePreset: '24h', project: 'project-2' },
+  ]);
 });
 
 it('shows the widget as pinned when the host already holds it, and follows the host when it unpins', async () => {
@@ -538,4 +806,75 @@ it('goes back to the host state when the host refuses the update', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Pin agent-runs' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Pin agent-runs' })).toBeTruthy());
   expect(screen.queryByRole('button', { name: 'Unpin agent-runs' })).toBeNull();
+});
+
+/** A host that shows its own settings for a widget through `observabilityWidgetHost`'s `onConfigure`. */
+function configuringHost(view: ObservabilityWidgetView = {}) {
+  const configured: ObservabilityWidgetConfigure[] = [];
+  const host = observabilityWidgetHost({
+    ...view,
+    resourceUri: APP.resourceUri,
+    onConfigure: configure => configured.push(configure),
+  });
+  return {
+    configured,
+    hostContext: () => host.hostContext!(APP)!,
+    connect: (connected: AppBridge) => {
+      connected.onupdatemodelcontext = async params => {
+        host.onModelContext!(APP, params);
+        return {};
+      };
+    },
+  };
+}
+
+it.each([
+  ['KPI group', agentRunsKpi, 'agent-runs'],
+  ['chart', agentRunsChart, 'Agent runs over time'],
+])(
+  'hands a %s to the host when its settings are clicked, with the window it is drawn over',
+  async (_, widget, name) => {
+    const mcp = observabilityServer({
+      answers: {
+        getMetricAggregate: { data: { value: 1 } },
+        getMetricTimeSeries: { data: { series: [] } },
+      },
+    });
+    const host = configuringHost();
+
+    host.connect(
+      await openWidget(mcp, { dashboard: dashboardOf(widget), datePreset: '7d' }, host.hostContext(), PINNING),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: `Configure ${name}` }));
+    await waitFor(() =>
+      expect(host.configured).toEqual([{ widget: expect.objectContaining(widget), datePreset: '7d' }]),
+    );
+    // The host only configures: no pin button without `pins`.
+    expect(screen.queryByRole('button', { name: `Pin ${name}` })).toBeNull();
+  },
+);
+
+it("hands the host the opened dashboard's project with the widget whose settings are clicked", async () => {
+  const mcp = observabilityServer({ project: 'project-2', answers: { getMetricAggregate: { data: { value: 1 } } } });
+  const host = configuringHost();
+
+  host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsKpi) }, host.hostContext(), PINNING));
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Configure agent-runs' }));
+  await waitFor(() =>
+    expect(host.configured).toEqual([
+      { widget: expect.objectContaining(agentRunsKpi), datePreset: '24h', project: 'project-2' },
+    ]),
+  );
+});
+
+it('shows no settings button when the host passes no onConfigure', async () => {
+  const mcp = observabilityServer({ answers: { getMetricTimeSeries: { data: { series: [] } } } });
+  const host = pinningHost();
+
+  host.connect(await openWidget(mcp, { dashboard: dashboardOf(agentRunsChart) }, host.hostContext(), PINNING));
+
+  expect(await screen.findByRole('button', { name: 'Pin Agent runs over time' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /^Configure/ })).toBeNull();
 });

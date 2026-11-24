@@ -11,8 +11,8 @@ import type {
 } from '@internal/auth';
 import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
-import type { MastraAuthProviderOptions } from '@internal/auth/provider';
-import { MastraAuthProvider } from '@internal/auth/provider';
+import type { MastraAuthOAuthMetadata, MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider, withSubjectAsId } from '@internal/auth/provider';
 import { verifyJwks } from '@mastra/auth';
 import type { JwtPayload } from '@mastra/auth';
 
@@ -390,10 +390,15 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
 
     try {
       const user = await verifyJwks(token, this.jwksUri);
-      return user;
+      return user && withSubjectAsId(user);
     } catch {
       return null;
     }
+  }
+
+  /** The Clerk Frontend API is the authorization server for MCP clients. */
+  getOAuthMetadata(): MastraAuthOAuthMetadata {
+    return { authorizationServers: [this.fapiUrl] };
   }
 
   async authorizeUser(user: ClerkUser) {

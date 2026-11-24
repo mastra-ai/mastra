@@ -321,6 +321,8 @@ const surfaceRows: TokenRow[] = [
   { token: 'card', use: 'Raised container' },
   { token: 'popover', use: 'Menu, dropdown, tooltip' },
   { token: 'dialog', use: 'Dialog, drawer, alert dialog' },
+  { token: 'nested', use: 'Box inside a card or dialog' },
+  { token: 'row', use: 'Rows of a table or list' },
   { token: 'field', use: 'Text field fill' },
   { token: 'field-disabled', use: 'Disabled field fill' },
   { token: 'muted', use: 'Quiet region inside a container' },
@@ -328,8 +330,11 @@ const surfaceRows: TokenRow[] = [
 
 const textRows: TokenRow[] = [
   { token: 'foreground', use: <span className="text-foreground">Values, names, prose</span> },
-  { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, timestamps, descriptions</span> },
-  { token: 'placeholder', use: <span className="text-placeholder">Text not written yet</span> },
+  { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, descriptions</span> },
+  { token: 'subtle-foreground', use: <span className="text-subtle-foreground">Counts, timestamps, hints</span> },
+  { token: 'placeholder', use: <span className="text-placeholder">Input placeholders, disabled labels</span> },
+  { token: 'icon', use: <span className="text-icon">Icon beside foreground text</span> },
+  { token: 'muted-icon', use: <span className="text-muted-icon">Icon beside muted text</span> },
   {
     token: 'control-icon-rest',
     use: <span className="text-(color:--control-icon-rest)">Icons inside a control, at rest</span>,

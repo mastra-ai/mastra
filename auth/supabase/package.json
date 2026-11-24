@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-supabase",
-  "version": "1.1.6",
+  "version": "1.2.2-alpha.1",
   "description": "Mastra Supabase Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.118.0"
+    "@supabase/supabase-js": "^2.119.0"
   },
   "devDependencies": {
     "@internal/auth": "workspace:*",
@@ -41,7 +41,8 @@
     "vitest": "catalog:"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

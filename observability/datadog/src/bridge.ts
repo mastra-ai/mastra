@@ -24,6 +24,7 @@ import type {
   ObservabilityBridge,
   CreateSpanOptions,
   ScoreEvent,
+  FeedbackEvent,
   SpanType,
   SpanIds,
 } from '@mastra/core/observability';
@@ -34,7 +35,19 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
 import { isModelInferenceEnabled } from './features';
 import { formatUsageMetrics } from './metrics';
-import { ensureTracer, formatInput, formatOutput, kindFor, toDate, toDatadogLinks } from './utils';
+import {
+  ensureTracer,
+  formatInput,
+  formatOutput,
+  kindFor,
+  toDate,
+  toDatadogLinks,
+  toDatadogSpanId,
+  toFeedbackOptions,
+  toLlmObsTraceId,
+  toLlmObsTraceIdTag,
+  LLMOBS_TRACE_ID_TAG,
+} from './utils';
 import type { DatadogSpanKind } from './utils';
 
 // These types model dd-trace internals, not its public API surface.
@@ -368,6 +381,32 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
   }
 
+  /** Submit feedback recorded with `addFeedback()` to Datadog LLM Observability. */
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    if (this.isDisabled || !(tracer as any).llmobs?.submitFeedback) return;
+
+    const { feedback } = event;
+    const traceId = feedback.traceId ? toLlmObsTraceId(feedback.traceId) : undefined;
+    const target = feedback.spanId ? { spanId: toDatadogSpanId(feedback.spanId) } : traceId ? { traceId } : undefined;
+    if (!target) {
+      this.logger.debug('Datadog bridge: dropping feedback with no traceId/spanId', {
+        feedbackId: feedback.feedbackId,
+      });
+      return;
+    }
+
+    try {
+      this.pendingSend = true;
+      tracer.llmobs.submitFeedback({ ...target, ...toFeedbackOptions(feedback, this.config.mlApp) });
+    } catch (error) {
+      this.logger.error('Datadog bridge: Failed to submit feedback', {
+        error,
+        traceId: feedback.traceId,
+        feedbackId: feedback.feedbackId,
+      });
+    }
+  }
+
   private executeWithSpanContext<T>(spanId: string, fn: () => T): T {
     const ddSpan = this.ddSpanMap.get(spanId);
 
@@ -438,6 +477,15 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
           ? (options.parent.attributes as ModelGenerationAttributes | undefined)
           : undefined;
       const traceCtx = this.resolveTraceContext(traceId, options);
+
+      // The tag stays on the trace because the Mastra trace ID is the APM trace ID
+      // here, so LLM spans that dd-trace or a downstream service adds to this
+      // trace join the run. A value propagated from an upstream service is kept.
+      const traceTags = ddSpan.context?.()?._trace?.tags;
+      const llmObsTraceId = toLlmObsTraceId(traceId);
+      if (traceTags && llmObsTraceId && !traceTags[LLMOBS_TRACE_ID_TAG]) {
+        traceTags[LLMOBS_TRACE_ID_TAG] = toLlmObsTraceIdTag(llmObsTraceId);
+      }
 
       // `registerLLMObsSpan` comes from dd-trace internals. Keep it under
       // review because the bridge depends on experimental behavior here.
@@ -788,13 +836,6 @@ function fillRandomBytes(bytes: Uint8Array): void {
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = Math.floor(Math.random() * 256);
   }
-}
-
-function toDatadogSpanId(spanId: string): string {
-  if (/^[0-9a-f]{16}$/i.test(spanId)) {
-    return BigInt(`0x${spanId}`).toString(10);
-  }
-  return spanId;
 }
 
 function generateSpanId(): string {

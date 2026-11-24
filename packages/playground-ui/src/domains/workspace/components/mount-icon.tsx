@@ -1,6 +1,9 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
-import { Cloud, Database, Folder, HardDrive } from 'lucide-react';
 import { AmazonIcon, AzureIcon, GoogleIcon } from '@/ds/icons';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
+import { IconStorage } from '@/ds/icons/central/IconStorage';
 
 export type WorkspaceMount = NonNullable<WorkspaceFsListResponse['entries'][number]['mount']>;
 
@@ -20,19 +23,19 @@ export function MountIcon({ mount }: { mount: WorkspaceMount }) {
     case 'cloudflare':
     case 'cloudflare-r2':
     case 'r2':
-      return <Cloud className="text-badge-orange-indicator" />;
+      return <IconCloud className="text-badge-orange-indicator" />;
     case 'neon':
-      return <Cloud className="text-badge-green-indicator" />;
+      return <IconCloud className="text-badge-green-indicator" />;
     case 'minio':
-      return <HardDrive className="text-badge-red-indicator" />;
+      return <IconStorage className="text-badge-red-indicator" />;
     case 'database':
-      return <Database className="text-badge-green-indicator" />;
+      return <IconServer1 className="text-badge-green-indicator" />;
     case 'local':
     case 'folder':
-      return <Folder className="text-badge-amber-indicator" />;
+      return <IconFolder1 className="text-badge-amber-indicator" />;
     case 'hard-drive':
-      return <HardDrive className="text-muted-foreground" />;
+      return <IconStorage className="text-muted-foreground" />;
     default:
-      return <Cloud className="text-muted-foreground" />;
+      return <IconCloud className="text-muted-foreground" />;
   }
 }

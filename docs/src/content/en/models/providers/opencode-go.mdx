@@ -7,7 +7,7 @@ description: "Browse OpenCode Go model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/opencode-go.svg" alt="OpenCode Go logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Go
 
-Access 40 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 44 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/).
 
@@ -70,18 +70,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
-    "model": "opencode-go/crouton-alpha-free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 270000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "opencode-go/deepseek-v4-pro",
     "imageInput": false,
     "audioInput": false,
@@ -116,18 +104,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 2,
     "outputCost": 10
-  },
-  {
-    "model": "opencode-go/glm-5.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
   },
   {
     "model": "opencode-go/glm-5.3",
@@ -190,6 +166,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
+    "model": "opencode-go/hungerg-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "opencode-go/hy3",
     "imageInput": false,
     "audioInput": false,
@@ -212,6 +200,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.834,
     "outputCost": 2.501
+  },
+  {
+    "model": "opencode-go/hy4-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode-go/hy4-preview",
@@ -257,7 +257,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -269,24 +269,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "maxOutput": 1048576,
     "inputCost": 2,
     "outputCost": 10
   },
   {
-    "model": "opencode-go/longcat-2.0",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "opencode-go/longcat-2.5-free",
+    "model": "opencode-go/longcat-2.5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -294,8 +282,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "opencode-go/mimo-v2.5",
@@ -428,6 +416,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2,
     "outputCost": 6
+  },
+  {
+    "model": "opencode-go/qwen4-max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 1.5,
+    "outputCost": 4.5
   },
   {
     "model": "opencode-go/step-5-preview",

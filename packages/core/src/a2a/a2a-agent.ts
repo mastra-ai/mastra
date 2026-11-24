@@ -9,6 +9,7 @@ import type { MastraMemory } from '../memory/memory';
 import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { DynamicArgument } from '../types';
+import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import type { A2AProtocolCompat, A2AStreamEventData } from './compat/types';
 import { v0_3Compat } from './compat/v0_3';
 import { v1Compat } from './compat/v1';
@@ -582,10 +583,7 @@ export class A2AAgent implements SubAgent {
       return this.#memory;
     }
 
-    return await this.#memory({
-      requestContext,
-      mastra: this.#mastra,
-    });
+    return await resolveDynamicArgument(this.#memory, { requestContext, mastra: this.#mastra });
   }
 
   getInstructions: SubAgent['getInstructions'] = async () => '';

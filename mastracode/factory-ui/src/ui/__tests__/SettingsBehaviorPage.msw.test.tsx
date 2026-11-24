@@ -51,9 +51,7 @@ function stubBehaviorPage() {
           {
             id: FACTORY_ID,
             name: 'Mastra',
-            repositories: [
-              listedRepository(REPO_ID, 'org/mastra', { branch: 'main', sandboxWorkdir: '/workspace/mastra' }),
-            ],
+            repositories: [listedRepository(REPO_ID, 'org/mastra', { branch: 'main' })],
           },
         ],
       }),

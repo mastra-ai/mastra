@@ -79,6 +79,7 @@ export async function getInputOptions(
     externalsPreset = false,
     explicitExternals = [],
     alias = {},
+    configEntryFile = entryFile,
   }: {
     sourcemap?: boolean;
     minify?: boolean;
@@ -89,6 +90,8 @@ export async function getInputOptions(
     externalsPreset?: boolean;
     explicitExternals?: string[];
     alias?: Record<string, string>;
+    /** File holding `new Mastra({...})`, when `entryFile` is a generated wrapper that imports it */
+    configEntryFile?: string;
   },
 ): Promise<InputOptions> {
   const nodeResolvePlugin = nodeResolve({
@@ -145,6 +148,8 @@ export async function getInputOptions(
       }),
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
+        // v6 rewrites lodash.<method> imports to lodash/<method>, which breaks projects that don't install lodash.
+        optimizeModularizedImports: false,
       }),
       commonjs({
         extensions: ['.js', '.ts', '.cjs'],
@@ -171,10 +176,10 @@ export async function getInputOptions(
       // },
       json(),
       localStorageDetector(workspaceRoot || projectRoot),
-      removeDeployer(entryFile, { sourcemap }),
+      removeDeployer(configEntryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({
-        include: entryFile,
+        include: configEntryFile,
         platform,
       }),
       // Runs at renderChunk, so the emitted chunks are minified as a whole rather

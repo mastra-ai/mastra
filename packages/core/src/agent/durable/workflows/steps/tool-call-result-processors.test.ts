@@ -110,6 +110,7 @@ function runToolCallStep(
 ) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
+    getState: async () => ({}),
     inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
     mastra,
     suspend: vi.fn(),
@@ -376,6 +377,7 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     // llm-mapping skips the blocked entry: the invocation stays in 'call' state.
     const mappingStep = createDurableLLMMappingStep();
     const mappingOutput = await (mappingStep as any).execute({
+      getState: async () => ({}),
       inputData: {
         llmOutput: {
           messageListState: seedMessageList().serialize(),

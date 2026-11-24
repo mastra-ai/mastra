@@ -850,7 +850,11 @@ export type AgentControllerEvent =
   | {
       type: 'agent_end';
       reason?: 'complete' | 'aborted' | 'error' | 'suspended';
-      /** Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread lease. */
+      /**
+       * Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread
+       * lease, `'memory-failure'` when an observational-memory observer or reflector failure stopped it (the
+       * failure is emitted as an `error` event just before).
+       */
       abortReason?: string;
     }
   | { type: 'message_start'; message: MastraDBMessage }
@@ -935,7 +939,13 @@ export type AgentControllerEvent =
           error?: string;
         }
     ))
-  | { type: 'usage_update'; usage: TokenUsage }
+  | {
+      type: 'usage_update';
+      /** This step's usage. */
+      usage: TokenUsage;
+      /** The active thread's running total after this step. Absent from servers that predate it. */
+      total?: TokenUsage;
+    }
   | { type: 'info'; message: string }
   | {
       type: 'error';

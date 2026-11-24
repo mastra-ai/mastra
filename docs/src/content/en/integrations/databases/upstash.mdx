@@ -12,7 +12,7 @@ The Upstash storage implementation provides a serverless-friendly storage soluti
 
 :::warning[Pricing]
 
-When using Mastra with Upstash, the pay-as-you-go model can result in unexpectedly high costs due to the high volume of Redis commands generated during agent conversations. We strongly recommend using a **fixed pricing plan** for predictable costs. See [Upstash pricing](https://upstash.com/pricing/redis) for details and [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) for context.
+When using Mastra with Upstash, the pay-as-you-go model can result in high costs due to the high volume of Redis commands generated during agent conversations. Use a **fixed pricing plan** for predictable costs. See [Upstash pricing](https://upstash.com/pricing/redis) for details and [GitHub issue #5850](https://github.com/mastra-ai/mastra/issues/5850) for context.
 
 :::
 
@@ -68,7 +68,7 @@ const storage = new UpstashStore({
 
 ## Additional notes
 
-### Key Structure
+### Key structure
 
 The Upstash storage implementation uses a key-value structure:
 
@@ -76,7 +76,7 @@ The Upstash storage implementation uses a key-value structure:
 - Message keys: `{prefix}message:{messageId}`
 - Metadata keys: `{prefix}metadata:{entityId}`
 
-### Serverless Benefits
+### Serverless benefits
 
 Upstash storage is particularly well-suited for serverless deployments:
 
@@ -85,7 +85,7 @@ Upstash storage is particularly well-suited for serverless deployments:
 - Global replication options
 - Edge-compatible
 
-### Data Persistence
+### Data persistence
 
 Upstash provides:
 
@@ -93,7 +93,7 @@ Upstash provides:
 - Point-in-time recovery
 - Cross-region replication options
 
-### Performance Considerations
+### Performance considerations
 
 For optimal performance:
 

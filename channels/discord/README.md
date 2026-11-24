@@ -46,8 +46,6 @@ const result = await discord.connect('support', {
 // → { type: 'immediate' }  OR  { type: 'oauth', authorizationUrl, installationId }
 ```
 
-See [`example/discord-agent.ts`](./example/discord-agent.ts) for a full runnable sketch.
-
 ### Developer Portal setup
 
 Discord apps are created in the [Developer Portal](https://discord.com/developers/applications), not via API. Once:

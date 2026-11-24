@@ -1,4 +1,3 @@
-import { Braces, Eye, Minimize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { SpanPayloadJson } from './span-payload-json';
@@ -9,6 +8,9 @@ import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBo
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconMinimize45 } from '@/ds/icons/central/IconMinimize45';
 import { cn } from '@/lib/utils';
 
 export type SpanPayloadView = 'rich' | 'raw';
@@ -58,7 +60,7 @@ function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view
         tooltip="Preview"
         onClick={() => onChange('rich')}
       >
-        <Eye />
+        <IconEyeOpen />
       </Button>
       <Button
         size="icon-sm"
@@ -68,7 +70,7 @@ function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view
         tooltip="JSON"
         onClick={() => onChange('raw')}
       >
-        <Braces />
+        <IconCodeBrackets />
       </Button>
     </div>
   );
@@ -147,7 +149,7 @@ export function SpanPayloadSection({
         )}
         {shouldClip && box.isExpanded && box.isClipped && (
           <div className="flex justify-center pt-1">
-            <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => box.setExpanded(false)}>
+            <Button size="sm" variant="ghost" icon={<IconMinimize45 />} onClick={() => box.setExpanded(false)}>
               Collapse
             </Button>
           </div>
@@ -177,7 +179,7 @@ export function SpanPayloadJsonSection({ title, icon, raw, layout = 'panel' }: S
     <Collapsible data-slot="span-payload-section" data-view="raw" className="group/payload flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <CollapsibleTrigger className="flex items-center gap-1 rounded-sm">
-          <DisclosureChevron direction="right" className="size-3 text-placeholder" />
+          <DisclosureChevron direction="right" className="size-3 text-subtle-foreground" />
           <DataPanelSectionHeading icon={icon} className={cn(layout === 'details' && 'text-meta')}>
             {title}
           </DataPanelSectionHeading>

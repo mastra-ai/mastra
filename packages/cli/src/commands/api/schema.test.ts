@@ -72,7 +72,7 @@ describe('buildCommandExamples', () => {
 
   it('uses observability score route shapes', () => {
     expect(commands('scoreCreate')).toEqual([
-      'mastra api score create \'{"score":{"scoreId":"score_123","traceId":"trace_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}\'',
+      'mastra api score create \'{"score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}\'',
     ]);
     expect(commands('scoreList')).toEqual([
       'mastra api score list \'{"page":0,"perPage":50}\'',

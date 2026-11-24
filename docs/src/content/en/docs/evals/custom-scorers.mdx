@@ -107,7 +107,7 @@ console.log(result.score) // 1
 console.log(result.analyzeStepResult) // { hasSources: true, sources: ["Wikipedia"] }
 ```
 
-### Agent Type for Agent Evaluation
+### Agent type for agent evaluation
 
 For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. The same scorer can evaluate an agent and score traces:
 
@@ -122,7 +122,7 @@ const myScorer = createScorer({
 
 ## Step-by-step breakdown
 
-### preprocess Step (Optional)
+### `preprocess` step (optional)
 
 Prepares input/output data when you need to extract specific elements or filter content, or alternatively transform complex data structures.
 
@@ -164,7 +164,7 @@ const glutenCheckerScorer = createScorer(...)
 
 **Data Flow:** Results are available to subsequent steps as `results.preprocessStepResult`
 
-### analyze Step (Optional)
+### `analyze` step (optional)
 
 Performs core evaluation analysis, gathering insights that will inform the scoring decision.
 
@@ -494,7 +494,7 @@ export const glutenCheckerScorer = createScorer({
   })
 ```
 
-### Judge Configuration
+### Judge configuration
 
 Sets up the LLM model and defines its role as a domain expert.
 
@@ -505,7 +505,7 @@ judge: {
 }
 ```
 
-### Analysis Step
+### Analysis step
 
 Defines how the LLM should analyze the input and what structured output to return.
 
@@ -529,7 +529,7 @@ The analysis step uses a prompt object to:
 - Define expected output structure with a Standard JSON Schema (both boolean result and list of gluten sources)
 - Generate runtime prompts based on the input content
 
-### Score Generation
+### Score generation
 
 Converts the LLM's structured analysis into a numerical score.
 
@@ -539,9 +539,9 @@ Converts the LLM's structured analysis into a numerical score.
 })
 ```
 
-The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so we use that boolean result: 1 for gluten-free, 0 for contains gluten.
+The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so the scorer uses that boolean result: 1 for gluten-free, 0 for contains gluten.
 
-### Reason Generation
+### Reason generation
 
 Provides human-readable explanations for the score using another LLM call.
 

@@ -1,6 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { Fragment } from 'react';
+import { Link, useParams } from 'react-router';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
@@ -8,16 +11,15 @@ import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { boardIntakePath } from '../../boardConfig/boardConfigPaths';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
 import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { JiraIntakeSection } from './JiraIntakeSection';
-import { AddLinearWorkspaceRow } from './LinearConnectionControls';
 import { LinearIntakeSection } from './LinearIntakeSection';
-import { AddPlatformAccountRow } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
+import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
 
@@ -27,7 +29,16 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   return 'available';
 }
 
+function IntakeSkeleton() {
+  return (
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading intake sources" variant="item" rows={4} />
+    </SettingsContainer>
+  );
+}
+
 export function IntakeSection() {
+  const { factoryId } = useParams<{ factoryId: string }>();
   const configQuery = useIntakeConfigQuery();
   useIntakeBindingsQuery();
   const github = useGithubStatusQuery();
@@ -36,15 +47,24 @@ export function IntakeSection() {
   const jira = useJiraStatusQuery();
   const incidentio = useIncidentioStatusQuery();
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
+  const vanta = useVantaStatusQuery();
+  const vantaConnections = usePlatformConnectionsQuery('vanta', Boolean(vanta.data));
 
-  if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
+  if (configQuery.isPending) return <IntakeSkeleton />;
   if (!configQuery.data) {
     return (
-      <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
-        <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
+      <SettingsContainer>
+        <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void configQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </SettingsRow>
+      </SettingsContainer>
     );
   }
 
@@ -56,7 +76,7 @@ export function IntakeSection() {
     incidentio.isPending ||
     incidentioConnections.isPending
   ) {
-    return <SkeletonRows label="Loading intake sources" rows={4} />;
+    return <IntakeSkeleton />;
   }
 
   const props = { config: configQuery.data };
@@ -87,6 +107,10 @@ export function IntakeSection() {
           incidentioDirect || Boolean(incidentioConnections.data?.length),
           incidentio.isError || incidentioConnections.isError,
         );
+  const vantaListing = sourceListing(
+    Boolean(vantaConnections.data?.length),
+    vantaConnections.isError && isPlatformConnectUnavailableError(vantaConnections.error),
+  );
   // Pass gated queries down: a new observer on an errored query refetches on mount and loops the gate.
   const sources = [
     {
@@ -121,58 +145,52 @@ export function IntakeSection() {
         />
       ),
     },
+    ...(vanta.data
+      ? [
+          {
+            id: 'vanta',
+            listing: vantaListing,
+            content: (
+              <VantaIntakeSection
+                {...props}
+                listed={vantaListing !== 'available'}
+                statusQuery={vanta}
+                connectionsQuery={vantaConnections}
+              />
+            ),
+          },
+        ]
+      : []),
   ];
-  const sourcesListed = (listing: SourceListing) => sources.filter(source => source.listing === listing);
-  const connectedSources = sourcesListed('connected');
-  const unavailableSources = sourcesListed('unavailable');
-  const availableSources = sourcesListed('available');
-  const anotherAccountRows = [
-    gitlab.data?.mode === 'platform' && gitlab.data.connections?.length ? (
-      <AddPlatformAccountRow key="gitlab" provider="gitlab" />
-    ) : null,
-    linear.data?.mode === 'platform' && linear.data.workspaces?.some(workspace => workspace.connected) ? (
-      <AddLinearWorkspaceRow key="linear" />
-    ) : null,
-    jira.data?.connections?.length ? <AddPlatformAccountRow key="jira" provider="jira" /> : null,
-    !incidentioDirect && incidentioConnections.data?.length ? (
-      <AddPlatformAccountRow key="incident-io" provider="incident-io" />
-    ) : null,
-  ].filter(row => row !== null);
 
   return (
-    <div className="flex flex-col gap-8">
-      {connectedSources.length > 0 && (
-        <SettingsSubsection
-          scope="org"
-          title="Connected sources"
-          description="Choose which services bring work into your organization's boards."
-        >
-          <div className="flex flex-col gap-6">
-            {connectedSources.map(source => (
-              <div key={source.id}>{source.content}</div>
-            ))}
-          </div>
-        </SettingsSubsection>
+    <SettingsSubsection
+      scope="org"
+      title="Sources"
+      description="The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing."
+    >
+      <div className="flex flex-col gap-3">
+        {sources.flatMap(source =>
+          source.listing === undefined
+            ? []
+            : [
+                source.listing === 'available' ? (
+                  <SettingsContainer key={source.id}>{source.content}</SettingsContainer>
+                ) : (
+                  <Fragment key={source.id}>{source.content}</Fragment>
+                ),
+              ],
+        )}
+      </div>
+      {factoryId && (
+        <Txt as="p" variant="caption" tone="muted">
+          Which board takes each item is set in each board's Rules, in the{' '}
+          <Link to={boardIntakePath(factoryId, 'work')} className="underline">
+            intake order
+          </Link>
+          .
+        </Txt>
       )}
-      {unavailableSources.length > 0 && (
-        <SettingsSubsection title="Unavailable sources">
-          <div className="flex flex-col gap-6">
-            {unavailableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
-            ))}
-          </div>
-        </SettingsSubsection>
-      )}
-      {(availableSources.length > 0 || anotherAccountRows.length > 0) && (
-        <SettingsSubsection title="Add a source">
-          <SettingsContainer>
-            {availableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
-            ))}
-            {anotherAccountRows}
-          </SettingsContainer>
-        </SettingsSubsection>
-      )}
-    </div>
+    </SettingsSubsection>
   );
 }

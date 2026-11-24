@@ -4,11 +4,12 @@ import { CommandPaletteInput } from '@mastra/playground-ui/components/CommandPal
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { CREATE_FACTORY_STEPS } from '../../hooks/useCreateFactoryFlow';
 import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;
@@ -54,13 +55,13 @@ export function CreateFactoryPalette({
       <div className="flex shrink-0 items-center gap-3">
         {onBack && (
           <Button
+            icon={<IconArrowLeft />}
             variant="ghost"
             size="sm"
             onMouseDown={event => event.preventDefault()}
             onClick={onBack}
             aria-label="Go back to previous step"
           >
-            <ArrowLeft aria-hidden="true" />
             Back
           </Button>
         )}
@@ -75,9 +76,14 @@ export function CreateFactoryPalette({
           {title}
         </Txt>
         {onSkip && (
-          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
+          <Button
+            iconEnd={<IconArrowRight />}
+            variant="ghost"
+            size="sm"
+            onMouseDown={event => event.preventDefault()}
+            onClick={onSkip}
+          >
             Skip
-            <ArrowRight aria-hidden="true" />
           </Button>
         )}
         <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>

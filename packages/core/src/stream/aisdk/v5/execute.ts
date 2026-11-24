@@ -4,6 +4,8 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import { getErrorFromUnknown } from '../../../error';
+import { hasFreeFormObject } from '../../../llm/model/free-form-object';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
@@ -54,11 +56,17 @@ function isContentChunk(chunk: unknown): boolean {
   );
 }
 
+const normalizedNonErrorThrows = new WeakSet<object>();
+
 /**
  * Whether a failed model call will be retried. Used by both `onFailedAttempt` and
  * `shouldRetry` so a terminal error never waits out a provider delay it will not use.
  */
 function isRetryableModelError(error: unknown): boolean {
+  // Non-Error throws are normalized only to keep their fields; p-retry never retried them.
+  if (normalizedNonErrorThrows.has(error as object)) {
+    return false;
+  }
   // A step budget covers the whole attempt, so burning what is left of it on retries
   // against the same model would only delay the fallback to the next one.
   if (isMastraTimeoutError(error)) {
@@ -68,36 +76,6 @@ function isRetryableModelError(error: unknown): boolean {
     return error.isRetryable;
   }
   return true;
-}
-
-/**
- * Whether a JSON schema has an object with free-form keys (e.g. `z.record()`), which OpenAI
- * strict mode cannot express: it requires every object to list fixed keys with
- * `additionalProperties: false`.
- */
-export function hasFreeFormObject(schema: unknown): boolean {
-  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return false;
-  const node = schema as Record<string, unknown>;
-  const additional = node.additionalProperties;
-  if (additional === true || (additional && typeof additional === 'object')) return true;
-  if (node.patternProperties || node.propertyNames) return true;
-
-  // Only descend into keywords that hold subschemas. Data keywords (`default`, `const`,
-  // `enum`, `examples`) and property names are not schemas and must not trigger a match.
-  const subschemas: unknown[] = [];
-  for (const key of ['properties', '$defs', 'definitions'] as const) {
-    const map = node[key];
-    if (map && typeof map === 'object' && !Array.isArray(map)) subschemas.push(...Object.values(map));
-  }
-  for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
-    const list = node[key];
-    if (Array.isArray(list)) subschemas.push(...list);
-  }
-  const items = node.items;
-  if (Array.isArray(items)) subschemas.push(...items);
-  else if (items) subschemas.push(items);
-  if (Array.isArray(node.prefixItems)) subschemas.push(...node.prefixItems);
-  return subschemas.some(hasFreeFormObject);
 }
 
 function readStrictJsonSchemaOption(options: unknown): boolean | undefined {
@@ -521,7 +499,12 @@ export function execute<OUTPUT = undefined>({
                 cleanupFirstChunkTimeout();
                 onRequestFailed?.();
                 abortSignal?.throwIfAborted();
-                throw error;
+                // p-retry rejects non-Error values as a TypeError containing String(error),
+                // discarding provider status and response fields needed downstream.
+                if (error instanceof Error) throw error;
+                const normalized = getErrorFromUnknown(error, { supportSerialization: false });
+                normalizedNonErrorThrows.add(normalized);
+                throw normalized;
               }
             },
             {

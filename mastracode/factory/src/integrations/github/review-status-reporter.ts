@@ -1,8 +1,11 @@
+import { pullRequestSourceNumber, reviewedPullRequest } from '../../boards/index.js';
 import type { PullRequestRef, VersionControl } from '../../capabilities/version-control.js';
+import { factorySessionUrl } from '../../links.js';
 import type { FactoryReviewStatusEvent, FactoryReviewStatusReporter } from '../../rules/dispatcher.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { Card } from '../../storage/domains/work-items/base.js';
 import { resolveRepository } from './acceptance-labels.js';
+import { isSessionUrl } from './review-status-comment.js';
 import type { ReviewStatusState, ReviewStatusStats } from './review-status-comment.js';
 import { publishReviewStatus } from './review-status.js';
 
@@ -58,11 +61,12 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
   return async event => {
     try {
       const item = await deps.workItems.get({ orgId: event.orgId, id: event.workItemId });
-      if (!item || item.externalSource?.integrationId !== 'github' || item.externalSource.type !== 'pull-request') {
-        return;
-      }
-      const repositoryId = item.workItem.metadata?.githubRepositoryId;
-      const number = item.workItem.metadata?.githubPullRequestNumber;
+      if (!item || item.externalSource?.integrationId !== 'github') return;
+      // An issue card reviews the pull request attached to it.
+      const attached = item.externalSource.type === 'pull-request' ? undefined : reviewedPullRequest(item);
+      if (item.externalSource.type !== 'pull-request' && attached?.integrationId !== 'github') return;
+      const repositoryId = attached?.metadata?.githubRepositoryId ?? item.workItem.metadata?.githubRepositoryId;
+      const number = attached ? pullRequestSourceNumber(attached) : item.workItem.metadata?.githubPullRequestNumber;
       if (typeof repositoryId !== 'number' || typeof number !== 'number' || number < 1) return;
       const target = await resolveRepository(deps.sourceControl, event.orgId, event.factoryProjectId, repositoryId);
       if (!target) return;
@@ -72,6 +76,9 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
         pullRequestId: String(number),
       };
       const head = event.phase === 'reviewing' ? commitSha(item.metadata?.pullRequestHeadSha) : undefined;
+      const session = event.session
+        ? factorySessionUrl({ factoryProjectId: event.factoryProjectId, ...event.session })
+        : undefined;
       const state: ReviewStatusState = {
         run: event.run,
         requestedAt: event.requestedAt.toISOString(),
@@ -80,6 +87,7 @@ export function createGithubReviewStatusReporter(deps: GithubReviewStatusReporte
         phase: event.phase,
         ...(event.startedAt ? { startedAt: event.startedAt.toISOString() } : {}),
         ...(head ? { head } : {}),
+        ...(isSessionUrl(session) ? { session } : {}),
       };
       const final = event.phase === 'completed' || event.phase === 'failed' || event.phase === 'cancelled';
       await publishReviewStatus(

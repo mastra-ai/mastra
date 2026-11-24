@@ -2,10 +2,28 @@ import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
-import { codeBoardOf } from './define-board.js';
 import type { BoardRegistry } from './registry.js';
 import { boardForWorkItem } from './semantics.js';
-import { workBoard } from './work.js';
+
+/** Card metadata recording the last phase an exit tool finished: `{ phase, tool, at }`. */
+export const PHASE_EXIT_METADATA_KEY = 'phaseExit';
+
+/**
+ * Whether the exit tool of `stage` succeeded (for `submit_plan`, with an approved plan) since the
+ * card last entered it. Until then the card stays in the phase, except when a person moves it.
+ */
+export function exitToolSucceeded(
+  item: Pick<Card, 'metadata' | 'stageHistory'>,
+  stage: string,
+  toolId: string,
+): boolean {
+  const exit: unknown = item.metadata?.[PHASE_EXIT_METADATA_KEY];
+  if (!exit || typeof exit !== 'object' || Array.isArray(exit)) return false;
+  const { phase, tool, at } = exit as Record<string, unknown>;
+  if (phase !== stage || tool !== toolId || typeof at !== 'string') return false;
+  const entered = item.stageHistory.findLast(entry => entry.stage === stage && entry.exitedAt === undefined);
+  return entered !== undefined && Date.parse(at) >= Date.parse(entered.enteredAt);
+}
 
 type PhaseCard = Pick<Card, 'board' | 'externalSource' | 'stages' | 'title' | 'metadata' | 'workItem'>;
 
@@ -22,11 +40,7 @@ export function startsInAutoPhase(boards: BoardRegistry, item: PhaseCard, decisi
   const board = boards.get(boardKey);
   const stage = item.stages[0]!;
   if (!board) return false;
-  // Work's Review and PR review phases run the independent reviewer in its own `review` seat.
-  const reviewerSeat =
-    decision.role === 'review' && codeBoardOf(board) === workBoard && (stage === 'review' || stage === 'pr-review');
-  const ownRun = board.roleForPhase(stage) === decision.role || reviewerSeat;
-  return ownRun && board.startsAutomatically(stage, cardRuleFacts(item));
+  return board.roleForPhase(stage) === decision.role && board.startsAutomatically(stage, cardRuleFacts(item));
 }
 
 /** The exit tool of the card's phase when it is approved without a person for this card. */

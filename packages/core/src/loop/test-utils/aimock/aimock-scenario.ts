@@ -89,9 +89,10 @@ export function getScenarioEngineHost(): ScenarioEngineHost | undefined {
   return engineHost;
 }
 
-function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any): any {
-  if (engine === 'durable') return createDurableAgent({ agent });
-  if (engine === 'evented') return createEventedAgent({ agent, pubsub });
+function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any, streamReplay?: false): any {
+  const replay = streamReplay === false ? { cache: false as const } : {};
+  if (engine === 'durable') return createDurableAgent({ agent, ...replay });
+  if (engine === 'evented') return createEventedAgent({ agent, pubsub, ...replay });
   if (engineHost && engine === engineHost.engine) return engineHost.wrapAgent(agent);
   return agent;
 }
@@ -127,6 +128,7 @@ export async function createSharedAgent(
     | 'defaultOptions'
     | 'pubsub'
     | 'cache'
+    | 'streamReplay'
     | 'observability'
     | 'engine'
     | 'inputProcessors'
@@ -163,6 +165,7 @@ async function buildScenarioAgent({
   defaultOptions,
   pubsub,
   cache,
+  streamReplay,
   observability,
   server,
   engine,
@@ -190,6 +193,7 @@ async function buildScenarioAgent({
   | 'defaultOptions'
   | 'pubsub'
   | 'cache'
+  | 'streamReplay'
   | 'observability'
   | 'server'
   | 'engine'
@@ -244,6 +248,7 @@ async function buildScenarioAgent({
         ...(maxRetries === undefined ? {} : { maxRetries }),
         ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
         ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
+        ...(streamReplay === false && !isDurableEngineVariant(engine) ? { durable: { cache: false } } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -266,6 +271,7 @@ async function buildScenarioAgent({
       ...(defaultOptions ? { defaultOptions } : {}),
       ...(maxRetries === undefined ? {} : { maxRetries }),
       ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
+      ...(streamReplay === false && !isDurableEngineVariant(engine) ? { durable: { cache: false } } : {}),
       // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
@@ -279,7 +285,7 @@ async function buildScenarioAgent({
   const eventedPubsub = engine === 'evented' ? (pubsub ?? new EventEmitterPubSub()) : undefined;
 
   // Wrap with the durable/evented wrapper for those engine variants
-  const registrableAgent = wrapForEngine(agent, engine ?? 'normal', eventedPubsub);
+  const registrableAgent = wrapForEngine(agent, engine ?? 'normal', eventedPubsub, streamReplay);
 
   // An external engine's worker resolves agents from the host's Mastra, so register there.
   if (engineHost && engine === engineHost.engine) {
@@ -419,9 +425,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   let agent: any;
   let mastra: any;
   if (sharedAgent) {
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter, so discriminate against a real
-    // wrapper by checking `agent.agent !== agent`. See `Mastra.addAgent`.
+    // Only wrappers (createDurableAgent, Inngest) match `isDurableAgentLike`; a native
+    // Agent with an execution engine does not, so it still gets wrapped below.
     const sharedIsRealDurableWrapper =
       isDurableAgentLike(sharedAgent.agent) && (sharedAgent.agent as any).agent !== sharedAgent.agent;
     if (isDurableEngineVariant(engine) && !sharedIsRealDurableWrapper) {
@@ -517,6 +522,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(prepareStep ? { prepareStep } : {}),
     ...(transform ? { transform } : {}),
     ...(requestContext ? { requestContext } : {}),
+    ...(opts.tracingOptions ? { tracingOptions: opts.tracingOptions } : {}),
     ...(delegation ? { delegation } : {}),
     ...(hooks ? { hooks } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),
@@ -694,11 +700,28 @@ export async function runApprovalScenario({
   observability,
   tracingOptions,
   afterStream,
+  agentOutputProcessors,
+  memory,
+  threadId,
+  resourceId,
+  resumeOptions,
+  defaultOptions,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
-  const { agent } = await buildScenarioAgent({ llm, tools, instructions, engine, observability });
+  const { agent } = await buildScenarioAgent({
+    llm,
+    tools,
+    instructions,
+    engine,
+    observability,
+    agentOutputProcessors,
+    memory,
+    defaultOptions,
+  });
   const isDurable = isDurableEngineVariant(engine);
+  const memoryOption =
+    memory && threadId ? { memory: { thread: threadId, ...(resourceId ? { resource: resourceId } : {}) } } : {};
 
   const chunks: ChunkType[] = [];
   const approvals: string[] = [];
@@ -710,6 +733,7 @@ export async function runApprovalScenario({
 
   let run = (await agent.stream(prompt, {
     tracingOptions,
+    ...memoryOption,
     ...(requireToolApproval !== false ? { requireToolApproval } : {}),
     ...(stopWhen ? { stopWhen } : {}),
     // Durable needs maxSteps as a fallback when stopWhen is the only bound.
@@ -740,8 +764,8 @@ export async function runApprovalScenario({
     approvals.push(`${approve ? 'approve' : 'decline'}:${toolCallId}`);
 
     run = (await (approve
-      ? agent.approveToolCall({ runId, toolCallId })
-      : agent.declineToolCall({ runId, toolCallId }))) as unknown as RunHandle;
+      ? agent.approveToolCall({ runId, toolCallId, ...resumeOptions })
+      : agent.declineToolCall({ runId, toolCallId, ...resumeOptions }))) as unknown as RunHandle;
   }
 
   await afterStream?.();

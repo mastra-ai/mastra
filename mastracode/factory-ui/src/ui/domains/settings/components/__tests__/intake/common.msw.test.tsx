@@ -27,21 +27,33 @@ import {
 
 describe('IntakeSection common', () => {
   describe('given a config with the default sources enabled', () => {
+    it('lists every service in one list, each connected one with what it brings in, and points to the intake order', async () => {
+      seedGithubProject();
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      const sources = await screen.findByRole('region', { name: 'Sources' });
+      const github = within(sources).getByRole('region', { name: 'GitHub' });
+      const linear = within(sources).getByRole('region', { name: 'Linear' });
+      expect(
+        await within(github).findByRole('button', { name: 'Add repository to Bring in issues from' }),
+      ).toBeInTheDocument();
+      expect(
+        within(linear).getByRole('button', { name: 'Add project or team to Linear projects and teams' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'intake order' })).toHaveAttribute('href', '/factories/fp-1/work/intake');
+    });
+
     it('keeps source pickers closed until requested', async () => {
       seedGithubProject();
       useIntakeHandlers();
 
       renderIntakeSection();
 
-      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
-      expect(await screen.findByRole('switch', { name: 'Sync Linear issues' })).toBeChecked();
+      expect(await screen.findByRole('button', { name: 'Add repository to Bring in issues from' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      const connectedSources = screen.getByRole('region', { name: 'Connected sources' });
-      const availableSources = screen.getByRole('region', { name: 'Add a source' });
-      expect(within(connectedSources).getByRole('region', { name: 'GitHub' })).toBeInTheDocument();
-      expect(within(connectedSources).getByRole('region', { name: 'Linear' })).toBeInTheDocument();
-      expect(connectedSources).not.toContainElement(availableSources);
       await openSourcePicker('Linear projects and teams');
       expect(await screen.findByRole('button', { name: 'Add Q3 Roadmap' })).toBeInTheDocument();
     });
@@ -77,15 +89,18 @@ describe('IntakeSection common', () => {
     });
   });
 
-  describe('when the GitHub source is toggled off', () => {
-    it('sends only the GitHub selection when GitHub is toggled off', async () => {
+  describe('when the last GitHub repository is removed', () => {
+    it('sends only the GitHub selection, which stops syncing', async () => {
       seedGithubProject();
       const custom = { enabled: false, sourceIds: ['src-1'] };
-      const saved = useIntakeHandlers({ config: { ...baseConfig(), 'custom-tracker': custom } });
+      const config = baseConfig();
+      const saved = useIntakeHandlers({
+        config: { ...config, github: { enabled: true, sourceIds: ['mastra'] }, 'custom-tracker': custom },
+      });
 
       renderIntakeSection();
 
-      await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub issues' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Remove mastra' }));
 
       await waitFor(() => expect(saved).toEqual([{ github: { enabled: false, sourceIds: null } }]));
     });
@@ -117,14 +132,13 @@ describe('IntakeSection common', () => {
       await waitFor(() => expect(requested).toBe(true));
       expect(screen.getByRole('status', { name: 'Loading intake sources' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Linear' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Connected sources' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Sources' })).not.toBeInTheDocument();
 
       releaseStatus();
 
       const connect = await screen.findByRole('button', { name: 'Connect Linear' });
-      expect(screen.getByRole('region', { name: 'Add a source' })).toContainElement(connect);
-      expect(screen.getByRole('region', { name: 'Connected sources' })).not.toContainElement(connect);
-      expect(screen.queryByRole('switch', { name: 'Sync Linear issues' })).not.toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Sources' })).toContainElement(connect);
+      expect(screen.queryByRole('region', { name: 'Linear' })).not.toBeInTheDocument();
     });
   });
 
@@ -231,7 +245,7 @@ describe('IntakeSection common', () => {
   });
 
   describe('given the server omits unregistered integrations', () => {
-    it('renders both sources with default toggles instead of crashing', async () => {
+    it('renders both sources instead of crashing', async () => {
       seedGithubProject();
       server.use(
         http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
@@ -246,9 +260,9 @@ describe('IntakeSection common', () => {
       renderIntakeSection();
 
       expect(await screen.findByText('GitHub is not configured on this server.')).toBeInTheDocument();
-      expect(screen.queryByRole('switch', { name: 'Sync GitHub issues' })).not.toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Sync Linear issues' })).not.toBeChecked();
-      expect(screen.queryByRole('switch', { name: 'Sync GitLab issues' })).not.toBeInTheDocument();
+      expect(
+        within(screen.getByRole('region', { name: 'Sources' })).getByRole('region', { name: 'Linear' }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -274,38 +288,31 @@ describe('IntakeSection common', () => {
       ['GitHub', GITHUB_STATUS_URL],
       ['GitLab', GITLAB_STATUS_URL],
     ])(
-      'keeps an unknown %s connection out of the connected and available source lists',
+      'offers a retry for an unknown %s connection, with no connect action and no sources',
       async (provider, statusUrl) => {
         useIntakeHandlers();
         server.use(http.get(statusUrl, () => HttpResponse.json({ error: 'unavailable' }, { status: 500 })));
         renderIntakeSection();
-        const unavailableSources = await screen.findByRole('region', { name: 'Unavailable sources' });
-        expect(within(unavailableSources).getByRole('region', { name: provider })).toBeInTheDocument();
-        expect(
-          within(screen.getByRole('region', { name: 'Connected sources' })).queryByRole('region', { name: provider }),
-        ).not.toBeInTheDocument();
-        expect(
-          within(screen.getByRole('region', { name: 'Add a source' })).queryByRole('link', {
-            name: `Connect ${provider}`,
-          }),
-        ).not.toBeInTheDocument();
-        expect(within(unavailableSources).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+        const card = await screen.findByRole('region', { name: provider });
+        expect(within(card).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+        expect(within(card).queryByRole('button', { name: `Connect ${provider}` })).not.toBeInTheDocument();
+        expect(within(card).queryByRole('button', { name: /^Add .* to / })).not.toBeInTheDocument();
       },
     );
 
-    it('keeps Linear with saved sources out of the connected list while its status is unknown', async () => {
+    it('hides Linear sources while its status is unknown, even with saved sources', async () => {
       const config = baseConfig();
       useIntakeHandlers({ config: { ...config, linear: { ...config.linear, sourceIds: ['project-1'] } } });
       server.use(http.get(LINEAR_STATUS_URL, () => HttpResponse.json({ error: 'unavailable' }, { status: 500 })));
       renderIntakeSection();
-      const unavailableSources = await screen.findByRole('region', { name: 'Unavailable sources' });
-      expect(within(unavailableSources).getByRole('region', { name: 'Linear' })).toBeInTheDocument();
-      expect(within(unavailableSources).getByText("Couldn't load Linear status.")).toBeInTheDocument();
+      const linear = await screen.findByRole('region', { name: 'Linear' });
+      expect(within(linear).getByText("Couldn't load Linear status.")).toBeInTheDocument();
+      expect(within(linear).queryByRole('button', { name: /^Add .* to / })).not.toBeInTheDocument();
     });
   });
 
   describe('given no source is connected', () => {
-    it('lists sources to add without an empty connected section', async () => {
+    it('lists each service with its connect action and nothing to pick', async () => {
       useIntakeHandlers({
         githubStatus: { enabled: true, connected: false, installations: [], reason: 'ready' },
         status: { enabled: true, connected: false, workspace: null, reason: 'not_connected' },
@@ -313,10 +320,10 @@ describe('IntakeSection common', () => {
 
       renderIntakeSection();
 
-      const addSource = await screen.findByRole('region', { name: 'Add a source' });
-      expect(within(addSource).getByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
-      expect(screen.queryByRole('region', { name: 'Connected sources' })).not.toBeInTheDocument();
-      expect(screen.queryByText('Connected sources')).not.toBeInTheDocument();
+      const sources = await screen.findByRole('region', { name: 'Sources' });
+      expect(within(sources).getByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
+      expect(within(sources).getByRole('button', { name: 'Connect Linear' })).toBeEnabled();
+      expect(screen.queryByRole('button', { name: /^Add .* to / })).not.toBeInTheDocument();
     });
   });
 });

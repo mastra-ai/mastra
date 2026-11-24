@@ -108,6 +108,29 @@ describe('pi-tui internals used by mouse support', () => {
     expect(editor.getText()).toBe('hello world');
   });
 
+  it('editor exposes the cursor movement its arrow, Home/End and word keys use, for Shift+key selection', () => {
+    const editor = createEditor();
+    editor.setText('one two\nthree');
+    editor.render(80);
+    const internals = editorInternals(editor);
+    const cursor = () => [internals.state.cursorLine, internals.state.cursorCol];
+
+    expect(internals.isOnLastVisualLine()).toBe(true);
+    internals.moveToLineStart();
+    expect(cursor()).toEqual([1, 0]);
+    internals.moveCursor(-1, 0);
+    expect(cursor()).toEqual([0, 0]);
+    expect(internals.isOnFirstVisualLine()).toBe(true);
+    internals.moveCursor(0, 1);
+    expect(cursor()).toEqual([0, 1]);
+    internals.moveWordForwards();
+    expect(cursor()).toEqual([0, 3]);
+    internals.moveToLineEnd();
+    expect(cursor()).toEqual([0, 7]);
+    internals.moveWordBackwards();
+    expect(cursor()).toEqual([0, 4]);
+  });
+
   it('editor keeps lastAction and onChange as writable fields', () => {
     const editor = createEditor();
     const internals = editorInternals(editor);

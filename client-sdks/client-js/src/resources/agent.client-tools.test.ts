@@ -1279,18 +1279,9 @@ describe('Agent client-side tools', () => {
       { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
     ];
 
-    // Second cycle: emit normal completion after tool result handling
-    const secondCycle = [
-      { type: 'step-start', payload: { messageId: 'm2' } },
-      { type: 'text-delta', payload: { text: 'Tool handled' } },
-      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
-      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
-    ];
-
-    // Mock two sequential fetch calls (initial and recursive)
-    (global.fetch as any)
-      .mockResolvedValueOnce(sseResponse(firstCycle))
-      .mockResolvedValueOnce(sseResponse(secondCycle));
+    // Only one request is made here: the client tool has no execute function, so
+    // the client does not issue a recursive call. Mock exactly that one request.
+    (global.fetch as any).mockResolvedValueOnce(sseResponse(firstCycle));
 
     const weatherTool = createTool({
       id: 'weatherTool',

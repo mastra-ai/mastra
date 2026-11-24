@@ -4,30 +4,24 @@ import type { ModelDefaults } from './components/models/routing/model-routes';
 
 export type SettingsSection =
   | 'account'
-  | 'preferences'
   | 'factory'
   | 'connections'
   | 'repositories'
   | 'intake'
-  | 'board'
   | 'models'
   | 'memory'
-  | 'skills'
   | 'tools'
   | 'behavior'
   | 'debug';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   account: 'My account',
-  preferences: 'Preferences',
   factory: 'Manage Factory',
   connections: 'Connections',
   repositories: 'Repositories',
   intake: 'Work Intake',
-  board: 'Work board',
   models: 'Models',
   memory: 'Memory',
-  skills: 'Skills',
   tools: 'Tools',
   behavior: 'Behavior',
   debug: 'Debug',
@@ -52,6 +46,7 @@ type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
+  ['preferences', { section: 'account' }],
   ['personal-models', { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.personal }],
   ['factory-memory', { section: 'memory' }],
   ['environment', { section: 'repositories' }],

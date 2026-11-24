@@ -6,9 +6,54 @@
 
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createSharedAgent, useLoopScenarioAimock } from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 import { createTool } from '../../../../tools';
 import { MockMemory } from '../../../../memory';
+
+describeForAllEngines('Generate() approval decisions', engine => {
+  const getMock = useLoopScenarioAimock();
+
+  it.each(['approve', 'decline'] as const)('%s preserves tool side effects and the model response', async decision => {
+    const llm = getMock();
+    const transfers: number[] = [];
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 0 },
+      { toolCalls: [{ id: 'transfer-approval', name: 'transfer', arguments: { amount: 42 } }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Decision recorded.' });
+
+    const { agent } = await createSharedAgent(llm, {
+      engine,
+      memory: new MockMemory(),
+      tools: {
+        transfer: createTool({
+          id: 'transfer',
+          description: 'Transfer money after approval.',
+          inputSchema: z.object({ amount: z.number() }),
+          requireApproval: true,
+          execute: async ({ amount }) => {
+            transfers.push(amount);
+            return { transferred: amount };
+          },
+        }),
+      },
+    });
+    const opening = await agent.generate('Transfer 42.', { maxSteps: 5 });
+    expect(opening.finishReason).toBe('suspended');
+    expect(transfers).toEqual([]);
+
+    const options = { runId: opening.runId!, toolCallId: opening.suspendPayload!.toolCallId, maxSteps: 5 };
+    const result =
+      decision === 'approve'
+        ? await agent.approveToolCallGenerate(options)
+        : await agent.declineToolCallGenerate({ ...options, reason: 'Budget approval required' });
+
+    expect(result.text).toBe('Decision recorded.');
+    expect(transfers).toEqual(decision === 'approve' ? [42] : []);
+    const resumedRequest = JSON.stringify(llm.getRequests().at(-1)?.body?.messages);
+    expect(resumedRequest).toContain(decision === 'approve' ? 'transferred' : 'Budget approval required');
+  });
+});
 
 describe('Generate() approval path scenario', () => {
   const getMock = useLoopScenarioAimock();

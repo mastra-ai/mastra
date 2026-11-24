@@ -13,6 +13,12 @@ import {
 /** Fixed clock for comparing selections: filter and date changes move the query, time passing does not. */
 const SELECTION_CLOCK = new Date(0);
 
+/** The root projection a trace query key asks for (`traceQueryKey` holds the query second). */
+const rootSourceOfKey = (queryKey: readonly unknown[] | undefined) => {
+  const query = queryKey?.[1];
+  return typeof query === 'object' && query !== null && 'rootSource' in query ? query.rootSource : undefined;
+};
+
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
   orderBy?: TraceQueryArgs['orderBy'];
@@ -58,9 +64,11 @@ export function useTracesListSource({
   // change: the new list and the new cursor start from the current time. Sorting is not part of the
   // selection and keeps the cursor.
   const selection = JSON.stringify(buildQuery(SELECTION_CLOCK));
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `selection` is the trigger, not an input.
-  const anchoredNow = useMemo(() => new Date(), [selection]);
-  const now = delta ? anchoredNow : tickNow;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- selection and polling mode anchor a new request window.
+  const anchoredNow = useMemo(() => new Date(), [selection, delta]);
+  // A polling-mode change must not reuse the old interval clock for its first request.
+  const refreshedNow = tickNow > anchoredNow ? tickNow : anchoredNow;
+  const now = delta ? anchoredNow : refreshedNow;
 
   const built = buildQuery(now);
   // Delta polls must keep the exact time range, so a rolling window reaches into the future
@@ -76,7 +84,13 @@ export function useTracesListSource({
 
   const result = useTraceQuery({
     queryOptions: {
-      traceQuery: { refetchInterval, refetchOnWindowFocus },
+      traceQuery: {
+        refetchInterval,
+        refetchOnWindowFocus,
+        // The previous rows stand in while the next query loads, unless they come from another root projection.
+        placeholderData: (previous, previousQuery) =>
+          rootSourceOfKey(previousQuery?.queryKey) === query.rootSource ? previous : undefined,
+      },
       legacy: { refetchInterval, refetchOnWindowFocus },
     },
     query,

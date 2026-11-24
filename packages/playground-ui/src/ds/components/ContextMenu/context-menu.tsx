@@ -1,8 +1,10 @@
 import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu';
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
-import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import {
   menuItemCheckClass,
@@ -139,7 +141,7 @@ const ContextMenuCheckboxItem = React.forwardRef<HTMLDivElement, ContextMenuPrim
     <ContextMenuPrimitive.CheckboxItem ref={ref} checked={checked} className={cn(menuItemClass, className)} {...props}>
       {children}
       <ContextMenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </ContextMenuPrimitive.CheckboxItemIndicator>
     </ContextMenuPrimitive.CheckboxItem>
   ),
@@ -151,7 +153,7 @@ const ContextMenuRadioItem = React.forwardRef<HTMLDivElement, ContextMenuPrimiti
     <ContextMenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
       {children}
       <ContextMenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </ContextMenuPrimitive.RadioItemIndicator>
     </ContextMenuPrimitive.RadioItem>
   ),
@@ -174,8 +176,12 @@ const ContextMenuSeparator = React.forwardRef<HTMLDivElement, ContextMenuPrimiti
 );
 ContextMenuSeparator.displayName = 'ContextMenuSeparator';
 
-const ContextMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn(menuShortcutClass, className)} {...props} />;
+const ContextMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span className={cn(menuShortcutClass, className)} {...props}>
+      <KeyLabel>{children}</KeyLabel>
+    </span>
+  );
 };
 ContextMenuShortcut.displayName = 'ContextMenuShortcut';
 
@@ -190,7 +196,7 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
     >
       {children}
       <span className={menuItemTrailingIconClass}>
-        <ChevronDown className="-rotate-90" />
+        <IconChevronDownMedium className="-rotate-90" />
       </span>
     </ContextMenuPrimitive.SubmenuTrigger>
   ),

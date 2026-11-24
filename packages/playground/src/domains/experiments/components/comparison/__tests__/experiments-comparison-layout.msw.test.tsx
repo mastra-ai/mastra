@@ -3,8 +3,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CompareMetricsMenu } from '../compare-metrics-menu';
-import { ExperimentsComparison } from '../experiments-comparison';
+import { StudioCompareMetricsMenu } from '../studio-compare-metrics-menu';
+import { StudioExperimentsComparison } from '../studio-experiments-comparison';
 import {
   BASELINE_ID,
   CHALLENGER_ID,
@@ -105,7 +105,7 @@ const useMetricsUsage = (release?: Promise<void>) => {
 const renderComparison = (contenderIds: string[] = [CONTENDER_ID]) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={contenderIds} />
+      <StudioExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={contenderIds} />
     </TestLinkProvider>,
     { router: true },
   );
@@ -191,14 +191,6 @@ describe('experiments comparison table', () => {
   });
 
   describe('when an item row is clicked', () => {
-    it('opens the dataset item in a side panel named after it', async () => {
-      renderComparison();
-
-      fireEvent.click(await findItemRow('item-a'));
-
-      expect(await screen.findByRole('dialog', { name: 'Dataset item item-a' })).toBeTruthy();
-    });
-
     it('shows the dataset item input and ground truth in the side panel', async () => {
       renderComparison();
 
@@ -518,14 +510,6 @@ describe('experiments comparison table', () => {
   });
 
   describe('when observability storage supports metrics and usage resolves', () => {
-    it('renders the comparison table', async () => {
-      useMetricsUsage();
-      renderComparison();
-
-      expect(await screen.findByRole('columnheader', { name: 'Items' })).toBeTruthy();
-      expect(await findItemRow('item-a')).toBeTruthy();
-    });
-
     it('shows each experiment total cost, with the contender difference against the baseline', async () => {
       useMetricsUsage();
       renderComparison();
@@ -659,8 +643,8 @@ describe('experiments comparison table', () => {
     const renderWithPicker = () =>
       renderWithProviders(
         <TestLinkProvider>
-          <CompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
-          <ExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
+          <StudioCompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
+          <StudioExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
         </TestLinkProvider>,
         { router: true },
       );
@@ -727,7 +711,7 @@ describe('experiments comparison table', () => {
     it('offers no cost or tokens entry in the metrics picker', async () => {
       renderWithProviders(
         <TestLinkProvider>
-          <CompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
+          <StudioCompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
         </TestLinkProvider>,
         { router: true },
       );

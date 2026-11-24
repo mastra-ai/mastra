@@ -3,6 +3,7 @@ import { estimateTokenCount } from 'tokenx';
 import type {
   KnowledgeNote,
   KnowledgePage,
+  KnowledgePageActivityEvent,
   KnowledgePageSearchHit,
   KnowledgePinKind,
   KnowledgeStorage,
@@ -10,12 +11,14 @@ import type {
 import {
   KnowledgePageHasChildrenError,
   knowledgeScopeReadable,
+  KnowledgeUnsupportedCapabilityError,
   MAX_KNOWLEDGE_PIN_LIST_DEPTH,
 } from '../storage/domains/knowledge';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import { moveKnowledgePageAndRelink } from './host-writes';
 import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import {
   KNOWLEDGE_READ_BODY_TOKENS,
@@ -47,6 +50,10 @@ export interface KnowledgePageToolHost {
   warn?: (message: string) => void;
   /** Most estimated tokens one read, match or list result returns; defaults to {@link KNOWLEDGE_READ_BODY_TOKENS}. */
   maxTokens?: number;
+  /** Host-supplied principals that replace the call's run scopes (see `createTools({ principals })`). */
+  principals?: readonly string[];
+  /** Author recorded on writes; overrides the run's agent id. */
+  author?: string;
 }
 
 function maxTokensOf(host: KnowledgePageToolHost): number {
@@ -60,7 +67,7 @@ const UNEMBED_FAILED =
 /** Embeds after a committed write. A failure only costs recall, so it warns instead of failing the write. */
 async function embed(
   host: KnowledgePageToolHost,
-  work: (index: KnowledgeSemanticIndex) => Promise<void>,
+  work: (index: KnowledgeSemanticIndex) => Promise<unknown>,
   failure: string | (() => Promise<string>),
 ) {
   if (!host.semantic) return;
@@ -114,6 +121,8 @@ function limitOf(limit: number | undefined): number {
 async function start(host: KnowledgePageToolHost, context: unknown, write = false): Promise<KnowledgeRun> {
   return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined, {
     write,
+    principals: host.principals,
+    author: host.author,
   });
 }
 
@@ -1074,7 +1083,8 @@ function listTool(host: KnowledgePageToolHost) {
   });
 }
 
-const NUMBERED_LINE = /^\s*\d+│/;
+// U+2502, the bar knowledge_read writes after each line number; escaped to keep published JS ASCII.
+const NUMBERED_LINE = /^\s*\d+\u2502/;
 
 /**
  * The body a write stores. With `range`, its text spliced into the body read at `expectedVersion`.
@@ -1302,16 +1312,11 @@ function pageTool(host: KnowledgePageToolHost) {
         if (parent.id !== destination.id && parent.scopeId !== destination.id) {
           throw new Error(`Parent "${args.parent}" is not in scope "${args.scope}".`);
         }
-        const moved = await storage.movePage({
+        const moved = await moveKnowledgePageAndRelink(storage, host.warn, {
           id: page.id,
           expectedVersion: args.expectedVersion ?? page.version,
           parentId: parent.id,
           provenance,
-        });
-        // The subtree's `scope#key/key` paths changed: links by old path stop resolving, new ones may.
-        await updateKnowledgeLinks(host.warn, async () => {
-          await syncKnowledgePageBodyLinks(storage, moved);
-          await refreshKnowledgeLinksTo(storage, [moved], { withDescendants: true });
         });
         return done(moved);
       }
@@ -1360,14 +1365,19 @@ function noteTool(host: KnowledgePageToolHost) {
       'Add a discrete, durable piece of knowledge to a page: something true or useful that someone else should be able to rely on later. Not for scratch work, to-dos, or comments about the page itself. ' +
       'Good, on "Refund Policy": "Refunds over $500 need a manager\'s approval (confirmed with finance, May 2026)." Bad: "Need to look into refunds later." ' +
       'Link other pages with [[Page Name]]. `scope` lists the stamp scopes that may see the note (any of them); a note on a shared page stamped with a narrower scope stays private to that scope. ' +
-      'op "add": adds `text` to `page`. op "restamp": replaces a note\'s stamp scopes. op "remove": removes a note. Removing then re-adding creates a new note id and resets its history.',
+      'op "add": adds `text` to `page`, stamped with the page\'s own scope unless `scope` is given. op "restamp": replaces a note\'s stamp scopes. op "remove": removes a note. Removing then re-adding creates a new note id and resets its history.',
     inputSchema: {
       type: 'object',
       properties: {
         op: { type: 'string', enum: ['add', 'restamp', 'remove'] },
         page: { type: 'string', minLength: 1, description: `Add: the page. ${pageRefDescription}` },
         note: { type: 'string', minLength: 1, description: 'Restamp or remove: the note id.' },
-        scope: { ...scopeListSchema, description: 'Add or restamp: the stamp scopes (addresses).' },
+        scope: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+          description:
+            "Add: the stamp scopes (addresses); defaults to the page's scope; pass narrower scopes to keep a note private. Restamp: the new stamp scopes (required).",
+        },
         text: {
           type: 'string',
           minLength: 1,
@@ -1386,8 +1396,11 @@ function noteTool(host: KnowledgePageToolHost) {
       const args = input as NoteInput;
       const run = await start(host, context, true);
       const { storage, provenance } = run;
-      const stamps = async (action: string) => {
-        if (!args.scope?.length) throw new Error(`${action} needs scope: the stamp scopes.`);
+      const stamps = async (action: string, home?: KnowledgePage) => {
+        if (!args.scope?.length) {
+          if (home) return [home.id];
+          throw new Error(`${action} needs scope: the stamp scopes.`);
+        }
         const scopes: KnowledgePage[] = [];
         for (const address of new Set(args.scope)) scopes.push(await run.targetScope(address, 'contributor', action));
         return scopes.map(scope => scope.id);
@@ -1398,8 +1411,9 @@ function noteTool(host: KnowledgePageToolHost) {
         const when = args.when ? new Date(args.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error(`Invalid when: "${args.when}".`);
         const page = await run.page(args.page, 'contributor');
-        await run.require(await run.scopeOf(page), 'contributor', 'Adding a note');
-        const stampScopeIds = await stamps('Adding a note');
+        const home = await run.scopeOf(page);
+        await run.require(home, 'contributor', 'Adding a note');
+        const stampScopeIds = await stamps('Adding a note', home);
         const note = await storage.addNote({
           pageId: page.id,
           text: args.text,
@@ -1500,6 +1514,271 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
   });
 }
 
+const ACTIVITY_DEFAULT_LIMIT = 25;
+const ACTIVITY_MAX_LIMIT = 100;
+
+// Batches one call may read. Events that turn out unreadable at hydration fill no entries, so
+// without this a run of hidden changes could make one call scan the whole interval.
+const ACTIVITY_MAX_BATCHES = 8;
+
+const ACTIVITY_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ACTIVITY_DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(\.\d{1,3})?)?(Z|([+-])(\d{2}):(\d{2}))$/;
+
+/**
+ * `2026-07-01` (UTC midnight) or a date-time with an explicit zone (`Z` or `±hh:mm`). A date-time
+ * without a zone would be read in the host's zone, and an impossible date (`2026-02-30`) would be
+ * rolled over by `Date`, so both are refused.
+ */
+function activityDate(name: 'since' | 'until', value: string): Date {
+  const trimmed = value.trim();
+  const refuse = (): never => {
+    throw new Error(
+      `${name} must be a date like "2026-07-01" or a date-time with a zone like "2026-07-01T09:30:00Z" or "2026-07-01T09:30:00+02:00"; got "${value}".`,
+    );
+  };
+  const dateOnly = ACTIVITY_DATE.exec(trimmed);
+  const dateTime = dateOnly ? undefined : ACTIVITY_DATE_TIME.exec(trimmed);
+  const match = dateOnly ?? dateTime ?? refuse();
+  const [year, month, day, hour = 0, minute = 0, second = 0] = [1, 2, 3, 4, 5, 6].map(index =>
+    match[index] === undefined ? undefined : Number(match[index]),
+  ) as number[];
+  // Every field must survive a UTC round trip unchanged, which rules out day 30 of February,
+  // hour 24, minute 60 and the like.
+  // setUTCFullYear, not Date.UTC: Date.UTC reads years 0-99 as 1900-1999.
+  const wall = new Date(0);
+  wall.setUTCFullYear(year!, month! - 1, day!);
+  wall.setUTCHours(hour, minute, second, 0);
+  if (
+    wall.getUTCFullYear() !== year ||
+    wall.getUTCMonth() !== month! - 1 ||
+    wall.getUTCDate() !== day ||
+    wall.getUTCHours() !== hour ||
+    wall.getUTCMinutes() !== minute ||
+    wall.getUTCSeconds() !== second
+  ) {
+    refuse();
+  }
+  if (dateTime?.[9] !== undefined) {
+    const offsetHours = Number(dateTime[10]);
+    const offsetMinutes = Number(dateTime[11]);
+    if (offsetMinutes > 59 || offsetHours > 14 || (offsetHours === 14 && offsetMinutes > 0)) refuse();
+  }
+  const date = new Date(dateOnly ? `${trimmed}T00:00:00.000Z` : trimmed);
+  if (Number.isNaN(date.getTime())) refuse();
+  // An offset can carry the instant out of years 1-9999 (0001-01-01T00:00:00+14:00 is year 0).
+  // Stores compare four-digit ISO text and PostgreSQL has no year zero, so keep inside that range.
+  const utcYear = date.getUTCFullYear();
+  if (utcYear < 1 || utcYear > 9999) refuse();
+  return date;
+}
+
+type ActivityCursor = { v: 1; before: [string, string]; bind: string };
+
+async function activityBinding(parts: Array<string | undefined>): Promise<string> {
+  const bytes = new TextEncoder().encode(JSON.stringify(parts.map(part => part ?? null)));
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function encodeActivityCursor(cursor: ActivityCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function decodeActivityCursor(value: string): ActivityCursor {
+  try {
+    const cursor = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as ActivityCursor;
+    if (
+      cursor?.v === 1 &&
+      Array.isArray(cursor.before) &&
+      typeof cursor.before[0] === 'string' &&
+      typeof cursor.before[1] === 'string' &&
+      !Number.isNaN(new Date(cursor.before[0]).getTime()) &&
+      typeof cursor.bind === 'string'
+    ) {
+      return cursor;
+    }
+  } catch {
+    // Falls through to the refusal below.
+  }
+  throw new Error('knowledge_activity: that cursor did not come from knowledge_activity.');
+}
+
+type ActivityEntry = {
+  at: string;
+  action: KnowledgePageActivityEvent['action'];
+  page: { ref: string; name: string; deleted?: true };
+  author: string;
+  note?: { ref: string; removed: true } | { ref: string; text: string; current: true; truncated?: true };
+};
+
+function activityTool(host: KnowledgePageToolHost) {
+  const maxTokens = maxTokensOf(host);
+  return createTool({
+    id: 'knowledge_activity',
+    description:
+      'What changed in Knowledge over a period: page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored, newest first, with who made each change. ' +
+      'Give `since` and/or `until` (a date like 2026-07-01, or a date-time with a zone like 2026-07-01T09:30:00Z; at least one); `from` narrows it to one page or scope. ' +
+      "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
+      `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until and from).`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        since: {
+          type: 'string',
+          minLength: 1,
+          description:
+            'Changes at or after this time, e.g. "2026-07-01" (UTC midnight), "2026-07-01T09:30:00Z" or "2026-07-01T09:30:00+02:00". A date-time needs a zone.',
+        },
+        until: { type: 'string', minLength: 1, description: 'Changes before this time, same formats as since.' },
+        from: {
+          type: 'string',
+          minLength: 1,
+          description: `Only changes to this page or scope. ${pageRefDescription}`,
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: ACTIVITY_MAX_LIMIT,
+          description: `Maximum changes. Defaults to ${ACTIVITY_DEFAULT_LIMIT}.`,
+        },
+        cursor: {
+          type: 'string',
+          minLength: 1,
+          description: "The previous result's cursor, for the changes after it (pass the same since, until and from).",
+        },
+      },
+      additionalProperties: false,
+    } satisfies JSONSchema7,
+    execute: async (input, context) => {
+      const args = input as { since?: string; until?: string; from?: string; limit?: number; cursor?: string };
+      if (args.since === undefined && args.until === undefined) {
+        throw new Error('knowledge_activity needs since or until, e.g. since: "2026-07-01".');
+      }
+      const since = args.since === undefined ? undefined : activityDate('since', args.since);
+      const until = args.until === undefined ? undefined : activityDate('until', args.until);
+      if (since && until && since.getTime() >= until.getTime()) {
+        throw new Error('knowledge_activity: since must be earlier than until.');
+      }
+      const limit = Math.min(Math.max(args.limit ?? ACTIVITY_DEFAULT_LIMIT, 1), ACTIVITY_MAX_LIMIT);
+      // Refused before any listing: an adapter without date support can't serve a dated read or its continuation.
+      if (!(await host.getStorage()).getCapabilities().supportsActivityDateRange) {
+        throw new KnowledgeUnsupportedCapabilityError('listPageActivity date range');
+      }
+      const cursor = args.cursor === undefined ? undefined : decodeActivityCursor(args.cursor);
+
+      const run = await start(host, context);
+      const origin = args.from ? await run.pageOrCloseMatches(args.from) : undefined;
+      const filter = origin ? (origin.isScope ? { scopeId: origin.id } : { pageId: origin.id }) : {};
+      const bind = await activityBinding([
+        since?.toISOString(),
+        until?.toISOString(),
+        'scopeId' in filter ? filter.scopeId : undefined,
+        'pageId' in filter ? filter.pageId : undefined,
+      ]);
+      if (cursor && cursor.bind !== bind) {
+        throw new Error(
+          'knowledge_activity: this cursor came from a call with different since, until or from. Pass the same ones as the call that returned it.',
+        );
+      }
+
+      const entries: ActivityEntry[] = [];
+      let used = 0;
+      let position = cursor ? { createdAt: new Date(cursor.before[0]), id: cursor.before[1] } : undefined;
+      let more = false;
+      let stopped = false;
+      let batches = 0;
+      while (!stopped && entries.length < limit && batches < ACTIVITY_MAX_BATCHES) {
+        batches++;
+        const startedAt = position;
+        const batch = await run.storage.listPageActivity({
+          read: run.read,
+          ...filter,
+          ...(since ? { since } : {}),
+          ...(until ? { until } : {}),
+          ...(position ? { before: position } : {}),
+          limit: limit - entries.length,
+        });
+        more = batch.nextCursor !== undefined;
+        // Hydrate under the same read: anything that became unreadable since listing is left out.
+        const pages = new Map<string, KnowledgePage>();
+        const notes = new Map<string, KnowledgeNote>();
+        for (const event of batch.events) {
+          if (!pages.has(event.pageId)) {
+            const page = await run.storage.getPage({ id: event.pageId, read: run.read });
+            if (page) pages.set(page.id, page);
+          }
+          if (event.noteId && !notes.has(event.noteId)) {
+            const note = await run.storage.getNote({ id: event.noteId, read: run.read, includeDeleted: true });
+            if (note) notes.set(note.id, note);
+          }
+        }
+        const { refs } = await pageRefs(run, [...pages.values()]);
+        for (const event of batch.events) {
+          const page = pages.get(event.pageId);
+          const note = event.noteId ? notes.get(event.noteId) : undefined;
+          if (!page || (event.noteId && !note)) {
+            // Consumed, so the cursor moves past it, but never shown.
+            position = { createdAt: event.createdAt, id: event.id };
+            continue;
+          }
+          const entry: ActivityEntry = {
+            at: event.createdAt.toISOString(),
+            action: event.action,
+            page: { ref: refs.get(page.id) ?? page.id, name: page.name, ...(page.deletedAt ? { deleted: true } : {}) },
+            author: event.provenance.author,
+            ...(note
+              ? {
+                  note: note.deletedAt
+                    ? { ref: note.id, removed: true as const }
+                    : { ref: note.id, text: note.text, current: true as const },
+                }
+              : {}),
+          };
+          let size = estimateTokenCount(JSON.stringify(entry));
+          if (entries.length > 0 && used + size > maxTokens) {
+            stopped = true;
+            break;
+          }
+          // The first change of a call is always returned, its note text cut to fit, so paging always moves on.
+          if (entries.length === 0 && size > maxTokens && entry.note && 'text' in entry.note) {
+            const full = entry.note.text;
+            let keep = full.length;
+            while (keep > 0 && size > maxTokens) {
+              keep = Math.floor(keep * 0.8);
+              entry.note = { ref: entry.note.ref, text: full.slice(0, keep), current: true, truncated: true };
+              size = estimateTokenCount(JSON.stringify(entry));
+            }
+          }
+          entries.push(entry);
+          used += size;
+          position = { createdAt: event.createdAt, id: event.id };
+          if (entries.length >= limit) break;
+        }
+        if (!more) break;
+        // A continuation that moved nowhere would be read again forever.
+        if (position === startedAt) {
+          throw new Error('knowledge_activity: the store returned a continuation without any changes; stopping.');
+        }
+        if (!stopped && entries.length >= limit) break;
+      }
+      const hasMore = stopped || more;
+      return {
+        ...(origin
+          ? { from: { ref: (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id, name: origin.name } }
+          : {}),
+        changes: entries,
+        ...(hasMore && position
+          ? {
+              more: true,
+              cursor: encodeActivityCursor({ v: 1, before: [position.createdAt.toISOString(), position.id], bind }),
+            }
+          : {}),
+      };
+    },
+  });
+}
+
 /** The schema-4 Knowledge tools. @internal */
 export function buildKnowledgePageTools(
   host: KnowledgePageToolHost,
@@ -1511,6 +1790,7 @@ export function buildKnowledgePageTools(
     tools.knowledge_list = listTool(host);
     tools.knowledge_search = searchTool(host);
     tools.knowledge_read = readTool(host);
+    tools.knowledge_activity = activityTool(host);
   }
   if (groups.write) {
     tools.knowledge_page = pageTool(host);

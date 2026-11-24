@@ -10,7 +10,8 @@
  * embedded mocks directly.
  */
 
-import { vi, type Mock } from 'vitest';
+import { vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 export type MockFn = Mock<(...args: any[]) => any>;
 export type MockFactory = () => MockFn;
@@ -48,7 +49,7 @@ export class MockRegistry {
    */
   register(key: string, factory: MockFactory): void {
     this.factories.set(key, factory);
-    this.mocks.set(key, factory());
+    this.mocks.delete(key);
   }
 
   /**
@@ -83,11 +84,13 @@ export class MockRegistry {
   /**
    * Reset all mocks to fresh instances using their factories.
    * Call this in beforeEach to ensure test isolation.
+   *
+   * Fresh mocks are created on the next get(), not here: the suite resets
+   * every registry before every test, and building every factory each time
+   * created ~700k mocks per suite run that vitest keeps for the worker's life.
    */
   reset(): void {
-    for (const [key, factory] of this.factories) {
-      this.mocks.set(key, factory());
-    }
+    this.mocks.clear();
   }
 
   /**

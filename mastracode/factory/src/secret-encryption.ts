@@ -63,11 +63,11 @@ export class FactorySecretDecryptionError extends Error {
 export function secretKeyProblem(error: unknown): { title: string; message: string; fix: string } | undefined {
   if (!(error instanceof FactorySecretDecryptionError)) return undefined;
   return {
-    title: "Factory can't unlock your secrets",
+    title: 'Factory needs its encryption key',
     message: error.missingKey
-      ? 'No encryption key is set. Your secrets are safe.'
-      : 'The encryption key changed. Your secrets are safe.',
-    fix: 'Redeploy with your `FACTORY_CREDENTIAL_ENCRYPTION_KEY`.',
+      ? "This deployment doesn't have one set."
+      : 'This deployment is using a different one than before.',
+    fix: 'Set `FACTORY_CREDENTIAL_ENCRYPTION_KEY` and redeploy.',
   };
 }
 

@@ -22,9 +22,10 @@ import { InMemoryServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_NORMALIZED_USER_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -69,6 +70,20 @@ describe('createInngestAgent factory function', () => {
     baseUrl: `http://localhost:${INNGEST_PORT}`,
   });
 
+  it('advertises detached streams when the wrapped Agent has streams disabled', () => {
+    const agent = new Agent({
+      id: 'detached-streams',
+      name: 'Detached streams',
+      instructions: 'Test',
+      model: createMockModel() as any,
+      durable: false,
+    });
+    const durableAgent = createInngestAgent({ agent, inngest });
+
+    expect(agent.hasResumableStreams()).toBe(false);
+    expect(durableAgent.hasResumableStreams()).toBe(true);
+  });
+
   it('should create an InngestAgent from a regular Agent', () => {
     const agent = new Agent({
       id: 'factory-test',
@@ -88,6 +103,60 @@ describe('createInngestAgent factory function', () => {
     expect(typeof durableAgent.prepare).toBe('function');
     expect(typeof durableAgent.getDurableWorkflows).toBe('function');
   });
+
+  it.each(
+    (['default', 'evented'] as const).flatMap(executionEngine =>
+      [false, true].map(registerFirst => ({ executionEngine, registerFirst })),
+    ),
+  )(
+    'isolates inner policy at structural registration: $executionEngine / registered=$registerFirst',
+    async ({ executionEngine, registerFirst }) => {
+      const threadBus = new EventEmitterPubSub();
+      const workflowBus = new EventEmitterPubSub();
+      const agent = new Agent({
+        id: 'policy-inner',
+        name: 'Policy inner',
+        instructions: 'Help.',
+        model: 'openai/gpt-4o',
+      });
+      const host = new Mastra({ logger: false, durable: { executionEngine, cleanupTimeoutMs: 0 } });
+      if (registerFirst) host.addAgent(agent);
+      const wrapped = createInngestAgent({ agent, inngest, pubsub: workflowBus });
+      const registered = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        pubsub: threadBus,
+        agents: { wrapped },
+        durable: { executionEngine },
+      });
+      expect(registered.getAgent('wrapped')).toBe(wrapped);
+      expect(wrapped.agent).toBe(agent);
+      expect(agent.__getExecutionEnginePolicy()).toBe(registerFirst ? executionEngine : false);
+      expect(agent.getPubSub()).toBe(registered.pubsub);
+      expect(wrapped.pubsub).toBeInstanceOf(CachingPubSub);
+      expect(wrapped.pubsub).not.toBe(registered.pubsub);
+      // Inngest's Proxy must remain on the legacy compatibility path.
+      expect(isDurableAgentLike(wrapped)).toBe(true);
+      host.addAgent(agent);
+      expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      await expect(registered.recoverAllDurableAgents()).resolves.toEqual({
+        agents: 1,
+        recovered: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+      });
+      const fork = wrapped.__fork();
+      expect(isInngestAgent(fork)).toBe(true);
+      const forkHost = new Mastra({ logger: false, agents: { fork }, durable: { executionEngine } });
+      expect(forkHost.getAgent('fork')).toBe(fork);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.agent.durable).toEqual(agent.durable);
+      forkHost.addAgent(fork.agent);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
+    },
+  );
 
   it('should be detected by isInngestAgent type guard', () => {
     const agent = new Agent({
@@ -433,6 +502,27 @@ describe('createInngestAgent observe-replay wiring', () => {
       }
     },
   );
+
+  // Steps send whole response lists when an observer that attaches mid-run can't read the run's
+  // earlier events, so the router must answer for the bus that carries the agent's stream.
+  it.each([
+    ['keeps', {}, true],
+    ['keeps no', { cache: false as const }, false],
+  ])('tells steps the agent stream %s history', (_, options, replays) => {
+    const durableAgent = createInngestAgent({
+      agent: makeAgent(`replay-routing-${replays}`),
+      inngest,
+      pubsub: new EventEmitterPubSub(),
+      ...options,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const routed = workflow.__getPubsubFactory()(new EventEmitterPubSub());
+    expect(routed.__replaysTopic(AGENT_STREAM_TOPIC('run'))).toBe(replays);
+    // Other topics follow the workflow's own bus.
+    expect(routed.__replaysTopic('workflow.events.v2.run')).toBe(false);
+  });
 
   it('routes workflow agent topics through the configured pubsub exactly once', async () => {
     const customPubsub = new EventEmitterPubSub();
@@ -1098,6 +1188,56 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it("does not resolve resume() defaultOptions or dispatch with the starting run's user", async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDynamicDefaults(
+        'default-callbacks-resume-user',
+        ({ user, requestContext }) => ({
+          onFinish: () => {
+            fired.push(`onFinish:${user?.id ?? 'anon'}:${requestContext.get('tenant')}`);
+          },
+        }),
+      );
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            loadWorkflowSnapshot: vi.fn().mockResolvedValue({
+              value: {},
+              context: {},
+              status: 'suspended',
+              suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+              requestContext: {
+                tenant: 'acme',
+                [MASTRA_NORMALIZED_USER_KEY]: { id: 'alice', role: 'admin' },
+                mastra__user: { sub: 'alice' },
+                mastra__userRoles: ['admin'],
+                mastra__userPermissions: ['admin:*'],
+              },
+            }),
+          }),
+        }),
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'default-callbacks-resume-user-run';
+
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
+        await publishStepAndFinish(durableAgent, runId);
+        await vi.waitFor(() => expect(fired).toEqual(['onFinish:anon:acme']));
+        const resumeEvent = sendSpy.mock.calls.map(([event]) => event as any).find(event => event.data?.resume);
+        // No user, roles or permissions from the starting run. The only other key is the
+        // framework's segment-span carrier (#30812); this resume opened no spans, so it is null.
+        expect(resumeEvent.data.requestContext).toEqual({
+          tenant: 'acme',
+          mastra__durableSegments: { [runId]: null },
+        });
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('resolves resume() defaultOptions against the snapshot once it is persisted', async () => {
       const fired: string[] = [];
       const durableAgent = makeAgentWithDynamicDefaults(
@@ -1560,6 +1700,8 @@ describe('InngestAgent parity surface', () => {
               userId: 'user-1',
               organizationId: 'org-2',
               requestId: 'request-1',
+              // The segment-span carrier every resume adds (#30812); no spans opened here.
+              mastra__durableSegments: { [runId]: null },
             },
             tracingOptions: {
               traceId: 'trace-1',
@@ -3485,5 +3627,89 @@ describe('thread and run abort (#25156)', () => {
 
     expect(() => durableAgent.abortRunStream('abort-run-publish-fails-run')).not.toThrow();
     await new Promise(resolve => setTimeout(resolve, 10));
+  });
+});
+
+describe('background task finished while untilIdle is open (#29785)', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-bg-notify',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeRegistered(id: string) {
+    const storage = new InMemoryStore();
+    const durableAgent = createInngestAgent({
+      agent: new Agent({
+        id,
+        name: id,
+        instructions: 'Test',
+        model: createMockModel() as any,
+        memory: new Memory({ storage }),
+      }),
+      inngest,
+    });
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      agents: { [id]: durableAgent as any },
+      storage,
+      backgroundTasks: { enabled: true },
+      logger: false,
+    });
+    // The durable tool-call step resolves the owner like this before notifying it.
+    const owner = Object.values(mastra.listAgents()).find(a => a.id === id) as any;
+    return { durableAgent, owner };
+  }
+
+  function finishedTask(threadId: string, resourceId: string) {
+    return {
+      threadId,
+      resourceId,
+      taskId: 'task-1',
+      toolCallId: 'call-1',
+      toolName: 'brew',
+      status: 'completed' as const,
+    };
+  }
+
+  it('does not wake the thread when an untilIdle stream is open for it', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-open');
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal');
+    const threadId = 'bg-notify-open-t';
+    const resourceId = 'bg-notify-open-r';
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      untilIdle: true,
+      memory: { thread: threadId, resource: resourceId },
+    } as any);
+    try {
+      await vi.waitFor(() => expect(owner.__untilIdleHandlesBackgroundTask(threadId, resourceId, 'probe')).toBe(true));
+
+      await owner.__notifyBackgroundTaskFinished(finishedTask(threadId, resourceId));
+
+      expect(signalSpy).not.toHaveBeenCalled();
+    } finally {
+      (result as any).cleanup?.();
+      durableAgent.abortThreadStream({ threadId, resourceId, localOnly: true } as any);
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('still wakes the thread when no untilIdle stream is open', async () => {
+    const { durableAgent, owner } = makeRegistered('bg-notify-idle');
+    const signalSpy = vi.spyOn(durableAgent.agent, 'sendSignal').mockReturnValue({
+      signal: { id: 'sig-1' },
+      accepted: Promise.resolve({ action: 'woke' }),
+    } as any);
+
+    expect(owner.__untilIdleHandlesBackgroundTask('bg-notify-idle-t', 'bg-notify-idle-r', 'task-1')).toBe(false);
+    await owner.__notifyBackgroundTaskFinished(finishedTask('bg-notify-idle-t', 'bg-notify-idle-r'));
+
+    expect(signalSpy).toHaveBeenCalledTimes(1);
+    expect(signalSpy.mock.calls[0]?.[0]).toMatchObject({ type: 'notification', tagName: 'background-task' });
+    expect(signalSpy.mock.calls[0]?.[1]).toMatchObject({
+      threadId: 'bg-notify-idle-t',
+      resourceId: 'bg-notify-idle-r',
+    });
   });
 });

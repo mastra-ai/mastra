@@ -11,12 +11,19 @@ import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   MastraMemory,
+  MESSAGE_EMBEDDING_CHARS_PER_TOKEN,
+  buildMessageEmbeddingRows,
+  chunkMessageText,
   loadMessageHistory,
   normalizeMessageHistoryConfig,
   getMemoryTokenBoundary,
   isAfterMemoryTokenBoundary,
+  resolveMaxChunkChars,
+  upsertMessageVectors,
 } from '@mastra/core/memory';
 import type {
+  MessageEmbeddingItem,
+  MessageEmbeddingRows,
   MemoryConfigInternal,
   SharedMemoryConfig,
   StorageThreadType,
@@ -69,11 +76,15 @@ import type {
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { WorkingMemoryInstructionCompat } from './processors/working-memory-instruction-compat';
+import type { WorkingMemoryInstructionArgs } from './processors/working-memory-instruction-compat';
 import { SUBCONSCIOUS_REMOVED_MESSAGE } from './removed-subconscious';
 import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
 
+export { asUserTurn, escapeTurnMarkup, sealTurnMarkup } from '@mastra/core/memory';
+export type { TurnSpeaker } from '@mastra/core/memory';
 export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
@@ -377,6 +388,28 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
   );
 }
 
+const DEFAULT_WORKING_MEMORY_TEMPLATE = `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`;
+
+/**
+ * True when the installed `@mastra/core` builds its WorkingMemory processor with the memory instance as the
+ * instruction provider. Cores from before `MastraMemory.getWorkingMemoryInstruction` existed (up to and
+ * including 1.86.0-alpha.5) don't, and render their own built-in text. Checked per call, not at import.
+ */
+function coreRendersWorkingMemoryInstructionThroughMemory(): boolean {
+  return 'getWorkingMemoryInstruction' in MastraMemory.prototype;
+}
+
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
@@ -407,9 +440,6 @@ function hasWorkingMemoryExtractor(
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
-
-// Average characters per token based on OpenAI's tokenization
-const CHARS_PER_TOKEN = 4;
 
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
@@ -595,6 +625,9 @@ export class Memory extends MastraMemory {
     });
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     this.threadConfig = mergedConfig;
+
+    // Fail at construction rather than on the first save.
+    resolveMaxChunkChars({ maxChunkChars: this.configuredMaxChunkChars });
 
     // Validate retrieval vector config at construction time
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
@@ -842,8 +875,13 @@ export class Memory extends MastraMemory {
 
       const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
       const threshold = semanticConfig?.threshold;
-      const filteredVectorResults =
-        threshold !== undefined ? vectorResults.filter(r => r.score >= threshold) : vectorResults;
+      // Check each hit's scope as well as the store's filter, so a store that drops or misapplies
+      // filters cannot bring other threads' or resources' messages into recall.
+      const filteredVectorResults = vectorResults.filter(
+        r =>
+          (threshold === undefined || r.score >= threshold) &&
+          (resourceScope ? r.metadata?.resource_id === resourceId : r.metadata?.thread_id === threadId),
+      );
 
       // Get raw messages from storage
       const memoryStore = await this.getMemoryStore();
@@ -923,6 +961,14 @@ export class Memory extends MastraMemory {
         // Reverse to restore chronological order if we queried DESC to get newest messages
         rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
         ({ total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult);
+      }
+
+      // The stored message is the authority on where it lives: drop any recalled message, or
+      // context neighbour, that the vector hit's metadata placed in scope but storage does not.
+      if (include.length) {
+        rawMessages = rawMessages.filter(
+          message => message.threadId === threadId || (resourceScope && message.resourceId === resourceId),
+        );
       }
 
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
@@ -1327,8 +1373,10 @@ export class Memory extends MastraMemory {
     // If the agent calls the update working memory tool multiple times simultaneously
     // each call could overwrite the other call
     // so get an in memory mutex to make sure this.getWorkingMemory() returns up to date data each time
-    const mutexKey =
-      memoryConfig?.workingMemory?.scope === `resource` ? `resource-${resourceId}` : `thread-${threadId}`;
+    // Key off the merged config: scope defaults to 'resource', so threads sharing a
+    // resource must share the lock even when the caller didn't pass a scope.
+    const scope = config.workingMemory.scope || 'resource';
+    const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
     const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
       ? this.updateWorkingMemoryMutexes.get(mutexKey)!
       : new Mutex();
@@ -1450,55 +1498,9 @@ ${workingMemory}`;
     }
   }
 
+  /** Splits text into chunks of at most `tokenSize` English tokens, measured as characters. */
   protected chunkText(text: string, tokenSize = 4096) {
-    // Convert token size to character size with some buffer
-    const charSize = tokenSize * CHARS_PER_TOKEN;
-    const chunks: string[] = [];
-    let currentChunk = '';
-
-    // Split text into words to avoid breaking words where possible.
-    const words = text.split(/\s+/);
-
-    for (const word of words) {
-      // A single word can be longer than the chunk budget (e.g. a base64 data URI,
-      // a minified JS/JSON blob, a long URL, or spaceless CJK text where the entire
-      // message is one "word"). The whitespace split can't break these, so hard-split
-      // the oversized word by character count to guarantee every chunk stays under the
-      // embedder's token limit instead of emitting one oversized chunk it would reject.
-      if (word.length > charSize) {
-        // Flush whatever we've accumulated so far before the oversized word.
-        if (currentChunk) {
-          chunks.push(currentChunk);
-          currentChunk = '';
-        }
-        for (let i = 0; i < word.length; i += charSize) {
-          chunks.push(word.slice(i, i + charSize));
-        }
-        continue;
-      }
-
-      // Add space before word unless it's the first word in the chunk
-      const wordWithSpace = currentChunk ? ' ' + word : word;
-
-      // If adding this word would exceed the chunk size, start a new chunk
-      if (currentChunk.length + wordWithSpace.length > charSize) {
-        // Guard against pushing an empty leading chunk: if the very first word
-        // already filled/exceeded the budget, currentChunk is still '' here.
-        if (currentChunk) {
-          chunks.push(currentChunk);
-        }
-        currentChunk = word;
-      } else {
-        currentChunk += wordWithSpace;
-      }
-    }
-
-    // Add the final chunk if not empty
-    if (currentChunk) {
-      chunks.push(currentChunk);
-    }
-
-    return chunks;
+    return chunkMessageText(text, tokenSize * MESSAGE_EMBEDDING_CHARS_PER_TOKEN);
   }
 
   private hasher = xxhash();
@@ -1527,54 +1529,7 @@ ${workingMemory}`;
       return cached;
     }
     const chunks = this.chunkText(content);
-
-    if (typeof this.embedder === `undefined`) {
-      throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
-    }
-    // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
-    const isFastEmbed = this.embedder.provider === `fastembed`;
-    if (isFastEmbed && this.firstEmbed instanceof Promise) {
-      // so wait for the first one
-      await this.firstEmbed;
-    }
-
-    const options = { values: chunks, maxRetries: 3 };
-    // Options share a public union; select the SDK-specific options alongside the model version.
-    const model = this.embedder;
-    let promise;
-    switch (model.specificationVersion) {
-      case 'v4':
-        promise = embedManyV7({
-          ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
-          model,
-        });
-        break;
-      case 'v3':
-        promise = embedManyV6({
-          ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
-          model,
-        });
-        break;
-      case 'v2':
-        promise = embedManyV5({
-          ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
-          model,
-        });
-        break;
-      default:
-        promise = embedMany({
-          ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
-          model,
-        });
-        break;
-    }
-
-    if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
-    const { embeddings, usage } = await promise;
+    const { embeddings, usage } = await this.embedValues(chunks);
 
     const result = {
       embeddings,
@@ -1586,14 +1541,199 @@ ${workingMemory}`;
     return result;
   }
 
+  // Message writes reuse the vectors of chunks they already embedded, so a repeated text (the same
+  // reply in another thread, a re-saved message) isn't sent to the embedder again. Keyed by the
+  // exact chunks, so a different chunk size is a miss, and emptied when the embedder or its options
+  // change. Holds only vectors: each message still gets its own row id and metadata.
+  private chunkEmbeddingCache = new LRUCache<bigint, Promise<number[][]>>({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
+  private chunkEmbeddingCacheOwner: Pick<MastraMemory, 'embedder' | 'embedderOptions'> = {};
+
+  /**
+   * Embeds one message's chunks, reusing vectors already produced for the same chunks. Usage is
+   * returned only for a call that reached the embedder.
+   */
+  private async embedMessageChunks(chunks: string[]) {
+    // The embedder and options that produce these vectors, read once: embedValues can wait (for
+    // fastembed's first download) while setEmbedder swaps them, and the vectors must be cached
+    // under the embedder that made them.
+    const producer = { embedder: this.embedder, embedderOptions: this.embedderOptions };
+    const key = (await this.hasher).h64(JSON.stringify(chunks));
+    if (producer.embedder !== this.embedder || producer.embedderOptions !== this.embedderOptions) {
+      return this.embedValues(chunks, producer);
+    }
+    const owner = this.chunkEmbeddingCacheOwner;
+    if (owner.embedder !== producer.embedder || owner.embedderOptions !== producer.embedderOptions) {
+      this.chunkEmbeddingCache.clear();
+      this.chunkEmbeddingCacheOwner = producer;
+    }
+    const cached = this.chunkEmbeddingCache.get(key);
+    if (cached) return { embeddings: await cached };
+
+    const result = this.embedValues(chunks, producer);
+    // Concurrent writers of the same chunks share this call. A failed call, or one without exactly
+    // one embedding per chunk, is not kept, so the next write asks the embedder again.
+    const embeddings = result.then(({ embeddings }) => {
+      if (embeddings.length !== chunks.length) evict();
+      return embeddings;
+    });
+    const evict = () => {
+      if (this.chunkEmbeddingCache.get(key) === embeddings) this.chunkEmbeddingCache.delete(key);
+    };
+    embeddings.catch(evict);
+    this.chunkEmbeddingCache.set(key, embeddings);
+    return result;
+  }
+
+  /** Sends texts to the embedder through the AI SDK version that matches its spec. */
+  private async embedValues(
+    values: string[],
+    { embedder, embedderOptions }: Pick<MastraMemory, 'embedder' | 'embedderOptions'> = this,
+  ) {
+    if (typeof embedder === `undefined`) {
+      throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
+    }
+    // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
+    const isFastEmbed = embedder.provider === `fastembed`;
+    if (isFastEmbed && this.firstEmbed instanceof Promise) {
+      // so wait for the first one
+      await this.firstEmbed;
+    }
+
+    const options = { values, maxRetries: 3 };
+    // Options share a public union; select the SDK-specific options alongside the model version.
+    const model = embedder;
+    let promise;
+    switch (model.specificationVersion) {
+      case 'v4':
+        promise = embedManyV7({
+          ...options,
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+      case 'v3':
+        promise = embedManyV6({
+          ...options,
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+      case 'v2':
+        promise = embedManyV5({
+          ...options,
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+      default:
+        promise = embedMany({
+          ...options,
+          ...(embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
+    }
+
+    if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
+    const { embeddings, usage } = await promise;
+    return { embeddings, usage };
+  }
+
+  /**
+   * Metadata of each thread, spread onto that thread's vector rows so `semanticRecall.filter`
+   * can match thread attributes.
+   */
+  private async loadThreadMetadata(threadIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+    const memoryStore = await this.getMemoryStore();
+    const metadataByThread = new Map<string, Record<string, unknown>>();
+    await Promise.all(
+      threadIds.map(async threadId => {
+        try {
+          const thread = await memoryStore.getThreadById({ threadId });
+          if (thread?.metadata) metadataByThread.set(threadId, thread.metadata);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `Could not fetch metadata for thread ${threadId} while writing semantic recall embeddings: ${message}`,
+          );
+        }
+      }),
+    );
+    return metadataByThread;
+  }
+
+  /**
+   * Embeds messages into vector rows in the shared format, without writing them. Every
+   * message-vector write in this class builds its rows here.
+   */
+  private async buildMessageVectorRows({
+    items,
+    embeddedMessages,
+  }: {
+    items: MessageEmbeddingItem[];
+    embeddedMessages?: Map<string, string>;
+  }): Promise<MessageEmbeddingRows> {
+    if (items.length === 0) return { ids: [], metadata: [], embeddedEntries: [] };
+    if (!this.embedder && !this.isSelfEmbedding) {
+      throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
+    }
+
+    return buildMessageEmbeddingRows({
+      items,
+      embed: this.isSelfEmbedding ? undefined : chunks => this.embedMessageChunks(chunks),
+      maxChunkChars: resolveMaxChunkChars({ maxChunkChars: this.configuredMaxChunkChars, embedder: this.embedder }),
+      loadThreadMetadata: threadIds => this.loadThreadMetadata(threadIds),
+      embeddedMessages,
+      // The run's record is kept per index; only agent runs pass one, and by then the dimension
+      // probe behind the index name already ran when the processors were created.
+      indexName: embeddedMessages
+        ? this.getEmbeddingIndexName(this.isSelfEmbedding ? undefined : await this.getEmbeddingDimension())
+        : undefined,
+    });
+  }
+
+  /** Writes rows from {@link buildMessageVectorRows} into the message index for `config`. */
+  private async writeMessageVectorRows({
+    rows,
+    config,
+    embeddedMessages,
+  }: {
+    rows: MessageEmbeddingRows;
+    config?: MemoryConfigInternal;
+    embeddedMessages?: Map<string, string>;
+  }): Promise<void> {
+    if (!this.vector || rows.ids.length === 0) return;
+    const { indexName } = await this.createEmbeddingIndex(rows.dimension, config);
+    await upsertMessageVectors(this.vector, indexName, rows, embeddedMessages);
+  }
+
+  /**
+   * Embeds messages and writes their vector rows.
+   *
+   * @returns Tokens billed by the embedder, if any.
+   */
+  private async writeMessageVectors(args: {
+    items: MessageEmbeddingItem[];
+    config?: MemoryConfigInternal;
+    embeddedMessages?: Map<string, string>;
+  }): Promise<{ tokens: number } | undefined> {
+    if (!this.vector) return undefined;
+    const rows = await this.buildMessageVectorRows(args);
+    await this.writeMessageVectorRows({ ...args, rows });
+    return rows.usage;
+  }
+
   async saveMessages({
     messages,
     memoryConfig,
     observabilityContext,
+    embeddedMessages,
   }: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
     observabilityContext?: Partial<ObservabilityContext>;
+    /** @internal See `MastraMemory.saveMessages`. */
+    embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
       messageCount: messages.length,
@@ -1619,151 +1759,16 @@ ${workingMemory}`;
         messages: dbMessages,
       });
 
-      let totalTokens = 0;
+      const usage =
+        this.vector && config.semanticRecall
+          ? await this.writeMessageVectors({
+              items: updatedMessages.map(message => ({ message })),
+              config,
+              embeddedMessages,
+            })
+          : undefined;
 
-      if (this.vector && config.semanticRecall) {
-        const messagesByThread = new Map<string, MastraDBMessage[]>();
-        updatedMessages.forEach(message => {
-          if (message.threadId) {
-            if (!messagesByThread.has(message.threadId)) {
-              messagesByThread.set(message.threadId, []);
-            }
-            messagesByThread.get(message.threadId)!.push(message);
-          }
-        });
-
-        const threadMetadataMap = new Map<string, Record<string, unknown>>();
-        await Promise.all(
-          Array.from(messagesByThread.keys()).map(async threadId => {
-            try {
-              const thread = await memoryStore.getThreadById({ threadId });
-              if (thread?.metadata) {
-                threadMetadataMap.set(threadId, thread.metadata);
-              }
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              throw new Error(
-                `Could not fetch metadata for thread ${threadId} while saving semantic recall embeddings: ${message}`,
-              );
-            }
-          }),
-        );
-
-        // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
-        const embeddingData: Array<{
-          embeddings: number[][];
-          /** Chunk texts, populated only when the store embeds server-side. */
-          documents?: string[];
-          metadata: Array<
-            Record<string, unknown> & {
-              message_id: string;
-              thread_id: string | undefined;
-              resource_id: string | undefined;
-            }
-          >;
-        }> = [];
-        let dimension: number | undefined;
-
-        // Process embeddings concurrently - this doesn't use DB connections
-        await Promise.all(
-          updatedMessages.map(async message => {
-            let textForEmbedding: string | null = null;
-
-            if (
-              message.content.content &&
-              typeof message.content.content === 'string' &&
-              message.content.content.trim() !== ''
-            ) {
-              textForEmbedding = message.content.content;
-            } else if (message.content.parts && message.content.parts.length > 0) {
-              // Extract text from all text parts, concatenate
-              const joined = message.content.parts
-                .filter(part => part.type === 'text')
-                .map(part => (part as TextPart).text)
-                .join(' ')
-                .trim();
-              if (joined) textForEmbedding = joined;
-            }
-
-            if (!textForEmbedding) return;
-
-            // The store embeds these itself, so it receives the chunk texts. Chunking matches the
-            // client-side path so one metadata entry lines up with one stored row.
-            let embeddings: number[][] = [];
-            let documents: string[] | undefined;
-            let chunks: string[];
-            if (this.isSelfEmbedding) {
-              chunks = this.chunkText(textForEmbedding);
-              documents = chunks;
-            } else {
-              const result = await this.embedMessageContent(textForEmbedding);
-              dimension = result.dimension;
-              if (result.usage?.tokens) {
-                totalTokens += result.usage.tokens;
-              }
-              embeddings = result.embeddings;
-              chunks = result.chunks;
-            }
-
-            const threadMetadata = message.threadId ? threadMetadataMap.get(message.threadId) || {} : {};
-
-            embeddingData.push({
-              embeddings,
-              documents,
-              metadata: chunks.map(() => ({
-                ...threadMetadata,
-                message_id: message.id,
-                thread_id: message.threadId,
-                resource_id: message.resourceId,
-                role: message.role,
-                content: textForEmbedding,
-                created_at:
-                  message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
-              })),
-            });
-          }),
-        );
-
-        // Batch all vectors into a single upsert call to avoid pool exhaustion
-        if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
-          if (typeof this.vector === `undefined`) {
-            throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
-          }
-
-          const { indexName } = await this.createEmbeddingIndex(dimension, config);
-
-          // Flatten all embeddings and metadata into single arrays
-          const allVectors: number[][] = [];
-          const allMetadata: Array<
-            Record<string, unknown> & {
-              message_id: string;
-              thread_id: string | undefined;
-              resource_id: string | undefined;
-            }
-          > = [];
-
-          const allDocuments: string[] = [];
-          for (const data of embeddingData) {
-            allVectors.push(...data.embeddings);
-            if (data.documents) allDocuments.push(...data.documents);
-            allMetadata.push(...data.metadata);
-          }
-
-          if (this.isSelfEmbedding) {
-            // `documents` is accepted only by self-embedding stores, so it is not on the shared
-            // UpsertVectorParams.
-            await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
-          } else {
-            await this.vector.upsert({
-              indexName,
-              vectors: allVectors,
-              metadata: allMetadata,
-            });
-          }
-        }
-      }
-
-      const saveResult = { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
+      const saveResult = { ...result, usage };
 
       span?.end({
         output: { success: true },
@@ -1795,8 +1800,16 @@ ${workingMemory}`;
       newMessage.content = { ...message.content };
     }
 
+    // Trim only what removing the tags left behind. Text without working-memory tags is
+    // saved as the model saw it, so the next run replays the same prompt (and keeps the
+    // provider's prompt cache), matching core's filterMessagesForPersistence.
+    const hideTags = (text: string) => {
+      const cleaned = removeWorkingMemoryTags(text);
+      return cleaned === text ? text : cleaned.trim();
+    };
+
     if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
-      newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
+      newMessage.content.content = hideTags(newMessage.content.content);
     }
 
     if (Array.isArray(newMessage.content?.parts)) {
@@ -1810,7 +1823,7 @@ ${workingMemory}`;
           const text = typeof part.text === 'string' ? part.text : '';
           return {
             ...part,
-            text: removeWorkingMemoryTags(text).trim(),
+            text: hideTags(text),
           };
         }
         return part;
@@ -1887,14 +1900,15 @@ ${workingMemory}`;
       const loadWorkingMemory = async () => {
         const memoryStore = await this.getMemoryStore();
         const resource = await memoryStore.getResourceById({ resourceId });
-        return resource?.workingMemory || null;
+        return typeof resource?.workingMemory === 'string' && resource.workingMemory ? resource.workingMemory : null;
       };
       workingMemoryData = runState
         ? await runState.load(`working-memory:resource:${resourceId}`, loadWorkingMemory)
         : await loadWorkingMemory();
     } else {
       const thread = runState?.threadLoaded ? runState.thread : await this.getThreadById({ threadId });
-      workingMemoryData = thread?.metadata?.workingMemory as string;
+      const stored = thread?.metadata?.workingMemory;
+      workingMemoryData = typeof stored === 'string' && stored ? stored : null;
     }
 
     if (!workingMemoryData) {
@@ -1992,23 +2006,25 @@ ${workingMemory}`;
 
     // In readOnly or non-agent-managed mode, provide context without tool instructions.
     // With agentManaged: false the app still updates the memory, so the agent must not claim it can't.
-    if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
-      return this.getReadOnlyWorkingMemoryInstruction({
-        template: workingMemoryTemplate,
-        data: workingMemoryData,
-        autoUpdated: !config?.readOnly,
-      });
-    }
-
-    return this.isVNextWorkingMemoryConfig(memoryConfig)
-      ? this.__experimental_getWorkingMemoryToolInstructionVNext({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        })
-      : this.getWorkingMemoryToolInstruction({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        });
+    // Render through getWorkingMemoryInstruction, the same method agents use, so both paths agree.
+    // `undefined` keeps the built-in text (the agent's processor falls back the same way), and an
+    // override that returns an empty string sends no instruction, so report that as null.
+    const args: WorkingMemoryInstructionArgs =
+      config?.readOnly || workingMemoryConfig.agentManaged === false
+        ? {
+            kind: 'read-only',
+            template: workingMemoryTemplate,
+            data: workingMemoryData,
+            autoUpdated: !config?.readOnly,
+          }
+        : {
+            // Same check the agent's WorkingMemory processor uses (see MastraMemory.getInputProcessors).
+            kind: 'version' in workingMemoryConfig && workingMemoryConfig.version === 'vnext' ? 'vnext' : 'tool',
+            template: workingMemoryTemplate,
+            data: workingMemoryData,
+          };
+    const instruction = this.getWorkingMemoryInstruction(args) ?? this.renderBuiltInWorkingMemoryInstruction(args);
+    return instruction || null;
   }
 
   /** Fetch current stored copies of messages in a resumed turn, bypassing run-state history caches. */
@@ -2360,20 +2376,9 @@ ${workingMemory}`;
     });
   }
 
-  public defaultWorkingMemoryTemplate = `
-# User Information
-- **First Name**: 
-- **Last Name**: 
-- **Location**: 
-- **Occupation**: 
-- **Interests**: 
-- **Goals**: 
-- **Events**: 
-- **Facts**: 
-- **Projects**: 
-`;
+  public defaultWorkingMemoryTemplate = DEFAULT_WORKING_MEMORY_TEMPLATE;
 
-  protected getWorkingMemoryToolInstruction({
+  private builtInWorkingMemoryToolInstruction({
     template,
     data,
   }: {
@@ -2427,13 +2432,14 @@ Notes:
 - IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.`;
   }
 
-  protected __experimental_getWorkingMemoryToolInstructionVNext({
+  private builtInWorkingMemoryToolInstructionVNext({
     template,
     data,
   }: {
     template: WorkingMemoryTemplate;
     data: string | null;
   }) {
+    const templateContent = typeof template.content === 'string' ? template.content : JSON.stringify(template.content);
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool.
 
@@ -2446,7 +2452,7 @@ Guidelines:
 6. Information not being relevant to the current conversation is not a valid reason to replace or remove working memory information. Your working memory spans across multiple conversations and may be needed again later, even if it's not currently relevant.
 
 <working_memory_template>
-${template.content}
+${templateContent}
 </working_memory_template>
 
 <working_memory_data>
@@ -2456,7 +2462,7 @@ ${data || 'No working memory data available.'}
 Notes:
 - Update memory whenever referenced information changes
 ${
-  template.content !== this.defaultWorkingMemoryTemplate
+  templateContent !== DEFAULT_WORKING_MEMORY_TEMPLATE
     ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
     : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 `
@@ -2468,12 +2474,7 @@ ${
 `;
   }
 
-  /**
-   * Generate read-only working memory instructions.
-   * This provides the working memory context without any tool update instructions.
-   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
-   */
-  protected getReadOnlyWorkingMemoryInstruction({
+  private builtInReadOnlyWorkingMemoryInstruction({
     data,
     autoUpdated = false,
   }: {
@@ -2500,6 +2501,64 @@ Guidelines:
 Notes:
 - This system is here so that you can maintain the conversation when your context window is very short
 - The user will not see the working memory data directly`;
+  }
+
+  /** Instruction for agents that update working memory with the updateWorkingMemory tool. Override to customize it. */
+  protected getWorkingMemoryToolInstruction(args: { template: WorkingMemoryTemplate; data: string | null }): string {
+    return this.builtInWorkingMemoryToolInstruction(args);
+  }
+
+  /** Instruction for `version: 'vnext'` template working memory. Override to customize it. */
+  protected __experimental_getWorkingMemoryToolInstructionVNext(args: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+  }): string {
+    return this.builtInWorkingMemoryToolInstructionVNext(args);
+  }
+
+  /**
+   * Generate read-only working memory instructions.
+   * This provides the working memory context without any tool update instructions.
+   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
+   * Override to customize it.
+   */
+  protected getReadOnlyWorkingMemoryInstruction(args: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+    autoUpdated?: boolean;
+  }): string {
+    return this.builtInReadOnlyWorkingMemoryInstruction(args);
+  }
+
+  /**
+   * Renders the working memory instruction an agent receives, using the instruction methods above,
+   * so a subclass that overrides them changes what the model sees. Return `undefined` to use the
+   * built-in instruction, or an empty string to send none.
+   */
+  override getWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string | undefined {
+    switch (args.kind) {
+      case 'read-only':
+        return this.getReadOnlyWorkingMemoryInstruction(args);
+      case 'vnext':
+        return this.__experimental_getWorkingMemoryToolInstructionVNext(args);
+      case 'tool':
+        return this.getWorkingMemoryToolInstruction(args);
+    }
+  }
+
+  /**
+   * The built-in text, ignoring subclass overrides of the instruction methods. Used when
+   * getWorkingMemoryInstruction returns `undefined`, matching the agent processor's own fallback.
+   */
+  private renderBuiltInWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string {
+    switch (args.kind) {
+      case 'read-only':
+        return this.builtInReadOnlyWorkingMemoryInstruction(args);
+      case 'vnext':
+        return this.builtInWorkingMemoryToolInstructionVNext(args);
+      case 'tool':
+        return this.builtInWorkingMemoryToolInstruction(args);
+    }
   }
 
   private isVNextWorkingMemoryConfig(config?: MemoryConfig): boolean {
@@ -2633,6 +2692,10 @@ Notes:
         } as never);
         for (const r of results) {
           if (!r.metadata?.thread_id) {
+            continue;
+          }
+          // Don't rely on the store having applied the filter: skip hits outside the scope.
+          if (r.metadata.resource_id !== resourceId || (filter?.threadId && r.metadata.thread_id !== filter.threadId)) {
             continue;
           }
 
@@ -2909,88 +2972,6 @@ Notes:
   }
 
   /**
-   * Index a list of messages directly (without querying storage).
-   * Used by observe-time indexing to vectorize newly-observed messages.
-   */
-  private async indexMessagesList(messages: MastraDBMessage[]): Promise<void> {
-    if (!this.vector || !this.embedder) return;
-
-    const embeddingData: Array<{
-      embeddings: number[][];
-      metadata: Array<
-        Record<string, unknown> & {
-          message_id: string;
-          thread_id: string | undefined;
-          resource_id: string | undefined;
-        }
-      >;
-    }> = [];
-    let dimension: number | undefined;
-
-    await Promise.all(
-      messages.map(async message => {
-        let textForEmbedding: string | null = null;
-
-        if (
-          message.content.content &&
-          typeof message.content.content === 'string' &&
-          message.content.content.trim() !== ''
-        ) {
-          textForEmbedding = message.content.content;
-        } else if (message.content.parts && message.content.parts.length > 0) {
-          const joined = message.content.parts
-            .filter((part: any) => part.type === 'text')
-            .map((part: any) => part.text)
-            .join(' ')
-            .trim();
-          if (joined) textForEmbedding = joined;
-        }
-
-        if (!textForEmbedding) return;
-
-        const embedResult = await this.embedMessageContent(textForEmbedding);
-        dimension = embedResult.dimension;
-
-        embeddingData.push({
-          embeddings: embedResult.embeddings,
-          metadata: embedResult.chunks.map(() => ({
-            message_id: message.id,
-            thread_id: message.threadId,
-            resource_id: message.resourceId,
-            role: message.role,
-            content: textForEmbedding,
-            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
-          })),
-        });
-      }),
-    );
-
-    if (embeddingData.length > 0 && dimension !== undefined) {
-      const { indexName } = await this.createEmbeddingIndex(dimension);
-
-      const allVectors: number[][] = [];
-      const allMetadata: Array<
-        Record<string, unknown> & {
-          message_id: string;
-          thread_id: string | undefined;
-          resource_id: string | undefined;
-        }
-      > = [];
-
-      for (const data of embeddingData) {
-        allVectors.push(...data.embeddings);
-        allMetadata.push(...data.metadata);
-      }
-
-      await this.vector.upsert({
-        indexName,
-        vectors: allVectors,
-        metadata: allMetadata,
-      });
-    }
-  }
-
-  /**
    * Check whether retrieval search (vector-based) is enabled.
    * Returns true when `retrieval: { vector: true }` and Memory has a vector store plus either an
    * embedder or a store that generates embeddings itself.
@@ -3129,76 +3110,20 @@ Notes:
         // Reuse the pre-update rows for vector metadata.
         const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
 
-        // Collect embeddings for messages with new text content
-        const embeddingData: Array<{
-          embeddings: number[][];
-          /** Chunk texts, populated only when the store embeds the text itself. */
-          documents?: string[];
-          metadata: Array<
-            Record<string, unknown> & {
-              message_id: string;
-              thread_id: string | undefined;
-              resource_id: string | undefined;
-            }
-          >;
-        }> = [];
-        let dimension: number | undefined;
+        // Old rows go for every edited message: cleared text leaves nothing to index, and new text
+        // can have fewer chunks or land in another index if the embedding model changed.
+        const messageIdsNeedingDeletion = new Set<string>();
+        const items: MessageEmbeddingItem[] = [];
+        for (const { id } of messagesWithTextUpdates) {
+          const existingMessage = existingMessagesMap.get(id);
+          if (!existingMessage) continue;
+          messageIdsNeedingDeletion.add(id);
+          const text = textForEmbeddingById.get(id);
+          if (text) items.push({ message: existingMessage, text });
+        }
 
-        // Track which messages will have new embeddings vs cleared content
-        const messageIdsWithNewEmbeddings = new Set<string>();
-        const messageIdsWithClearedContent = new Set<string>();
-
-        // Prepare new embeddings and track which messages need vector operations
-        await Promise.all(
-          messagesWithTextUpdates.map(async message => {
-            const existingMessage = existingMessagesMap.get(message.id);
-            if (!existingMessage) return;
-
-            const textForEmbedding = textForEmbeddingById.get(message.id) ?? null;
-
-            // If there's new text content, embed it
-            if (textForEmbedding) {
-              // A self-embedding store receives the chunk texts and embeds them itself.
-              let embeddings: number[][] = [];
-              let documents: string[] | undefined;
-              let chunks: string[];
-              if (this.isSelfEmbedding) {
-                chunks = this.chunkText(textForEmbedding);
-                documents = chunks;
-              } else {
-                const result = await this.embedMessageContent(textForEmbedding);
-                dimension = result.dimension;
-                embeddings = result.embeddings;
-                chunks = result.chunks;
-              }
-
-              embeddingData.push({
-                embeddings,
-                documents,
-                metadata: chunks.map(() => ({
-                  message_id: message.id,
-                  thread_id: existingMessage.threadId,
-                  resource_id: existingMessage.resourceId,
-                  role: existingMessage.role,
-                  content: textForEmbedding,
-                  created_at:
-                    existingMessage.createdAt instanceof Date
-                      ? existingMessage.createdAt.toISOString()
-                      : String(existingMessage.createdAt),
-                })),
-              });
-              messageIdsWithNewEmbeddings.add(message.id);
-            } else {
-              // Content is empty or has no text - mark for vector deletion only
-              messageIdsWithClearedContent.add(message.id);
-            }
-          }),
-        );
-
-        // Delete old vectors from all existing memory indexes for messages that need it:
-        // - Messages with cleared content: vectors must be removed (no new embeddings will replace them)
-        // - Messages with new embeddings: old vectors must be removed before upserting (may be in different indexes if embedding model changed)
-        const messageIdsNeedingDeletion = new Set([...messageIdsWithClearedContent, ...messageIdsWithNewEmbeddings]);
+        // Embed before deleting, so a failed embedding call leaves the old rows searchable.
+        const rows = await this.buildMessageVectorRows({ items });
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
@@ -3225,39 +3150,7 @@ Notes:
           }
         }
 
-        // Upsert new embeddings if any
-        if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
-          const { indexName } = await this.createEmbeddingIndex(dimension, config);
-
-          // Flatten all embeddings and metadata into single arrays
-          const allVectors: number[][] = [];
-          const allMetadata: Array<
-            Record<string, unknown> & {
-              message_id: string;
-              thread_id: string | undefined;
-              resource_id: string | undefined;
-            }
-          > = [];
-
-          const allDocuments: string[] = [];
-          for (const data of embeddingData) {
-            allVectors.push(...data.embeddings);
-            if (data.documents) allDocuments.push(...data.documents);
-            allMetadata.push(...data.metadata);
-          }
-
-          if (this.isSelfEmbedding) {
-            // `documents` is accepted only by self-embedding stores, so it is not on the shared
-            // UpsertVectorParams.
-            await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
-          } else {
-            await this.vector.upsert({
-              indexName,
-              vectors: allVectors,
-              metadata: allMetadata,
-            });
-          }
-        }
+        await this.writeMessageVectorRows({ rows, config });
       }
     }
 
@@ -3630,15 +3523,15 @@ Notes:
     if (migratesVectors) {
       try {
         const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+        // Embed before deleting, so a failed embedding call leaves the old rows searchable.
+        const rows = await this.buildMessageVectorRows({ items: messages.map(message => ({ message })) });
         const messageIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
         await Promise.all(
           messageIndexes.map(async indexName => {
             await this.vector!.deleteVectors({ indexName, filter: { thread_id: threadId } });
           }),
         );
-        if (messages.length > 0) {
-          await this.embedClonedMessages(messages, config);
-        }
+        await this.writeMessageVectorRows({ rows, config });
       } catch (error) {
         // The storage transfer already committed, but if vector migration fails the thread's
         // messages can become unrecallable under resource-scoped semantic recall while the
@@ -3705,7 +3598,12 @@ Notes:
         };
       }
       const moved = new Set<string>();
-      for (;;) {
+      // Eventually consistent stores may keep returning an updated page for minutes.
+      // Bound the whole index migration, including retries across multiple pages.
+      const deadline = Date.now() + 120_000;
+      let retryDelayMs = 1_000;
+      let complete = false;
+      migration: while (Date.now() < deadline) {
         // `queryText` is accepted only by self-embedding stores, so it is not on the shared
         // QueryVectorParams.
         const stale = await vector.query({
@@ -3715,9 +3613,22 @@ Notes:
           topK: 20,
           filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
         } as never);
+        if (stale.length === 0) {
+          complete = true;
+          break;
+        }
         const pending = stale.filter(result => !moved.has(result.id));
-        if (pending.length === 0) break;
+        if (pending.length === 0) {
+          const delayMs = Math.min(retryDelayMs, Math.max(0, deadline - Date.now()));
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+          continue;
+        }
+        retryDelayMs = 1_000;
         for (const result of pending) {
+          // A slow query or earlier updates can use up the budget mid-page. Start no new write after
+          // the deadline; completed updates stay in place so a same-resource retry finishes the rest.
+          if (Date.now() >= deadline) break migration;
           moved.add(result.id);
           // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
           if (!result.metadata) {
@@ -3737,6 +3648,12 @@ Notes:
             },
           });
         }
+      }
+      if (!complete) {
+        throw new Error(
+          `Observation vector migration in index "${indexName}" did not complete within 120 seconds ` +
+            `(${moved.size} vector IDs processed). The store may still be returning stale results; retry the transfer.`,
+        );
       }
     }
   }
@@ -3876,8 +3793,8 @@ Notes:
   }
 
   /**
-   * Embed cloned messages for semantic recall.
-   * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
+   * Embed cloned messages for semantic recall. Cloned messages have new ids, so they get rows of
+   * their own next to the source thread's rows.
    */
   private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfigInternal): Promise<void> {
     // A self-embedding store needs no embedder: it receives the text and embeds it itself.
@@ -3885,104 +3802,7 @@ Notes:
       return;
     }
 
-    const embeddingData: Array<{
-      embeddings: number[][];
-      /** Chunk texts, populated only when the store embeds the text itself. */
-      documents?: string[];
-      metadata: Array<
-        Record<string, unknown> & {
-          message_id: string;
-          thread_id: string | undefined;
-          resource_id: string | undefined;
-        }
-      >;
-    }> = [];
-    let dimension: number | undefined;
-
-    // Process embeddings concurrently
-    await Promise.all(
-      messages.map(async message => {
-        let textForEmbedding: string | null = null;
-
-        if (
-          message.content?.content &&
-          typeof message.content.content === 'string' &&
-          message.content.content.trim() !== ''
-        ) {
-          textForEmbedding = message.content.content;
-        } else if (message.content?.parts && message.content.parts.length > 0) {
-          // Extract text from all text parts, concatenate
-          const joined = message.content.parts
-            .filter((part: { type: string }) => part.type === 'text')
-            .map((part: { type: string; text?: string }) => (part as { type: string; text: string }).text)
-            .join(' ')
-            .trim();
-          if (joined) textForEmbedding = joined;
-        }
-
-        if (!textForEmbedding) return;
-
-        let embeddings: number[][] = [];
-        let documents: string[] | undefined;
-        let chunks: string[];
-        if (this.isSelfEmbedding) {
-          chunks = this.chunkText(textForEmbedding);
-          documents = chunks;
-        } else {
-          const result = await this.embedMessageContent(textForEmbedding);
-          dimension = result.dimension;
-          embeddings = result.embeddings;
-          chunks = result.chunks;
-        }
-
-        embeddingData.push({
-          embeddings,
-          documents,
-          metadata: chunks.map(() => ({
-            message_id: message.id,
-            thread_id: message.threadId,
-            resource_id: message.resourceId,
-            role: message.role,
-            content: textForEmbedding,
-            created_at: message.createdAt instanceof Date ? message.createdAt.toISOString() : String(message.createdAt),
-          })),
-        });
-      }),
-    );
-
-    // Batch all vectors into a single upsert call
-    if (embeddingData.length > 0 && (this.isSelfEmbedding || dimension !== undefined)) {
-      const { indexName } = await this.createEmbeddingIndex(dimension, config);
-
-      // Flatten all embeddings and metadata into single arrays
-      const allVectors: number[][] = [];
-      const allMetadata: Array<
-        Record<string, unknown> & {
-          message_id: string;
-          thread_id: string | undefined;
-          resource_id: string | undefined;
-        }
-      > = [];
-
-      const allDocuments: string[] = [];
-      for (const data of embeddingData) {
-        allVectors.push(...data.embeddings);
-        if (data.documents) allDocuments.push(...data.documents);
-        allMetadata.push(...data.metadata);
-      }
-
-      if (this.isSelfEmbedding) {
-        // `documents` is accepted only by self-embedding stores, so it is not on the shared
-        // UpsertVectorParams.
-        await this.vector.upsert({ indexName, documents: allDocuments, metadata: allMetadata } as never);
-      } else {
-        await this.vector.upsert({
-          indexName,
-          vectors: allVectors,
-          metadata: allMetadata,
-        });
-      }
-    }
+    await this.writeMessageVectors({ items: messages.map(message => ({ message })), config });
   }
 
   /**
@@ -4134,6 +3954,15 @@ Notes:
     // Get base processors from parent class
     const processors = await super.getInputProcessors(configuredProcessors, context);
 
+    // Older cores build the WorkingMemory processor with their own instruction text, so swap in one that
+    // renders through this instance. A WorkingMemory processor the user configured is left alone.
+    if (!coreRendersWorkingMemoryInstructionThroughMemory()) {
+      const index = processors.findIndex(p => p.id === 'working-memory' && !configuredProcessors.includes(p));
+      if (index !== -1) {
+        processors[index] = await this.createWorkingMemoryInstructionCompatProcessor(context);
+      }
+    }
+
     const om = await this.createOMProcessor(configuredProcessors, context);
     if (om) {
       processors.push(om);
@@ -4226,6 +4055,33 @@ Notes:
     const { ObservationalMemoryProcessor } = await import('./processors/observational-memory');
     return new ObservationalMemoryProcessor(engine, this, {
       temporalMarkers: effectiveConfig.temporalMarkers,
+    });
+  }
+
+  /**
+   * Builds the WorkingMemory input processor for cores without an instruction provider, from the same
+   * config core's `MastraMemory.getInputProcessors()` uses for the processor it replaces.
+   */
+  private async createWorkingMemoryInstructionCompatProcessor(
+    context?: RequestContext,
+  ): Promise<WorkingMemoryInstructionCompat> {
+    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const effectiveConfig = runtimeMemory?.memoryConfig
+      ? this.getMergedThreadConfig(runtimeMemory.memoryConfig)
+      : this.threadConfig;
+    const workingMemory = typeof effectiveConfig.workingMemory === 'object' ? effectiveConfig.workingMemory : undefined;
+
+    return new WorkingMemoryInstructionCompat({
+      storage: await this.getMemoryStore(),
+      template: workingMemory?.template ? { format: 'markdown', content: workingMemory.template } : undefined,
+      scope: workingMemory?.scope,
+      useVNext: workingMemory !== undefined && 'version' in workingMemory && workingMemory.version === 'vnext',
+      readOnly: effectiveConfig.readOnly,
+      agentManaged: workingMemory?.agentManaged,
+      defaultTemplate: DEFAULT_WORKING_MEMORY_TEMPLATE,
+      getWorkingMemoryTemplate: args => this.getWorkingMemoryTemplate(args),
+      renderInstruction: args =>
+        this.getWorkingMemoryInstruction(args) ?? this.renderBuiltInWorkingMemoryInstruction(args),
     });
   }
 

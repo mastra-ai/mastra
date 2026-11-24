@@ -275,7 +275,7 @@ When `replication` is set, Mastra rewrites its `MergeTree` and `ReplacingMergeTr
 - `zookeeperPath`: `'/clickhouse/tables/{shard}/{database}/{table}'`
 - `replicaName`: `'{replica}'`
 
-The defaults match the most common self-managed convention. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match. Mastra doesn't read your cluster's convention from Keeper, so a mismatched default writes Mastra's metadata to a separate branch from the rest of the cluster.
+The defaults match the most common self-managed convention. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match, because Mastra doesn't read your cluster's convention from Keeper: a mismatched default writes Mastra's metadata to a separate branch from the rest of the cluster.
 
 ```typescript
 new ClickhouseStoreVNext({
@@ -397,7 +397,7 @@ await observability.init()
 In CI/CD pipelines, set `disableInit: true` on `ClickhouseStore` and run `init()` from a deployment step that uses elevated credentials. Runtime application credentials need:
 
 - `SELECT` and `INSERT` on the Mastra tables.
-- `ALTER DELETE` on the observability tables you delete from. On ClickHouse 26.6 and earlier, lightweight deletes also require `ALTER UPDATE` on those tables; ClickHouse 26.7 removed that requirement.
+- `ALTER DELETE` on the observability tables you delete from. On ClickHouse 26.6 and earlier, lightweight deletes also require `ALTER UPDATE` on those tables. ClickHouse 26.7 removed that requirement.
 
 ## Observability
 

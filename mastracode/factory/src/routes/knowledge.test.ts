@@ -1,4 +1,5 @@
-import { Knowledge } from '@mastra/core/knowledge';
+import { resolveKnowledgeSessionScopes } from '@mastra/code-sdk/knowledge-scope';
+import { encodeKnowledgeScopeId, Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Hono } from 'hono';
@@ -7,6 +8,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+
+vi.mock('@mastra/code-sdk/knowledge-scope', async importOriginal => {
+  const actual = await importOriginal<typeof import('@mastra/code-sdk/knowledge-scope')>();
+  return { ...actual, resolveKnowledgeSessionScopes: vi.fn(actual.resolveKnowledgeSessionScopes) };
+});
 
 const ORG = 'org-1';
 const OTHER_ORG = 'org-2';
@@ -32,11 +38,13 @@ async function createHarness(
   options: {
     user?: { workosId: string; organizationId?: string } | null;
     declarations?: ConstructorParameters<typeof Knowledge>[0]['scopes'];
+    orgId?: string;
   } = {},
 ) {
+  const orgId = options.orgId ?? ORG;
   const factory = await createFactoryStorageForTests();
-  const project = await factory.projects.create({ orgId: ORG, userId: 'user-1', input: { name: 'P' } });
-  const other = await factory.projects.create({ orgId: ORG, userId: 'user-1', input: { name: 'Q' } });
+  const project = await factory.projects.create({ orgId, userId: 'user-1', input: { name: 'P' } });
+  const other = await factory.projects.create({ orgId, userId: 'user-1', input: { name: 'Q' } });
   const foreign = await factory.projects.create({ orgId: OTHER_ORG, userId: 'user-2', input: { name: 'X' } });
 
   const knowledge = new Knowledge({
@@ -48,9 +56,9 @@ async function createHarness(
   const scope = async (address: string, declaration: string, name: string, parentId?: string) =>
     (await store.materializeScope({ address, declaration, name, provenance: host, ...(parentId ? { parentId } : {}) }))
       .scope;
-  const org = await scope(`org:${ORG}`, 'org:$orgId', 'Org one');
-  const p = await scope(`project:${project.id}`, 'project:$projectId', 'Project P', org.id);
-  const q = await scope(`project:${other.id}`, 'project:$projectId', 'Project Q', org.id);
+  const org = await scope(`org:${encodeKnowledgeScopeId(orgId)}`, 'org:$orgId', 'Org one');
+  const p = await scope(`project:${encodeKnowledgeScopeId(project.id)}`, 'project:$projectId', 'Project P', org.id);
+  const q = await scope(`project:${encodeKnowledgeScopeId(other.id)}`, 'project:$projectId', 'Project Q', org.id);
   const thread = await scope('thread:t-1', 'thread:$threadId', 'Session T', p.id);
   const otherOrg = await scope(`org:${OTHER_ORG}`, 'org:$orgId', 'Org two');
   const handbook = await store.createPage({ parentId: org.id, name: 'Handbook', provenance: host });
@@ -67,7 +75,7 @@ async function createHarness(
   });
 
   const app = new Hono();
-  const user = options.user === undefined ? { workosId: 'user-1', organizationId: ORG } : options.user;
+  const user = options.user === undefined ? { workosId: 'user-1', organizationId: orgId } : options.user;
   app.use('*', async (context, next) => {
     if (user) context.set('factoryAuthUser' as never, user as never);
     await next();
@@ -138,6 +146,14 @@ describe('Factory Knowledge routes on the page store', () => {
     expect(names(roots.body.pages)).toEqual(['Org one']);
     const underOrg = await h.get(`/tree?parentId=${h.org.id}`);
     expect(names(underOrg.body.pages)).toEqual(['Handbook', 'Project P']);
+  });
+
+  it('reads an org whose id contains a colon at its encoded address, as Factory sessions write it', async () => {
+    const h = await createHarness({ orgId: 'org:eu' });
+    expect(h.org.address).toBe('org:org%3Aeu');
+    const graph = await h.get('/graph');
+    expect(graph.status).toBe(200);
+    expect(names(graph.body.pages)).toEqual(['Deploy runbook', 'Handbook', 'Org one', 'Project P']);
   });
 
   it('reads the other project through its own route', async () => {
@@ -301,5 +317,25 @@ describe('Factory Knowledge routes on the page store', () => {
       const response = await h.app.request(`/web/factory/projects/${h.foreignProjectId}/knowledge/events`);
       expect(response.status).toBe(404);
     });
+  });
+
+  it('reads with exactly the scopes the session resolver gives an agent in that project, and refuses a foreign project', async () => {
+    const h = await createHarness();
+    const resolver = vi.mocked(resolveKnowledgeSessionScopes);
+    resolver.mockClear();
+    const readScopeFor = vi.spyOn(Knowledge.prototype, 'readScopeFor');
+    try {
+      expect((await h.get('/graph')).status).toBe(200);
+      const session = resolver.mock.results[0]?.value;
+      expect(session).toEqual({
+        resolved: true,
+        scopes: [`org:${encodeKnowledgeScopeId(ORG)}`, `project:${encodeKnowledgeScopeId(h.projectId)}`],
+      });
+      expect(readScopeFor).toHaveBeenCalledWith(session.scopes);
+      expect((await h.get('/graph', h.foreignProjectId)).status).toBe(404);
+      expect(resolver).toHaveBeenCalledTimes(1);
+    } finally {
+      readScopeFor.mockRestore();
+    }
   });
 });
