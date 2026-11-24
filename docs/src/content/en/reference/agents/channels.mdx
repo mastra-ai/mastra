@@ -464,10 +464,9 @@ When Slack chat runs through [Mastra Connect](/integrations/channels/slack#agent
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { channels } from '@mastra/connect'
-import { supportAgent } from './agents/support-agent'
 
 export const mastra = new Mastra({
-  agents: { supportAgent },
+  // ...
   channels: await channels({
     providers: { slack: { providerOptions: { generativeUI: true } } },
   }),
@@ -481,14 +480,14 @@ The agent doesn't need `channels.adapters`. Connect the Slack channel to the age
 
 When you manage your own Slack app with the [self-managed setup](/integrations/channels/slack#self-managed-setup), set `generativeUI` on the agent's Slack adapter instead:
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/generative-ui.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You are a helpful support assistant.',
+const agent = new Agent({
+  id: 'generative-ui-agent',
+  name: 'Generative UI Agent',
+  instructions: '...',
   model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
@@ -506,14 +505,14 @@ The tool returns `{ ok: true, messageId }` once the card is posted. When the spe
 
 ### Agent instructions
 
-A generic prompt such as `'You are a helpful support assistant.'` usually produces only a basic table or chart. Name the components the agent should use and when to use them. When `render_card` returns issues, agents also tend to simplify the card by dropping images or fields instead of fixing the spec, so tell the agent to keep every component:
+A generic prompt usually produces only a basic table or chart. Name the components the agent should use and when to use them. When `render_card` returns issues, agents also tend to simplify the card by dropping images or fields instead of fixing the spec, so tell the agent to keep every component:
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/generative-ui.ts"
 import { Agent } from '@mastra/core/agent'
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
+const agent = new Agent({
+  id: 'generative-ui-agent',
+  name: 'Generative UI Agent',
   instructions: `You are a support assistant for an internal deploy service.
 
 Use render_card for status updates and reports. Start each card with a Card that has a title.
