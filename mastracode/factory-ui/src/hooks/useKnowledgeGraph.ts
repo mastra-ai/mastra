@@ -29,13 +29,16 @@ const RETRY_MS = 3_000;
 /** Writes arrive in bursts (a page and its notes); one refetch covers the burst. */
 const BURST_MS = 150;
 
+const isTerminalReadError = (error: unknown) =>
+  error instanceof RequestError && (error.status === 404 || error.status === 422);
+
 /**
- * Refresh gate, so pages agents write show up while the page is open. Only a 404 is terminal; transient
- * errors keep polling. `paused` suspends it while the user is interacting; `live` slows it to a safety net
+ * Refresh gate, so pages agents write show up while the page is open. Missing and over-budget reads
+ * stop polling. `paused` suspends it while the user is interacting; `live` slows it to a safety net
  * while the change stream carries updates.
  */
 export function knowledgeRefetchInterval(error: unknown, paused: boolean, live = false): number | false {
-  if (error instanceof RequestError && error.status === 404) return false;
+  if (isTerminalReadError(error)) return false;
   if (paused) return false;
   return live ? LIVE_POLL_MS : POLL_MS;
 }
@@ -107,15 +110,13 @@ export function useKnowledgeLiveUpdates(factoryProjectId: string | undefined): b
   return connected;
 }
 
-const notFound = (error: unknown) => error instanceof RequestError && error.status === 404;
-
 export function useKnowledgeGraph(factoryProjectId: string | undefined, paused = false, live = false) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.knowledgeGraph(factoryProjectId),
     queryFn: factoryProjectId ? ({ signal }) => fetchKnowledgeGraph(baseUrl, factoryProjectId, signal) : skipToken,
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, paused, live),
-    retry: (failureCount, error) => !notFound(error) && failureCount < 2,
+    retry: (failureCount, error) => !isTerminalReadError(error) && failureCount < 2,
   });
 }
 
@@ -134,7 +135,7 @@ export function useKnowledgePage(
         : skipToken,
     // Only the first notes chunk polls; later chunks are fetched once as the user loads them.
     refetchInterval: query => (noteCursor ? false : knowledgeRefetchInterval(query.state.error, false, live)),
-    retry: (failureCount, error) => !notFound(error) && failureCount < 2,
+    retry: (failureCount, error) => !isTerminalReadError(error) && failureCount < 2,
   });
 }
 
@@ -154,7 +155,7 @@ export function useKnowledgeTreeLevels(
       // A level's first chunk refreshes, so new children appear in the tree and the page's child list.
       refetchInterval: (query: { state: { error: unknown } }) =>
         request.cursor ? false : knowledgeRefetchInterval(query.state.error, false, live),
-      retry: (failureCount: number, error: unknown) => !notFound(error) && failureCount < 2,
+      retry: (failureCount: number, error: unknown) => !isTerminalReadError(error) && failureCount < 2,
     })),
   });
 }
@@ -167,7 +168,7 @@ export function useKnowledgeActivity(factoryProjectId: string | undefined, pageI
       ? ({ signal }) => fetchKnowledgeActivity(baseUrl, factoryProjectId, pageId, signal)
       : skipToken,
     refetchInterval: query => knowledgeRefetchInterval(query.state.error, false, live),
-    retry: (failureCount, error) => !notFound(error) && failureCount < 2,
+    retry: (failureCount, error) => !isTerminalReadError(error) && failureCount < 2,
   });
 }
 

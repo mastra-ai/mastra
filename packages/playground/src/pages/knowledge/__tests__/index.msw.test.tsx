@@ -1,10 +1,10 @@
 import type { KnowledgeLinkCountsResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import KnowledgePage from '..';
 import {
   archiveScope,
@@ -130,6 +130,26 @@ describe('Knowledge page', () => {
       renderPage();
       expect(await screen.findByText('No pages yet')).toBeTruthy();
     });
+  });
+
+  it('stops polling the graph after the server refuses its read budget', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      let requests = 0;
+      withInstance();
+      server.use(
+        http.get(`${api}/main/graph`, () => {
+          requests++;
+          return HttpResponse.json({ error: 'Reduce the graph limits' }, { status: 422 });
+        }),
+      );
+      renderPage();
+      await screen.findByText('Failed to load Knowledge');
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(requests).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe('when the instance has pages', () => {

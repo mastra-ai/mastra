@@ -227,11 +227,22 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in view) return view.response;
           const maxPages = boundedLimit(c.req.query('maxPages'), MAX_GRAPH_PAGES);
           if (maxPages === null) return badRequest(c, `maxPages must be an integer from 1 to ${MAX_GRAPH_PAGES}.`);
-          const graph = await readKnowledgePageGraph(view.store, {
-            read: view.read,
-            rootId: boundedId(c.req.query('rootId')) ?? null,
-            ...(maxPages ? { limits: { maxPages } } : {}),
-          });
+          let graph;
+          try {
+            graph = await readKnowledgePageGraph(view.store, {
+              read: view.read,
+              rootId: boundedId(c.req.query('rootId')) ?? null,
+              ...(maxPages ? { limits: { maxPages } } : {}),
+            });
+          } catch (error) {
+            if (error instanceof Error && 'status' in error && error.status === 422) {
+              return c.json(
+                { error: 'query_too_expensive', message: 'Select a narrower root or reduce the graph limits.' },
+                422,
+              );
+            }
+            throw error;
+          }
           if (!graph) return c.json({ error: 'page_not_found' }, 404);
           // Declared grants between the scopes shown, limited to principal scopes this caller can read.
           const grants = await readKnowledgeScopeGrants(view.store, {

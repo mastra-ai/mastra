@@ -35,6 +35,8 @@ const pollUnless = (live: boolean) => (live ? LIVE_POLL_MS : POLL_MS);
 const isFinal = (error: unknown) =>
   error instanceof MastraClientError && ((error.status >= 400 && error.status < 500) || error.status === 501);
 
+const retryUnlessFinal = (failures: number, error: unknown) => !isFinal(error) && failures < 2;
+
 function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>(resolve => {
     const timer = setTimeout(resolve, ms);
@@ -115,12 +117,12 @@ export function useKnowledgeInstances() {
 /** The bounded page graph across every root scope; its pages also feed the tree. */
 export function useKnowledgePageGraph(knowledgeKey: string | undefined, live: boolean) {
   const client = useMastraClient();
-  return useQuery({
+  return useQuery<KnowledgeGraphResponse>({
     queryKey: ['knowledge', knowledgeKey, 'graph'],
-    queryFn: knowledgeKey
-      ? async (): Promise<KnowledgeGraphResponse> => client.getKnowledge(knowledgeKey).graph()
-      : skipToken,
-    refetchInterval: pollUnless(live),
+    queryFn: knowledgeKey ? () => client.getKnowledge(knowledgeKey).graph() : skipToken,
+    retry: retryUnlessFinal,
+    refetchInterval: ({ state }) =>
+      state.error instanceof MastraClientError && state.error.status === 422 ? false : pollUnless(live),
   });
 }
 
@@ -180,7 +182,6 @@ export function useKnowledgeTreeLevels(
 /** The most pages one link count request may ask about; the route rejects more. */
 const LINK_COUNT_BATCH = 200;
 /** A server with no link index answers 501 every time, and a refused caller the same; neither is retried. */
-const retryUnlessFinal = (failures: number, error: unknown) => !isFinal(error) && failures < 2;
 
 /** Exact link counts for the pages the graph holds, in batches. 501 (no link index) is an error the graph falls back from. */
 export function useKnowledgeLinkCounts(knowledgeKey: string | undefined, live: boolean, pageIds: string[]) {

@@ -24,6 +24,10 @@ describe('knowledgeRefetchInterval (poll pauses while the user interacts)', () =
     expect(knowledgeRefetchInterval(new RequestError('boom', 500), false)).toBe(5_000);
   });
 
+  it('stops polling when the requested graph exceeds the service budget', () => {
+    expect(knowledgeRefetchInterval(new RequestError('Reduce the graph limits', 422), false)).toBe(false);
+  });
+
   it('stops permanently on a 404 regardless of interaction', () => {
     expect(knowledgeRefetchInterval(new RequestError('gone', 404), false)).toBe(false);
     expect(knowledgeRefetchInterval(new RequestError('gone', 404), true)).toBe(false);

@@ -111,6 +111,16 @@ async function createHarness(
 const names = (pages: Array<{ name: string }>) => pages.map(page => page.name).sort();
 
 describe('Factory Knowledge routes on the page store', () => {
+  it('passes a hosted graph budget refusal through to the client', async () => {
+    const h = await createHarness();
+    vi.spyOn(h.store, 'listChildScopes').mockRejectedValue(
+      Object.assign(new Error('Reduce the graph limits'), { status: 422 }),
+    );
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/graph`);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: 'query_too_expensive' });
+  });
+
   it("labels scope pages with their declaration's displayLabel, filling in the address's params", async () => {
     const h = await createHarness({
       declarations: {
