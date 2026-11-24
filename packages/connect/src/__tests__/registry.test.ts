@@ -15,6 +15,7 @@ describe('shipped provider registry', () => {
       'confluence',
       'discord',
       'elevenlabs',
+      'figma',
       'fireflies',
       'github',
       'gitlab',

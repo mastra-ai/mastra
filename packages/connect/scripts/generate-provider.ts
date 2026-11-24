@@ -1536,6 +1536,351 @@ function attemptWritesOnce(action: ExtractedAction): ExtractedAction {
   return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
 }
 
+/**
+ * Checks the comment pin shapes most specific first. Zod drops unknown keys,
+ * so a region pin matched the bare point shape and lost its size.
+ */
+function figmaClientMetaOrder(count: number): StatementRewrite {
+  return {
+    pattern: /z\.union\(\[VectorSchema, FrameOffsetSchema, RegionSchema, FrameOffsetRegionSchema\]\)/,
+    replacement: 'z.union([FrameOffsetRegionSchema, RegionSchema, FrameOffsetSchema, VectorSchema])',
+    count,
+    what: 'comment pin order',
+  };
+}
+
+/** The frame a published component or set sits in, as Figma's REST spec describes it. */
+const FIGMA_FRAME_INFO: StatementRewrite = {
+  pattern: /const FrameInfoSchema = z\.object\(\{[\s\S]*?\}\);/,
+  replacement: `const FrameInfoSchema = z.object({
+  nodeId: z.string().optional(),
+  name: z.string().optional(),
+  backgroundColor: z.string().optional(),
+  pageId: z.string(),
+  pageName: z.string(),
+  containingStateGroup: z.object({ nodeId: z.string().optional(), name: z.string().optional() }).nullish(),
+  containingComponentSet: z.object({ nodeId: z.string().optional(), name: z.string().optional() }).nullish(),
+});`,
+  count: 1,
+  what: 'frame info',
+};
+
+/** Figma URLs write node ids with a dash (`node-id=91-1`); the API and its response keys use a colon. */
+const FIGMA_NODE_ID_HELPER = "const figmaNodeId = (id: string) => id.replace(/-/g, ':');";
+
+function figmaNodeIdDescription(pattern: RegExp, field: string, what: string): StatementRewrite {
+  return {
+    pattern,
+    replacement: `${field}.describe('${what}, as in "91:1". The "91-1" form from a Figma URL works too.')`,
+    count: 1,
+    what: 'node id description',
+  };
+}
+
+/**
+ * Corrections to the Figma templates, each found reviewing them against
+ * Figma's REST API spec:
+ * - Comment pins were matched least specific first, dropping their offsets.
+ * - Comments may omit `resolved_at`, and replies have a `null` `order_id`;
+ *   get_comment kept only node pins, dropping canvas and region pins.
+ * - The comments endpoint has no pages, yet list_comments offered a cursor.
+ * - Figma's version `next_page` pages back with `before`; list_versions read
+ *   and sent `after`, so it never offered older versions, and get_version
+ *   walked `prev_page` from the newest page, so it only searched one page.
+ * - Team component frames used snake_case keys Figma never sends, and team
+ *   component sets rejected the `null` state group Figma sends.
+ * - Agents copy node ids from Figma URLs, where they use a dash.
+ * - A 403 (missing scope or access) was reported as a missing component set.
+ * - list_styles read its team from connection metadata nobody sets; the other
+ *   team listings take `team_id` as input.
+ * - Dev resource responses carry optional error ids and full updated links.
+ * Drop an entry once the upstream template is fixed.
+ */
+const FIGMA_FIXES: Readonly<Record<string, ProviderActionFixes & { helpers?: readonly string[] }>> = {
+  'list-comments': {
+    statements: [
+      {
+        pattern:
+          /,\s*cursor: z\.string\(\)\.optional\(\)\.describe\('Pagination cursor\. Not used by this endpoint; reserved for future compatibility\.'\)/,
+        replacement: '',
+        count: 1,
+        what: 'unused cursor',
+      },
+      {
+        pattern: /,\s*next_cursor: z\.string\(\)\.optional\(\)/,
+        replacement: '',
+        count: 1,
+        what: 'unused next cursor',
+      },
+      {
+        pattern: /resolved_at: z\.string\(\)\.nullable\(\)/,
+        replacement: 'resolved_at: z.string().nullish()',
+        count: 1,
+        what: 'optional resolved_at',
+      },
+      figmaClientMetaOrder(2),
+    ],
+    exec: [
+      {
+        pattern: /providerComment\.resolved_at !== null/,
+        replacement: 'providerComment.resolved_at != null',
+        count: 1,
+        what: 'absent resolved_at',
+      },
+    ],
+  },
+  'create-comment': { statements: [figmaClientMetaOrder(1)] },
+  'get-comment': {
+    statements: [
+      {
+        pattern: /const ClientMetaSchema = z\.object\(\{[\s\S]*?\}\);/,
+        replacement: `const ClientMetaSchema = z.object({
+  node_id: z.string().optional(),
+  node_offset: NodeOffsetSchema.optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  region_height: z.number().optional(),
+  region_width: z.number().optional(),
+  comment_pin_corner: z.string().optional(),
+});`,
+        count: 1,
+        what: 'comment pin',
+      },
+      {
+        pattern: /client_meta: z\s*\.object\(\{\s*node_id[\s\S]*?\.optional\(\)\s*\}\)\s*\.optional\(\)/,
+        replacement: 'client_meta: ClientMetaSchema.optional()',
+        count: 1,
+        what: 'output comment pin',
+      },
+      {
+        pattern: /order_id: z\.string\(\)\.optional\(\)/,
+        replacement: 'order_id: z.string().nullish()',
+        count: 2,
+        what: 'reply order_id',
+      },
+    ],
+    exec: [
+      {
+        pattern: /\.\.\.\(comment\.client_meta != null && \{[\s\S]*?node_offset\.y\s*\}\s*\}\)\s*\}\s*\}\)/,
+        replacement: '...(comment.client_meta != null && { client_meta: comment.client_meta })',
+        count: 1,
+        what: 'comment pin mapping',
+      },
+      {
+        pattern: /comment\.order_id !== undefined/,
+        replacement: 'comment.order_id != null',
+        count: 1,
+        what: 'reply order_id',
+      },
+    ],
+  },
+  'list-comment-reactions': {
+    exec: [
+      {
+        pattern: /new URL\(providerResponse\.pagination\.next_page\)/,
+        replacement: "new URL(providerResponse.pagination.next_page, 'https://api.figma.com')",
+        count: 1,
+        what: 'relative next page',
+      },
+    ],
+  },
+  'list-versions': {
+    exec: [
+      {
+        pattern: /\.\.\.\(input\.cursor !== undefined && \{ after: input\.cursor \}\)/,
+        replacement: '...(input.cursor !== undefined && { before: input.cursor })',
+        count: 1,
+        what: 'older versions',
+      },
+      {
+        pattern:
+          /new URL\(nextPageUrl\);\s*const afterParam = url\.searchParams\.get\('after'\);\s*if \(afterParam\) \{\s*nextCursor = afterParam;\s*\}/,
+        replacement: `new URL(nextPageUrl, 'https://api.figma.com');
+const before = url.searchParams.get('before');
+if (before && before !== input.cursor && providerResponse.versions.length > 0) {
+  nextCursor = before;
+}`,
+        count: 1,
+        what: 'next cursor',
+      },
+    ],
+  },
+  'get-version': {
+    exec: [
+      {
+        pattern: /let params: Record<string, string> = \{\};/,
+        replacement: "let params: Record<string, string> = { page_size: '50' };\nlet pages = 0;",
+        count: 1,
+        what: 'version pages',
+      },
+      {
+        pattern:
+          /const prevPageUrl = parsed\.pagination\?\.prev_page;\s*if \(!prevPageUrl\) break;\s*params = Object\.fromEntries\(new URL\(prevPageUrl\)\.searchParams\.entries\(\)\);/,
+        replacement: `const nextPageUrl = parsed.pagination?.next_page;
+const before = nextPageUrl ? new URL(nextPageUrl, 'https://api.figma.com').searchParams.get('before') : null;
+// Figma repeats the last page instead of ending, so stop when the cursor stops moving.
+if (!before || before === params['before'] || parsed.versions.length === 0 || ++pages >= 100) break;
+params = { page_size: '50', before };`,
+        count: 1,
+        what: 'older version pages',
+      },
+    ],
+  },
+  'get-file-node': {
+    helpers: [FIGMA_NODE_ID_HELPER],
+    statements: [
+      {
+        pattern:
+          /(const ComponentSetSchema = z\.object\(\{[\s\S]*?documentationLinks: z\.array\(z\.object\(\{ uri: z\.string\(\) \}\)\))(,\s*remote: z\.boolean\(\))/,
+        replacement: '$1.optional()$2.optional()',
+        count: 1,
+        what: 'component set metadata',
+      },
+      figmaNodeIdDescription(
+        /node_id: z\.string\(\)\.describe\('The ID of the node to retrieve\. Example: "91:1"'\)/,
+        'node_id: z.string()',
+        'The ID of the node to retrieve',
+      ),
+    ],
+    exec: [
+      { pattern: /ids: input\.node_id/, replacement: 'ids: figmaNodeId(input.node_id)', count: 1, what: 'node id' },
+      {
+        pattern: /responseData\.nodes\[input\.node_id\]/,
+        replacement: 'responseData.nodes[figmaNodeId(input.node_id)]',
+        count: 1,
+        what: 'node lookup',
+      },
+    ],
+  },
+  'list-file-nodes': {
+    helpers: [FIGMA_NODE_ID_HELPER],
+    statements: [
+      figmaNodeIdDescription(
+        /ids: z\.array\(z\.string\(\)\.min\(1\)\)\.min\(1\)\.describe\('Node IDs to retrieve\. Example: \["91:1", "1:2"\]'\)/,
+        'ids: z.array(z.string().min(1)).min(1)',
+        'Node IDs to retrieve. The response keys each node by its colon form',
+      ),
+    ],
+    exec: [
+      {
+        pattern: /ids: input\.ids\.join\(','\)/,
+        replacement: "ids: input.ids.map(figmaNodeId).join(',')",
+        count: 1,
+        what: 'node ids',
+      },
+    ],
+  },
+  'render-images': {
+    helpers: [FIGMA_NODE_ID_HELPER],
+    statements: [
+      figmaNodeIdDescription(
+        /node_ids: z\.array\(z\.string\(\)\)\.nonempty\(\)\.describe\('Node IDs to render\. Example: \["91:1"\]'\)/,
+        'node_ids: z.array(z.string()).nonempty()',
+        'Node IDs to render. The response keys each image by its node id in colon form',
+      ),
+    ],
+    exec: [
+      {
+        pattern: /ids: input\.node_ids\.join\(','\)/,
+        replacement: "ids: input.node_ids.map(figmaNodeId).join(',')",
+        count: 1,
+        what: 'node ids',
+      },
+    ],
+  },
+  'get-component-set': {
+    exec: [
+      {
+        pattern:
+          /httpStatus === 404 \|\| httpStatus === 403\) \{([\s\S]*?)message: 'Component set not found or access denied'/,
+        replacement: "httpStatus === 404) {$1message: 'Component set not found'",
+        count: 1,
+        what: 'access errors',
+      },
+    ],
+  },
+  'list-styles': {
+    statements: [
+      {
+        pattern:
+          /cursor: z\.string\(\)\.optional\(\)\.describe\('Pagination cursor from the previous response\. Omit for the first page\.'\)/,
+        replacement: `team_id: z.string().describe('Team ID. Example: "1639747348117609063"'),
+    cursor: z
+      .string()
+      .regex(/^\\d+$/, 'cursor must be a number')
+      .optional()
+      .describe('Pagination cursor from the previous response. Omit for the first page.')`,
+        count: 1,
+        what: 'team input',
+      },
+    ],
+    exec: [
+      {
+        pattern: /const rawMetadata = await \w+\.getMetadata\(\);[\s\S]*?const teamId = metadataResult\.data\.team_id;/,
+        replacement: 'const teamId = input.team_id;',
+        count: 1,
+        what: 'team from input',
+      },
+      {
+        pattern:
+          /if \(input\.cursor !== undefined && Number\.isNaN\(after\)\) \{\s*throw new [\w.]+\(\{[\s\S]*?\}\);\s*\}/,
+        replacement: '',
+        count: 1,
+        what: 'cursor check in schema',
+      },
+    ],
+  },
+  'get-file-components': { statements: [FIGMA_FRAME_INFO] },
+  'get-file-component-sets': { statements: [FIGMA_FRAME_INFO] },
+  'list-components': { statements: [FIGMA_FRAME_INFO] },
+  'list-component-sets': { statements: [FIGMA_FRAME_INFO] },
+  'create-dev-resources': {
+    statements: [
+      {
+        pattern: /(file_key|node_id): z\.string\(\)\.nullable\(\)/,
+        replacement: '$1: z.string().nullish()',
+        count: 2,
+        what: 'optional error target',
+      },
+    ],
+  },
+  'update-dev-resources': {
+    statements: [
+      {
+        pattern: /links_updated: z\.array\(z\.string\(\)\)\.optional\(\)/,
+        replacement:
+          'links_updated: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).optional()',
+        count: 1,
+        what: 'updated links',
+      },
+      {
+        pattern: /id: z\.string\(\),(\s*)error: z\.string\(\)/,
+        replacement: 'id: z.string().optional(),$1error: z.string()',
+        count: 2,
+        what: 'optional error id',
+      },
+    ],
+    exec: [
+      {
+        pattern: /links_updated: providerResponse\.links_updated \?\? \[\]/,
+        replacement:
+          "links_updated: (providerResponse.links_updated ?? []).map(link => (typeof link === 'string' ? link : link.id))",
+        count: 1,
+        what: 'updated link ids',
+      },
+    ],
+  },
+};
+
+function adaptFigmaAction(action: ExtractedAction): ExtractedAction {
+  const fixes = FIGMA_FIXES[action.candidate.actionSlug];
+  let adapted = attemptWritesOnce(action);
+  if (fixes?.statements) adapted = rewriteModuleStatements(adapted, fixes.statements);
+  if (fixes?.exec) adapted = rewriteExecBody(adapted, fixes.exec);
+  if (fixes?.helpers) adapted = { ...adapted, moduleStatements: [...fixes.helpers, ...adapted.moduleStatements] };
+  return adapted;
+}
+
 /** Identifier fields of each GitLab update tool; any other field counts as an update. */
 const GITLAB_UPDATE_IDENTIFIERS: Readonly<Record<string, readonly string[]>> = {
   'update-group': ['id'],
@@ -2219,6 +2564,9 @@ function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction 
   if (action.candidate.providerId === 'zendesk') {
     return adaptZendeskAction(action);
   }
+  if (action.candidate.providerId === 'figma') {
+    return adaptFigmaAction(action);
+  }
   if (action.candidate.providerId === 'confluence') {
     return routeConfluenceThroughProviderBase(action);
   }
@@ -2373,6 +2721,22 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
  * template returns them because the provider does, but an agent has no use for
  * a credential and must not see one.
  */
+/**
+ * Actions deliberately left out of a toolset, keyed by `<providerId>/<actionSlug>`, with the reason recorded in the
+ * manifest's skipped actions. Use this for actions the generator could emit but agents shouldn't have.
+ */
+export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
+  // Figma's project endpoints need projects:read, which public OAuth apps can't request.
+  'figma/list-projects': 'excluded: needs projects:read, which public Figma OAuth apps cannot request',
+  'figma/get-project': 'excluded: needs projects:read, which public Figma OAuth apps cannot request',
+  'figma/list-files': 'excluded: needs projects:read, which public Figma OAuth apps cannot request',
+  // Mastra registers Figma webhooks itself; agents must not change where Figma sends events.
+  'figma/list-webhooks': 'excluded: webhooks are managed by Mastra, not agents',
+  'figma/get-webhook': 'excluded: webhooks are managed by Mastra, not agents',
+  'figma/update-webhook': 'excluded: webhooks are managed by Mastra, not agents',
+  'figma/delete-webhook': 'excluded: webhooks are managed by Mastra, not agents',
+};
+
 const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   // GET /v1/user echoes the account's raw API key; the masked xi_api_key_preview stays.
   elevenlabs: {
@@ -2830,6 +3194,11 @@ export async function generateProvider({
       actionSlug,
       toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
     };
+    const excluded = EXCLUDED_ACTIONS[`${providerId}/${actionSlug}`];
+    if (excluded) {
+      skipped.push({ candidate, reason: excluded });
+      continue;
+    }
     const result = extractAction(project, candidate);
     if (result.kind === 'ok') extracted.push(applyProviderActionOverrides(result.value));
     else skipped.push({ candidate, reason: result.reason });
