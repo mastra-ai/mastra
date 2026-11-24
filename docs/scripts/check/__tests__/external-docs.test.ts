@@ -201,6 +201,69 @@ describe('external-docs check', () => {
     expect(summary(findings)).toEqual([expect.stringMatching(/^mastra\/external-mdx-parse src\/site\/guide\.mdx/)])
   })
 
+  describe('a site with several sections', () => {
+    const REF_SOURCE = 'docs/src/site-ref'
+    const sections = (refRepo = 'mastra-ai/site') => ({
+      targets: [
+        MANIFEST.targets[0],
+        {
+          name: 'ref',
+          source: REF_SOURCE,
+          repo: refRepo,
+          branch: 'main',
+          dest: 'src/reference',
+          routeBasePath: '/reference',
+        },
+      ],
+    })
+    // `run` writes relative to the first section's source dir.
+    const ref = (file: string) => `../site-ref/${file}`
+    const site = (link: string, refSidebar = sidebar(['api'])) => ({
+      'index.mdx': page(`# Home\n\nSee [the API](${link}).`),
+      'sidebars.js': sidebar(['index']),
+      [ref('api.mdx')]: page('# API\n\n## Usage\n\nBack to [home](/).'),
+      [ref('sidebars.js')]: refSidebar,
+    })
+
+    it('resolves links and anchors across sections served under their routeBasePath', async () => {
+      expect(await run(site('/reference/api#usage'), sections())).toEqual([])
+    })
+
+    it('reports routes and anchors missing from another section', async () => {
+      for (const link of ['/reference/missing', '/api', '/reference/api#nope']) {
+        expect(summary(await run(site(link), sections()))).toEqual([
+          `mastra/external-${link.includes('#') ? 'anchor' : 'internal-link'} src/site/index.mdx:7`,
+        ])
+      }
+    })
+
+    it('checks each section against its own sidebars.js', async () => {
+      expect(summary(await run(site('/reference/api'), sections()))).toEqual([])
+      expect(summary(await run(site('/reference/api', sidebar([])), sections()))).toEqual([
+        'mastra/external-sidebar-unlinked-page src/site-ref/api.mdx',
+      ])
+    })
+
+    it('routes index pages and frontmatter ids under the section routeBasePath', async () => {
+      const files = {
+        ...site('/reference#overview'),
+        [ref('index.mdx')]: page('# Reference\n\n## Overview\n\nText.'),
+        [ref('renamed.mdx')]: page('# Renamed', 'id: client'),
+        [ref('sidebars.js')]: sidebar(['api', 'index', 'client']),
+      }
+      expect(await run(files, sections())).toEqual([])
+      files['index.mdx'] = page('# Home\n\nSee [the client](/reference/client) and [old](/reference/renamed).')
+      expect(summary(await run(files, sections()))).toEqual(['mastra/external-internal-link src/site/index.mdx:7'])
+    })
+
+    it('does not resolve links into a different site', async () => {
+      expect(summary(await run(site('/reference/api'), sections('mastra-ai/other')))).toEqual([
+        'mastra/external-internal-link src/site/index.mdx:7',
+        'mastra/external-internal-link src/site-ref/api.mdx:9',
+      ])
+    })
+  })
+
   it('does nothing when the manifest does not exist', async () => {
     expect(await run({ 'index.mdx': page('[broken](/nope)') }, null)).toEqual([])
   })

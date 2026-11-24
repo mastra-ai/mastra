@@ -20,6 +20,8 @@ Every pubsub-backed lease uses the `LeaseProvider` interface in `src/events/pubs
 
 Pubsub leases expire on the backend's clock (Redis `PEXPIRE`, or `Date.now()` in-process).
 
+A lease provider says nothing about evented execution on several processes. That needs a pubsub that redelivers unacknowledged events and a store with step guards. `EventEmitterPubSub` and `UnixSocketPubSub` implement leases and still don't qualify: neither hands a stopped worker's event to another worker.
+
 ## Run ownership
 
 Files: `execution-fence.ts`, `run-fence-scope.ts`, `run-registry.ts`, `../../storage/run-fencing.ts`.

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-import { main, mirror, syncTarget, validateManifest } from './sync-docs.mjs';
+import { main, mirror, syncRepo, validateManifest } from './sync-docs.mjs';
 
 const GIT_ENV = {
   GIT_AUTHOR_NAME: 'Test',
@@ -120,6 +120,10 @@ describe('validateManifest', () => {
     'source outside docs/': target({ source: 'packages/core' }),
     'source escaping docs/ with ..': target({ source: 'docs/../packages' }),
     'missing source dir': target({ source: 'docs/src/missing' }),
+    'routeBasePath without leading slash': target({ routeBasePath: 'reference' }),
+    'routeBasePath with trailing slash': target({ routeBasePath: '/reference/' }),
+    'routeBasePath with ..': target({ routeBasePath: '/../x' }),
+    'non-string routeBasePath': target({ routeBasePath: 1 }),
   };
   for (const [label, bad] of Object.entries(invalid)) {
     test(`rejects ${label}`, () => {
@@ -155,6 +159,60 @@ describe('validateManifest', () => {
     assert.throws(
       () => validateManifest({ targets: [target(), target({ name: 'two', dest: 'src/docs/sub' })] }, { rootDir: root }),
       /overlapping "dest"/,
+    );
+  });
+
+  test('accepts two sections of one site with distinct dests and routeBasePaths', () => {
+    const root = makeRoot();
+    writeFiles(path.join(root, 'docs/src/site-ref'), { 'api.mdx': '# API\n' });
+    const sections = [
+      target(),
+      target({ name: 'ref', source: 'docs/src/site-ref', dest: 'src/reference', routeBasePath: '/reference' }),
+    ];
+    assert.deepEqual(validateManifest({ targets: sections }, { rootDir: root }), sections);
+  });
+
+  test('rejects sections of one site that clash or diverge', () => {
+    const root = makeRoot();
+    writeFiles(path.join(root, 'docs/src/site-ref'), { 'api.mdx': '# API\n' });
+    const ref = (overrides = {}) =>
+      target({
+        name: 'ref',
+        source: 'docs/src/site-ref',
+        dest: 'src/reference',
+        routeBasePath: '/reference',
+        ...overrides,
+      });
+    const cases = [
+      [ref({ routeBasePath: undefined }), /same "routeBasePath"/],
+      [ref({ routeBasePath: '/' }), /same "routeBasePath"/],
+      [ref({ branch: 'other' }), /needs the same "branch"/],
+      [ref({ source: 'docs/src/site/nested' }), /overlapping "source"/],
+    ];
+    for (const [second, error] of cases) {
+      assert.throws(() => validateManifest({ targets: [target(), second] }, { rootDir: root }), error);
+    }
+    writeFiles(path.join(root, 'docs/src/site-api'), { 'client.mdx': '# Client\n' });
+    const api = ref({ name: 'api', source: 'docs/src/site-api', dest: 'src/api', routeBasePath: '/reference/api' });
+    assert.throws(
+      () => validateManifest({ targets: [target(), ref(), api] }, { rootDir: root }),
+      /targets\[1\] and targets\[2\]: nested "routeBasePath"/,
+    );
+    assert.doesNotThrow(() =>
+      validateManifest({ targets: [target(), ref(), { ...api, routeBasePath: '/referenced' }] }, { rootDir: root }),
+    );
+    // Different repos may reuse a routeBasePath, a branch, and even the same source.
+    assert.doesNotThrow(() =>
+      validateManifest(
+        {
+          targets: [
+            target(),
+            ref({ repo: 'mastra-ai/other', routeBasePath: undefined }),
+            target({ name: 'copy', repo: 'mastra-ai/copy' }),
+          ],
+        },
+        { rootDir: root },
+      ),
     );
   });
 
@@ -216,12 +274,12 @@ describe('mirror', () => {
   });
 });
 
-describe('syncTarget', () => {
+describe('syncRepo', () => {
   test('pushes exactly one commit with the fixed message, then is a no-op', async () => {
     const root = makeRoot();
     const remote = makeRemote();
 
-    const first = await syncTarget({ target: target(), remoteUrl: remote.url, sha: SHA, rootDir: root, log: quiet });
+    const first = await syncRepo({ targets: [target()], remoteUrl: remote.url, sha: SHA, rootDir: root, log: quiet });
     assert.deepEqual(first, { status: 'pushed', attempts: 1 });
     assert.equal(git(remote.bare, 'rev-list', '--count', 'main'), '2');
     assert.equal(
@@ -235,7 +293,7 @@ describe('syncTarget', () => {
     assert.deepEqual(remoteDest(remote.bare), SOURCE_FILES);
     assert.equal(git(remote.bare, 'show', 'main:README.md'), 'site', 'files outside dest are untouched');
 
-    const second = await syncTarget({ target: target(), remoteUrl: remote.url, sha: SHA, rootDir: root, log: quiet });
+    const second = await syncRepo({ targets: [target()], remoteUrl: remote.url, sha: SHA, rootDir: root, log: quiet });
     assert.deepEqual(second, { status: 'unchanged' });
     assert.equal(git(remote.bare, 'rev-list', '--count', 'main'), '2');
   });
@@ -253,8 +311,8 @@ describe('syncTarget', () => {
       git(competing, 'push', '--quiet', 'origin', 'main');
     };
 
-    const result = await syncTarget({
-      target: target(),
+    const result = await syncRepo({
+      targets: [target()],
       remoteUrl: remote.url,
       sha: SHA,
       rootDir: root,
@@ -270,9 +328,81 @@ describe('syncTarget', () => {
     );
   });
 
+  test('syncs every section of one site in a single commit, and retries all of them', async () => {
+    const root = makeRoot();
+    const REF_FILES = { 'api.mdx': '# API\n', 'sidebars.js': 'export default {};\n' };
+    writeFiles(path.join(root, 'docs/src/site-ref'), REF_FILES);
+    const remote = makeRemote();
+    const sections = [
+      target(),
+      target({ name: 'ref', source: 'docs/src/site-ref', dest: 'src/reference', routeBasePath: '/reference' }),
+    ];
+    const beforePush = () => {
+      const competing = path.join(tmp, 'competing');
+      git(tmp, 'clone', '--quiet', remote.url, competing);
+      writeFiles(competing, { 'src/reference/stray.mdx': 'stray\n', 'src/docs/guide.mdx': 'edited\n' });
+      git(competing, 'add', '--all');
+      git(competing, 'commit', '--quiet', '-m', 'competing commit');
+      git(competing, 'push', '--quiet', 'origin', 'main');
+    };
+
+    const lines = [];
+    const result = await syncRepo({
+      targets: sections,
+      remoteUrl: remote.url,
+      sha: SHA,
+      rootDir: root,
+      beforePush,
+      log: line => lines.push(line),
+    });
+    assert.deepEqual(result, { status: 'pushed', attempts: 2 });
+    assert.equal(git(remote.bare, 'rev-list', '--count', 'main'), '3', 'seed + competing + one sync commit');
+    assert.deepEqual(
+      git(remote.bare, 'show', '--name-only', '--format=', 'main').split('\n').sort(),
+      [
+        'src/docs/guide.mdx',
+        'src/docs/index.mdx',
+        'src/docs/nested/deep.mdx',
+        'src/docs/removed.mdx',
+        'src/docs/sidebars.js',
+        'src/reference/api.mdx',
+        'src/reference/sidebars.js',
+        'src/reference/stray.mdx',
+      ],
+      'the sync commit touches both dests',
+    );
+    assert.deepEqual(remoteDest(remote.bare), SOURCE_FILES);
+    assert.deepEqual(remoteDest(remote.bare, 'src/reference'), REF_FILES);
+    assert.ok(lines.includes('ref: added 2, updated 0, deleted 0'));
+
+    const again = await syncRepo({ targets: sections, remoteUrl: remote.url, sha: SHA, rootDir: root, log: quiet });
+    assert.deepEqual(again, { status: 'unchanged' });
+  });
+
+  test('refuses targets from different repos or branches', async () => {
+    await assert.rejects(
+      syncRepo({
+        targets: [target(), target({ name: 'b', repo: 'mastra-ai/b' })],
+        remoteUrl: 'unused',
+        sha: SHA,
+        log: quiet,
+      }),
+      /share one repo and branch/,
+    );
+    await assert.rejects(
+      syncRepo({
+        targets: [target(), target({ name: 'b', dest: 'src/b', branch: 'dev' })],
+        remoteUrl: 'unused',
+        sha: SHA,
+        log: quiet,
+      }),
+      /share one repo and branch/,
+    );
+  });
+
   test('rejects an invalid sha', async () => {
     await assert.rejects(
-      syncTarget({ target: target(), remoteUrl: 'unused', sha: 'HEAD', log: quiet }),
+      syncRepo({ targets: [target()], remoteUrl: 'unused', sha: 'HEAD', log: quiet }),
       /Invalid source commit sha/,
     );
   });
@@ -292,7 +422,7 @@ describe('syncTarget', () => {
     const before = git(bare, 'rev-parse', 'main');
 
     await assert.rejects(
-      syncTarget({ target: target(), remoteUrl: pathToFileURL(bare).href, sha: SHA, rootDir: root, log: quiet }),
+      syncRepo({ targets: [target()], remoteUrl: pathToFileURL(bare).href, sha: SHA, rootDir: root, log: quiet }),
       /Refusing to sync through symlink/,
     );
     assert.deepEqual(fs.readdirSync(outside), []);
@@ -320,6 +450,22 @@ describe('main', () => {
     assert.equal(code, 0);
     assert.deepEqual(lines, ['site: added 4, updated 0, deleted 0']);
     assert.deepEqual(readTree(path.join(into, 'src/docs')), SOURCE_FILES);
+  });
+
+  test('--into refuses a selection that spans more than one site', async () => {
+    const root = makeRoot();
+    const into = path.join(tmp, 'checkout');
+    const errors = [];
+    const code = await main({
+      argv: ['--target', 'all', '--into', into],
+      rootDir: root,
+      manifestPath: writeManifest(root, [target(), target({ name: 'other', repo: 'mastra-ai/other' })]),
+      log: () => {},
+      logError: line => errors.push(line),
+    });
+    assert.equal(code, 2);
+    assert.match(errors.join('\n'), /--into takes one site/);
+    assert.equal(fs.existsSync(into), false);
   });
 
   test('--into refuses a dest reached through a symlink in the checkout', async () => {
@@ -367,8 +513,8 @@ describe('main', () => {
     });
 
     assert.equal(code, 1);
-    assert.match(errors.join('\n'), /broken: sync failed/);
-    assert.match(errors.join('\n'), /Failed targets: broken$/);
+    assert.match(errors.join('\n'), /mastra-ai\/broken: sync failed/);
+    assert.match(errors.join('\n'), /Failed repos: mastra-ai\/broken$/);
     assert.deepEqual(remoteDest(good.bare), SOURCE_FILES);
 
     const rootSha = git(root, 'rev-parse', 'HEAD');
@@ -378,6 +524,28 @@ describe('main', () => {
       git(good.bare, 'log', '-1', '--format=%b', 'main'),
       `Source: https://github.com/mastra-ai/mastra/commit/${rootSha}`,
     );
+  });
+
+  test('--push --target all syncs the sections of one site as one commit', async () => {
+    const root = makeRoot();
+    writeFiles(path.join(root, 'docs/src/site-ref'), { 'api.mdx': '# API\n' });
+    git(root, 'add', '--all');
+    git(root, 'commit', '--quiet', '-m', 'ref');
+    const remote = makeRemote();
+    const code = await main({
+      argv: ['--target', 'all', '--push'],
+      rootDir: root,
+      manifestPath: writeManifest(root, [
+        target(),
+        target({ name: 'ref', source: 'docs/src/site-ref', dest: 'src/reference', routeBasePath: '/reference' }),
+      ]),
+      remoteUrl: () => remote.url,
+      log: quiet,
+      logError: quiet,
+    });
+    assert.equal(code, 0);
+    assert.equal(git(remote.bare, 'rev-list', '--count', 'main'), '2', 'seed + one sync commit');
+    assert.deepEqual(remoteDest(remote.bare, 'src/reference'), { 'api.mdx': '# API\n' });
   });
 
   test('rejects an unknown target and conflicting modes', async () => {

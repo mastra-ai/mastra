@@ -1,0 +1,44 @@
+---
+title: "Model policy"
+description: Restrict which providers and models the Agent Builder exposes, pin a default model, and lock the picker.
+---
+
+# Model policy
+
+The model policy controls which providers and models Builder-created agents can use, which model is selected by default, and whether end users can change it. Define the policy in `builder.configuration.agent.models`.
+
+## Quickstart
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          allowed: [
+            { provider: 'openai', modelId: '__AI_SDK_OPENAI_MODEL_BASE__' },
+            { provider: 'anthropic', modelId: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
+          ],
+        },
+      },
+    },
+  },
+})
+```
+
+This restricts the Builder's model picker to one OpenAI model and one Anthropic model. End users choose one when creating an agent.
+
+## Validation rules
+
+Mastra validates the model policy at server boot and throws an error for invalid configurations.
+
+- When `allowed` is empty or omitted, every registered model is available.
+- When `allowed` is non-empty, `default` (if set) must satisfy the allowlist. If `default` fails this check, Mastra throws an error at startup. Add the model to `allowed` or change `default`.
+- To hide the end-user model picker, set `features.agent.model: false` in [AgentBuilderOptions](/reference/agent-builder-options). When the picker is hidden, provide a `default` so new agents resolve a model.
+
+Registered providers (`provider: 'openai'`, `provider: 'anthropic'`, and so on) can omit `modelId` to allow every model from that provider.
+
+See the [`builder.configuration.agent.models`](/reference/builder-models) reference for every admin-writable field and validation rules.
