@@ -8,8 +8,8 @@ import type { RequestContextReader } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
-import { MODEL_FALLBACK_STATE_KEY, fallbackModelIdsToTry, pendingModelFallbackForThread } from '../model-fallback.js';
-import type { PendingModelFallback } from '../model-fallback.js';
+import { MODEL_FALLBACK_STATE_KEY, modelFallbacksToTry, pendingModelFallbackForThread } from '../model-fallback.js';
+import type { ModelFallback, PendingModelFallback } from '../model-fallback.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   getCustomProviderId,
@@ -498,24 +498,28 @@ const HOST_MODEL_ROUTE_CONTEXT_KEY = 'mastracodeHostModelRoute';
 export function setHostModelRoute(
   requestContext: RequestContext,
   primaryModelId: string | undefined,
-  fallbackModelIds: readonly string[] | undefined,
+  fallbacks: readonly ModelFallback[] | undefined,
 ): void {
-  if (!fallbackModelIds) {
+  if (!fallbacks) {
     requestContext.delete(HOST_MODEL_ROUTE_CONTEXT_KEY);
     return;
   }
-  const modelIds = primaryModelId
+  const route: ModelRouteEntry[] = primaryModelId
     ? [
-        primaryModelId,
-        ...fallbackModelIdsToTry(
+        { id: primaryModelId, label: primaryModelId, modelId: primaryModelId },
+        ...modelFallbacksToTry(
           primaryModelId,
-          fallbackModelIds,
+          fallbacks,
           modelId => canAuthenticateModel(modelId, requestContext),
           MODEL_ROUTE_MAX_ENTRIES - 1,
-        ),
+        ).map(({ modelId, thinkingLevel }) => ({
+          id: modelId,
+          label: modelId,
+          modelId,
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+        })),
       ]
     : [];
-  const route: ModelRouteEntry[] = modelIds.map(modelId => ({ id: modelId, label: modelId, modelId }));
   requestContext.set(HOST_MODEL_ROUTE_CONTEXT_KEY, route);
 }
 
@@ -527,25 +531,14 @@ export function requestModelRoute(
   requestContext: RequestContextReader | undefined,
   controller: { getState?: () => Record<string, unknown> | undefined; threadId?: unknown } | undefined,
 ): { entries: ModelRouteEntry[] | undefined; pending: PendingModelFallback | null } {
-  const state = controller?.getState?.();
-  const pending = pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId);
   const hostRoute = hostModelRoute(requestContext);
-  if (hostRoute) return heldHostRoute(hostRoute, pending);
+  if (hostRoute) return { entries: hostRoute, pending: null };
+  const state = controller?.getState?.();
   const entries = (state?.modelRoute as ModelRoute | undefined)?.entries;
   return {
     entries: Array.isArray(entries) ? entries.slice(0, MODEL_ROUTE_MAX_ENTRIES) : undefined,
-    pending,
+    pending: pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId),
   };
-}
-
-function heldHostRoute(
-  route: ModelRouteEntry[],
-  pending: PendingModelFallback | null,
-): { entries: ModelRouteEntry[]; pending: PendingModelFallback | null } {
-  const from = route.findIndex(entry => entry.id === pending?.fromEntryId);
-  const to = route.findIndex(entry => entry.id === pending?.toEntryId);
-  const held = pending && from >= 0 && to > from && Date.parse(pending.failure?.retryAt ?? '') > Date.now();
-  return held ? { entries: [...route.slice(to), ...route.slice(0, to)], pending } : { entries: route, pending: null };
 }
 
 function canAuthenticateModel(modelId: string, requestContext: RequestContext): boolean {
@@ -611,7 +604,10 @@ export function getDynamicModel(
     }
     let entryModel: ResolvedModel;
     try {
-      entryModel = resolveModel(routeEntry.modelId, resolveOptions);
+      entryModel = resolveModel(routeEntry.modelId, {
+        ...resolveOptions,
+        thinkingLevel: routeEntry.thinkingLevel ?? thinkingLevel,
+      });
     } catch {
       break;
     }

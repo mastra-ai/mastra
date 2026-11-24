@@ -60,7 +60,6 @@ import { dispatchEvent, getThreadLifecycleGeneration } from './event-dispatch.js
 import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { drainQueuedActionIfIdle } from './handlers/agent-lifecycle.js';
-import { leaveExpiredPackFallback } from './handlers/pack-fallback.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { applyCurrentThreadPack, listResolvableModePacks } from './model-packs/apply.js';
 import type { OnboardingResult } from './onboarding-inline.js';
@@ -90,8 +89,8 @@ import {
   renderExistingTasks,
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
-import type { MastraTUIOptions, PackFallbackStatus, TUIState } from './state.js';
-import { createTUIState, getGithubPrSubscriptionsFromMetadata, packFallbackStatusSchema } from './state.js';
+import type { MastraTUIOptions, TUIState } from './state.js';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
 import { resumeThreadOnStartup } from './thread-startup.js';
@@ -121,8 +120,19 @@ const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
-function fallbackStatusFromMetadata(metadata: Record<string, unknown> | undefined): PackFallbackStatus | undefined {
-  return packFallbackStatusSchema.safeParse(metadata?.[THREAD_FALLBACK_STATUS_KEY]).data;
+function fallbackStatusFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): { usingPack: string; failedPack: string } | undefined {
+  const persisted = metadata?.[THREAD_FALLBACK_STATUS_KEY];
+  if (
+    persisted &&
+    typeof persisted === 'object' &&
+    typeof (persisted as Record<string, unknown>).usingPack === 'string' &&
+    typeof (persisted as Record<string, unknown>).failedPack === 'string'
+  ) {
+    return persisted as { usingPack: string; failedPack: string };
+  }
+  return undefined;
 }
 
 export async function syncInitialThreadState(state: TUIState, isCurrent: () => boolean = () => true): Promise<void> {
@@ -460,8 +470,6 @@ export class MastraTUI {
         showInfo(this.state, 'No model selected. Use /model to select a model, or /connect to authenticate.');
         return;
       }
-      await leaveExpiredPackFallback(this.getEventContext());
-      if (this.stopped) return;
 
       const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
       this.state.pendingImages = [];

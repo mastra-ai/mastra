@@ -24,6 +24,7 @@ export interface ModelRouteEntry {
   id: string;
   label: string;
   modelId: string;
+  thinkingLevel?: ThinkingLevelSetting;
   accountId?: string;
   memoryModelId?: string;
 }

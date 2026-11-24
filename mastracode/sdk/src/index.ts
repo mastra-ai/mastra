@@ -110,6 +110,7 @@ import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowled
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import { MODEL_FALLBACK_STATE_KEY } from './model-fallback.js';
+import type { ModelFallback } from './model-fallback.js';
 import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableOmPacks, resolveAutoOMModelId } from './onboarding/packs.js';
 import {
@@ -412,15 +413,18 @@ export interface MastraCodeConfig {
     requestContext: RequestContext;
   }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
   /**
-   * Host-owned fallback model IDs, tried in order for the current request when
+   * Host-owned fallback models, tried in order for the current request when
    * the session model is rate-limited, out of credits, unauthorized or
-   * unavailable. A tenant credential store that disallows environment keys skips
-   * the fallbacks it holds no key for. Called on every model resolution; the next
-   * request starts on the session model again.
+   * unavailable. Each fallback runs at its own thinking level, else the
+   * request's level. A tenant credential store that disallows environment keys
+   * skips the fallbacks it holds no key for. Called on every model resolution;
+   * the next request starts on the session model again.
    * When set, this route replaces the session's `modelRoute` packs and the
    * pending-hop stickiness on every request, even when it returns `[]`.
    */
-  resolveModelFallbacks?: (ctx: { requestContext: RequestContext }) => readonly string[] | Promise<readonly string[]>;
+  resolveModelFallbacks?: (ctx: {
+    requestContext: RequestContext;
+  }) => readonly ModelFallback[] | Promise<readonly ModelFallback[]>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */

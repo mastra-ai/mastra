@@ -250,7 +250,6 @@ describe('getDynamicModel model route', () => {
         threadId?: string;
         reason: 'pool-exhausted' | 'persistent-outage';
         at: string;
-        failure?: { kind: 'rate_limited'; retryAt?: string };
       };
     },
   ) {
@@ -422,54 +421,26 @@ describe('getDynamicModel model route', () => {
     expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2']);
   });
 
-  const hostHop = {
-    fromEntryId: 'anthropic/claude-fable-5',
-    toEntryId: 'openai/gpt-5.6-sol',
-    toModelId: 'openai/gpt-5.6-sol',
-    threadId: 'thread-1',
-    reason: 'pool-exhausted',
-    at: '2026-10-05T00:00:00.000Z',
-  } as const;
-  const limitedUntil = (retryAt: string) => ({ ...hostHop, failure: { kind: 'rate_limited', retryAt } as const });
-  const FUTURE = '2999-01-01T00:00:00.000Z';
+  it('starts a host route on the session model even when an earlier request left a pending hop', () => {
+    const request = requestWithSession('anthropic/claude-fable-5', {
+      threadId: 'thread-1',
+      pending: {
+        fromEntryId: 'anthropic/claude-fable-5',
+        toEntryId: 'openai/gpt-5.6-sol',
+        toModelId: 'openai/gpt-5.6-sol',
+        threadId: 'thread-1',
+        reason: 'pool-exhausted',
+        at: '2026-10-05T00:00:00.000Z',
+      },
+    });
+    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', [{ modelId: 'openai/gpt-5.6-sol' }]);
 
-  it.each([
-    [
-      'keeps a host route on its fallback until the provider retry time, with the session model last',
-      limitedUntil(FUTURE),
-      ['openai/gpt-5.6-sol'],
-      ['openai/gpt-5.6-sol', 'anthropic/claude-fable-5'],
-    ],
-    [
-      'starts a host route on the session model when the switch recorded no retry time',
-      hostHop,
-      ['openai/gpt-5.6-sol'],
-      ['anthropic/claude-fable-5', 'openai/gpt-5.6-sol'],
-    ],
-    [
-      'starts a host route on the session model once the retry time has passed',
-      limitedUntil('2020-01-01T00:00:00.000Z'),
-      ['openai/gpt-5.6-sol'],
-      ['anthropic/claude-fable-5', 'openai/gpt-5.6-sol'],
-    ],
-    [
-      'starts a host route on the session model when the fallback was removed',
-      limitedUntil(FUTURE),
-      ['openai/gpt-5.4-mini'],
-      ['anthropic/claude-fable-5', 'openai/gpt-5.4-mini'],
-    ],
-    [
-      'starts a host route on the session model when the session model changed',
-      { ...limitedUntil(FUTURE), fromEntryId: 'openai/gpt-5.4-mini' },
-      ['openai/gpt-5.6-sol'],
-      ['anthropic/claude-fable-5', 'openai/gpt-5.6-sol'],
-    ],
-  ])('%s', (_, pending, fallbackModelIds, expectedIds) => {
-    const request = requestWithSession('anthropic/claude-fable-5', { threadId: 'thread-1', pending });
-    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', fallbackModelIds);
     const model = getDynamicModel(request);
 
-    expect(Array.isArray(model) ? model.map(entry => entry.id) : [model.id]).toEqual(expectedIds);
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual([
+      'anthropic/claude-fable-5',
+      'openai/gpt-5.6-sol',
+    ]);
   });
 
   it('starts on the session model when the host has no usable fallback, even with a pending hop', () => {
