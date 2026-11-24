@@ -244,7 +244,7 @@ function buttonIconProp(context) {
         if (attributes.has(prop)) continue;
         for (const icon of iconsAtEdge(content, prop, iconImports)) {
           // A loader belongs to `loading`, not to `icon`: button-loading reports it.
-          if (branches(icon).some(isLoader)) continue;
+          if (holdsLoader(icon)) continue;
           context.report({
             node: icon,
             message: `Pass this icon through <${name}>'s \`${prop}\` prop, not as a child beside the label.`,
@@ -277,6 +277,14 @@ function isLoader(node) {
   return classValues(className).some(value => /(^|[\s:])animate-spin(\s|$)/.test(value));
 }
 
+// Is a loader in there, under any wrapper or condition?
+const holdsLoader = node =>
+  branches(node).some(
+    option =>
+      isLoader(option) ||
+      ((option.type === 'JSXElement' || option.type === 'JSXFragment') && option.children.some(holdsLoader)),
+  );
+
 function buttonLoading(context) {
   const { components = LOADING_BUTTONS } = context.options[0] ?? {};
   const names = new Set(components);
@@ -307,6 +315,8 @@ function buttonLoading(context) {
       case 'JSXElement':
       case 'JSXFragment':
         return node.children;
+      case 'ArrayExpression':
+        return node.elements.filter(Boolean);
       case 'ConditionalExpression':
         return [node.consequent, node.alternate];
       case 'LogicalExpression':
@@ -370,6 +380,12 @@ function buttonLoading(context) {
   const isNot = node => node.type === 'UnaryExpression' && node.operator === '!';
   const textOf = node => sourceCode.getText(unwrap(node)).replace(/\s+/g, '').replaceAll('?.', '.');
 
+  function opposite(value) {
+    if (value.type !== 'BinaryExpression' || !/^[!=]==?$/.test(value.operator)) return `!${textOf(value)}`;
+    const operator = value.operator.replace(/^[!=]/, sign => (sign === '!' ? '=' : '!'));
+    return `${textOf(value.left)}${operator}${textOf(value.right)}`;
+  }
+
   function operands(node, operator) {
     const value = unwrap(node);
     if (value.type !== 'LogicalExpression' || value.operator !== operator) return [value];
@@ -398,10 +414,8 @@ function buttonLoading(context) {
   // the finished label back until then.
   function isDecidedBy(states, test) {
     const value = unwrap(test);
-    if (states.has(textOf(value))) return true;
+    if (states.has(textOf(value)) || states.has(opposite(value))) return true;
     if (isNot(value)) return isDecidedBy(states, value.argument);
-    if (value.type === 'BinaryExpression' && value.operator.startsWith('!='))
-      return states.has(`${textOf(value.left)}${value.operator.replace('!', '=')}${textOf(value.right)}`);
     if (value.type !== 'LogicalExpression') return false;
     if (value.operator === '||') return operands(value, '||').some(side => isDecidedBy(states, side));
     return operands(value, '&&').some(side => states.has(textOf(side)));
@@ -440,7 +454,7 @@ function buttonLoading(context) {
       const name = jsxName(node.openingElement.name);
       if (!names.has(name)) return;
       const attributes = attributesOf(node);
-      const content = [...node.children, ...['icon', 'iconEnd'].map(prop => attributes.get(prop)?.value)];
+      const content = [...node.children, ...['children', 'icon', 'iconEnd'].map(prop => attributes.get(prop)?.value)];
       for (const loader of content.filter(Boolean).flatMap(loadersIn))
         context.report({
           node: loader,

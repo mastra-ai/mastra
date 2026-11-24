@@ -43,6 +43,10 @@ tester.run('button-loading', plugin.rules['button-loading'], {
       name: 'allows a finished label that waits for loading to end',
       code: jsx("<Button loading={saving}>{!saving && saved ? 'Saved' : 'Save'}</Button>"),
     },
+    {
+      name: 'allows a finished label that waits for a negated loading to end',
+      code: jsx("<Button loading={!ready}>{ready && saved ? 'Saved' : 'Save'}</Button>"),
+    },
     { name: 'allows a button that always loads', code: jsx('<Button loading>{busy ? "Saving" : "Save"}</Button>') },
     {
       name: 'allows branches that render the same',
@@ -165,6 +169,21 @@ tester.run('button-loading', plugin.rules['button-loading'], {
       errors: [label()],
     },
     {
+      name: 'flags the opposite of a negated loading',
+      code: jsx("<Button loading={!ready}>{ready ? 'Save' : 'Waiting…'}</Button>"),
+      errors: [label()],
+    },
+    {
+      name: 'flags the opposite of a compared loading',
+      code: jsx("<Button loading={state !== 'ready'}>{state === 'ready' ? 'Save' : 'Waiting…'}</Button>"),
+      errors: [label()],
+    },
+    {
+      name: 'flags children in an array',
+      code: jsx("<Button loading={saving}>{[saving ? 'Saving…' : 'Save', <Spinner key=\"spinner\" />]}</Button>"),
+      errors: [label(), loader()],
+    },
+    {
       name: 'flags loading made a boolean',
       code: jsx("<Button loading={Boolean(saving)}>{!!saving ? 'Saving…' : 'Save'}</Button>"),
       errors: [label()],
@@ -243,6 +262,11 @@ tester.run('button-loading', plugin.rules['button-loading'], {
       name: 'flags the children prop',
       code: jsx("<Button loading={saving} children={saving ? 'Saving…' : 'Save'} />"),
       errors: [label()],
+    },
+    {
+      name: 'flags a Spinner in the children prop',
+      code: jsx('<Button children={<Spinner />} />'),
+      errors: [loader()],
     },
     {
       name: "flags a DialogAction that changes with its Dialog's pending",

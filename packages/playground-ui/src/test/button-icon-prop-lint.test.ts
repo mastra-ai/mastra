@@ -55,6 +55,10 @@ tester.run('button-icon-prop', plugin.rules['button-icon-prop'], {
       name: 'leaves a loader beside the label to button-loading',
       code: jsx('<Button>{busy ? <Spinner /> : <IconPlusMedium />} Save {busy && <Spinner />}</Button>'),
     },
+    {
+      name: 'leaves a wrapped loader to button-loading',
+      code: jsx('<Button><span><Spinner /></span> Save</Button>'),
+    },
     { name: 'allows an avatar beside the label', code: jsx('<Button><Avatar name="Ada" /> Ada</Button>') },
     { name: 'allows a badge after the label', code: jsx('<Button>Runs <Badge>3</Badge></Button>') },
     { name: 'allows a key hint after the label', code: jsx('<Button>Search <Kbd>K</Kbd></Button>') },
