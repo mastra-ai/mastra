@@ -419,7 +419,7 @@ for (const run of recovered) {
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
-`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. A skip carries a `retryAt` when another process still owns the run or the recovery attempt times out. For an owned run, `retryAt` is when the claim expires unless the owner renews it. For a timeout, the result also includes `reason: 'recovery-timeout'`.
+`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. A skip carries a `retryAt` when another process still owns the run, a transient error interrupts recovery, or the recovery attempt times out. For an owned run, `retryAt` is when the claim expires unless the owner renews it. For a timeout, the result also includes `reason: 'recovery-timeout'`.
 
 If you call `recoverActiveRuns()` directly, use `retryAt` to schedule your own re-check. `mastra.recoverAllDurableAgents()` schedules eligible re-checks for you. It counts a timed-out attempt only as `skipped`, even if that attempt settles later.
 
