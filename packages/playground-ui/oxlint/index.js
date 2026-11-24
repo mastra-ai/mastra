@@ -421,10 +421,19 @@ function buttonLoading(context) {
     return operands(value, '&&').some(side => states.has(textOf(side)));
   }
 
+  // The same words in other markup, or beside another icon, are the same label.
+  function labelText(node) {
+    const value = unwrap(node);
+    if (isIcon(value, iconImports) || isNothing(value)) return '';
+    if (value.type === 'JSXElement' || value.type === 'JSXFragment') return value.children.map(labelText).join('');
+    if (value.type === 'JSXText' || value.type === 'Literal') return String(value.value).replace(/\s+/g, '');
+    return textOf(value);
+  }
+
   function changesWith(states, node) {
     const changes =
       node.type === 'ConditionalExpression'
-        ? textOf(node.consequent) !== textOf(node.alternate) &&
+        ? labelText(node.consequent) !== labelText(node.alternate) &&
           parts(node).some(hasText) &&
           isDecidedBy(states, node.test)
         : node.type === 'LogicalExpression' &&

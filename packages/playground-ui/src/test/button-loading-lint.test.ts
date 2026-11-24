@@ -53,6 +53,10 @@ tester.run('button-loading', plugin.rules['button-loading'], {
       code: jsx("<Button loading={saving}>{saving ? 'Save' : 'Save'}</Button>"),
     },
     {
+      name: 'allows branches with the same words in other markup',
+      code: jsx("<Button loading={saving}>{saving ? <><IconStop /> <b>Save all</b></> : 'Save all'}</Button>"),
+    },
+    {
       name: 'allows a class inside the label to change',
       code: jsx("<Button loading={saving}><span className={saving ? 'a' : 'b'}>Save</span></Button>"),
     },
