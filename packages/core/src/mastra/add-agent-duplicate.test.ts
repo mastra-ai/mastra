@@ -40,6 +40,25 @@ describe.each([
   });
 });
 
+describe('Mastra.addAgent with agents from an older @mastra/core copy', () => {
+  // Agents built by a core copy that predates engine policy have no registration hook.
+  function makeAgentWithoutPolicyHook(id: string) {
+    const agent = makeAgent(id);
+    Object.defineProperty(agent, '__registerExecutionEnginePolicy', { value: undefined });
+    return agent;
+  }
+
+  it('registers and re-registers the agent without an engine-policy hook', () => {
+    const mastra = new Mastra({ logger: false, durable: { executionEngine: 'default' } });
+    const agent = makeAgentWithoutPolicyHook('legacy');
+
+    expect(() => mastra.addAgent(agent, 'legacy')).not.toThrow();
+    expect(() => mastra.addAgent(agent, 'legacy')).not.toThrow();
+    expect(mastra.getAgent('legacy')).toBe(agent);
+    expect(agent.getMastraInstance()).toBe(mastra);
+  });
+});
+
 describe('Mastra.addAgent with stored agents', () => {
   it('preserves the registered agent when a published editor hydrates another stored version', () => {
     const mastra = new Mastra({ logger: false });

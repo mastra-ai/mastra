@@ -184,7 +184,7 @@ function SemanticRecallEntity() {
             render={({ field }) => (
               <Field className="gap-1.5">
                 <FieldLabel>Vector Store</FieldLabel>
-                <FieldDescription className="mt-0 text-placeholder">
+                <FieldDescription className="mt-0 text-subtle-foreground">
                   Select a vector store for semantic search
                 </FieldDescription>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
@@ -209,7 +209,7 @@ function SemanticRecallEntity() {
             render={({ field }) => (
               <Field className="gap-1.5">
                 <FieldLabel>Embedder Model</FieldLabel>
-                <FieldDescription className="mt-0 text-placeholder">
+                <FieldDescription className="mt-0 text-subtle-foreground">
                   Select an embedding model for semantic search
                 </FieldDescription>
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
@@ -310,7 +310,7 @@ function ObservationalMemoryFields() {
       <div className="grid grid-cols-2 gap-4">
         <Field className="gap-1.5">
           <FieldLabel>Provider</FieldLabel>
-          <FieldDescription className="mt-0 text-placeholder">
+          <FieldDescription className="mt-0 text-subtle-foreground">
             Provider for the observer and reflector agents
           </FieldDescription>
           <Controller
@@ -332,7 +332,7 @@ function ObservationalMemoryFields() {
 
         <Field className="gap-1.5">
           <FieldLabel>Model</FieldLabel>
-          <FieldDescription className="mt-0 text-placeholder">
+          <FieldDescription className="mt-0 text-subtle-foreground">
             Model for the observer and reflector agents
           </FieldDescription>
           <Controller
@@ -352,7 +352,7 @@ function ObservationalMemoryFields() {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Scope</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Whether observations are scoped per thread or shared across all threads for a resource. Resource scope
                 is deprecated and will be removed in a future release.
               </FieldDescription>
@@ -375,7 +375,7 @@ function ObservationalMemoryFields() {
           render={({ field }) => (
             <Field disabled={readOnly} className="gap-1.5">
               <FieldLabel>Share Token Budget</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Share token budget between observation and reflection
               </FieldDescription>
               <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
@@ -404,7 +404,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
       <div className="grid grid-cols-2 gap-4">
         <Field className="gap-1.5">
           <FieldLabel>Provider Override</FieldLabel>
-          <FieldDescription className="mt-0 text-placeholder">
+          <FieldDescription className="mt-0 text-subtle-foreground">
             Override the default model provider for the observer
           </FieldDescription>
           <Controller
@@ -426,7 +426,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
 
         <Field className="gap-1.5">
           <FieldLabel>Model Override</FieldLabel>
-          <FieldDescription className="mt-0 text-placeholder">
+          <FieldDescription className="mt-0 text-subtle-foreground">
             Override the default model for the observer
           </FieldDescription>
           <Controller
@@ -446,7 +446,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Message Tokens</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Token count of unobserved messages that triggers observation (default: 30000)
               </FieldDescription>
               <Input
@@ -472,7 +472,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Max Tokens Per Batch</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Maximum tokens per batch when observing multiple threads (default: 10000)
               </FieldDescription>
               <Input
@@ -498,7 +498,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Buffer Tokens</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Token interval for async buffering (fraction of messageTokens or absolute count, empty to use default
                 0.2, set 0 to disable)
               </FieldDescription>
@@ -530,7 +530,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Buffer Activation</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Ratio (0-1) of buffered observations to activate (default: 0.8)
               </FieldDescription>
               <Input
@@ -557,7 +557,7 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Block After</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Multiplier or absolute token count for synchronous blocking (default: 1.2)
               </FieldDescription>
               <Input
@@ -591,7 +591,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
       <div className="grid grid-cols-2 gap-4">
         <Field className="gap-1.5">
           <FieldLabel>Provider Override</FieldLabel>
-          <FieldDescription className="mt-0 text-placeholder">
+          <FieldDescription className="mt-0 text-subtle-foreground">
             Override the default model provider for the reflector
           </FieldDescription>
           <Controller
@@ -613,7 +613,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
 
         <Field className="gap-1.5">
           <FieldLabel>Model Override</FieldLabel>
-          <FieldDescription className="mt-0 text-placeholder">
+          <FieldDescription className="mt-0 text-subtle-foreground">
             Override the default model for the reflector
           </FieldDescription>
           <Controller
@@ -633,7 +633,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Observation Tokens</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Token count of observations that triggers reflection (default: 40000)
               </FieldDescription>
               <Input
@@ -659,7 +659,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Block After</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Multiplier or absolute token count for synchronous blocking (default: 1.2)
               </FieldDescription>
               <Input
@@ -685,7 +685,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
           render={({ field }) => (
             <Field className="gap-1.5">
               <FieldLabel>Buffer Activation</FieldLabel>
-              <FieldDescription className="mt-0 text-placeholder">
+              <FieldDescription className="mt-0 text-subtle-foreground">
                 Ratio (0-1) controlling when async reflection buffering starts
               </FieldDescription>
               <Input

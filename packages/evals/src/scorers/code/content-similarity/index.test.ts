@@ -100,4 +100,41 @@ describe('ContentSimilarityMetric', () => {
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(0);
   });
+
+  it('should count whitespace differences when ignoreWhitespace is false', async () => {
+    const whitespaceSensitiveMetric = createContentSimilarityScorer({ ignoreCase: true, ignoreWhitespace: false });
+    const scoreOf = async (input: string, output: string) => {
+      const result = await whitespaceSensitiveMetric.run(
+        createAgentTestRun({
+          inputMessages: [createTestMessage({ content: input, role: 'user', id: 'test-input' })],
+          output: [createTestMessage({ content: output, role: 'assistant', id: 'test-output' })],
+        }),
+      );
+      return result.score;
+    };
+
+    expect(await scoreOf('New York', 'NewYork')).toBeCloseTo(10 / 13);
+    expect(await scoreOf('The quick\nbrown fox', 'The quick brown fox')).toBeCloseTo(32 / 36);
+    expect(await scoreOf('ha ha', 'ha ha ha')).toBeCloseTo(8 / 11);
+  });
+
+  it('should count whitespace in texts with many distinct characters', async () => {
+    const metric = createContentSimilarityScorer({ ignoreCase: false, ignoreWhitespace: false });
+    const text = Array.from({ length: 0xffff }, (_, i) => String.fromCharCode(i))
+      .filter(char => /\S/.test(char))
+      .slice(0, 45311)
+      .join('');
+    const inputMessages = [createTestMessage({ content: text + ' '.repeat(100000), role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: text, role: 'assistant', id: 'test-output' })];
+    const result = await metric.run(createAgentTestRun({ inputMessages, output }));
+    expect(result.score).toBe(90620 / 190620);
+  });
+
+  it('should keep ignoring whitespace when only ignoreCase is passed', async () => {
+    const caseOnlyMetric = createContentSimilarityScorer({ ignoreCase: false });
+    const inputMessages = [createTestMessage({ content: 'New York', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'NewYork', role: 'assistant', id: 'test-output' })];
+    const result = await caseOnlyMetric.run(createAgentTestRun({ inputMessages, output }));
+    expect(result.score).toBe(1);
+  });
 });

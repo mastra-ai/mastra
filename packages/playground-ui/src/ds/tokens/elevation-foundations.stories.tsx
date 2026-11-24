@@ -12,7 +12,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'shadow-rim draws only the surface edge. shadow-raised and shadow-overlay compose that edge with a lip and drops; shadow-inset combines a highlight and rim for badges and avatars. The examples distinguish isolated edges from these complete recipes.',
+          'shadow-rim draws only the surface edge. shadow-raised and shadow-overlay compose an edge with drops; shadow-inset is the rim of badges and avatars. The examples distinguish isolated edges from these complete recipes.',
       },
     },
   },
@@ -33,7 +33,7 @@ export const ElevationFoundations: Story = {
     >
       <FoundationSection
         label="Rim — edge only"
-        description="shadow-rim draws a 1px inset --surface-rim with no highlight or drop. border-surface-rim uses the same color as a CSS border. Reserve the inset pixel when children touch this edge."
+        description="shadow-rim draws a 1px inset --surface-rim with no drop. border-surface-rim uses the same color as a CSS border. Reserve the inset pixel when children touch this edge."
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Specimen name="shadow-rim" note="Isolated inset edge on the canvas">
@@ -98,7 +98,7 @@ export const ElevationFoundations: Story = {
 
       <FoundationSection
         label="Inset — on the surface"
-        description="Badges and product avatars sit on a surface rather than above it, so they carry no drop. shadow-inset gives them a 1px top highlight from --inset-highlight and a 1px rim from --inset-rim. Both are neutral: the fill carries the color, never the edge."
+        description="Badges and product avatars sit on a surface rather than above it, so they carry no drop. shadow-inset gives them a 1px rim from --inset-rim. It is neutral: the fill carries the color, never the edge."
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Specimen name="shadow-inset" note="Badge and ProductAvatar">
@@ -109,7 +109,7 @@ export const ElevationFoundations: Story = {
               <Badge variant="success">Success</Badge>
             </div>
           </Specimen>
-          <Specimen name="Inset edge" note="Dark: white at 7% / 7%. Light: white at 55% / black at 8%.">
+          <Specimen name="Inset edge" note="Dark: white at 7%. Light: black at 8%.">
             <div className="flex h-20 items-center gap-3 rounded-xl bg-background p-4">
               <div className="size-12 rounded-lg bg-card shadow-inset" />
               <Txt variant="caption" tone="muted">
@@ -119,19 +119,14 @@ export const ElevationFoundations: Story = {
           </Specimen>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:max-w-80">
-          {['inset-highlight', 'inset-rim'].map(token => (
-            <Specimen key={token} name={`--${token}`}>
-              <div
-                role="img"
-                aria-label={`--${token} isolated edge`}
-                className="h-16 rounded-md"
-                style={{
-                  boxShadow:
-                    token === 'inset-highlight' ? `inset 0 1px 0 var(--${token})` : `inset 0 0 0 1px var(--${token})`,
-                }}
-              />
-            </Specimen>
-          ))}
+          <Specimen name="--inset-rim">
+            <div
+              role="img"
+              aria-label="--inset-rim isolated edge"
+              className="h-16 rounded-md"
+              style={{ boxShadow: 'inset 0 0 0 1px var(--inset-rim)' }}
+            />
+          </Specimen>
         </div>
       </FoundationSection>
     </FoundationPage>

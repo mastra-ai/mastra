@@ -12,7 +12,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -30,7 +30,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

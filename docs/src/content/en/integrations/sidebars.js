@@ -1288,6 +1288,22 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'other/cloudflare-workers',
+          label: 'Cloudflare Workers',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/digits',
+          label: 'Digits',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/digits.svg',
+          },
+        },
+        {
+          type: 'doc',
           id: 'other/fireflies',
           label: 'Fireflies.ai',
           customProps: {

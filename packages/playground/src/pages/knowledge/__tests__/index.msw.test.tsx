@@ -1,3 +1,4 @@
+import type { KnowledgeLinkCountsResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -55,6 +56,26 @@ const withInstance = (graph = knowledgeGraph) =>
     // A server on an older @mastra/core can't stream changes; the page then polls.
     http.get(`${api}/main/events`, () => HttpResponse.json({ error: 'Not implemented' }, { status: 501 })),
   );
+
+async function renderGestureCanvas() {
+  withInstance();
+  server.use(
+    http.get(`${api}/main/link-counts`, () => HttpResponse.json({ counts: {} } satisfies KnowledgeLinkCountsResponse)),
+  );
+  const { container } = renderPage('/knowledge?view=graph');
+  await screen.findAllByTestId('knowledge-page-node');
+  const pane = container.querySelector('.react-flow__pane');
+  const viewport = container.querySelector<HTMLElement>('.react-flow__viewport');
+  if (!pane || !viewport) throw new Error('Expected the loaded Knowledge canvas');
+  return {
+    pane,
+    position: () => {
+      const transform = viewport.style.transform.match(/^translate\(([^,]+)px,\s*([^)]+)px\) scale\(([^)]+)\)$/);
+      if (!transform) throw new Error(`Unexpected canvas transform: ${viewport.style.transform}`);
+      return { x: Number(transform[1]), y: Number(transform[2]), zoom: Number(transform[3]) };
+    },
+  };
+}
 
 /** An events route that stays open; `push` sends one change notice down it. */
 function withChangeStream() {
@@ -131,6 +152,50 @@ describe('Knowledge page', () => {
       expect(within(tree).getByText('Acme')).toBeTruthy();
       expect(await within(tree).findByText('Payments Service')).toBeTruthy();
       expect(within(tree).getByText('Deploy Runbook')).toBeTruthy();
+    });
+  });
+
+  describe('when a two-finger scroll moves across the graph', () => {
+    it('pans in both directions at the current zoom', async () => {
+      const { pane, position } = await renderGestureCanvas();
+      const before = position();
+
+      fireEvent.wheel(pane, { deltaX: 80, deltaY: 50 });
+
+      await waitFor(() => {
+        const after = position();
+        expect(after.x).toBeLessThan(before.x);
+        expect(after.y).toBeLessThan(before.y);
+        expect(after.zoom).toBe(before.zoom);
+      });
+    });
+  });
+
+  describe('when a trackpad pinch zooms in on the graph', () => {
+    it('increases the zoom', async () => {
+      const { pane, position } = await renderGestureCanvas();
+      const before = position();
+
+      // Browsers send trackpad pinches as wheel events with Ctrl set.
+      fireEvent.wheel(pane, { ctrlKey: true, deltaY: -100 });
+
+      await waitFor(() => expect(position().zoom).toBeGreaterThan(before.zoom));
+    });
+  });
+
+  describe('when a trackpad pinch reaches a zoom limit', () => {
+    it.each([
+      { button: 'Zoom out', deltaY: 4000, limit: 0.1 },
+      { button: 'Zoom in', deltaY: -4000, limit: 2 },
+    ])('disables $button', async ({ button, deltaY, limit }) => {
+      const { pane, position } = await renderGestureCanvas();
+      const control = screen.getByRole('button', { name: button });
+      expect(control.hasAttribute('disabled')).toBe(false);
+
+      fireEvent.wheel(pane, { ctrlKey: true, deltaY });
+
+      await waitFor(() => expect(position().zoom).toBe(limit));
+      expect(control.hasAttribute('disabled')).toBe(true);
     });
   });
 

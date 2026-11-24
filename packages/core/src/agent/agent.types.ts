@@ -17,11 +17,14 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
+import type { MastraModelOutput } from '../stream/base/output';
 import type { MastraStreamTransformOptions } from '../stream/types';
 import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
+import type { DurableAgentStreamResult } from './durable/types';
 import type { MessageListInput } from './message-list';
+
 import type { AgentSignalType } from './signals';
 import type { SubAgentGenerateResult } from './subagent';
 import type {
@@ -33,6 +36,10 @@ import type {
   AgentMethodType,
   MastraDBMessage,
 } from './types';
+
+/** Native streams retain model output APIs and expose lifecycle controls when durable execution is selected. */
+export type AgentStreamOutput<OUTPUT = undefined> = MastraModelOutput<OUTPUT> &
+  Partial<Pick<DurableAgentStreamResult<OUTPUT>, 'abort' | 'cleanup' | 'threadId' | 'resourceId'>>;
 
 // Re-export types for convenience
 export type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';

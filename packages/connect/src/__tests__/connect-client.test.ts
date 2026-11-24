@@ -509,6 +509,8 @@ describe('ConnectClient sessions and links', () => {
     integrationId: 'jira',
     connectUrl: 'https://connect.nango.dev/x',
     sessionToken: 'st',
+    // Self-hosted Nango: callers need this host for the connect SDK.
+    apiBaseUrl: 'https://nango.example.test',
     expiresAt: '2026-11-13T12:00:00.000Z',
   };
 

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../../../error';
 import type { PubSub } from '../../../events/pubsub';
-import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
-import { AgenticLoopBuilder } from '../../../loop/loop-builder';
+import { BaseAgenticLoopBuilder } from '../../../loop/base-loop-builder';
+import type { LoopContinuationPredicate } from '../../../loop/base-loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
 import { agentLoopTermination } from '../../../loop/shared/execution-outcome';
@@ -256,7 +256,7 @@ function liveOrRebuiltAgentSpan(
 }
 
 /**
- * Builds the durable agent loop on the shared `AgenticLoopBuilder` topology.
+ * Builds the durable agent loop on the shared `BaseAgenticLoopBuilder` shape.
  *
  * The durable loop implements the same agentic loop pattern as the main loop
  * (LLM execution → tool-call foreach → mapping → background check → signal
@@ -264,21 +264,18 @@ function liveOrRebuiltAgentSpan(
  * through workflow input/output so it is durable across process restarts and
  * execution engine replays.
  *
- * Migration status: every method is still a whole-method
- * override delegating to the durable step files. As the shared cores land,
- * these overrides shrink until only the runtime hooks remain (state
- * resolution via registry + serialized `messageListState`, pubsub chunk
- * transport, the evented `workflowFactory`, and snapshot policies).
+ * Every method delegates to the durable step files; behavior shared with the
+ * main loop lives in the shared step cores (`loop/shared`), not in a common
+ * superclass.
  */
-export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
+export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
   readonly #options?: DurableAgenticWorkflowOptions;
   readonly #maxSteps: number;
   readonly #shouldPersistSnapshot: ShouldPersistSnapshotFn;
 
   constructor(options?: DurableAgenticWorkflowOptions) {
-    // No main-loop params: the durable loop resolves its runtime from the run
-    // registry and serialized iteration state. Any base method that reads
-    // `this.params` on this path throws (see AgenticLoopBuilder).
+    // The durable loop resolves its runtime from the run registry and
+    // serialized iteration state rather than per-run params.
     super();
     this.#options = options;
     this.#maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
@@ -1251,12 +1248,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: state.state,
             };
 
+            // The state carries the facts across workers; the registry is the fallback for
+            // runs whose snapshots predate those fields.
+            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,
                 ...(textRewritten && { textRewritten }),
+                ...(stopCause && { stopCause }),
               });
             }
 
@@ -1264,10 +1266,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             // abandon it, but wait only after FINISH has released stream/generate callers.
             await finishResult.titleGeneration;
 
-            // The state carries the facts across workers; the registry is the fallback for
-            // runs whose snapshots predate those fields.
             const finishReason = finalOutput.stepResult?.reason;
-            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
             const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
             if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
               logger?.warn?.(
@@ -1350,8 +1349,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
             }
 
-            // A recovery that finds this step saved ends its own spans with the same outcome.
-            return { ...finalOutput, tracingTermination: termination };
+            // A recovery that finds this step saved ends its own spans with the same outcome and
+            // republishes FINISH with the same stop cause.
+            return { ...finalOutput, tracingTermination: termination, ...(stopCause && { stopCause }) };
           },
           { id: MAP_FINAL_OUTPUT_STEP_ID },
         )

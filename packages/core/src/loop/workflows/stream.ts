@@ -15,7 +15,7 @@ import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
-import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
+import { CONTINUATION_STOP_CAUSE_KEY, REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../shared/tool-abort-grace';
 import { createTimeoutAbortSignal, isMastraTimeoutError, settledOrElapsed } from '../timeout';
 import type { LoopRun } from '../types';
@@ -597,6 +597,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
         // The tripwire/abort status is communicated through the stepResult.reason
+        const stopCause = rest.tracingScope?.get(CONTINUATION_STOP_CAUSE_KEY);
         finishQueued = safeEnqueue(controller, {
           type: 'finish',
           runId,
@@ -608,6 +609,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               // runtime reason can be 'tripwire' | 'retry' from processors
               reason: executionResult.result.stepResult.reason,
             },
+            ...(stopCause ? { stopCause } : {}),
           },
         });
 

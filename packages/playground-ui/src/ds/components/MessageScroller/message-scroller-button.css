@@ -1,31 +1,13 @@
-/* Shadows only, never a border, matching the composer. Layer counts match so hover transitions. */
+/* A shadow rim, never a border, and the same drop as the composer. */
 [data-slot='message-scroller-button'] {
-  --scroller-button-drop:
-    inset 0 1px 0 var(--inset-highlight), 0 1px 2px oklch(0% 0 0deg / 30%), 0 4px 12px -2px oklch(0% 0 0deg / 32%),
-    0 12px 28px -8px oklch(0% 0 0deg / 28%);
-  --scroller-button-drop-lifted:
-    inset 0 1px 0 var(--inset-highlight), 0 1px 2px oklch(0% 0 0deg / 34%), 0 6px 16px -2px oklch(0% 0 0deg / 38%),
-    0 16px 36px -8px oklch(0% 0 0deg / 34%);
-
   background: var(--muted);
-  box-shadow: var(--scroller-button-drop);
+  box-shadow:
+    0 0 0 1px var(--overlay-rim),
+    var(--elevation-overlay);
 }
 
 html.light [data-slot='message-scroller-button'] {
-  --scroller-button-drop:
-    inset 0 0 0 0 transparent, 0 1px 2px oklch(0% 0 0deg / 6%), 0 4px 12px -2px oklch(0% 0 0deg / 8%),
-    0 12px 28px -8px oklch(0% 0 0deg / 8%);
-  --scroller-button-drop-lifted:
-    inset 0 0 0 0 transparent, 0 1px 2px oklch(0% 0 0deg / 8%), 0 6px 16px -2px oklch(0% 0 0deg / 11%),
-    0 16px 36px -8px oklch(0% 0 0deg / 11%);
-
   background: var(--card);
-}
-
-@media (hover: hover) {
-  [data-slot='message-scroller-button']:hover {
-    box-shadow: var(--scroller-button-drop-lifted);
-  }
 }
 
 [data-slot='message-scroller-button-glyph'] {

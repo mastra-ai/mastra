@@ -67,6 +67,8 @@ echo "Summarize the repo" | mastracode --prompt -
 | `1` | Error, aborted, or max turns reached |
 | `2` | Timeout |
 
+Warnings go to stderr in every output mode and don't change the exit code. For example, if the local embedder package `@mastra/fastembed` can't be loaded (a partial or broken install), the run still completes, but Mastra Code prints one `Warning: Memory recall is off: ...` line explaining that recall search won't work until you reinstall Mastra Code.
+
 ### Examples
 
 ```sh
