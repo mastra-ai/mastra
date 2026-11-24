@@ -17202,10 +17202,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/mastra/scheduler-integration.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-24",
+      "last_failure": "2026-11-24",
+      "reason": "versioning-fail"
     },
     "packages/core/src/mastra/scorer-hook-teardown.test.ts": {
       "tier": "out",
@@ -17868,10 +17868,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/schedules/worker.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": null,
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-24",
+      "last_failure": "2026-11-24",
+      "reason": "versioning-fail"
     },
     "packages/core/src/server/auth.test.ts": {
       "tier": "out",
