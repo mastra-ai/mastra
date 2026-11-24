@@ -46,7 +46,7 @@ export class WrappingSelectList implements Component, MouseAware {
   onConfirmMulti?: (items: SelectItem[]) => void;
 
   /**
-   * `card` style (inline prompts): an accent ❯ cursor and a bold label instead of a highlighted row,
+   * `card` style (inline prompts): an accent cursor and a bold label instead of a highlighted row,
    * and ●/○ instead of [x]/[ ] in multi-select mode.
    */
   private cardStyle: CardListStyle | undefined;

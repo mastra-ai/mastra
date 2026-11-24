@@ -185,7 +185,7 @@ export class AskQuestionBorderedBox {
 
   /**
    * Borderless card with a colored left bar (▎):
-   * - waiting for an answer: accent bar, bold question, ❯ options, hint
+   * - waiting for an answer: accent bar, bold question, → options, hint
    * - answered: muted question with the options frozen (✓ on the chosen ones), or "✓ answer" for
    *   free text; a card answered live keeps the height it had while waiting (see render)
    */
