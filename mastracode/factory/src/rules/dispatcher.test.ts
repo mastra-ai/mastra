@@ -3200,7 +3200,7 @@ describe('FactoryDecisionDispatcher', () => {
       controller: controller as never,
       transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
       boardEngine: {
-        submitInput: async input => {
+        requestMove: async input => {
           inputs.push(input);
           return {
             status: 'rejected',

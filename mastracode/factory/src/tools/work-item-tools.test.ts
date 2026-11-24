@@ -84,7 +84,7 @@ async function setup({
     {
       workItems: seed.workItems,
       boards,
-      boardEngine: { submitInput: transitionService.transition },
+      boardEngine: { requestMove: transitionService.transition },
       auditRecorder,
       sessions: { getSourceControlBySessionId: async () => sourceControl },
       // Without intake rules to read, the route list, as before intake order.

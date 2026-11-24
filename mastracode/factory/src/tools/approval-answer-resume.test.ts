@@ -280,7 +280,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           workItems: seeded.workItems,
           boards: createBoardRegistry(),
           boardEngine: {
-            submitInput: async request => ({
+            requestMove: async request => ({
               status: 'accepted',
               transitionId: randomUUID(),
               itemId: request.workItemId,

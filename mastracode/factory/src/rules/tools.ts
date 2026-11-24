@@ -123,7 +123,7 @@ export async function createFactoryTransitionTools(options: {
         if (!item) throw new Error('Bound Factory work item not found.');
         const board = boardForWorkItem(item);
 
-        const result = await options.boardEngine.submitInput({
+        const result = await options.boardEngine.requestMove({
           orgId: binding.orgId,
           factoryProjectId: binding.factoryProjectId,
           workItemId: binding.workItemId,
@@ -351,7 +351,7 @@ async function recordSelfReviewVerdict(input: {
   if (!updated) throw new Error('Bound Factory work item not found.');
   if (verdict === 'approve')
     return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt, selfReviewRounds: rounds };
-  const transition = await input.boardEngine.submitInput({
+  const transition = await input.boardEngine.requestMove({
     orgId: binding.orgId,
     factoryProjectId: binding.factoryProjectId,
     workItemId: binding.workItemId,

@@ -326,7 +326,7 @@ export function createFactoryWorkItemTools(
           ...(rerun ? { reenter: true } : {}),
         });
         if (!parsed.success) throw new Error(`"${stage}" is not a valid stage name.`);
-        const result = await deps.boardEngine.submitInput({
+        const result = await deps.boardEngine.requestMove({
           ...parsed.data,
           ...project,
           workItemId: item.id,

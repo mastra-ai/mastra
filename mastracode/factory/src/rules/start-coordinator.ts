@@ -360,7 +360,7 @@ export class FactoryStartCoordinator {
     const destinationStage = request.destinationStage;
     if (destinationStage && (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== destinationStage)) {
       if (!this.#boardEngine) throw new Error('Factory board engine is unavailable.');
-      const transition = await this.#boardEngine.submitInput({
+      const transition = await this.#boardEngine.requestMove({
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
         workItemId: prepared.item.id,

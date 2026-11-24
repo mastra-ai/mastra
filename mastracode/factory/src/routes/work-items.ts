@@ -900,7 +900,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             return c.json({ error: 'factory_transition_unavailable' }, 503);
           }
           await workItems.ensureReady();
-          const result = await boardEngine.submitInput({
+          const result = await boardEngine.requestMove({
             ...parsed,
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,

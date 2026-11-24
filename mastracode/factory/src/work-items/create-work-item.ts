@@ -18,7 +18,7 @@ import { CARD_NUMBER_METADATA_KEY } from './card-number.js';
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */
 export type FactoryAuditEmit = (input: EmitAuditInput) => Promise<void>;
 
-type TransitionResult = Awaited<ReturnType<FactoryBoardEngine['submitInput']>>;
+type TransitionResult = Awaited<ReturnType<FactoryBoardEngine['requestMove']>>;
 
 /** Attempts at each step after the upsert before a card that keeps changing under its creator is left as is. */
 const STEP_ATTEMPTS = 3;
@@ -226,7 +226,7 @@ export async function createFactoryWorkItem({
     request: Omit<FactoryTransitionRequest, 'expectedRevision'>,
   ): Promise<TransitionResult | undefined> => {
     for (let attempt = 1; revision !== undefined; attempt++) {
-      const transitioned = await boardEngine.submitInput({ ...request, expectedRevision: revision });
+      const transitioned = await boardEngine.requestMove({ ...request, expectedRevision: revision });
       // The result carries no timestamp, so `updatedAt` stays at the last write this call saw; the
       // commit has moved the card past it, so a later rollback keeps the card instead of guessing.
       if (transitioned.status === 'accepted') revision = transitioned.revision;

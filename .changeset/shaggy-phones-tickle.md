@@ -12,9 +12,9 @@ const factory = new MastraFactory({
   boardEngine: context => {
     const engine = createDispatcherBoardEngine(context);
     return {
-      submitInput: input => {
-        console.log('move', input.workItemId, input.stage);
-        return engine.submitInput(input);
+      requestMove: request => {
+        console.log('move', request.workItemId, request.stage);
+        return engine.requestMove(request);
       },
     };
   },

@@ -963,7 +963,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     if (committed.status !== 'committed' || !this.options.boardEngine) return;
     for (const entry of decisions) {
       if (entry.type !== 'transition') continue;
-      await this.options.boardEngine.submitInput({
+      await this.options.boardEngine.requestMove({
         orgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
         workItemId: item.id,

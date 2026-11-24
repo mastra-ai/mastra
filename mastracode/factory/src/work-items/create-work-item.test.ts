@@ -404,7 +404,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           return remove(args);
         };
         const boardEngine: CreateFactoryWorkItemArgs['boardEngine'] = {
-          submitInput: async request => {
+          requestMove: async request => {
             const at = request.ingress.identity.endsWith(':intake-route') ? 'route-move' : 'initial-entry';
             if (at === step) await interleave();
             const transitioned = await service.transition(request);

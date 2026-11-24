@@ -106,7 +106,7 @@ function buildApp(
       intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
       boardEngine: {
-        submitInput: input => {
+        requestMove: input => {
           engineInputs.push(input);
           return new DispatcherBoardEngine({
             transitionService: new FactoryTransitionService({
@@ -121,7 +121,7 @@ function buildApp(
                 committedHook.push({ workItemId: args.workItemId, fromStage: args.fromStage, toStage: args.toStage });
               },
             }),
-          }).submitInput(input);
+          }).requestMove(input);
         },
       },
       startCoordinator,

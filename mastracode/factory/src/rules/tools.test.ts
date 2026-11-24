@@ -330,7 +330,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      boardEngine: { submitInput: transition },
+      boardEngine: { requestMove: transition },
     });
 
     const result = await execute(
@@ -369,7 +369,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      boardEngine: { submitInput: transition },
+      boardEngine: { requestMove: transition },
     });
 
     const result = await execute(tools.factory_transition_work_item as ExecutableTool, context, {
@@ -490,7 +490,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      boardEngine: { submitInput: transition },
+      boardEngine: { requestMove: transition },
     });
 
     // Handing planning its turn in the live session rotates the binding row.
@@ -632,7 +632,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      boardEngine: { submitInput: transition } as never,
+      boardEngine: { requestMove: transition } as never,
     });
 
     await execute(tools.factory_transition_work_item as ExecutableTool, context, {
@@ -666,7 +666,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        boardEngine: { submitInput: transition } as never,
+        boardEngine: { requestMove: transition } as never,
         boards: olderWork,
       });
 
@@ -691,7 +691,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        boardEngine: { submitInput: transition } as never,
+        boardEngine: { requestMove: transition } as never,
         boards: olderWork,
       });
 
@@ -743,7 +743,7 @@ describe('factory_transition_work_item', () => {
         createFactoryTransitionTools({
           requestContext: requestContext(),
           storage,
-          boardEngine: { submitInput: vi.fn() } as never,
+          boardEngine: { requestMove: vi.fn() } as never,
           ...(boards ? { boards } : {}),
         });
 
@@ -779,7 +779,7 @@ describe('factory_transition_work_item', () => {
         const tools = await createFactoryTransitionTools({
           requestContext: context,
           storage,
-          boardEngine: { submitInput: vi.fn() } as never,
+          boardEngine: { requestMove: vi.fn() } as never,
         });
         await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { stages: ['intake'] } });
 
@@ -847,7 +847,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        boardEngine: { submitInput: vi.fn() } as never,
+        boardEngine: { requestMove: vi.fn() } as never,
       });
 
       await expect(
@@ -887,7 +887,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        boardEngine: { submitInput: vi.fn() } as never,
+        boardEngine: { requestMove: vi.fn() } as never,
       });
 
       await execute(tools.factory_record_review_verdict as ExecutableTool, context, {
@@ -991,7 +991,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: requestContext(),
         storage,
-        boardEngine: { submitInput: vi.fn() } as never,
+        boardEngine: { requestMove: vi.fn() } as never,
       });
 
       // Done grants no tools, so the reviewer's session loses the verdict tool with the move.
@@ -1005,7 +1005,7 @@ describe('factory_transition_work_item', () => {
       const workTools = await createFactoryTransitionTools({
         requestContext: requestContext(),
         storage,
-        boardEngine: { submitInput: vi.fn() } as never,
+        boardEngine: { requestMove: vi.fn() } as never,
       });
       expect(workTools).not.toHaveProperty('factory_record_review_verdict');
 
@@ -1014,7 +1014,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: requestContext(),
         storage: reviewStorage,
-        boardEngine: { submitInput: vi.fn() } as never,
+        boardEngine: { requestMove: vi.fn() } as never,
       });
       const schema = (tools.factory_record_review_verdict as ExecutableTool).inputSchema;
       expect(
@@ -1043,7 +1043,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        boardEngine: { submitInput: transition } as never,
+        boardEngine: { requestMove: transition } as never,
         sessions,
       });
 
@@ -1077,7 +1077,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: crashResumedContext(setState),
       storage,
-      boardEngine: { submitInput: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
+      boardEngine: { requestMove: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
       sessions: { getBySessionId: vi.fn(async () => Promise.reject(new Error('sessions down'))) },
     });
 
@@ -1098,7 +1098,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: crashResumedContext(setState),
       storage,
-      boardEngine: { submitInput: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
+      boardEngine: { requestMove: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
       sessions: { getBySessionId },
     });
 

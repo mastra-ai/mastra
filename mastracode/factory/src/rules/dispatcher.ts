@@ -2282,7 +2282,7 @@ export class FactoryDecisionDispatcher {
 
     let expectedRevision = result.item.revision;
     if (materializedByDecision) {
-      const initial = await this.#boardEngine.submitInput({
+      const initial = await this.#boardEngine.requestMove({
         orgId: record.orgId,
         factoryProjectId: record.factoryProjectId,
         workItemId: result.item.id,
@@ -2305,7 +2305,7 @@ export class FactoryDecisionDispatcher {
     await filed();
     if (decision.stage === initialPhase) return;
 
-    const moved = await this.#boardEngine.submitInput({
+    const moved = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: result.item.id,
@@ -2391,7 +2391,7 @@ export class FactoryDecisionDispatcher {
       );
       return true;
     }
-    const moved = await this.#boardEngine.submitInput({
+    const moved = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: card.id,
@@ -2672,7 +2672,7 @@ export class FactoryDecisionDispatcher {
       `decision:${record.idempotencyKey}`,
     );
     if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
-    const result = await this.#boardEngine.submitInput({
+    const result = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,
@@ -2795,7 +2795,7 @@ export class FactoryDecisionDispatcher {
     }
     const { item, board, route } = first;
     const crossesBoards = route.board !== board.id;
-    const result = await this.#boardEngine.submitInput({
+    const result = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,
