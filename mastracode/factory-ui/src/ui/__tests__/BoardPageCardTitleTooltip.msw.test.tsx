@@ -56,7 +56,6 @@ const failedDecision: FactoryDecisionSummary = {
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T00:01:00.000Z',
   completedAt: '2026-07-18T00:01:00.000Z',
-  availableAt: null,
 };
 
 /** Stubs the board's data endpoints with one work item. */

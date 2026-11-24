@@ -1,3 +1,4 @@
+import type { ModelPackSet } from '@mastra/factory/model-packs';
 import {
   queryOptions,
   skipToken,
@@ -14,8 +15,7 @@ import {
   fetchFactoryProject,
   updateFactoryProject,
 } from '../ui/domains/workspaces/services/github';
-import type { FactoryModelScope, FactoryProjectPayload } from '../ui/domains/workspaces/services/github';
-import { useOptimisticFieldWrite } from './optimistic-field-write';
+import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -35,27 +35,15 @@ export function useFactoryProjectQuery(factoryProjectId: string | undefined) {
   return useQuery(factoryProjectQueryOptions(baseUrl, factoryProjectId));
 }
 
-export function useSetFactoryDefaultModelMutation(factoryProjectId: string | undefined) {
+export function useSetFactoryModelPacksMutation(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (defaultModelId: string | null) => updateFactoryProject(baseUrl, factoryProjectId!, { defaultModelId }),
+    mutationFn: (set: ModelPackSet) => updateFactoryProject(baseUrl, factoryProjectId, set),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
+      return queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
-  });
-}
-
-export function useSetFactoryFallbackModelsMutation(factoryProjectId: string) {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useOptimisticFieldWrite<FactoryProjectPayload, 'fallbackModelIds', FactoryProjectPayload>({
-    queryKey: queryKeys.factoryProject(factoryProjectId),
-    field: 'fallbackModelIds',
-    write: fallbackModelIds => updateFactoryProject(baseUrl, factoryProjectId, { fallbackModelIds }),
-    savedValue: project => project.fallbackModelIds,
-    onSaved: () => queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) }),
   });
 }
 

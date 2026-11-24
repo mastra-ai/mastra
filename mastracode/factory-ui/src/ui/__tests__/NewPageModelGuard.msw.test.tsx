@@ -24,7 +24,7 @@ function stubFactoryShell() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/decisions`, () => HttpResponse.json({ decisions: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
@@ -178,7 +178,12 @@ describe('NewPage credential guard', () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: null });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-sonnet-4-5', thinkingLevel: null }),
+        HttpResponse.json({
+          modelId: 'anthropic/claude-sonnet-4-5',
+          thinkingLevel: null,
+          modelPacks: [],
+          defaultModelPackId: null,
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({

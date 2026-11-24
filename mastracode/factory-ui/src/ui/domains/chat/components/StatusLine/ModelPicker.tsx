@@ -1,4 +1,4 @@
-import { fallbackModelIdsToTry } from '@mastra/code-sdk/model-fallback';
+import type { ModelPack } from '@mastra/factory/model-packs';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
@@ -16,11 +16,13 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { useChatThinking } from '../../context/useChatThinking';
 import { useModelCredential } from '../../hooks/useModelCredential';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../../settings/settingsSections';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';
+import { ModelPackSection } from './ModelPackSection';
 import { ModelProviderMark } from './ModelProviderMark';
 import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
 import { SessionThinkingIcon } from './SessionThinkingIcon';
@@ -54,19 +56,39 @@ function canSwitchModel({
 
 function useModelSwitch() {
   const chatSession = useChatSessionContext();
-  const { activeModelId, defaultModelId, fallbackModelIds, pendingModelId, setModel } = useChatModels();
+  const {
+    activeModelId,
+    defaultModelId,
+    modelPacks,
+    defaultModelPackId,
+    activeModelPack,
+    pendingModelId,
+    pendingModelPackId,
+    setModel,
+    setModelPack,
+  } = useChatModels();
+  const thinking = useChatThinking();
   const { catalogTarget, modelScope, scopeLoading } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
-  const inCatalog = (modelId: string) => Boolean(modelsQuery.data?.some(model => model.id === modelId));
 
   const selectedModelId = pendingModelId ?? activeModelId;
-  const busy = Boolean(pendingModelId);
+  const busy = Boolean(pendingModelId ?? pendingModelPackId);
+
+  const reportSwitchError = (fallbackMessage: string) => (cause: unknown) => {
+    toast.error(cause instanceof Error ? cause.message : fallbackMessage);
+  };
 
   const pickModel = (modelId: string) => {
     if (busy || modelId === activeModelId) return;
-    void setModel(modelId).catch((cause: unknown) => {
-      toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
-    });
+    void setModel(modelId).catch(reportSwitchError('Failed to switch model'));
+  };
+
+  const pickPack = (pack: ModelPack) => {
+    if (busy || pack.id === activeModelPack?.id) return;
+    const switched = chatSession.draftSessionId
+      ? setModelPack(pack).then(() => thinking.setLevel(pack.models[0].thinkingLevel))
+      : setModelPack(pack);
+    void switched.catch(reportSwitchError('Failed to switch model pack'));
   };
 
   return {
@@ -74,7 +96,11 @@ function useModelSwitch() {
     activeModelId,
     selectedModelId,
     defaultModelId,
-    fallbackModelIds: selectedModelId ? fallbackModelIdsToTry(selectedModelId, fallbackModelIds, inCatalog) : [],
+    modelPacks,
+    defaultModelPackId,
+    activeModelPack,
+    pendingModelPackId,
+    fallbackModelIds: activeModelPack?.models.slice(1).map(model => model.modelId) ?? [],
     scopeLoading,
     busy,
     switchable: canSwitchModel(chatSession),
@@ -86,6 +112,7 @@ function useModelSwitch() {
       selectedModelId !== defaultModelId &&
       Boolean(modelsQuery.data?.some(model => model.id === defaultModelId)),
     pickModel,
+    pickPack,
   };
 }
 
@@ -118,7 +145,20 @@ function ModelMenu({
   unavailableReason,
   children,
 }: ModelMenuProps) {
-  const { modelsQuery, selectedModelId, defaultModelId, fallbackModelIds, canReset, locked, pickModel } = modelSwitch;
+  const {
+    modelsQuery,
+    selectedModelId,
+    defaultModelId,
+    modelPacks,
+    defaultModelPackId,
+    activeModelPack,
+    pendingModelPackId,
+    fallbackModelIds,
+    canReset,
+    locked,
+    pickModel,
+    pickPack,
+  } = modelSwitch;
   const location = useLocation();
   const { factoryId, modelScope } = useChatModelScope();
   const organizationScoped = useOrganizationScopedFactory();
@@ -151,7 +191,19 @@ function ModelMenu({
       defaultModel={defaultModelId ? pickerValue(defaultModelId) : undefined}
       fallbackModels={fallbackModelIds.flatMap(modelId => pickerValue(modelId) ?? [])}
       renderProviderIcon={renderProviderIcon}
-      header={<ModelCredentialSummary modelId={selectedModelId} />}
+      header={
+        <>
+          <ModelCredentialSummary modelId={selectedModelId} />
+          <ModelPackSection
+            packs={modelPacks}
+            activePackId={activeModelPack?.id}
+            defaultPackId={defaultModelPackId}
+            pendingPackId={pendingModelPackId}
+            disabled={locked}
+            onPick={pickPack}
+          />
+        </>
+      }
       settings={settings}
       addProvider={
         factoryId
@@ -213,7 +265,7 @@ function LockedModelMenu({
 
 export function ModelPicker() {
   const modelSwitch = useModelSwitch();
-  const { modelsQuery, activeModelId, selectedModelId, scopeLoading, switchable, busy } = modelSwitch;
+  const { modelsQuery, activeModelId, selectedModelId, activeModelPack, scopeLoading, switchable, busy } = modelSwitch;
   const { modelLockedReason } = useChatSessionContext();
   const { status } = useChatConnection();
   const { isLoading, error } = useChatModels();
@@ -250,6 +302,7 @@ export function ModelPicker() {
         className="max-w-48 max-sm:max-w-28"
         data-composer-line-hidden={notConfigured ? undefined : ''}
       >
+        {activeModelPack && <Metadata.Item className="shrink-0">{activeModelPack.name}</Metadata.Item>}
         <Metadata.Item>{label}</Metadata.Item>
         {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
       </Metadata>

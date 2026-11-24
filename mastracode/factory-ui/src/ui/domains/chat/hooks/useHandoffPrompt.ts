@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
+import { useSetSessionModelPackMutation } from '../../../../hooks/useSessionModelPack';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -18,6 +19,7 @@ import type { PromptHandoff } from '../services/promptHandoff';
 interface HandoffModel {
   modelId?: string;
   thinkingLevel?: ThinkingLevelSetting;
+  modelPackId?: string;
 }
 
 // History keeps a thread's route state, so only the tab that opened it may send its first prompt, once.
@@ -40,6 +42,7 @@ export function startPromptHandoff(
     handoffPrompt: prompt,
     handoffModelId: model.modelId,
     handoffThinkingLevel: model.thinkingLevel,
+    handoffModelPackId: model.modelPackId,
     handoffShownMessageId: shownMessageId,
   };
 }
@@ -87,7 +90,7 @@ export function clearPendingHandoff(sessionId: string): void {
 export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, resourceId, sessionThreadId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { transcript, localUser, clearPending, pushNotice } = useChatTranscript();
   const { restoreComposerDraft } = useChatCommands();
   const { setImages } = useComposerImagesState();
@@ -99,6 +102,11 @@ export function useHandoffPrompt(): void {
   };
   const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation(mutationArgs);
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
+  const { mutateAsync: setSessionModelPack } = useSetSessionModelPackMutation({
+    resourceId,
+    threadId: sessionThreadId ?? sessionId,
+    sessionId,
+  });
   const handedOff = useRef(false);
   const recovered = useRef(false);
   const shown = useRef(false);
@@ -106,12 +114,25 @@ export function useHandoffPrompt(): void {
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
   const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
+  const modelPackId = readHandoffField(location.state, 'handoffModelPackId');
   const shownMessageId = readHandoffField(location.state, 'handoffShownMessageId');
   const promptShown = shownMessageId !== undefined && transcript.entries.some(entry => entry.id === shownMessageId);
 
   useEffect(() => {
     if (handedOff.current) return;
-    const startOn = async ({ modelId, thinkingLevel }: HandoffModel) => {
+    const startOnPack = async (packId: string, thinkingLevel: ThinkingLevelSetting | undefined) => {
+      const started = await setSessionModelPack(packId);
+      if (thinkingLevel && thinkingLevel !== started.thinkingLevel) {
+        await switchModel({ modelId: started.modelId, thinkingLevel });
+      }
+    };
+    const startOn = async ({ modelId, thinkingLevel, modelPackId }: HandoffModel) => {
+      if (modelPackId) {
+        await startOnPack(modelPackId, thinkingLevel).catch((error: unknown) =>
+          pushNotice(error instanceof Error ? error.message : 'Could not start on the picked model pack.', 'error'),
+        );
+        return;
+      }
       if (!modelId) return;
       await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
         pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
@@ -153,7 +174,7 @@ export function useHandoffPrompt(): void {
     if (!prompt && files.length === 0) return;
     const outgoing = toOutgoing(files);
     void (async () => {
-      await startOn({ modelId, thinkingLevel });
+      await startOn({ modelId, thinkingLevel, modelPackId });
       await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
       clearPendingHandoff(sessionId);
     })().catch(error => {
@@ -177,6 +198,7 @@ export function useHandoffPrompt(): void {
     location.pathname,
     location.search,
     modelId,
+    modelPackId,
     navigate,
     prompt,
     promptShown,
@@ -186,6 +208,7 @@ export function useHandoffPrompt(): void {
     sendMessage,
     sessionEnabled,
     setImages,
+    setSessionModelPack,
     switchModel,
     thinkingLevel,
   ]);

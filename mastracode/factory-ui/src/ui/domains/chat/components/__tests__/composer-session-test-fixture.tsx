@@ -146,7 +146,12 @@ export function stubPreparingSession({
       } catch {
         return HttpResponse.json({ message: 'Model settings unavailable' }, { status: 500 });
       }
-      return HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null });
+      return HttpResponse.json({
+        modelId: 'openai/gpt-4o-mini',
+        thinkingLevel: null,
+        modelPacks: [],
+        defaultModelPackId: null,
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () => {
       result.sessionLookups += 1;

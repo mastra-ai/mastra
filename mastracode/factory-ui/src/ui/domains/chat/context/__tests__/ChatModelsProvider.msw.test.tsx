@@ -68,7 +68,7 @@ describe('ChatModelsProvider', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null }),
+        HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
         const params = new URL(request.url).searchParams;
@@ -119,7 +119,12 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
+        HttpResponse.json({
+          modelId: 'anthropic/claude-opus-4-1',
+          thinkingLevel: null,
+          modelPacks: [],
+          defaultModelPackId: null,
+        }),
       ),
     );
 
@@ -139,7 +144,7 @@ describe('ChatModelsProvider', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
         await defaultPending;
-        return HttpResponse.json({ modelId: null, thinkingLevel: null });
+        return HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null });
       }),
     );
 
@@ -180,7 +185,12 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
+        HttpResponse.json({
+          modelId: 'anthropic/claude-opus-4-1',
+          thinkingLevel: null,
+          modelPacks: [],
+          defaultModelPackId: null,
+        }),
       ),
     );
     const liveSession: ChatSessionContextApi = {

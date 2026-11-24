@@ -1,6 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -29,7 +28,7 @@ const reply: MastraDBMessage = {
 };
 
 describe('a reply that switched to a fallback model', () => {
-  it('names the failed model and its replacement, and says messages go back to the failed model once it is available', async () => {
+  it('names the failed model and its replacement without promising a switch back', () => {
     renderWithProviders(
       <TranscriptEntries
         entries={[{ kind: 'message', id: reply.id, message: reply }]}
@@ -38,14 +37,10 @@ describe('a reply that switched to a fallback model', () => {
       />,
     );
 
-    const row = screen.getByRole('group', { name: 'Claude Opus 5.5 is rate-limited, switched to GPT-5.6 Sol' });
-    expect(within(row).queryByText(/go back to/)).not.toBeInTheDocument();
-
-    await userEvent.click(within(row).getByRole('button'));
-
     expect(
-      within(row).getByText("Your messages go back to Claude Opus 5.5 as soon as it's available again."),
-    ).toBeVisible();
+      screen.getByRole('group', { name: 'Claude Opus 5.5 is rate-limited, switched to GPT-5.6 Sol' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/go back to|as soon as/)).not.toBeInTheDocument();
     expect(screen.getByText('Reviewed on the fallback')).toBeVisible();
   });
 });

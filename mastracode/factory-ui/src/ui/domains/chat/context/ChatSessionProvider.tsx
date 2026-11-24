@@ -222,7 +222,10 @@ export function ChatSessionBoundary({
           isLoadingMoreHistory={messagesQuery.isLoadingMore}
           loadMoreHistory={messagesQuery.loadMore}
         >
-          <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
+          <ChatModelsProvider
+            initialDraftModelId={failedDraft?.modelId}
+            initialDraftModelPackId={failedDraft?.modelPackId}
+          >
             <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
               <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
                 <ComposerImagesProvider initialImages={failedDraft?.files}>

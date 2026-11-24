@@ -23,7 +23,7 @@ import { startPromptHandoff } from './useHandoffPrompt';
  */
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
-  const { activeModelId, defaultModelId } = useChatModels();
+  const { activeModelId, defaultModelId, activeModelPack, defaultModelPackId } = useChatModels();
   const { override: thinkingLevelOverride } = useChatThinking();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
@@ -40,6 +40,7 @@ export function useCreateUserSessionFromDraft() {
 
     const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
     const handoffModelId = draftKeepsServerDefaults ? undefined : activeModelId;
+    const handoffModelPackId = activeModelPack?.id === defaultModelPackId ? undefined : activeModelPack?.id;
     const draftPath = `/factories/${factoryId}/user/new/${draftSessionId}`;
     void queryClient
       .query({
@@ -57,7 +58,12 @@ export function useCreateUserSessionFromDraft() {
             const message = error instanceof Error ? error.message : 'Session creation failed';
             throw new DraftSessionCreateError(
               `Could not create the session: ${message}. Try again.`,
-              { prompt, modelId: handoffModelId, thinkingLevel: thinkingLevelOverride },
+              {
+                prompt,
+                modelId: handoffModelId,
+                thinkingLevel: thinkingLevelOverride,
+                modelPackId: handoffModelPackId,
+              },
               draftPath,
               { cause: error },
             );
@@ -84,6 +90,7 @@ export function useCreateUserSessionFromDraft() {
       state: startPromptHandoff(draftSessionId, prompt, {
         modelId: handoffModelId,
         thinkingLevel: thinkingLevelOverride,
+        modelPackId: handoffModelPackId,
       }),
     });
   };

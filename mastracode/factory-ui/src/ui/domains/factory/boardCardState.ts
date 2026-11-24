@@ -1,7 +1,5 @@
 import { phaseMayStartRun } from '@mastra/factory/boards/busy-card';
-import type { ProviderLimit } from '@mastra/factory/rules/provider-limit';
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
-import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { FactoryDecisionSummary } from './services/decisions';
@@ -112,50 +110,24 @@ function yourRequest(input: BoardCardStateInput): { statusLabel: string; progres
   return undefined;
 }
 
-const PROVIDER_LIMIT_FAILURES: Record<ProviderLimit['code'], { label: string; detail: string }> = {
-  run_rate_limited: {
-    label: 'Model still rate-limited',
-    detail: 'Retry later, or add a fallback model in Settings → Models.',
-  },
-  run_quota_exhausted: {
-    label: 'Model out of credits or quota',
-    detail: 'Add credits to the provider account, or pick another model or fallback in Settings → Models, then retry.',
-  },
-};
-
-function isProviderLimitCode(code: FactoryDispatchFailureCode | null): code is ProviderLimit['code'] {
-  return code !== null && Object.hasOwn(PROVIDER_LIMIT_FAILURES, code);
-}
-
 function automationOnCard(
   decision: FactoryDecisionSummary,
   sessionStatus: SessionRowStatus | undefined,
   queuePosition: number | undefined,
 ): { status?: BoardCardStatus; owner: BoardCardOwner } {
   const copy = automationCopy(decision);
-  const providerLimit = isProviderLimitCode(decision.failureCode)
-    ? PROVIDER_LIMIT_FAILURES[decision.failureCode]
-    : undefined;
+  const detail = decision.lastError ?? undefined;
   if (decision.status === 'failed') {
     return {
       status: {
         kind: 'error',
-        label: providerLimit?.label ?? copy.failed,
+        label: copy.failed,
         ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
-        detail: (decision.canRetry ? providerLimit?.detail : undefined) ?? decision.lastError ?? undefined,
+        detail,
       },
       owner: FREE,
     };
   }
-  if (decision.status === 'retry' && decision.failureCode === 'run_rate_limited' && decision.availableAt) {
-    if (queuePosition !== undefined) return queuedOnCard(queuePosition);
-    const retryTime = new Date(decision.availableAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return {
-      status: { kind: 'busy', label: `Model rate-limited. Retrying at ${retryTime}` },
-      owner: { kind: 'automation', progressLabel: 'Waiting…' },
-    };
-  }
-  const detail = decision.lastError ?? undefined;
   // The server retries a failure on its own, so it offers no button.
   if (retriesAfterFailure(decision)) {
     return {

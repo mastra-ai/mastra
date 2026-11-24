@@ -76,7 +76,7 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
   server.use(
     // A connected personal lane starts on the caller's saved default model, when there is one.
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.put(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
       const body = await request.json();
@@ -913,7 +913,12 @@ describe('Account presets', () => {
     const writes = registerSetup();
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null }),
+        HttpResponse.json({
+          modelId: 'openai/gpt-6.1-sol',
+          thinkingLevel: null,
+          modelPacks: [],
+          defaultModelPackId: null,
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
@@ -944,7 +949,12 @@ describe('Account presets', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
         await defaultAnswered;
-        return HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null });
+        return HttpResponse.json({
+          modelId: 'openai/gpt-6.1-sol',
+          thinkingLevel: null,
+          modelPacks: [],
+          defaultModelPackId: null,
+        });
       }),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({

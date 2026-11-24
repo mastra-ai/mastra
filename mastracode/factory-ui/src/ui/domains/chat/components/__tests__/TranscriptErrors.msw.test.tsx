@@ -132,7 +132,7 @@ describe('chat run errors', () => {
         HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
     );
   });
@@ -476,7 +476,7 @@ describe('chat run errors on an account limit', () => {
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'hybrid' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({

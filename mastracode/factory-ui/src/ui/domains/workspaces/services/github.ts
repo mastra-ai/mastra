@@ -14,6 +14,7 @@
  */
 
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ModelPack } from '@mastra/factory/model-packs';
 import type { FACTORY_ROUTE_CONTRACTS, ProjectListRepository } from '@mastra/factory/routes/contracts';
 import type { z } from 'zod';
 
@@ -253,7 +254,8 @@ export interface FactoryProjectPayload {
   modelScope?: FactoryModelScope;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
-  fallbackModelIds?: string[];
+  modelPacks?: ModelPack[];
+  defaultModelPackId?: string | null;
 }
 
 /** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
@@ -377,7 +379,8 @@ const FACTORY_PROJECT_FIELD_LABELS = {
   defaultModelId: 'default model',
   modelScope: 'model scope',
   defaultThinkingLevel: 'thinking level',
-  fallbackModelIds: 'fallback models',
+  modelPacks: 'model packs',
+  defaultModelPackId: 'model packs',
 } satisfies Partial<Record<keyof FactoryProjectUpdateBody, string>>;
 
 type FactoryProjectChanges = Pick<FactoryProjectUpdateBody, keyof typeof FACTORY_PROJECT_FIELD_LABELS>;
@@ -393,12 +396,14 @@ export async function updateFactoryProject(
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(changes),
   });
-  const changed = Object.entries(FACTORY_PROJECT_FIELD_LABELS)
-    .filter(([field]) => field in changes)
-    .map(([, label]) => label);
+  const changed = new Set(
+    Object.entries(FACTORY_PROJECT_FIELD_LABELS)
+      .filter(([field]) => field in changes)
+      .map(([, label]) => label),
+  );
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
-    `Failed to update Factory ${changed.join(', ')}`,
+    `Failed to update Factory ${[...changed].join(', ')}`,
   );
   return project;
 }

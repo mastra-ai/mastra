@@ -4,6 +4,7 @@ export interface PromptHandoff {
   handoffPrompt: string;
   handoffModelId?: string;
   handoffThinkingLevel?: ThinkingLevelSetting;
+  handoffModelPackId?: string;
   handoffShownMessageId?: string;
 }
 

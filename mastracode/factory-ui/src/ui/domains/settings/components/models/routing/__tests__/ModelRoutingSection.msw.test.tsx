@@ -1,3 +1,4 @@
+import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -17,7 +18,7 @@ function stubFactory(modelScope: FactoryModelScope, patchStatus = 200) {
   let saved = modelScope;
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: saved } })),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
@@ -60,11 +61,9 @@ describe('ModelRoutingSection', () => {
     expect(within(region('Chats')).getByText('Uses Personal defaults')).toBeInTheDocument();
     expect(within(region('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(
-      await within(region('Personal defaults')).findByRole('combobox', { name: 'Personal default model' }),
+      await within(region('Personal defaults')).findByRole('button', { name: 'New pack' }),
     ).toBeInTheDocument();
-    expect(
-      within(region('Factory defaults')).getByRole('combobox', { name: 'Factory default model' }),
-    ).toBeInTheDocument();
+    expect(await within(region('Factory defaults')).findByRole('button', { name: 'New pack' })).toBeInTheDocument();
   });
 
   it('saves a new routing and collapses the defaults it leaves unused', async () => {
@@ -74,7 +73,7 @@ describe('ModelRoutingSection', () => {
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
     expect(within(region('Factory defaults')).getByText('Not used in this scope')).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
+    expect(within(region('Factory defaults')).queryByRole('button', { name: 'New pack' })).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));
     await confirmSwitch(user);
@@ -85,7 +84,7 @@ describe('ModelRoutingSection', () => {
     expect(routing('Factory')).toBeChecked();
     expect(within(region('Chats')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(within(region('Personal defaults')).getByText('Not used in this scope')).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Personal default model' })).not.toBeInTheDocument();
+    expect(within(region('Personal defaults')).queryByRole('button', { name: 'New pack' })).not.toBeInTheDocument();
     expect(within(region('Factory defaults')).getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
     expect(within(region('Factory defaults')).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
   });
@@ -202,17 +201,28 @@ describe('ModelRoutingSection', () => {
     expect(routing('Factory')).toBeChecked();
   });
 
-  it('lets an admin change the Factory default from the unused Factory card in Personal routing', async () => {
+  it('lets an admin create a Factory pack from the unused Factory card in Personal routing', async () => {
     const patchedBodies = stubFactory('user');
     const user = userEvent.setup();
     const { client } = renderRoutingSection();
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
-    await user.click(within(region('Factory defaults')).getByRole('button', { name: 'Settings' }));
-    await pickModel(user, 'Factory default model', 'openai/gpt-5');
+    const factoryDefaults = region('Factory defaults');
+    await user.click(within(factoryDefaults).getByRole('button', { name: 'Settings' }));
+    await user.click(await within(factoryDefaults).findByRole('button', { name: 'New pack' }));
+    await user.type(within(factoryDefaults).getByRole('textbox', { name: 'Name' }), 'Build');
+    await pickModel(user, 'Model', 'openai/gpt-5');
+    await user.click(within(factoryDefaults).getByRole('button', { name: 'Save' }));
     await waitForMutationsIdle(client);
 
-    expect(patchedBodies).toEqual([{ defaultModelId: 'openai/gpt-5' }]);
+    expect(patchedBodies).toEqual([
+      {
+        modelPacks: [
+          { id: expect.any(String), name: 'Build', models: [{ modelId: 'openai/gpt-5', thinkingLevel: DEFAULT_THINKING_LEVEL }] },
+        ],
+        defaultModelPackId: expect.any(String),
+      },
+    ]);
   });
 
   it('opens the unused Factory card when a link targets it', async () => {
@@ -220,8 +230,8 @@ describe('ModelRoutingSection', () => {
     renderRoutingSection('/factories/fp-1/settings/models#factory-defaults');
 
     expect(
-      await within(await screen.findByRole('region', { name: 'Factory defaults' })).findByRole('combobox', {
-        name: 'Factory default model',
+      await within(await screen.findByRole('region', { name: 'Factory defaults' })).findByRole('button', {
+        name: 'New pack',
       }),
     ).toBeInTheDocument();
   });

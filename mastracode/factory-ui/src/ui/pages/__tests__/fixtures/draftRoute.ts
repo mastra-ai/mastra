@@ -167,7 +167,12 @@ export function stubDraftRoute({
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
       await modelDefaultsGate;
-      return HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null });
+      return HttpResponse.json({
+        modelId: defaultModelId,
+        thinkingLevel: null,
+        modelPacks: [],
+        defaultModelPackId: null,
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({

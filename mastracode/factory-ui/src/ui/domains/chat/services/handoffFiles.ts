@@ -28,6 +28,7 @@ export interface FailedDraft {
   prompt: string;
   modelId?: string;
   thinkingLevel?: ThinkingLevelSetting;
+  modelPackId?: string;
 }
 
 /**
@@ -51,5 +52,6 @@ export function readFailedDraft(
   const modelId = 'modelId' in draft && typeof draft.modelId === 'string' ? draft.modelId : undefined;
   const thinkingLevel =
     'thinkingLevel' in draft && isThinkingLevelSetting(draft.thinkingLevel) ? draft.thinkingLevel : undefined;
-  return { prompt: draft.prompt, modelId, thinkingLevel, files: peekHandoffFiles(draftSessionId) };
+  const modelPackId = 'modelPackId' in draft && typeof draft.modelPackId === 'string' ? draft.modelPackId : undefined;
+  return { prompt: draft.prompt, modelId, thinkingLevel, modelPackId, files: peekHandoffFiles(draftSessionId) };
 }

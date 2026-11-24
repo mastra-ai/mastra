@@ -307,7 +307,6 @@ describe('SessionRouteFrame', () => {
         createdAt: '2026-07-29T00:00:00.000Z',
         updatedAt: '2026-07-29T00:00:00.000Z',
         completedAt: null,
-        availableAt: null,
       };
       server.use(
         http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>

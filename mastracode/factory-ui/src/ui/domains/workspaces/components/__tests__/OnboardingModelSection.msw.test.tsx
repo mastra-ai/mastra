@@ -126,7 +126,7 @@ describe('Model provider onboarding', () => {
             }),
           ),
           http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-            HttpResponse.json({ modelId: null, thinkingLevel: null }),
+            HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
           ),
           http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, () => {
             connect();
@@ -459,7 +459,7 @@ describe('Model provider onboarding', () => {
     function registerNoPersonalDefault() {
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+          HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
         ),
       );
     }

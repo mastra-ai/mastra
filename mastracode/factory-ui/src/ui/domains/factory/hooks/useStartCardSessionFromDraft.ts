@@ -33,7 +33,7 @@ export function useStartCardSessionFromDraft(
   sessionRepository: WorkItemSessionRepository | undefined,
 ): DraftSessionStart & { ownsSession: (sessionId: string) => boolean } {
   const { baseUrl } = useChatSessionContext();
-  const { activeModelId, defaultModelId, setModel } = useChatModels();
+  const { activeModelId, defaultModelId, activeModelPack, defaultModelPackId, setModel } = useChatModels();
   const { override: thinkingLevelOverride } = useChatThinking();
   const { localUser, failLocalUser } = useChatTranscript();
   const queryClient = useQueryClient();
@@ -100,6 +100,7 @@ export function useStartCardSessionFromDraft(
         shownMessageId,
         modelId: draftKeepsServerDefaults ? undefined : activeModelId,
         thinkingLevel: thinkingLevelOverride,
+        modelPackId: activeModelPack?.id === defaultModelPackId ? undefined : activeModelPack?.id,
       }),
     );
   };

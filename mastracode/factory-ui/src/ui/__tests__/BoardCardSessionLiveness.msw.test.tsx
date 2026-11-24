@@ -239,7 +239,6 @@ describe('Board card session liveness', () => {
               createdAt: '2026-07-18T00:00:00.000Z',
               updatedAt: '2026-07-18T00:01:00.000Z',
               completedAt: null,
-              availableAt: null,
             },
           ],
         }),

@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -23,15 +22,13 @@ export function DefaultsCard({
   defaults,
   inUse,
   anchorRef,
-  model,
-  fallbacks,
+  packs,
   providers,
 }: {
   defaults: ModelDefaults;
   inUse: boolean;
   anchorRef?: Ref<HTMLElement>;
-  model: ReactNode;
-  fallbacks: ReactNode;
+  packs: ReactNode;
   providers: ReactNode;
 }) {
   const anchor = MODEL_DEFAULTS_ANCHORS[defaults];
@@ -67,17 +64,11 @@ export function DefaultsCard({
             )}
           </header>
           <CollapsibleContent className="flex flex-col gap-4 pt-4">
-            <Field className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-2">
-              <FieldLabel size="smaller" className="h-control-sm text-muted-foreground">
-                Model
-              </FieldLabel>
-              {model}
-            </Field>
             <div className="flex flex-col gap-2">
               <Txt as="span" variant="caption" tone="muted">
-                Fallbacks
+                Model packs
               </Txt>
-              {fallbacks}
+              {packs}
             </div>
             <div className="flex flex-col gap-2">
               <Txt as="span" variant="caption" tone="muted">

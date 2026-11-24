@@ -2,14 +2,8 @@
 '@mastra/factory': minor
 ---
 
-Added fallback models to the Factory UI. Under Settings → Models, a project or a person can list up to 3 fallback models after their default model, and reorder or remove them.
+Added model packs to the Factory UI. A model pack is a named list of up to 4 models, each with its own thinking level. The first model runs the session, and the others are fallbacks, tried in order when it can't answer. Under Settings → Models, a Factory or a person can keep up to 8 packs and mark one as the default. Packs can be created, edited, reordered, deleted, or made the default there.
 
-Before: a rate-limited run failed and its card showed a generic failure.
-After: the run finishes on a fallback, and the reply shows one muted line with the cause and the provider's wait, for example `Claude Opus 5.5 is rate-limited for 5 min, switched to GPT-5.6 Sol`. Expand it to see that your messages go back to Claude Opus 5.5 as soon as it's available again. The chat model picker marks the session's fallback models with a `Fallback` badge next to `Default`, and updates as soon as the fallbacks change in settings.
-
-When every model is limited, the card says why:
-
-- **Rate limit:** `Model rate-limited. Retrying at 14:05`. Once Factory stops retrying, the card shows `Model still rate-limited` with a Retry button.
-- **Out of credits or quota:** `Model out of credits or quota`, with a Retry button.
+The chat model picker lists the packs above the models. It marks the session's active pack with a check and shows the pack's name on the trigger. Picking a pack switches the session to its first model and thinking level. In a new draft, the picked pack is applied as soon as the session starts. When a run switches to a fallback, the reply shows one muted line such as `Claude Opus 5.5 → GPT-5.6 Sol`.
 
 Every model picker in settings, including the Observer and Reflector models, now only saves a `provider/model` ID such as `anthropic/claude-opus-5.5`. Before, a search typed into a model picker and submitted with Enter, such as `sonnet 5.5`, was saved as the model ID.

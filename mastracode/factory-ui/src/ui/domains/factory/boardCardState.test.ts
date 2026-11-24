@@ -23,7 +23,6 @@ function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecis
     createdAt: '2026-08-01T00:00:00.000Z',
     updatedAt: '2026-08-01T00:00:00.000Z',
     completedAt: null,
-    availableAt: null,
     ...overrides,
   };
 }
@@ -78,73 +77,6 @@ describe('status row', () => {
       kind: 'error',
       label: 'Automated run could not start. Retrying…',
       detail: 'ECONNRESET',
-    });
-  });
-
-  it('shows a rate-limited run as waiting until the server tries again, with no Retry button', () => {
-    const availableAt = new Date(2026, 7, 1, 14, 5).toISOString();
-    const state = boardCardState({
-      decision: decision({
-        status: 'retry',
-        failureCode: 'run_rate_limited',
-        lastError: 'Model provider rate limit reached',
-        availableAt,
-      }),
-    });
-
-    expect(state.status).toEqual({
-      kind: 'busy',
-      label: expect.stringMatching(/^Model rate-limited\. Retrying at \d{2}:05/),
-    });
-    expect(state.owner).toEqual({ kind: 'automation', progressLabel: 'Waiting…' });
-  });
-
-  it('shows the queue position once a rate-limited run is waiting for a run slot', () => {
-    expect(
-      boardCardState({
-        decision: decision({
-          status: 'retry',
-          failureCode: 'run_rate_limited',
-          lastError: 'Model provider rate limit reached',
-          availableAt: new Date(2026, 7, 1, 14, 5).toISOString(),
-        }),
-        queuePosition: 2,
-      }).status,
-    ).toEqual({ kind: 'busy', label: 'Queued (#2)' });
-  });
-
-  it('tells the user how to unblock a run whose model is out of credits, and offers Retry', () => {
-    expect(
-      boardCardState({
-        decision: decision({
-          status: 'failed',
-          failureCode: 'run_quota_exhausted',
-          lastError: 'Model provider out of credits or quota',
-        }),
-      }).status,
-    ).toEqual({
-      kind: 'error',
-      label: 'Model out of credits or quota',
-      detail:
-        'Add credits to the provider account, or pick another model or fallback in Settings → Models, then retry.',
-      retryDecisionId: 'decision-1',
-    });
-  });
-
-  it('does not tell the user to retry a provider-limited run that cannot be retried', () => {
-    expect(
-      boardCardState({
-        decision: decision({
-          status: 'failed',
-          failureCode: 'run_rate_limited',
-          canRetry: false,
-          lastError: 'Model provider rate limit reached',
-        }),
-      }).status,
-    ).toEqual({
-      kind: 'error',
-      label: 'Model still rate-limited',
-      detail: 'Model provider rate limit reached',
     });
   });
 

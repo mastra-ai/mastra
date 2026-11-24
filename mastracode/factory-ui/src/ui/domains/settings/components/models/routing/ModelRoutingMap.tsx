@@ -5,10 +5,8 @@ import { useState } from 'react';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { FactoryDefaultModel } from '../defaults/FactoryDefaultModel';
-import { FactoryFallbackModels } from '../defaults/FactoryFallbackModels';
-import { PersonalDefaultModel } from '../defaults/PersonalDefaultModel';
-import { PersonalFallbackModels } from '../defaults/PersonalFallbackModels';
+import { FactoryModelPacks } from '../packs/FactoryModelPacks';
+import { PersonalModelPacks } from '../packs/PersonalModelPacks';
 import { ProviderList } from '../providers/ProviderList';
 import { DefaultsCard } from './DefaultsCard';
 import { LaneCard, LaneSource } from './LaneCard';
@@ -59,16 +57,14 @@ export function ModelRoutingMap({ factoryId, modelScope }: { factoryId: string; 
             defaults="personal"
             inUse={defaultsInUse(modelScope, 'personal')}
             anchorRef={anchors.personal}
-            model={<PersonalDefaultModel />}
-            fallbacks={<PersonalFallbackModels />}
+            packs={<PersonalModelPacks />}
             providers={<ProviderList credentialScope="user" />}
           />
           <DefaultsCard
             defaults="factory"
             inUse={defaultsInUse(modelScope, 'factory')}
             anchorRef={anchors.factory}
-            model={<FactoryDefaultModel factoryId={factoryId} />}
-            fallbacks={<FactoryFallbackModels factoryId={factoryId} />}
+            packs={<FactoryModelPacks factoryId={factoryId} />}
             providers={<ProviderList credentialScope="org" />}
           />
         </>
