@@ -729,7 +729,8 @@ type AgentThreadRuntimeState = {
   /**
    * Idle messages this runtime forwarded to another process's lease-owning run, keyed by thread key and then
    * signal ID. A forward can reach the owner after its run has finished locally, and the owner then drops it, so
-   * each copy is kept until the owner presents the message as pending on that run (its admission) and is queued
+   * each copy is kept until the owner admits it on that run (`user-message-admitted`, or the pending presentation
+   * from owners that predate it) and is queued
    * again here if the run ends first, or if the lease stops naming that run (see `forwardedIdleLeaseChecks`).
    */
   forwardedIdleSignalsByThread: Map<string, Map<string, ForwardedIdleSignal>>;
@@ -922,8 +923,12 @@ type AgentThreadStreamRuntimeEvent =
   // Without a streamId the sender found the run through the thread lease, not a stream it watches.
   | { type: 'run-abort-requested'; runId: string; streamId?: string; clearPendingSignals?: boolean }
   | { type: 'signals-cancelled'; signalIds: string[] }
-  | { type: 'user-message-presentation'; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
+  // runId is the run whose trim removes the entry; a cancellation has no owning run.
+  | { type: 'user-message-presentation'; runId?: string; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
   | { type: 'user-message-delivered'; signalId: string }
+  // The owner admitted a forwarded message on admittedRunId. Unlike the presentation, it carries no runId of its own, so
+  // the run's trim keeps it for a forwarder that reads the thread after that run ended.
+  | { type: 'user-message-admitted'; signalId: string; admittedRunId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
@@ -2212,14 +2217,22 @@ export class AgentThreadStreamRuntime {
           )
         )
           return;
-        const queue = queues.get(key) ?? [];
         const signal = createSignal(data.signal);
+        // Not awaited: if the run ended while this runtime waited on the publish, the forwarder would settle its copy
+        // on this event while this runtime never queued it, losing the message.
+        if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
+          this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
+        }
+        const queue = queues.get(key) ?? [];
         queue.push(signal);
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
         this.#notifyPendingSignals(state, key, signal);
+      } else if (data?.type === 'user-message-admitted') {
+        this.#settleForwardedIdleSignal(state, key, data.signalId, data.admittedRunId);
       } else if (data?.type === 'user-message-presentation') {
+        // Owners that predate user-message-admitted only announce the admission this way.
         const { chunk } = data;
         if (chunk.type === 'data-user-message-pending' && chunk.data.metadata?.status === 'pending') {
           this.#settleForwardedIdleSignal(state, key, chunk.data.id, chunk.runId);
@@ -2330,7 +2343,7 @@ export class AgentThreadStreamRuntime {
         type !== 'signals-cancelled' &&
         type !== 'run-abort-requested' &&
         type !== 'run-registered' &&
-        !(type === 'user-message-presentation' && awaitingForwards) &&
+        !((type === 'user-message-presentation' || type === 'user-message-admitted') && awaitingForwards) &&
         !(
           (type === 'run-completed' || type === 'run-failed') &&
           // While a local run is active, its superseding runs are looked up in
@@ -3622,8 +3635,9 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     await resolvedPubSub.publish(topic, {
       type: event.type,
-      // Thread-scoped control events use the thread key as their envelope correlation ID.
-      runId: 'runId' in event ? event.runId : key,
+      // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
+      // control events fall back to the thread key.
+      runId: ('runId' in event ? event.runId : undefined) ?? key,
       data: event,
     });
   }
@@ -4734,7 +4748,7 @@ export class AgentThreadStreamRuntime {
     status: 'pending' | 'queued',
   ) {
     const chunk = this.#pendingUserMessageChunk(runId, signal, status);
-    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', chunk });
+    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', runId, chunk });
   }
 
   #publishCancelledUserMessages(pubsub: PubSub | undefined, key: string, signalIds: string[]) {
@@ -6067,9 +6081,10 @@ export class AgentThreadStreamRuntime {
         return true;
       }
       const ownerRunId = owns.owner ? threadLeaseRunId(owns.owner) : undefined;
-      // Only user messages have an admission the owner announces (their pending presentation), so only
+      // Only user messages have an admission the owner announces (`user-message-admitted`), so only
       // they can be held until admitted without risking a second delivery. Known limit: if the owner admits it
-      // but that presentation is lost before its run ends, the held copy is queued again and the message runs twice.
+      // but that admission's publish fails, the held copy is queued again when the run ends and the message runs twice.
+      // If the owner dies after admitting it but before running it, the held copy is already settled and the message is lost.
       // A forward to a run this runtime registered and then lost to a takeover is kept by the lost-segment guard in
       // the control subscription's terminal handler; that narrow window has no in-process test.
       if (owns.owner && ownerRunId && this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {
