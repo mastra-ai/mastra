@@ -155,6 +155,9 @@ function serializeRunAudit(session: RunEndCaptureSession, write: () => Promise<v
 
 const legacyOpenRunsSchema = z.array(factoryOpenRunSchema);
 
+/** The most legacy entries one read of a thread's `factoryOpenRuns` setting considers. */
+export const FACTORY_LEGACY_OPEN_RUNS_READ = 10;
+
 /**
  * Runs that a release before the storage ledger keeps in `threadId`'s `factoryOpenRuns` setting.
  * During a rolling deploy that release still owns, heartbeats and ends them there, so a live entry
@@ -168,7 +171,11 @@ async function legacyOpenRunsOn(
   threadId: string,
   read: () => Promise<unknown>,
 ): Promise<FactoryOpenRun[]> {
-  const parsed = legacyOpenRunsSchema.safeParse((await read()) ?? []);
+  const stored = await read();
+  if (!Array.isArray(stored)) return [];
+  // An earlier release holds a thread's few runs here; the setting is client-writable, so a longer
+  // list is read only up to its latest entries, bounding the work (and copies) one read can cause.
+  const parsed = legacyOpenRunsSchema.safeParse(stored.slice(-FACTORY_LEGACY_OPEN_RUNS_READ));
   if (!parsed.success) return [];
   const now = Date.now();
   const entries = parsed.data
@@ -206,7 +213,10 @@ async function openRunsOn(
   readLegacy: () => Promise<unknown>,
 ): Promise<FactoryOpenRun[]> {
   const live = await legacyOpenRunsOn(openRuns, threadId, readLegacy);
-  return [...(await openRuns.listByThread(threadId)), ...live];
+  const ledger = await openRuns.listByThread(threadId);
+  // A copy committed by another reader between the two reads is already on the ledger.
+  const listed = new Set(ledger.map(run => run.kickoffId));
+  return [...ledger, ...live.filter(run => !listed.has(run.kickoffId))];
 }
 
 /** The open runs of the thread the session is on. */

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
+  FACTORY_LEGACY_OPEN_RUNS_READ,
   FACTORY_OPEN_RUN_STALE_MS,
   FACTORY_OPEN_RUNS_SETTING,
   FACTORY_RUN_USAGE_STEPS_JSON_BUDGET,
@@ -193,6 +194,40 @@ describe('Factory run lifecycle audit', () => {
       await waitForSessionRunAudit(session);
       expect((await events()).map(event => event.metadata.kickoffId)).toEqual(['kickoff-1']);
       await expect(ledger()).resolves.toEqual([]);
+    });
+
+    it('considers only the latest entries of an overlong setting, copying no more than those', async () => {
+      const { session, settings, openRuns, ledger } = await setup();
+      const entries = Array.from({ length: 1_000 }, (_, index) => ({
+        ...OPEN_RUN,
+        kickoffId: `kickoff-${index}`,
+        heartbeatAt: 1,
+      }));
+      settings[FACTORY_OPEN_RUNS_SETTING] = entries;
+      const importLegacy = vi.spyOn(openRuns, 'importLegacy');
+
+      await listSessionOpenRuns(session, openRuns);
+
+      expect(importLegacy.mock.calls[0]![1]).toHaveLength(FACTORY_LEGACY_OPEN_RUNS_READ);
+      expect((await ledger()).map(run => run.kickoffId).sort()).toEqual(
+        entries
+          .slice(-FACTORY_LEGACY_OPEN_RUNS_READ)
+          .map(run => run.kickoffId)
+          .sort(),
+      );
+    });
+
+    it('lists a legacy run once when another reader copies it between the ledger reads', async () => {
+      const { session, settings, openRuns } = await setup();
+      const live = { ...OPEN_RUN, ownerId: 'old-release', heartbeatAt: Date.now() };
+      settings[FACTORY_OPEN_RUNS_SETTING] = [live];
+      const list = openRuns.listByThread.bind(openRuns);
+      vi.spyOn(openRuns, 'listByThread').mockImplementationOnce(async threadId => {
+        await openRuns.open(live);
+        return list(threadId);
+      });
+
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([live]);
     });
 
     it('still counts entries written before ownership was recorded as stale', async () => {
