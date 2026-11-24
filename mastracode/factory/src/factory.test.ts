@@ -2745,6 +2745,10 @@ describe('MastraFactory.prepare', () => {
   it.each([
     ['WorkOS', (workos: MastraAuthWorkos) => workos],
     ['WorkOS inside CompositeAuth', (workos: MastraAuthWorkos) => new CompositeAuth([workos])],
+    [
+      'WorkOS inside nested CompositeAuths',
+      (workos: MastraAuthWorkos) => new CompositeAuth([new CompositeAuth([workos])]),
+    ],
   ])('with %s, refuses tokens issued for any other resource', async (_name, wrap) => {
     // WorkOS verifies a bearer's signature against its JWKS but never its audience.
     const { publicKey, privateKey } = await generateKeyPair('RS256');

@@ -330,8 +330,11 @@ async function authenticateRequest(
   try {
     const result = await provider.authenticateToken(token, raw);
     if (aud !== undefined && result && refuseAudienceBoundTokens) {
-      const authenticatedBy = provider instanceof CompositeAuth ? provider.getAuthenticatedProvider(result) : provider;
-      // A composite that can't say which provider authenticated it is refused too.
+      // Follow nested composites to the provider that authenticated the token;
+      // one that can't say is refused too.
+      let authenticatedBy: IMastraAuthProvider | undefined = provider;
+      while (authenticatedBy instanceof CompositeAuth)
+        authenticatedBy = authenticatedBy.getAuthenticatedProvider(result);
       if (!authenticatedBy || refuseAudienceBoundTokens(authenticatedBy)) return null;
     }
     return toFactoryAuthUser(result);
