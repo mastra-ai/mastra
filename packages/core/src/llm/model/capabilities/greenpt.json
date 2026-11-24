@@ -91,31 +91,13 @@
     "qwen3.6-35b-a3b"
   ],
   "reasoning": {
-    "glm-5.2-caveman-ultra": [
+    "qwen3.5-397b-a17b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-honey-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "kimi-k2.7-code": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -127,19 +109,37 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-5.2": [
+    "glm-5.2-ponytail-ultra": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "green-r-raw": [
+    "glm-5.2-caveman-lite": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-honey-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-ponytail": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-honey-ultra": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -157,19 +157,49 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
+    "green-r-raw": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-ponytail-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "kimi-k2.7-code": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.6-35b-a3b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2-caveman-ultra": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
     "green-r": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-5.2-ponytail-ultra": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "qwen3.5-397b-a17b": [
+    "glm-5.2-honey": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -187,55 +217,25 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "qwen3.6-35b-a3b": [
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "glm-5.2-honey": [
+    "glm-5.2": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "glm-5.2-ponytail-lite": [
+    "holo2-30b-a3b": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-caveman": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-honey-ultra": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-ponytail": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2-caveman-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4-flash-0731": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -247,10 +247,10 @@
         "values": ["none", "high"]
       }
     ],
-    "holo2-30b-a3b": [
+    "glm-5.2-caveman": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ]
   }
