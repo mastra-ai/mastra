@@ -3,10 +3,10 @@
   "temperature": ["GLM-5.3", "MiniMax-M3.1-Flash", "gemma-4-31B-it", "gpt-oss-120b"],
   "structuredOutput": ["GLM-5.3", "MiniMax-M3.1-Flash", "gemma-4-31B-it", "gpt-oss-120b"],
   "reasoning": {
-    "GLM-5.3": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "gemma-4-31B-it": [
@@ -14,16 +14,16 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "MiniMax-M3.1-Flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
