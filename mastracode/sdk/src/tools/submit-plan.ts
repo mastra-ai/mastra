@@ -10,6 +10,10 @@
  * the sandbox is recreated, the plans directory moves, or the file is edited after
  * submission (which would make the approved plan differ from the reviewed one).
  *
+ * Only the first pass (validate, read, suspend) lives here. The description, schemas, the
+ * resumed pass and the no-`suspend` fallback are the builtin's own, because Mastra Code's
+ * rejection abort, Factory rules and the TUI match the builtin's result text.
+ *
  * Registered through the AgentController's `tools` option, with `submit_plan` added to its
  * `disableBuiltinTools` so the filesystem-free builtin is removed rather than left to be
  * replaced by name in the toolset merge.
@@ -17,9 +21,7 @@
 
 import * as path from 'node:path';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { createTool } from '@mastra/core/tools';
-import type { SubmitPlanResumeData } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool, submitPlanTool } from '@mastra/core/tools';
 import type { MastraCodeState } from '../schema.js';
 import {
   getLocalPlansDir,
@@ -35,14 +37,6 @@ export interface SubmitPlanToolOptions {
   /** Host-configured workspace-relative plans directory (e.g. `.artifacts/plans`). */
   plansDir?: string;
 }
-
-const resumeSchema = z.object({
-  action: z.enum(['approved', 'rejected']),
-  feedback: z.string().optional(),
-  path: z.string().optional(),
-  title: z.string().optional(),
-  plan: z.string().optional(),
-});
 
 /**
  * Where to write a plan and which path to submit. Named in every rejection so the agent can
@@ -62,81 +56,17 @@ function planPathError(detail: string, guidance: string): string {
 export function createSubmitPlanTool(options: SubmitPlanToolOptions = {}) {
   return createTool({
     id: SUBMIT_PLAN_TOOL_ID,
-    description:
-      'Submit a plan you wrote to a markdown file for review. Pass the `path` to that file (e.g. `<plans directory>/add-dark-mode.md`, using the plans directory your instructions name). Write/edit the file first — do not paste the plan contents here. Reuse the same file across revisions; only create a new file for a genuinely new plan. The user can approve, reject, or request changes. On approval, the system automatically switches to the default mode so you can implement.',
-    inputSchema: z.object({
-      path: z
-        .string()
-        .describe(
-          'Path to the plan markdown file on disk, inside the plans directory your instructions name (e.g. `<plans directory>/add-dark-mode.md`).',
-        ),
-    }),
-    suspendSchema: z.object({
-      toolId: z.literal(SUBMIT_PLAN_TOOL_ID).optional(),
-      path: z.string(),
-      title: z.string().optional(),
-      plan: z.string().optional(),
-    }),
-    resumeSchema,
-    execute: async ({ path: submittedPath }, context: any) => {
+    description: submitPlanTool.description,
+    inputSchema: submitPlanTool.inputSchema,
+    suspendSchema: submitPlanTool.suspendSchema,
+    resumeSchema: submitPlanTool.resumeSchema,
+    execute: async (input, context: any) => {
+      const suspend = context?.agent?.suspend;
+      if (context?.agent?.resumeData !== undefined || !suspend) {
+        return submitPlanTool.execute!(input, context);
+      }
+      const submittedPath = input.path;
       try {
-        const resumeData = (context?.agent?.resumeData ?? context?.resumeData) as SubmitPlanResumeData | undefined;
-        if (resumeData !== undefined) {
-          if (resumeData.action === 'approved') {
-            return {
-              toolId: SUBMIT_PLAN_TOOL_ID,
-              content: 'Plan approved. Proceed with implementation following the approved plan.',
-              isError: false,
-              submittedPlan: {
-                title: resumeData.title,
-                path: resumeData.path,
-                plan: resumeData.plan,
-                action: 'approved',
-              },
-            };
-          }
-
-          if (resumeData.feedback) {
-            return {
-              toolId: SUBMIT_PLAN_TOOL_ID,
-              content: `Plan was not approved. The user wants revisions.\n\nUser feedback: ${resumeData.feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
-              isError: false,
-              submittedPlan: {
-                title: resumeData.title,
-                path: resumeData.path,
-                plan: resumeData.plan,
-                action: 'rejected',
-                feedback: resumeData.feedback,
-              },
-            };
-          }
-
-          // No inline feedback — the user will provide revision instructions in
-          // their next chat message. Stop and wait for it.
-          return {
-            toolId: SUBMIT_PLAN_TOOL_ID,
-            content:
-              'Plan was not approved. The user will send revision instructions in their next message. Stop now and wait for the user to provide feedback before revising the plan.',
-            isError: false,
-            submittedPlan: {
-              title: resumeData.title,
-              path: resumeData.path,
-              plan: resumeData.plan,
-              action: 'rejected',
-            },
-          };
-        }
-
-        const suspend = context?.agent?.suspend ?? context?.suspend;
-        if (!suspend) {
-          // No agent context available: surface the submission as readable text so
-          // non-agent execution paths still expose it to the model.
-          return {
-            content: `[Plan submitted for review]\n\nPath: ${submittedPath}`,
-            isError: false,
-          };
-        }
-
         const agentControllerCtx = context?.requestContext?.get('controller') as
           | AgentControllerRequestContext<MastraCodeState>
           | undefined;

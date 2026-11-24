@@ -165,54 +165,50 @@ describe('submit_plan (host tool)', () => {
     expect(result.content).toContain('session workspace filesystem is not available');
   });
 
-  it('reports an approved resume with the reviewed plan', async () => {
-    const at = new Date().toISOString();
-    const reviewedPlan = {
-      title: 'Fail fast on unrenderable plan paths',
-      path: `${PLANS_DIR}/issue-5.md`,
-      plan: 'Read the plan at suspend time.',
-    };
-    const { context } = resumePass({ action: 'approved', ...reviewedPlan, at }, createAgentControllerCtx());
+  it('reuses the builtin description and schemas', () => {
+    const host = tool();
 
-    const result = await tool().execute({ path: `${PLANS_DIR}/issue-5.md` }, context);
-
-    expect(result).toMatchObject({
-      isError: false,
-      content: 'Plan approved. Proceed with implementation following the approved plan.',
-      submittedPlan: { ...reviewedPlan, action: 'approved' },
-    });
+    expect(host.description).toBe(submitPlanTool.description);
+    expect(host.inputSchema).toBe(submitPlanTool.inputSchema);
+    expect(host.suspendSchema).toBe(submitPlanTool.suspendSchema);
+    expect(host.resumeSchema).toBe(submitPlanTool.resumeSchema);
   });
 
-  it('reports a rejected resume with feedback', async () => {
-    const { context } = resumePass(
-      { action: 'rejected', feedback: 'Split phase 2 out.', path: `${PLANS_DIR}/issue-5.md` },
-      createAgentControllerCtx(),
-    );
+  // Mastra Code's rejection abort, Factory rules and the TUI match the builtin's result text,
+  // so a resumed call must report exactly what the builtin reports.
+  it.each([
+    {
+      label: 'an approval with the reviewed plan',
+      resumeData: {
+        action: 'approved',
+        title: 'Fail fast on unrenderable plan paths',
+        path: `${PLANS_DIR}/issue-5.md`,
+        plan: 'Read the plan at suspend time.',
+      },
+    },
+    {
+      label: 'a rejection with feedback',
+      resumeData: { action: 'rejected', feedback: 'Split phase 2 out.', path: `${PLANS_DIR}/issue-5.md` },
+    },
+    { label: 'a rejection without feedback', resumeData: { action: 'rejected' } },
+  ])('reports $label exactly as the builtin does', async ({ resumeData }) => {
+    const input = { path: `${PLANS_DIR}/issue-5.md` };
 
-    const result = await tool().execute({ path: `${PLANS_DIR}/issue-5.md` }, context);
+    const host = await tool().execute(input, resumePass(resumeData, createAgentControllerCtx()).context);
+    const builtin = await submitPlanTool.execute!(input, resumePass(resumeData, createAgentControllerCtx()).context);
 
-    expect(result).toMatchObject({ isError: false, submittedPlan: { action: 'rejected' } });
-    expect(result.content).toContain('Split phase 2 out.');
+    expect(host).toEqual(builtin);
+    expect(host).toMatchObject({ isError: false, submittedPlan: { action: resumeData.action } });
   });
 
-  it('tells the agent to stop when a rejection carries no feedback', async () => {
-    const { context } = resumePass({ action: 'rejected' }, createAgentControllerCtx());
+  it('surfaces the path exactly as the builtin does when there is no suspension capability', async () => {
+    const input = { path: `${PLANS_DIR}/issue-5.md` };
+    const context = () => ({ requestContext: { get: () => undefined }, workspace: {} });
 
-    const result = await tool().execute({ path: `${PLANS_DIR}/issue-5.md` }, context);
+    const host = await createSubmitPlanTool().execute(input, context());
 
-    expect(result).toMatchObject({ isError: false, submittedPlan: { action: 'rejected' } });
-    expect(result.content).toContain('Stop now and wait for the user to provide feedback');
-  });
-
-  it('surfaces the path when there is no suspension capability', async () => {
-    const context = {
-      requestContext: { get: () => undefined },
-      workspace: {},
-    };
-
-    const result = await createSubmitPlanTool().execute({ path: `${PLANS_DIR}/issue-5.md` }, context);
-
-    expect(result).toMatchObject({ isError: false });
-    expect(result.content).toContain(`${PLANS_DIR}/issue-5.md`);
+    expect(host).toEqual(await submitPlanTool.execute!(input, context()));
+    expect(host).toMatchObject({ isError: false });
+    expect(host.content).toContain(`${PLANS_DIR}/issue-5.md`);
   });
 });
