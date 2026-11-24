@@ -353,36 +353,11 @@ describe('Observational Memory token counts for stored history', () => {
     },
   );
 
-  it('saves a message marked for resave whole when it is not stored yet', async () => {
-    const { storage, memory } = open(join(dbDir, 'resave-unstored.db'));
+  it('does not bring back a remembered message that was deleted during the turn', async () => {
+    const { storage, memory } = open(join(dbDir, 'deleted-mid-turn.db'));
     const threadId = randomUUID();
-    const id = `${threadId}-unstored`;
-    await memory.saveThread({
-      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
-    });
-    const live: MastraDBMessage = {
-      id,
-      threadId,
-      resourceId: RESOURCE,
-      role: 'user',
-      createdAt: new Date(0),
-      content: { format: 2, parts: [{ type: 'text', text: 'Never stored. '.repeat(40) }] },
-    };
-    new TokenCounter().countMessage(live);
-    const om = (await memory.omEngine)!;
-    await om.persistMessages([live], threadId, RESOURCE, new Set([id]));
-
-    const memoryStore = (await storage.getStore('memory'))!;
-    const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
-    expect(saved).toBeDefined();
-    expect(trustedEntries(saved!.content.parts[0])).toHaveLength(1);
-  });
-
-  it('still saves an unstored message whole when the count patch for a stored one fails', async () => {
-    const { storage, memory } = open(join(dbDir, 'patch-fails.db'));
-    const threadId = randomUUID();
-    const storedId = `${threadId}-stored`;
-    const unstoredId = `${threadId}-unstored`;
+    const keptId = `${threadId}-kept`;
+    const deletedId = `${threadId}-deleted`;
     await memory.saveThread({
       thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
     });
@@ -394,23 +369,21 @@ describe('Observational Memory token counts for stored history', () => {
       createdAt,
       content: { format: 2, parts: [{ type: 'text', text: `${id} `.repeat(40) }] },
     });
-    await memory.saveMessages({ messages: [build(storedId, new Date(0))] });
-    const stored = build(storedId, new Date(0));
-    const unstored = build(unstoredId, new Date(1000));
-    new TokenCounter().countMessage(stored);
-    new TokenCounter().countMessage(unstored);
-    const memoryStore = (await storage.getStore('memory'))!;
-    vi.spyOn(memoryStore, 'updateMessages').mockRejectedValue(new Error('patch failed'));
+    await memory.saveMessages({ messages: [build(keptId, new Date(0)), build(deletedId, new Date(1000))] });
+    // Both were loaded at turn start and counted during it; one is then deleted.
+    const kept = build(keptId, new Date(0));
+    const deleted = build(deletedId, new Date(1000));
+    new TokenCounter().countMessage(kept);
+    new TokenCounter().countMessage(deleted);
+    await memory.deleteMessages([deletedId]);
 
     const om = (await memory.omEngine)!;
-    await om.persistMessages([stored, unstored], threadId, RESOURCE, new Set([storedId, unstoredId]));
+    await om.persistMessages([kept, deleted], threadId, RESOURCE, new Set([keptId, deletedId]));
 
-    const rows = (await memoryStore.listMessagesById({ messageIds: [storedId, unstoredId] })).messages;
-    const byId = new Map(rows.map(row => [row.id, row]));
-    // The unstored message reaches storage with its count, even though patching the stored one failed.
-    expect(trustedEntries(byId.get(unstoredId)!.content.parts[0])).toHaveLength(1);
-    // The failed patch left the stored message uncounted, to be counted again on read.
-    expect(trustedEntries(byId.get(storedId)!.content.parts[0])).toHaveLength(0);
+    const memoryStore = (await storage.getStore('memory'))!;
+    const rows = (await memoryStore.listMessagesById({ messageIds: [keptId, deletedId] })).messages;
+    expect(rows.map(row => row.id)).toEqual([keptId]);
+    expect(trustedEntries(rows[0]!.content.parts[0])).toHaveLength(1);
   });
 
   it('saves a sealed message holding a completed boundary whole, so its end marker and count both reach storage', async () => {

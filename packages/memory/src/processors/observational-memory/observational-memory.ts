@@ -2215,7 +2215,7 @@ export class ObservationalMemory {
    * Messages with observation markers are always saved (upserted) even if sealed,
    * because the markers need to be persisted to storage. A stored message in `resaveIds` gained token
    * counts after it was stored, whether or not it is sealed: only those counts are copied onto the stored
-   * copy, see {@link persistTokenEstimatesOntoStored}; one with no stored row is saved whole. Ids in `resaveIds` must not be this turn's own
+   * copy, see {@link persistTokenEstimatesOntoStored}; one with no stored row was deleted during the turn and stays deleted. Ids in `resaveIds` must not be this turn's own
    * input or output, which are saved whole.
    */
   async persistMessages(
@@ -2248,15 +2248,10 @@ export class ObservationalMemory {
     }
 
     // A missed count write only costs a recount on the next request, so it must never fail the save.
-    let notStored: MastraDBMessage[] = [];
     try {
-      notStored = await this.persistTokenEstimatesOntoStored(storedWithNewCounts);
+      await this.persistTokenEstimatesOntoStored(storedWithNewCounts);
     } catch (error) {
       omError('[OM] Failed to save token counts for stored messages', error);
-    }
-    // A message with no stored row has nothing to patch, so it is saved whole.
-    if (notStored.length > 0) {
-      await this.messageHistory.persistMessages({ messages: notStored, threadId, resourceId });
     }
   }
 
@@ -2266,8 +2261,8 @@ export class ObservationalMemory {
    * instead of saved whole. Each count goes to the first stored part whose content matches the counted
    * part, so a part that changed in storage keeps no count and is counted again on read.
    */
-  private async persistTokenEstimatesOntoStored(messages: MastraDBMessage[]): Promise<MastraDBMessage[]> {
-    if (messages.length === 0) return [];
+  private async persistTokenEstimatesOntoStored(messages: MastraDBMessage[]): Promise<void> {
+    if (messages.length === 0) return;
     type Part = MastraDBMessage['content']['parts'][number] & { providerMetadata?: Record<string, any> };
     // Everything but the count itself is compared: `providerMetadata.mastra.modelOutput` changes what the model
     // sees, so two parts with the same raw result but different model outputs must not share a count.
@@ -2300,17 +2295,7 @@ export class ObservationalMemory {
       });
       if (changed) updates.push({ id: row.id, content: { ...row.content, parts } as MastraDBMessage['content'] });
     }
-    // Decided before patching: a failed patch must not hide the messages that still need a whole save.
-    const storedIds = new Set(stored.map(row => row.id));
-    const notStored = messages.filter(message => !storedIds.has(message.id));
-    if (updates.length > 0) {
-      try {
-        await this.storage.updateMessages({ messages: updates });
-      } catch (error) {
-        omError('[OM] Failed to save token counts for stored messages', error);
-      }
-    }
-    return notStored;
+    if (updates.length > 0) await this.storage.updateMessages({ messages: updates });
   }
 
   /**
