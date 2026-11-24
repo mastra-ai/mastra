@@ -1179,6 +1179,48 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0 } });
     }, 60_000);
 
+    it("repairs another binding's linking pages behind its saved settle cursor when its item is taken over", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#linear' },
+      ]);
+      await run([upsert({ sourceId: 'p0' })]);
+      const host = knowledge.importers!.host;
+      const first = await host.startRun('b2');
+      if (first.status !== 'started') throw new Error('not started');
+      const children = Array.from({ length: 60 }, (_, i) =>
+        upsert({ sourceId: `c${String(i).padStart(2, '0')}`, parent: 'p' }),
+      );
+      await flushOnce(host, first.runId, first.generation, 1, [
+        upsert({ sourceId: 'q1' }),
+        upsert({ sourceId: 'a-link', links: [{ sourceId: 'q1' }] }),
+        ...children,
+      ]);
+      // The parent arrives and settles 50; the run ends with its settle cursor saved at c49.
+      expect(await flushOnce(host, first.runId, first.generation, 2, [upsert({ sourceId: 'p' })])).toMatchObject({
+        pending: true,
+      });
+      await host.finishRun({
+        runId: first.runId,
+        generation: first.generation,
+        outcome: 'succeeded',
+        backlog: false,
+        lastSeq: 2,
+      });
+      expect((await page('linear/a-link'))?.body).toContain('[[docs:acme#linear/q1]]');
+      // A person moves b2's q1 to where b1's q1 goes, and b1 takes it over; a-link sorts before b2's cursor.
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear/q1', parent: 'notion' });
+      expect(await run([upsert({ sourceId: 'q1', body: 'from b1' })])).toMatchObject({ counts: { updated: 1 } });
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.getNode('b2', 'a-link'))?.unsettled).toBe(true);
+      // b2's next empty run reaches a-link: it no longer links to the page b1 took over.
+      expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded' });
+      expect((await page('linear/a-link'))?.body).not.toContain('q1]]');
+      // Once b2 sends q1 again, a-link links to b2's new page.
+      expect(await run([upsert({ sourceId: 'q1' })], 'b2')).toMatchObject({ counts: { created: 1 } });
+      expect((await page('linear/a-link'))?.body).toContain('[[docs:acme#linear/q1]]');
+    });
+
     it("repairs another binding's linking pages that sort before its saved settle cursor", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
