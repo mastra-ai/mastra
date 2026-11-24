@@ -444,11 +444,15 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     } while (cursor);
     return kept;
   };
-  /** Saves the body a page has as it is taken over, in place of any earlier takeover's. */
+  /**
+   * Saves the body a page has as it is taken over, in place of any earlier takeover's. An empty body
+   * keeps no note, so a removal stubs the page rather than bringing back a body a person cleared.
+   */
   const keepBody = async (pageId: string, body: string) => {
     for (const earlier of await keptBodyNotes(pageId)) {
       await storage.removeNote({ id: earlier.id, deletedBy: provenance.author, provenance });
     }
+    if (!body) return;
     await storage.addNote({
       id: `${originalBodyNotePrefix(pageId)}:${randomUUID()}`,
       pageId,
@@ -654,7 +658,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       const imported = await release(fresh.id);
       renamed = fields.name !== fresh.name;
       // Saved whatever this op sends: a later upsert, not this one, may be what replaces the body.
-      if (fresh.body && !imported) await keepBody(fresh.id, fresh.body);
+      if (!imported) await keepBody(fresh.id, fresh.body ?? '');
       page = await storage.updatePage({ id: fresh.id, expectedVersion: fresh.version, ...fields, provenance });
       change = 'updated';
       adopted = true;
@@ -672,8 +676,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       page = current.page;
       // An item sent again after its removal takes the page over again: the body it has now, which
       // someone may have edited since, is the one its next removal gives back.
-      if (existing.stub && existing.adopted && page.body && !REMOVED_BODIES.has(page.body)) {
-        await keepBody(page.id, page.body);
+      if (existing.stub && existing.adopted && !REMOVED_BODIES.has(page.body ?? '')) {
+        await keepBody(page.id, page.body ?? '');
       }
       // A page a person moved out of the target stays where they put it.
       if (!current.outside && page.parentId !== destination.page.id) {

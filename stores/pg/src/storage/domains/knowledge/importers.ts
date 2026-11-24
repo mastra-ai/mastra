@@ -133,6 +133,8 @@ export function pgKnowledgeImportersDDL(schemaName?: string): string[] {
       generation integer NOT NULL,
       first_write_at timestamptz
     )`,
+    // The writer guard's one row: the exported DDL has to provision it too, so init can be skipped.
+    `INSERT INTO ${t.guard} (id, active_path, generation) VALUES (true, 'new', 1) ON CONFLICT (id) DO NOTHING`,
   ];
 }
 
@@ -214,9 +216,6 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
         `mastra-knowledge-importers-schema:${this.#schemaName ?? ''}`,
       ]);
       for (const statement of pgKnowledgeImportersDDL(this.#schemaName)) await tx.query(statement);
-      await tx.query(
-        `INSERT INTO ${this.#t.guard} (id, active_path, generation) VALUES (true, 'new', 1) ON CONFLICT (id) DO NOTHING`,
-      );
     });
   }
 

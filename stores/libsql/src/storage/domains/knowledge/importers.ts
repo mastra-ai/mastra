@@ -115,6 +115,8 @@ export const KNOWLEDGE_IMPORTER_DDL = [
     generation INTEGER NOT NULL,
     firstWriteAt INTEGER
   )`,
+  // The writer guard's one row: the exported DDL has to provision it too, so init can be skipped.
+  `INSERT OR IGNORE INTO "${T.guard}" (id, activePath, generation) VALUES (1, 'new', 1)`,
 ];
 
 type RunStateReason = 'not_found' | 'not_running' | 'generation' | 'stale_guard' | 'seq';
@@ -200,7 +202,6 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
   async init(): Promise<void> {
     await this.#transaction(async tx => {
       for (const statement of KNOWLEDGE_IMPORTER_DDL) await tx.execute(statement);
-      await tx.execute(`INSERT OR IGNORE INTO "${T.guard}" (id, activePath, generation) VALUES (1, 'new', 1)`);
     });
   }
 

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import * as knowledgeCompat from '@internal/core/knowledge-compat';
 import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
+  createKnowledgeImporterExportDDLTests,
   createKnowledgeImporterHostTests,
   createKnowledgeHostedImporterHostTests,
   createKnowledgeImportersStorageTests,
@@ -319,3 +320,21 @@ const importerHostFixture = async () => {
 };
 createKnowledgeImporterHostTests(importerHostFixture);
 createKnowledgeHostedImporterHostTests(importerHostFixture);
+
+createKnowledgeImporterExportDDLTests(async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'knowledge-importer-export-'));
+  const url = `file:${join(dir, 'knowledge.db')}`;
+  // LibSQL exports no page DDL: the pages domain provisions itself, the importer tables come from the export.
+  const client = createClient({ url });
+  await new KnowledgeLibSQL({ client }).init();
+  for (const statement of KnowledgeLibSQL.getImportersExportDDL()) await client.execute(statement);
+  client.close();
+  const storage = new LibSQLStore({ id: 'importer-export', url, disableInit: true });
+  return {
+    storage,
+    cleanup: async () => {
+      await storage.close?.();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+});

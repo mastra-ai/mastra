@@ -2,6 +2,7 @@ import {
   createKnowledgeImporterHostTests,
   createKnowledgeHostedImporterHostTests,
   createKnowledgeHostWriteTests,
+  createKnowledgeImporterExportDDLTests,
   createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgePageStoreTests,
@@ -364,3 +365,18 @@ const importerHostFixture = async () => {
 };
 createKnowledgeImporterHostTests(importerHostFixture);
 createKnowledgeHostedImporterHostTests(importerHostFixture);
+
+createKnowledgeImporterExportDDLTests(async () => {
+  const schemaName = `knowledge_importer_export_${process.pid}`;
+  await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+  await pool.query(`CREATE SCHEMA "${schemaName}"`);
+  for (const statement of [...KnowledgePG.getExportDDL(schemaName), ...KnowledgePG.getImportersExportDDL(schemaName)]) {
+    await pool.query(statement);
+  }
+  return {
+    storage: new PostgresStore({ id: 'importer-export', pool, schemaName, disableInit: true }),
+    cleanup: async () => {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    },
+  };
+});

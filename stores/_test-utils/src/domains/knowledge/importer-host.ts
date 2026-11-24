@@ -1456,6 +1456,48 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('notion/p1'))?.body).toBe('Human later');
     });
 
+    it('an item the source sends again after a person cleared its restored body is stubbed on removal, not given the old body', async () => {
+      const { knowledge, run, page } = setup();
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'Human original' });
+      await run([upsert({ sourceId: 'p1' })]);
+      await run([{ op: 'remove', sourceId: 'p1' }]);
+      expect((await page('notion/p1'))?.body).toBe('Human original');
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: '' });
+      await run([upsert({ sourceId: 'p1', body: 'back again' })]);
+      await run([{ op: 'remove', sourceId: 'p1' }]);
+      expect((await page('notion/p1'))?.body).toBe(
+        'Removed from the source. Kept because the page was here before the import.',
+      );
+    });
+
+    for (const again of ['another binding', 'the same binding id'] as const) {
+      it(`a second takeover by ${again} of a page a person emptied keeps no earlier body`, async () => {
+        const first = setup();
+        await first.knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'Human original' });
+        const p1 = await first.page('notion/p1');
+        await first.run([upsert({ sourceId: 'p1' })]);
+        await first.run([{ op: 'remove', sourceId: 'p1' }]);
+        await createKnowledgeImporterHost(first.knowledge, {
+          bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
+        }).retireBinding('b1');
+        await first.knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: '' });
+
+        const id = again === 'another binding' ? 'b9' : 'b1';
+        const second = setup([{ id, target: 'docs:acme#notion' }]);
+        await second.run([upsert({ sourceId: 'p1', body: 'imported again' })], id);
+        expect(await second.run([{ op: 'remove', sourceId: 'p1' }], id)).toMatchObject({ counts: { stubbed: 1 } });
+        expect(await second.page('notion/p1')).toMatchObject({
+          id: p1!.id,
+          body: 'Removed from the source. Kept because the page was here before the import.',
+        });
+        const storage = await second.knowledge.getStorage();
+        const kept = (await storage.listNotes({ pageId: p1!.id, read: 'all' })).notes.filter(n =>
+          n.text.startsWith('The body this page had before an importer took it over:'),
+        );
+        expect(kept).toEqual([]);
+      });
+    }
+
     it('drops a generated link to an item the source removed on the next empty run', async () => {
       const { run, page } = setup();
       await run([upsert({ sourceId: 'z-target' }), upsert({ sourceId: 'a-link', links: [{ sourceId: 'z-target' }] })]);
@@ -1635,5 +1677,42 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
     }))) {
       it(c.name, c.run);
     }
+  });
+}
+
+/**
+ * A store provisioned only from the exported DDL, with storage init disabled, runs an import: the
+ * export has to leave the importer tables as `importers.init()` would, writer-guard row included.
+ */
+export function createKnowledgeImporterExportDDLTests(
+  createFixture: () => Promise<KnowledgeImporterHostFixture>,
+): void {
+  describe('importer tables provisioned from the exported DDL', () => {
+    it('runs an import with storage init disabled', async () => {
+      const fixture = await createFixture();
+      try {
+        class Notes extends KnowledgeImporter({ id: 'notes', label: 'Notes' }) {
+          async import(ctx: KnowledgeImporterContext<Record<string, never>, never>) {
+            await ctx.items.upsert({ sourceId: 'p1', title: 'P1', body: 'body of p1' });
+          }
+        }
+        const knowledge = new Knowledge({
+          scopes: { 'docs:$orgId': {} },
+          storage: fixture.storage,
+          importers: [new Notes({ id: 'b1', target: 'docs:acme#notion' })],
+        });
+        expect(await knowledge.importers!.run('b1')).toMatchObject({
+          outcome: 'succeeded',
+          counts: { created: 1, refused: 0 },
+        });
+        const storage = await knowledge.getStorage();
+        const [scope] = await storage.getScopesByAddress(['docs:acme']);
+        expect((await storage.getPageByPath({ scopeId: scope!.id, path: ['notion', 'p1'], read: 'all' }))?.body).toBe(
+          'body of p1',
+        );
+      } finally {
+        await fixture.cleanup();
+      }
+    });
   });
 }
