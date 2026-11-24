@@ -49,7 +49,7 @@ program
   )
   .version(pkg.version, '-v, --version')
   .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
-    const region = args.region ? String(args.region) : undefined;
+    const region = args.region !== undefined ? String(args.region) : undefined;
     const validRegion = region !== undefined && isProjectRegion(region) ? region : undefined;
     const versionTag = args.tag?.trim() || undefined;
     const analyticsVersionTag = versionTagForAnalytics(versionTag);
@@ -75,7 +75,7 @@ program
           default_template: args.template === undefined,
           no_platform: args.platform === false,
           has_org: Boolean(args.org),
-          region: validRegion ?? (region ? 'invalid' : undefined),
+          region: validRegion ?? (region !== undefined ? 'invalid' : undefined),
           version_tag: analyticsVersionTag,
         },
         execution: async () => {
