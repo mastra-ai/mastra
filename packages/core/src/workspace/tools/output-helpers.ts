@@ -280,7 +280,8 @@ function sliceEdge(output: string, budget: number, limit: number, side: 'head' |
  * it fits.
  */
 function fitBudget(kept: string, budget: number, side: 'head' | 'tail'): string {
-  for (let tokens = estimateTokenCount(kept); tokens > budget; tokens = estimateTokenCount(kept)) {
+  // `kept.length > 0`: an empty string counts 0 tokens, which never fits a negative budget.
+  for (let tokens = estimateTokenCount(kept); kept.length > 0 && tokens > budget; tokens = estimateTokenCount(kept)) {
     const next = side === 'head' ? sliceByTokensSafe(kept, 0, budget) : sliceByTokensSafe(kept, -budget);
     // tokenx can't trim it any further: drop chars in proportion to the overshoot instead.
     const length = next.length < kept.length ? next.length : Math.floor((kept.length * budget) / tokens);

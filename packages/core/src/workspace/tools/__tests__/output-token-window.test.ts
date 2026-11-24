@@ -8,17 +8,22 @@ import { applyTokenLimit, applyTokenLimitSandwich, truncateOutput } from '../out
 
 // Records the length of every string handed to tokenx, so a test can prove the
 // exact (slow) estimator never walks the whole of a huge output (#30951).
-const scanned = vi.hoisted(() => ({ lengths: [] as number[] }));
+// `cap` turns a synchronous runaway loop into a thrown error instead of a hung test.
+const scanned = vi.hoisted(() => ({ lengths: [] as number[], cap: Infinity }));
+const record = (length: number) => {
+  scanned.lengths.push(length);
+  if (scanned.lengths.length > scanned.cap) throw new Error(`tokenx called more than ${scanned.cap} times`);
+};
 vi.mock('tokenx', async importOriginal => {
   const actual = await importOriginal<typeof import('tokenx')>();
   return {
     ...actual,
     estimateTokenCount: (text: string, ...rest: unknown[]) => {
-      scanned.lengths.push(text?.length ?? 0);
+      record(text?.length ?? 0);
       return (actual.estimateTokenCount as (...args: unknown[]) => number)(text, ...rest);
     },
     sliceByTokens: (text: string, ...rest: unknown[]) => {
-      scanned.lengths.push(text?.length ?? 0);
+      record(text?.length ?? 0);
       return (actual.sliceByTokens as (...args: unknown[]) => string)(text, ...rest);
     },
   };
@@ -26,6 +31,7 @@ vi.mock('tokenx', async importOriginal => {
 
 afterEach(() => {
   scanned.lengths = [];
+  scanned.cap = Infinity;
 });
 
 const LIMIT = 2_000;
@@ -189,24 +195,31 @@ describe('token limits on huge output (#30951)', () => {
   });
 
   it.each([
-    ['one unbroken word', 'x'.repeat(5 * MB), 0],
-    // tokenx rounds up when a slice cuts one long CJK segment: slicing the whole output on main recounts 2001 too.
-    ['CJK text', '漢字かなカナ'.repeat(MB / 2), 1],
-    ['tokens spread thinly through whitespace', ('word' + ' '.repeat(1_000)).repeat(5_000), 0],
-    ['minified code', 'function a(b,c){return b+c};var d=a(1,2);'.repeat(MB / 10), 0],
-  ])('%s: bounded scan, kept piece fits the limit', async (_label, output, rounding) => {
+    ['one unbroken word', 'x'.repeat(5 * MB)],
+    ['CJK text', '漢字かなカナ'.repeat(MB / 2)],
+    ['tokens spread thinly through whitespace', ('word' + ' '.repeat(1_000)).repeat(5_000)],
+    ['minified code', 'function a(b,c){return b+c};var d=a(1,2);'.repeat(MB / 10)],
+  ])('%s: bounded scan, kept piece fits the limit', async (_label, output) => {
     for (const from of ['start', 'end'] as const) {
       scanned.lengths = [];
       const result = await applyTokenLimit(output, LIMIT, from);
       expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
       const kept =
         from === 'start' ? result.slice(result.indexOf('\n') + 1) : result.slice(0, result.lastIndexOf('\n'));
-      expect(estimateTokenCount(kept)).toBeLessThanOrEqual(LIMIT + rounding);
+      expect(estimateTokenCount(kept)).toBeLessThanOrEqual(LIMIT);
       expect(result).toMatch(/\[output truncated: showing (last|first) ~2000 of ~\d+ tokens\]/);
     }
     scanned.lengths = [];
     await applyTokenLimitSandwich(output, LIMIT);
     expect(maxScanned()).toBeLessThanOrEqual(LIMIT * 32);
+  });
+
+  it('a negative limit returns instead of looping (maxOutputTokens is not validated)', async () => {
+    scanned.cap = 1_000;
+    for (const from of ['start', 'end'] as const) {
+      expect(typeof (await applyTokenLimit('x'.repeat(1_000), -1, from))).toBe('string');
+    }
+    expect(typeof (await applyTokenLimitSandwich('x'.repeat(1_000), -1))).toBe('string');
   });
 
   it('a window ending inside a long mixed-language segment still keeps head and tail within the budget', async () => {
