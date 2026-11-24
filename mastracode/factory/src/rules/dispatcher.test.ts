@@ -3427,6 +3427,29 @@ describe('FactoryDecisionDispatcher', () => {
       }
     });
 
+    it('resumes on the next delivery generation when the continuation was not delivered', async () => {
+      const { storage, session, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-build-not-delivered',
+        Date.now() - 60_000,
+      );
+      const send = session.sendSignal.getMockImplementation()!;
+      // A named non-delivery action: no run began, so the retry starts a new delivery generation.
+      session.sendSignal.mockImplementationOnce(() => ({
+        accepted: Promise.resolve({ accepted: true, action: 'persist' }),
+      }));
+      session.sendSignal.mockImplementation(send);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(2);
+      expect(session.sendSignal.mock.calls[1]![0]).toMatchObject({
+        id: expect.stringMatching(new RegExp(`^${lost.id}:retry:\\d+:resume:\\d+$`)),
+        contents: expect.stringContaining('Your previous run was interrupted'),
+      });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+
     it('does not resume, and keeps the lost run, when its end cannot be recorded', async () => {
       const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild(
         'lost-build-audit-down',
