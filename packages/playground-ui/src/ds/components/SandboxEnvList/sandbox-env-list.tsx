@@ -351,7 +351,7 @@ function SandboxEnvDialog({
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
           <DialogAction disabled={!canSave} onConfirm={save}>
-            {pending ? 'Saving…' : 'Save'}
+            Save
           </DialogAction>
         </DialogFooter>
       </DialogContent>

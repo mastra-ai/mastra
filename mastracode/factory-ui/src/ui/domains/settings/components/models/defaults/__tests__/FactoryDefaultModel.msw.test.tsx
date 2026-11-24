@@ -131,7 +131,7 @@ describe('FactoryDefaultModel', () => {
 
     await waitFor(() => expect(applyRequests).toEqual(['apply']));
     expect(screen.getByRole('dialog', { name: SWITCH_PROMPT })).toBeInTheDocument();
-    expect(switchSessions).toBeDisabled();
+    expect(switchSessions).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('button', { name: 'Keep them as-is' })).toBeDisabled();
 
     releaseApply();

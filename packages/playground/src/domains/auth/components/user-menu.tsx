@@ -131,10 +131,10 @@ export function UserMenu({ user }: UserMenuProps) {
             icon={<IconArrowBoxLeft />}
             variant="ghost"
             onClick={() => handleLogout()}
-            disabled={isPending}
             className="w-full justify-start"
+            loading={isPending}
           >
-            {isPending ? 'Signing out...' : 'Sign out'}
+            Sign out
           </Button>
         </div>
       </PopoverContent>

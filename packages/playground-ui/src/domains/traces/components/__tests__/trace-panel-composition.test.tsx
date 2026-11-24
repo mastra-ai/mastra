@@ -643,9 +643,12 @@ describe('TracePanel, fully composed — downloading the trace', () => {
 
   describe('when the host is still downloading', () => {
     it('refuses a second download', () => {
-      render(<FullTracePanel {...baseProps} isDownloadingTrace />);
+      const onDownloadTrace = vi.fn<(traceId: string) => void>();
+      render(<FullTracePanel {...baseProps} onDownloadTrace={onDownloadTrace} isDownloadingTrace />);
 
-      expect(screen.getByRole('button', { name: 'Download trace JSON' }).hasAttribute('data-disabled')).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Download trace JSON', busy: true }));
+
+      expect(onDownloadTrace).not.toHaveBeenCalled();
     });
   });
 });

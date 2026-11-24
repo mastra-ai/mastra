@@ -3,7 +3,17 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 /** Puts a built-in or app board back to Factory's version, after asking. */
-export function BoardResetButton({ name, pending, onReset }: { name: string; pending: boolean; onReset: () => void }) {
+export function BoardResetButton({
+  name,
+  disabled,
+  loading,
+  onReset,
+}: {
+  name: string;
+  disabled: boolean;
+  loading: boolean;
+  onReset: () => void;
+}) {
   return (
     <AlertDialog>
       <AlertDialog.Trigger
@@ -14,7 +24,8 @@ export function BoardResetButton({ name, pending, onReset }: { name: string; pen
             icon={<IconArrowRotateCounterClockwise />}
             tooltip="Go back to Factory's version of this board"
             tooltipPosition="bottom"
-            disabled={pending}
+            disabled={disabled}
+            loading={loading}
           >
             Reset
           </Button>
