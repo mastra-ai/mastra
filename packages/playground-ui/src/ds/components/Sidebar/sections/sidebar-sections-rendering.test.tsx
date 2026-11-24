@@ -3,7 +3,6 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { getIsLinkActive } from '../nav/sidebar-link-active';
-import { navRowInset } from '../nav/sidebar-nav-item-classes';
 import { SidebarSections } from './sidebar-sections';
 import type { SidebarSection } from './sidebar-sections';
 
@@ -186,7 +185,7 @@ describe('SidebarSections', () => {
       />,
     );
 
-    expect(screen.getByRole('link', { name: 'Agents' }).className).toContain(navRowInset);
+    expect(screen.getByRole('link', { name: 'Agents' }).className).not.toMatch(/\bpl-/);
     expect(screen.getByRole('link', { name: 'Templates' }).className).toContain('pl-8');
     expect(screen.getByRole('link', { name: 'Drafts' }).className).toContain('pl-10');
   });

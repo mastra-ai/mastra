@@ -66,7 +66,7 @@ const idleSurface =
 
 const activeSurface = 'rounded-lg bg-fill text-foreground [&>svg]:text-icon';
 
-const featuredSurface = 'my-2 rounded-lg border border-transparent bg-brand-green text-black hover:brightness-95';
+const featuredSurface = 'my-2 rounded-lg bg-brand-green text-black hover:brightness-95';
 
 export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) => {
   if (isFeatured) return featuredSurface;
