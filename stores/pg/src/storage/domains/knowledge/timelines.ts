@@ -157,8 +157,11 @@ export class PgKnowledgeTimelines implements KnowledgeTimelinesStorage {
     return this.#client.tx(async tx => {
       const page = await tx.oneOrNone(`SELECT "deletedAt" FROM ${this.#t.pages} WHERE "id" = $1 FOR UPDATE`, [pageId]);
       if (!page || page.deletedAt) throw new KnowledgeNotFoundError('page', pageId);
+      // The page-row lock above is what makes select-then-insert safe: a second markTimeline waits on it.
       const marked = await tx.oneOrNone(`SELECT 1 FROM ${this.#t.timelines} WHERE "pageId" = $1`, [pageId]);
       if (marked) return { status: 'unchanged' as const };
+      // Known window: createPage doesn't lock the parent row, so a child created after this check
+      // commits alongside the mark. That leaves a timeline with children; reads are unaffected.
       const child = await tx.oneOrNone(
         `SELECT 1 FROM ${this.#t.pages} WHERE "parentId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
         [pageId],
