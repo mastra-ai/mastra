@@ -7,6 +7,8 @@ import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
+import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
 import {
   isRunRepositoryInstruction,
@@ -14,12 +16,14 @@ import {
   resolveRunRepositoryFromIntake,
   runRepositoryInstruction,
 } from '../session/work-item-repository.js';
+import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { FactoryDispatchError } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { externallyAuthoredWorkItem } from './types.js';
 import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
@@ -165,6 +169,7 @@ export class FactoryStartCoordinator {
   readonly #projects?: FactoryProjectsStorage;
   readonly #modelDefaults?: ModelDefaultsStorage;
   readonly #boards?: ProjectBoardSource;
+  readonly #vaultSandboxes: boolean;
 
   constructor(
     controller: FactoryController,
@@ -179,7 +184,9 @@ export class FactoryStartCoordinator {
     sessionModel?: { projects: FactoryProjectsStorage; modelDefaults: ModelDefaultsStorage },
     /** Tells a pull request review run from the card's other review runs; without it every review run with a pull request is untrusted. */
     boards?: BoardRegistry | ProjectBoardSource,
+    sandboxProvider?: string,
   ) {
+    this.#vaultSandboxes = sandboxHostMayUseCredentialVault(sandboxProvider);
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
@@ -197,10 +204,31 @@ export class FactoryStartCoordinator {
     if (!sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(sourceControl, request);
     const starter = request.startedBy;
-    await sourceControl.sessions.setSandboxUser({
-      sessionId: sourceSession.sessionId,
-      userId: starter?.type === 'human' && !isFactoryPrincipalId(starter.id) ? starter.id : null,
-    });
+    const sandboxUserId = starter?.type === 'human' && isHumanActorId(starter.id) ? starter.id : null;
+    const hasSandbox = Boolean(sourceSession.sandboxId || sourceSession.materializedAt);
+    const existingActor =
+      sourceSession.sandboxUserId !== undefined ? sourceSession.sandboxUserId : hasSandbox ? null : undefined;
+    const sandbox = peekSessionSandbox(sourceSession.sessionId)?.sandbox;
+    const tokenSandbox = sandbox && 'vault' in sandbox && sandbox.vault === false;
+    const vaultSandbox = this.#vaultSandboxes && !tokenSandbox;
+    if (
+      vaultSandbox &&
+      existingActor !== undefined &&
+      (existingActor !== sandboxUserId || (hasSandbox && existingActor === null)) &&
+      (existingActor !== null || hasSandbox)
+    ) {
+      throw new FactoryDispatchError(
+        'sandbox_vault_owner_required',
+        `Credential vault refusal: this card's sandbox acts as ${existingActor ?? 'no authenticated human'}; only that original human starter may reuse it.`,
+      );
+    }
+    // Token-only starts keep the original grant metadata without constraining who starts the run.
+    if (
+      (!hasSandbox && sourceSession.sandboxUserId === undefined) ||
+      (vaultSandbox && existingActor !== sandboxUserId)
+    ) {
+      await sourceControl.sessions.setSandboxUser({ sessionId: sourceSession.sessionId, userId: sandboxUserId });
+    }
     const sessionModel =
       this.#projects && this.#modelDefaults
         ? await resolveFactorySessionModel({

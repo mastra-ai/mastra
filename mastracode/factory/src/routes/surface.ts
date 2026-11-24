@@ -32,7 +32,6 @@ import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
-import { sessionSandboxUser } from '../sandbox/vault.js';
 import { secretKeyMismatchHint, secretKeyProblem } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
@@ -296,18 +295,18 @@ async function legacyPlanSession(
   const legacyRole = legacyPlanRoleFor(boardId, input.role);
   if (!legacyRole) return undefined;
   const session = await reuseBoundSession(sourceControl, input, legacyRole);
-  if (session && sameBranch(session.branch, branch) && session.projectRepositoryId === projectRepositoryId) {
+  if (
+    session &&
+    (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
+    session.projectRepositoryId === projectRepositoryId
+  ) {
     return session;
   }
   return undefined;
 }
 
 function sameBranch(held: string, branch: string): boolean {
-  return (
-    held === branch ||
-    held === legacyGithubWorkItemBranch(branch) ||
-    (held.startsWith(`${branch}-session-`) && /^[a-f0-9]{8}$/.test(held.slice(`${branch}-session-`.length)))
-  );
+  return held === branch || held === legacyGithubWorkItemBranch(branch);
 }
 
 /** The branch a binding's session works on: the reviewed pull request's for PR review of an attached one. */
@@ -474,10 +473,11 @@ export async function prepareFactoryRuleBinding(
     if (repository.status !== 'resolved') {
       throw new FactoryDispatchError('source_repository_ambiguous', repository.hint);
     }
-    // Re-preparing keeps the role's repository and context unless the trusted
-    // sandbox actor changes; that case gets a fresh session below. A session may
-    // work outside its own repository only when a run recorded that repository
-    // on a card that named none.
+    // Re-preparing a binding (server restart, retired controller session) must
+    // land in the role's existing session: minting a replacement would repoint
+    // the work item, flip the session's owner to the approver, and orphan the
+    // previous sandbox. A session may work on a card outside its own repository
+    // only when a run recorded that repository on a card that named none.
     const approver = input.record.approvedBy ?? undefined;
     if (
       boundSession &&
@@ -499,7 +499,7 @@ export async function prepareFactoryRuleBinding(
       existingSession?.userId ??
       (await phaseSessionOwner({ sourceControl, workItems: owner?.workItems, project, approver }));
     if (isFactoryPrincipalId(ownerUserId)) await requireOrganizationModelKey(owner, project);
-    let preparedSession =
+    const preparedSession =
       existingSession ??
       (await ensureFactorySourceSession({
         sourceControl,
@@ -532,40 +532,11 @@ export async function prepareFactoryRuleBinding(
         );
       }));
 
-    const starter = approver ? await starterOf(owner?.workItems, project, approver) : undefined;
-    const sandboxUserId = starter?.type === 'human' && isHumanActorId(starter.id) ? starter.id : undefined;
-    const sourceSession = await sourceControl.sessions.getBySessionId(preparedSession.sessionId);
-    const existingActor =
-      sourceSession?.sandboxUserId ??
-      (sourceSession?.sandboxId || sourceSession?.materializedAt ? sessionSandboxUser(sourceSession) : undefined);
-    if (
-      sourceSession &&
-      existingActor !== sandboxUserId &&
-      (existingActor || sourceSession.sandboxId || sourceSession.materializedAt)
-    ) {
-      if (!sandboxUserId) {
-        throw new FactoryDispatchError(
-          'session_unavailable',
-          'An automated card start cannot reuse a session with an existing sandbox credential actor.',
-        );
-      }
-      // Keep the old session and its vault grant untouched. Factory-owned sessions
-      // share a model owner, so a fresh branch also keeps their storage keys distinct.
-      preparedSession = await ensureFactorySourceSession({
-        sourceControl,
-        orgId: input.record.orgId,
-        factoryProjectId: input.record.factoryProjectId,
-        projectRepositoryId: repository.projectRepositoryId,
-        branch: `${branch}-session-${globalThis.crypto.randomUUID().slice(0, 8)}`,
-        attributeToUserId: await phaseSessionOwner({ sourceControl, workItems: owner?.workItems, project, approver }),
-      });
-    }
-
     const modelScope = effectiveModelScope(project.modelScope, 'run');
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
-      ...(starter ? { startedBy: starter } : {}),
+      ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       expectedBindingId: input.expectedBindingId,
@@ -939,6 +910,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.domains.intake,
         { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
         deps.boardRegistry,
+        deps.sandbox?.provider,
       )
     : undefined;
   if (transitionService && startCoordinator) {

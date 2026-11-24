@@ -13,6 +13,11 @@ interface FactoryDispatchFailureMetadata {
 }
 
 const FAILURE_METADATA = {
+  sandbox_vault_owner_required: {
+    canRetry: true,
+    autoRetry: false,
+    label: 'Card sandbox requires its original vault owner',
+  },
   session_unavailable: { canRetry: true, label: 'Factory session unavailable' },
   source_control_missing: { canRetry: true, label: 'Source-control connection unavailable' },
   source_repository_missing: { canRetry: true, label: 'Source repository unavailable' },
