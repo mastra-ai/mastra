@@ -4,14 +4,21 @@ import type {
   KnowledgePageView,
   KnowledgeTreeChildren,
 } from '@mastra/core/knowledge';
-import type { KnowledgePageActivityEvent, KnowledgePageSearchHit } from '@mastra/core/storage';
+import type {
+  KnowledgePageActivityEvent,
+  KnowledgePageSearchHit,
+  KnowledgeTimelineEntryRecord,
+} from '@mastra/core/storage';
 import type { ClientOptions, Serialized } from '../types';
 import { createSseJsonTransform } from '../utils/stream-transforms';
 
 import { BaseResource } from './base';
 
 export type KnowledgeTreeResponse = Serialized<KnowledgeTreeChildren>;
-export type KnowledgePageResponse = Serialized<KnowledgePageView>;
+export type KnowledgePageResponse = Serialized<KnowledgePageView> & {
+  /** True when the page is a timeline; read its entries with `timeline()`. Absent from older servers. */
+  timeline?: boolean;
+};
 export type KnowledgeGraphResponse = Serialized<KnowledgePageGraph> & {
   /** Declared access grants onto the scopes shown; absent from servers on an older core. */
   grants?: Array<KnowledgeGraphScopeGrant & { principalLabel?: string }>;
@@ -32,6 +39,11 @@ export interface KnowledgeSearchResponse {
 export interface KnowledgeActivityResponse {
   events: Serialized<KnowledgePageActivityEvent>[];
   nextCursor?: string;
+}
+export interface KnowledgeTimelineResponse {
+  entries: Serialized<KnowledgeTimelineEntryRecord>[];
+  /** Null when there are no more entries, and always null for a keyword search. */
+  nextCursor: string | null;
 }
 
 /** One committed write the caller can read. Ids they can't read are left out; re-read what changed. */
@@ -113,6 +125,26 @@ export class Knowledge extends BaseResource {
     params: { scopeId?: string; pageId?: string; cursor?: string; limit?: number } = {},
   ): Promise<KnowledgeActivityResponse> {
     return this.request(`${this.base}/activity${query(params)}`);
+  }
+
+  /**
+   * A timeline page's entries: newest first by default, paged with `cursor`, within `since`/`until` (ISO date-times)
+   * or one `thread`. With `q`, the entries matching those keywords instead, best first and not paged. Rejects with
+   * 404 when the page is not a timeline, and 501 where the store has no timelines.
+   */
+  timeline(
+    pageId: string,
+    params: {
+      since?: string;
+      until?: string;
+      order?: 'desc' | 'asc';
+      thread?: string;
+      q?: string;
+      cursor?: string;
+      limit?: number;
+    } = {},
+  ): Promise<KnowledgeTimelineResponse> {
+    return this.request(`${this.base}/pages/${encodeURIComponent(pageId)}/timeline${query(params)}`);
   }
 
   /**

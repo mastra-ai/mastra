@@ -3252,6 +3252,30 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "GET /knowledge/:knowledgeKey/pages/:pageId/timeline": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/pages/:pageId/timeline",
+    "pathParams": [
+      "knowledgeKey",
+      "pageId"
+    ],
+    "queryParams": [
+      "cursor",
+      "limit",
+      "order",
+      "q",
+      "since",
+      "thread",
+      "until"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "entries"
+    }
+  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",

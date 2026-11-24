@@ -22,6 +22,7 @@ import {
   useKnowledgePage,
   useKnowledgePageGraph,
   useKnowledgeSearch,
+  useKnowledgeTimeline,
   useKnowledgeLinkedPages,
   useKnowledgeTreeLevels,
 } from '@/domains/knowledge/use-studio-knowledge';
@@ -66,6 +67,7 @@ function Explorer({
       usePageLinks: pageId => useKnowledgePageLinks(knowledgeKey, pageId),
       useLinkedPages: keys => useKnowledgeLinkedPages(knowledgeKey, keys),
       useActivity: pageId => useKnowledgeActivity(knowledgeKey, live, pageId),
+      useTimeline: (pageId, requests) => useKnowledgeTimeline(knowledgeKey, live, pageId, requests),
     }),
     [knowledgeKey, live],
   );

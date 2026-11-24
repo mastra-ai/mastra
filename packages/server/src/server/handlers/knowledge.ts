@@ -18,6 +18,8 @@ import {
   knowledgePathParams,
   knowledgeSearchQuerySchema,
   knowledgeSearchResponseSchema,
+  knowledgeTimelineQuerySchema,
+  knowledgeTimelineResponseSchema,
   knowledgeLinkCountsQuerySchema,
   knowledgeLinkCountsResponseSchema,
   knowledgePageLinksQuerySchema,
@@ -272,8 +274,11 @@ export const GET_KNOWLEDGE_PAGE_ROUTE = createRoute({
       const view = await readers.readKnowledgePage(store, { pageId, read, noteCursor, noteLimit });
       if (!view) throw new HTTPException(404, { message: 'Knowledge page not found' });
       const label = <T extends { isScope: boolean; declaration?: string }>(page: T) => withDisplayLabel(instance, page);
+      // Stores without timelines (and older cores) send no flag, and the explorer shows a plain page.
+      const timeline = (await store.timelines?.listTimelineIds({ pageIds: [view.page.id] }))?.length ? true : undefined;
       return {
         ...view,
+        ...(timeline ? { timeline } : {}),
         page: label(view.page),
         ancestors: view.ancestors.map(label),
         related: view.related.map(label),
@@ -400,6 +405,53 @@ export const SEARCH_KNOWLEDGE_ROUTE = createRoute({
       return { results: results.map(hit => ({ ...hit, page: withDisplayLabel(instance, hit.page) })) };
     } catch (error) {
       return handleError(error, 'Error searching Knowledge');
+    }
+  },
+});
+
+export const GET_KNOWLEDGE_TIMELINE_ROUTE = createRoute({
+  method: 'GET',
+  path: '/knowledge/:knowledgeKey/pages/:pageId/timeline',
+  responseType: 'json',
+  pathParamSchema: knowledgePagePathParams,
+  queryParamSchema: knowledgeTimelineQuerySchema,
+  responseSchema: knowledgeTimelineResponseSchema,
+  summary: "Read a timeline page's entries",
+  description:
+    "Returns a timeline page's entries, newest first by default, paged with cursor, within a since/until range or one thread. With q, returns the entries matching those keywords instead, best first and not paged. 404 when the page is not a timeline the caller can read; 501 when the store has no timelines.",
+  tags: ['Knowledge'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, knowledgeKey, pageId, since, until, order, thread, q, cursor, limit }) => {
+    try {
+      const { store, read } = await resolveStore(mastra, requestContext, knowledgeKey);
+      const timelines = store.timelines;
+      if (!timelines) throw new HTTPException(501, { message: 'This Knowledge store has no timelines.' });
+      const page = await store.getPage({ id: pageId, read });
+      if (!page || !(await timelines.listTimelineIds({ pageIds: [page.id] })).length) {
+        throw new HTTPException(404, { message: 'Knowledge timeline not found' });
+      }
+      const range = { since: since ? new Date(since) : undefined, until: until ? new Date(until) : undefined };
+      if (q) {
+        const entries = await timelines.searchEntries({
+          query: q,
+          read,
+          timelineIds: [page.id],
+          ...range,
+          limit: limit ?? 20,
+        });
+        return { entries, nextCursor: null };
+      }
+      return await timelines.listEntries({
+        timelineId: page.id,
+        read,
+        ...range,
+        order,
+        threadExternalId: thread,
+        cursor: cursor || undefined,
+        limit: limit ?? 50,
+      });
+    } catch (error) {
+      return handleError(error, 'Error reading Knowledge timeline');
     }
   },
 });

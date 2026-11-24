@@ -32,6 +32,7 @@ import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KnowledgeNotesSkeleton, KnowledgePageSkeleton } from './KnowledgePageSkeleton';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
+import { KnowledgeTimelineEntries } from './KnowledgeTimelineEntries';
 import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { ActionRow } from '@/ds/components/ActionRow';
@@ -88,6 +89,39 @@ export interface KnowledgeExplorerPageDetail {
   related: KnowledgePagePayload[];
   /** Notes on other pages that mention this one. */
   mentionedBy?: KnowledgeNotePayload[];
+  /** Set when the page is a timeline; the explorer then lists its entries through `useTimeline`. */
+  timeline?: boolean;
+}
+
+/** One entry of a timeline page, as the server sends it (times are ISO strings). */
+export interface KnowledgeExplorerTimelineEntry {
+  id: string;
+  timelineId: string;
+  externalId: string;
+  occurredAt: string;
+  writtenAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+  author: { sourceId: string; name?: string } | null;
+  threadExternalId: string | null;
+  body: string;
+  version: number;
+  writtenBy: string;
+}
+
+export interface KnowledgeExplorerTimeline {
+  entries: KnowledgeExplorerTimelineEntry[];
+  nextCursor: string | null;
+}
+
+/** One read of a timeline's entries. With `q` the host returns keyword matches, best first, unpaged. */
+export interface KnowledgeExplorerTimelineRequest {
+  order: 'desc' | 'asc';
+  since?: string;
+  until?: string;
+  thread?: string;
+  q?: string;
+  cursor?: string;
 }
 
 /** One level of the tree: a parent's child scopes then its child pages, paged. */
@@ -153,6 +187,11 @@ export interface KnowledgeExplorerSource {
   usePageLinks?: (pageId: string | null) => KnowledgeExplorerQueryState<KnowledgeExplorerPageLinks>;
   /** A page's recent activity, newest first. */
   useActivity?: (pageId: string) => KnowledgeExplorerQueryState<KnowledgeExplorerActivity>;
+  /** A timeline page's entries, one result per request in order (e.g. `useQueries`). Without it timelines show as plain pages. */
+  useTimeline?: (
+    pageId: string,
+    requests: KnowledgeExplorerTimelineRequest[],
+  ) => Array<KnowledgeExplorerQueryState<KnowledgeExplorerTimeline>>;
 }
 
 export interface KnowledgePageExplorerProps {
@@ -720,6 +759,11 @@ function SelectedPage({
       mentionedBy={detail.data.mentionedBy}
       links={links}
       activity={activity.data?.events}
+      timeline={
+        detail.data.timeline && source.useTimeline ? (
+          <KnowledgeTimelineEntries key={pageId} pageId={pageId} useTimeline={source.useTimeline} />
+        ) : undefined
+      }
       childPages={
         source.useTreeLevels ? (
           <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onOpen={onSelect} />

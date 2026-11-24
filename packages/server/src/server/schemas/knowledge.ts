@@ -39,6 +39,18 @@ export const knowledgeSearchQuerySchema = z.object({
   limit,
 });
 
+const timelineTime = z.iso.datetime({ offset: true });
+
+export const knowledgeTimelineQuerySchema = z.object({
+  since: timelineTime.optional().describe('Entries that happened at or after this ISO 8601 date-time'),
+  until: timelineTime.optional().describe('Entries that happened before this ISO 8601 date-time'),
+  order: z.enum(['desc', 'asc']).optional().describe('Newest first (default) or oldest first'),
+  thread: z.string().min(1).max(512).optional().describe("One thread: its root entry's externalId"),
+  q: z.string().min(1).max(200).optional().describe('Keywords to match in entry bodies; results are ranked, not paged'),
+  cursor: z.string().optional(),
+  limit,
+});
+
 const pageIds = z
   .union([z.string(), z.array(z.string())])
   .transform(value => (Array.isArray(value) ? value : [value]))
@@ -80,6 +92,10 @@ export const knowledgePageLinksResponseSchema = z.object({
   truncated: z.boolean(),
 });
 export const knowledgeActivityResponseSchema = payload;
+export const knowledgeTimelineResponseSchema = z.object({
+  entries: z.array(payload),
+  nextCursor: z.string().nullable(),
+});
 export const knowledgeEventsResponseSchema = z.object({
   kind: z.enum(['scope', 'page', 'note', 'pin']),
   op: z.string(),

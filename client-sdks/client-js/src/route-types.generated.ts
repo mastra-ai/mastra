@@ -184,7 +184,7 @@ type InputShared_Auxiliary_283 =
           };
     };
 
-type InputShared_Auxiliary_740 =
+type InputShared_Auxiliary_741 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -229,27 +229,27 @@ type InputShared_Auxiliary_740 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_740[];
+      args: InputShared_Auxiliary_741[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_740;
+      arg: InputShared_Auxiliary_741;
     };
 
-type InputShared_Auxiliary_814 = {
+type InputShared_Auxiliary_815 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_814[] | undefined;
+  children?: InputShared_Auxiliary_815[] | undefined;
 };
 
-type Shared_Auxiliary_799 = {
+type Shared_Auxiliary_800 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_799[] | undefined;
+  children?: Shared_Auxiliary_800[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1861,7 +1861,7 @@ type InputShared_Type_90 = {
       }
     | undefined;
   steps: InputShared_Type_85[];
-  predicates: InputShared_Auxiliary_740[];
+  predicates: InputShared_Auxiliary_741[];
 };
 
 type InputShared_Type_91 = {
@@ -1875,7 +1875,7 @@ type InputShared_Type_91 = {
     | undefined;
   step: InputShared_Type_85;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_740;
+  predicate: InputShared_Auxiliary_741;
 };
 
 type InputShared_Type_92 =
@@ -4528,7 +4528,7 @@ type Shared_Type_88 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_799[] | undefined;
+  files?: Shared_Auxiliary_800[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -13779,6 +13779,54 @@ export interface GetKnowledgeKnowledgeKeyActivity_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /knowledge/:knowledgeKey/pages/:pageId/timeline
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams = GetKnowledgeKnowledgeKeyPagesPageId_PathParams;
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams = {
+  /** Entries that happened at or after this ISO 8601 date-time */
+  since?: string | undefined;
+  /** Entries that happened before this ISO 8601 date-time */
+  until?: string | undefined;
+  /** Newest first (default) or oldest first */
+  order?: ('desc' | 'asc') | undefined;
+  /** One thread: its root entry's externalId */
+  thread?: string | undefined;
+  /** Keywords to match in entry bodies; results are ranked, not paged */
+  q?: string | undefined;
+  cursor?: string | undefined;
+  limit?: number | undefined;
+};
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Response = {
+  entries: {
+    [key: string]: unknown;
+  }[];
+  nextCursor: string | null;
+};
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams }) &
+    (GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyPagesPageIdTimeline_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Request;
+  response: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /knowledge/:knowledgeKey/events
 // ============================================================================
 export type GetKnowledgeKnowledgeKeyEvents_PathParams = GetKnowledgeKnowledgeKeyTree_PathParams;
@@ -19974,7 +20022,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_814[] | undefined;
+  files?: InputShared_Auxiliary_815[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -20032,7 +20080,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_814[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_815[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -25806,6 +25854,7 @@ export interface RouteTypes {
   'GET /knowledge/:knowledgeKey/pages/:pageId/links': GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
   'GET /knowledge/:knowledgeKey/search': GetKnowledgeKnowledgeKeySearch_RouteContract;
   'GET /knowledge/:knowledgeKey/activity': GetKnowledgeKnowledgeKeyActivity_RouteContract;
+  'GET /knowledge/:knowledgeKey/pages/:pageId/timeline': GetKnowledgeKnowledgeKeyPagesPageIdTimeline_RouteContract;
   'GET /knowledge/:knowledgeKey/events': GetKnowledgeKnowledgeKeyEvents_RouteContract;
   'GET /.well-known/:agentId/agent-card.json': GetWellKnownAgentIdAgentCardJson_RouteContract;
   'POST /a2a/:agentId': PostA2aAgentId_RouteContract;
@@ -26559,6 +26608,9 @@ export interface Client {
   };
   '/knowledge/:knowledgeKey/pages/:pageId/links': {
     GET: GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/pages/:pageId/timeline': {
+    GET: GetKnowledgeKnowledgeKeyPagesPageIdTimeline_RouteContract;
   };
   '/knowledge/:knowledgeKey/search': {
     GET: GetKnowledgeKnowledgeKeySearch_RouteContract;

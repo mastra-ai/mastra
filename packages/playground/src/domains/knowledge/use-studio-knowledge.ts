@@ -6,9 +6,13 @@ import type {
   KnowledgePageLinksResponse,
   KnowledgePageResponse,
   KnowledgeSearchResponse,
+  KnowledgeTimelineResponse,
   KnowledgeTreeResponse,
 } from '@mastra/client-js';
-import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+import type {
+  KnowledgeExplorerTimelineRequest,
+  KnowledgeExplorerTreeRequest,
+} from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -227,6 +231,27 @@ export function useKnowledgeActivity(knowledgeKey: string | undefined, live: boo
       ? async (): Promise<KnowledgeActivityResponse> => client.getKnowledge(knowledgeKey).activity({ pageId })
       : skipToken,
     refetchInterval: pollUnless(live),
+  });
+}
+
+/** A timeline page's entries, one query per request (the first page, then each older page by cursor). */
+export function useKnowledgeTimeline(
+  knowledgeKey: string | undefined,
+  live: boolean,
+  pageId: string,
+  requests: KnowledgeExplorerTimelineRequest[],
+) {
+  const client = useMastraClient();
+  return useQueries({
+    queries: requests.map(request => ({
+      queryKey: ['knowledge', knowledgeKey, 'timeline', pageId, request],
+      queryFn: knowledgeKey
+        ? async (): Promise<KnowledgeTimelineResponse> => client.getKnowledge(knowledgeKey).timeline(pageId, request)
+        : skipToken,
+      // Later pages are fetched once as the user loads them; only the first one polls.
+      refetchInterval: request.cursor ? false : pollUnless(live),
+      placeholderData: keepPreviousData,
+    })),
   });
 }
 
