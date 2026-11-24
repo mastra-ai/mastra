@@ -236,6 +236,116 @@ describe('boardPhases', () => {
     expect(listedIds(list, { source: ['slack'] }).intake).toEqual(['thread']);
   });
 
+  it('keeps the cards with a pull request, whether the card is the pull request or holds one, next to a source pick', () => {
+    const issue = testCard('issue', { externalSource: { integrationId: 'github', type: 'issue', externalId: '7' } });
+    const withPullRequest: Card = {
+      ...issue,
+      id: 'issue-with-pr',
+      workItem: {
+        ...issue.workItem,
+        sources: [
+          {
+            id: 'pr-source',
+            workItemId: issue.workItemId,
+            provider: 'github',
+            integrationId: 'github',
+            sourceType: 'pull-request',
+            workspaceId: null,
+            externalId: 'acme/app#8',
+            sourceKey: null,
+            key: 'acme/app#8',
+            url: 'https://github.com/acme/app/pull/8',
+            state: 'open',
+            labels: [],
+            author: null,
+            metadata: { githubPullRequestNumber: 8 },
+            revision: 1,
+            syncedAt: null,
+            createdAt: new Date('2026-03-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-03-01T00:00:00.000Z'),
+          },
+        ],
+      },
+    };
+    const pullRequest = testCard('pr', {
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'acme/app#9' },
+    });
+    const byHand = testCard('by-hand');
+    const list = [issue, withPullRequest, pullRequest, byHand];
+
+    expect(listedIds(list, { pullRequest: ['with'] }).intake.toSorted()).toEqual(['issue-with-pr', 'pr']);
+    expect(listedIds(list, { pullRequest: ['without'] }).intake.toSorted()).toEqual(['by-hand', 'issue']);
+    expect(listedIds(list, { pullRequest: ['with', 'without'] }).intake).toHaveLength(4);
+    expect(listedIds(list, { source: ['github'], pullRequest: ['with'] }).intake.toSorted()).toEqual([
+      'issue-with-pr',
+      'pr',
+    ]);
+    expect(listedIds(list, { source: ['manual'], pullRequest: ['with'] }).intake).toEqual([]);
+  });
+
+  it('finds and counts the cards a pull request held by another card closes', () => {
+    const holder = testCard('holder', { externalSource: { integrationId: 'github', type: 'issue', externalId: '42' } });
+    const closed = testCard('closed', { externalSource: { integrationId: 'github', type: 'issue', externalId: '43' } });
+    const other = testCard('other', { externalSource: { integrationId: 'github', type: 'issue', externalId: '44' } });
+    const held: Card = {
+      ...holder,
+      workItem: {
+        ...holder.workItem,
+        sources: [
+          {
+            id: 'pr-source',
+            workItemId: holder.workItemId,
+            provider: 'github',
+            integrationId: 'github',
+            sourceType: 'pull-request',
+            workspaceId: null,
+            externalId: 'acme/app#31036',
+            sourceKey: null,
+            key: 'acme/app#31036',
+            url: 'https://github.com/acme/app/pull/31036',
+            state: 'open',
+            labels: [],
+            author: null,
+            metadata: { githubPullRequestNumber: 31036, closesWorkItemIds: ['closed', 'gone'] },
+            revision: 1,
+            syncedAt: null,
+            createdAt: new Date('2026-03-01T00:00:00.000Z'),
+            updatedAt: new Date('2026-03-01T00:00:00.000Z'),
+          },
+        ],
+      },
+    };
+    const list = [held, closed, other];
+
+    expect(listedIds(list, { q: '31036' }).intake.toSorted()).toEqual(['closed', 'holder']);
+    expect(listedIds(list, { q: 'https://github.com/acme/app/pull/31036' }).intake.toSorted()).toEqual([
+      'closed',
+      'holder',
+    ]);
+    expect(listedIds(list, { pullRequest: ['with'] }).intake.toSorted()).toEqual(['closed', 'holder']);
+    expect(listedIds(list, { pullRequest: ['without'] }).intake).toEqual(['other']);
+    expect(listedIds(list, { source: ['pull-request'] }).intake.toSorted()).toEqual(['closed', 'holder']);
+  });
+
+  it('splits cards by trust the way intake routes read it, counting cards no outsider can file as trusted', () => {
+    const github = { integrationId: 'github', type: 'issue', externalId: '7' } as const;
+    const list = [
+      testCard('member', {
+        externalSource: github,
+        metadata: { authorTrusted: true },
+      }),
+      testCard('outsider', {
+        externalSource: github,
+        metadata: { authorTrusted: false },
+      }),
+      testCard('unstamped', { externalSource: github }),
+      testCard('by-hand'),
+    ];
+
+    expect(listedIds(list, { trust: ['trusted'] }).intake.toSorted()).toEqual(['by-hand', 'member']);
+    expect(listedIds(list, { trust: ['untrusted'] }).intake.toSorted()).toEqual(['outsider', 'unstamped']);
+  });
+
   it('counts as having worked on a card whoever filed it, moved it in or out, or started a session on it', () => {
     const list = [
       testCard('filed', { createdBy: 'u2' }),
