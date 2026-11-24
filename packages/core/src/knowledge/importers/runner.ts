@@ -279,7 +279,12 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     binding: { id: binding.id, target: binding.target },
     settings,
     credentials,
-    fetch: (input, init) => fetchImpl(input, { ...init, signal: init?.signal ?? controller.signal }),
+    // A signal the importer passes joins the run's: the deadline and cancel still abort the fetch.
+    fetch: (input, init) =>
+      fetchImpl(input, {
+        ...init,
+        signal: init?.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal,
+      }),
     state: {
       get: async key => state[key],
       set: async (key, value) => {

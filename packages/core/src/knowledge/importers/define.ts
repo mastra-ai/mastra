@@ -44,7 +44,8 @@ export interface KnowledgeImporterContext<TSettings = unknown, TSlot extends str
   /** Values for the definition's slots, supplied by the host at run start. */
   credentials: Readonly<Record<TSlot, string>>;
   /**
-   * The source fetch, bound to `signal`: the runner's `fetch` option, else the platform fetch. It
+   * The source fetch, bound to `signal`: the runner's `fetch` option, else the platform fetch. A
+   * signal passed in `init` is combined with `signal`, so either one aborts the fetch. It
    * doesn't retry; on hosts that keep the credentials it may be a relay. A source's error status
    * comes back as a response; throw `KnowledgeImporterSourceError` to fail the run with it.
    */

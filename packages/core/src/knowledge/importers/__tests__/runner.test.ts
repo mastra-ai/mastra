@@ -347,6 +347,57 @@ describe('runKnowledgeImport', () => {
     expect(host.finish).toMatchObject({ outcome: 'failed', error: { code: 'stopped' } });
   });
 
+  it("aborts a fetch at the run's deadline even when the importer passes its own signal", async () => {
+    const host = new RecordingHost();
+    let fetchSignal: AbortSignal | undefined;
+    const own = new AbortController();
+    await runKnowledgeImport({
+      importers: [
+        importer(async ctx => {
+          await ctx.fetch('https://source.test/items', { signal: own.signal }).catch(() => undefined);
+        }),
+      ],
+      host,
+      bindingId: 'b1',
+      budgetMs: 5,
+      graceMs: 5,
+      fetch: (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          fetchSignal = init?.signal ?? undefined;
+          fetchSignal?.addEventListener('abort', () => reject(fetchSignal!.reason));
+        }),
+    });
+    expect(fetchSignal?.aborted).toBe(true);
+    expect(own.signal.aborted).toBe(false);
+    expect(host.finish).toMatchObject({ outcome: 'failed', error: { code: 'stopped' } });
+  });
+
+  it("aborts a fetch when the importer's own signal aborts, before the run ends", async () => {
+    const host = new RecordingHost();
+    const own = new AbortController();
+    let aborted = false;
+    await runKnowledgeImport({
+      importers: [
+        importer(async ctx => {
+          const pending = ctx.fetch('https://source.test/items', { signal: own.signal }).catch(() => {
+            aborted = true;
+          });
+          own.abort();
+          await pending;
+        }),
+      ],
+      host,
+      bindingId: 'b1',
+      fetch: (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          if (init?.signal?.aborted) return reject(init.signal.reason);
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+        }),
+    });
+    expect(aborted).toBe(true);
+    expect(host.finish).toMatchObject({ outcome: 'succeeded' });
+  });
+
   it('finishes credential_missing and importer_missing_from_deploy without running import', async () => {
     let ran = false;
     class WithSlot extends KnowledgeImporter({
