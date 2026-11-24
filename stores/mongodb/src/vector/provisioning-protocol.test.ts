@@ -1427,10 +1427,22 @@ describe('provisioning protocol', () => {
         const events = captureCommands(a);
         await a.createSearchIndex({ indexName: coll, searchIndexName: 'T' });
         expect(events.filter(e => e.commandName === 'updateSearchIndex')).toEqual([]);
+        // latestDefinition is the last requested mapping, not an applied one: a FAILED build with the
+        // same mapping still needs the update, the only request that rebuilds it.
+        const listed = (await db.collection(coll).listSearchIndexes('T').toArray()) as Document[];
+        await withHooks(
+          [a],
+          {
+            listSearchIndexesStub: (name: string) =>
+              name === 'T' ? listed.map(r => ({ ...r, name: 'T', status: 'FAILED' })) : undefined,
+          },
+          () => a.createSearchIndex({ indexName: coll, searchIndexName: 'T' }),
+        );
+        expect(events.filter(e => e.commandName === 'updateSearchIndex').map(e => String(e.command.id))).toEqual([t]);
         // A different mapping on the same recorded index still updates it in place.
         await a.createSearchIndex({ indexName: coll, searchIndexName: 'T', fields: ['title'] });
         const updates = events.filter(e => e.commandName === 'updateSearchIndex');
-        expect(updates.map(e => String(e.command.id))).toEqual([t]);
+        expect(updates.map(e => String(e.command.id))).toEqual([t, t]);
         await a.deleteIndex({ indexName: coll });
       });
 

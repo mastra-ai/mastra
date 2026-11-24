@@ -3073,8 +3073,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // The incarnation we recorded (§3.2): recreating it with a different `fields` mapping must
         // change the mapping, by id. An identical refresh sends nothing: Atlas rejects concurrent
         // updates of one id ("indexes had duplicate ids"), so racing refreshes must not both update.
+        // latestDefinition is the last requested mapping, so a FAILED build of it still needs the
+        // update, the only request that rebuilds it.
         const row = created.outcome === 'attached' ? created.row : undefined;
-        if (!row?.latestDefinition || !searchDefinitionsEquivalent(row.latestDefinition, definition)) {
+        const applied =
+          row?.status !== 'FAILED' &&
+          !!row?.latestDefinition &&
+          searchDefinitionsEquivalent(row.latestDefinition, definition);
+        if (!applied) {
           await this.runSearchIndexCommand({ updateSearchIndex: collection.collectionName, id: listedId, definition });
         }
       } else {
