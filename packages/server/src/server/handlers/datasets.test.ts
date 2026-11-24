@@ -4,7 +4,7 @@ import type { Event } from '@mastra/core/events';
 import { coreFeatures } from '@mastra/core/features';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -47,6 +47,7 @@ import {
   UPDATE_ITEM_ROUTE,
 } from './datasets';
 import { createTestServerContext } from './test-utils';
+import { RECEIVE_WORKFLOW_EVENT_ROUTE } from './workflows';
 
 describe('Datasets Handlers', () => {
   let mockStorage: InMemoryStore;
@@ -351,6 +352,47 @@ describe('Datasets Handlers', () => {
           experimentId: triggered.experimentId,
           requestContext: { projectId: 'project-1' },
         });
+      });
+
+      it("keeps the caller's auth token and user out of the start event and the run snapshot", async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('projectId', 'project-1');
+        requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'secret-token');
+        requestContext.set('mastra__user', { id: 'secret-user' });
+        const { triggered } = await trigger({ durable: true }, requestContext);
+
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        expect(events[0]?.data.prevResult.output.requestContext).toEqual({ projectId: 'project-1' });
+        const workflows = (await mockStorage.getStore('workflows'))!;
+        const snapshot = await workflows.loadWorkflowSnapshot({
+          workflowName: '__mastra-experiment',
+          runId: triggered.experimentId,
+        });
+        expect(snapshot).toBeTruthy();
+        expect(JSON.stringify(snapshot)).not.toContain('secret-');
+      });
+
+      it('refuses a pushed start for an experiment run that was never started, and accepts the real one', async () => {
+        const { dataset, triggered } = await trigger({ durable: true });
+        await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
+        const realStart = events[0]!;
+        const push = (event: Event) =>
+          RECEIVE_WORKFLOW_EVENT_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            event: { ...event, createdAt: new Date().toISOString() },
+          } as any);
+
+        const forged = { ...realStart, id: 'forged', runId: crypto.randomUUID() };
+        await expect(push(forged)).rejects.toMatchObject({ status: 404 });
+        expect(generate).not.toHaveBeenCalled();
+        const experiment = (await GET_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: triggered.experimentId,
+        } as any)) as any;
+        expect(experiment).toMatchObject({ status: 'pending' });
+
+        await expect(push(realStart)).resolves.toMatchObject({ ok: true });
       });
 
       it('returns 400 for a config a durable run cannot store', async () => {

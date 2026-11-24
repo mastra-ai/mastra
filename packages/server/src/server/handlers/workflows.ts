@@ -1708,6 +1708,9 @@ const workflowEventSchema = z.object({
   deliveryAttempt: z.number().optional(),
 });
 
+/** Core's internal durable-experiment workflow (`EXPERIMENT_WORKFLOW_ID`, not exported from `@mastra/core`). */
+const EXPERIMENT_WORKFLOW_ID = '__mastra-experiment';
+
 const receiveWorkflowEventBodySchema = z.object({
   event: workflowEventSchema.passthrough(),
 });
@@ -1762,6 +1765,11 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
         runId: event.runId,
         ...(typeof workflowName === 'string' ? { workflowName } : {}),
       });
+      // Starting a durable experiment saves its run before publishing the start event, so an
+      // event for an experiment run that doesn't exist was not published by Mastra.
+      if (!existingRun && workflowName === EXPERIMENT_WORKFLOW_ID) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
+      }
       await validateRunOwnership(
         existingRun,
         getEffectiveResourceId(requestContext, undefined),

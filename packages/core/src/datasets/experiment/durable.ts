@@ -1,4 +1,5 @@
 import { MastraError } from '../../error/index.js';
+import { withoutLiveRequestKeys } from '../../request-context';
 import type { StartExperimentConfig } from './types';
 import type { ExperimentWorkflowInput } from './workflow';
 
@@ -60,7 +61,10 @@ export function durableRunOptions<I, O, E>(
   if (config.persistence?.experiments === 'none' || config.persistence?.scores === 'none') {
     throw notDurable('persistence', 'a durable run is tracked through stored experiments and scores');
   }
-  if (config.requestContext !== undefined && !isPlainJson(config.requestContext)) {
+  // The caller's token, user and permissions belong to the starting request; never publish or store them.
+  const requestContext =
+    config.requestContext === undefined ? undefined : withoutLiveRequestKeys(config.requestContext);
+  if (requestContext !== undefined && !isPlainJson(requestContext)) {
     throw notDurable('requestContext', 'values must be plain JSON (no functions, class instances, undefined or NaN)');
   }
   if (config.agentModel !== undefined && typeof config.agentModel !== 'string') {
@@ -74,7 +78,7 @@ export function durableRunOptions<I, O, E>(
       maxRetries: config.maxRetries,
       agentModel: config.agentModel,
       unmockedToolPolicy: config.unmockedToolPolicy,
-      requestContext: config.requestContext,
+      requestContext,
       versions: config.versions,
     },
     scorerIds,

@@ -11,6 +11,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import { Mastra } from '../../../mastra';
+import { MASTRA_AUTH_TOKEN_KEY } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
 import { createStep, createWorkflow } from '../../../workflows';
 import { EXPERIMENT_NOT_DURABLE } from '../durable';
@@ -372,6 +373,42 @@ describe('durable experiment workflow', () => {
 
       expect(await waitForExperiment(storage, started.experimentId)).toMatchObject({ status: 'completed' });
       expect(log.contexts).toEqual([user]);
+    });
+
+    it("keeps the caller's auth token and user out of the events and the snapshot", async () => {
+      const { mastra, storage } = await setup(newLog());
+      const events: Event[] = [];
+      await mastra.pubsub.subscribe('workflows', event => {
+        events.push(event);
+      });
+      const dataset = await mastra.datasets.create({ name: 'durable-live-keys' });
+      await dataset.addItems({ items: [{ input: { text: 'paris' } }] });
+
+      const started = await dataset.startExperimentAsync({
+        ...echoConfig,
+        durable: true,
+        requestContext: {
+          [MASTRA_AUTH_TOKEN_KEY]: 'secret-token',
+          mastra__user: { id: 'secret-user' },
+          mastra__userPermissions: ['secret-permission'],
+          // The auth middleware's unprefixed copy of the user goes with it.
+          user: { id: 'secret-user' },
+          projectId: 'project-1',
+        },
+      });
+
+      expect(await waitForExperiment(storage, started.experimentId)).toMatchObject({ status: 'completed' });
+      const workflows = (await storage.getStore('workflows'))!;
+      const snapshot = await workflows.loadWorkflowSnapshot({
+        workflowName: EXPERIMENT_WORKFLOW_ID,
+        runId: started.experimentId,
+      });
+      expect(snapshot).toBeTruthy();
+      expect(events.length).toBeGreaterThan(0);
+      for (const stored of [JSON.stringify(events), JSON.stringify(snapshot)]) {
+        expect(stored).not.toContain('secret-');
+      }
+      expect(events[0]?.data.prevResult.output.requestContext).toEqual({ projectId: 'project-1' });
     });
 
     it.each(rejected)('rejects `%s` before creating anything', async (option, overrides) => {

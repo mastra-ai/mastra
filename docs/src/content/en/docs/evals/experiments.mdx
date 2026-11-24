@@ -517,6 +517,8 @@ Durable runs need [workers](/docs/deployment/workers) and a pubsub that redelive
 
 Everything in a durable run must be serializable, so `durable: true` accepts registered targets, scorer IDs, `version`, `maxConcurrency`, `itemTimeout`, `maxRetries`, `agentModel` as a `provider/modelId` string, `requestContext` with plain JSON values, `unmockedToolPolicy`, and `versions`. It throws a `MastraError` with the `id` `EXPERIMENT_NOT_DURABLE` before creating anything when the config uses an inline `task`, lifecycle hooks, `onEvent`, `signal`, scorer objects or step scorers, `persistence` set to `'none'`, or `requestContext` values that aren't plain JSON, such as functions or dates.
 
+A durable run doesn't keep the signed-in user from the request that started it. Mastra removes the auth token, user, roles, and permissions from `requestContext` before the run is published or stored, so targets in a durable run don't see them.
+
 Keep these limits in mind:
 
 - **Recovery waits for the broker.** With Redis or Valkey Streams, an item cut off by a crash runs again after `reclaimIdleMs` (60 seconds by default).
