@@ -1889,6 +1889,7 @@ export class MastraFactory {
       resolveReviewedChangeRequest({
         requestContext,
         providers: sourceControlToolProviders,
+        workItems: workItemsStorage,
         boundChangeRequestId: async () => {
           const resolution = await resolveFactorySessionAddress({ requestContext, storage: workItemsStorage });
           if (!resolution) return undefined;
@@ -2146,6 +2147,7 @@ export class MastraFactory {
                 audit: auditDomain,
                 ...(workItemsStorage
                   ? {
+                      workItems: workItemsStorage,
                       workItem: {
                         selfReviewApprovedHead: target =>
                           selfReviewApprovedHead({ requestContext, workItems: workItemsStorage, boards, target }),

@@ -46,6 +46,7 @@ import type {
 } from '../../../capabilities/version-control.js';
 import { loose } from '../../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
+import { isFactoryPrincipalId } from '../../../storage/domains/projects/base.js';
 import type {
   SourceControlInstallation,
   SourceControlStorageHandle,
@@ -1561,7 +1562,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       ...actingUser(input.actingUserId),
     });
     const created = parsePullRequest(result);
-    if (input.actingUserId && input.connection.type === 'app-installation') {
+    // The Factory itself has no GitHub account to assign, so an autonomous run's PR is left unassigned.
+    if (
+      input.actingUserId &&
+      !isFactoryPrincipalId(input.actingUserId) &&
+      input.connection.type === 'app-installation'
+    ) {
       try {
         const user = await this.#fetchUserConnection(input.actingUserId);
         const login = user.githubUsername;
