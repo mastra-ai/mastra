@@ -36,6 +36,10 @@ import type {
 /** The body a page keeps when its item is gone at the source but pages are still nested under it. */
 export const REMOVED_PARENT_BODY = 'Removed from the source. Kept because pages are still nested under it.';
 export const REMOVED_ADOPTED_BODY = 'Removed from the source. Kept because the page was here before the import.';
+/** Heads the note that keeps a taken-over page's hand-written body. */
+export const ORIGINAL_BODY_NOTE = 'Written by hand before an importer took over this page:\n\n';
+/** One per page, so the removal that gives the body back can find it. */
+const originalBodyNoteId = (pageId: string) => `knowledge-import-original:${pageId}`;
 
 /** Embedding work for after commit. */
 export type KnowledgeImportEmbedJob = { kind: 'index'; pageId: string } | { kind: 'remove'; pageId: string };
@@ -585,8 +589,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     let adopted = existing?.adopted ?? false;
 
     // A page someone else wrote at the item's path is taken over: it keeps its id and children, and
-    // the item's fields replace its own. Another binding's page is never taken. The destination is
-    // locked, so nothing can be created at the path or moved there until commit.
+    // the item's fields replace its own. Its hand-written body is kept in a note on the page, and
+    // comes back when the source removes the item. Another binding's page is never taken. Only the
+    // page found at the path is locked; when the path is empty, the unique key on (parent, key)
+    // refuses a page created there concurrently.
     const held = existing
       ? null
       : await storage.getPageByPath({ scopeId: scope.id, path: [...destination.keys, key], read: 'all' });
@@ -600,6 +606,19 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         throw new KnowledgeImportRefusalError('occupied');
       }
       renamed = fields.name !== fresh.name;
+      if (fresh.body && fields.body !== undefined && fields.body !== fresh.body) {
+        const id = originalBodyNoteId(fresh.id);
+        if (!(await storage.getNote({ id, read: 'all', includeDeleted: true }))) {
+          await storage.addNote({
+            id,
+            pageId: fresh.id,
+            text: ORIGINAL_BODY_NOTE + fresh.body,
+            stampScopeIds: [scope.id],
+            mentions: [],
+            provenance,
+          });
+        }
+      }
       page = await storage.updatePage({ id: fresh.id, expectedVersion: fresh.version, ...fields, provenance });
       change = 'updated';
       adopted = true;
@@ -713,10 +732,17 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           // A page the binding took over is never deleted, even as a leaf.
           if (children > 0 || node.adopted) {
             if (node.stub) return;
+            // A page it took over gets its hand-written body back, as the note kept it.
+            const note = node.adopted
+              ? await storage.getNote({ id: originalBodyNoteId(current.page.id), read: 'all' })
+              : null;
+            const original = note?.text.startsWith(ORIGINAL_BODY_NOTE)
+              ? note.text.slice(ORIGINAL_BODY_NOTE.length)
+              : note?.text;
             const page = await storage.updatePage({
               id: current.page.id,
               expectedVersion: current.page.version,
-              body: children > 0 ? REMOVED_PARENT_BODY : REMOVED_ADOPTED_BODY,
+              body: original || (children > 0 ? REMOVED_PARENT_BODY : REMOVED_ADOPTED_BODY),
               provenance,
             });
             await importers.saveNode({ ...node, stub: true });

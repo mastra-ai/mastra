@@ -147,4 +147,10 @@ export interface KnowledgeImporterRunReceipt {
    * Stored with the finish; a replay returns the same value.
    */
   chain: boolean;
+  /**
+   * The items the host refused in this run, as the runner received them in flush receipts: the first
+   * 100, in order. `counts.refused` has the total. Set by the runner, not stored by the host, so a
+   * receipt read back from the host has none.
+   */
+  refused?: KnowledgeImportRefusal[];
 }

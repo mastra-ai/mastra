@@ -11,6 +11,7 @@ import type { KnowledgeImporterHost, KnowledgeImporterStartRunOptions } from './
 import type {
   KnowledgeImportDeclaration,
   KnowledgeImportItem,
+  KnowledgeImportRefusal,
   KnowledgeImporterFinishRequest,
   KnowledgeImporterOp,
   KnowledgeImporterRunError,
@@ -84,6 +85,9 @@ async function within<T>(promise: Promise<T>, ms: number, onTimeout: () => Error
     clearTimeout(timer);
   }
 }
+
+/** Refusals kept on a run receipt. */
+const MAX_RECEIPT_REFUSALS = 100;
 
 const isRetryable = (error: unknown) =>
   error instanceof KnowledgeImporterHostError && (error.status === undefined || error.status >= 500);
@@ -180,6 +184,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
    * work can be left from an earlier run, so a run that flushes nothing still sends one empty flush.
    */
   let pending: boolean | undefined;
+  const refused: KnowledgeImportRefusal[] = [];
   let flushing: Promise<void> = Promise.resolve();
   /** `settle` sends an empty flush, which only runs the host's next settle slice. */
   function flush(staged?: KnowledgeImporterState, settle = false): Promise<void> {
@@ -198,6 +203,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       try {
         const receipt = await withRetries(() => host.flush(request), 'mutation');
         pending = receipt.pending === true;
+        refused.push(...receipt.refused.slice(0, MAX_RECEIPT_REFUSALS - refused.length));
       } catch (error) {
         // A refusal (409) or a 4xx means nothing was applied; a retryable failure may have committed.
         if (!isRetryable(error)) unsettledSeq = undefined;
@@ -219,8 +225,12 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     if (buffer.length >= bufferSize) await flush();
   };
 
-  const finish = (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) =>
-    finishRun(host, { runId, generation, ...request }, lastSeq, unsettledSeq, send => withRetries(send, 'finish'));
+  const finish = async (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) => {
+    const result = await finishRun(host, { runId, generation, ...request }, lastSeq, unsettledSeq, send =>
+      withRetries(send, 'finish'),
+    );
+    return 'outcome' in result ? { ...result, refused } : result;
+  };
 
   const binding = started.binding;
   const configured =

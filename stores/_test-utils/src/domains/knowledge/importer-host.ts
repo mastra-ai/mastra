@@ -450,15 +450,77 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       ]);
       expect(removed).toMatchObject({ counts: { stubbed: 1, removed: 1, refused: 0 } });
       expect(await page('notion/p1')).toBeNull();
-      expect(await page('notion/p2')).toMatchObject({
-        id: human!.id,
-        body: 'Removed from the source. Kept because the page was here before the import.',
-      });
+      // Its hand-written body comes back.
+      expect(await page('notion/p2')).toMatchObject({ id: human!.id, body: 'mine' });
 
       // A stub it took over comes back to life when the source sends the item again.
       const back = await run([upsert({ sourceId: 'p2', body: 'back' })]);
       expect(back).toMatchObject({ counts: { updated: 1, refused: 0 } });
       expect(await page('notion/p2')).toMatchObject({ id: human!.id, body: 'back' });
+    });
+
+    it('keeps the body it took over in a note, and leaves a page that had no body as a stub', async () => {
+      const { knowledge, run, page } = setup();
+      await knowledge.upsertPage({
+        scope: 'docs:acme',
+        path: 'notion/p1',
+        name: 'Human',
+        body: 'mine\n\nwith [[docs:acme#notion]]',
+      });
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p2', name: 'Empty', body: '' });
+      expect(await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'p2' })])).toMatchObject({
+        counts: { updated: 2, refused: 0 },
+      });
+      const storage = await knowledge.getStorage();
+      const taken = await page('notion/p1');
+      const { notes } = await storage.listNotes({ pageId: taken!.id, read: 'all' });
+      expect(notes.map(n => n.text)).toEqual([
+        'Written by hand before an importer took over this page:\n\nmine\n\nwith [[docs:acme#notion]]',
+      ]);
+      expect(notes[0]!.mentions).toEqual([]);
+      const empty = await page('notion/p2');
+      expect((await storage.listNotes({ pageId: empty!.id, read: 'all' })).notes).toEqual([]);
+
+      // A later resend still replaces the body, and keeps the one note.
+      await run([upsert({ sourceId: 'p1', body: 'newer' })]);
+      expect((await storage.listNotes({ pageId: taken!.id, read: 'all' })).notes).toHaveLength(1);
+
+      expect(
+        await run([
+          { op: 'remove', sourceId: 'p1' },
+          { op: 'remove', sourceId: 'p2' },
+        ]),
+      ).toMatchObject({
+        counts: { stubbed: 2, removed: 0, refused: 0 },
+      });
+      expect((await page('notion/p1'))?.body).toBe('mine\n\nwith [[docs:acme#notion]]');
+      expect((await page('notion/p2'))?.body).toBe(
+        'Removed from the source. Kept because the page was here before the import.',
+      );
+    });
+
+    it('takes over a hand-written page while its item waits for its parent, and keeps its body through the move', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p0' })]);
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/c1', name: 'Human', body: 'mine' });
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/c1/h', name: 'Human child', body: 'kid' });
+      const human = await page('notion/c1');
+
+      // c1's parent hasn't arrived, so it waits at the target's root, where the hand-written page is.
+      expect(await run([upsert({ sourceId: 'c1', parent: 'p1' })])).toMatchObject({
+        counts: { updated: 1, refused: 0 },
+      });
+      expect(await page('notion/c1')).toMatchObject({ id: human!.id, body: 'body of c1' });
+
+      // The parent arrives: the taken-over page moves under it with its human child.
+      expect(await run([upsert({ sourceId: 'p1' })])).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('notion/p1/c1')).toMatchObject({ id: human!.id, body: 'body of c1' });
+      expect((await page('notion/p1/c1/h'))?.body).toBe('kid');
+
+      // Removed from the source, it keeps its place and its hand-written body comes back.
+      expect(await run([{ op: 'remove', sourceId: 'c1' }])).toMatchObject({ counts: { stubbed: 1, refused: 0 } });
+      expect(await page('notion/p1/c1')).toMatchObject({ id: human!.id, body: 'mine' });
+      expect((await page('notion/p1/c1/h'))?.body).toBe('kid');
     });
 
     it('writes an item again after someone deleted its page by hand, and lets its removal through', async () => {
@@ -661,9 +723,15 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'hub', name: 'Hub' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear', parent: 'hub' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'hub/linear/l1' });
-      expect(await run([upsert({ sourceId: 'p1' })], 'b1')).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(await run([upsert({ sourceId: 'p1' })], 'b1')).toMatchObject({
+        counts: { created: 0, refused: 1 },
+        refused: [{ sourceId: 'p1', reason: 'occupied' }],
+      });
       expect(await page('hub/linear/notion')).toBeNull();
-      expect(await run([upsert({ sourceId: 'p1' })], 'b3')).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(await run([upsert({ sourceId: 'p1' })], 'b3')).toMatchObject({
+        counts: { created: 0, refused: 1 },
+        refused: [{ sourceId: 'p1', reason: 'occupied' }],
+      });
       expect(await page('l1/notion')).toBeNull();
       // Control: a human container on the path is fine.
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'team', name: 'Team' });
@@ -685,6 +753,10 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await knowledge.movePage({ scope: 'docs:acme', path: 'notion', parent: 'hub' });
       expect(await run([upsert({ sourceId: 'p1', body: 'new' }), upsert({ sourceId: 'p2' })])).toMatchObject({
         counts: { updated: 0, created: 0, refused: 2 },
+        refused: [
+          { sourceId: 'p1', reason: 'conflict' },
+          { sourceId: 'p2', reason: 'conflict' },
+        ],
       });
       expect((await page('hub/notion/p1'))?.body).toBe('body of p1');
       expect(await page('hub/notion/p2')).toBeNull();
@@ -702,7 +774,10 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await storage.transaction(tx =>
         tx.importers!.setBindingAnchor({ bindingId: 'b1', expected: anchor!.id, pageId: null }),
       );
-      expect(await run([upsert({ sourceId: 'p2' })])).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(await run([upsert({ sourceId: 'p2' })])).toMatchObject({
+        counts: { created: 0, refused: 1 },
+        refused: [{ sourceId: 'p2', reason: 'occupied' }],
+      });
       expect(await page('p1/p2')).toBeNull();
       expect(await storage.importers!.getBinding('b1')).toMatchObject({ anchorPageId: null });
     });

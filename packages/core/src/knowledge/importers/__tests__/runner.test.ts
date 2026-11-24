@@ -78,15 +78,20 @@ class RecordingHost implements KnowledgeImporterHost {
       Object.assign(this.state, flush.state);
     }
     if (failure?.afterCommit) throw failure.error;
+    // Items whose sourceId starts with `x` are refused, the way a sink refuses an occupied path.
+    const refused = flush.ops
+      .map(op => (op.op === 'remove' ? op.sourceId : op.item.sourceId))
+      .filter(id => id.startsWith('x'))
+      .map(sourceId => ({ sourceId, reason: 'occupied' as const }));
     return {
       seq: flush.seq,
-      created: flush.ops.length,
+      created: flush.ops.length - refused.length,
       updated: 0,
       unchanged: 0,
       moved: 0,
       removed: 0,
       stubbed: 0,
-      refused: [],
+      refused,
     };
   }
   async heartbeat() {
@@ -133,6 +138,50 @@ const importer = (run: (ctx: KnowledgeImporterContext) => Promise<void>) =>
 const item = (n: number) => ({ sourceId: `e${n}`, title: `Event ${n}`, body: `body ${n}` });
 
 describe('runKnowledgeImport', () => {
+  it("returns each refused item's sourceId and reason on the run receipt, across flushes", async () => {
+    const host = new RecordingHost();
+    const receipt = await runKnowledgeImport({
+      importers: [
+        importer(async ctx => {
+          await ctx.items.upsert(item(1));
+          await ctx.items.upsert({ ...item(2), sourceId: 'x2' });
+          await ctx.items.upsert(item(3));
+          await ctx.items.upsert({ ...item(4), sourceId: 'x4' });
+        }),
+      ],
+      host,
+      bindingId: 'b1',
+      bufferSize: 2,
+    });
+    expect(host.flushes).toHaveLength(2);
+    expect(receipt).toMatchObject({
+      outcome: 'succeeded',
+      refused: [
+        { sourceId: 'x2', reason: 'occupied' },
+        { sourceId: 'x4', reason: 'occupied' },
+      ],
+    });
+  });
+
+  it('keeps the first 100 refusals on the run receipt', async () => {
+    const host = new RecordingHost();
+    const receipt = await runKnowledgeImport({
+      importers: [
+        importer(async ctx => {
+          for (let i = 0; i < 150; i++) await ctx.items.upsert({ ...item(i), sourceId: `x${i}` });
+        }),
+      ],
+      host,
+      bindingId: 'b1',
+      bufferSize: 40,
+    });
+    expect(receipt).toMatchObject({ outcome: 'succeeded' });
+    const refused = (receipt as KnowledgeImporterRunReceipt).refused!;
+    expect(refused).toHaveLength(100);
+    expect(refused[0]).toEqual({ sourceId: 'x0', reason: 'occupied' });
+    expect(refused[99]).toEqual({ sourceId: 'x99', reason: 'occupied' });
+  });
+
   it('flushes when the buffer fills, with state.set, and when sync returns, in seq order', async () => {
     const host = new RecordingHost();
     const receipt = await runKnowledgeImport({
