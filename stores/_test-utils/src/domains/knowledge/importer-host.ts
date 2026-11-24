@@ -621,6 +621,32 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('linear/p1'))?.body).toBe('body of p1');
     });
 
+    it("refuses an imported page a person moved under another binding's page inside this target", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#linear' },
+      ]);
+      await run([upsert({ sourceId: 'p1' })]);
+      await run([upsert({ sourceId: 'l1' })], 'b2');
+      // b2's page lands inside b1's target, then b1's own page goes under it.
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear/l1', parent: 'notion' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', parent: 'notion/l1' });
+      const before = await page('notion/l1/p1');
+      const receipt = await run([upsert({ sourceId: 'p1', body: 'new' })]);
+      expect(receipt).toMatchObject({ counts: { updated: 0, refused: 1 } });
+      const after = await page('notion/l1/p1');
+      expect(after?.id).toBe(before!.id);
+      expect(after?.body).toBe('body of p1');
+      // Control: under a human folder inside its target, b1 still updates its page (and places it
+      // back under its parent, the anchor).
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/folder', name: 'Folder' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/l1/p1', parent: 'notion/folder' });
+      expect(await run([upsert({ sourceId: 'p1', body: 'new' })])).toMatchObject({ counts: { updated: 1, refused: 0 } });
+      const updated = await page('notion/p1');
+      expect(updated?.id).toBe(before!.id);
+      expect(updated?.body).toBe('new');
+    });
+
     it('refuses an imported page a person moved into another scope', async () => {
       const { knowledge, run } = setup();
       await run([upsert({ sourceId: 'p1' })]);

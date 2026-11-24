@@ -346,7 +346,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   /**
    * A page this binding owns, checked after locking: live, in the target's scope, mapped back to the
    * node. A person may have moved it out of the anchor: it is still the binding's and is updated
-   * where they put it (`outside`), unless they put it inside another binding's pages.
+   * where they put it (`outside`), unless they put it under another binding's pages, inside the
+   * target or not.
    */
   const owned = async (
     pageId: string,
@@ -365,10 +366,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const outside = !(
       sameKeys(after.path.keys.slice(0, anchorPath.length), anchorPath) && after.path.ids.includes(anchor.id)
     );
-    if (outside) {
-      for (const id of after.path.ids.slice(0, -1)) {
-        if (await othersPage(id)) throw new KnowledgeImportRefusalError('conflict');
-      }
+    // Inside the target or not, a page a person put under another binding's page is that binding's
+    // subtree now, so this binding refuses it.
+    for (const id of after.path.ids.slice(0, -1)) {
+      if (await othersPage(id)) throw new KnowledgeImportRefusalError('conflict');
     }
     if (after.page.id !== anchor.id) {
       const node = await importers.getNodeByPage(after.page.id);
