@@ -223,6 +223,22 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('Using fallback OpenAI (Anthropic failed)');
   });
 
+  it.each([
+    [new Date(2026, 10, 23, 14, 5), 'Using fallback OpenAI until 14:05 (Anthropic failed)'],
+    [new Date(2026, 10, 24, 14, 5), 'Using fallback OpenAI until Tue 14:05 (Anthropic failed)'],
+    [new Date(2026, 10, 23, 12, 0), 'Using fallback OpenAI (Anthropic failed)'],
+  ])('shows when a fallback that ends at %s hands back to the failed pack', (retryAt, label) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 10, 23, 13, 0));
+    const state = createState();
+    state.fallbackStatus = { usingPack: 'OpenAI', failedPack: 'Anthropic', retryAt: retryAt.toISOString() };
+
+    updateStatusLine(state);
+
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain(label);
+    vi.useRealTimers();
+  });
+
   it('shows active elapsed time in the Working row instead of the status line', () => {
     vi.useFakeTimers();
     vi.setSystemTime(62_000);
