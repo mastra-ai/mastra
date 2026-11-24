@@ -49,7 +49,7 @@ const ReactionSchema = z.object({
 
 const ProviderCommentSchema = z.object({
   id: z.string(),
-  client_meta: z.union([FrameOffsetRegionSchema, RegionSchema, FrameOffsetSchema, VectorSchema]),
+  client_meta: z.union([FrameOffsetRegionSchema, RegionSchema, FrameOffsetSchema, VectorSchema]).nullable(),
   file_key: z.string(),
   parent_id: z.string().optional(),
   user: UserSchema,
@@ -109,7 +109,7 @@ export function listCommentsTool(proxy: PlatformProxy) {
           created_at: providerComment.created_at,
           message: providerComment.message,
           reactions: providerComment.reactions,
-          client_meta: providerComment.client_meta,
+          ...(providerComment.client_meta != null && { client_meta: providerComment.client_meta }),
           ...(providerComment.parent_id !== undefined && { parent_id: providerComment.parent_id }),
           ...(providerComment.resolved_at != null && { resolved_at: providerComment.resolved_at }),
           ...(providerComment.order_id !== null && { order_id: providerComment.order_id }),

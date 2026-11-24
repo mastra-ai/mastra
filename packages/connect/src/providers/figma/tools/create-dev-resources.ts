@@ -4,11 +4,13 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+const figmaNodeId = (id: string) => id.replace(/-/g, ':');
+
 const DevResourceCreateSchema = z.object({
   name: z.string(),
   url: z.string(),
   file_key: z.string(),
-  node_id: z.string(),
+  node_id: z.string().describe('The node to link, as in "91:1". The "91-1" form from a Figma URL works too.'),
 });
 
 export const createDevResourcesInputSchema = z.object({
@@ -50,7 +52,7 @@ export function createDevResourcesTool(proxy: PlatformProxy) {
             name: resource.name,
             url: resource.url,
             file_key: resource.file_key,
-            node_id: resource.node_id,
+            node_id: figmaNodeId(resource.node_id),
           })),
         },
         retries: 1,

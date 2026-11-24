@@ -45,10 +45,23 @@ const VariableAliasSchema = z.object({
   id: z.string(),
 });
 
+const VariableComposedColorSchema = z.union([
+  z.object({ color: ColorSchema, opacity: VariableAliasSchema }),
+  z.object({ color: VariableAliasSchema, opacity: z.union([z.number(), VariableAliasSchema]) }),
+]);
+
 const VariableModeValueSchema = z.object({
   variableId: z.string(),
   modeId: z.string(),
-  value: z.union([z.boolean(), z.number(), z.string(), ColorSchema, VariableAliasSchema, z.null()]),
+  value: z.union([
+    z.boolean(),
+    z.number(),
+    z.string(),
+    VariableComposedColorSchema,
+    ColorSchema,
+    VariableAliasSchema,
+    z.null(),
+  ]),
 });
 
 export const updateVariablesInputSchema = z

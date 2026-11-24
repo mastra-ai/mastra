@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+const FIGMA_VERSION_PAGES = 20;
+
 export const getVersionInputSchema = z.object({
   file_key: z.string().describe('The file key for the Figma file. Example: "UzYlOaPNPL2c7zmHCEljOs"'),
   version_id: z.string().describe('The unique identifier for the version. Example: "2356506860085774014"'),
@@ -54,7 +56,8 @@ export const getVersionOutputSchema = z.object({
 export function getVersionTool(proxy: PlatformProxy) {
   return createTool({
     id: 'figma_get_version',
-    description: 'Retrieve a single version from Figma.',
+    description:
+      'Retrieve a single version from Figma by id. Searches the newest 1,000 versions; for an older version, page through figma_list_versions instead.',
     inputSchema: getVersionInputSchema,
     outputSchema: getVersionOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof getVersionOutputSchema>> => {
@@ -93,7 +96,13 @@ export function getVersionTool(proxy: PlatformProxy) {
         const nextPageUrl = parsed.pagination?.next_page;
         const before = nextPageUrl ? new URL(nextPageUrl, 'https://api.figma.com').searchParams.get('before') : null;
         // Figma repeats the last page instead of ending, so stop when the cursor stops moving.
-        if (!before || before === params['before'] || parsed.versions.length === 0 || ++pages >= 100) break;
+        if (!before || before === params['before'] || parsed.versions.length === 0) break;
+        if (++pages >= FIGMA_VERSION_PAGES) {
+          throw new platformProxy.ActionError({
+            type: 'search_limit',
+            message: `Version ${input.version_id} is not among the newest ${FIGMA_VERSION_PAGES * 50} versions of file ${input.file_key}. Page further back with figma_list_versions, passing its cursor.`,
+          });
+        }
         params = { page_size: '50', before };
       } while (true);
 

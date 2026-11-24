@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+const figmaNodeId = (id: string) => id.replace(/-/g, ':');
+
 export const createCommentInputSchema = z
   .object({
     file_key: z.string().describe('The file key to add the comment to. Example: "UzYlOaPNPL2c7zmHCEljOs"'),
@@ -12,7 +14,10 @@ export const createCommentInputSchema = z
       .string()
       .optional()
       .describe('The ID of the comment to reply to, if any. This must be a root comment.'),
-    node_id: z.string().optional().describe('The node ID to attach the comment to. Example: "91:1"'),
+    node_id: z
+      .string()
+      .optional()
+      .describe('The node ID to attach the comment to, as in "91:1". The "91-1" form from a Figma URL works too.'),
     node_offset_x: z.number().optional().describe('X coordinate offset within the node from the top-left corner.'),
     node_offset_y: z.number().optional().describe('Y coordinate offset within the node from the top-left corner.'),
   })
@@ -111,7 +116,7 @@ export function createCommentTool(proxy: PlatformProxy) {
 
       if (input.node_id !== undefined && input.node_offset_x !== undefined && input.node_offset_y !== undefined) {
         body['client_meta'] = {
-          node_id: input.node_id,
+          node_id: figmaNodeId(input.node_id),
           node_offset: {
             x: input.node_offset_x,
             y: input.node_offset_y,

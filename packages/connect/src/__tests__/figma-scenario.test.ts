@@ -58,7 +58,15 @@ const RESPONSES: Record<string, unknown> = {
   figma_update_variables: { meta: { tempIdToRealId: { smoke_collection: 'VariableCollectionId:9:9' } } },
 };
 
-async function runScenario({ fail = {} }: { fail?: Record<string, string> } = {}) {
+async function runScenario({
+  fail = {},
+  responses = {},
+  failIf,
+}: {
+  fail?: Record<string, string>;
+  responses?: Record<string, unknown>;
+  failIf?: (toolId: string, input: Record<string, unknown>) => string | undefined;
+} = {}) {
   const calls: Array<{ toolId: string; input: Record<string, unknown> }> = [];
   const errors: string[] = [];
   const tools = Object.fromEntries(TOOL_IDS.map(id => [id, {}]));
@@ -70,8 +78,9 @@ async function runScenario({ fail = {} }: { fail?: Record<string, string> } = {}
     log: { info() {}, warn() {}, error: (message: string) => errors.push(message) },
     call: async <T>(toolId: string, input: Record<string, unknown>): Promise<T> => {
       calls.push({ toolId, input });
-      if (fail[toolId]) throw new Error(fail[toolId]);
-      return (RESPONSES[toolId] ?? {}) as T;
+      const failure = fail[toolId] ?? failIf?.(toolId, input);
+      if (failure) throw new Error(failure);
+      return (responses[toolId] ?? RESPONSES[toolId] ?? {}) as T;
     },
   } as unknown as ScenarioContext;
   const steps: ScenarioStep[] = await figmaScenario.run(context);
@@ -108,13 +117,31 @@ describe('Figma smoke scenario', () => {
     });
   });
 
-  it('skips the file tools when no test file is set', async () => {
+  it('reads the team library without a test file and skips the file tools', async () => {
     delete process.env.MASTRA_SMOKE_FIGMA_FILE_KEY;
 
     const { steps, calls } = await runScenario();
 
-    expect(calls.map(call => call.toolId)).toEqual(['figma_get_current_user']);
+    expect(calls.map(call => call.toolId)).toEqual([
+      'figma_get_current_user',
+      'figma_list_components',
+      'figma_list_component_sets',
+      'figma_list_styles',
+      'figma_get_component',
+      'figma_get_component_set',
+      'figma_get_style',
+    ]);
+    expect(calls.find(call => call.toolId === 'figma_get_component_set')?.input).toEqual({ key: 'set' });
     expect(steps).toContainEqual(expect.objectContaining({ name: 'file tools', status: 'skip' }));
+    expect(steps.filter(step => step.status === 'fail')).toEqual([]);
+  });
+
+  it('skips the team listings when no team is set', async () => {
+    delete process.env.MASTRA_SMOKE_FIGMA_TEAM_ID;
+
+    const { steps } = await runScenario();
+
+    expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_list_styles', status: 'skip' }));
   });
 
   it('never creates a variable collection outside an Enterprise organization', async () => {
@@ -132,6 +159,15 @@ describe('Figma smoke scenario', () => {
       },
     ]);
     expect(steps.filter(step => step.toolId?.includes('variables')).every(step => step.status === 'pass')).toBe(true);
+  });
+
+  it.each([
+    'status=403 Invalid scope(s): file_comments:read. This endpoint requires the file_variables:read scope',
+    'status=403 Invalid token',
+  ])('counts a variables 403 that is not the plan gate as a failure: %s', async message => {
+    const { steps } = await runScenario({ fail: { figma_get_local_variables: message } });
+
+    expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_get_local_variables', status: 'fail' }));
   });
 
   it('counts a Platform refusal of variables as a failure, not the Enterprise gate', async () => {
@@ -155,5 +191,68 @@ describe('Figma smoke scenario', () => {
     expect(calls).toContainEqual(
       expect.objectContaining({ toolId: 'figma_render_images', input: expect.objectContaining({ node_ids: ['1-2'] }) }),
     );
+  });
+
+  describe('a create whose outcome is unknown', () => {
+    it.each([
+      [
+        'comment',
+        'figma_create_comment',
+        {
+          figma_list_comments: {
+            items: [
+              { id: '555', message: 'mastra-smoke-run-1' },
+              { id: '9', message: 'hi' },
+            ],
+          },
+        },
+        { toolId: 'figma_delete_comment', input: { file_key: 'FILE', comment_id: '555' } },
+      ],
+      [
+        'dev resource',
+        'figma_create_dev_resources',
+        { figma_list_dev_resources: { dev_resources: [{ id: 'dr_9', name: 'mastra-smoke-run-1' }] } },
+        { toolId: 'figma_delete_dev_resource', input: { file_key: 'FILE', dev_resource_id: 'dr_9' } },
+      ],
+      [
+        'variable collection',
+        'figma_update_variables',
+        {
+          figma_get_local_variables: {
+            meta: { variableCollections: { a: { id: 'VariableCollectionId:7:7', name: 'mastra-smoke-run-1' } } },
+          },
+        },
+        {
+          toolId: 'figma_update_variables',
+          input: { file_key: 'FILE', variableCollections: [{ action: 'DELETE', id: 'VariableCollectionId:7:7' }] },
+        },
+      ],
+    ])('deletes a %s Figma kept without repeating the create', async (_what, createTool, responses, removal) => {
+      // Fail only the create: deletes go through figma_update_variables too.
+      const { steps, calls, errors } = await runScenario({
+        responses,
+        failIf: (toolId, input) =>
+          toolId === createTool && !JSON.stringify(input).includes('DELETE') ? 'socket hang up' : undefined,
+      });
+
+      expect(calls).toContainEqual(removal);
+      const creates = calls.filter(
+        call =>
+          call.toolId === createTool &&
+          !(createTool === 'figma_update_variables' && JSON.stringify(call.input).includes('DELETE')),
+      );
+      expect(creates).toHaveLength(1);
+      expect(errors).toEqual([]);
+      expect(steps).toContainEqual(expect.objectContaining({ name: `delete kept ${_what}`, status: 'pass' }));
+    });
+
+    it('logs and fails when it cannot check whether Figma kept the comment', async () => {
+      const { steps, errors } = await runScenario({
+        fail: { figma_create_comment: 'socket hang up', figma_list_comments: 'status=500' },
+      });
+
+      expect(steps).toContainEqual(expect.objectContaining({ name: 'delete kept comment', status: 'fail' }));
+      expect(errors.some(error => error.includes('mastra-smoke-run-1'))).toBe(true);
+    });
   });
 });

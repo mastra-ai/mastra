@@ -1549,15 +1549,18 @@ function figmaClientMetaOrder(count: number): StatementRewrite {
   };
 }
 
-/** The frame a published component or set sits in, as Figma's REST spec describes it. */
+/**
+ * The frame a published component or set sits in, as Figma's REST spec describes it.
+ * An asset outside any frame gets `{}`, so even the page fields can be absent.
+ */
 const FIGMA_FRAME_INFO: StatementRewrite = {
   pattern: /const FrameInfoSchema = z\.object\(\{[\s\S]*?\}\);/,
   replacement: `const FrameInfoSchema = z.object({
   nodeId: z.string().optional(),
   name: z.string().optional(),
   backgroundColor: z.string().optional(),
-  pageId: z.string(),
-  pageName: z.string(),
+  pageId: z.string().optional(),
+  pageName: z.string().optional(),
   containingStateGroup: z.object({ nodeId: z.string().optional(), name: z.string().optional() }).nullish(),
   containingComponentSet: z.object({ nodeId: z.string().optional(), name: z.string().optional() }).nullish(),
 });`,
@@ -1594,9 +1597,16 @@ function figmaNodeIdDescription(pattern: RegExp, field: string, what: string): S
  * - list_styles read its team from connection metadata nobody sets; the other
  *   team listings take `team_id` as input.
  * - Dev resource responses carry optional error ids and full updated links.
+ * - A comment can come back with a `null` pin.
+ * - Variable values can be a composed color (a color with a separately
+ *   bound opacity), which update_variables refused.
+ * - get_version could walk 100 pages of history, each with retries, and then
+ *   reported a version it never reached as missing.
  * Drop an entry once the upstream template is fixed.
  */
-const FIGMA_FIXES: Readonly<Record<string, ProviderActionFixes & { helpers?: readonly string[] }>> = {
+const FIGMA_FIXES: Readonly<
+  Record<string, ProviderActionFixes & { helpers?: readonly string[]; description?: string }>
+> = {
   'list-comments': {
     statements: [
       {
@@ -1619,8 +1629,21 @@ const FIGMA_FIXES: Readonly<Record<string, ProviderActionFixes & { helpers?: rea
         what: 'optional resolved_at',
       },
       figmaClientMetaOrder(2),
+      {
+        pattern:
+          /(client_meta: z\.union\(\[FrameOffsetRegionSchema, RegionSchema, FrameOffsetSchema, VectorSchema\]\))(?!\.optional)/,
+        replacement: '$1.nullable()',
+        count: 1,
+        what: 'null comment pin',
+      },
     ],
     exec: [
+      {
+        pattern: /client_meta: providerComment\.client_meta\b/,
+        replacement: '...(providerComment.client_meta != null && { client_meta: providerComment.client_meta })',
+        count: 1,
+        what: 'null comment pin',
+      },
       {
         pattern: /providerComment\.resolved_at !== null/,
         replacement: 'providerComment.resolved_at != null',
@@ -1629,7 +1652,25 @@ const FIGMA_FIXES: Readonly<Record<string, ProviderActionFixes & { helpers?: rea
       },
     ],
   },
-  'create-comment': { statements: [figmaClientMetaOrder(1)] },
+  'create-comment': {
+    helpers: [FIGMA_NODE_ID_HELPER],
+    statements: [
+      figmaClientMetaOrder(1),
+      figmaNodeIdDescription(
+        /node_id: z\.string\(\)\.optional\(\)\.describe\('The node ID to attach the comment to\. Example: "91:1"'\)/,
+        'node_id: z.string().optional()',
+        'The node ID to attach the comment to',
+      ),
+    ],
+    exec: [
+      {
+        pattern: /node_id: input\.node_id\b/,
+        replacement: 'node_id: figmaNodeId(input.node_id)',
+        count: 1,
+        what: 'node id',
+      },
+    ],
+  },
   'get-comment': {
     statements: [
       {
@@ -1719,12 +1760,21 @@ if (before && before !== input.cursor && providerResponse.versions.length > 0) {
         replacement: `const nextPageUrl = parsed.pagination?.next_page;
 const before = nextPageUrl ? new URL(nextPageUrl, 'https://api.figma.com').searchParams.get('before') : null;
 // Figma repeats the last page instead of ending, so stop when the cursor stops moving.
-if (!before || before === params['before'] || parsed.versions.length === 0 || ++pages >= 100) break;
+if (!before || before === params['before'] || parsed.versions.length === 0) break;
+if (++pages >= FIGMA_VERSION_PAGES) {
+  throw new platformProxy.ActionError({
+    type: 'search_limit',
+    message: \`Version \${input.version_id} is not among the newest \${FIGMA_VERSION_PAGES * 50} versions of file \${input.file_key}. Page further back with figma_list_versions, passing its cursor.\`,
+  });
+}
 params = { page_size: '50', before };`,
         count: 1,
         what: 'older version pages',
       },
     ],
+    helpers: ['const FIGMA_VERSION_PAGES = 20;'],
+    description:
+      'Retrieve a single version from Figma by id. Searches the newest 1,000 versions; for an older version, page through figma_list_versions instead.',
   },
   'get-file-node': {
     helpers: [FIGMA_NODE_ID_HELPER],
@@ -1835,12 +1885,71 @@ params = { page_size: '50', before };`,
   'list-components': { statements: [FIGMA_FRAME_INFO] },
   'list-component-sets': { statements: [FIGMA_FRAME_INFO] },
   'create-dev-resources': {
+    helpers: [FIGMA_NODE_ID_HELPER],
     statements: [
+      {
+        pattern: /(const DevResourceCreateSchema = z\.object\(\{[\s\S]*?node_id: z\.string\(\))/,
+        replacement: `$1.describe('The node to link, as in "91:1". The "91-1" form from a Figma URL works too.')`,
+        count: 1,
+        what: 'node id description',
+      },
       {
         pattern: /(file_key|node_id): z\.string\(\)\.nullable\(\)/,
         replacement: '$1: z.string().nullish()',
         count: 2,
         what: 'optional error target',
+      },
+    ],
+    exec: [
+      {
+        pattern: /node_id: resource\.node_id\b/,
+        replacement: 'node_id: figmaNodeId(resource.node_id)',
+        count: 1,
+        what: 'node id',
+      },
+    ],
+  },
+  'list-dev-resources': {
+    helpers: [FIGMA_NODE_ID_HELPER],
+    statements: [
+      {
+        pattern:
+          /'Optional list of node IDs to filter dev resources by\. Only dev resources attached to these nodes will be returned\.'/,
+        replacement:
+          '\'Optional node IDs to filter by, as in "91:1". The "91-1" form from a Figma URL works too. Only dev resources attached to these nodes are returned.\'',
+        count: 1,
+        what: 'node id description',
+      },
+    ],
+    exec: [
+      {
+        pattern: /params\['node_ids'\] = input\.node_ids\.join\(','\);/,
+        replacement: "params['node_ids'] = input.node_ids.map(figmaNodeId).join(',');",
+        count: 1,
+        what: 'node ids',
+      },
+    ],
+  },
+  'update-variables': {
+    statements: [
+      {
+        pattern: /(const VariableModeValueSchema = )/,
+        replacement: `const VariableComposedColorSchema = z.union([
+  z.object({ color: ColorSchema, opacity: VariableAliasSchema }),
+  z.object({ color: VariableAliasSchema, opacity: z.union([z.number(), VariableAliasSchema]) }),
+]);
+
+$1`,
+        count: 1,
+        what: 'composed color',
+      },
+      {
+        pattern:
+          /value: z\.union\(\[z\.boolean\(\), z\.number\(\), z\.string\(\), ColorSchema, VariableAliasSchema, z\.null\(\)\]\)/,
+        replacement:
+          'value: z.union([z.boolean(), z.number(), z.string(), VariableComposedColorSchema, ColorSchema, VariableAliasSchema, z.null()])',
+        count: 1,
+        what: 'composed color value',
       },
     ],
   },
@@ -1878,6 +1987,7 @@ function adaptFigmaAction(action: ExtractedAction): ExtractedAction {
   if (fixes?.statements) adapted = rewriteModuleStatements(adapted, fixes.statements);
   if (fixes?.exec) adapted = rewriteExecBody(adapted, fixes.exec);
   if (fixes?.helpers) adapted = { ...adapted, moduleStatements: [...fixes.helpers, ...adapted.moduleStatements] };
+  if (fixes?.description) adapted = { ...adapted, description: fixes.description };
   return adapted;
 }
 
@@ -2717,15 +2827,10 @@ function modelOutputOverride(action: ExtractedAction): { importStatement: string
 }
 
 /**
- * Top-level response fields that must not leave a generated tool. The upstream
- * template returns them because the provider does, but an agent has no use for
- * a credential and must not see one.
- */
-/**
  * Actions deliberately left out of a toolset, keyed by `<providerId>/<actionSlug>`, with the reason recorded in the
  * manifest's skipped actions. Use this for actions the generator could emit but agents shouldn't have.
  */
-export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
+const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // Figma's project endpoints need projects:read, which public OAuth apps can't request.
   'figma/list-projects': 'excluded: needs projects:read, which public Figma OAuth apps cannot request',
   'figma/get-project': 'excluded: needs projects:read, which public Figma OAuth apps cannot request',
@@ -2737,6 +2842,11 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   'figma/delete-webhook': 'excluded: webhooks are managed by Mastra, not agents',
 };
 
+/**
+ * Top-level response fields that must not leave a generated tool. The upstream
+ * template returns them because the provider does, but an agent has no use for
+ * a credential and must not see one.
+ */
 const OUTPUT_SECRET_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   // GET /v1/user echoes the account's raw API key; the masked xi_api_key_preview stays.
   elevenlabs: {

@@ -4,13 +4,15 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
+const figmaNodeId = (id: string) => id.replace(/-/g, ':');
+
 export const listDevResourcesInputSchema = z.object({
   file_key: z.string().describe('The file to get dev resources from. This must be a main file key, not a branch key.'),
   node_ids: z
     .array(z.string())
     .optional()
     .describe(
-      'Optional list of node IDs to filter dev resources by. Only dev resources attached to these nodes will be returned.',
+      'Optional node IDs to filter by, as in "91:1". The "91-1" form from a Figma URL works too. Only dev resources attached to these nodes are returned.',
     ),
 });
 
@@ -36,7 +38,7 @@ export function listDevResourcesTool(proxy: PlatformProxy) {
       const platformProxy = proxy.withRequestContext(requestContext);
       const params: Record<string, string> = {};
       if (input.node_ids && input.node_ids.length > 0) {
-        params['node_ids'] = input.node_ids.join(',');
+        params['node_ids'] = input.node_ids.map(figmaNodeId).join(',');
       }
 
       const response = await platformProxy.get({

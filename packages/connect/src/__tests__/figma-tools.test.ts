@@ -184,6 +184,17 @@ describe('Figma tools', () => {
   });
 
   describe('comments', () => {
+    it('reads a comment that has no pin', async () => {
+      answer = () => ({ status: 200, body: { comments: [comment({ client_meta: null }), comment({ id: '101' })] } });
+
+      const result = (await run('figma_list_comments', { file_key: 'FILE' })) as {
+        items: Array<Record<string, unknown>>;
+      };
+
+      expect(result.items[0]).not.toHaveProperty('client_meta');
+      expect(result.items[1]).toMatchObject({ id: '101', client_meta: { x: 10, y: 20 } });
+    });
+
     it('keeps the size of a region pin and reads unresolved comments and replies', async () => {
       const region = { x: 1, y: 2, region_width: 30, region_height: 40, comment_pin_corner: 'top-left' };
       const { resolved_at: _omitted, ...unresolved } = comment({ id: '101', client_meta: region });
@@ -303,6 +314,30 @@ describe('Figma tools', () => {
       await expect(run('figma_get_version', { file_key: 'FILE', version_id: '999' })).rejects.toThrow(/not found/);
       expect(requests).toHaveLength(2);
     });
+
+    it('gives up after 20 pages without calling an unsearched version missing', async () => {
+      let page = 0;
+      answer = () => {
+        page++;
+        return {
+          status: 200,
+          body: {
+            versions: [version(String(10_000 - page))],
+            pagination: { next_page: `https://api.figma.com/v1/files/FILE/versions?before=${10_000 - page}` },
+          },
+        };
+      };
+
+      const failure = await run('figma_get_version', { file_key: 'FILE', version_id: '1' }).catch(
+        (error: unknown) => error as Error,
+      );
+
+      expect(requests).toHaveLength(20);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure!.message).toMatch(/newest 1000 versions/);
+      expect(failure!.message).toMatch(/figma_list_versions/);
+      expect(failure!.message).not.toMatch(/not found/);
+    });
   });
 
   describe('node ids', () => {
@@ -349,9 +384,50 @@ describe('Figma tools', () => {
 
       expect(requests.map(request => request.query.ids)).toEqual(['91:1,1:2', '91:1']);
     });
+
+    it('sends colon ids when pinning a comment and linking or listing dev resources', async () => {
+      answer = request =>
+        request.method === 'GET'
+          ? { status: 200, body: { dev_resources: [] } }
+          : request.path === '/v1/dev_resources'
+            ? { status: 200, body: { links_created: [], errors: [] } }
+            : { status: 200, body: comment() };
+
+      await run('figma_create_comment', {
+        file_key: 'FILE',
+        message: 'Hi',
+        node_id: '91-1',
+        node_offset_x: 1,
+        node_offset_y: 2,
+      });
+      await run('figma_create_dev_resources', {
+        dev_resources: [{ name: 'Ticket', url: 'https://example.com/1', file_key: 'FILE', node_id: '91-1' }],
+      });
+      await run('figma_list_dev_resources', { file_key: 'FILE', node_ids: ['91-1', '1:2'] });
+
+      expect(requests[0]!.body).toMatchObject({ client_meta: { node_id: '91:1' } });
+      expect(requests[1]!.body).toEqual({
+        dev_resources: [{ name: 'Ticket', url: 'https://example.com/1', file_key: 'FILE', node_id: '91:1' }],
+      });
+      expect(requests[2]!.query).toEqual({ node_ids: '91:1,1:2' });
+    });
   });
 
   describe('libraries', () => {
+    it.each([
+      ['figma_get_file_components', 'components'],
+      ['figma_get_file_component_sets', 'component_sets'],
+    ])('%s reads an asset outside any frame', async (toolId, field) => {
+      answer = () => ({
+        status: 200,
+        body: { status: 200, error: false, meta: { [field]: [{ ...published('loose'), containing_frame: {} }] } },
+      });
+
+      const result = await run(toolId, { file_key: 'FILE' });
+
+      expect(JSON.stringify(result)).toContain('"loose"');
+    });
+
     it('reads team component sets outside a state group and keeps component frame ids', async () => {
       answer = request =>
         request.path.endsWith('/component_sets')
@@ -406,6 +482,34 @@ describe('Figma tools', () => {
       });
 
       expect(result).toEqual({ links_created: [], errors: [{ error: 'rate limited' }] });
+    });
+  });
+
+  describe('variables', () => {
+    it.each([
+      ['a bound opacity', { color: { r: 1, g: 0, b: 0 }, opacity: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:4' } }],
+      ['a bound color', { color: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:3' }, opacity: 50 }],
+    ])('sets a composed color with %s', async (_case, value) => {
+      answer = () => ({ status: 200, body: { status: 200, error: false, meta: { tempIdToRealId: {} } } });
+
+      await run('figma_update_variables', {
+        file_key: 'FILE',
+        variableModeValues: [{ variableId: 'VariableID:1:2', modeId: '1:0', value }],
+      });
+
+      expect(requests[0]!.body).toMatchObject({ variableModeValues: [{ value }] });
+    });
+
+    it('refuses a composed color with nothing bound to a variable', async () => {
+      await expect(
+        run('figma_update_variables', {
+          file_key: 'FILE',
+          variableModeValues: [
+            { variableId: 'VariableID:1:2', modeId: '1:0', value: { color: { r: 1, g: 0, b: 0 }, opacity: 50 } },
+          ],
+        }),
+      ).rejects.toThrow(/failed validation/);
+      expect(requests).toEqual([]);
     });
   });
 });

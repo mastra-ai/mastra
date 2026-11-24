@@ -32,8 +32,8 @@ const FrameInfoSchema = z.object({
   nodeId: z.string().optional(),
   name: z.string().optional(),
   backgroundColor: z.string().optional(),
-  pageId: z.string(),
-  pageName: z.string(),
+  pageId: z.string().optional(),
+  pageName: z.string().optional(),
   containingStateGroup: z.object({ nodeId: z.string().optional(), name: z.string().optional() }).nullish(),
   containingComponentSet: z.object({ nodeId: z.string().optional(), name: z.string().optional() }).nullish(),
 });
