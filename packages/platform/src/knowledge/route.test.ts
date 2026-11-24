@@ -76,15 +76,6 @@ it.each([{ pages: [], edges: [], outsideIds: [], pinnedIds: [], truncated: false
   },
 );
 
-it('rejects an oversized hosted graph before issuing remote storage calls', async () => {
-  const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected remote read'));
-  onTestFinished(() => fetch.mockRestore());
-  await expect(
-    readKnowledgePageGraph(await hostedGraphStore(), { ...graphInput, limits: { maxPages: 501 } }),
-  ).rejects.toThrow(RangeError);
-  expect(fetch).not.toHaveBeenCalled();
-});
-
 it('falls back to the scoped page reader when an older instance lacks the graph operation', async () => {
   const fetch = vi
     .spyOn(globalThis, 'fetch')

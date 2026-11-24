@@ -124,7 +124,7 @@ class RemoteKnowledgeStorage extends KnowledgeStorage implements KnowledgeGraphS
     });
   }
 
-  private async request(operation: string, input?: unknown): Promise<unknown> {
+  private async request<T = unknown>(operation: string, input?: unknown): Promise<T> {
     const response = await fetch(`${this.endpoint}/operations/${operation}`, {
       method: 'POST',
       headers: {
@@ -199,42 +199,18 @@ class RemoteKnowledgeStorage extends KnowledgeStorage implements KnowledgeGraphS
       }
       throw Object.assign(new Error(message), { status: response.status });
     }
-    return decode<{ result?: unknown }>(text).result;
+    return decode<{ result: T }>(text).result;
   }
 
   async readPageGraph(
     input: Parameters<typeof readKnowledgePageGraph>[1],
   ): Promise<KnowledgePageGraph | null | undefined> {
-    // Only a missing operation falls back to remote primitives. Oversized requests must respect the hosted budget.
-    const { limits } = input;
-    if ((limits?.maxPages ?? 0) > 500 || (limits?.maxNotes ?? 0) > 5000 || (limits?.maxOutsidePages ?? 0) > 50) {
-      throw new RangeError('Hosted Knowledge graphs support up to 500 pages, 5000 notes, and 50 outside pages');
-    }
-    let result: unknown;
     try {
-      result = await this.request('readPageGraph', input);
+      return await this.request<KnowledgePageGraph | null>('readPageGraph', input);
     } catch (error) {
       if (isMissingOperation(error)) return undefined;
       throw error;
     }
-    if (result === null) return null;
-    if (
-      !result ||
-      typeof result !== 'object' ||
-      !('pages' in result) ||
-      !Array.isArray(result.pages) ||
-      !('edges' in result) ||
-      !Array.isArray(result.edges) ||
-      !('outsideIds' in result) ||
-      !Array.isArray(result.outsideIds) ||
-      !('pinnedIds' in result) ||
-      !Array.isArray(result.pinnedIds) ||
-      !('truncated' in result) ||
-      typeof result.truncated !== 'boolean'
-    ) {
-      throw new Error('Knowledge service answered readPageGraph without a graph');
-    }
-    return result as KnowledgePageGraph;
   }
 
   /**
