@@ -1839,8 +1839,11 @@ export class AgentController<TState = {}> {
         return deleted && !resumed();
       } catch (error) {
         // A resume overlapped the failed attempt: decide once it settles rather than leave what it parks.
-        if (resumed()) return false;
-        throw error;
+        if (!resumed()) throw error;
+        this.getMastra()
+          ?.getLogger()
+          ?.warn(`[AgentController:${this.id}] Failed to delete snapshot of released run ${runId}`, { runId, error });
+        return false;
       }
     } finally {
       for (const watcher of watchers) watcher.stop();

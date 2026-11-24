@@ -552,6 +552,7 @@ describe('deleteSession with a parked suspension (#30743)', () => {
       const workflows = (await storage.getStore('workflows'))!;
       const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
       const runId = parked!.runId;
+      const warn = vi.spyOn(controller.getMastra()!.getLogger(), 'warn');
       const remove = workflows.deleteWorkflowRunById.bind(workflows);
       let resumed: Promise<unknown> | undefined;
       let failing = true;
@@ -573,6 +574,13 @@ describe('deleteSession with a parked suspension (#30743)', () => {
       await agent.__resumesSettled(runId);
 
       await expectReleased(agent, workflows, runId);
+      // The failed attempt is reported even though the retry released the run.
+      const reports = warn.mock.calls.filter(([message]) => String(message).includes(runId));
+      expect(reports).toHaveLength(1);
+      expect(reports[0]![1]).toEqual({
+        runId,
+        error: expect.objectContaining({ errors: expect.arrayContaining([new Error('delete failed')]) }),
+      });
     },
   );
 
