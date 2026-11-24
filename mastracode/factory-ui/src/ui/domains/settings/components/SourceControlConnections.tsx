@@ -2,6 +2,7 @@ import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/s
 
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
+import { reconnectProvider } from '../../factory/services/platformConnect';
 import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
 import { IntegrationItem } from './IntegrationItem';
 import {
@@ -97,6 +98,7 @@ function GitLabConnectionRows() {
     return (
       <IntegrationItem {...gitlab}>
         <PlatformConnectButton provider="gitlab" />
+        <PlatformConnectButton provider="gitlab-self-hosted" buttonLabel="Connect self-hosted" />
       </IntegrationItem>
     );
   }
@@ -114,9 +116,15 @@ function GitLabConnectionRows() {
           >
             {needsReauth || last ? (
               <>
-                {needsReauth && <PlatformReconnectButton provider="gitlab" connectionId={connection.id} />}
+                {needsReauth && (
+                  <PlatformReconnectButton
+                    provider={reconnectProvider('gitlab', connection)}
+                    connectionId={connection.id}
+                  />
+                )}
                 {last && <PlatformManageLink provider="gitlab" />}
                 {last && <AddPlatformAccountButton provider="gitlab" />}
+                {last && <AddPlatformAccountButton provider="gitlab-self-hosted" buttonLabel="Add self-hosted" />}
               </>
             ) : undefined}
           </IntegrationItem>
