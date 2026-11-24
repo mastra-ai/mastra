@@ -17130,10 +17130,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/mastra/recover-all-durable-agents.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-10-11",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-24",
+      "last_failure": "2026-11-24",
+      "reason": "versioning-fail"
     },
     "packages/core/src/mastra/register-exporter.test.ts": {
       "tier": "out",
