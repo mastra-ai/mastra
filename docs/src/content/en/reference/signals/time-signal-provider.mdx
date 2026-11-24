@@ -27,11 +27,11 @@ const agent = new Agent({
   instructions: '...',
   model,
   memory,
-  signals: [new TimeSignalProvider({ interval: 'minute', timeZone: 'America/New_York' })],
+  signals: [new TimeSignalProvider({ timeZone: 'America/New_York' })],
 })
 ```
 
-The model then sees a state signal like this, refreshed as the minute changes:
+The model then sees a state signal like this, refreshed every 15 minutes at :00, :15, :30 and :45 by default:
 
 ```xml
 <current-time timeZone="America/New_York">Tuesday, November 24, 2026 at 3:15 AM EST</current-time>
@@ -42,7 +42,7 @@ One provider instance can be listed on several agents and serves every thread.
 ## Requirements and cost
 
 - **Memory is required.** Like every state signal, the time lane is tracked on a memory-backed thread. Listing the provider on an agent without memory makes every run fail with `computeStateSignal requires Mastra memory with an active resourceId and threadId`.
-- **Each snapshot stays in the context.** State signals are appended, not replaced: each new snapshot is a persisted message that remains in the prompt until memory trims it. A two-hour run at `interval: 'minute'` that takes a step every minute carries about 120 `<current-time>` messages. Choose the coarsest interval the agent needs.
+- **Each snapshot stays in the context.** State signals are appended, not replaced: each new snapshot is a persisted message that remains in the prompt until memory trims it. A two-hour run carries about 8 `<current-time>` messages at the default 15-minute interval, and about 120 at `interval: 'minute'` if it takes a step every minute. Choose the coarsest interval the agent needs.
 - If an earlier snapshot is trimmed from the context window, the provider adds a fresh one on the next step.
 - An interval that spans a daylight saving change can add one extra snapshot that day, carrying the new UTC offset.
 
@@ -54,7 +54,7 @@ One provider instance can be listed on several agents and serves every thread.
     name: 'interval',
     type: "'minute' | 'hour' | 'day' | number",
     isOptional: true,
-    defaultValue: "'minute'",
+    defaultValue: '15 minutes',
     description:
       'How often the time shown to the model moves on, as a name or in milliseconds. With `align: true` a number must be whole minutes that divide a day evenly (for example 15 minutes or 6 hours); other values throw.',
   },

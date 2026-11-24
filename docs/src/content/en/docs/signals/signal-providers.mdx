@@ -249,7 +249,7 @@ const agent = new Agent({
 })
 ```
 
-The provider reads the clock at each model step and adds a snapshot only when the interval moves on, without timers or waking idle threads. It requires a memory-backed thread.
+The provider reads the clock at each model step and adds a snapshot only when the interval (15 minutes by default) moves on, without timers or waking idle threads. It requires a memory-backed thread.
 
 ### Webhook signal provider
 

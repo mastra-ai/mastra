@@ -77,9 +77,24 @@ describe('TimeSignalProvider', () => {
     expect(processorOf(provider).stateId).toBe('current-time');
   });
 
+  it('defaults to a 15-minute interval aligned to the quarter hour', async () => {
+    vi.setSystemTime(new Date('2026-11-24T08:14:59Z'));
+    const time = lane(new TimeSignalProvider({ timeZone: 'UTC' }));
+    expect(await time.step()).toMatchObject({
+      cacheKey: 'time:2026-11-24T08:00+00:00',
+      value: { interval: 15 * MINUTE },
+    });
+    vi.setSystemTime(new Date('2026-11-24T08:15:00Z'));
+    const next = await time.step();
+    expect(next?.cacheKey).toBe('time:2026-11-24T08:15+00:00');
+    expect(next?.contents).toBe('Tuesday, November 24, 2026 at 8:15 AM UTC');
+    vi.setSystemTime(new Date('2026-11-24T08:29:59Z'));
+    expect(await time.step()).toBeUndefined();
+  });
+
   it('emits a current-time snapshot on the first step', async () => {
     vi.setSystemTime(new Date('2026-11-24T08:15:30Z'));
-    const result = await lane(new TimeSignalProvider({ timeZone: 'America/Los_Angeles' })).step();
+    const result = await lane(new TimeSignalProvider({ interval: 'minute', timeZone: 'America/Los_Angeles' })).step();
     expect(result).toMatchObject({
       id: 'current-time',
       tagName: 'current-time',
@@ -93,7 +108,7 @@ describe('TimeSignalProvider', () => {
 
   it('emits nothing within the same minute and a new snapshot after the boundary', async () => {
     vi.setSystemTime(new Date('2026-11-24T08:15:05Z'));
-    const time = lane(new TimeSignalProvider({ timeZone: 'UTC' }));
+    const time = lane(new TimeSignalProvider({ interval: 'minute', timeZone: 'UTC' }));
     expect(await time.step()).toBeDefined();
     vi.setSystemTime(new Date('2026-11-24T08:15:59Z'));
     expect(await time.step()).toBeUndefined();
@@ -103,7 +118,7 @@ describe('TimeSignalProvider', () => {
 
   it('re-emits when the snapshot has left the context window', async () => {
     vi.setSystemTime(new Date('2026-11-24T08:15:05Z'));
-    const time = lane(new TimeSignalProvider({ timeZone: 'UTC' }));
+    const time = lane(new TimeSignalProvider({ interval: 'minute', timeZone: 'UTC' }));
     await time.step();
     expect(await time.dropWindow()).toBeDefined();
   });
@@ -131,13 +146,18 @@ describe('TimeSignalProvider', () => {
   it('accepts Intl options and a format function as overrides', async () => {
     vi.setSystemTime(new Date('2026-11-24T08:15:30Z'));
     const intl = await lane(
-      new TimeSignalProvider({ timeZone: 'UTC', locale: 'en-GB', format: { dateStyle: 'short', timeStyle: 'short' } }),
+      new TimeSignalProvider({
+        interval: 'minute',
+        timeZone: 'UTC',
+        locale: 'en-GB',
+        format: { dateStyle: 'short', timeStyle: 'short' },
+      }),
     ).step();
     expect(intl?.contents).toBe('24/11/2026, 08:15');
     const fn = vi.fn(
       (date: Date, options: { timeZone: string; locale: string }) => `${date.toISOString()} ${options.timeZone}`,
     );
-    const custom = await lane(new TimeSignalProvider({ timeZone: 'UTC', format: fn })).step();
+    const custom = await lane(new TimeSignalProvider({ interval: 'minute', timeZone: 'UTC', format: fn })).step();
     expect(custom?.contents).toBe('2026-11-24T08:15:30.000Z UTC');
     expect(fn).toHaveBeenCalledWith(expect.any(Date), { timeZone: 'UTC', locale: 'en-US' });
   });
@@ -249,7 +269,7 @@ describe('TimeSignalProvider on an agent', () => {
       model,
       tools: { wait },
       ...(memory ? { memory } : {}),
-      signals: [new TimeSignalProvider({ timeZone: 'UTC' })],
+      signals: [new TimeSignalProvider({ interval: 'minute', timeZone: 'UTC' })],
     });
     new Mastra({ agents: { clock: agent }, storage: new InMemoryStore(), logger: false });
     return { agent, prompts };

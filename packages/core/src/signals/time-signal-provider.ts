@@ -4,6 +4,7 @@ import { SignalProvider } from './signal-provider';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
+const DEFAULT_INTERVAL_MS = 15 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 const TIME_STATE_ID = 'current-time';
@@ -14,7 +15,7 @@ export type TimeSignalFormatter = (date: Date, options: { timeZone: string; loca
 export type TimeSignalProviderOptions = {
   /**
    * How often the time shown to the model moves on: `'minute'`, `'hour'`, `'day'`, or milliseconds.
-   * With `align` (the default) a number must be whole minutes that divide a day. Defaults to `'minute'`.
+   * With `align` (the default) a number must be whole minutes that divide a day. Defaults to 15 minutes.
    */
   interval?: 'minute' | 'hour' | 'day' | number;
   /** IANA time zone, e.g. `'America/Los_Angeles'`. Defaults to the host's time zone. */
@@ -36,7 +37,7 @@ export type TimeSignalProviderOptions = {
 const NAMED_INTERVALS = { minute: MINUTE_MS, hour: HOUR_MS, day: DAY_MS } as const;
 
 function resolveInterval(interval: TimeSignalProviderOptions['interval'], align: boolean): number {
-  const ms = typeof interval === 'string' ? NAMED_INTERVALS[interval] : (interval ?? MINUTE_MS);
+  const ms = typeof interval === 'string' ? NAMED_INTERVALS[interval] : (interval ?? DEFAULT_INTERVAL_MS);
   if (!Number.isFinite(ms) || ms <= 0) {
     throw new Error(`TimeSignalProvider: interval must be a positive number of milliseconds, got ${String(interval)}`);
   }
@@ -189,7 +190,7 @@ class TimeStateProcessor {
  * const agent = new Agent({
  *   // ...
  *   memory,
- *   signals: [new TimeSignalProvider({ interval: 'minute', timeZone: 'America/New_York' })],
+ *   signals: [new TimeSignalProvider({ timeZone: 'America/New_York' })],
  * });
  * ```
  */
