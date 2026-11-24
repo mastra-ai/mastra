@@ -690,6 +690,23 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await page('hub/notion/p2')).toBeNull();
     });
 
+    it('does not re-anchor on one of its own pages a rebind left at the target', async () => {
+      const { knowledge, run, page } = setup([{ id: 'b1', target: 'docs:acme#p1' }]);
+      await run([upsert({ sourceId: 'p1' })]);
+      // The anchor moves away and its item `p1` takes the target path; the app then rebinds.
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'old', name: 'Old' });
+      const anchor = await page('p1');
+      await knowledge.movePage({ scope: 'docs:acme', path: 'p1', parent: 'old' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'old/p1/p1' });
+      const storage = await knowledge.getStorage();
+      await storage.transaction(tx =>
+        tx.importers!.setBindingAnchor({ bindingId: 'b1', expected: anchor!.id, pageId: null }),
+      );
+      expect(await run([upsert({ sourceId: 'p2' })])).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(await page('p1/p2')).toBeNull();
+      expect(await storage.importers!.getBinding('b1')).toMatchObject({ anchorPageId: null });
+    });
+
     it('refuses an imported page a person moved into another scope', async () => {
       const { knowledge, run } = setup();
       await run([upsert({ sourceId: 'p1' })]);

@@ -312,10 +312,13 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         const locked = await chain();
         if (locked.length !== before.length || locked.some((page, i) => page.id !== before[i]!.id)) continue;
         // A page someone wrote at the target becomes the binding's folder, its body and children
-        // kept. Another binding's anchor or page is never taken, at the target or above it. The
-        // chain is locked, so its pages can't move, be renamed or be removed until commit.
+        // kept. Another binding's anchor or any imported page, this binding's own included (left
+        // behind by a rebind), is never taken, at the target or above it. The chain is locked, so
+        // its pages can't move, be renamed or be removed until commit.
         for (const page of locked) {
-          if (await othersPage(page.id)) return 'occupied' as const;
+          if ((await otherBindings()).has(page.id) || (await importers.getNodeByPage(page.id))) {
+            return 'occupied' as const;
+          }
         }
         let parent: KnowledgePage = locked.at(-1) ?? scope;
         // Containers along the way are ordinary pages; only the last key is the binding's own.
