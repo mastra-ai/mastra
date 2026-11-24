@@ -3,7 +3,7 @@
  * Lists known providers with their key status and allows adding, updating, or removing keys.
  */
 
-import { Container, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, matchesKey, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 
@@ -134,10 +134,10 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         updateDetail(item.value);
       };
 
-      // Delete (or Backspace on an empty search, the Mac delete key) removes a stored key
+      // Only Delete removes a stored key; Backspace edits the search and then goes back, like in every menu.
       const originalHandleInput = list.handleInput.bind(list);
       list.handleInput = async (data: string) => {
-        if (data === '\x7f' || data === '\x1b[3~') {
+        if (matchesKey(data, 'delete')) {
           // Nothing is selected when the search matches no provider: then there is nothing to remove.
           const selected = list.getSelectedItem();
           const info = selected ? providers.find(p => p.provider === selected.value) : undefined;
@@ -210,7 +210,6 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
 
     const modal = Object.assign(container, {
       handleInput: (data: string) => selectList.handleInput(data),
-      menuKeepsBackspace: true,
     });
     showModalOverlay(ctx.state.ui, modal, { title: 'API keys', hints: [{ key: 'delete', label: 'remove' }] });
   });

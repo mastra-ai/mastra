@@ -28,7 +28,7 @@ export interface MenuChrome {
   menuWindow?(): ListWindow | undefined;
   /**
    * Backspace on an empty search goes back (closes the menu) unless this is true; the menu then gets
-   * it itself (e.g. /api-keys removes a key with the Mac delete key, a question is not skipped).
+   * it itself (e.g. a question is not skipped).
    */
   readonly menuKeepsBackspace?: boolean;
   /** Space always goes to the menu, even after search text (multi-select lists toggle with it). */
