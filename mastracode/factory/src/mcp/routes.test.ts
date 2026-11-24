@@ -87,7 +87,7 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
   let issuer = '';
   const outage: Record<'metadata' | 'jwks', false | 'down' | 'hang'> = { metadata: false, jwks: false };
   const hanging: Array<() => void> = [];
-  const discovery: { kind: 'oauth' | 'openid' } = { kind: 'oauth' };
+  const discovery: { kind: 'oauth' | 'openid'; issuer?: string } = { kind: 'oauth' };
   hangingResponses.push(() => hanging.splice(0).forEach(end => end()));
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -98,7 +98,7 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
     if (req.url === document) {
       if (outage.metadata === 'hang') hanging.push(() => res.end());
       else if (outage.metadata) res.writeHead(503).end('{}');
-      else res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
+      else res.end(JSON.stringify({ issuer: discovery.issuer ?? issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
     } else if (req.url === `${path}/oauth2/jwks`) {
       if (outage.jwks === 'hang') hanging.push(() => res.end());
       else if (outage.jwks) res.writeHead(503).end('{}');
@@ -464,6 +464,13 @@ describe('Factory MCP server', () => {
     const openid = await setup({ issuerPath: '/tenant' });
     openid.authServer.discovery.kind = 'openid';
     expect((await claudeRequest(openid.url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
+  it('refuses to trust keys from metadata that describes another issuer', async () => {
+    const { url, authServer } = await setup();
+    authServer.discovery.issuer = 'https://attacker.example.com';
+
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
   });
 
   it('accepts tokens from an authorization server that only publishes OpenID Connect discovery', async () => {

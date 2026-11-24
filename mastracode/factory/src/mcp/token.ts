@@ -47,7 +47,11 @@ export function createMcpTokenVerifier(options: {
         let response = await discover(`${origin}/.well-known/oauth-authorization-server${trimSlash(pathname)}`);
         if (response.status === 404) response = await discover(`${issuer}/.well-known/openid-configuration`);
         if (!response.ok) throw new Error(`authorization server metadata answered ${response.status}`);
-        const { jwks_uri } = (await response.json()) as { jwks_uri?: unknown };
+        const metadata = (await response.json()) as { issuer?: unknown; jwks_uri?: unknown };
+        if (typeof metadata.issuer !== 'string' || trimSlash(metadata.issuer) !== issuer) {
+          throw new Error('authorization server metadata names another issuer');
+        }
+        const { jwks_uri } = metadata;
         if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');
         return createRemoteJWKSet(new URL(jwks_uri), { timeoutDuration: timeoutMs });
       })();
