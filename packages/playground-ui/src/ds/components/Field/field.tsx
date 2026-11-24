@@ -215,7 +215,7 @@ const fieldErrorClassName = '-mt-1 flex gap-1 text-body-sm text-destructive-fore
 
 function FieldErrorIcon() {
   return (
-    <Icon size="xs" className="mt-1 shrink-0" aria-hidden>
+    <Icon size="xs" className="flex h-lh shrink-0 items-center" aria-hidden>
       <IconExclamationCircle />
     </Icon>
   );
@@ -236,7 +236,7 @@ function FieldError({ className, children, ...props }: FieldErrorProps) {
         {...props}
       >
         <FieldErrorIcon />
-        <span className="min-w-0">{children}</span>
+        <span className="min-w-0 wrap-anywhere">{children}</span>
       </FieldPrimitive.Error>
     );
   }
@@ -252,7 +252,7 @@ function FieldError({ className, children, ...props }: FieldErrorProps) {
       render={({ children: message, ...errorProps }) => (
         <div {...errorProps}>
           <FieldErrorIcon />
-          <span className="min-w-0">{message}</span>
+          <span className="min-w-0 wrap-anywhere">{message}</span>
         </div>
       )}
     />
