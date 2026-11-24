@@ -503,6 +503,42 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(b2).toMatchObject({ counts: { refused: 1 } });
     });
 
+    it('repairs links to a hand-deleted page that is written again under another parent', async () => {
+      const { knowledge, run, page } = setup();
+      await run([
+        upsert({ sourceId: 'P' }),
+        upsert({ sourceId: 'p1', parent: 'P' }),
+        upsert({ sourceId: 'p2', links: [{ sourceId: 'p1' }] }),
+      ]);
+      expect((await page('notion/p2'))?.body).toBe('body of p2\n\nLinks:\n- [[docs:acme#notion/P/p1]]');
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion/P/p1' });
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion/P' });
+
+      // p1 comes back while its parent is still gone: it waits at the target's root. p2 isn't resent.
+      expect(await run([upsert({ sourceId: 'p1', parent: 'P' })])).toMatchObject({ outcome: 'succeeded' });
+      const p1 = await page('notion/p1');
+      expect((await page('notion/p2'))?.body).toBe('body of p2\n\nLinks:\n- [[docs:acme#notion/p1]]');
+      const storage = await knowledge.getStorage();
+      expect(await storage.listPageBodyLinkSources({ toPageIds: [p1!.id] })).toContain((await page('notion/p2'))!.id);
+
+      // Its parent returns and it moves under it; p2 follows again.
+      await run([upsert({ sourceId: 'P' })]);
+      expect((await page('notion/P/p1'))?.id).toBe(p1!.id);
+      expect((await page('notion/p2'))?.body).toBe('body of p2\n\nLinks:\n- [[docs:acme#notion/P/p1]]');
+    });
+
+    it('leaves links alone when a hand-deleted page is written again at the same path', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'p2', links: [{ sourceId: 'p1' }] })]);
+      const p2 = await page('notion/p2');
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion/p1' });
+      const receipt = await run([upsert({ sourceId: 'p1' })]);
+      expect(receipt).toMatchObject({ counts: { created: 1, updated: 0 } });
+      expect(await page('notion/p2')).toMatchObject({ id: p2!.id, version: p2!.version, body: p2!.body });
+      const storage = await knowledge.getStorage();
+      expect(await storage.listPageBodyLinkSources({ toPageIds: [(await page('notion/p1'))!.id] })).toContain(p2!.id);
+    });
+
     it('keeps updating an imported page a person moved out of the target, where they put it', async () => {
       const { knowledge, run, page } = setup();
       await run([

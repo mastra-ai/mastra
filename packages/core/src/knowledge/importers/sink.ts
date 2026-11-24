@@ -400,6 +400,18 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const page = await storage.getPage({ id: node.pageId, read: 'all' });
     return !page || (!!page.deletedAt && !page.mergedInto);
   };
+  /**
+   * Drops the node of a hand-deleted page, so its item is written again as new. Pages that linked to
+   * it still name its old path: this binding's linking items are marked unsettled so a settle slice
+   * renders their links section from wherever the item lands, and Knowledge's own link index is
+   * refreshed for the old page's refs.
+   */
+  const forgetDeleted = async (node: KnowledgeImporterNodeRecord) => {
+    const old = await storage.getPage({ id: node.pageId, read: 'all' });
+    await importers.markLinkingNodesUnsettled(binding.id, [node.sourceId]);
+    await importers.deleteNode(binding.id, node.sourceId);
+    if (old) await syncLinks(() => refreshKnowledgeLinksTo(storage, [old]));
+  };
   const liveNodeOf = async (sourceId: string | null | undefined) => {
     const node = await nodeOf(sourceId);
     return node && !(await deletedByHand(node)) ? node : null;
@@ -535,7 +547,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   ) => {
     let existing = await importers.getNode(binding.id, item.sourceId);
     if (existing && (await deletedByHand(existing))) {
-      await importers.deleteNode(binding.id, item.sourceId);
+      await forgetDeleted(existing);
       existing = null;
     }
     // Where it goes: its parent's page, else its holding item's page, else the anchor. Placed
@@ -682,7 +694,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           const node = await importers.getNode(binding.id, sourceId);
           if (!node) return;
           if (await deletedByHand(node)) {
-            await importers.deleteNode(binding.id, sourceId);
+            await forgetDeleted(node);
             result.applied = true;
             return;
           }
