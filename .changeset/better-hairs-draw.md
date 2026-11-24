@@ -12,4 +12,4 @@ curl -X POST http://localhost:4111/api/datasets/$DATASET_ID/experiments \
 
 A durable start answers `pending` with `startedAt: null`. A config a durable run can't store now returns 400 instead of 500, and with an older `@mastra/core` that has no durable experiments, `durable: true` returns 400 instead of silently running the experiment in process.
 
-`POST /workflows/events` now returns 404 for an event that names an experiment run that was never started, so a forged event can't re-run an existing experiment.
+`POST /workflows/events` only accepts an experiment event for a run Mastra started, carrying that run's stored input. It returns 404 when the run doesn't exist and 400 when the event names another run, dataset, experiment or request context, so a forged event can't run someone else's experiment.
