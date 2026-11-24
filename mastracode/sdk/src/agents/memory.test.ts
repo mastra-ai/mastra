@@ -193,6 +193,7 @@ describe('getDynamicMemory', () => {
     expect(om).toMatchObject({
       enabled: true,
       temporalMarkers: true,
+      liveDateHints: false,
       retrieval: true,
       scope: 'thread',
       activateAfterIdle: { default: 'auto', anthropic: '1h' },
