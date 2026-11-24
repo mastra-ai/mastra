@@ -46,6 +46,7 @@ import type { FactoryBindingPreparationInput, FactoryReviewStatusEvent } from '.
 import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import type { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryTransitionRequest } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -3174,6 +3175,59 @@ describe('FactoryDecisionDispatcher', () => {
     emitAgentEnd();
     await first;
     expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it("leaves a queued rule move undone when the host's board engine refuses it", async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage, 'github-issue:7');
+    const before = (await storage.get({ orgId: 'org-1', id: item.id }))!.stages;
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'tool-result-1' },
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'work', stage: 'done', idempotencyKey: 'refused-move' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const inputs: FactoryTransitionRequest[] = [];
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+      boardEngine: {
+        submitInput: async input => {
+          inputs.push(input);
+          return {
+            status: 'rejected',
+            transitionId: 'refused',
+            itemId: input.workItemId,
+            code: 'forbidden',
+            reason: 'This host keeps cards out of Done.',
+          };
+        },
+      },
+      storage,
+      audit: seed.audit,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(inputs).toEqual([
+      expect.objectContaining({
+        workItemId: item.id,
+        stage: 'done',
+        ingress: { type: 'rule', identity: 'decision:refused-move' },
+      }),
+    ]);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(before);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'refused-move'),
+    ).toMatchObject({ status: 'failed', lastError: expect.stringContaining('This host keeps cards out of Done.') });
   });
 
   it('waits for an open run on the same binding before sending another kickoff', async () => {
