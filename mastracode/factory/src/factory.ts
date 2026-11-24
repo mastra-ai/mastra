@@ -22,6 +22,7 @@
 import { existsSync } from 'node:fs';
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
@@ -49,14 +50,13 @@ import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from
 import {
   buildAuthDisabledRoutes,
   buildAuthRoutes,
+  authProviders,
   createFactoryAuthGate,
   createFactoryInteractiveMarker,
   createFactoryRouteAuth,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
-  getWorkOSProvider,
-  isWorkOSAuth,
 } from './auth.js';
 import { publishBoardChange, subscribeBoardChanges } from './board-changes.js';
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
@@ -932,8 +932,15 @@ export class MastraFactory {
     // so is any audience-bound token where the provider doesn't check `aud`.
     const authOptions = {
       mcpResource: factoryMcpResource(publicOrigin),
-      refuseAudienceBoundTokens: isWorkOSAuth(auth) || auth instanceof MastraAuthStudio,
+      refuseAudienceBoundTokens: (provider: IMastraAuthProvider) =>
+        provider instanceof MastraAuthWorkos || provider instanceof MastraAuthStudio,
     };
+    // Inside a `CompositeAuth` too: the MCP endpoint resolves WorkOS callers
+    // through WorkOS, and honors Platform auth's pinned organization.
+    const workosAuth = authProviders(auth).find((p): p is MastraAuthWorkos => p instanceof MastraAuthWorkos);
+    const pinnedOrganizationId = authProviders(auth).find(
+      (p): p is MastraAuthStudio => p instanceof MastraAuthStudio,
+    )?.pinnedOrganizationId;
     const routeAuth = createFactoryRouteAuth(auth, authOptions);
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
@@ -2335,19 +2342,13 @@ export class MastraFactory {
                 verifyAccessToken: createMcpTokenVerifier({
                   authorizationServers: mcpAuthorizationServers,
                   resource: authOptions.mcpResource,
-                  ...(isWorkOSAuth(auth)
-                    ? {
-                        resolveCaller: createWorkosMcpCallerResolver(
-                          getWorkOSProvider(auth).getWorkOS().userManagement,
-                        ),
-                      }
+                  ...(workosAuth
+                    ? { resolveCaller: createWorkosMcpCallerResolver(workosAuth.getWorkOS().userManagement) }
                     : {}),
                 }),
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,
-                ...(auth instanceof MastraAuthStudio && auth.pinnedOrganizationId
-                  ? { organizationId: auth.pinnedOrganizationId }
-                  : {}),
+                ...(pinnedOrganizationId ? { organizationId: pinnedOrganizationId } : {}),
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
                 tools: factoryToolDeps,

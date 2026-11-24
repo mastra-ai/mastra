@@ -3,6 +3,7 @@ import { MastraAuthWorkos } from '@mastra/auth-workos';
 import type { MessageAuthor } from '@mastra/core/agent-controller';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import {
+  CompositeAuth,
   registerApiRoute,
   isAuthHttpHandler,
   isCredentialsProvider,
@@ -289,38 +290,31 @@ export interface FactoryAuthOptions {
    */
   mcpResource?: string;
   /**
-   * Refuse every bearer token that carries an `aud` claim. Set for providers
-   * that verify bearers by signature and issuer only (WorkOS, Platform): their
-   * logins carry no audience, so a token with one was issued for some other
-   * resource — another Factory's `/mcp`, Platform's MCP server — and must not
-   * authenticate here.
+   * Whether bearer tokens authenticated by `provider` must carry no `aud`
+   * claim. True for providers that verify bearers by signature and issuer only
+   * (WorkOS, Platform): their logins carry no audience, so a token with one was
+   * issued for some other resource — another Factory's `/mcp`, Platform's MCP
+   * server — and must not authenticate here. Inside a `CompositeAuth`, it's
+   * asked about the wrapped provider that authenticated the token.
    */
-  refuseAudienceBoundTokens?: boolean;
+  refuseAudienceBoundTokens?: (provider: IMastraAuthProvider) => boolean;
 }
 
-/**
- * Whether a bearer token was issued for a resource other than the Factory app:
- * its `aud` names the MCP resource or, with `refuseAudienceBoundTokens`, it has
- * any audience at all. The claims are read unverified, which is safe because a
- * match only ever refuses.
- */
-function isResourceBoundToken(token: string, options: FactoryAuthOptions): boolean {
-  const payload = options.mcpResource || options.refuseAudienceBoundTokens ? token.split('.')[1] : undefined;
-  if (!payload) return false;
-  let aud: unknown;
+/** The bearer token's `aud` claim, read unverified; only ever used to refuse. */
+function bearerAudience(token: string): unknown {
+  const payload = token.split('.')[1];
+  if (!payload) return undefined;
   try {
-    ({ aud } = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { aud?: unknown });
+    return (JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { aud?: unknown }).aud;
   } catch {
-    return false;
+    return undefined;
   }
-  if (options.refuseAudienceBoundTokens && aud !== undefined) return true;
-  const { mcpResource } = options;
-  return mcpResource !== undefined && (aud === mcpResource || (Array.isArray(aud) && aud.includes(mcpResource)));
 }
 
 /**
  * Resolve the authenticated user for a request via the provider. Never throws:
- * ordinary invalid/expired sessions, and MCP access tokens, resolve to `null`.
+ * ordinary invalid/expired sessions, MCP access tokens and tokens for other
+ * resources resolve to `null`.
  */
 async function authenticateRequest(
   provider: IMastraAuthProvider,
@@ -328,13 +322,28 @@ async function authenticateRequest(
   raw: Request,
   options: FactoryAuthOptions,
 ): Promise<FactoryAuthUser | null> {
-  if (isResourceBoundToken(token, options)) return null;
+  const aud = bearerAudience(token);
+  const { mcpResource, refuseAudienceBoundTokens } = options;
+  if (mcpResource !== undefined && (aud === mcpResource || (Array.isArray(aud) && aud.includes(mcpResource)))) {
+    return null;
+  }
   try {
     const result = await provider.authenticateToken(token, raw);
+    if (aud !== undefined && result && refuseAudienceBoundTokens) {
+      const authenticatedBy = provider instanceof CompositeAuth ? provider.getAuthenticatedProvider(result) : provider;
+      // A composite that can't say which provider authenticated it is refused too.
+      if (!authenticatedBy || refuseAudienceBoundTokens(authenticatedBy)) return null;
+    }
     return toFactoryAuthUser(result);
   } catch {
     return null;
   }
+}
+
+/** The providers `provider` delegates to: itself, or every provider a `CompositeAuth` wraps. */
+export function authProviders(provider: IMastraAuthProvider | undefined): IMastraAuthProvider[] {
+  if (!provider) return [];
+  return provider instanceof CompositeAuth ? provider.getProviders().flatMap(authProviders) : [provider];
 }
 
 /**

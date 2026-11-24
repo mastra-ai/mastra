@@ -175,7 +175,7 @@ describe('Factory route auth organization selection', () => {
   it('refusing audience-bound bearers still lets logins without an audience in', async () => {
     const provider = fakeProvider();
     const app = new Hono();
-    const auth = createFactoryRouteAuth(provider, { refuseAudienceBoundTokens: true });
+    const auth = createFactoryRouteAuth(provider, { refuseAudienceBoundTokens: () => true });
     app.get('/web/projects', async c => c.json({ ok: Boolean(await auth.ensureUser(c)) }));
     const jwt = (claims: object) =>
       ['{"alg":"none"}', JSON.stringify({ sub: 'user_fake', ...claims }), 'sig']

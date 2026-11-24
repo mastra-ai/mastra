@@ -18,6 +18,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
+import { CompositeAuth } from '@mastra/core/server';
 import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -2741,7 +2742,10 @@ describe('MastraFactory.prepare', () => {
     expect(await me.json()).toMatchObject({ authenticated: false });
   });
 
-  it('with WorkOS, refuses tokens issued for any other resource', async () => {
+  it.each([
+    ['WorkOS', (workos: MastraAuthWorkos) => workos],
+    ['WorkOS inside CompositeAuth', (workos: MastraAuthWorkos) => new CompositeAuth([workos])],
+  ])('with %s, refuses tokens issued for any other resource', async (_name, wrap) => {
     // WorkOS verifies a bearer's signature against its JWKS but never its audience.
     const { publicKey, privateKey } = await generateKeyPair('RS256');
     const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' }] };
@@ -2762,7 +2766,7 @@ describe('MastraFactory.prepare', () => {
     );
     const config = await prepareFactory({
       storage: fakeStorage(),
-      auth: provider,
+      auth: wrap(provider),
       publicUrl: 'https://factory.example.com',
       mcp: { authorizationServers: ['https://auth.example.com'] },
     });
