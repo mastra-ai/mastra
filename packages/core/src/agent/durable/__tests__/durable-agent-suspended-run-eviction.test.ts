@@ -578,10 +578,18 @@ describe('releaseParkedRun on a thread-bound stream', () => {
         agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: asksForever() as any, tools: { ask } }),
       });
       const mastra = new Mastra({ storage, logger: false, agents: { older, newer } });
+      const publish = vi.spyOn(mastra.pubsub, 'publish');
+      const suspendedStreamIds = () =>
+        publish.mock.calls
+          .map(([, event]) => (event as { data?: any }).data)
+          .filter(data => data?.type === 'run-suspended' && data.runId === 'run-thread-successor')
+          .map(data => data.streamId as string);
       const olderOutput = await older.stream('hi', { runId: 'run-thread-successor', memory });
       const { fullStream } = olderOutput;
       const reader = (fullStream as ReadableStream<any>).getReader();
       await expect.poll(() => storedStatus(storage, 'run-thread-successor')).toBe('suspended');
+      await expect.poll(() => suspendedStreamIds().length).toBeGreaterThan(0);
+      const olderStreamId = suspendedStreamIds()[0];
 
       const resumed = await newer.resume('run-thread-successor', { a: 'yes' }, { memory });
       const resumedReader = (resumed.fullStream as ReadableStream<any>).getReader();
@@ -593,8 +601,10 @@ describe('releaseParkedRun on a thread-bound stream', () => {
         if (value.type === 'tool-call') successorCallId = value.payload.toolCallId;
         if (value.type === 'tool-call-suspended' && value.payload.toolCallId === successorCallId) break;
       }
+      // isRunParked() is already true while the successor is still `suspending`, which no eviction matches; wait
+      // for the successor's own run-suspended so its record is `suspended` and a wrong eviction could take it.
+      await expect.poll(() => suspendedStreamIds().some(streamId => streamId !== olderStreamId)).toBe(true);
       await expect.poll(() => storedStatus(storage, 'run-thread-successor')).toBe('suspended');
-      await expect.poll(() => agentThreadStreamRuntime.isRunParked('run-thread-successor', mastra.pubsub)).toBe(true);
 
       if (order === 'cleanup, then release') olderOutput.cleanup();
       expect(await older.releaseParkedRun('run-thread-successor')).toBe(true);

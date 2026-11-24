@@ -71,6 +71,8 @@ for (let attempt = 0; attempt < 100 && !collected; attempt++) {
   gc();
   await new Promise<void>(resolve => setImmediate(resolve));
   collected = output.deref() === undefined;
+  // A successful deref() keeps the target alive until the current job ends, so yield before the next gc().
+  if (!collected) await new Promise<void>(resolve => setImmediate(resolve));
 }
 if (!collected) throw new Error('Abandoned closeOnSuspend output was not garbage collected');
 process.send?.('ok');
