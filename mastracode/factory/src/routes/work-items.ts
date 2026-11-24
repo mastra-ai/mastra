@@ -108,7 +108,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** The board engine every stage move goes through. Stage moves 503 when absent. */
-  boardEngine?: FactoryBoardEngine;
+  boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   sessionRepository?: (input: {

@@ -382,7 +382,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       onBoundThreadRun?: () => void;
       /** Whether a run is going on this thread in this process; its binding stays due for reconcile until it stops. */
       isThreadRunning?: (threadId: string) => boolean;
-      boardEngine?: FactoryBoardEngine;
+      boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
         binding: FactoryRunBindingRecord;

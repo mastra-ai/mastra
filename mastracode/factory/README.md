@@ -392,7 +392,7 @@ Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `so
 
 ### Board engine
 
-The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all requested from the engine; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each move through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions are queued as decisions first; the dispatcher requests their moves from the same engine when it runs them.
+The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all requested from the engine; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each move through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions are queued as decisions first; the dispatcher requests their moves from the same engine when it runs them. A card filed without a transition (re-filed by a reconcile pass, or moved to another board when an intake route changes) is requested as a placement, which runs no phase rules.
 
 Pick the engine with the `boardEngine` option. It receives the transition service and returns the engine:
 
@@ -405,7 +405,7 @@ const factory = new MastraFactory({
 });
 ```
 
-A custom engine implements `requestMove(request)` and answers with the board's verdict (`accepted` or `rejected`). Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior while observing every move.
+A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), and `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior while observing every move.
 
 ### Board tool-result rules
 

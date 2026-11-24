@@ -16,6 +16,7 @@ const factory = new MastraFactory({
         console.log('move', request.workItemId, request.stage);
         return engine.requestMove(request);
       },
+      requestPlacement: placement => engine.requestPlacement(placement),
     };
   },
 });

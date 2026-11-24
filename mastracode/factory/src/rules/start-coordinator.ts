@@ -155,7 +155,7 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
-  readonly #boardEngine?: FactoryBoardEngine;
+  readonly #boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
   readonly #sourceControl?:
     | SourceControlStorageHandle
     | ((
@@ -169,7 +169,7 @@ export class FactoryStartCoordinator {
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
-    boardEngine?: FactoryBoardEngine,
+    boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>,
     sourceControl?:
       | SourceControlStorageHandle
       | ((

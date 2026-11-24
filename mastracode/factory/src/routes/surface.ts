@@ -1080,10 +1080,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           boards: deps.storedBoards.cache,
         }).routes()
       : []),
-    ...(deps.factoryReady && deps.storedBoards
+    ...(deps.factoryReady && deps.storedBoards && boardEngine
       ? new IntakeRouteRoutes({
           auth: deps.auth,
           audit: deps.audit,
+          boardEngine,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,

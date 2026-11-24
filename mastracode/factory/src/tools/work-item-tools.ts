@@ -46,7 +46,7 @@ export interface FactoryWorkItemToolDependencies {
   /** Which evaluator places a filed card; the old `route-list` by default. */
   intakeEvaluator?: IntakeEvaluator;
   /** The board engine every stage move goes through; filing and moving items refuse while it is unavailable. */
-  boardEngine: FactoryBoardEngine | undefined;
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
   auditRecorder: AuditRecorder;
   /** Finds the caller session's source-control provider, whose linked repositories a card can name. */

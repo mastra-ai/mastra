@@ -9,6 +9,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import type { FactoryBoardEngine, FactoryCardPlacement } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -3210,6 +3211,7 @@ describe('FactoryDecisionDispatcher', () => {
             reason: 'This host keeps cards out of Done.',
           };
         },
+        requestPlacement: async () => 'skipped',
       },
       storage,
       audit: seed.audit,
@@ -3295,7 +3297,7 @@ describe('FactoryDecisionDispatcher', () => {
 
   describe('a Building run whose worker was lost', () => {
     /** The lost worker claimed the kickoff, delivered it and recorded the run open, then stopped heartbeating. */
-    async function lostBuild(key: string, heartbeatAt: number) {
+    async function lostBuild(key: string, heartbeatAt: number, options?: { ledgerSuffix?: string }) {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
       const { item, transitionService } = await queueDecision(
@@ -3321,7 +3323,7 @@ describe('FactoryDecisionDispatcher', () => {
         key: FACTORY_OPEN_RUNS_SETTING,
         value: [
           {
-            kickoffId: lost!.id,
+            kickoffId: `${lost!.id}${options?.ledgerSuffix ?? ''}`,
             bindingId: binding.id,
             role: binding.role,
             startedBy: 'factory-rule-dispatcher',
@@ -3369,7 +3371,7 @@ describe('FactoryDecisionDispatcher', () => {
       // The lost run closes as aborted; the resumed run is the one that completed.
       const ended = (await seed.audit.list({ orgId: 'org-1' })).events
         .filter(event => event.action === 'factory.run.ended')
-        .map(event => [event.idempotencyKey ?? event.metadata?.kickoffId, event.metadata?.reason]);
+        .map(event => [event.metadata?.kickoffId, event.metadata?.reason]);
       expect(ended).toEqual(
         expect.arrayContaining([
           [lost.id, 'aborted'],
@@ -3377,6 +3379,53 @@ describe('FactoryDecisionDispatcher', () => {
         ]),
       );
       expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
+    });
+
+    it('keeps the lost run on the ledger, owned by the resuming worker, until the continuation is sent', async () => {
+      const { session, dispatcher, lost, lostAt } = await lostBuild('lost-build-ledger', Date.now() - 60_000);
+      const ledgerAtSend: Promise<unknown>[] = [];
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementation((...args) => {
+        ledgerAtSend.push(session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING }));
+        return send(...args);
+      });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      // Had this worker died while sending, the entry would go stale and the next worker resume again.
+      expect(await Promise.all(ledgerAtSend)).toEqual([
+        [expect.objectContaining({ kickoffId: `${lost.id}:resume:2`, ownerId: 'worker-2' })],
+      ]);
+    });
+
+    it('resumes again when the worker resuming a lost run is lost too', async () => {
+      const { session, dispatcher, lost, lostAt } = await lostBuild('lost-twice', Date.now() - 60_000, {
+        ledgerSuffix: ':resume:1',
+      });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ id: `${lost.id}:resume:2` });
+    });
+
+    it('does not resume, and keeps the lost run, when its end cannot be recorded', async () => {
+      const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-build-audit-down',
+        Date.now() - 60_000,
+      );
+      const record = seed.audit.record.bind(seed.audit);
+      vi.spyOn(seed.audit, 'record').mockImplementation(input =>
+        input.action === 'factory.run.ended' ? Promise.reject(new Error('audit store down')) : record(input),
+      );
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry' });
+      expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([
+        expect.objectContaining({ kickoffId: lost.id, ownerId: 'lost-worker' }),
+      ]);
     });
 
     it('leaves a run another worker still heartbeats alone', async () => {
@@ -8355,12 +8404,14 @@ describe('custom-board deferred targets', () => {
     storage: WorkItemsStorage,
     boards: ReturnType<typeof createBoardRegistry>,
     configVersion = 'custom-v1',
+    boardEngine?: FactoryBoardEngine,
   ) {
     return new FactoryDecisionDispatcher({
       controller: createSession().controller as never,
       storage,
       boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({ storage, boards, configVersion }),
+      ...(boardEngine ? { boardEngine } : {}),
       // No intake rules to read: the route list, as before intake order.
       intakeEvaluator: 'route-list',
       ownerId: 'custom-worker',
@@ -8484,6 +8535,52 @@ describe('custom-board deferred targets', () => {
     ]);
     // Planning's entry rule never fired, so the placement is the only decision.
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
+  });
+
+  it("leaves an existing card where it is when the host's board engine refuses its placement", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'work',
+        title: 'Needs planning',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:refused-placement' },
+      },
+    });
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'refused-placement',
+      board: 'work',
+      stage: 'planning',
+      sourceKey: 'github-issue:refused-placement',
+      skipRules: true,
+    });
+    const placements: FactoryCardPlacement[] = [];
+    const engine: FactoryBoardEngine = {
+      requestMove: async () => {
+        throw new Error('A skipRules placement is not a transition.');
+      },
+      requestPlacement: async placement => {
+        placements.push(placement);
+        return 'skipped';
+      },
+    };
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({}), 'custom-v1', engine).runOnce();
+
+    expect(placements).toEqual([
+      expect.objectContaining({
+        item: expect.objectContaining({ id: item.id }),
+        targetBoard: 'work',
+        targetStage: 'planning',
+      }),
+    ]);
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'work', stages: ['intake'] });
   });
 
   it('places a pull request card its project keeps on the retired Review board where it sits', async () => {

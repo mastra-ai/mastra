@@ -279,25 +279,51 @@ export function recordSessionRunStart(
 }
 
 /**
- * Closes ledger entries whose run died with its worker: each is recorded as an aborted run with
- * no usage seen, and removed so the resumed run that replaces it is the only one left open.
+ * Hands the runs that died with their worker to the run resuming them. Each lost run is recorded
+ * as aborted, then its ledger entries are replaced in one write by a single entry for the resumed
+ * run, owned by this worker. The ledger never loses the evidence: if this worker dies too before
+ * the resumed run lands, that entry goes stale and the next worker resumes again.
+ *
+ * Resolves `false`, leaving the ledger untouched, when an aborted record could not be written.
  */
-export function endInterruptedSessionRuns(
+export async function takeOverInterruptedSessionRuns(
   session: RunEndCaptureSession,
-  { audit, kickoffIds }: { audit: AuditRecorder | undefined; kickoffIds: string[] },
-): Promise<void> {
-  return serializeRunAudit(session, async () => {
+  {
+    audit,
+    kickoffIds,
+    resumeKickoffId,
+    ownerId,
+  }: { audit: AuditRecorder | undefined; kickoffIds: string[]; resumeKickoffId: string; ownerId: string },
+): Promise<boolean> {
+  let tookOver = false;
+  await serializeRunAudit(session, async () => {
+    const runs = await listSessionOpenRuns(session);
+    const lost = runs.filter(run => kickoffIds.includes(run.kickoffId));
+    if (lost.length === 0) return;
     if (audit) {
-      for (const kickoffId of kickoffIds) {
-        await recordRunEnds(session, audit, 'aborted', kickoffId, { steps: [], claimed: false });
+      for (const run of lost) {
+        const input = runAuditInput(run);
+        const recorded = await audit.record({
+          ...input,
+          actorId: `agent:${run.threadId}`,
+          actorType: 'agent',
+          action: 'factory.run.ended',
+          metadata: { ...input.metadata, reason: 'aborted', usage: { status: 'unreported' } },
+        });
+        if (!recorded) return;
       }
     }
-    const runs = await listSessionOpenRuns(session);
-    const remaining = runs.filter(run => !kickoffIds.includes(run.kickoffId));
-    if (remaining.length !== runs.length) {
-      await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: remaining });
-    }
+    const now = Date.now();
+    await session.thread.setSetting({
+      key: FACTORY_OPEN_RUNS_SETTING,
+      value: [
+        ...runs.filter(run => !lost.includes(run)),
+        { ...lost[0]!, kickoffId: resumeKickoffId, ownerId, heartbeatAt: now, startedAt: now },
+      ],
+    });
+    tookOver = true;
   });
+  return tookOver;
 }
 
 /** Renew this process's claim on an open run so other replicas keep treating it as live. */

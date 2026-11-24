@@ -44,15 +44,14 @@ import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-rou
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
-import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
-  endInterruptedSessionRuns,
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
   listThreadOpenRuns,
   recordSessionRunStart,
+  takeOverInterruptedSessionRuns,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
 import { sessionHoldsWork } from '../session/session-unloader.js';
@@ -1716,8 +1715,17 @@ export class FactoryDecisionDispatcher {
             : [];
           if (interrupted.length > 0 && !(await kickoffStale())) {
             if (await this.#runStopRequested(record.orgId, binding.id)) throw new FactoryRunStopped();
-            await this.#endInterruptedRuns(session, interrupted);
-            deliveryId = `${kickoffId}:resume:${record.attempts}`;
+            const resumeId = `${kickoffId}:resume:${record.attempts}`;
+            const tookOver = await takeOverInterruptedSessionRuns(session, {
+              audit: this.#audit,
+              kickoffIds: interrupted,
+              resumeKickoffId: resumeId,
+              ownerId: this.#ownerId,
+            });
+            if (!tookOver) {
+              throw new Error(`Factory could not record the interrupted run of binding ${binding.id} as aborted.`);
+            }
+            deliveryId = resumeId;
           }
           if (await kickoffLanded()) {
             if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
@@ -2259,7 +2267,7 @@ export class FactoryDecisionDispatcher {
       // change the card in between; a placement skipped for that reason is retried on a fresh read.
       let item: Card | null = result.created ? null : result.item;
       for (let attempt = 0; item && attempt < 3; attempt += 1) {
-        const outcome = await moveCardToBoard({
+        const outcome = await this.#boardEngine.requestPlacement({
           workItems: this.#storage,
           boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
@@ -3256,10 +3264,6 @@ export class FactoryDecisionDispatcher {
           !isOpenRunLiveElsewhere(entry, this.#ownerId),
       )
       .map(entry => entry.kickoffId);
-  }
-
-  async #endInterruptedRuns(session: BoundDispatcherSession, kickoffIds: string[]): Promise<void> {
-    await endInterruptedSessionRuns(session, { audit: this.#audit, kickoffIds });
   }
 
   async #requireSession(binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<BoundDispatcherSession> {

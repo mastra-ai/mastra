@@ -54,7 +54,7 @@ export type CreateFactoryWorkItemResult =
 export interface CreateFactoryWorkItemArgs {
   workItems: WorkItemsStorage;
   boards: BoardRegistry;
-  boardEngine: FactoryBoardEngine | undefined;
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'> | undefined;
   audit: FactoryAuditEmit;
   orgId: string;
   /** Who files the card; becomes its `created_by` and the human actor of its first phase entry. */

@@ -1,16 +1,28 @@
+import { moveCardToBoard } from '../boards/relocate.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 
 /**
+ * A card filed somewhere without a transition: re-filed by a reconcile pass, or moved to another
+ * board by an intake route change. No phase rule runs for it and no transition is recorded.
+ */
+export type FactoryCardPlacement = Parameters<typeof moveCardToBoard>[0];
+
+/** `moved` when the card was placed, `unchanged` when it already sat there, `skipped` when it could not move. */
+export type FactoryCardPlacementResult = Awaited<ReturnType<typeof moveCardToBoard>>;
+
+/**
  * Decides how a card moves across its board. Every stage change from outside the engine (a
  * person's move, the chat move tool, card creation, a run start, an agent's move or verdict, a
- * tool-result rule) is requested here; nothing outside the engine calls the transition service.
+ * tool-result rule, a card re-filed or rerouted to another board) is requested here; nothing outside the engine calls the transition service.
  *
  * The host picks one engine per deployment with `MastraFactory`'s `boardEngine` option.
  */
 export interface FactoryBoardEngine {
   /** Asks to move a card; the engine may refuse, and answers with the board's verdict. */
   requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult>;
+  /** Asks to file a card on a board and phase without a transition; the engine may answer `skipped`. */
+  requestPlacement(placement: FactoryCardPlacement): Promise<FactoryCardPlacementResult>;
 }
 
 /** The services an engine is built from; the host's `boardEngine` factory receives them. */
@@ -34,6 +46,10 @@ export class DispatcherBoardEngine implements FactoryBoardEngine {
 
   requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
     return this.#transitionService.transition(request);
+  }
+
+  requestPlacement(placement: FactoryCardPlacement): Promise<FactoryCardPlacementResult> {
+    return moveCardToBoard(placement);
   }
 }
 

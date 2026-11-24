@@ -49,7 +49,7 @@ const transitionInputSchema = z
 export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
   storage: WorkItemsStorage;
-  boardEngine: FactoryBoardEngine;
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'>;
   sessions?: FactorySessionSourceLookup;
   boards?: BoardRegistry | ProjectBoardSource;
 }): Promise<IntegrationTools> {
@@ -174,7 +174,7 @@ function createReviewVerdictTool(
   options: {
     requestContext: RequestContext;
     storage: WorkItemsStorage;
-    boardEngine: FactoryBoardEngine;
+    boardEngine: Pick<FactoryBoardEngine, 'requestMove'>;
     sessions?: FactorySessionSourceLookup;
     boards?: BoardRegistry | ProjectBoardSource;
   },
@@ -307,7 +307,7 @@ function createReviewVerdictTool(
  */
 async function recordSelfReviewVerdict(input: {
   storage: WorkItemsStorage;
-  boardEngine: FactoryBoardEngine;
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'>;
   binding: { id: string; orgId: string; factoryProjectId: string; workItemId: string; role: string };
   item: Card;
   board: string;
