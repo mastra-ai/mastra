@@ -1373,7 +1373,7 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
 
         // Evented tools run with a copy of the request context, so there the change never reaches the save,
         // which writes the run's own thread.
-        const redirected = engine !== 'evented';
+        const redirected = engine !== 'evented' && engine !== 'native-evented';
         expect(denied.includes(otherThreadId)).toBe(redirected);
         const saved = async (id: string) =>
           (await memory.recall({ threadId: id, resourceId: RESOURCE })).messages.some(

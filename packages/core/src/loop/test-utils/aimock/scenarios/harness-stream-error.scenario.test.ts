@@ -1,7 +1,12 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { AGENT_STREAM_TOPIC } from '../../../../agent/durable/constants';
 import { EventEmitterPubSub } from '../../../../events';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 /**
  * Harness contract: an error thrown while draining `fullStream` fails the
@@ -75,6 +80,24 @@ describeForAllEngines(
         throw new Error('onFinish exploded');
       },
     };
+
+    if (isDurableEngineVariant(engine)) {
+      it('keeps the durable stream settled when its onFinish callback throws', async () => {
+        const onFinish = vi.fn(defaultOptions.onFinish);
+        const { output, streamError } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Say hello',
+          defaultOptions: { onFinish },
+          fixtures,
+        });
+
+        await vi.waitFor(() => expect(onFinish).toHaveBeenCalledTimes(1));
+        expect(streamError).toBeUndefined();
+        expect(await output.text).toBe('Hello');
+      });
+      return;
+    }
 
     it('throws when the base stream fails and no error was expected', async () => {
       const run = runLoopScenario({ engine, llm: getMock(), prompt: 'Say hello', defaultOptions, fixtures });

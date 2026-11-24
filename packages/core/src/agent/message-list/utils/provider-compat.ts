@@ -135,7 +135,8 @@ export function ensureAnthropicCompatibleMessages(
   messages: ModelMessage[],
   dbMessages: MastraDBMessage[],
 ): ModelMessage[] {
-  return messages.map(msg => enrichToolResultsWithInput(msg, dbMessages));
+  const getToolCallArgs = createToolCallArgsLookup(dbMessages);
+  return messages.map(msg => enrichToolResultsWithInput(msg, getToolCallArgs));
 }
 
 /**
@@ -274,7 +275,10 @@ export function pairOrphanedToolCalls(messages: ModelMessage[]): ModelMessage[] 
 /**
  * Enriches a single message's tool-result parts with input field
  */
-function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBMessage[]): ModelMessage {
+function enrichToolResultsWithInput(
+  message: ModelMessage,
+  getToolCallArgs: (toolCallId: string) => Record<string, unknown>,
+): ModelMessage {
   if (message.role !== 'tool' || !Array.isArray(message.content)) {
     return message;
   }
@@ -285,7 +289,7 @@ function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBM
       if (part.type === 'tool-result') {
         return {
           ...part,
-          input: findToolCallArgs(dbMessages, part.toolCallId),
+          input: getToolCallArgs(part.toolCallId),
         } as ToolResultWithInput;
       }
       return part;
@@ -354,6 +358,41 @@ export function getResponseProviderItemIdFromPart(
 // ============================================================================
 // Tool Call Args Lookup
 // ============================================================================
+
+// Keep this lookup local to one synchronous conversion: live tool args can change between conversions.
+export function createToolCallArgsLookup(messages: MastraDBMessage[]): (toolCallId: string) => Record<string, unknown> {
+  let byId: Map<string, Record<string, unknown>> | undefined;
+  return toolCallId => {
+    if (!byId) {
+      byId = new Map();
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (!message || message.role !== 'assistant') continue;
+        const seen = new Set<string>();
+        for (const part of message.content.parts ?? []) {
+          if (part.type !== 'tool-invocation') continue;
+          const invocation = part.toolInvocation;
+          if (seen.has(invocation.toolCallId)) continue;
+          seen.add(invocation.toolCallId);
+          const args = invocation.args;
+          if (!byId.has(invocation.toolCallId) && args && typeof args === 'object' && Object.keys(args).length > 0) {
+            byId.set(invocation.toolCallId, args);
+          }
+        }
+        seen.clear();
+        for (const invocation of message.content.toolInvocations ?? []) {
+          if (seen.has(invocation.toolCallId)) continue;
+          seen.add(invocation.toolCallId);
+          const args = invocation.args;
+          if (!byId.has(invocation.toolCallId) && args && typeof args === 'object' && Object.keys(args).length > 0) {
+            byId.set(invocation.toolCallId, args);
+          }
+        }
+      }
+    }
+    return byId.get(toolCallId) ?? {};
+  };
+}
 
 /**
  * Finds the tool call args for a given toolCallId by searching through messages.

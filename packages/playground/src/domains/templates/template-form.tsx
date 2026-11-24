@@ -142,18 +142,16 @@ export function TemplateForm({
 
         {selectedProvider && !isLoadingEnvVars && (
           <Button
-            iconEnd={isInstalling ? undefined : <IconArrowRight />}
-            icon={isInstalling ? <Spinner /> : undefined}
             className={cn(
               'mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-card state-layer text-foreground',
               '[&_svg]:h-[1.1em] [&_svg]:text-foreground [&>svg]:w-[1.1em]',
             )}
             onClick={handleInstallTemplate}
-            disabled={
-              !selectedProvider || !defaultModelProvider || !defaultModelId || errors.length > 0 || isInstalling
-            }
+            disabled={!selectedProvider || !defaultModelProvider || !defaultModelId || errors.length > 0}
+            iconEnd={<IconArrowRight />}
+            loading={isInstalling}
           >
-            {isInstalling ? 'Installing...' : 'Install'}
+            Install
           </Button>
         )}
       </div>

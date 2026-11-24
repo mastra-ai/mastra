@@ -263,7 +263,7 @@ export function BoardConfigEditor({
             <Button
               size="sm"
               variant="primary"
-              disabled={save.isPending || nameMissing || phasesToFix.length > 0}
+              disabled={nameMissing || phasesToFix.length > 0}
               onClick={() =>
                 save.mutate({
                   name: draft.name,
@@ -272,8 +272,9 @@ export function BoardConfigEditor({
                   expectedRevision: board.revision ?? 0,
                 })
               }
+              loading={save.isPending}
             >
-              {save.isPending ? 'Saving…' : 'Save'}
+              Save
             </Button>
           </div>
         </SettingsColumn>

@@ -1,12 +1,6 @@
 import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Reasoning output and replay across engines.
@@ -117,7 +111,7 @@ describeForAllEngines('AIMock loop scenario: reasoning output', engine => {
       const memoryOptions = { memory: { thread: threadId, resource: 'r', options: { lastMessages: 10 } } };
       const send = async (messages: any[]) => {
         const result: any = await agent.stream(messages, memoryOptions);
-        const output = isDurableEngineVariant(engine) ? result.output : result;
+        const output = result.output ?? result;
         const text = await output.text;
         result.cleanup?.();
         return text;

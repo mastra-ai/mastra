@@ -27,7 +27,7 @@ vi.hoisted(() => {
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
-import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
+import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -173,14 +173,20 @@ function threadLeaseLoss(engine: EngineVariant) {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: agent as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: agent as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: agent as any });
     return mastra.getAgent('agent') as any;
   }
 
   async function startStream(agent: any, prompt: string, options: Record<string, any>) {
     const result = await agent.stream(prompt, options);
-    if (!isDurableEngineVariant(engine)) return { output: result, drain: () => result.consumeStream() };
+    if (!('output' in result)) return { output: result, drain: () => result.consumeStream() };
     return {
       output: result.output,
       drain: async () => {
@@ -460,7 +466,13 @@ function threadLeaseLoss(engine: EngineVariant) {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: built as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: built as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: built as any });
 
     try {
@@ -531,7 +543,13 @@ function threadLeaseLoss(engine: EngineVariant) {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: built as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: built as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: built as any });
 
     try {

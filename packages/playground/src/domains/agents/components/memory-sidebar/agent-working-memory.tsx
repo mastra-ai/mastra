@@ -7,7 +7,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
@@ -200,9 +199,9 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                       toast.error('Failed to update working memory');
                     }
                   }}
-                  disabled={isUpdating}
+                  loading={isUpdating}
                 >
-                  {isUpdating ? <IconArrowRotateCounterClockwise className="animate-spin" /> : 'Save changes'}
+                  Save changes
                 </Button>
                 <Button
                   icon={<IconCrossMedium />}

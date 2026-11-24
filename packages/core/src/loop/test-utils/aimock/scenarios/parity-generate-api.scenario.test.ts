@@ -271,10 +271,12 @@ async function runSuspendOnEngine(engine: ParityEngine): Promise<EngineRun> {
 
   // Every engine runs on a host, as it would in a real app: a suspended run is
   // only resumable when the run's snapshot reached storage.
+  const executionEngine = engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
     storage: new InMemoryStore(),
     logger: false,
+    durable: { executionEngine },
   });
 
   if (wrapper && engine === 'evented') {
@@ -293,12 +295,10 @@ async function runSuspendOnEngine(engine: ParityEngine): Promise<EngineRun> {
     const first = await runner.generate('Go.', options);
     const run: EngineRun = { engine, first: summarize(first), resumed: undefined, toolLog, calls };
     const toolCallId = lastToolCallId(first);
-    // The resume signatures really do differ: plain takes `resumeData` first,
-    // durable and evented take the run id first.
-    const resumed =
-      engine === 'plain'
-        ? await runner.resumeGenerate({ confirmed: true }, { runId, toolCallId, memory })
-        : await runner.resumeGenerate(runId, { confirmed: true }, { toolCallId, memory });
+    // Wrappers take the run ID first; Agent takes the resume data first.
+    const resumed = wrapper
+      ? await runner.resumeGenerate(runId, { confirmed: true }, { toolCallId, memory })
+      : await runner.resumeGenerate({ confirmed: true }, { runId, toolCallId, memory });
     run.resumed = summarize(resumed);
     return run;
   } finally {

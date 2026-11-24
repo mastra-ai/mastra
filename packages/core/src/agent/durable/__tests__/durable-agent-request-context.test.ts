@@ -8,8 +8,10 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { ConsoleLogger } from '../../../logger';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { RequestContext, MASTRA_AUTH_TOKEN_KEY, MASTRA_INHERITED_MEMORY_KEY } from '../../../request-context';
 import { Agent } from '../../agent';
@@ -66,6 +68,35 @@ describe('DurableAgent RequestContext reserved keys', () => {
   });
 
   describe('RequestContext serialization', () => {
+    it.each(['default', 'evented'] as const)(
+      'warns when a run on inherited %s drops a context entry from its snapshot',
+      async executionEngine => {
+        const agent = new Agent({
+          id: 'inherited-context',
+          name: 'Inherited Context',
+          instructions: 'Help the user.',
+          model: createTextModel('Hello!'),
+        });
+        const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+        new Mastra({ agents: { agent }, durable: { executionEngine }, pubsub });
+        try {
+          const requestContext = new RequestContext();
+          requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-only');
+          expect((await agent.generate('hello', { requestContext })).text).toBe('Hello!');
+          expect(
+            warn.mock.calls.filter(([message]) => String(message).includes('request context snapshot')),
+          ).toHaveLength(0);
+
+          requestContext.set('liveHandle', () => 'not-serializable');
+          expect((await agent.generate('hello', { requestContext })).text).toBe('Hello!');
+          expect(
+            warn.mock.calls.filter(([message]) => String(message).includes('request context snapshot')),
+          ).toHaveLength(1);
+        } finally {
+          warn.mockRestore();
+        }
+      },
+    );
     it('snapshots JSON-safe requestContext entries for parity with the non-durable agent', async () => {
       const mockModel = createTextModel('Hello!');
 

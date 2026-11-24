@@ -384,10 +384,10 @@ export default function Workspace() {
                     variant="ghost"
                     size="icon-sm"
                     tooltip="Update skills"
-                    disabled={updateSkills.isPending}
                     onClick={() => void handleUpdateSkills()}
+                    loading={updateSkills.isPending}
                   >
-                    <IconArrowRotateClockwise className={updateSkills.isPending ? 'animate-spin' : undefined} />
+                    <IconArrowRotateClockwise />
                   </Button>
                 ) : undefined
               }
