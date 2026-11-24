@@ -1107,12 +1107,37 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       if (!effectiveResourceId) {
         throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
       }
+      // The OM processor owns the branch-aware locator when it can serve records
+      // itself (resource-scoped records are keyed by resource, thread-scoped ones
+      // by their own thread). Older or adapter-hosted OM exposes only storage.
+      const omProcessor = await agent.resolveProcessorById('observational-memory', requestContext);
+      const processorServesRecords =
+        !!omProcessor &&
+        typeof (omProcessor as any).getRecord === 'function' &&
+        typeof (omProcessor as any).getHistory === 'function';
+
       if (effectiveThreadId) {
-        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-        await enforceThreadAccess({ mastra, requestContext, threadId: effectiveThreadId, thread, effectiveResourceId });
-        // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
-        if (!thread && omConfig.scope !== 'resource') {
-          return { record: null, history: undefined };
+        if (processorServesRecords) {
+          await authorizeMemoryThreadForOMRead({
+            mastra,
+            requestContext,
+            memory,
+            threadId: effectiveThreadId,
+            effectiveResourceId,
+          });
+        } else {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
+          // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
+          if (!thread && omConfig.scope !== 'resource') {
+            return { record: null, history: undefined };
+          }
         }
       } else {
         await authorizeResourceMemoryAccess({
@@ -1123,13 +1148,24 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         });
       }
 
+      if (processorServesRecords) {
+        const record = await (omProcessor as any).getRecord(effectiveThreadId ?? '', effectiveResourceId);
+        const history = await (omProcessor as any).getHistory(
+          effectiveThreadId ?? '',
+          effectiveResourceId,
+          historyLimit,
+          historyOptions,
+        );
+        return {
+          record: record ?? null,
+          history: history.length > 0 ? history : undefined,
+        };
+      }
+
       // For resource-scoped OM, lookup by resourceId only (threadId=null)
       const omThreadId = omConfig.scope === 'resource' ? null : (effectiveThreadId ?? null);
 
-      // Get current record
       const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
-
-      // Get history
       const history = await memoryStore.getObservationalMemoryHistory(
         omThreadId,
         effectiveResourceId,
@@ -2062,27 +2098,21 @@ export const CREATE_THREAD_ROUTE = createRoute({
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
+      // A live branch participant holds lineage the ordinary upsert would overwrite.
       const branchState = await inspectVisibleMemoryThread(memory, effectiveThreadId, { allowCreate: true });
-      if (branchState.state !== 'absent') {
-        const existing = await memory.getThreadById({ threadId: effectiveThreadId });
-        if (!existing) throwThreadBranchNotFound();
+      if (branchState.state === 'ready' || branchState.hasReadyDescendants) {
+        const branchThread = await memory.getThreadById({ threadId: effectiveThreadId });
+        if (!branchThread) throwThreadBranchNotFound();
         await authorizeThreadBranchTree({
           mastra,
           requestContext,
           memory,
-          thread: existing,
+          thread: branchThread,
           effectiveResourceId,
           permission: MastraFGAPermissions.MEMORY_WRITE,
         });
         throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A thread with the requested ID already exists.');
       }
-      await enforceThreadAccess({
-        mastra,
-        requestContext,
-        threadId: effectiveThreadId,
-        effectiveResourceId,
-        permission: MastraFGAPermissions.MEMORY_WRITE,
-      });
 
       // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
       const existing = threadId ? await memory.getThreadById({ threadId: effectiveThreadId }) : null;

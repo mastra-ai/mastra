@@ -23,7 +23,7 @@ import {
   sanitizeThreadForResponse,
   throwThreadBranchNotFound,
 } from './thread-branching';
-import { enforceThreadAccess, getEffectiveResourceId } from './utils';
+import { enforceThreadAccess, getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {
   return {
@@ -94,18 +94,25 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
           if (!conversation_id) continue;
           const existingThread = await memory.getThreadById({ threadId });
           if (!existingThread) throwThreadBranchNotFound();
-          await authorizeThreadBranchTree({
-            mastra,
-            requestContext,
-            memory,
-            thread: existingThread,
-            effectiveResourceId: resourceId,
-            permission: MastraFGAPermissions.MEMORY_WRITE,
-          });
-          throw createThreadBranchError(
-            'BRANCH_MUTATION_CONFLICT',
-            'A conversation with the requested ID already exists.',
-          );
+          // A live branch participant holds lineage the ordinary upsert would overwrite.
+          if (state.state === 'ready' || state.hasReadyDescendants) {
+            await authorizeThreadBranchTree({
+              mastra,
+              requestContext,
+              memory,
+              thread: existingThread,
+              effectiveResourceId: resourceId,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
+            throw createThreadBranchError(
+              'BRANCH_MUTATION_CONFLICT',
+              'A conversation with the requested ID already exists.',
+            );
+          }
+          // Creating with an existing id upserts the thread, so validate ownership of the existing one first.
+          await validateThreadOwnership(existingThread, getEffectiveResourceId(requestContext, undefined));
+          const thread = await memory.createThread({ threadId, resourceId, title, metadata });
+          return buildConversationObject({ thread: sanitizeThreadForResponse(thread) });
         }
         await enforceThreadAccess({
           mastra,

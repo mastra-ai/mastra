@@ -4293,18 +4293,18 @@ describe('A2A Handler', () => {
         },
       });
 
-      const list = (historyLength: number) =>
+      const list = async (historyLength: number) =>
         (
-          handleTaskList({
+          (await handleTaskList({
             requestId: 1,
             taskStore: mockTaskStore,
             agentId: 'test-agent',
             params: { historyLength },
-          }) as any
+          })) as any
         ).result.tasks[0].history;
 
-      expect(list(0)).toEqual([]);
-      expect(list(1)).toHaveLength(1);
+      expect(await list(0)).toEqual([]);
+      expect(await list(1)).toHaveLength(1);
     });
 
     it('returns a protocol error for unsupported A2A versions', async () => {
