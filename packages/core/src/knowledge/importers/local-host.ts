@@ -22,7 +22,12 @@ import type {
   KnowledgeImporterStartRunOptions,
   NormalizedKnowledgeImporterFinish,
 } from './host';
-import { applyKnowledgeImportFlush, parseKnowledgeImportTarget } from './sink';
+import {
+  applyKnowledgeImportFlush,
+  KNOWLEDGE_IMPORT_SETTLE_RESTART_KEY,
+  KNOWLEDGE_IMPORT_SETTLE_SEEN_KEY,
+  parseKnowledgeImportTarget,
+} from './sink';
 import type { KnowledgeImportEmbedJob } from './sink';
 import type {
   KnowledgeImportCounts,
@@ -133,12 +138,11 @@ const SETTLE_MAX_TIMEOUTS = 3;
 /**
  * Host bookkeeping kept beside the importer's own state, under a prefix the importer can't write:
  * where the settle pass stopped, `<runId>:<n>` settle timeouts in a row for the current run, and
- * whether the pass already started over without settling anything since.
+ * the restart request another binding's flush left (see {@link KNOWLEDGE_IMPORT_SETTLE_RESTART_KEY}).
  */
 const RESERVED_STATE_PREFIX = 'mastra:';
 const SETTLE_CURSOR_KEY = 'mastra:settle:cursor';
 const SETTLE_TIMEOUTS_KEY = 'mastra:settle:timeouts';
-const SETTLE_WRAPPED_KEY = 'mastra:settle:wrapped';
 
 const settleTimeouts = (state: Record<string, string>, runId: string): number => {
   const value = state[SETTLE_TIMEOUTS_KEY] ?? '';
@@ -636,6 +640,8 @@ export function createLocalKnowledgeImporterHost(
               if (!scope) throw new KnowledgeImporterHostError('The binding target scope does not exist.', 503);
               const hostState = await importers.getState(binding.id);
               const timeouts = settleTimeouts(hostState, run.id);
+              const restart = hostState[KNOWLEDGE_IMPORT_SETTLE_RESTART_KEY] ?? '';
+              const restarting = restart !== (hostState[KNOWLEDGE_IMPORT_SETTLE_SEEN_KEY] ?? '');
               const applied = await applyKnowledgeImportFlush({
                 storage: tx,
                 importers,
@@ -649,12 +655,11 @@ export function createLocalKnowledgeImporterHost(
                 ...(timeouts < SETTLE_MAX_TIMEOUTS
                   ? {
                       settle: {
-                        after: hostState[SETTLE_CURSOR_KEY] || null,
+                        // Another binding queued repairs that may sit before the saved cursor.
+                        after: restarting ? null : hostState[SETTLE_CURSOR_KEY] || null,
                         candidates: Math.max(1, SETTLE_CANDIDATES >> timeouts),
                         moves: SETTLE_MOVES,
                         until: Math.min(Date.now() + (options.settleBudgetMs ?? DEFAULT_SETTLE_BUDGET_MS), deadlineAt),
-                        // Once per stretch without progress, so nodes that never settle can't keep it going.
-                        wrap: hostState[SETTLE_WRAPPED_KEY] !== '1',
                         onStart: () => {
                           settling = true;
                         },
@@ -668,10 +673,9 @@ export function createLocalKnowledgeImporterHost(
                 hostUpdates[SETTLE_CURSOR_KEY] = settled.cursor ?? '';
               }
               if (timeouts > 0 && timeouts < SETTLE_MAX_TIMEOUTS) hostUpdates[SETTLE_TIMEOUTS_KEY] = '';
-              if (settled?.wrapped) hostUpdates[SETTLE_WRAPPED_KEY] = '1';
-              else if ((applied.applied || (settled?.settled ?? 0) > 0) && hostState[SETTLE_WRAPPED_KEY] === '1') {
-                hostUpdates[SETTLE_WRAPPED_KEY] = '';
-              }
+              // Only a slice that ran from the start has seen the repairs queued before this flush read
+              // the state; a restart requested since then still differs and starts the next one over.
+              if (restarting && settled?.fromStart) hostUpdates[KNOWLEDGE_IMPORT_SETTLE_SEEN_KEY] = restart;
               const state = { ...body.state, ...hostUpdates };
               if (Object.keys(state).length) await importers.setState(binding.id, state);
               for (const change of applied.changes) await importers.recordRunChange({ runId: run.id, ...change });

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { KnowledgeUnsupportedCapabilityError } from '../../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge/base';
 import type {
@@ -78,11 +80,6 @@ export interface KnowledgeImportSettleBudget {
   until: number;
   /** Called as the slice starts, so a host can tell a timeout while settling from one before it. */
   onStart?: () => void;
-  /**
-   * Whether a pass that started from a saved cursor may start over when it finds unsettled nodes
-   * before that cursor it didn't visit (see {@link KnowledgeImportSettleResult.wrapped}). Default true.
-   */
-  wrap?: boolean;
 }
 
 export interface KnowledgeImportSettleResult {
@@ -92,14 +89,19 @@ export interface KnowledgeImportSettleResult {
   cursor: string | null;
   /** Moves and relinks this slice landed. */
   settled: number;
-  /**
-   * The pass reached the end and started over because unsettled nodes it skipped past may need
-   * work, such as linking pages another binding's move queued. A host lets the pass do this once
-   * until settling makes progress again; otherwise nodes that can never settle (waiting on a parent
-   * that never arrives) would keep it going forever.
-   */
-  wrapped?: boolean;
+  /** The slice ran from the first unsettled node, so it saw every repair queued before it started. */
+  fromStart: boolean;
 }
+
+/**
+ * Host state key another binding's flush sets, to a fresh value, when it queues link repairs on
+ * this binding's pages. Those pages may sort before this binding's saved settle cursor, so its next
+ * slice starts the pass over when the value differs from {@link KNOWLEDGE_IMPORT_SETTLE_SEEN_KEY}.
+ * The binding's own flushes never write this key, so a flush that read the state earlier can't undo it.
+ */
+export const KNOWLEDGE_IMPORT_SETTLE_RESTART_KEY = 'mastra:settle:restart';
+/** The {@link KNOWLEDGE_IMPORT_SETTLE_RESTART_KEY} value the binding's settling last started over for. */
+export const KNOWLEDGE_IMPORT_SETTLE_SEEN_KEY = 'mastra:settle:seen';
 
 /** An unresolved link as the node map lists it, with its label. */
 const encodeLink = (link: KnowledgeImporterNodeLink) => JSON.stringify([link.sourceId, link.rel]);
@@ -254,7 +256,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const ops = order(input.ops);
   // An empty flush only settles, and there is nothing to settle before the anchor exists.
   if (ops.length === 0 && !(input.settle && binding.anchorPageId)) {
-    if (input.settle) result.settle = { pending: false, cursor: null, settled: 0 };
+    if (input.settle) result.settle = { pending: false, cursor: null, settled: 0, fromStart: false };
     return result;
   }
 
@@ -274,6 +276,17 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const sameKeys = (a: string[], b: string[]) => a.length === b.length && a.every((key, i) => key === b[i]);
 
   /**
+   * Marks another binding's pages that link to `targets` for repair, and has its next settle slice
+   * start the pass over: they may sort before its saved cursor.
+   */
+  const queueRepairs = async (bindingId: string, targets: string[]) => {
+    await importers.markLinkingNodesUnsettled(bindingId, targets);
+    if (bindingId !== binding.id) {
+      await importers.setState(bindingId, { [KNOWLEDGE_IMPORT_SETTLE_RESTART_KEY]: randomUUID() });
+    }
+  };
+
+  /**
    * Stops another binding tracking a page as its item, so this one can take it over: its node is
    * dropped and that binding's links to it are marked for repair. Says whether it was an item. A
    * page that is another binding's folder stays its folder: folders are shared, so taking one over
@@ -282,7 +295,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const release = async (pageId: string) => {
     const node = await importers.getNodeByPage(pageId);
     if (!node) return false;
-    await importers.markLinkingNodesUnsettled(node.bindingId, [node.sourceId]);
+    await queueRepairs(node.bindingId, [node.sourceId]);
     await importers.deleteNode(node.bindingId, node.sourceId);
     return true;
   };
@@ -516,7 +529,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const keys = [...parent.keys, moved.key!];
 
     const relinked: Relinked[] = [];
-    for (const [other, theirs] of othersTargets) await importers.markLinkingNodesUnsettled(other, theirs);
+    for (const [other, theirs] of othersTargets) await queueRepairs(other, theirs);
     await importers.markLinkingNodesUnsettled(binding.id, targets);
     const linking = await importers.listLinkingNodes(binding.id, targets, {
       limit: MAX_KNOWLEDGE_LINK_REFRESH_SOURCES + 1,
@@ -814,7 +827,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       input.settle.onStart?.();
       result.settle = await settle(input.settle);
     } else {
-      result.settle = { pending: false, cursor: null, settled: 0 };
+      result.settle = { pending: false, cursor: null, settled: 0, fromStart: false };
     }
   }
   return result;
@@ -828,10 +841,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
    */
   async function settle(budget: KnowledgeImportSettleBudget): Promise<KnowledgeImportSettleResult> {
     let after = budget.after ?? undefined;
+    const fromStart = after === undefined;
     let examined = 0;
     let moves = 0;
     let settled = 0;
-    const visited = new Set<string>();
     for (;;) {
       const page = await importers.listNodes(binding.id, {
         unsettled: true,
@@ -840,11 +853,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       });
       for (const node of page.items) {
         if (examined >= budget.candidates || moves >= budget.moves || Date.now() >= budget.until) {
-          return { pending: true, cursor: resumeAt(), settled };
+          return { pending: true, cursor: resumeAt(), settled, fromStart };
         }
         examined++;
         after = node.sourceId;
-        visited.add(node.sourceId);
         const embeds: KnowledgeImportEmbedJob[] = [];
         try {
           const outcome = await storage.transaction(() => settleNode(node.sourceId, embeds, moves < budget.moves));
@@ -859,21 +871,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         // Linker repairs this slice deferred may sit anywhere, even on nodes it already visited.
         if (deferredLinkers) {
           const behind = await importers.listNodes(binding.id, { unsettled: true, limit: 1 });
-          if (behind.items.length > 0) return { pending: true, cursor: null, settled };
+          if (behind.items.length > 0) return { pending: true, cursor: null, settled, fromStart };
         }
-        // A pass that started from a saved cursor hasn't seen the nodes before it, and another
-        // binding's move may have queued some there. Nodes this slice visited and couldn't settle
-        // (waiting on a parent) don't count: if any other node is unsettled, one of the first
-        // `visited.size + 1` is.
-        else if (budget.after) {
-          const first = await importers.listNodes(binding.id, { unsettled: true, limit: visited.size + 1 });
-          if (budget.wrap !== false && first.items.some(node => !visited.has(node.sourceId))) {
-            return { pending: true, cursor: null, settled, wrapped: true };
-          }
-        }
-        return { pending: false, cursor: null, settled };
+        return { pending: false, cursor: null, settled, fromStart };
       }
-      if (examined >= budget.candidates) return { pending: true, cursor: resumeAt(), settled };
+      if (examined >= budget.candidates) return { pending: true, cursor: resumeAt(), settled, fromStart };
     }
 
     // A slice that deferred linker repairs may have queued them behind its cursor; the next one

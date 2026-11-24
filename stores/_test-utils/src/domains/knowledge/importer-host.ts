@@ -1179,6 +1179,132 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0 } });
     }, 60_000);
 
+    it.each(['move', 'takeover'] as const)(
+      "repairs another binding's linking pages behind its saved settle cursor in its next run, even after a pass already started over (%s)",
+      async how => {
+        const { knowledge, run, page } = setup([
+          { id: 'b1', target: 'docs:acme#notion' },
+          { id: 'b2', target: 'docs:acme#notion/a1/linear' },
+        ]);
+        await run([upsert({ sourceId: 'a0' }), upsert({ sourceId: 'a1' })]);
+        const host = knowledge.importers!.host;
+        const orphans = Array.from({ length: 450 }, (_, i) =>
+          upsert({ sourceId: `c${String(i).padStart(3, '0')}`, parent: 'never' }),
+        );
+        const first = await host.startRun('b2');
+        if (first.status !== 'started') throw new Error('not started');
+        await flushOnce(host, first.runId, first.generation, 1, [
+          upsert({ sourceId: 'q1' }),
+          upsert({ sourceId: 'a-link', links: [{ sourceId: 'q1' }] }),
+          ...orphans,
+        ]);
+        // Empty flushes walk the orphans a slice at a time, reach the end and start the pass again;
+        // the run then ends mid-pass (on its budget, lease or a cancel) with the cursor saved.
+        for (const seq of [2, 3, 4]) await flushOnce(host, first.runId, first.generation, seq, []);
+        await host.finishRun({
+          runId: first.runId,
+          generation: first.generation,
+          outcome: 'succeeded',
+          backlog: false,
+          lastSeq: 4,
+        });
+        const storage = await knowledge.getStorage();
+        expect((await storage.importers!.getState('b2'))['mastra:settle:cursor']).toBeTruthy();
+        if (how === 'move') {
+          // b1 moves a1, and b2's folder with it; a-link sorts before b2's saved cursor.
+          expect(await run([upsert({ sourceId: 'a1', parent: 'a0' })])).toMatchObject({ counts: { moved: 1 } });
+        } else {
+          // A person moves b2's q1 to where b1's q1 goes, and b1 takes it over.
+          await knowledge.movePage({ scope: 'docs:acme', path: 'notion/a1/linear/q1', parent: 'notion' });
+          expect(await run([upsert({ sourceId: 'q1', body: 'from b1' })])).toMatchObject({ counts: { updated: 1 } });
+        }
+        expect((await storage.importers!.getNode('b2', 'a-link'))?.unsettled).toBe(true);
+        // b2's next run, which sends nothing, repairs it.
+        expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded' });
+        const linker = how === 'move' ? 'notion/a0/a1/linear/a-link' : 'notion/a1/linear/a-link';
+        if (how === 'move') {
+          expect((await page(linker))?.body).toContain('[[docs:acme#notion/a0/a1/linear/q1]]');
+          expect((await storage.importers!.getNode('b2', 'a-link'))?.unsettled).toBe(false);
+        } else {
+          // Its target is b1's now; it waits for b2 to send q1 again.
+          expect((await page(linker))?.body).not.toContain('q1]]');
+        }
+        // The orphans still never settle, and runs end on their own.
+        expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0 } });
+      },
+      60_000,
+    );
+
+    describe("another binding's restart request", () => {
+      const RESTART = 'mastra:settle:restart';
+      const SEEN = 'mastra:settle:seen';
+
+      it('starts the next flush over when it arrives after a flush that starts over read the state', async () => {
+        const { knowledge, run } = setup([{ id: 'b2', target: 'docs:acme#linear' }]);
+        await run([upsert({ sourceId: 'q1' })], 'b2');
+        const storage = await knowledge.getStorage();
+        await storage.importers!.setState('b2', { [RESTART]: 'r1' });
+        const host = knowledge.importers!.host;
+        const started = await host.startRun('b2');
+        if (started.status !== 'started') throw new Error('not started');
+        // Another binding's request lands after this flush read the state, before it writes `seen`.
+        const proto = Object.getPrototypeOf(storage.importers!);
+        const getState = proto.getState;
+        proto.getState = async function (this: typeof storage.importers, bindingId: string) {
+          const state = await getState.call(this, bindingId);
+          proto.getState = getState;
+          await this!.setState(bindingId, { [RESTART]: 'r2' });
+          return state;
+        };
+        try {
+          await flushOnce(host, started.runId, started.generation, 1, []);
+        } finally {
+          proto.getState = getState;
+        }
+        expect(await storage.importers!.getState('b2')).toMatchObject({ [RESTART]: 'r2', [SEEN]: 'r1' });
+        await flushOnce(host, started.runId, started.generation, 2, []);
+        expect(await storage.importers!.getState('b2')).toMatchObject({ [RESTART]: 'r2', [SEEN]: 'r2' });
+      });
+
+      it('stays unseen while the run has stopped settling after its timeouts', async () => {
+        const { knowledge, run } = setup([{ id: 'b2', target: 'docs:acme#linear' }]);
+        await run([upsert({ sourceId: 'q1' })], 'b2');
+        const storage = await knowledge.getStorage();
+        const host = knowledge.importers!.host;
+        const started = await host.startRun('b2');
+        if (started.status !== 'started') throw new Error('not started');
+        await storage.importers!.setState('b2', { [RESTART]: 'r1', 'mastra:settle:timeouts': `${started.runId}:3` });
+        await flushOnce(host, started.runId, started.generation, 1, [upsert({ sourceId: 'q2' })]);
+        expect((await storage.importers!.getState('b2'))[SEEN] ?? '').toBe('');
+        await host.finishRun({
+          runId: started.runId,
+          generation: started.generation,
+          outcome: 'succeeded',
+          backlog: false,
+          lastSeq: 1,
+        });
+        // The next run settles again, from the start.
+        await run([], 'b2');
+        expect((await storage.importers!.getState('b2'))[SEEN]).toBe('r1');
+      });
+
+      it('stays unseen while the binding has no folder to settle under', async () => {
+        const { knowledge, run } = setup([{ id: 'b2', target: 'docs:acme#linear' }]);
+        await run([upsert({ sourceId: 'q1' }), upsert({ sourceId: 'q2' })], 'b2');
+        await knowledge.upsertPage({ scope: 'docs:acme', path: 'kept', name: 'Kept' });
+        await knowledge.movePage({ scope: 'docs:acme', path: 'linear/q1', parent: 'kept' });
+        await knowledge.movePage({ scope: 'docs:acme', path: 'linear/q2', parent: 'kept' });
+        await knowledge.removePage({ scope: 'docs:acme', path: 'linear' });
+        const storage = await knowledge.getStorage();
+        await storage.importers!.setState('b2', { [RESTART]: 'r1' });
+        expect(await run([{ op: 'remove', sourceId: 'q2' }], 'b2')).toMatchObject({ counts: { removed: 1 } });
+        expect((await storage.importers!.getState('b2'))[SEEN] ?? '').toBe('');
+        // The write that makes the folder again settles from the start.
+        await run([upsert({ sourceId: 'q3' })], 'b2');
+        expect((await storage.importers!.getState('b2'))[SEEN]).toBe('r1');
+      });
+    });
+
     it("repairs another binding's linking pages behind its saved settle cursor when its item is taken over", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },

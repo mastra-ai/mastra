@@ -175,16 +175,19 @@ describe('importer settle', () => {
       pending: true,
       cursor: null,
       settled: 0,
+      fromStart: true,
     });
     expect(await slice({ after: null, candidates: 2, until: Date.now() + 10_000 })).toEqual({
       pending: true,
       cursor: 'c002',
       settled: 0,
+      fromStart: true,
     });
     expect(await slice({ after: 'c002', candidates: 2, until: Date.now() + 10_000 })).toEqual({
       pending: false,
       cursor: null,
       settled: 0,
+      fromStart: false,
     });
     expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
   });
