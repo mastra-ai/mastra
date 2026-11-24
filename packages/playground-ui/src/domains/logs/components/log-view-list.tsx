@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
+import { LogViewFill } from './log-view/log-view-fill';
 import { LogsListRow } from './logs-list-row';
 import { useDataListKeyboard } from '@/ds/components/DataList';
 import { LogsDataList } from '@/ds/components/LogsDataList';
@@ -38,11 +39,13 @@ export function LogViewList({ isLoading, ...props }: LogViewListProps) {
 
 function LogViewSkeleton() {
   return (
-    <div className="flex flex-col gap-1 px-3 py-1" aria-busy="true">
-      {SKELETON_WIDTHS.map(width => (
-        <SkeletonText key={width} className={width} />
-      ))}
-    </div>
+    <LogViewFill>
+      <div className="flex flex-col gap-1 px-3 py-2" aria-busy="true">
+        {SKELETON_WIDTHS.map(width => (
+          <SkeletonText key={width} className={width} />
+        ))}
+      </div>
+    </LogViewFill>
   );
 }
 

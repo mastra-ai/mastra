@@ -14,6 +14,7 @@ import {
 } from './data-list-column-order';
 import { DataListReorderContext } from './data-list-reorder-context';
 import type { DataListReorderContextValue } from './data-list-reorder-context';
+import { dataListWellSurfaceStyle } from './shared';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -183,7 +184,7 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
   // No panel, so rows rest on the page and only show on hover.
   light: '[--row:var(--background)]',
   well: cn(
-    "relative bg-row after:pointer-events-none after:absolute after:inset-0 after:z-30 after:rounded-[inherit] after:shadow-rim after:content-['']",
+    dataListWellSurfaceStyle,
     '[&_.data-list-top]:border-b [&_.data-list-top]:border-border',
     '[&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
   ),

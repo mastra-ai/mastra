@@ -36,6 +36,9 @@ const dataListRowToneStyles = [
  * rung, the same rung a resting control carries, and error sits on the row
  * element itself so it reads on top of the hover layer.
  */
+export const dataListWellSurfaceStyle =
+  "relative bg-row after:pointer-events-none after:absolute after:inset-0 after:z-30 after:rounded-[inherit] after:shadow-rim after:content-['']";
+
 export const dataListRowStateStyles = [
   // `data-list-row-interactive` lets the root light a hovered row's opaque sticky cell.
   "data-list-row-interactive after:pointer-events-none after:absolute after:inset-0 after:-z-1 after:rounded-[inherit] after:content-['']",
