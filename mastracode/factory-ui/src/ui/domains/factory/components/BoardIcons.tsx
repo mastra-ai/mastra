@@ -44,46 +44,54 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
   terminal: 'success',
 };
 
-const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string }> = {
+const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string; headerTint: string }> = {
   neutral: {
     icon: 'text-muted-foreground',
     tint: 'bg-fill-subtle',
     strongTint: 'bg-fill-strong',
+    headerTint: 'bg-fill-subtle',
   },
   orange: {
     icon: 'text-(--orange-500) dark:text-(--orange-400)',
     tint: 'bg-badge-orange-subtle',
     strongTint: 'bg-badge-orange-strong',
+    headerTint: 'bg-badge-orange-subtle',
   },
   cyan: {
     icon: 'text-(--cyan-500) dark:text-(--cyan-400)',
     tint: 'bg-badge-cyan-subtle',
     strongTint: 'bg-badge-cyan-strong',
+    headerTint: 'bg-badge-cyan-subtle',
   },
   info: {
     icon: 'text-info-indicator',
     tint: 'bg-info-subtle',
     strongTint: 'bg-badge-blue-strong',
+    headerTint: 'bg-badge-blue-subtle',
   },
   green: {
     icon: 'text-badge-green-indicator',
     tint: 'bg-badge-green-subtle',
     strongTint: 'bg-badge-green-strong',
+    headerTint: 'bg-badge-green-subtle',
   },
   purple: {
     icon: 'text-badge-purple-indicator',
     tint: 'bg-badge-purple-subtle',
     strongTint: 'bg-badge-purple-strong',
+    headerTint: 'bg-badge-purple-subtle',
   },
   success: {
     icon: 'text-(--green-500) dark:text-(--green-400)',
     tint: 'bg-success-subtle',
     strongTint: 'bg-badge-green-strong',
+    headerTint: 'bg-badge-green-subtle',
   },
   destructive: {
     icon: 'text-destructive-indicator',
     tint: 'bg-destructive-subtle',
     strongTint: 'bg-badge-red-strong',
+    headerTint: 'bg-badge-red-subtle',
   },
 };
 
@@ -164,6 +172,11 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
 
 export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].tint;
+}
+
+/** List headers all use translucent tints, so no status reads heavier than another. */
+export function stageHeaderTintClass(stage: string, kind?: BoardPhaseKind): string {
+  return TONE_CLASSES[stageToneFor(stage, kind)].headerTint;
 }
 
 export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): string {
