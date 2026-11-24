@@ -165,7 +165,7 @@ function TokenEditor({
             if (event.key === 'Escape' && !saveMutation.isPending) onClose();
           }}
         />
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center gap-2">
           <Button size="sm" icon={<IconCrossMedium />} disabled={saveMutation.isPending} onClick={onClose}>
             Cancel
           </Button>

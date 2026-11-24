@@ -11,7 +11,7 @@ import {
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsControl, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -79,6 +79,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
         // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
         if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
       }}
+      className="w-full"
     >
       <InputNumberGroup
         size="sm"
@@ -263,7 +264,7 @@ type OMRowCellsProps = {
 
 function OMRow({ as: Row = 'div', rail, ...cells }: { as?: 'li' | 'div'; rail: RailMark } & OMRowCellsProps) {
   return (
-    <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,1fr)]">
+    <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,13.75rem)]">
       <span aria-hidden="true" className="row-span-2 flex flex-col items-center self-stretch @min-[30rem]:row-span-1">
         {RAIL_MARKS[rail]}
       </span>
@@ -289,11 +290,7 @@ function OMRowCells({
   );
   if (!children) return plainLabel;
 
-  const control = (
-    <SettingsControl className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">
-      {children}
-    </SettingsControl>
-  );
+  const control = <div className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">{children}</div>;
   if (controlNamesItself) {
     return (
       <>

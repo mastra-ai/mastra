@@ -14,7 +14,6 @@ import {
   deprecatedErrorAria,
   fieldErrorRimWithin,
   inputSurfaceAndFocusWithinStyle,
-  textFieldWidthStyle,
 } from '@/ds/primitives/form-element';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
@@ -88,10 +87,6 @@ function InputGroup({ className, size, ...props }: InputGroupProps) {
       data-size={resolved}
       className={cn(
         inputGroupClassName,
-        textFieldWidthStyle,
-        // In a flex row it fills the row, unless a settings row gives it a fixed width. Brackets: tailwind-merge
-        // doesn't replace `flex-1` with the `flex-(--x)` form.
-        'flex-[var(--text-field-flex,1)]',
         controlHeight[resolved],
         controlSpacing[resolved],
         controlIconState,

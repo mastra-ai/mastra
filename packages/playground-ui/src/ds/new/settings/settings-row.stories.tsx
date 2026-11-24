@@ -1,17 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SettingsContainer, SettingsControl, SettingsRow } from './index';
+import { SettingsContainer, SettingsRow } from './index';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
-import { Field, FieldError } from '@/ds/components/Field';
+import { Field } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/ds/components/InputGroup';
-import {
-  InputNumber,
-  InputNumberDecrement,
-  InputNumberGroup,
-  InputNumberIncrement,
-  InputNumberInput,
-} from '@/ds/components/InputNumber';
+import { InputNumber, InputNumberGroup, InputNumberInput } from '@/ds/components/InputNumber';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -58,83 +52,30 @@ export const Default: Story = {
   ),
 };
 
-/**
- * The row sets every field's width, so none needs a width class. Fields you type in (an input, an input group, a
- * number field, a combobox) take one width, also inside a wrapper; a select hugs its value up to that width.
- */
+/** Fields you type in share one width set by the row, wrapped or not. */
 export const FieldWidths: Story = {
   render: () => (
     <>
-      <SettingsRow label="Input">
-        <Input defaultValue="/api" />
-      </SettingsRow>
-      <SettingsRow label="Input group">
-        <InputGroup>
-          <InputGroupInput defaultValue="60" />
-          <InputGroupAddon align="inline-end">
-            <InputGroupText>/ min</InputGroupText>
-          </InputGroupAddon>
-        </InputGroup>
-      </SettingsRow>
       <SettingsRow label="Number field">
-        <InputNumber defaultValue={30000} min={1} step={1000}>
+        <InputNumber defaultValue={3}>
           <InputNumberGroup>
             <InputNumberInput />
-            <InputGroupAddon align="inline-end" variant="flush">
-              <InputGroupText className="mr-2">tokens</InputGroupText>
-              <InputNumberDecrement />
-              <InputNumberIncrement />
-            </InputGroupAddon>
           </InputNumberGroup>
         </InputNumber>
       </SettingsRow>
       <SettingsRow label="Combobox">
         <Combobox options={models} value="google/gemini-3.5-flash" />
       </SettingsRow>
-      <SettingsRow label="Select">
-        <Select defaultValue="eu">
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="eu">Europe</SelectItem>
-          </SelectContent>
-        </Select>
-      </SettingsRow>
-      <SettingsRow label="In a field">
-        <Field invalid>
-          <Input aria-label="In a field" defaultValue="-1" />
-          <FieldError>Must be 0 or more.</FieldError>
+      <SettingsRow label="Wrapped in a field">
+        <Field>
+          <Input aria-label="Wrapped in a field" defaultValue="/api" />
         </Field>
-      </SettingsRow>
-      <SettingsRow label="With an action">
-        <form className="flex min-w-0 flex-wrap items-center gap-2" onSubmit={event => event.preventDefault()}>
-          <Input aria-label="With an action" defaultValue="Production" />
-          <Button type="submit">Save</Button>
-        </form>
-      </SettingsRow>
-      <SettingsRow label="Own width" description="A short number keeps the width it asks for">
-        <InputNumber defaultValue={5} className="w-24">
-          <InputNumberGroup>
-            <InputNumberInput />
-          </InputNumberGroup>
-        </InputNumber>
       </SettingsRow>
     </>
   ),
 };
 
-/** Outside a row, `SettingsControl` gives fields the same widths: here a setting under its own title. */
-export const OutsideARow: Story = {
-  render: () => (
-    <SettingsControl className="flex flex-col gap-2">
-      <Input aria-label="Session" defaultValue="default" />
-      <Combobox aria-label="Model" options={models} value="google/gemini-3.5-flash" />
-    </SettingsControl>
-  ),
-};
-
-/** Fields take the row's width; switches keep their own, and a width class on a field still wins. */
+/** Selects and comboboxes beside the label share one width set by the row; other controls keep their own. */
 export const Controls: Story = {
   render: () => (
     <>

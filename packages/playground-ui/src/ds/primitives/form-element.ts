@@ -77,11 +77,6 @@ export const fieldTriggerStyle =
 // (the value truncates past that). A width class passed by the caller still wins, since `cn` drops the default.
 export const fieldTriggerWidthStyle = 'w-(--field-width,100%) max-w-(--field-max-width,none) shrink-(--field-shrink,1)';
 
-// Width of a field you type in (Input, InputGroup, InputNumber, a typed Combobox): fills its container by default,
-// and takes one fixed width where an ancestor sets `--text-field-width` (SettingsRow), at any depth. It can't hug
-// its value: it would change width with every keystroke.
-export const textFieldWidthStyle = 'w-(--text-field-width,100%)';
-
 export const inputSurfaceAndFocusStyle =
   'bg-field shadow-input text-foreground disabled:bg-field-disabled ' +
   surfaceTintHover +

@@ -10,11 +10,5 @@ export {
   type SettingsItemProps,
   type SettingsListHeaderProps,
 } from './settings-list';
-export {
-  SettingsControl,
-  SettingsFieldsetRow,
-  SettingsRow,
-  type SettingsFieldsetRowProps,
-  type SettingsRowProps,
-} from './settings-row';
+export { SettingsFieldsetRow, SettingsRow, type SettingsFieldsetRowProps, type SettingsRowProps } from './settings-row';
 export { SettingsSkeleton, type SettingsSkeletonProps } from './settings-skeleton';

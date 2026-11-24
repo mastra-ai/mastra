@@ -11,7 +11,6 @@ import {
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
-  textFieldWidthStyle,
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
@@ -23,8 +22,7 @@ const inputVariants = cva(
   cn(
     // A text field is a block control: it fills its field. Content-sized controls (a
     // Select or Combobox trigger, a Button) do the opposite and let the call site grow them.
-    'flex zoom-safe-text text-ellipsis text-foreground',
-    textFieldWidthStyle,
+    'flex w-full zoom-safe-text text-ellipsis text-foreground',
     controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',

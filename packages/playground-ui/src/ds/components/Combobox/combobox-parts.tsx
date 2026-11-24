@@ -13,7 +13,6 @@ import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium'
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { textFieldWidthStyle } from '@/ds/primitives/form-element';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
@@ -42,9 +41,7 @@ function ComboboxRoot<Value, Multiple extends boolean | undefined = false>(
 const fieldClass = (size: TextButtonSize = 'md') =>
   cn(
     comboboxTriggerClass({ variant: 'default', size }),
-    // Typed in, so it takes a text field's width; the triggers' cap only bounds it where text fields have one.
-    textFieldWidthStyle,
-    'max-w-none cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)] sm:max-w-(--field-max-width,none)',
+    'w-full max-w-none cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)]',
     // Disabled like other form elements (muted text, not-allowed cursor), keyed off the input.
     'has-[input:disabled]:cursor-not-allowed has-[input:disabled]:bg-field-disabled has-[input:disabled]:[&_*]:cursor-not-allowed has-[input:disabled]:[&_*]:text-muted-foreground',
     // The input inside carries `aria-invalid`; the field shows it like other invalid fields.

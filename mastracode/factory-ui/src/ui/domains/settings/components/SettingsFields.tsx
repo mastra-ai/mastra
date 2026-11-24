@@ -55,7 +55,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
           size="sm"
           aria-label="Completion sound"
           className={cn(
-            'bg-card relative z-10',
+            'bg-card relative z-10 w-32',
             // Opaque even when muted: the mute button is tucked underneath.
             'disabled:opacity-100',
             muted && 'text-subtle-foreground hover:text-subtle-foreground hover:bg-card [&_svg]:opacity-25',

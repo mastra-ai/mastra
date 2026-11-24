@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { settingsRowLabelClassName } from './settings-row-label';
 import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
@@ -17,8 +17,8 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   required?: boolean;
   errorMsg?: ReactNode;
   /**
-   * `side` (default): the control sits on the right. Fields you type in take one shared width (13.75rem), selects
-   * hug their value up to that width, and switches and buttons keep their own size; all end at the right edge.
+   * `side` (default): the control sits on the right. Text fields take one shared width (13.75rem), selects hug
+   * their value up to that width, and switches and buttons keep their own size; all end at the right edge.
    * `below`: the control goes under the label at full width, for forms with several controls.
    */
   controlPlacement?: 'side' | 'below';
@@ -38,31 +38,15 @@ const headingClassName = 'flex min-w-0 flex-col gap-px';
 const sideHeadingClassName =
   'sm:flex-[1_1_12rem] sm:min-h-[calc(var(--text-label)*1.5+1px+var(--text-caption)*1.5)] sm:justify-center';
 /**
- * One width rule for every field in a setting, at any depth: fields you type in take 13.75rem (`textFieldWidthStyle`,
- * full width on phones); selects and other field triggers hug their value up to that same width
- * (`fieldTriggerWidthStyle`).
- */
-const fieldWidthsClassName =
-  '[--field-max-width:13.75rem] [--field-width:auto] sm:[--text-field-flex:0_1_auto] sm:[--text-field-width:13.75rem]';
-/**
- * The controls. Switches and buttons keep their size, so a row of only those never wraps for lack of room. Several
- * controls put straight in the row share the column, at least 13.75rem wide: a text field takes what the others leave.
- * The column is as tall as the row, so a control shorter than the label column is centered against it.
+ * The controls. A field you type in takes 13.75rem, also inside a wrapper; selects and other field triggers hug their
+ * value up to that width (`fieldTriggerWidthStyle`); switches and buttons keep their size, so a row of only those never
+ * wraps. The column is as tall as the row, so a control shorter than the label column is centered against it.
  */
 const sideControlClassName = cn(
-  fieldWidthsClassName,
-  'flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:shrink-0 sm:self-stretch',
-  'sm:has-[>input:not([aria-hidden]),>[data-slot=input-group]]:min-w-55',
-  '[&>:is(input,[data-slot=input-group]):not(:only-child)]:[--text-field-flex:1] [&>:is(input,[data-slot=input-group]):not(:only-child)]:[--text-field-width:100%]',
+  'flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:shrink-0 sm:self-stretch',
+  'sm:has-[>[data-slot=input-number]]:w-55 sm:has-[>input:not([aria-hidden]),>[data-slot=input-group]]:min-w-55',
+  'sm:[&>:is(:not([data-slot]),[data-slot=field])>:is(input:not([aria-hidden]),[data-slot=input-group]),&>:is([data-slot=combobox-input],[data-slot=combobox-chips])]:w-55',
 );
-
-/**
- * Gives the fields inside it the widths a `SettingsRow` gives its own, for a setting laid out some other way (a step
- * in a diagram, a field under its own title). Use a `SettingsRow` when the setting is a label beside its control.
- */
-export function SettingsControl({ className, ...props }: ComponentProps<'div'>) {
-  return <div data-slot="settings-control" className={cn(fieldWidthsClassName, 'min-w-0', className)} {...props} />;
-}
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
   if (!viewOnly) return children;

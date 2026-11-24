@@ -15,13 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
-import {
-  SettingsContainer,
-  SettingsControl,
-  SettingsGroup,
-  SettingsRow,
-  SettingsTitle,
-} from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
 import { Link } from 'react-router';
 import type { ReactNode } from 'react';
 
@@ -54,6 +48,8 @@ import { IconFlag2 } from '@mastra/playground-ui/icons/central/IconFlag2';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 const NO_SKILL = '__none__';
+/** Free-text fields share one width, so short values don't stretch across the page. */
+const FIELD_WIDTH = 'sm:max-w-55';
 /** A counter only shows once its limit is near. */
 const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
 
@@ -316,15 +312,14 @@ export function PhaseConfig({
             description="Phases with the same session share one agent session per card."
             disabled={disabled}
           >
-            <SettingsControl>
-              <Input
-                aria-label={`${phase.name} session`}
-                value={phase.runner?.context ?? ''}
-                placeholder={DEFAULT_SESSION}
-                disabled={disabled}
-                onChange={event => setRunner({ context: event.target.value })}
-              />
-            </SettingsControl>
+            <Input
+              className={FIELD_WIDTH}
+              aria-label={`${phase.name} session`}
+              value={phase.runner?.context ?? ''}
+              placeholder={DEFAULT_SESSION}
+              disabled={disabled}
+              onChange={event => setRunner({ context: event.target.value })}
+            />
           </PhaseField>
 
           <SettingsSubsection title="Skill">
@@ -416,18 +411,17 @@ export function PhaseConfig({
             description="Ends the phase when it succeeds. Leave empty for none."
             disabled={disabled}
           >
-            <SettingsControl>
-              <Input
-                aria-label={`${phase.name} exit tool`}
-                value={exitToolId}
-                disabled={disabled}
-                onChange={event => {
-                  const value = event.target.value.trim();
-                  onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
-                  if (!value) onRawRule('autoApproveWhen', undefined);
-                }}
-              />
-            </SettingsControl>
+            <Input
+              className={FIELD_WIDTH}
+              aria-label={`${phase.name} exit tool`}
+              value={exitToolId}
+              disabled={disabled}
+              onChange={event => {
+                const value = event.target.value.trim();
+                onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
+                if (!value) onRawRule('autoApproveWhen', undefined);
+              }}
+            />
           </PhaseField>
           {exitToolId !== '' && (
             <SettingsContainer>
