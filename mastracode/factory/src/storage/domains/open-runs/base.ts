@@ -246,28 +246,39 @@ export class OpenRunsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Copies runs read from the legacy `factoryOpenRuns` thread setting onto the ledger, each at
-   * most once. Resolves the kickoffs now copied, including ones an earlier call copied, so the
-   * caller can drop them from the setting.
+   * Copies runs read from `threadId`'s legacy `factoryOpenRuns` setting onto the ledger, each at
+   * most once, so a copied run that has since ended never comes back from the setting. The setting
+   * is client-writable, so only entries naming `threadId` are copied, and none with a heartbeat
+   * later than `now`.
    */
-  async importLegacy(runs: readonly FactoryOpenRun[]): Promise<string[]> {
-    const copied: string[] = [];
-    for (const run of runs) {
+  async importLegacy(threadId: string, runs: readonly FactoryOpenRun[], now = Date.now()): Promise<void> {
+    const candidates = runs.filter(
+      run => run.threadId === threadId && (run.heartbeatAt === undefined || run.heartbeatAt <= now),
+    );
+    if (candidates.length === 0) return;
+    const copied = new Set(
+      (
+        await this.#db.findMany<{ kickoff_id: string }>('factory_open_run_imports', {
+          kickoff_id: { in: candidates.map(run => run.kickoffId) },
+        })
+      ).map(row => row.kickoff_id),
+    );
+    for (const run of candidates) {
+      if (copied.has(run.kickoffId)) continue;
       try {
         await this.storage.withTransaction(async ops => {
           if (await ops.findOne('factory_open_run_imports', { kickoff_id: run.kickoffId })) return;
-          const now = new Date();
-          await ops.insertOne('factory_open_run_imports', { kickoff_id: run.kickoffId, imported_at: now });
+          const at = new Date(now);
+          await ops.insertOne('factory_open_run_imports', { kickoff_id: run.kickoffId, imported_at: at });
           if (!(await ops.findOne('factory_open_runs', { kickoff_id: run.kickoffId }))) {
-            await ops.insertOne('factory_open_runs', toRow(run, now));
+            await ops.insertOne('factory_open_runs', toRow(run, at));
           }
         });
       } catch (error) {
-        // Another reader copied it at the same moment.
+        // Another reader copied it, or a run with its kickoff opened, at the same moment; the next
+        // read settles it.
         if (!(error instanceof UniqueViolationError)) throw error;
       }
-      copied.push(run.kickoffId);
     }
-    return copied;
   }
 }

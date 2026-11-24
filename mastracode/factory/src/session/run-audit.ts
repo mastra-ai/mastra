@@ -156,22 +156,55 @@ function serializeRunAudit(session: RunEndCaptureSession, write: () => Promise<v
 const legacyOpenRunsSchema = z.array(factoryOpenRunSchema);
 
 /**
- * The open runs of `threadId`, after copying any a release before the storage ledger left in the
- * thread's setting. Copied runs are dropped from the setting; a copy is never repeated, so a run
- * that ended after its copy stays ended even if dropping it from the setting failed.
+ * Runs that a release before the storage ledger keeps in `threadId`'s `factoryOpenRuns` setting.
+ * During a rolling deploy that release still owns, heartbeats and ends them there, so a live entry
+ * is read in place (never copied or removed: its owner would lose track of it). An entry whose
+ * owner is gone is copied to the ledger once. The setting is client-writable: only entries naming
+ * this thread count, a heartbeat further in the future than clock skew explains is ignored, and a
+ * nearer one reads as now.
  */
+async function legacyOpenRunsOn(
+  openRuns: OpenRunLedger,
+  threadId: string,
+  read: () => Promise<unknown>,
+): Promise<FactoryOpenRun[]> {
+  const parsed = legacyOpenRunsSchema.safeParse((await read()) ?? []);
+  if (!parsed.success) return [];
+  const now = Date.now();
+  const entries = parsed.data
+    // Clocks differ a little between replicas; a heartbeat further ahead than that is forged.
+    .filter(run => run.threadId === threadId && (run.heartbeatAt ?? 0) <= now + FACTORY_OPEN_RUN_STALE_MS)
+    .map(run => (run.heartbeatAt !== undefined && run.heartbeatAt > now ? { ...run, heartbeatAt: now } : run));
+  const isLive = (run: FactoryOpenRun) =>
+    run.heartbeatAt !== undefined && now - run.heartbeatAt < FACTORY_OPEN_RUN_STALE_MS;
+  await openRuns.importLegacy(
+    threadId,
+    entries.filter(run => !isLive(run)),
+    now,
+  );
+  return entries.filter(isLive);
+}
+
+/** The runs on `threadId`'s ledger, after copying legacy runs whose owner is gone. */
+async function ledgerRunsOn(
+  openRuns: OpenRunLedger,
+  threadId: string,
+  readLegacy: () => Promise<unknown>,
+): Promise<FactoryOpenRun[]> {
+  await legacyOpenRunsOn(openRuns, threadId, readLegacy);
+  return openRuns.listByThread(threadId);
+}
+
+/** The ledger's runs on `threadId`, plus live runs a release before the ledger still tracks. */
 async function openRunsOn(
   openRuns: OpenRunLedger,
   threadId: string,
-  legacy: { read(): Promise<unknown>; write(value: FactoryOpenRun[]): Promise<void> },
+  readLegacy: () => Promise<unknown>,
 ): Promise<FactoryOpenRun[]> {
-  const stored = legacyOpenRunsSchema.parse((await legacy.read()) ?? []);
-  if (stored.length > 0) {
-    const copied = new Set(await openRuns.importLegacy(stored));
-    const remaining = legacyOpenRunsSchema.parse((await legacy.read()) ?? []);
-    await legacy.write(remaining.filter(run => !copied.has(run.kickoffId)));
-  }
-  return openRuns.listByThread(threadId);
+  const live = await legacyOpenRunsOn(openRuns, threadId, readLegacy);
+  const legacy = new Set(live.map(run => run.kickoffId));
+  // A live legacy entry carries its owner's latest heartbeat, fresher than any stale copy of it.
+  return [...(await openRuns.listByThread(threadId)).filter(run => !legacy.has(run.kickoffId)), ...live];
 }
 
 /** The open runs of the thread the session is on. */
@@ -181,27 +214,18 @@ export function listSessionOpenRuns(
 ): Promise<FactoryOpenRun[]> {
   const threadId = session.thread.getId();
   if (!threadId) return Promise.resolve([]);
-  return openRunsOn(openRuns, threadId, {
-    read: () => session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING }),
-    write: value => session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value }),
-  });
+  return openRunsOn(openRuns, threadId, () => session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING }));
 }
 
 /** The open runs of `threadId`, whichever thread the session is on now. */
 export function listThreadOpenRuns(
-  session: {
-    readonly thread: {
-      getSettingOn(args: { threadId: string; key: string }): Promise<unknown>;
-      setSettingOn(args: { threadId: string; key: string; value: unknown }): Promise<void>;
-    };
-  },
+  session: { readonly thread: { getSettingOn(args: { threadId: string; key: string }): Promise<unknown> } },
   openRuns: OpenRunLedger,
   threadId: string,
 ): Promise<FactoryOpenRun[]> {
-  return openRunsOn(openRuns, threadId, {
-    read: () => session.thread.getSettingOn({ threadId, key: FACTORY_OPEN_RUNS_SETTING }),
-    write: value => session.thread.setSettingOn({ threadId, key: FACTORY_OPEN_RUNS_SETTING, value }),
-  });
+  return openRunsOn(openRuns, threadId, () =>
+    session.thread.getSettingOn({ threadId, key: FACTORY_OPEN_RUNS_SETTING }),
+  );
 }
 
 export async function waitForSessionRunAudit(session: object): Promise<void> {
@@ -232,7 +256,12 @@ async function recordRunEnds(
 ): Promise<void> {
   if (!reason || reason === 'suspended') return;
   const usage = usageFor(session);
-  const runs = await listSessionOpenRuns(session, openRuns);
+  const threadId = session.thread.getId();
+  if (!threadId) return;
+  // Only the ledger's own runs: a live run a release before the ledger tracks is its owner's to end.
+  const runs = await ledgerRunsOn(openRuns, threadId, () =>
+    session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING }),
+  );
   if (runs.length === 0) return;
   const ending = runs.filter(run => !kickoffId || run.kickoffId === kickoffId);
   // An end event bills the turn it closed. A run whose ledger entry lands after its turn ended
@@ -241,27 +270,36 @@ async function recordRunEnds(
   const steps = turn && !turn.claimed ? turn.steps : [];
   if (turn && ending.length > 0) turn.claimed = true;
   const turnUsage = runUsage(steps);
-  // The end is recorded before the audit write, so a waiter elsewhere settles even while the audit
-  // store is down; the run stays on the ledger until its end record lands.
-  const endedAt = Date.now();
-  for (const run of ending) await openRuns.end(run.kickoffId, { reason, endedAt });
+  // Held before any write that can fail, so a retry bills the turn this end claimed.
   for (const run of ending) {
-    let runUsageRecord = usage.held.get(run.kickoffId);
-    if (!runUsageRecord) {
-      const shared = ending.filter(other => other !== run).map(other => other.kickoffId);
-      runUsageRecord =
-        turnUsage.status === 'recorded' && shared.length > 0
-          ? { ...turnUsage, sharedWithKickoffIds: shared }
-          : turnUsage;
-      usage.held.set(run.kickoffId, runUsageRecord);
-    }
+    if (usage.held.has(run.kickoffId)) continue;
+    const shared = ending.filter(other => other !== run).map(other => other.kickoffId);
+    usage.held.set(
+      run.kickoffId,
+      turnUsage.status === 'recorded' && shared.length > 0 ? { ...turnUsage, sharedWithKickoffIds: shared } : turnUsage,
+    );
+  }
+  // The end is recorded before the audit write, so a waiter elsewhere settles even while the audit
+  // store is down; the run stays on the ledger until its end record lands. The first end recorded
+  // is the run's end, on its row and in its audit record alike.
+  const endedAt = Date.now();
+  const reasons = new Map<string, RunEndReason>();
+  for (const run of ending) {
+    const recorded = (await openRuns.end(run.kickoffId, { reason, endedAt }))
+      ? undefined
+      : (await openRuns.get(run.kickoffId))?.end?.reason;
+    reasons.set(run.kickoffId, recorded ?? reason);
+  }
+  for (const run of ending) {
+    const runUsageRecord = usage.held.get(run.kickoffId)!;
+    const runReason = reasons.get(run.kickoffId)!;
     const input = runAuditInput(run);
     const recorded = await audit.record({
       ...input,
       actorId: `agent:${run.threadId}`,
       actorType: 'agent',
       action: 'factory.run.ended',
-      metadata: { ...input.metadata, reason, usage: runUsageRecord },
+      metadata: { ...input.metadata, reason: runReason, usage: runUsageRecord },
     });
     if (recorded) {
       usage.held.delete(run.kickoffId);

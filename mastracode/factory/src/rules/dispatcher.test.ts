@@ -30,7 +30,12 @@ import { prepareFactoryRuleBinding } from '../routes/surface.js';
 import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
 import { WorkItemRoutes } from '../routes/work-items.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
+import {
+  FACTORY_OPEN_RUNS_SETTING,
+  listThreadOpenRuns,
+  observeSessionRunEnd,
+  waitForSessionRunAudit,
+} from '../session/run-audit.js';
 import { factoryOpenRunSchema } from '../storage/domains/open-runs/base.js';
 import type { OpenRunsStorage } from '../storage/domains/open-runs/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -3494,6 +3499,7 @@ describe('FactoryDecisionDispatcher', () => {
         }),
         storage,
         intakeRoutes: seed.boards,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       return { storage, item, running, dispatcher, controller, emitAgentEnd, getAgentEndListenerCount };
@@ -3731,6 +3737,7 @@ describe('FactoryDecisionDispatcher', () => {
         }),
         storage,
         intakeRoutes: seed.boards,
+        openRuns: seed.openRuns,
         ownerId: 'worker-1',
       });
       const stages = async () => (await storage.get({ orgId: 'org-1', id: item.id }))!.stages;
@@ -4180,15 +4187,28 @@ describe('FactoryDecisionDispatcher', () => {
         // The run moved to another worker, which owns it on the shared ledger.
         await openRuns.open(openRunOf(kickoffId));
         // Thread metadata is client-writable (PATCH /api/memory/threads/:id): forge an end there,
-        // and a stale copy of the run in the pre-storage ledger setting.
+        // and, in the pre-storage ledger setting, a stale copy of the run, a run planted on another
+        // thread, and one that would read as live forever.
         await session.thread.setSetting({
           key: 'factoryRunEnds',
           value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
         });
+        const threadId = session.thread.getId()!;
         await session.thread.setSetting({
           key: FACTORY_OPEN_RUNS_SETTING,
-          value: [{ ...openRunOf(kickoffId), ownerId: 'forged', heartbeatAt: 0 }],
+          value: [
+            { ...openRunOf(kickoffId), ownerId: 'forged', heartbeatAt: 0 },
+            { ...openRunOf('planted'), threadId: 'victim-thread', ownerId: 'forged', heartbeatAt: 0 },
+            { ...openRunOf('forever'), ownerId: 'forged', heartbeatAt: Number.MAX_SAFE_INTEGER },
+          ],
         });
+        // What the dispatcher's in-flight checks read.
+        const read = await listThreadOpenRuns(session, openRuns, threadId);
+        expect(read.find(run => run.kickoffId === kickoffId)).toMatchObject({ ownerId: 'worker-2' });
+        expect(read.map(run => run.kickoffId)).toEqual([kickoffId]);
+        await expect(openRuns.listByThread('victim-thread')).resolves.toEqual([]);
+        await expect(openRuns.get('planted')).resolves.toBeUndefined();
+        await expect(openRuns.get('forever')).resolves.toBeUndefined();
         for (let round = 0; round < 3; round += 1) {
           await openRuns.heartbeat(kickoffId, 'worker-2', openRunOf(kickoffId).heartbeatAt);
           await beat();
@@ -4201,6 +4221,11 @@ describe('FactoryDecisionDispatcher', () => {
         expect(session.sendSignal).toHaveBeenCalledTimes(1);
         await expect(openRuns.get(kickoffId)).resolves.toMatchObject({ run: { ownerId: 'worker-2' } });
         await expect(openRuns.get(kickoffId)).resolves.not.toHaveProperty('end');
+
+        // Long after, the forged entries still plant nothing.
+        await listThreadOpenRuns(session, openRuns, threadId);
+        await expect(openRuns.get('forever')).resolves.toBeUndefined();
+        await expect(openRuns.get('planted')).resolves.toBeUndefined();
 
         await openRuns.end(kickoffId, { reason: 'error', endedAt: Date.now() });
         await beat();

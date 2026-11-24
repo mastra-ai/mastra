@@ -99,6 +99,18 @@ describe('OpenRunsStorage', () => {
     await expect(openRuns.listByThread('thread-1')).resolves.toEqual([open]);
   });
 
+  it('copies only legacy runs naming the thread read, and none with a heartbeat from the future', async () => {
+    const { openRuns } = await createFactoryStorageForTests();
+    const elsewhere = openRun('kickoff-elsewhere', { threadId: 'thread-2' });
+    const future = openRun('kickoff-future', { ownerId: 'forged', heartbeatAt: 1_000 });
+    const stale = openRun('kickoff-stale', { ownerId: 'gone', heartbeatAt: 10 });
+
+    await openRuns.importLegacy('thread-1', [elsewhere, future, stale], 100);
+
+    await expect(openRuns.listByThread('thread-1')).resolves.toEqual([stale]);
+    await expect(openRuns.listByThread('thread-2')).resolves.toEqual([]);
+  });
+
   describe('across replicas', () => {
     it('keeps every run when replicas open runs on the same thread at once', async () => {
       const { a, b } = await replicas();
@@ -149,12 +161,14 @@ describe('OpenRunsStorage', () => {
     it('copies a legacy run once, so a copied run that ended does not come back', async () => {
       const { a, b } = await replicas();
 
-      const [copiedA, copiedB] = await Promise.all([a.importLegacy([LOST]), b.importLegacy([LOST])]);
-      expect([copiedA, copiedB]).toEqual([['kickoff-1'], ['kickoff-1']]);
+      await Promise.all([a.importLegacy('thread-1', [LOST], 100), b.importLegacy('thread-1', [LOST], 100)]);
       await expect(a.listByThread('thread-1')).resolves.toEqual([LOST]);
 
       await finish(a, 'kickoff-1');
-      await expect(b.importLegacy([LOST])).resolves.toEqual(['kickoff-1']);
+      // Even once the closed row is pruned.
+      await a.close(openRun('kickoff-later'), 1 + 100 + FACTORY_RUN_END_RETENTION_MS);
+      await expect(a.get('kickoff-1')).resolves.toBeUndefined();
+      await b.importLegacy('thread-1', [LOST], 200);
       await expect(a.listByThread('thread-1')).resolves.toEqual([]);
     });
   });

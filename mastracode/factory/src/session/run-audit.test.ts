@@ -79,37 +79,90 @@ describe('Factory run lifecycle audit', () => {
   });
 
   describe('runs left in the thread setting by a release before the storage ledger', () => {
-    it('moves them to the ledger on first read, dropping only what it moved', async () => {
-      const { session, settings, openRuns } = await setup();
-      settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'plan agent' }];
+    it('copies a run whose owner is gone to the ledger, leaving the setting as it is', async () => {
+      const { session, settings, openRuns, ledger } = await setup();
+      const legacy = [{ ...OPEN_RUN, agentName: 'plan agent' }];
+      settings[FACTORY_OPEN_RUNS_SETTING] = legacy;
 
       await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([OPEN_RUN]);
-      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+      await expect(ledger()).resolves.toEqual([OPEN_RUN]);
+      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toBe(legacy);
       await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([OPEN_RUN]);
     });
 
-    it('ends a moved run like any other', async () => {
+    it("reads another owner's live run in place, and copies it once it goes stale", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { session, settings, openRuns, ledger } = await setup();
+        const live = { ...OPEN_RUN, ownerId: 'old-release', heartbeatAt: Date.now() };
+        settings[FACTORY_OPEN_RUNS_SETTING] = [live];
+
+        const [entry] = await listSessionOpenRuns(session, openRuns);
+        expect(entry).toEqual(live);
+        expect(isOpenRunLiveElsewhere(entry!, 'worker-2')).toBe(true);
+        await expect(ledger()).resolves.toEqual([]);
+
+        vi.setSystemTime(Date.now() + FACTORY_OPEN_RUN_STALE_MS);
+        await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([live]);
+        await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([live]);
+        await expect(ledger()).resolves.toEqual([live]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('takes nothing from an entry naming another thread or carrying a heartbeat from the future', async () => {
+      const { session, settings, openRuns, ledger } = await setup();
+      settings[FACTORY_OPEN_RUNS_SETTING] = [
+        { ...OPEN_RUN, kickoffId: 'planted', threadId: 'thread-2', ownerId: 'forged', heartbeatAt: 1 },
+        { ...OPEN_RUN, ownerId: 'forged', heartbeatAt: Number.MAX_SAFE_INTEGER },
+      ];
+
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([]);
+      await expect(ledger()).resolves.toEqual([]);
+      await expect(openRuns.listByThread('thread-2')).resolves.toEqual([]);
+    });
+
+    it('reads a heartbeat a little ahead, as from a replica whose clock runs fast, as now', async () => {
+      const { session, settings, openRuns } = await setup();
+      const before = Date.now();
+      settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, ownerId: 'old-release', heartbeatAt: before + 5_000 }];
+
+      const [entry] = await listSessionOpenRuns(session, openRuns);
+      expect(entry!.heartbeatAt).toBeGreaterThanOrEqual(before);
+      expect(entry!.heartbeatAt).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('ends a copied run like any other', async () => {
       const { session, settings, openRuns, emit, events, ledger } = await setup();
       settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, ownerId: 'old-release', heartbeatAt: 1 }];
 
       emit('complete');
 
       await vi.waitFor(async () => expect(await events()).toHaveLength(1));
+      await waitForSessionRunAudit(session);
       expect((await events())[0]).toMatchObject({ action: 'factory.run.ended', metadata: { kickoffId: 'kickoff-1' } });
       await expect(ledger()).resolves.toEqual([]);
-      expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
       await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([]);
     });
 
-    it('does not bring back a moved run that ended when the setting still lists it', async () => {
+    it("leaves a live run of an earlier release to its owner when this session's run ends", async () => {
+      const { session, settings, emit, events } = await setup();
+      settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, ownerId: 'old-release', heartbeatAt: Date.now() }];
+
+      emit('complete');
+      await waitForSessionRunAudit(session);
+
+      await expect(events()).resolves.toEqual([]);
+    });
+
+    it('does not bring back a copied run that ended when the setting still lists it', async () => {
       const { session, settings, openRuns, ledger } = await setup();
-      const stale = [OPEN_RUN];
-      settings[FACTORY_OPEN_RUNS_SETTING] = stale;
+      settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
       await listSessionOpenRuns(session, openRuns);
       await openRuns.end('kickoff-1', { reason: 'complete', endedAt: 1 });
       await openRuns.close(OPEN_RUN, 1);
-      // Dropping it from the setting failed, or another replica read the setting before it was dropped.
-      settings[FACTORY_OPEN_RUNS_SETTING] = stale;
 
       await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([]);
       await expect(ledger()).resolves.toEqual([]);
@@ -149,7 +202,7 @@ describe('Factory run lifecycle audit', () => {
   });
 
   it('retains both kickoffs when roles hand off within the same agent turn', async () => {
-    const { start, emit, events, ledger } = await setup();
+    const { session, start, emit, events, ledger } = await setup();
     await start({ ...OPEN_RUN, kickoffId: 'plan', role: 'plan' });
     await start({ ...OPEN_RUN, kickoffId: 'work', role: 'work' });
     emit('complete');
@@ -158,6 +211,7 @@ describe('Factory run lifecycle audit', () => {
     const ended = (await events()).filter(event => event.action === 'factory.run.ended');
     expect(ended.map(event => event.metadata.kickoffId).sort()).toEqual(['plan', 'work']);
     expect(ended.every(event => event.metadata.startedBy === 'approver-2')).toBe(true);
+    await waitForSessionRunAudit(session);
     expect(await ledger()).toEqual([]);
   });
 
@@ -382,6 +436,22 @@ describe('Factory run lifecycle audit', () => {
       expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
     });
 
+    it('keeps the usage a run end claimed when recording its end on the ledger fails', async () => {
+      const { session, start, emit, step, events, openRuns } = await setup();
+      await start();
+      step(100, 50);
+      const failure = vi.spyOn(openRuns, 'end').mockRejectedValueOnce(new Error('store unavailable'));
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      emit('complete');
+      await waitForSessionRunAudit(session);
+      failure.mockRestore();
+      warning.mockRestore();
+
+      emit('complete');
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 150 } });
+    });
+
     it('bills a turn to only one run when two ledger entries land after it ended', async () => {
       const { start, emit, step, events } = await setup();
       step(7, 3);
@@ -396,7 +466,7 @@ describe('Factory run lifecycle audit', () => {
     });
 
     it('warns when a run end cannot persist its usage, and persists the same usage on the retry', async () => {
-      const { start, emit, step, events, audit, ledger } = await setup();
+      const { session, start, emit, step, events, audit, ledger } = await setup();
       await start();
       step(100, 50);
       const failure = vi.spyOn(audit, 'record').mockResolvedValueOnce(null);
@@ -416,6 +486,7 @@ describe('Factory run lifecycle audit', () => {
       emit('complete');
       await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
       expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 150 } });
+      await waitForSessionRunAudit(session);
       expect(await ledger()).toEqual([]);
     });
 
