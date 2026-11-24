@@ -19,6 +19,7 @@ interface Node {
   attributes?: { type: string; name?: string; value?: unknown }[]
   children?: Node[]
   position?: { start: { line: number; column: number } }
+  data?: { estree?: { body: unknown[]; comments?: { value: string }[] } }
 }
 
 interface Target {
@@ -56,6 +57,15 @@ function stripExplicitIds(source: string): { source: string; ids: Map<number, st
   return { source: lines.join('\n'), ids }
 }
 
+/** Id from a trailing `{/* #custom-id *\/}` comment, using the same rule as Docusaurus' heading plugin. */
+function commentHeadingId(heading: Node): string | undefined {
+  const last = heading.children?.at(-1)
+  const program = last?.type === 'mdxTextExpression' ? last.data?.estree : undefined
+  if (!program || program.body.length !== 0 || program.comments?.length !== 1) return undefined
+  const firstPart = program.comments[0].value.trim().split(' ')[0]
+  return firstPart.startsWith('#') ? firstPart.slice(1) || undefined : undefined
+}
+
 /** Plain text of a node, matching `mdast-util-to-string`, which Docusaurus slugs headings from. */
 function toText(node: Node): string {
   if (typeof node.value === 'string') return node.value
@@ -73,7 +83,7 @@ function collectAnchors(tree: Node, explicitIds: Map<number, string>): Set<strin
   const slugger = new GithubSlugger()
   walk(tree, node => {
     if (node.type === 'heading') {
-      const explicit = node.position ? explicitIds.get(node.position.start.line) : undefined
+      const explicit = (node.position ? explicitIds.get(node.position.start.line) : undefined) ?? commentHeadingId(node)
       anchors.add(explicit ?? slugger.slug(toText(node).trim()))
     } else if (node.type === 'mdxJsxFlowElement' || node.type === 'mdxJsxTextElement') {
       const id = node.attributes?.find(attribute => attribute.type === 'mdxJsxAttribute' && attribute.name === 'id')
@@ -157,6 +167,15 @@ function checkPageLinks(page: SyncedPage, byRoute: Map<string, SyncedPage>, byPa
         return
       }
     } else {
+      // Relative page links without `.md(x)` resolve against the browser URL, which depends on trailing slashes.
+      if (/\.[a-z0-9]+$/i.test(pathname)) return
+      findings.push(
+        finding(
+          'mastra/external-internal-link',
+          `${url}: link to synced pages with a root-relative route or a relative .mdx path`,
+          at,
+        ),
+      )
       return
     }
 

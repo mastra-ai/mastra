@@ -139,6 +139,12 @@ describe('external-docs check', () => {
     expect(summary(findings)).toEqual(['mastra/external-internal-link src/site/index.mdx:7'])
   })
 
+  it('reports relative page links without an .mdx extension', async () => {
+    expect(summary(await runWithLink('missing#setup'))).toEqual(['mastra/external-internal-link src/site/index.mdx:7'])
+    expect(summary(await runWithLink('guide'))).toEqual(['mastra/external-internal-link src/site/index.mdx:7'])
+    expect(summary(await runWithLink('./img/diagram.png'))).toEqual([])
+  })
+
   it('reports an anchor with no matching heading', async () => {
     const findings = await runWithLink('/guide#install')
     expect(summary(findings)).toEqual(['mastra/external-anchor src/site/index.mdx:7'])
@@ -154,6 +160,14 @@ describe('external-docs check', () => {
 
   it('uses explicit heading ids instead of the generated slug', async () => {
     const guide = page('# Guide\n\n## Install the CLI {#install}\n\nText.')
+    expect(summary(await runWithLink('/guide#install', guide))).toEqual([])
+    expect(summary(await runWithLink('/guide#install-the-cli', guide))).toEqual([
+      'mastra/external-anchor src/site/index.mdx:7',
+    ])
+  })
+
+  it('uses MDX comment heading ids like Docusaurus', async () => {
+    const guide = page('# Guide\n\n## Install the CLI {/* #install */}\n\n## Plain {/* note */}\n\nText.')
     expect(summary(await runWithLink('/guide#install', guide))).toEqual([])
     expect(summary(await runWithLink('/guide#install-the-cli', guide))).toEqual([
       'mastra/external-anchor src/site/index.mdx:7',
