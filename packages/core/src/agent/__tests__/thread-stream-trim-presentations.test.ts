@@ -14,21 +14,15 @@ import { LeasePubSub } from './thread-stream-test-utils';
 
 const resourceId = 'presentation-trim-user';
 
-function setup(threadId: string, { delayFirstPresentationMs = 0 } = {}) {
+function setup(threadId: string) {
   const pubsub = new LeasePubSub();
   pubsub.retain = true;
   const topics = new Set<string>();
   const completed: string[] = [];
   const publish = pubsub.publish.bind(pubsub);
-  let presentationDelayed = false;
   pubsub.publish = async (topic: string, event: any) => {
     topics.add(topic);
     if (event.type === 'run-completed') completed.push(event.runId);
-    if (delayFirstPresentationMs > 0 && event.type === 'user-message-presentation' && !presentationDelayed) {
-      // The first append fails transiently and the backend retries it after a delay, as Redis Streams' publish does.
-      presentationDelayed = true;
-      await new Promise(resolve => setTimeout(resolve, delayFirstPresentationMs));
-    }
     return publish(topic, event);
   };
   const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'later response');
@@ -99,31 +93,6 @@ describe('user message presentation trim', () => {
     await stream.text;
     await waitForCondition(() => completed.length === 2, 2_000);
     await waitForCondition(() => !retained().some(event => event.type === 'user-message-presentation'), 2_000);
-    watcher.unsubscribe();
-
-    expect(await replayedPending(agent, threadId)).toEqual([]);
-  });
-
-  it('removes a queued message announcement whose append is retried while the run it waited on completes', async () => {
-    const threadId = 'presentation-trim-retried';
-    const { agent, releaseFirst, completed, retained } = setup(threadId, { delayFirstPresentationMs: 300 });
-    const watcher = await agent.subscribeToThread({ threadId, resourceId });
-    void (async () => {
-      for await (const _ of watcher.stream);
-    })();
-
-    const stream = await agent.stream('Hello', { memory: { thread: threadId, resource: resourceId } });
-    await waitForActiveRun(watcher);
-    await waitForCondition(() => stream._getImmediateText() === 'first response');
-    const queued = agent.queueMessage({ contents: 'then summarise' }, { resourceId, threadId });
-    await queued.accepted;
-
-    releaseFirst();
-    await stream.text;
-    await waitForCondition(() => completed.length === 2, 2_000);
-    // Past the retry, so an announcement appended after its run's trim would be in the stream by now.
-    await new Promise(resolve => setTimeout(resolve, 400));
-    expect(retained().some(event => event.type === 'user-message-presentation')).toBe(false);
     watcher.unsubscribe();
 
     expect(await replayedPending(agent, threadId)).toEqual([]);
