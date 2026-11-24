@@ -2,9 +2,11 @@
 
 // Mirrors docs directories of this monorepo into external docs repos, as listed
 // in .github/docs-sync.json. Each target's `dest` directory is fully owned by
-// the sync: files missing from `source` are deleted there. Targets that share a
-// repo (one site with several docs sections) are synced in a single commit, so
-// cross-section links never deploy half-updated.
+// the sync: files missing from `source` are deleted there. With `--target all`
+// (what the workflow runs on push), targets that share a repo (one site with
+// several docs sections) are synced in a single commit, so cross-section links
+// never deploy half-updated. A named `--target` syncs only that section and
+// leaves its siblings as they are.
 //
 // Usage:
 //   node sync-docs.mjs --target <name|all> --into <dir>   mirror into a local checkout, no git
