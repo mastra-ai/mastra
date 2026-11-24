@@ -110,8 +110,23 @@ export class PlatformGitLabIntegration
         integrationId: GITLAB_SELF_HOSTED_INTEGRATION_ID,
         connectionIntegrationIds: [GITLAB_SELF_HOSTED_INTEGRATION_ID],
         binding: this.binding,
+        // A reconnect only renews the token; the instance stays the one the
+        // connection is on, so the form submits that hostname unchanged.
+        reconnectParams: async connectionId => ({ hostname: await this.#reconnectHostname(connectionId) }),
       },
     ];
+  }
+
+  /** The instance this process pinned the connection to, else the one Platform has recorded for it. */
+  async #reconnectHostname(connectionId: string): Promise<string> {
+    const pinned = this.#instances.get(connectionId);
+    if (pinned) return pinned;
+    const context = await this.binding.connect.getContext(connectionId);
+    const hostname = selfHostedHostname(context.connection_config?.hostname);
+    if (!hostname) {
+      throw new GitLabApiError(`Self-hosted GitLab connection ${connectionId} has no valid instance hostname.`, 502);
+    }
+    return hostname;
   }
 
   override async statusConnections(): Promise<GitLabStatusConnection[]> {
@@ -152,7 +167,10 @@ export class PlatformGitLabIntegration
    * process happened to see first, so a connection moved back to its linked
    * instance works again without a restart.
    */
-  protected override async contextByIdForLinkedHost(connectionId: string, host: string): Promise<PlatformGitLabContext> {
+  protected override async contextByIdForLinkedHost(
+    connectionId: string,
+    host: string,
+  ): Promise<PlatformGitLabContext> {
     const connection = await this.#activeConnection(connectionId);
     const linked = selfHostedHostname(host);
     if (connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID && linked) {

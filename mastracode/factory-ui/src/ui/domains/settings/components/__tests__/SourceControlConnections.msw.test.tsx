@@ -75,7 +75,8 @@ function gitlabAccounts(initial: GitLabConnection[]) {
       if (!connection) return HttpResponse.json({ error: 'connection_not_found' }, { status: 404 });
       connection.status = 'active';
       minted.push({ provider, kind: 'reconnect', id });
-      return HttpResponse.json(session(provider, id), { status: 201 });
+      const keep = provider === 'gitlab-self-hosted' ? { params: { hostname: 'gitlab.example.com' } } : {};
+      return HttpResponse.json({ ...session(provider, id), ...keep }, { status: 201 });
     }),
   );
   return minted;
@@ -199,7 +200,7 @@ describe('Source control connections', () => {
     ]);
   });
 
-  it('reconnects an expired self-hosted connection with its token form, not the gitlab.com popup', async () => {
+  it('reconnects an expired self-hosted connection on its own instance with its token form, not the gitlab.com popup', async () => {
     const minted = gitlabAccounts([
       { id: 'cloud', integrationId: 'gitlab', status: 'active', accountLabel: 'Cloud account' },
       { id: 'instance', integrationId: 'gitlab-self-hosted', status: 'needs_reauth', accountLabel: 'Instance' },
@@ -210,7 +211,8 @@ describe('Source control connections', () => {
       within(await waitFor(() => rowOf('Instance'))).getByRole('button', { name: 'Reconnect self-hosted GitLab' }),
     );
     const dialog = await screen.findByRole('dialog', { name: 'Reconnect self-hosted GitLab' });
-    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Instance hostname' }), 'gitlab.example.com');
+    // The instance is not the user's to change on reconnect: the server names it.
+    expect(within(dialog).queryByRole('textbox', { name: 'Instance hostname' })).not.toBeInTheDocument();
     await userEvent.type(within(dialog).getByLabelText('self-hosted GitLab access token'), 'glpat-rotated');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
 

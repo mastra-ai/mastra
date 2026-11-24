@@ -75,6 +75,8 @@ export interface PlatformConnectSession {
   connectUrl: string;
   sessionToken: string;
   expiresAt: string;
+  /** Connection settings a reconnect keeps unchanged, such as a self-hosted instance hostname. */
+  params?: Record<string, string>;
 }
 
 async function requestJson<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {

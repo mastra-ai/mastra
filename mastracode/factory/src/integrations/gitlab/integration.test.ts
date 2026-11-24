@@ -653,7 +653,10 @@ describe('PlatformGitLabIntegration', () => {
       accountLabel: 'ops',
     };
 
-    function stubPlatform(context: (connectionId: string) => Response, credential?: (connectionId: string) => Response) {
+    function stubPlatform(
+      context: (connectionId: string) => Response,
+      credential?: (connectionId: string) => Response,
+    ) {
       const fetchMock = vi.fn<typeof fetch>(async input => {
         const url = String(input);
         if (url.includes('/v2/projects/proj_factory/connections')) {
@@ -800,6 +803,27 @@ describe('PlatformGitLabIntegration', () => {
       });
     });
 
+    it('reconnects a self-hosted connection on the instance it is pinned to', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const gitlab = discovering();
+      const reconnectParams = gitlab
+        .platformConnectProviders()
+        .find(provider => provider.provider === 'gitlab-self-hosted')?.reconnectParams;
+      if (!reconnectParams) throw new Error('self-hosted GitLab offers no reconnect params');
+
+      // Before this process has used the connection, Platform's record names the instance.
+      await expect(reconnectParams('a1b_selfhosted')).resolves.toEqual({ hostname: 'gitlab.example.com' });
+
+      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      // The connection was moved elsewhere; the reconnect form still names the pinned instance.
+      hostname = 'gitlab.other.com';
+      await expect(reconnectParams('a1b_selfhosted')).resolves.toEqual({ hostname: 'gitlab.example.com' });
+      expect(gitlab.platformConnectProviders().find(provider => provider.provider === 'gitlab')?.reconnectParams).toBe(
+        undefined,
+      );
+    });
+
     it('refuses to re-register a connection on another instance, even after a restart', async () => {
       let hostname = 'gitlab.example.com';
       stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
@@ -857,7 +881,8 @@ describe('PlatformGitLabIntegration', () => {
       const restarted = discovering();
       restarted.versionControl.initialize({ storage });
       await restarted.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
-      const target = () => restarted.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository!.id });
+      const target = () =>
+        restarted.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository!.id });
       await expect(target()).rejects.toMatchObject({ status: 409 });
 
       // Moving it back to the linked instance works without another restart.
@@ -870,7 +895,8 @@ describe('PlatformGitLabIntegration', () => {
       const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
       const gitlab = discovering();
       await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
-      const proxyCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('a1b_selfhosted/proxy')).length;
+      const proxyCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('a1b_selfhosted/proxy')).length;
       const before = proxyCalls();
 
       // Reconnected to another instance inside the connection list's cache window.
@@ -918,7 +944,10 @@ describe('PlatformGitLabIntegration', () => {
               }),
             },
           }),
-        ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('connect gitlab.other.com as a new connection') });
+        ).rejects.toMatchObject({
+          status: 409,
+          message: expect.stringContaining('connect gitlab.other.com as a new connection'),
+        });
         expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/credentials'))).toBe(false);
       } finally {
         vi.useRealTimers();

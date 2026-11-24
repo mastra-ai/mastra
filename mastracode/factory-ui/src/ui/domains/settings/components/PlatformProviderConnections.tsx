@@ -45,14 +45,16 @@ interface ApiKeyDialogProps {
   provider: PlatformConnectProviderId;
   title: string;
   pending: boolean;
+  /** Reconnecting keeps the connection's settings, so only the credential is asked for. */
+  reconnecting: boolean;
   onSubmit: (apiKey: string, params: Record<string, string> | undefined) => void;
   onClose: () => void;
 }
 
-function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDialogProps) {
+function ApiKeyDialog({ provider, title, pending, reconnecting, onSubmit, onClose }: ApiKeyDialogProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const credentialName = meta.credentialName ?? 'API key';
-  const fields = meta.params ?? [];
+  const fields = reconnecting ? [] : (meta.params ?? []);
   const [apiKey, setApiKey] = useState('');
   const [params, setParams] = useState<Record<string, string>>({});
   const value = (key: string) => params[key]?.trim() ?? '';
@@ -134,7 +136,10 @@ export function ProviderConnectControl({
     const auth = { ...(credentials ? { credentials } : {}), ...(params ? { params } : {}) };
     try {
       const connection = reconnectConnectionId
-        ? await reconnectMutation.mutateAsync({ connectionId: reconnectConnectionId, ...auth })
+        ? await reconnectMutation.mutateAsync({
+            connectionId: reconnectConnectionId,
+            ...(credentials ? { credentials } : {}),
+          })
         : await connectMutation.mutateAsync(auth);
       setCollectingApiKey(false);
       if (connection) {
@@ -166,6 +171,7 @@ export function ProviderConnectControl({
           provider={provider}
           title={label}
           pending={pending}
+          reconnecting={Boolean(reconnectConnectionId)}
           onSubmit={(apiKey, params) => void run({ apiKey }, params)}
           onClose={() => setCollectingApiKey(false)}
         />

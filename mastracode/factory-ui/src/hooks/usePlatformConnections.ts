@@ -107,16 +107,14 @@ export function useReconnectPlatformProviderMutation(provider: PlatformConnectPr
   const { baseUrl } = useApiConfig();
   const invalidate = useInvalidateProviderState(provider);
   return useMutation({
-    mutationFn: async (input: {
-      connectionId: string;
-      credentials?: Record<string, string>;
-      params?: Record<string, string>;
-    }) => {
+    mutationFn: async (input: { connectionId: string; credentials?: Record<string, string> }) => {
       const session = await createPlatformReconnectSession(baseUrl, provider, input.connectionId);
+      // A reconnect renews the credential only: connection settings come from
+      // the server, so the connection cannot be moved to another instance.
       await runHeadlessAuth({
         session,
         ...(input.credentials ? { credentials: input.credentials } : {}),
-        ...(input.params ? { params: input.params } : {}),
+        ...(session.params ? { params: session.params } : {}),
       });
       return waitForActiveConnection(baseUrl, provider, input.connectionId);
     },
