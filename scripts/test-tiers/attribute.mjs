@@ -151,9 +151,10 @@ const PR_COMMITS_LIMIT = 250;
 const COAUTHOR = /^co-authored-by:.*<(?:\d+\+)?([^@<>\s]+)@users\.noreply\.github\.com>\s*$/gim;
 
 /**
- * Who answers for a PR a bot opened: the person who merged it, else every person whose latest
- * review approved it, else the person credited on the most commits (as author or in a
- * Co-authored-by trailer with a GitHub noreply address; ties go to all). None: `logins` is empty.
+ * Who answers for a PR a bot or a person missing from the Slack map opened: the person who
+ * merged it, else every person whose latest review approved it, else the person credited on the
+ * most commits (as author or in a Co-authored-by trailer with a GitHub noreply address; ties go
+ * to all). None: `logins` is empty.
  * A lookup that failed is passed as null (or undefined for the merger) and its rung is skipped.
  */
 export function standIns({ mergedBy, reviews, commits }) {
@@ -191,10 +192,15 @@ export function alertMessages({ repo, runUrl, good, bad, reason, slackUsers, res
     const pr = prs[sha];
     const files = list.map(r => code(r.file)).join(', ');
     const tag = login => (slackUsers[login] ? `<@${slackUsers[login]}>` : `@${escapeMrkdwn(login)}`);
-    const stand = pr?.standIns?.logins.length
-      ? `, ${pr.standIns.role} ${pr.standIns.logins.map(tag).join(', ')}`
-      : ', no person found on the PR <!here>';
-    const by = !pr?.author ? '' : pr.bot ? ` by ${escapeMrkdwn(pr.author)} (bot)${stand}` : ` by ${tag(pr.author)}`;
+    const others = pr?.standIns?.logins.filter(login => login !== pr.author) ?? [];
+    const stand = others.length ? `, ${pr.standIns.role} ${others.map(tag).join(', ')}` : '';
+    const by = !pr?.author
+      ? ''
+      : pr.bot
+        ? ` by ${escapeMrkdwn(pr.author)} (bot)${stand || ', no person found on the PR <!here>'}`
+        : slackUsers[pr.author]
+          ? ` by ${tag(pr.author)}`
+          : ` by ${tag(pr.author)}${stand}`;
     const merge = pr
       ? `<https://github.com/${repo}/pull/${pr.number}|#${pr.number}> "${escapeMrkdwn(pr.title)}"${by}`
       : `<https://github.com/${repo}/commit/${sha}|${sha.slice(0, 7)}>`;
@@ -376,7 +382,7 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
     if (r.culprit in prs) continue;
     const subject = git('log', '-1', '--format=%s', r.culprit);
     const pr = prForCommit(gh(`repos/${repo}/commits/${r.culprit}/pulls`), subject);
-    if (pr?.bot) {
+    if (pr?.bot || (pr?.author && !users[pr.author])) {
       const lookup = (what, fn, unknown) => {
         try {
           return fn();

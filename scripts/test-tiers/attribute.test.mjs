@@ -245,6 +245,76 @@ test('one message per culprit PR; mapped authors are tagged, bots and unmapped a
   assert.match(unmapped[0], /by @tony\./);
 });
 
+test('an unmapped person who opened the PR is named, and whoever merged it is tagged', () => {
+  const ctx = {
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    good: 'g000000000',
+    bad: 'b000000000',
+    results: [{ file: 'a.test.ts', verdict: 'culprit', culprit: 'c1111111111', parent: 'p' }],
+    jobs: [],
+  };
+  const pr = { number: 1, title: 't', author: 'daneatmastra', bot: false };
+  const [merged] = alertMessages({
+    ...ctx,
+    slackUsers: { NikAiyer: 'U085YNHJM7Y' },
+    prs: { c1111111111: { ...pr, standIns: { role: 'merged by', logins: ['NikAiyer'] } } },
+  });
+  assert.match(merged, /by @daneatmastra, merged by <@U085YNHJM7Y>\./);
+
+  const [unmappedMerger] = alertMessages({
+    ...ctx,
+    slackUsers: {},
+    prs: { c1111111111: { ...pr, standIns: { role: 'merged by', logins: ['NikAiyer'] } } },
+  });
+  assert.match(unmappedMerger, /by @daneatmastra, merged by @NikAiyer\./);
+
+  const [selfMerged] = alertMessages({
+    ...ctx,
+    slackUsers: {},
+    prs: { c1111111111: { ...pr, standIns: { role: 'merged by', logins: ['daneatmastra'] } } },
+  });
+  assert.match(selfMerged, /by @daneatmastra\./);
+
+  const [nobody] = alertMessages({
+    ...ctx,
+    slackUsers: {},
+    prs: { c1111111111: { ...pr, standIns: { role: null, logins: [] } } },
+  });
+  assert.match(nobody, /by @daneatmastra\./);
+  assert.doesNotMatch(nobody, /<!here>/);
+});
+
+test('a mapped person who opened the PR is tagged alone', () => {
+  const [message] = alertMessages({
+    repo: 'mastra-ai/mastra',
+    runUrl: 'https://run',
+    slackUsers: { tony: 'U1', NikAiyer: 'U085YNHJM7Y' },
+    results: [{ file: 'a.test.ts', verdict: 'culprit', culprit: 'c1111111111', parent: 'p' }],
+    jobs: [],
+    prs: {
+      c1111111111: {
+        number: 1,
+        title: 't',
+        author: 'tony',
+        bot: false,
+        standIns: { role: 'merged by', logins: ['NikAiyer'] },
+      },
+    },
+  });
+  assert.match(message, /by <@U1>\./);
+});
+
+test('the Slack map tags Nik and the active committers found in Slack', () => {
+  const users = JSON.parse(fs.readFileSync(new URL('../../.github/slack-users.json', import.meta.url), 'utf8'));
+  assert.equal(users.NikAiyer, 'U085YNHJM7Y');
+  assert.equal(users['shreyas-mastra'], 'U0BVCSJ18MR');
+  assert.equal(users.YujohnNattrass, 'U08C10D1ETH');
+  assert.equal(users.PaulieScanlon, 'U08SDV7MY05');
+  assert.equal(users.labifrancis, 'U0BA2UQG7GU');
+  assert.equal(users.internetburrito, 'U0B583A0LR5');
+});
+
 test('unconfirmed files and escaped jobs go in one unattributed message with the range', () => {
   const messages = alertMessages({
     repo: 'mastra-ai/mastra',
