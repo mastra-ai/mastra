@@ -3,7 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
@@ -1834,7 +1834,11 @@ describe('FactoryPhaseStateProcessor', () => {
       patch: { parentWorkItemId: epic.item.id },
     });
     await card('Unrelated work', 'github-issue:11');
+    // Children created in the same millisecond tie on creation time; space them so "newest first" is decided.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() });
+    onTestFinished(() => void vi.useRealTimers());
     await card('Older child', 'github-issue:12', prepared.item.id);
+    vi.setSystemTime(Date.now() + 1_000);
     await card('Newer child', 'github-issue:13', prepared.item.id);
     const listShared = vi.spyOn(storage, 'listShared');
 
