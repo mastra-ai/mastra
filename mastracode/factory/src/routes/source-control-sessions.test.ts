@@ -49,6 +49,7 @@ function buildApp(
   viewer: Viewer | ((headers: Headers) => Viewer) = user,
   moveThread?: RouteOptions['moveThread'],
   renameThread?: RouteOptions['renameThread'],
+  isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>,
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -59,7 +60,7 @@ function buildApp(
   mountApiRoutes(
     app as never,
     buildSourceControlSessionRoutes({
-      auth: fakeRouteAuth(),
+      auth: fakeRouteAuth({ isOrganizationAdmin }),
       sourceControls,
       projects,
       memorySettings,
@@ -932,8 +933,19 @@ describe('source-control session routes', () => {
       hasRunBindingForSession: async ({ sessionId }) => sessionId === 'factory-run',
     };
     const owner = buildApp([sourceControl], seed, controller, workItems);
-    const teammate = buildApp([sourceControl], seed, controller, workItems, {
-      workosId: 'user-2',
+    const notAdmin = async () => false;
+    const teammate = buildApp(
+      [sourceControl],
+      seed,
+      controller,
+      workItems,
+      { workosId: 'user-2', organizationId: 'org-1' },
+      undefined,
+      undefined,
+      notAdmin,
+    );
+    const adminTeammate = buildApp([sourceControl], seed, controller, workItems, {
+      workosId: 'user-3',
       organizationId: 'org-1',
     });
     const capabilities = async (app: Hono, sessionId: string) => {
@@ -948,6 +960,7 @@ describe('source-control session routes', () => {
     expect(await offersTakeover(owner, 'user-session')).toBe(false);
     await expect(capabilities(teammate, 'user-session')).resolves.toMatchObject({ switchModel: false });
     await expect(capabilities(owner, 'user-session')).resolves.toMatchObject({ switchModel: true });
+    await expect(capabilities(adminTeammate, 'user-session')).resolves.toMatchObject({ switchModel: true });
     for (const sessionId of ['slack-thread', 'factory-run', 'side-session']) {
       expect(await offersTakeover(teammate, sessionId)).toBe(false);
       const refused = await takeOwnership(teammate, sessionId, 'user-1');
@@ -1968,7 +1981,7 @@ describe('session sandbox recreate', () => {
       expect(body.session.capabilities).toEqual({
         recreateSandbox: expected,
         takeOwnership: false,
-        switchModel: owner === 'user-1',
+        switchModel: owner === 'user-1' || (await isOrganizationAdmin()),
       });
     },
   );
