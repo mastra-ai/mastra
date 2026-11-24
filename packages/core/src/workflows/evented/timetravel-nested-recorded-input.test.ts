@@ -170,12 +170,9 @@ describe('evented time travel into a nested workflow step', () => {
       const result = await withTimeout(run.timeTravel({ step: ['inner', 'charge'] }));
 
       expect(result.status).toBe('success');
-      // Every replayed iteration runs in its own recorded child run, with its own recorded input.
-      expect(calls.map(call => call.input.n)).toContain(0);
-      for (const call of calls) {
-        expect(call.input).toEqual({ n: call.input.n, tag: `t${call.input.n}` });
-        expect(call.runId).toBe(recordedRunIds.get(call.input.n));
-      }
+      // Only the failed iteration re-runs, in its own recorded child run with its recorded input.
+      // Iterations that already succeeded keep their output and do not run again.
+      expect(calls).toEqual([{ input: { n: 0, tag: 't0' }, runId: recordedRunIds.get(0) }]);
       expect(result.status === 'success' && result.result).toEqual([
         { n: 0, tag: 't0' },
         { n: 1, tag: 't1' },

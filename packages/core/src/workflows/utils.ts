@@ -507,6 +507,25 @@ const nestedRunIdentity = (metadata: Record<string, any> | undefined) => {
   return Object.keys(identity).length > 0 ? identity : undefined;
 };
 
+// The evented engine keeps each foreach iteration's output in its own slot, but concurrent
+// iterations rewrite the whole per-iteration record list and can drop each other's entries.
+// Time travel replays every iteration without a success record, so fill those gaps from the
+// slots: a settled slot that is neither empty nor suspended holds a successful iteration.
+const withSettledForeachRecords = (suspendPayload: any, output: unknown) => {
+  const records = suspendPayload?.__workflow_meta?.foreachOutput;
+  if (!Array.isArray(records) || !Array.isArray(output)) return suspendPayload;
+  let changed = false;
+  const foreachOutput = output.map((slot: any, index) => {
+    const record = records[index];
+    if (record || slot === null || slot === undefined || slot?.status === 'suspended') return record ?? null;
+    changed = true;
+    return { status: 'success', output: slot };
+  });
+  return changed
+    ? { ...suspendPayload, __workflow_meta: { ...suspendPayload.__workflow_meta, foreachOutput } }
+    : suspendPayload;
+};
+
 export const createTimeTravelExecutionParams = (params: {
   steps: string[];
   inputData?: any;
@@ -622,7 +641,7 @@ export const createTimeTravelExecutionParams = (params: {
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
         resumePayload: stepContext?.resumePayload,
-        suspendPayload: stepContext?.suspendPayload,
+        suspendPayload: withSettledForeachRecords(stepContext?.suspendPayload, stepContext?.output),
         suspendOutput: stepContext?.suspendOutput,
         startedAt: stepContext?.startedAt ?? Date.now(),
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
