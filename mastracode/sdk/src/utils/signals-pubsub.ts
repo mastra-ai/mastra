@@ -21,6 +21,7 @@ const MAX_PATH_SEGMENT_LENGTH = 128;
 const MAX_SOCKET_PATH_BYTES = 104;
 // The longest name a socket in a scope directory gets: `/<16 hex>.sock`.
 const MAX_SOCKET_NAME_BYTES = 22;
+const HASHED_SCOPE_DIR = /^_h[0-9a-f]{16}$/;
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
 const IDLE_ACCEPTANCE_REPLY_TOPIC = new RegExp(`^agent\\.thread-stream\\..+\\.idle-acceptance\\.${UUID_PATTERN}$`, 'i');
@@ -404,11 +405,14 @@ class SignalsPubSub extends PubSub {
    * The absolute directory of a scope. A scope whose directory would leave no
    * room for a socket name within the path limit (a long resource id under a
    * long root such as macOS `$TMPDIR`) gets a hashed directory name instead;
-   * every process derives the same one.
+   * every process derives the same one. A scope that already looks like a
+   * hashed name is always hashed, so no scope can land in another one's
+   * hashed directory.
    */
   #scopeDir(scope: string): string {
     const dir = join(this.#rootDir, scope);
-    if (Buffer.byteLength(dir) + MAX_SOCKET_NAME_BYTES <= MAX_SOCKET_PATH_BYTES) return dir;
+    const fits = Buffer.byteLength(dir) + MAX_SOCKET_NAME_BYTES <= MAX_SOCKET_PATH_BYTES;
+    if (fits && !HASHED_SCOPE_DIR.test(scope)) return dir;
     return join(this.#rootDir, `_h${createHash('sha256').update(scope).digest('hex').slice(0, 16)}`);
   }
 
@@ -489,7 +493,13 @@ class SignalsPubSub extends PubSub {
       key = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)))
         .toString('hex')
         .slice(0, 16);
-      return join(dir, `${key}.sock`);
+      const hashed = join(dir, `${key}.sock`);
+      if (Buffer.byteLength(hashed) > MAX_SOCKET_PATH_BYTES) {
+        throw new Error(
+          `Signal socket root ${this.#rootDir} is too long for Unix socket paths (${MAX_SOCKET_PATH_BYTES} bytes). Set MASTRACODE_SIGNALS_SOCKET_ROOT to a shorter absolute path.`,
+        );
+      }
+      return hashed;
     }
     return candidate;
   }

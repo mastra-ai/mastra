@@ -723,6 +723,31 @@ describe('SignalsPubSub', () => {
       expect(socketPaths().some(path => path.startsWith('/tmp/mc/'))).toBe(false);
     });
 
+    it('never lets a resource id that looks like a hashed directory share a long resource id directory', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const macRoot = '/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/mc';
+      const longResourceId = 'my-company-internal-platform-service-0123456789ab';
+      const long = createSignalsPubSub(longResourceId, { rootDir: macRoot });
+      await long.publish('workflows', event);
+      const hashedDir = socketPaths()[0]!.slice(0, socketPaths()[0]!.lastIndexOf('/'));
+      const lookalikeResourceId = hashedDir.slice(macRoot.length + 1);
+      expect(lookalikeResourceId).toMatch(/^_h[0-9a-f]{16}$/);
+
+      const lookalike = createSignalsPubSub(lookalikeResourceId, { rootDir: macRoot });
+      await lookalike.publish('workflows', event);
+
+      const lookalikeDir = socketPaths().at(-1)!.slice(0, socketPaths().at(-1)!.lastIndexOf('/'));
+      expect(lookalikeDir).toMatch(new RegExp(`^${macRoot}/_h[0-9a-f]{16}$`));
+      expect(lookalikeDir).not.toBe(hashedDir);
+    });
+
+    it('rejects a socket root too long to fit any socket path', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { rootDir: `/tmp/${'r'.repeat(90)}` });
+
+      await expect(pubsub.publish('workflows', event)).rejects.toThrow(/MASTRACODE_SIGNALS_SOCKET_ROOT/);
+    });
+
     it('keeps every socket path within the 104-byte limit for a long resource id under a macOS-length root', async () => {
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
       // `$TMPDIR/mc` on macOS is about 52 bytes.

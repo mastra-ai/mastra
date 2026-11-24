@@ -1,4 +1,4 @@
-import { open, unlink } from 'node:fs/promises';
+import { mkdir, open, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
@@ -538,7 +538,9 @@ async function runStaleLeaseTakeover() {
 async function runLeaseMutationHammer() {
   const leaseProvider = pubsub.getLeaseProvider();
   const leaseKey = 'mutation-lock-hammer';
-  const criticalPath = join(resolveSignalsSocketRoot(), resourceId, 'mutation-lock-hammer.critical');
+  const criticalDir = join(resolveSignalsSocketRoot(), resourceId);
+  await mkdir(criticalDir, { recursive: true });
+  const criticalPath = join(criticalDir, 'mutation-lock-hammer.critical');
   const owner = `${role}:${process.pid}`;
   let acquisitions = 0;
   let overlaps = 0;

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolveSignalsSocketRoot } from '../signals-socket-root.js';
 
-const uid = process.getuid!();
+// Only read by the POSIX-only suites below; Windows has no getuid.
+const uid = process.getuid?.() ?? 0;
 
 describe.skipIf(process.platform === 'win32')('resolveSignalsSocketRoot', () => {
   let scratch: string;
