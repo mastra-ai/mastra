@@ -6,6 +6,7 @@ import type { MCPServerBase } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
 import type { ProgressNotification, Prompt, Resource, ResourceTemplateType } from '@modelcontextprotocol/client';
+import type { Skill, SkillFile } from '@modelcontextprotocol/client/ext/skills';
 import equal from 'fast-deep-equal';
 import { UnauthorizedError } from '../shared/oauth-types';
 import type { MCPDetailedTask, MCPTaskInputResponses } from '../shared/tasks';
@@ -683,6 +684,75 @@ To fix this you have three different options:
    * });
    * ```
    */
+  /**
+   * Agent Skills served by the configured servers over the MCP Skills extension (SEP-2640).
+   * Every file read is checked against the size and digest the server listed for it; a file
+   * that fails the check throws a `SkillVerificationError`. Loading a skill into an agent,
+   * and asking a user before doing so, is up to the caller.
+   *
+   * @example
+   * ```typescript
+   * const skills = await mcp.skills.list();
+   * const [skill] = skills.docsServer;
+   * const manifest = await mcp.skills.read('docsServer', skill);
+   * console.log(manifest.frontmatter, manifest.body);
+   * const reference = await mcp.skills.read('docsServer', skill, 'references/API.md');
+   * ```
+   */
+  public get skills() {
+    this.addToInstanceCache();
+    const call = async <T>(
+      id: Uppercase<string>,
+      serverName: string,
+      details: Record<string, string>,
+      fn: (client: InternalMastraMCPClient) => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await fn(await this.getConnectedClientForServer(serverName));
+      } catch (error) {
+        throw new MastraError(
+          { id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, details: { serverName, ...details } },
+          error,
+        );
+      }
+    };
+    return {
+      /**
+       * Lists the skills of every configured server. Servers without the extension list none;
+       * a server that fails is logged and left out.
+       */
+      list: async (): Promise<Record<string, Skill[]>> =>
+        (
+          await this.discoverValuesWithErrors(
+            async serverName => {
+              const { skills } = await this.getConnectedClientForServer(serverName);
+              return skills.supported ? (await skills.list()).skills : [];
+            },
+            { errorId: 'MCP_CLIENT_LIST_SKILLS_FAILED', logMessage: 'Failed to list skills from server:' },
+          )
+        ).values,
+      /** One skill entry by its `SKILL.md` URI. */
+      get: (serverName: string, uri: string): Promise<Skill> =>
+        call('MCP_CLIENT_GET_SKILL_FAILED', serverName, { uri }, async client => (await client.skills.get(uri)).skill),
+      /**
+       * Reads and verifies one file of a skill. `ref` is a path relative to the skill
+       * (`references/API.md`) or an absolute URI; the default is its `SKILL.md`, returned
+       * with its parsed `frontmatter` and `body`.
+       */
+      read: (serverName: string, skill: Skill, ref?: string): Promise<SkillFile> =>
+        call('MCP_CLIENT_READ_SKILL_FAILED', serverName, { uri: skill.uri, ref: ref ?? 'SKILL.md' }, client =>
+          client.skills.read(skill, ref),
+        ),
+      /** The direct children of a skill directory, on servers that support directory reads. */
+      readDirectory: async (serverName: string, uri: string) =>
+        (
+          await call('MCP_CLIENT_READ_SKILL_DIRECTORY_FAILED', serverName, { uri }, client =>
+            client.skills.readDirectory(uri),
+          )
+        ).resources,
+    };
+  }
+
   public get prompts() {
     this.addToInstanceCache();
     return {

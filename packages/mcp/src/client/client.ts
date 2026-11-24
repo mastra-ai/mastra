@@ -32,6 +32,7 @@ import type {
   VersionNegotiationMode,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
+import { SkillsClient } from '@modelcontextprotocol/client/ext/skills';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod/v4';
@@ -2172,6 +2173,14 @@ export class InternalMastraMCPClient extends MastraBase {
       });
       return undefined;
     }
+  }
+
+  private skillsClient?: SkillsClient;
+
+  /** Lists, gets and reads this server's Agent Skills (SEP-2640), verifying every file against its digest. */
+  get skills(): SkillsClient {
+    this.skillsClient ??= new SkillsClient(this.client);
+    return this.skillsClient;
   }
 
   /** Reads, answers and cancels this server's tasks (SEP-2663). */
