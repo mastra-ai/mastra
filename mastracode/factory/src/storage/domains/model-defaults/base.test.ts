@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ModelPack } from '../../../model-packs.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
 
 describe('ModelDefaultsStorage', () => {
@@ -74,7 +75,7 @@ describe('ModelDefaultsStorage', () => {
     expect(await seed.modelDefaults.get(user)).toBeNull();
 
     await seed.modelDefaults.set({ ...user, modelId: 'openai/gpt-5.6' });
-    expect(await seed.modelDefaults.get(user)).toMatchObject({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({ modelId: 'openai/gpt-5.6', thinkingLevel: 'medium' });
     expect(await seed.modelDefaults.setThinkingLevel({ ...user, thinkingLevel: 'high' })).toMatchObject({
       thinkingLevel: 'high',
     });
@@ -86,28 +87,72 @@ describe('ModelDefaultsStorage', () => {
       thinkingLevel: 'high',
     });
 
+    expect(await seed.modelDefaults.setThinkingLevel({ ...user, thinkingLevel: null })).toMatchObject({
+      thinkingLevel: 'medium',
+    });
+
     await seed.modelDefaults.clear(user);
     expect(await seed.modelDefaults.get(user)).toBeNull();
   });
 
-  it('personal fallback models need a personal model and survive a model change', async () => {
+  it('reads a row saved before packs as a single Default pack', async () => {
     const seed = await createFactoryStorageForTests();
     const user = { orgId: 'org-1', userId: 'user-1' };
-    const fallbackModelIds = ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'];
-
-    expect(await seed.modelDefaults.setFallbackModelIds({ ...user, fallbackModelIds })).toBeNull();
-    expect(await seed.modelDefaults.get(user)).toBeNull();
-
-    await seed.modelDefaults.set({ ...user, modelId: 'anthropic/claude-opus-5.5' });
-    expect(await seed.modelDefaults.get(user)).toMatchObject({ fallbackModelIds: [] });
-    expect(await seed.modelDefaults.setFallbackModelIds({ ...user, fallbackModelIds })).toMatchObject({
-      fallbackModelIds,
+    await seed.storage.ops.insertOne('user_default_models', {
+      org_id: 'org-1',
+      user_id: 'user-1',
+      model_id: 'anthropic/claude-opus-5.5',
+      thinking_level: 'high',
+      updated_at: new Date(),
     });
 
-    await seed.modelDefaults.set({ ...user, modelId: 'anthropic/claude-sonnet-5' });
     expect(await seed.modelDefaults.get(user)).toMatchObject({
-      modelId: 'anthropic/claude-sonnet-5',
-      fallbackModelIds,
+      modelId: 'anthropic/claude-opus-5.5',
+      thinkingLevel: 'high',
+      modelPacks: [
+        { id: 'default', name: 'Default', models: [{ modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'high' }] },
+      ],
+      defaultModelPackId: 'default',
     });
+  });
+
+  it('stores personal packs, mirrors the default pack into the default model, and deletes the row when empty', async () => {
+    const seed = await createFactoryStorageForTests();
+    const user = { orgId: 'org-1', userId: 'user-1' };
+    const build: ModelPack = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      ],
+    };
+    const cheap: ModelPack = {
+      id: 'cheap',
+      name: 'Cheap',
+      models: [{ modelId: 'deepseek/deepseek-flash', thinkingLevel: 'low' }],
+    };
+
+    expect(
+      await seed.modelDefaults.setModelPacks({ ...user, modelPacks: [build, cheap], defaultModelPackId: 'cheap' }),
+    ).toMatchObject({ modelId: 'deepseek/deepseek-flash', thinkingLevel: 'low', defaultModelPackId: 'cheap' });
+
+    await seed.modelDefaults.setModelPacks({ ...user, modelPacks: [build, cheap], defaultModelPackId: 'build' });
+    await seed.modelDefaults.set({ ...user, modelId: 'openai/gpt-5.6-sol' });
+    expect(await seed.modelDefaults.get(user)).toMatchObject({
+      modelId: 'openai/gpt-5.6-sol',
+      thinkingLevel: 'medium',
+      modelPacks: [{ ...build, models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' }] }, cheap],
+      defaultModelPackId: 'build',
+    });
+
+    await seed.modelDefaults.setThinkingLevel({ ...user, thinkingLevel: 'max' });
+    expect((await seed.modelDefaults.get(user))?.modelPacks[0]?.models[0]).toEqual({
+      modelId: 'openai/gpt-5.6-sol',
+      thinkingLevel: 'max',
+    });
+
+    expect(await seed.modelDefaults.setModelPacks({ ...user, modelPacks: [], defaultModelPackId: null })).toBeNull();
+    expect(await seed.modelDefaults.get(user)).toBeNull();
   });
 });

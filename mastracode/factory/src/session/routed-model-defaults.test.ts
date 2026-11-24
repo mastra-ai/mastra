@@ -1,10 +1,11 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ModelPack, ModelPackSet } from '../model-packs.js';
 import type { FactoryModelScope } from '../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createSourceControlSessionLookup } from './factory-session.js';
-import { resolveRoutedModelDefaults } from './routed-model-defaults.js';
+import { resolveRoutedModelDefaults, resolveSessionModelFallbacks } from './routed-model-defaults.js';
 import type { RoutedModelDefaults } from './routed-model-defaults.js';
 
 function contextFor(controller: Record<string, unknown> | undefined, userId: string | null = 'owner') {
@@ -15,6 +16,26 @@ function contextFor(controller: Record<string, unknown> | undefined, userId: str
 }
 
 const thinkingLevel = async (pending: Promise<RoutedModelDefaults>) => (await pending).thinkingLevel;
+
+const factoryPack: ModelPack = {
+  id: 'factory-build',
+  name: 'Build',
+  models: [
+    { modelId: 'deepseek/deepseek-flash', thinkingLevel: 'low' },
+    { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+    { modelId: 'google/gemini-3.8-flash', thinkingLevel: 'medium' },
+  ],
+};
+const factoryPacks: ModelPackSet = { modelPacks: [factoryPack], defaultModelPackId: 'factory-build' };
+const ownerPack: ModelPack = {
+  id: 'owner-build',
+  name: 'Mine',
+  models: [
+    { modelId: 'anthropic/claude-opus-4-6', thinkingLevel: 'high' },
+    { modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'medium' },
+  ],
+};
+const noPacks: ModelPackSet = { modelPacks: [], defaultModelPackId: null };
 
 async function setup(
   modelScope: FactoryModelScope = 'hybrid',
@@ -29,7 +50,7 @@ async function setup(
   const project = (await seed.projects.update({
     orgId: 'org-1',
     id: created.id,
-    input: { defaultThinkingLevel: 'low', fallbackModelIds: ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'] },
+    input: { modelPackSet: factoryPacks },
   }))!;
   const sourceControl = seed.sourceControl.forIntegration('github');
   if (withSourceSession) {
@@ -64,15 +85,16 @@ async function setup(
       visibility: 'org',
     });
   }
-  await seed.modelDefaults.set({ orgId: 'org-1', userId: 'owner', modelId: 'anthropic/claude-opus-4-6' });
   if (ownerLevel) {
-    await seed.modelDefaults.setThinkingLevel({ orgId: 'org-1', userId: 'owner', thinkingLevel: ownerLevel });
+    await seed.modelDefaults.setModelPacks({
+      orgId: 'org-1',
+      userId: 'owner',
+      modelPacks: [ownerPack],
+      defaultModelPackId: ownerPack.id,
+    });
+  } else {
+    await seed.modelDefaults.set({ orgId: 'org-1', userId: 'owner', modelId: 'anthropic/claude-opus-4-6' });
   }
-  await seed.modelDefaults.setFallbackModelIds({
-    orgId: 'org-1',
-    userId: 'owner',
-    fallbackModelIds: ['anthropic/claude-sonnet-4-6'],
-  });
   await seed.modelDefaults.set({ orgId: 'org-1', userId: 'viewer', modelId: 'openai/gpt-5.5' });
   await seed.modelDefaults.setThinkingLevel({ orgId: 'org-1', userId: 'viewer', thinkingLevel: 'max' });
   const deps = {
@@ -137,10 +159,7 @@ describe('resolveRoutedModelDefaults', () => {
     const getById = vi.spyOn(deps.projects, 'getById');
     const chat = () => contextFor({ sessionId: 'session-1', resourceId: 'session-1', threadId: 'chat-thread' });
     const request = chat();
-    const factoryDefaults = {
-      thinkingLevel: 'low',
-      fallbackModelIds: ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'],
-    };
+    const factoryDefaults = { thinkingLevel: 'low', modelPackSet: factoryPacks };
 
     expect(await resolveRoutedModelDefaults(request, deps)).toEqual(factoryDefaults);
     const reads = getById.mock.calls.length;
@@ -152,18 +171,18 @@ describe('resolveRoutedModelDefaults', () => {
     expect(getById).toHaveBeenCalledTimes(2 * reads);
   });
 
-  it("falls back to the owner's personal fallback models in a personally routed chat", async () => {
+  it("routes a personally routed chat to the owner's personal packs", async () => {
     const { resolveDefaults } = await setup('hybrid');
-    expect((await resolveDefaults('chat-thread')).fallbackModelIds).toEqual(['anthropic/claude-sonnet-4-6']);
+    expect((await resolveDefaults('chat-thread')).modelPackSet).toEqual({
+      modelPacks: [ownerPack],
+      defaultModelPackId: 'owner-build',
+    });
   });
 
-  it("falls back to the Factory's fallback models, in order, in a Factory-routed work-item run", async () => {
+  it("routes a Factory-routed work-item run to the Factory's packs", async () => {
     const { resolveDefaults, bindRunThread } = await setup('hybrid');
     await bindRunThread();
-    expect((await resolveDefaults('run-thread')).fallbackModelIds).toEqual([
-      'openai/gpt-5.6-sol',
-      'google/gemini-3.8-flash',
-    ]);
+    expect((await resolveDefaults('run-thread')).modelPackSet).toEqual(factoryPacks);
   });
 
   it.each(['user', 'hybrid'] as const)(
@@ -188,7 +207,13 @@ describe('resolveRoutedModelDefaults', () => {
   it("starts a Factory-page chat at the viewer's level on personal routing", async () => {
     const { project, deps } = await setup('hybrid', { withSourceSession: false });
     const page = contextFor({ sessionId: project.id, resourceId: project.id }, 'viewer');
-    expect(await resolveRoutedModelDefaults(page, deps)).toEqual({ thinkingLevel: 'max', fallbackModelIds: [] });
+    expect(await resolveRoutedModelDefaults(page, deps)).toEqual({
+      thinkingLevel: 'max',
+      modelPackSet: {
+        modelPacks: [{ id: 'default', name: 'Default', models: [{ modelId: 'openai/gpt-5.5', thinkingLevel: 'max' }] }],
+        defaultModelPackId: 'default',
+      },
+    });
   });
 
   it('starts a Factory-page chat at the Factory level on Factory routing', async () => {
@@ -203,7 +228,7 @@ describe('resolveRoutedModelDefaults', () => {
     expect(await thinkingLevel(resolveRoutedModelDefaults(unsigned, deps))).toBe('low');
   });
 
-  it("starts a personal-routed chat at medium with no fallbacks when the personal defaults can't be read", async () => {
+  it("starts a personal-routed chat at medium with no packs when the personal defaults can't be read", async () => {
     const { deps } = await setup('hybrid');
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const failing = {
@@ -216,12 +241,12 @@ describe('resolveRoutedModelDefaults', () => {
       },
     };
     const chat = contextFor({ sessionId: 'session-1', resourceId: 'session-1', threadId: 'chat-thread' });
-    expect(await resolveRoutedModelDefaults(chat, failing)).toEqual({ thinkingLevel: 'medium', fallbackModelIds: [] });
+    expect(await resolveRoutedModelDefaults(chat, failing)).toEqual({ thinkingLevel: 'medium', modelPackSet: noPacks });
   });
 
-  it('uses medium and no fallbacks outside any Factory and when the lookup fails', async () => {
+  it('uses medium and no packs outside any Factory and when the lookup fails', async () => {
     const { deps } = await setup('hybrid', { withSourceSession: false });
-    const unrouted = { thinkingLevel: 'medium', fallbackModelIds: [] };
+    const unrouted = { thinkingLevel: 'medium', modelPackSet: noPacks };
     expect(await resolveRoutedModelDefaults(undefined, deps)).toEqual(unrouted);
     expect(await resolveRoutedModelDefaults(contextFor(undefined), deps)).toEqual(unrouted);
     expect(await resolveRoutedModelDefaults(contextFor({ sessionId: 'user-1', resourceId: 'user-1' }), deps)).toEqual(
@@ -241,5 +266,51 @@ describe('resolveRoutedModelDefaults', () => {
       await resolveRoutedModelDefaults(contextFor({ sessionId: 'session-1', resourceId: 'session-1' }), failing),
     ).toEqual(unrouted);
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('resolveSessionModelFallbacks', () => {
+  const reviewPack: ModelPack = {
+    id: 'factory-review',
+    name: 'Review',
+    models: [
+      { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+      { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'xhigh' },
+    ],
+  };
+
+  async function fallbacksFor(modelId: string, sessionPackId?: string) {
+    const { project, deps } = await setup('factory');
+    await deps.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { modelPackSet: { modelPacks: [factoryPack, reviewPack], defaultModelPackId: factoryPack.id } },
+    });
+    const chat = contextFor({
+      sessionId: 'session-1',
+      resourceId: 'session-1',
+      threadId: 'chat-thread',
+      session: { modelId },
+      getThreadSetting: async (key: string) => (key === 'factoryModelPackId' ? sessionPackId : undefined),
+    });
+    return resolveSessionModelFallbacks(chat, deps);
+  }
+
+  it("falls back through the default pack when the session never picked one and is on that pack's model", async () => {
+    expect(await fallbacksFor('deepseek/deepseek-flash')).toEqual([
+      { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      { modelId: 'google/gemini-3.8-flash', thinkingLevel: 'medium' },
+    ]);
+  });
+
+  it('falls back through the pack the session picked, with that pack thinking levels', async () => {
+    expect(await fallbacksFor('anthropic/claude-opus-5.5', 'factory-review')).toEqual([
+      { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'xhigh' },
+    ]);
+  });
+
+  it("has no fallbacks once the session switched off its pack's model", async () => {
+    expect(await fallbacksFor('openai/gpt-5.5', 'factory-review')).toEqual([]);
+    expect(await fallbacksFor('openai/gpt-5.5')).toEqual([]);
   });
 });

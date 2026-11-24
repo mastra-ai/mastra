@@ -194,7 +194,7 @@ import { hydrateSessionMemorySettings } from './session/memory-settings-hydratio
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
-import { resolveRoutedModelDefaults } from './session/routed-model-defaults.js';
+import { resolveRoutedModelDefaults, resolveSessionModelFallbacks } from './session/routed-model-defaults.js';
 import { observeSessionRunEnd, waitForSessionRunAudit } from './session/run-audit.js';
 import { recordRunRepositoryChoice, selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
@@ -1800,13 +1800,14 @@ export class MastraFactory {
       requestContext.set('mastra__factoryMemorySettings', record);
     };
     // Thinking and fallback defaults come from the session's defaults set, never the host's settings.json.
+    const routedDefaultsDeps = {
+      projects: factoryProjectsStorage,
+      sourceControl: sourceControlSessions,
+      workItems: workItemsStorage,
+      modelDefaults: modelDefaultsStorage,
+    };
     const resolveRoutedDefaults = (requestContext: RequestContext | undefined) =>
-      resolveRoutedModelDefaults(requestContext, {
-        projects: factoryProjectsStorage,
-        sourceControl: sourceControlSessions,
-        workItems: workItemsStorage,
-        modelDefaults: modelDefaultsStorage,
-      });
+      resolveRoutedModelDefaults(requestContext, routedDefaultsDeps);
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
@@ -1945,8 +1946,7 @@ export class MastraFactory {
         subagents: [],
         resolveDefaultThinkingLevel: async ({ requestContext }) =>
           (await resolveRoutedDefaults(requestContext)).thinkingLevel,
-        resolveModelFallbacks: async ({ requestContext }) =>
-          (await resolveRoutedDefaults(requestContext)).fallbackModelIds.map(modelId => ({ modelId })),
+        resolveModelFallbacks: ({ requestContext }) => resolveSessionModelFallbacks(requestContext, routedDefaultsDeps),
         workspace: createWorkspaceFactory({
           skills: this.#skills,
           ...(storage.isDomainReady('skill-overrides') ? { skillOverrides: skillOverridesStorage } : {}),

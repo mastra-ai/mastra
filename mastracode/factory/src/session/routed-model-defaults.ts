@@ -3,6 +3,8 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { DEFAULT_THINKING_LEVEL } from '../default-thinking-level.js';
+import { activeModelPack, EMPTY_MODEL_PACK_SET, FACTORY_MODEL_PACK_SETTING } from '../model-packs.js';
+import type { ModelPackModel, ModelPackSet } from '../model-packs.js';
 import { UUID_PATTERN } from '../routes/contracts.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from './credential-policy.js';
@@ -16,10 +18,13 @@ interface RoutedModelDefaultsDependencies extends FactoryModelPolicyDependencies
 
 export interface RoutedModelDefaults {
   thinkingLevel: ThinkingLevelSetting;
-  fallbackModelIds: readonly string[];
+  modelPackSet: ModelPackSet;
 }
 
-const UNROUTED_DEFAULTS: RoutedModelDefaults = { thinkingLevel: DEFAULT_THINKING_LEVEL, fallbackModelIds: [] };
+const UNROUTED_DEFAULTS: RoutedModelDefaults = {
+  thinkingLevel: DEFAULT_THINKING_LEVEL,
+  modelPackSet: EMPTY_MODEL_PACK_SET,
+};
 const readPerRequest = new WeakMap<RequestContext, Promise<RoutedModelDefaults>>();
 
 function sessionlessFactoryProjectId(controller: AgentControllerRequestContext): string | undefined {
@@ -38,7 +43,7 @@ async function unsignedFactoryProjectId(
   return sourceSession?.factoryProjectId ?? sessionlessFactoryProjectId(controller);
 }
 
-/** A session's unpicked thinking level and fallback models: those of the defaults set it routes to; unsigned requests get the Factory's. */
+/** A session's unpicked thinking level and model packs: those of the defaults set it routes to; unsigned requests get the Factory's. */
 export async function resolveRoutedModelDefaults(
   requestContext: RequestContext | undefined,
   deps: RoutedModelDefaultsDependencies,
@@ -61,12 +66,14 @@ async function readRoutedModelDefaults(
     const policy = await resolveFactoryModelPolicy(requestContext, deps);
     if (policy && policy.tenant.credentialScope !== 'factory') {
       const personalDefaults = await routedPersonalDefaults(policy.tenant, deps.modelDefaults).catch(error => {
-        console.warn('[factory] Could not read the personal model defaults; using medium and no fallbacks.', error);
+        console.warn('[factory] Could not read the personal model defaults; using medium and no model packs.', error);
         return null;
       });
       return {
         thinkingLevel: personalDefaults?.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
-        fallbackModelIds: personalDefaults?.fallbackModelIds ?? [],
+        modelPackSet: personalDefaults
+          ? { modelPacks: personalDefaults.modelPacks, defaultModelPackId: personalDefaults.defaultModelPackId }
+          : EMPTY_MODEL_PACK_SET,
       };
     }
     const factoryProjectId = policy
@@ -74,11 +81,30 @@ async function readRoutedModelDefaults(
       : await unsignedFactoryProjectId(controller, deps);
     const project = factoryProjectId ? await deps.projects.getById({ id: factoryProjectId }) : null;
     return project
-      ? { thinkingLevel: project.defaultThinkingLevel, fallbackModelIds: project.fallbackModelIds }
+      ? {
+          thinkingLevel: project.defaultThinkingLevel,
+          modelPackSet: { modelPacks: project.modelPacks, defaultModelPackId: project.defaultModelPackId },
+        }
       : UNROUTED_DEFAULTS;
   } catch (error) {
     // A missed lookup costs reasoning depth and fallbacks, not the run.
-    console.warn('[factory] Could not read the model defaults; using medium and no fallbacks.', error);
+    console.warn('[factory] Could not read the model defaults; using medium and no model packs.', error);
     return UNROUTED_DEFAULTS;
   }
+}
+
+export async function resolveSessionModelFallbacks(
+  requestContext: RequestContext | undefined,
+  deps: RoutedModelDefaultsDependencies,
+): Promise<ModelPackModel[]> {
+  const controller = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
+  if (!controller) return [];
+  const sessionPackId = await controller.getThreadSetting?.(FACTORY_MODEL_PACK_SETTING);
+  const { modelPackSet } = await resolveRoutedModelDefaults(requestContext, deps);
+  const pack = activeModelPack(
+    modelPackSet,
+    typeof sessionPackId === 'string' ? sessionPackId : null,
+    controller.session?.modelId,
+  );
+  return pack ? pack.models.slice(1) : [];
 }

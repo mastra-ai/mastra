@@ -1489,6 +1489,13 @@ describe('default model routes with a tenant', () => {
   const controller = makeAgentController([]);
   const userA = { workosId: 'user-a', organizationId: 'org1' };
   const userB = { workosId: 'user-b', organizationId: 'org1' };
+  const unset = { modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null };
+  const singleModelDefaults = (modelId: string, thinkingLevel: string) => ({
+    modelId,
+    thinkingLevel,
+    modelPacks: [{ id: 'default', name: 'Default', models: [{ modelId, thinkingLevel }] }],
+    defaultModelPackId: 'default',
+  });
 
   function buildApp(user: { workosId: string; organizationId?: string } | null, includeStorage = true) {
     const app = new Hono();
@@ -1536,7 +1543,7 @@ describe('default model routes with a tenant', () => {
   it('returns null when the user has no default model', async () => {
     const res = await buildApp(userA).request('/web/config/default-model');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ modelId: null, thinkingLevel: null, fallbackModelIds: [] });
+    expect(await res.json()).toEqual(unset);
   });
 
   it('validates and persists a default model per user', async () => {
@@ -1563,12 +1570,8 @@ describe('default model routes with a tenant', () => {
 
     const userAResponse = await buildApp(userA).request('/web/config/default-model');
     const userBResponse = await buildApp(userB).request('/web/config/default-model');
-    expect(await userAResponse.json()).toEqual({
-      modelId: 'openai/gpt-5.6',
-      thinkingLevel: null,
-      fallbackModelIds: [],
-    });
-    expect(await userBResponse.json()).toEqual({ modelId: null, thinkingLevel: null, fallbackModelIds: [] });
+    expect(await userAResponse.json()).toEqual(singleModelDefaults('openai/gpt-5.6', 'medium'));
+    expect(await userBResponse.json()).toEqual(unset);
   });
 
   it('saves a personal thinking level only next to a personal default model', async () => {
@@ -1589,59 +1592,74 @@ describe('default model routes with a tenant', () => {
     const saved = await putThinking({ thinkingLevel: 'high' });
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ ok: true, thinkingLevel: 'high' });
-    expect(await getDefaults(userA)).toEqual({
-      modelId: 'openai/gpt-5.6',
-      thinkingLevel: 'high',
-      fallbackModelIds: [],
-    });
-    expect(await getDefaults(userB)).toEqual({ modelId: null, thinkingLevel: null, fallbackModelIds: [] });
+    expect(await getDefaults(userA)).toEqual(singleModelDefaults('openai/gpt-5.6', 'high'));
+    expect(await getDefaults(userB)).toEqual(unset);
 
     const invalid = await putThinking({ thinkingLevel: 'enormous' });
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: 'Invalid thinkingLevel' });
-    expect(await getDefaults(userA)).toEqual({
-      modelId: 'openai/gpt-5.6',
-      thinkingLevel: 'high',
-      fallbackModelIds: [],
-    });
+    expect(await getDefaults(userA)).toEqual(singleModelDefaults('openai/gpt-5.6', 'high'));
 
     const reset = await putThinking({ thinkingLevel: null });
     expect(reset.status).toBe(200);
     expect(await reset.json()).toEqual({ ok: true, thinkingLevel: null });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null, fallbackModelIds: [] });
+    expect(await getDefaults(userA)).toEqual(singleModelDefaults('openai/gpt-5.6', 'medium'));
   });
 
-  it('saves personal fallback models only next to a personal default model', async () => {
-    const putFallbacks = (body: unknown) =>
-      buildApp(userA).request('/web/config/default-model/fallbacks', {
+  it('replaces the caller’s model packs and keeps the default model on the default pack', async () => {
+    const putPacks = (body: unknown) =>
+      buildApp(userA).request('/web/config/model-packs', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
     const getDefaults = async (user: typeof userA) =>
       (await buildApp(user).request('/web/config/default-model')).json();
-    const fallbackModelIds = ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'];
+    const build = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'high' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' },
+      ],
+    };
+    const quick = { id: 'quick', name: 'Quick', models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'low' }] };
 
-    const withoutModel = await putFallbacks({ fallbackModelIds });
-    expect(withoutModel.status).toBe(400);
-    expect(await withoutModel.json()).toEqual({ error: 'default_model_not_set' });
+    for (const invalid of [
+      { modelPacks: [build] },
+      { modelPacks: [build], defaultModelPackId: 'missing' },
+      { modelPacks: [build, { ...quick, name: 'build' }], defaultModelPackId: 'build' },
+      { modelPacks: [{ ...build, models: [...build.models, build.models[0]] }], defaultModelPackId: 'build' },
+    ]) {
+      const rejected = await putPacks(invalid);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toMatchObject({ error: 'invalid_model_packs' });
+    }
+    expect(await getDefaults(userA)).toEqual(unset);
 
-    await putDefault(buildApp(userA), { modelId: 'anthropic/claude-opus-5.5' });
-    const saved = await putFallbacks({ fallbackModelIds });
+    const saved = await putPacks({ modelPacks: [build, quick], defaultModelPackId: 'quick' });
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toEqual({ ok: true, fallbackModelIds });
-    expect(await getDefaults(userA)).toEqual({
-      modelId: 'anthropic/claude-opus-5.5',
-      thinkingLevel: null,
-      fallbackModelIds,
-    });
-    expect(await getDefaults(userB)).toEqual({ modelId: null, thinkingLevel: null, fallbackModelIds: [] });
+    const quickDefaults = {
+      modelId: 'openai/gpt-5.6-sol',
+      thinkingLevel: 'low',
+      modelPacks: [build, quick],
+      defaultModelPackId: 'quick',
+    };
+    expect(await saved.json()).toEqual(quickDefaults);
+    expect(await getDefaults(userA)).toEqual(quickDefaults);
+    expect(await getDefaults(userB)).toEqual(unset);
 
-    const duplicated = await putFallbacks({ fallbackModelIds: ['openai/gpt-5.6-sol', 'openai/gpt-5.6-sol'] });
-    expect(duplicated.status).toBe(400);
-    const tooMany = await putFallbacks({ fallbackModelIds: ['a/1', 'a/2', 'a/3', 'a/4'] });
-    expect(tooMany.status).toBe(400);
-    expect(await getDefaults(userA)).toMatchObject({ fallbackModelIds });
+    await putDefault(buildApp(userA), { modelId: 'google/gemini-3.8-flash' });
+    expect(await getDefaults(userA)).toEqual({
+      ...quickDefaults,
+      modelId: 'google/gemini-3.8-flash',
+      modelPacks: [build, { ...quick, models: [{ modelId: 'google/gemini-3.8-flash', thinkingLevel: 'low' }] }],
+    });
+
+    const emptied = await putPacks({ modelPacks: [], defaultModelPackId: null });
+    expect(emptied.status).toBe(200);
+    expect(await emptied.json()).toEqual(unset);
+    expect(await getDefaults(userA)).toEqual(unset);
   });
 
   it('clears a personal default model', async () => {

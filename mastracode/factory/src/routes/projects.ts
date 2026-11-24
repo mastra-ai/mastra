@@ -478,7 +478,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               ? 'model scope'
               : parsedBody.data.defaultThinkingLevel !== undefined
                 ? 'thinking default'
-                : undefined;
+                : parsedBody.data.modelPacks !== undefined
+                  ? 'model packs'
+                  : undefined;
           if (
             adminField &&
             this.deps.auth.enabled() &&
@@ -500,8 +502,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             autoRunEnabled: _autoRun,
             reviewTestChecksEnabled: _testChecks,
             selfReviewEnabled: _selfReview,
-            ...input
+            modelPacks,
+            defaultModelPackId,
+            ...fields
           } = parsedBody.data;
+          const input =
+            modelPacks !== undefined && defaultModelPackId !== undefined
+              ? { ...fields, modelPackSet: { modelPacks, defaultModelPackId } }
+              : fields;
           const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },

@@ -1285,36 +1285,69 @@ describe('ProjectRoutes', () => {
     expect(await invalidScope.json()).toEqual({ error: 'invalid_project' });
   });
 
-  it('saves an ordered list of up to three distinct fallback models on a project', async () => {
+  it('lets only an organization admin save model packs, sent together with a default pack that exists', async () => {
     const seed = await createFactoryStorageForTests();
+    const isOrganizationAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
-      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
       await next();
     });
-    mountApiRoutes(app as never, projectRoutes(seed));
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Valid' } });
-    const patchFallbacks = (fallbackModelIds: string[]) =>
+    const patch = (body: Record<string, unknown>) =>
       app.request(`/web/factory/projects/${project.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ fallbackModelIds }),
+        body: JSON.stringify(body),
       });
-    const fallbackModelIds = ['openai/gpt-5.6-sol', 'google/gemini-3.8-flash'];
+    const build = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      ],
+    };
+    const packs = { modelPacks: [build], defaultModelPackId: 'build' };
 
-    const saved = await patchFallbacks(fallbackModelIds);
+    const denied = await patch(packs);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: 'forbidden',
+      message: 'Organization administrator access is required to change the model packs.',
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.modelPacks).toEqual([]);
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    for (const body of [
+      { modelPacks: [build] },
+      { defaultModelPackId: 'build' },
+      { modelPacks: [build], defaultModelPackId: 'missing' },
+    ]) {
+      const rejected = await patch(body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({ error: 'invalid_project' });
+    }
+
+    const saved = await patch(packs);
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toMatchObject({ project: { fallbackModelIds } });
+    expect(await saved.json()).toMatchObject({
+      project: { ...packs, defaultModelId: 'anthropic/claude-opus-5.5', defaultThinkingLevel: 'medium' },
+    });
     const read = await app.request(`/web/factory/projects/${project.id}`);
-    expect(await read.json()).toMatchObject({ project: { fallbackModelIds } });
+    expect(await read.json()).toMatchObject({ project: packs });
 
-    const tooMany = await patchFallbacks(['a/1', 'a/2', 'a/3', 'a/4']);
-    expect(tooMany.status).toBe(400);
-    expect(await tooMany.json()).toEqual({ error: 'invalid_project' });
-    const duplicated = await patchFallbacks(['openai/gpt-5.6-sol', 'openai/gpt-5.6-sol']);
-    expect(duplicated.status).toBe(400);
-    expect(await duplicated.json()).toEqual({ error: 'invalid_project' });
-    expect((await seed.projects.getById({ id: project.id }))?.fallbackModelIds).toEqual(fallbackModelIds);
+    const renamedDefault = await patch({ defaultModelId: 'openai/gpt-5.6-sol' });
+    expect(await renamedDefault.json()).toMatchObject({
+      project: {
+        defaultModelId: 'openai/gpt-5.6-sol',
+        modelPacks: [{ ...build, models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' }] }],
+      },
+    });
   });
 
   describe('environment', () => {
