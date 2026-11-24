@@ -923,13 +923,23 @@ With cross-agent communication on, `agent_connections_list` lists Mastra Code in
 - When you pass your own `pubsub`.
 - When the resource ID, set through `MASTRA_RESOURCE_ID` or `resourceId` in `.mastracode/database.json`, can't be used as a directory name. That covers IDs that are empty, are longer than 128 characters, contain `/`, `\` or control characters, or equal `.`, `..` or `_shared`. Mastra Code logs one warning at startup, and the instance only lists instances that share its resource ID.
 
-Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project. Thread-owner lookup and peer discovery, which lists the threads you can connect to, both run in a shared `/tmp/mc/_shared` directory. Instances running versions before this change can't see or be seen by updated instances, so restart every instance after updating.
+Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project. Thread-owner lookup and peer discovery, which lists the threads you can connect to, both run in a shared `_shared` directory under the socket root described below. Instances running versions before this change can't see or be seen by updated instances, so restart every instance after updating.
 
 ### Security and socket isolation
 
 Any local process running as your user can list the threads your instances advertise and message them, so only turn on cross-agent communication on machines and accounts you trust.
 
-To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
+Signal sockets live in a directory that only your user can access:
+
+- On macOS, `mc` in `$TMPDIR`, or in your user's temporary directory when `$TMPDIR` is unset.
+- On Linux, `mc` in `$XDG_RUNTIME_DIR`, or in `/run/user/<uid>` when `$XDG_RUNTIME_DIR` is unset.
+- Otherwise, `/tmp/mc-<uid>`.
+
+Mastra Code creates the directory with mode `0700`. If the path is a symbolic link, belongs to another user, or other users can access it, Mastra Code refuses to use it, logs a warning at startup and runs without signals between instances. Earlier versions used a shared `/tmp/mc` directory. Instances on those versions can't reach updated instances or share their thread leases, so restart every instance after updating. Mastra Code doesn't remove an old `/tmp/mc` directory; you can delete it once no instance uses it.
+
+Every instance must resolve the same directory to reach the others. An instance started from a launch agent, `ssh` session or terminal multiplexer can see a different `$TMPDIR` or `$XDG_RUNTIME_DIR`. If instances can't see each other, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to the same path everywhere.
+
+To isolate an instance or a test from the default directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Mastra Code uses that path as given, without the ownership checks. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
 
 ## Telemetry
 

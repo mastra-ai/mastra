@@ -161,6 +161,7 @@ import {
 } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
+import { resolveSignalsSocketRoot } from './utils/signals-socket-root.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
@@ -743,9 +744,23 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =
     (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
+  // The socket root backs both the signals pubsub and the notification
+  // dispatch lease below. If it is unsafe (for example another user owns it),
+  // run without cross-process coordination rather than trust it.
+  let signalsSocketRoot: string | undefined;
+  if (!configuredPubSub && process.platform !== 'win32') {
+    try {
+      signalsSocketRoot = resolveSignalsSocketRoot();
+    } catch (error) {
+      console.warn(`Signals between Mastra Code instances are disabled: ${(error as Error).message}`);
+    }
+  }
   const ownSignalsPubSub =
-    !configuredPubSub && useUnixSocketPubSub
-      ? createSignalsPubSub(project.resourceId, { sharedAgentDiscovery: useCrossAgentSignals })
+    signalsSocketRoot && useUnixSocketPubSub
+      ? createSignalsPubSub(project.resourceId, {
+          sharedAgentDiscovery: useCrossAgentSignals,
+          rootDir: signalsSocketRoot,
+        })
       : undefined;
   const signalsPubSub = configuredPubSub ?? ownSignalsPubSub;
   const crossProcessPubSub = config?.crossProcessPubSub ?? Boolean(ownSignalsPubSub);
@@ -991,8 +1006,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // too; on Windows there is none, and each process dispatches unleased.
   const ownsNotificationDispatch = !configuredPubSub;
   const dispatchLeasePubSub =
-    ownsNotificationDispatch && !ownSignalsPubSub && process.platform !== 'win32'
-      ? createSignalsPubSub(project.resourceId)
+    ownsNotificationDispatch && !ownSignalsPubSub && signalsSocketRoot
+      ? createSignalsPubSub(project.resourceId, { rootDir: signalsSocketRoot })
       : undefined;
   const notificationDispatchLeases = ownsNotificationDispatch
     ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider()

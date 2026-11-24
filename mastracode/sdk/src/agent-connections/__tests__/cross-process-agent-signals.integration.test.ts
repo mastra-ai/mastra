@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { resolveSignalsSocketRoot } from '../../utils/signals-socket-root.js';
+
 const tsxBin = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
 const childScript = fileURLToPath(new URL('./fixtures/cross-process-agent-signals-child.mts', import.meta.url));
 const activeChildren = new Set<ReturnType<typeof spawn>>();
@@ -137,7 +139,9 @@ async function waitForChildEvent(
 
 describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix sockets', () => {
   const resourceId = `agent-signals-${randomUUID().slice(0, 8)}`;
-  const socketDir = `/tmp/mc/${resourceId}`;
+  // The children resolve the default socket root the same way this process does.
+  const socketRoot = resolveSignalsSocketRoot();
+  const socketDir = join(socketRoot, resourceId);
 
   afterEach(async () => {
     await Promise.all(
@@ -265,7 +269,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(observer.stderr).toBe('');
     expect(ownerCode).toBe(0);
     expect(observerCode).toBe(0);
-    rmSync(`/tmp/mc/${isolatedResourceId}`, { recursive: true, force: true });
+    rmSync(join(socketRoot, isolatedResourceId), { recursive: true, force: true });
   }, 30_000);
 
   it('keeps discovery reply sockets and descriptors flat across repeated lookups', async () => {

@@ -1,10 +1,12 @@
+import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { join } from 'node:path';
 
 import { PubSub, UnixSocketPubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 
-const DEFAULT_SOCKET_ROOT = '/tmp/mc';
+import { resolveSignalsSocketRoot } from './signals-socket-root.js';
+
 const SHARED_SCOPE_DIR = '_shared';
 const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
 const THREAD_KEY_SEPARATOR = '\0';
@@ -15,6 +17,10 @@ const OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const RESERVED_SOCKET_NAME = /^agent_thread-(?:peer|owner)-discovery(?:_|$)/i;
 const MAX_PATH_SEGMENT_LENGTH = 128;
+// macOS sun_path limit is 104 bytes; Linux is 108. Use 104 as the conservative bound.
+const MAX_SOCKET_PATH_BYTES = 104;
+// The longest name a socket in a scope directory gets: `/<16 hex>.sock`.
+const MAX_SOCKET_NAME_BYTES = 22;
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
 const IDLE_ACCEPTANCE_REPLY_TOPIC = new RegExp(`^agent\\.thread-stream\\..+\\.idle-acceptance\\.${UUID_PATTERN}$`, 'i');
@@ -35,16 +41,12 @@ export type SignalsPubSubOptions = {
    */
   sharedAgentDiscovery?: boolean;
   /**
-   * Directory that holds every resource's socket directory. Defaults to the
-   * absolute path in `MASTRACODE_SIGNALS_SOCKET_ROOT`, else `/tmp/mc`.
+   * Directory that holds every resource's socket directory. Defaults to
+   * {@link resolveSignalsSocketRoot}: the absolute path in
+   * `MASTRACODE_SIGNALS_SOCKET_ROOT`, else a directory only this user can use.
    */
   rootDir?: string;
 };
-
-function socketRootFromEnv(): string {
-  const root = process.env.MASTRACODE_SIGNALS_SOCKET_ROOT;
-  return root && isAbsolute(root) ? root : DEFAULT_SOCKET_ROOT;
-}
 
 /**
  * Whether an id can name a single directory: no path separators or control
@@ -148,8 +150,8 @@ function socketKey(dir: string, topic: string): string {
  * A PubSub that manages one Unix socket per topic for cross-process signal
  * coordination between mastracode processes on this machine.
  *
- * Socket paths use `<root>/<dir>/<sanitized-topic>.sock` (root `/tmp/mc`)
- * for inspectability and automatic OS cleanup. Each topic gets its own
+ * Socket paths use `<root>/<dir>/<sanitized-topic>.sock` (root from
+ * {@link resolveSignalsSocketRoot}) for inspectability and automatic OS cleanup. Each topic gets its own
  * socket, so broker election and message routing are per-topic.
  *
  * Every process shares one database, so any process can act on any project's
@@ -200,7 +202,7 @@ class SignalsPubSub extends PubSub {
   constructor(resourceId: string, options: SignalsPubSubOptions = {}) {
     super();
     this.#resourceId = resourceId;
-    this.#rootDir = options.rootDir ?? socketRootFromEnv();
+    this.#rootDir = options.rootDir ?? resolveSignalsSocketRoot();
     this.#sharedPeerDiscovery = Boolean(options.sharedAgentDiscovery) && this.#canShareDiscovery();
     // Created eagerly, as before, so this resource's lease socket exists from the start.
     this.#leasesFor(resourceId);
@@ -383,7 +385,7 @@ class SignalsPubSub extends PubSub {
   #leasesFor(resourceId: string): UnixSocketPubSub {
     let socket = this.#leaseSockets.get(resourceId);
     if (!socket) {
-      socket = new UnixSocketPubSub(join(this.#rootDir, resourceId, LEASE_SOCKET_NAME));
+      socket = new UnixSocketPubSub(join(this.#scopeDir(resourceId), LEASE_SOCKET_NAME));
       this.#leaseSockets.set(resourceId, socket);
     }
     return socket;
@@ -396,6 +398,18 @@ class SignalsPubSub extends PubSub {
     const decoded = decodeThreadTopic(topic);
     if (decoded !== undefined) return resourceOfThreadKey(decoded) ?? this.#resourceId;
     return this.#resourceId;
+  }
+
+  /**
+   * The absolute directory of a scope. A scope whose directory would leave no
+   * room for a socket name within the path limit (a long resource id under a
+   * long root such as macOS `$TMPDIR`) gets a hashed directory name instead;
+   * every process derives the same one.
+   */
+  #scopeDir(scope: string): string {
+    const dir = join(this.#rootDir, scope);
+    if (Buffer.byteLength(dir) + MAX_SOCKET_NAME_BYTES <= MAX_SOCKET_PATH_BYTES) return dir;
+    return join(this.#rootDir, `_h${createHash('sha256').update(scope).digest('hex').slice(0, 16)}`);
   }
 
   #retain(key: string): void {
@@ -466,13 +480,12 @@ class SignalsPubSub extends PubSub {
     if (decodeThreadTopic(topic) !== undefined && !isSafeFileName(key)) {
       throw new Error('Cannot route an agent thread topic whose threadId is not a safe file name');
     }
-    const dir = join(this.#rootDir, scope);
+    const dir = this.#scopeDir(scope);
     await mkdir(dir, { recursive: true });
     const candidate = join(dir, `${key}.sock`);
-    // macOS sun_path limit is 104 bytes; Linux is 108. Use 104 as the
-    // conservative bound. When the path is too long, replace the key with
-    // a short hash so the socket can still be created.
-    if (Buffer.byteLength(candidate) > 104) {
+    // When the path is too long, replace the key with a short hash so the
+    // socket can still be created.
+    if (Buffer.byteLength(candidate) > MAX_SOCKET_PATH_BYTES) {
       key = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)))
         .toString('hex')
         .slice(0, 16);
@@ -486,9 +499,9 @@ class SignalsPubSub extends PubSub {
  * Creates a per-topic PubSub backed by Unix sockets for cross-process signal
  * and workflow event coordination between mastracode processes.
  *
- * Topics live under `/tmp/mc/<resourceId>/`, except that a thread's stream and
+ * Topics live under `<root>/<resourceId>/`, except that a thread's stream and
  * leases live under its own resource's directory and thread-owner discovery
- * under `/tmp/mc/_shared/` (see {@link SignalsPubSub}). With
+ * under `<root>/_shared/` (see {@link SignalsPubSub}). With
  * `sharedAgentDiscovery`, peer discovery runs there too. Stale sockets from
  * crashed processes are handled by the underlying {@link UnixSocketPubSub}'s
  * broker election logic.

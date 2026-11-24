@@ -7,6 +7,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 
 import { createSignalsPubSub } from '../../../utils/signals-pubsub.js';
+import { resolveSignalsSocketRoot } from '../../../utils/signals-socket-root.js';
 import { createThreadOwnershipManager } from '../../ownership.js';
 import { AgentConnectionRegistry, stablePeerId } from '../../registry.js';
 import { createSessionThreadAdvertisement } from '../../session-advertisement.js';
@@ -537,7 +538,7 @@ async function runStaleLeaseTakeover() {
 async function runLeaseMutationHammer() {
   const leaseProvider = pubsub.getLeaseProvider();
   const leaseKey = 'mutation-lock-hammer';
-  const criticalPath = join('/tmp/mc', resourceId, 'mutation-lock-hammer.critical');
+  const criticalPath = join(resolveSignalsSocketRoot(), resourceId, 'mutation-lock-hammer.critical');
   const owner = `${role}:${process.pid}`;
   let acquisitions = 0;
   let overlaps = 0;
