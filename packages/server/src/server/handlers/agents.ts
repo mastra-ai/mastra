@@ -314,8 +314,13 @@ function hasEngineCheck(agent: Agent): boolean {
   return typeof (agent as unknown as { __hasDurableExecution?: unknown }).__hasDurableExecution === 'function';
 }
 
-/** Whether the agent itself resolved a core durable engine, as opposed to matching the wrapper shape. */
+/**
+ * Whether the agent is itself an `Agent` running on a core durable engine. The `instanceof` check
+ * keeps adapter proxies (Inngest) out: they forward unknown members to the agent they wrap, so the
+ * engine check alone reports the wrapped agent's engine, not the adapter's.
+ */
 function ownsDurableEngine(agent: Agent): boolean {
+  if (!(agent instanceof Agent)) return false;
   const native = agent as unknown as { __hasDurableExecution?: () => boolean };
   return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
 }
@@ -3216,10 +3221,10 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Agents running on a core durable engine (native or a core wrapper) subscribe for us so the
-      // client never sees what an execution that lost the run still publishes. Asked of the agent
-      // itself: an adapter proxy (Inngest) forwards this to the plain agent it wraps, which answers
-      // false, so it keeps reading its own transport below. A wrapper from a @mastra/core that
-      // predates engine selection has no engine check at all, so its shape decides.
+      // client never sees what an execution that lost the run still publishes. An adapter proxy
+      // (Inngest) is not an Agent, so it keeps reading its own transport below whatever engine the
+      // agent it wraps uses. A wrapper from a @mastra/core that predates engine selection has no
+      // engine check at all, so its shape decides.
       const fencedAgent =
         ownsDurableEngine(agent) || (durableAgent && !hasEngineCheck(agent))
           ? (agent as unknown as DurableAgentLike)
