@@ -38,14 +38,18 @@ describe('background tool in an evented agent run on a dedicated worker', () => 
   async function run(env: Record<string, string> = {}) {
     const ranBefore = worker!.stdout.split('tool-ran:').length;
     const api = spawnFixture({ entry: ENTRY, label: 'api', env: { ...sharedEnv, ...env, ROLE: 'api' } });
-    await waitForLine(api, 'tasks:');
-    await waitFor(async () => worker!.stdout.split('tool-ran:').length > ranBefore);
-    const toolRuns = [...worker!.stdout.matchAll(/tool-ran:(.*)/g)];
-    return {
-      chunkTypes: JSON.parse(api.stdout.match(/stream:(.*)/)![1]!),
-      tasks: JSON.parse(api.stdout.match(/tasks:(.*)/)![1]!),
-      toolRun: JSON.parse(toolRuns.at(-1)![1]!),
-    };
+    try {
+      await waitForLine(api, 'tasks:');
+      await waitFor(async () => worker!.stdout.split('tool-ran:').length > ranBefore);
+      const toolRuns = [...worker!.stdout.matchAll(/tool-ran:(.*)/g)];
+      return {
+        chunkTypes: JSON.parse(api.stdout.match(/stream:(.*)/)![1]!),
+        tasks: JSON.parse(api.stdout.match(/tasks:(.*)/)![1]!),
+        toolRun: JSON.parse(toolRuns.at(-1)![1]!),
+      };
+    } finally {
+      await killProcess(api);
+    }
   }
 
   it('runs the tool as a background task', async () => {

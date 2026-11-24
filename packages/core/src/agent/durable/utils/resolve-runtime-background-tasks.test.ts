@@ -83,13 +83,17 @@ describe.each(Object.entries(rebuilds))('rebuilding a run in %s on another proce
     const mastra = setup();
     await rebuild(mastra, { disableBackgroundTasks: true });
 
-    expect(getRunRegistryEntry(RUN_ID, mastra)?.backgroundTaskManager).toBeUndefined();
+    const entry = getRunRegistryEntry(RUN_ID, mastra);
+    expect(entry).toBeDefined();
+    expect(entry?.backgroundTaskManager).toBeUndefined();
   });
 
   it('keeps dispatch off when the run policy forbids tool dispatch', async () => {
     const mastra = setup();
     await rebuild(mastra, { backgroundTaskPolicy: { allowToolDispatch: false } });
 
-    expect(getRunRegistryEntry(RUN_ID, mastra)?.backgroundTaskManager).toBeUndefined();
+    const entry = getRunRegistryEntry(RUN_ID, mastra);
+    expect(entry).toBeDefined();
+    expect(entry?.backgroundTaskManager).toBeUndefined();
   });
 });
