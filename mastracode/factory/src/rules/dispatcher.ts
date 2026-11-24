@@ -50,11 +50,10 @@ import {
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
   listThreadOpenRuns,
-  readThreadRunEnd,
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
-import type { FactoryOpenRun, OpenRunLedger } from '../session/run-audit.js';
+import type { OpenRunLedger } from '../session/run-audit.js';
 import { sessionHoldsWork } from '../session/session-unloader.js';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
@@ -1826,13 +1825,11 @@ export class FactoryDecisionDispatcher {
             label: 'Factory skill run',
             runStillActive,
             storedRunEnd: async () => {
-              // The ledger first: a run's end is recorded before it leaves the ledger, so once the
-              // ledger read misses it, the end read after it cannot.
-              const open = this.#openRuns ? await listThreadOpenRuns(session, this.#openRuns, binding.threadId) : [];
-              const entry = open.find(run => run.kickoffId === deliveryId);
-              const ended = await readThreadRunEnd(session, binding.threadId, deliveryId);
-              if (ended) return ended.reason;
-              return entry && isOpenRunLiveElsewhere(entry, this.#ownerId) ? 'running' : undefined;
+              // The run's end and its owner's heartbeat sit on one row, so a single read sees
+              // either the end or the run still live; no end can land between two reads.
+              const stored = await this.#openRuns?.get(deliveryId);
+              if (stored?.end) return stored.end.reason;
+              return stored && isOpenRunLiveElsewhere(stored.run, this.#ownerId) ? 'running' : undefined;
             },
             stopRequested,
           });

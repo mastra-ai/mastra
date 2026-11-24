@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests, createSharedFactoryDatabaseForTests } from '../../test-utils.js';
-import type { FactoryOpenRun } from './base.js';
+import { FACTORY_RUN_END_RETENTION_MS } from './base.js';
+import type { FactoryOpenRun, OpenRunsStorage } from './base.js';
 
 function openRun(kickoffId: string, overrides: Partial<FactoryOpenRun> = {}): FactoryOpenRun {
   return {
@@ -20,6 +21,11 @@ function openRun(kickoffId: string, overrides: Partial<FactoryOpenRun> = {}): Fa
 }
 
 const LOST = openRun('kickoff-1', { ownerId: 'lost-worker', heartbeatAt: 1, startedAt: 1 });
+
+async function finish(openRuns: OpenRunsStorage, kickoffId: string, at = 100) {
+  await openRuns.end(kickoffId, { reason: 'complete', endedAt: at });
+  await openRuns.close({ kickoffId, threadId: 'thread-1' }, at);
+}
 
 async function replicas() {
   const database = await createSharedFactoryDatabaseForTests();
@@ -48,10 +54,49 @@ describe('OpenRunsStorage', () => {
 
     await expect(openRuns.heartbeat('kickoff-1', 'another-worker', 9)).resolves.toBe(false);
     await expect(openRuns.heartbeat('kickoff-1', 'lost-worker', 9)).resolves.toBe(true);
-    await openRuns.close('kickoff-1');
+    await openRuns.end('kickoff-1', { reason: 'complete', endedAt: 10 });
     await expect(openRuns.heartbeat('kickoff-1', 'lost-worker', 10)).resolves.toBe(false);
+    await openRuns.close(LOST, 10);
+    await expect(openRuns.heartbeat('kickoff-1', 'lost-worker', 11)).resolves.toBe(false);
 
     await expect(openRuns.listByThread('thread-1')).resolves.toEqual([]);
+  });
+
+  it('keeps the first end of a run, readable after the run leaves the ledger', async () => {
+    const { openRuns } = await createFactoryStorageForTests();
+    await openRuns.open(LOST);
+    await expect(openRuns.get('kickoff-1')).resolves.toEqual({ run: LOST });
+
+    await expect(openRuns.end('kickoff-1', { reason: 'error', endedAt: 10 })).resolves.toBe(true);
+    await expect(openRuns.end('kickoff-1', { reason: 'complete', endedAt: 11 })).resolves.toBe(false);
+    // Ended, but on the ledger until its end is on the audit log.
+    await expect(openRuns.listByThread('thread-1')).resolves.toEqual([LOST]);
+
+    await openRuns.close(LOST, 12);
+    await expect(openRuns.listByThread('thread-1')).resolves.toEqual([]);
+    await expect(openRuns.get('kickoff-1')).resolves.toEqual({ run: LOST, end: { reason: 'error', endedAt: 10 } });
+    await expect(openRuns.end('kickoff-unknown', { reason: 'complete', endedAt: 10 })).resolves.toBe(false);
+  });
+
+  it("prunes a thread's closed runs once they are past retention, keeping recent ones and other threads'", async () => {
+    const { openRuns } = await createFactoryStorageForTests();
+    const old = openRun('kickoff-old');
+    const recent = openRun('kickoff-recent');
+    const elsewhere = openRun('kickoff-elsewhere', { threadId: 'thread-2' });
+    const open = openRun('kickoff-open');
+    for (const run of [old, recent, elsewhere, open]) await openRuns.open(run);
+    for (const run of [old, elsewhere]) {
+      await openRuns.end(run.kickoffId, { reason: 'complete', endedAt: 1 });
+      await openRuns.close(run, 1);
+    }
+    const now = 1 + FACTORY_RUN_END_RETENTION_MS;
+    await openRuns.end(recent.kickoffId, { reason: 'aborted', endedAt: now });
+    await openRuns.close(recent, now);
+
+    await expect(openRuns.get(old.kickoffId)).resolves.toBeUndefined();
+    await expect(openRuns.get(recent.kickoffId)).resolves.toMatchObject({ end: { reason: 'aborted' } });
+    await expect(openRuns.get(elsewhere.kickoffId)).resolves.toMatchObject({ end: { reason: 'complete' } });
+    await expect(openRuns.listByThread('thread-1')).resolves.toEqual([open]);
   });
 
   describe('across replicas', () => {
@@ -72,7 +117,7 @@ describe('OpenRunsStorage', () => {
       await a.open(LOST);
       await b.open(other);
 
-      const [, renewed] = await Promise.all([a.close('kickoff-1'), b.heartbeat('kickoff-2', 'worker-b', 60)]);
+      const [, renewed] = await Promise.all([finish(a, 'kickoff-1'), b.heartbeat('kickoff-2', 'worker-b', 60)]);
 
       expect(renewed).toBe(true);
       await expect(a.listByThread('thread-1')).resolves.toEqual([{ ...other, heartbeatAt: 60 }]);
@@ -82,9 +127,23 @@ describe('OpenRunsStorage', () => {
       const { a, b } = await replicas();
       await a.open(LOST);
 
-      await Promise.all([a.close('kickoff-1'), b.heartbeat('kickoff-1', 'lost-worker', 60)]);
+      await Promise.all([finish(a, 'kickoff-1'), b.heartbeat('kickoff-1', 'lost-worker', 60)]);
 
       await expect(a.listByThread('thread-1')).resolves.toEqual([]);
+    });
+
+    it('keeps exactly one end when two replicas end the same run at once', async () => {
+      const { a, b } = await replicas();
+      await a.open(LOST);
+
+      const ended = await Promise.all([
+        a.end('kickoff-1', { reason: 'complete', endedAt: 10 }),
+        b.end('kickoff-1', { reason: 'error', endedAt: 11 }),
+      ]);
+
+      expect(ended.filter(Boolean)).toHaveLength(1);
+      const winner = ended[0] ? { reason: 'complete', endedAt: 10 } : { reason: 'error', endedAt: 11 };
+      await expect(b.get('kickoff-1')).resolves.toEqual({ run: LOST, end: winner });
     });
 
     it('copies a legacy run once, so a copied run that ended does not come back', async () => {
@@ -94,7 +153,7 @@ describe('OpenRunsStorage', () => {
       expect([copiedA, copiedB]).toEqual([['kickoff-1'], ['kickoff-1']]);
       await expect(a.listByThread('thread-1')).resolves.toEqual([LOST]);
 
-      await a.close('kickoff-1');
+      await finish(a, 'kickoff-1');
       await expect(b.importLegacy([LOST])).resolves.toEqual(['kickoff-1']);
       await expect(a.listByThread('thread-1')).resolves.toEqual([]);
     });

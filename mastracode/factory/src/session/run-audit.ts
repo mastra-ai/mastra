@@ -14,36 +14,16 @@ export const FACTORY_OPEN_RUNS_SETTING = 'factoryOpenRuns';
 
 export type { FactoryOpenRun };
 
-/** Where open runs are kept; every write touches only its own run. */
-export type OpenRunLedger = Pick<OpenRunsStorage, 'listByThread' | 'open' | 'heartbeat' | 'close' | 'importLegacy'>;
-
 /**
- * How each recent run on a thread ended, keyed by kickoff id. A run can end in a process other
+ * Where runs are kept; every write touches only its own run. A run can end in a process other
  * than the one waiting on it (a durable run that moved workers), where the waiter never sees the
- * in-memory `agent_end`; this record is what it reads instead.
+ * in-memory `agent_end`; the end recorded on the run's row is what it reads instead. It lives in
+ * Factory storage, never in thread metadata a client can write.
  */
-export const FACTORY_RUN_ENDS_SETTING = 'factoryRunEnds';
-/** Only a waiter still in flight reads an end, so a short tail of recent ends is enough. */
-const FACTORY_RUN_ENDS_KEPT = 20;
-
-const factoryRunEndSchema = z.object({
-  kickoffId: z.string(),
-  reason: z.enum(['complete', 'aborted', 'error']),
-  endedAt: z.number(),
-});
-
-export type FactoryRunEnd = z.infer<typeof factoryRunEndSchema>;
-
-/** How the run of `kickoffId` on `threadId` ended, when its end was recorded. */
-export async function readThreadRunEnd(
-  session: { readonly thread: { getSettingOn(args: { threadId: string; key: string }): Promise<unknown> } },
-  threadId: string,
-  kickoffId: string,
-): Promise<FactoryRunEnd | undefined> {
-  const stored = await session.thread.getSettingOn({ threadId, key: FACTORY_RUN_ENDS_SETTING });
-  const ends = z.array(factoryRunEndSchema).safeParse(stored ?? []);
-  return ends.success ? ends.data.find(end => end.kickoffId === kickoffId) : undefined;
-}
+export type OpenRunLedger = Pick<
+  OpenRunsStorage,
+  'listByThread' | 'get' | 'open' | 'heartbeat' | 'end' | 'close' | 'importLegacy'
+>;
 
 /** A heartbeat older than this means the owner is gone; nothing renews it once the run's dispatcher dies. */
 export const FACTORY_OPEN_RUN_STALE_MS = 30_000;
@@ -261,22 +241,10 @@ async function recordRunEnds(
   const steps = turn && !turn.claimed ? turn.steps : [];
   if (turn && ending.length > 0) turn.claimed = true;
   const turnUsage = runUsage(steps);
-  // The end is recorded before the run leaves the ledger: a reader that finds neither would take
-  // the run for lost.
-  if (ending.length > 0) {
-    const stored = z
-      .array(factoryRunEndSchema)
-      .safeParse((await session.thread.getSetting({ key: FACTORY_RUN_ENDS_SETTING })) ?? []);
-    const endedAt = Date.now();
-    const ended = new Set(ending.map(run => run.kickoffId));
-    await session.thread.setSetting({
-      key: FACTORY_RUN_ENDS_SETTING,
-      value: [
-        ...(stored.success ? stored.data : []).filter(end => !ended.has(end.kickoffId)),
-        ...ending.map(run => ({ kickoffId: run.kickoffId, reason, endedAt })),
-      ].slice(-FACTORY_RUN_ENDS_KEPT),
-    });
-  }
+  // The end is recorded before the audit write, so a waiter elsewhere settles even while the audit
+  // store is down; the run stays on the ledger until its end record lands.
+  const endedAt = Date.now();
+  for (const run of ending) await openRuns.end(run.kickoffId, { reason, endedAt });
   for (const run of ending) {
     let runUsageRecord = usage.held.get(run.kickoffId);
     if (!runUsageRecord) {
@@ -297,7 +265,7 @@ async function recordRunEnds(
     });
     if (recorded) {
       usage.held.delete(run.kickoffId);
-      await openRuns.close(run.kickoffId);
+      await openRuns.close(run, Date.now());
     } else {
       console.warn(
         `[Factory run audit] Token usage for run ${run.kickoffId} (${run.role}) was not persisted; keeping it for the next attempt.`,

@@ -30,12 +30,7 @@ import { prepareFactoryRuleBinding } from '../routes/surface.js';
 import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
 import { WorkItemRoutes } from '../routes/work-items.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
-import {
-  FACTORY_OPEN_RUNS_SETTING,
-  FACTORY_RUN_ENDS_SETTING,
-  observeSessionRunEnd,
-  waitForSessionRunAudit,
-} from '../session/run-audit.js';
+import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { factoryOpenRunSchema } from '../storage/domains/open-runs/base.js';
 import type { OpenRunsStorage } from '../storage/domains/open-runs/base.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -4041,22 +4036,45 @@ describe('FactoryDecisionDispatcher', () => {
         // The other worker renews every few seconds; stamp the beat it sends just before this check.
         heartbeatAt: Date.now() + FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs - 1_000,
       });
-      return { storage, openRuns: seed.openRuns, session, dispatcher, kickoffId: record!.id, openRunOf };
+      // Each registry heartbeat the dispatcher reads the run from storage. Real storage I/O spans
+      // real time while the fake clock jumps, so the clock only moves between reads, a stale
+      // window's fraction at a time, as it would for a read that takes milliseconds.
+      const get = seed.openRuns.get.bind(seed.openRuns);
+      const reads = { inFlight: 0, before: async () => {}, after: async () => {} };
+      vi.spyOn(seed.openRuns, 'get').mockImplementation(async id => {
+        reads.inFlight += 1;
+        try {
+          await reads.before();
+          const read = await get(id);
+          await reads.after();
+          return read;
+        } finally {
+          reads.inFlight -= 1;
+        }
+      });
+      const step = Math.floor(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs / 3);
+      const beat = async () => {
+        for (let elapsed = 0; elapsed < FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs; elapsed += step) {
+          await untilFakeClockSettles(() => expect(reads.inFlight).toBe(0));
+          await vi.advanceTimersByTimeAsync(step);
+        }
+        await untilFakeClockSettles(() => expect(reads.inFlight).toBe(0));
+      };
+      return { storage, openRuns: seed.openRuns, session, dispatcher, kickoffId: record!.id, openRunOf, reads, beat };
     }
 
     it('settles the run from its recorded end', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
       try {
-        const { storage, session, dispatcher, kickoffId } = await remoteRun('remote-end');
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } = await remoteRun('remote-end');
 
         const dispatch = dispatcher.runOnce();
         await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
-        await session.thread.setSetting({
-          key: FACTORY_RUN_ENDS_SETTING,
-          value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
-        });
-        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        await openRuns.end(kickoffId, { reason: 'complete', endedAt: Date.now() });
+        await beat();
         await dispatch;
 
         expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
@@ -4069,15 +4087,14 @@ describe('FactoryDecisionDispatcher', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
       try {
-        const { storage, session, dispatcher, kickoffId } = await remoteRun('remote-error');
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } = await remoteRun('remote-error');
 
         const dispatch = dispatcher.runOnce();
         await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
-        await session.thread.setSetting({
-          key: FACTORY_RUN_ENDS_SETTING,
-          value: [{ kickoffId, reason: 'error', endedAt: Date.now() }],
-        });
-        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        await openRuns.end(kickoffId, { reason: 'error', endedAt: Date.now() });
+        await beat();
         await dispatch;
 
         expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).not.toMatchObject({
@@ -4095,24 +4112,21 @@ describe('FactoryDecisionDispatcher', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
       try {
-        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf } = await remoteRun('remote-live');
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } = await remoteRun('remote-live');
 
         const dispatch = dispatcher.runOnce();
         await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
         await openRuns.open(openRunOf(kickoffId));
-        for (let beat = 0; beat < 3; beat += 1) {
+        for (let round = 0; round < 3; round += 1) {
           await openRuns.heartbeat(kickoffId, 'worker-2', openRunOf(kickoffId).heartbeatAt);
-          await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+          await beat();
         }
         const pending = (await storage.listDeferredDecisions('org-1', PROJECT_ID))[0];
         expect(pending).toMatchObject({ status: 'leased', lastError: null });
 
-        await openRuns.close(kickoffId);
-        await session.thread.setSetting({
-          key: FACTORY_RUN_ENDS_SETTING,
-          value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
-        });
-        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        await openRuns.end(kickoffId, { reason: 'complete', endedAt: Date.now() });
+        await beat();
         await dispatch;
 
         expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
@@ -4120,37 +4134,81 @@ describe('FactoryDecisionDispatcher', () => {
         vi.useRealTimers();
       }
     });
-    it('settles from the end the other process records between its two storage reads', async () => {
+    it('settles from the end the other process records right after a read that found the run live', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
       try {
-        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf } =
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, reads, beat } =
           await remoteRun('remote-end-between-reads');
 
         const dispatch = dispatcher.runOnce();
         await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
         await openRuns.open(openRunOf(kickoffId));
-        // The other worker finishes right after the dispatcher's ledger read: it records the end,
-        // then drops the run from the ledger.
-        const listByThread = openRuns.listByThread.bind(openRuns);
+        // The other worker finishes right after the dispatcher read its run as live. The end and
+        // the heartbeat share one row, so there is no second read for the end to slip between.
         let finished = false;
-        vi.spyOn(openRuns, 'listByThread').mockImplementation(async threadId => {
-          const runs = await listByThread(threadId);
-          if (!finished) {
-            finished = true;
-            await session.thread.setSetting({
-              key: FACTORY_RUN_ENDS_SETTING,
-              value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
-            });
-            await openRuns.close(kickoffId);
-          }
-          return runs;
-        });
-        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        // Live until it finishes: the other worker beats just before each read.
+        reads.before = async () => {
+          if (!finished) await openRuns.heartbeat(kickoffId, 'worker-2', Date.now());
+        };
+        reads.after = async () => {
+          if (finished) return;
+          finished = true;
+          await openRuns.end(kickoffId, { reason: 'complete', endedAt: Date.now() });
+        };
+        await beat();
+        expect(finished).toBe(true);
+        await beat();
         await dispatch;
 
-        expect(finished).toBe(true);
         expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not settle a run from thread metadata a client wrote', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, openRuns, session, dispatcher, kickoffId, openRunOf, beat } =
+          await remoteRun('remote-forged-end');
+
+        const dispatch = dispatcher.runOnce();
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
+        // The run moved to another worker, which owns it on the shared ledger.
+        await openRuns.open(openRunOf(kickoffId));
+        // Thread metadata is client-writable (PATCH /api/memory/threads/:id): forge an end there,
+        // and a stale copy of the run in the pre-storage ledger setting.
+        await session.thread.setSetting({
+          key: 'factoryRunEnds',
+          value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
+        });
+        await session.thread.setSetting({
+          key: FACTORY_OPEN_RUNS_SETTING,
+          value: [{ ...openRunOf(kickoffId), ownerId: 'forged', heartbeatAt: 0 }],
+        });
+        for (let round = 0; round < 3; round += 1) {
+          await openRuns.heartbeat(kickoffId, 'worker-2', openRunOf(kickoffId).heartbeatAt);
+          await beat();
+        }
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+          status: 'leased',
+          lastError: null,
+        });
+        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        await expect(openRuns.get(kickoffId)).resolves.toMatchObject({ run: { ownerId: 'worker-2' } });
+        await expect(openRuns.get(kickoffId)).resolves.not.toHaveProperty('end');
+
+        await openRuns.end(kickoffId, { reason: 'error', endedAt: Date.now() });
+        await beat();
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).not.toMatchObject({
+          status: 'succeeded',
+        });
       } finally {
         vi.useRealTimers();
       }

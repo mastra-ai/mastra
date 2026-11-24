@@ -4,13 +4,11 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   FACTORY_OPEN_RUNS_SETTING,
-  FACTORY_RUN_ENDS_SETTING,
   FACTORY_RUN_USAGE_STEPS_JSON_BUDGET,
   heartbeatSessionOpenRun,
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
   observeSessionRunEnd,
-  readThreadRunEnd,
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from './run-audit.js';
@@ -108,7 +106,8 @@ describe('Factory run lifecycle audit', () => {
       const stale = [OPEN_RUN];
       settings[FACTORY_OPEN_RUNS_SETTING] = stale;
       await listSessionOpenRuns(session, openRuns);
-      await openRuns.close('kickoff-1');
+      await openRuns.end('kickoff-1', { reason: 'complete', endedAt: 1 });
+      await openRuns.close(OPEN_RUN, 1);
       // Dropping it from the setting failed, or another replica read the setting before it was dropped.
       settings[FACTORY_OPEN_RUNS_SETTING] = stale;
 
@@ -209,53 +208,47 @@ describe('Factory run lifecycle audit', () => {
     expect((await events()).map(event => event.action).sort()).toEqual(['factory.run.ended', 'factory.run.started']);
   });
 
-  it('records how a run ended on the thread, before the run leaves the ledger', async () => {
-    const { session, start, emit, settings, openRuns } = await setup();
+  it("records how a run ended on the run's own row, before its audit record and before it leaves the ledger", async () => {
+    const { session, start, emit, settings, audit, openRuns } = await setup();
     await start();
     const order: string[] = [];
-    const setSetting = session.thread.setSetting;
-    session.thread.setSetting = async args => {
-      order.push(args.key);
-      await setSetting(args);
-    };
-    const close = openRuns.close.bind(openRuns);
-    vi.spyOn(openRuns, 'close').mockImplementation(async kickoffId => {
-      order.push(`close:${kickoffId}`);
-      await close(kickoffId);
+    const end = openRuns.end.bind(openRuns);
+    vi.spyOn(openRuns, 'end').mockImplementation(async (kickoffId, ended) => {
+      order.push(`end:${kickoffId}`);
+      return end(kickoffId, ended);
     });
+    const record = audit.record.bind(audit);
+    vi.spyOn(audit, 'record').mockImplementation(async input => {
+      order.push(input.action);
+      return record(input);
+    });
+    const close = openRuns.close.bind(openRuns);
+    vi.spyOn(openRuns, 'close').mockImplementation(async (run, at) => {
+      order.push(`close:${run.kickoffId}`);
+      await close(run, at);
+    });
+    const settingsBefore = { ...settings };
     emit('error');
     await waitForSessionRunAudit(session);
 
-    expect(order).toEqual([FACTORY_RUN_ENDS_SETTING, `close:${OPEN_RUN.kickoffId}`]);
-    const reader = { thread: { getSettingOn: async ({ key }: { key: string }) => settings[key] } };
-    await expect(readThreadRunEnd(reader, 'thread-1', OPEN_RUN.kickoffId)).resolves.toMatchObject({
-      kickoffId: OPEN_RUN.kickoffId,
-      reason: 'error',
+    expect(order).toEqual([`end:${OPEN_RUN.kickoffId}`, 'factory.run.ended', `close:${OPEN_RUN.kickoffId}`]);
+    await expect(openRuns.get(OPEN_RUN.kickoffId)).resolves.toMatchObject({
+      end: { reason: 'error', endedAt: expect.any(Number) },
     });
-    await expect(readThreadRunEnd(reader, 'thread-1', 'another-kickoff')).resolves.toBeUndefined();
-  });
-
-  it('keeps only the latest run ends on a thread', async () => {
-    const { start, emit, settings, ledger } = await setup();
-    for (let run = 0; run < 25; run += 1) {
-      await start({ ...OPEN_RUN, kickoffId: `kickoff-${run}` });
-      emit('complete');
-      await vi.waitFor(async () => expect(await ledger()).toEqual([]));
-    }
-
-    const ends = settings[FACTORY_RUN_ENDS_SETTING] as Array<{ kickoffId: string }>;
-    expect(ends).toHaveLength(20);
-    expect(ends.at(-1)?.kickoffId).toBe('kickoff-24');
+    // Nothing about the run's end lands in thread metadata, which clients can write.
+    expect(settings).toEqual(settingsBefore);
   });
 
   it('leaves an end recoverable when the audit store is temporarily unavailable', async () => {
-    const { start, emit, events, audit, ledger } = await setup();
+    const { start, emit, events, audit, ledger, openRuns } = await setup();
     await start();
     const failure = vi.spyOn(audit, 'record').mockRejectedValueOnce(new Error('store unavailable'));
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     emit('complete');
     await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
     expect(await ledger()).toHaveLength(1);
+    // A waiter elsewhere still reads the end while the audit store is down.
+    await expect(openRuns.get(OPEN_RUN.kickoffId)).resolves.toMatchObject({ end: { reason: 'complete' } });
     failure.mockRestore();
     emit('complete');
     await vi.waitFor(async () => expect(await events()).toHaveLength(2));

@@ -1,7 +1,12 @@
 /**
- * The open-run ledger: one row per Factory run that started and has not ended yet, shared by every
- * replica. Each write touches only its own run's row, so no writer can erase an entry another
- * writer added; ownership checks ride on the write itself instead of a read before it.
+ * The open-run ledger: one row per Factory run, shared by every replica. Each write touches only its
+ * own run's row, so no writer can erase an entry another writer added; ownership checks ride on the
+ * write itself instead of a read before it.
+ *
+ * A row lives through three states: open; ended (how and when the run ended, set once, readable by
+ * a waiter in another process that never saw the run's `agent_end`); and closed (its end is on the
+ * audit log, so it is off the ledger). Closed rows are kept for {@link FACTORY_RUN_END_RETENTION_MS}
+ * so a late waiter still reads the end, then pruned.
  */
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
@@ -34,6 +39,17 @@ export const factoryOpenRunSchema = z.object({
 
 export type FactoryOpenRun = z.infer<typeof factoryOpenRunSchema>;
 
+export type FactoryRunEndReason = 'complete' | 'aborted' | 'error';
+
+/** How a run ended. */
+export interface FactoryRunEnd {
+  reason: FactoryRunEndReason;
+  endedAt: number;
+}
+
+/** How long a closed run's row, and so its end, stays readable. */
+export const FACTORY_RUN_END_RETENTION_MS = 24 * 60 * 60 * 1000;
+
 export const FACTORY_OPEN_RUNS_SCHEMA: CollectionSchema = {
   name: 'factory_open_runs',
   columns: {
@@ -51,6 +67,9 @@ export const FACTORY_OPEN_RUNS_SCHEMA: CollectionSchema = {
     owner_id: { type: 'text', nullable: true },
     heartbeat_at: { type: 'bigint', nullable: true },
     started_at: { type: 'bigint', nullable: true },
+    end_reason: { type: 'text', nullable: true },
+    ended_at: { type: 'bigint', nullable: true },
+    closed_at: { type: 'bigint', nullable: true },
     created_at: { type: 'timestamp' },
   },
   indexes: [{ name: 'factory_open_runs_thread', columns: ['thread_id'] }],
@@ -83,6 +102,9 @@ interface OpenRunDbRow extends Record<string, unknown> {
   owner_id: string | null;
   heartbeat_at: number | null;
   started_at: number | null;
+  end_reason: FactoryRunEndReason | null;
+  ended_at: number | null;
+  closed_at: number | null;
   created_at: Date;
 }
 
@@ -102,6 +124,9 @@ function toRow(run: FactoryOpenRun, createdAt: Date): OpenRunDbRow {
     owner_id: run.ownerId ?? null,
     heartbeat_at: run.heartbeatAt ?? null,
     started_at: run.startedAt ?? null,
+    end_reason: null,
+    ended_at: null,
+    closed_at: null,
     created_at: createdAt,
   };
 }
@@ -143,11 +168,11 @@ export class OpenRunsStorage extends FactoryStorageDomain {
     return this.ops;
   }
 
-  /** The open runs of `threadId`, oldest first. */
+  /** The runs of `threadId` still on the ledger, oldest first; an ended run stays on it until closed. */
   async listByThread(threadId: string): Promise<FactoryOpenRun[]> {
     const rows = await this.#db.findMany<OpenRunDbRow>(
       'factory_open_runs',
-      { thread_id: threadId },
+      { thread_id: threadId, closed_at: null },
       {
         orderBy: [
           ['created_at', 'asc'],
@@ -174,15 +199,50 @@ export class OpenRunsStorage extends FactoryStorageDomain {
     return (
       (await this.#db.updateMany(
         'factory_open_runs',
-        { kickoff_id: kickoffId, owner_id: ownerId },
+        { kickoff_id: kickoffId, owner_id: ownerId, ended_at: null },
         { heartbeat_at: at },
       )) > 0
     );
   }
 
-  /** Takes a run off the ledger. */
-  async close(kickoffId: string): Promise<void> {
-    await this.#db.deleteMany('factory_open_runs', { kickoff_id: kickoffId });
+  /** A run and, once it ended, how; closed runs included until pruned. */
+  async get(kickoffId: string): Promise<{ run: FactoryOpenRun; end?: FactoryRunEnd } | undefined> {
+    const row = await this.#db.findOne<OpenRunDbRow>('factory_open_runs', { kickoff_id: kickoffId });
+    if (!row) return undefined;
+    return {
+      run: toRun(row),
+      ...(row.end_reason !== null && row.ended_at !== null
+        ? { end: { reason: row.end_reason, endedAt: row.ended_at } }
+        : {}),
+    };
+  }
+
+  /**
+   * Records how a run ended, in one write to its row. The first end wins; resolves `false` when
+   * the run already ended or is not on the ledger.
+   */
+  async end(kickoffId: string, { reason, endedAt }: FactoryRunEnd): Promise<boolean> {
+    return (
+      (await this.#db.updateMany(
+        'factory_open_runs',
+        { kickoff_id: kickoffId, ended_at: null, closed_at: null },
+        { end_reason: reason, ended_at: endedAt },
+      )) > 0
+    );
+  }
+
+  /**
+   * Takes an ended run off the ledger once its end is on the audit log. Its row, and so its end,
+   * stays readable for {@link FACTORY_RUN_END_RETENTION_MS}; closing a run prunes its thread's
+   * closed runs older than that.
+   */
+  async close(run: Pick<FactoryOpenRun, 'kickoffId' | 'threadId'>, at: number): Promise<void> {
+    await this.#db.updateMany('factory_open_runs', { kickoff_id: run.kickoffId, closed_at: null }, { closed_at: at });
+    const closed = await this.#db.findMany<OpenRunDbRow>('factory_open_runs', { thread_id: run.threadId });
+    for (const row of closed) {
+      if (row.closed_at === null || at - row.closed_at < FACTORY_RUN_END_RETENTION_MS) continue;
+      await this.#db.deleteMany('factory_open_runs', { kickoff_id: row.kickoff_id, closed_at: row.closed_at });
+    }
   }
 
   /**
