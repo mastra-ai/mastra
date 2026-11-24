@@ -12,6 +12,7 @@ import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/use
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
+import { ChatThinkingProvider } from '../../context/ChatThinkingProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
@@ -106,7 +107,9 @@ function ErrorSession({
           }}
         >
           <ChatModelsProvider>
-            <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
+            <ChatThinkingProvider>
+              <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
+            </ChatThinkingProvider>
           </ChatModelsProvider>
         </ChatTranscriptContext.Provider>
       </ChatConnectionContext.Provider>
@@ -133,6 +136,9 @@ describe('chat run errors', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
         HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId`, () =>
+        HttpResponse.json({ controllerId: AGENT_CONTROLLER_ID, resourceId: 'resource-1', settings: {} }),
       ),
     );
   });

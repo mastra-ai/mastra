@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
-import type { FactoryProject } from '../../workspaces/services/github';
+import type { FactoryProjectPayload } from '../../workspaces/services/github';
 import { useChatModelScope } from './useChatModelScope';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { useSetSessionModelPackMutation } from '../../../../hooks/useSessionModelPack';
@@ -43,7 +43,7 @@ export function ChatModelsProvider({
   return <ChatModelsContext.Provider value={draftSessionId ? draft : live}>{children}</ChatModelsContext.Provider>;
 }
 
-function useLocalModelPacks(project: FactoryProject | undefined, personal: ModelPackSet | undefined) {
+function useLocalModelPacks(project: FactoryProjectPayload | undefined, personal: ModelPackSet | undefined) {
   const { modelScope } = useChatModelScope();
   return (
     routedDefault<ModelPackSet>(modelScope, {
