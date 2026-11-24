@@ -6,16 +6,20 @@ import './brand-loader.css';
 
 export type BrandLoaderProps = {
   className?: string;
-  /** Defaults to `lg` with `fill`. */
-  size?: 'sm' | 'md' | 'lg';
-  /**
-   * For a whole page that hasn't shown yet: centers the loader in the page's area, or in the window with `screen`.
-   * Directly inside `PageLayout` it centers on the whole page, where the route's loader sits.
-   * Anything inside a page that already shows keeps its own loading state.
-   */
-  fill?: boolean | 'screen';
   'aria-label'?: string;
-};
+} & (
+  | { fill?: false; size?: 'sm' | 'md' | 'lg' }
+  | {
+      /**
+       * For a whole page that hasn't shown yet: centers the loader in the page's area, or in the window with `screen`.
+       * Directly inside `PageLayout` it centers on the whole page, where the route's loader sits. It is one size on
+       * every page, and its label is for screen readers only.
+       * Anything inside a page that already shows keeps its own loading state.
+       */
+      fill: true | 'screen';
+      size?: never;
+    }
+);
 
 const sizeClasses = {
   sm: 'w-6',
