@@ -496,6 +496,7 @@ describe('Button', () => {
       render(<Button loading>Save</Button>);
       expect(fireEvent.keyDown(screen.getByRole('button'), { key: 'r', metaKey: true })).toBe(true);
       expect(fireEvent.keyDown(screen.getByRole('button'), { key: 'Escape' })).toBe(true);
+      expect(fireEvent.keyDown(screen.getByRole('button'), { key: 'ArrowDown' })).toBe(true);
     });
 
     it('is busy and unavailable to assistive technology under its own name', () => {

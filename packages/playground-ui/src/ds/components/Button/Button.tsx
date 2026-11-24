@@ -319,12 +319,12 @@ function blockActivation(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
 
-// Enter and Space press a button, the arrows open the menu it triggers. Every other key, browser and app shortcuts
-// included, goes through. (Base UI's `focusableWhenDisabled` cancels those too.)
-const ACTIVATION_KEYS = ['Enter', ' ', 'ArrowDown', 'ArrowUp'];
-
+// Enter and Space press a button; the arrows open the menu it triggers, but still scroll the page. Every other key,
+// browser and app shortcuts included, goes through. (Base UI's `focusableWhenDisabled` cancels those too.)
 function blockActivationKeys(event: React.KeyboardEvent): void {
-  if (ACTIVATION_KEYS.includes(event.key) && !event.metaKey && !event.ctrlKey) blockActivation(event);
+  if (event.metaKey || event.ctrlKey) return;
+  if (event.key === 'Enter' || event.key === ' ') blockActivation(event);
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.stopPropagation();
 }
 
 // Not prevented, so a press still moves focus to the button.
