@@ -2248,14 +2248,15 @@ export class ObservationalMemory {
     }
 
     // A missed count write only costs a recount on the next request, so it must never fail the save.
+    let notStored: MastraDBMessage[] = [];
     try {
-      const notStored = await this.persistTokenEstimatesOntoStored(storedWithNewCounts);
-      // A message with no stored row has nothing to patch, so it is saved whole.
-      if (notStored.length > 0) {
-        await this.messageHistory.persistMessages({ messages: notStored, threadId, resourceId });
-      }
+      notStored = await this.persistTokenEstimatesOntoStored(storedWithNewCounts);
     } catch (error) {
       omError('[OM] Failed to save token counts for stored messages', error);
+    }
+    // A message with no stored row has nothing to patch, so it is saved whole.
+    if (notStored.length > 0) {
+      await this.messageHistory.persistMessages({ messages: notStored, threadId, resourceId });
     }
   }
 
