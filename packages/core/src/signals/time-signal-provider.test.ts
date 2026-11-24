@@ -6,18 +6,19 @@ import { Agent } from '../agent';
 import { mastraDBMessageToSignal } from '../agent/signals';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
-import type { ComputeStateSignalArgs } from '../processors';
+import type { ComputeStateSignalArgs, ComputeStateSignalResult } from '../processors';
 import { InMemoryStore } from '../storage/mock';
 import { createTool } from '../tools';
 
-import type { TimeStateProcessor } from './time-signal-provider';
 import { TimeSignalProvider } from './index';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
-function processorOf(provider: TimeSignalProvider): TimeStateProcessor {
-  return provider.getInputProcessors()[0] as TimeStateProcessor;
+type TimeLane = { stateId: string; computeStateSignal(args: ComputeStateSignalArgs): ComputeStateSignalResult };
+
+function processorOf(provider: TimeSignalProvider): TimeLane {
+  return provider.getInputProcessors()[0] as unknown as TimeLane;
 }
 
 /** Minimal hook args: only the fields the time lane reads. */
@@ -148,6 +149,24 @@ describe('TimeSignalProvider', () => {
     expect((await time.step())?.contents).toBe('Sunday, November 1, 2026 at 1 AM PDT');
     vi.setSystemTime(new Date('2026-11-01T09:30:00Z'));
     expect((await time.step())?.contents).toBe('Sunday, November 1, 2026 at 1 AM PST');
+  });
+
+  it('re-announces once when a multi-hour bucket spans DST fall-back', async () => {
+    const time = lane(new TimeSignalProvider({ interval: 6 * HOUR, timeZone: 'America/Los_Angeles' }));
+    // 2026-11-01, local bucket 00:00-06:00. 00:30 PDT (07:30Z), then the clocks go back at 09:00Z.
+    vi.setSystemTime(new Date('2026-11-01T07:30:00Z'));
+    expect((await time.step())?.cacheKey).toBe('time:2026-11-01T00:00-07:00');
+    // 02:00 PST (10:00Z): same local bucket, new offset, one extra snapshot with the right time.
+    vi.setSystemTime(new Date('2026-11-01T10:00:00Z'));
+    const after = await time.step();
+    expect(after?.cacheKey).toBe('time:2026-11-01T00:00-08:00');
+    expect(after?.contents).toBe('Sunday, November 1, 2026 at 2 AM PST');
+    // 04:00 PST (12:00Z): no further snapshot in that bucket.
+    vi.setSystemTime(new Date('2026-11-01T12:00:00Z'));
+    expect(await time.step()).toBeUndefined();
+    // 06:00 PST (14:00Z): the next bucket.
+    vi.setSystemTime(new Date('2026-11-01T14:00:00Z'));
+    expect((await time.step())?.cacheKey).toBe('time:2026-11-01T06:00-08:00');
   });
 
   it('keeps one day bucket across spring-forward', async () => {

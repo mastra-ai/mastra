@@ -116,7 +116,7 @@ function pad(value: number): string {
  * step and emits a snapshot only when the interval has moved on, or when the last snapshot left the
  * context window. It holds no per-thread state and no timers.
  */
-export class TimeStateProcessor {
+class TimeStateProcessor {
   readonly id = 'time-state';
   // The runner reads tracking under `stateId`; it must match the emitted lane id.
   readonly stateId = TIME_STATE_ID;
