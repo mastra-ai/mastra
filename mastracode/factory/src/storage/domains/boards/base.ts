@@ -62,6 +62,15 @@ export interface StoredPhaseInput {
   exitTool?: StoredPhaseExitTool | null;
   /** Factory tools the phase grants the session working the card there. */
   tools?: FactoryPhaseTool[] | null;
+  /** On a working phase, the outcomes its session may report; unset means one per next phase. */
+  outcomes?: StoredPhaseOutcome[] | null;
+}
+
+/** An outcome a working phase's session may report, and the next phase it sends the card to. */
+export interface StoredPhaseOutcome {
+  key: string;
+  label: string;
+  to: string;
 }
 
 /** A board as it is written. Phase order is significant: the first phase is where cards start. */
@@ -84,6 +93,7 @@ export interface StoredPhaseRecord {
   autoStartWhen: RuleGroup | null;
   exitTool: StoredPhaseExitTool | null;
   tools: FactoryPhaseTool[] | null;
+  outcomes: StoredPhaseOutcome[] | null;
 }
 
 export interface StoredBoardRecord {
@@ -361,6 +371,7 @@ interface PhaseRow extends Record<string, unknown> {
   auto_start_when: RuleGroup | null;
   exit_tool: StoredPhaseExitTool | null;
   tools: FactoryPhaseTool[] | null;
+  outcomes?: StoredPhaseOutcome[] | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -475,6 +486,7 @@ function toPhaseRecord(row: PhaseRow): StoredPhaseRecord {
       ? { ...row.exit_tool, autoApproveWhen: currentRuleGroup(row.exit_tool.autoApproveWhen) }
       : row.exit_tool,
     tools: row.tools ?? null,
+    outcomes: row.outcomes ?? null,
   };
 }
 
@@ -1493,6 +1505,7 @@ async function insertPhases(ops: FactoryStorageOps, scope: StoredBoardScope, inp
       auto_start_when: phase.autoStartWhen ?? null,
       exit_tool: phase.exitTool ?? null,
       tools: phase.tools?.length ? phase.tools : null,
+      outcomes: phase.outcomes?.length ? phase.outcomes : null,
     });
   }
 }
