@@ -114,6 +114,9 @@ async function seedSharedStorage(dir: string) {
   return { seed, sourceControl };
 }
 
+/** Started worker processes; each is killed after its test, however the test ends. */
+const workers = new Set<() => Promise<void>>();
+
 /** Starts worker A in its own process and waits until its phase run is open on the ledger. */
 async function startWorkerA(dir: string) {
   const child = spawn(
@@ -125,6 +128,14 @@ async function startWorkerA(dir: string) {
   child.stdout.on('data', chunk => (output += String(chunk)));
   child.stderr.on('data', chunk => (output += String(chunk)));
   const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+  /** SIGKILL: no shutdown hook runs, so the run is left exactly as a crashed worker leaves it. */
+  const kill = async () => {
+    workers.delete(kill);
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    process.kill(-child.pid!, 'SIGKILL');
+    await exited;
+  };
+  workers.add(kill);
   const deadline = Date.now() + 90_000;
   while (!existsSync(join(dir, 'worker-a.ready'))) {
     if (child.exitCode !== null || Date.now() > deadline) {
@@ -132,19 +143,14 @@ async function startWorkerA(dir: string) {
     }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  return {
-    /** SIGKILL: no shutdown hook runs, so the run is left exactly as a crashed worker leaves it. */
-    kill: async () => {
-      process.kill(-child.pid!, 'SIGKILL');
-      await exited;
-    },
-  };
+  return { kill };
 }
 
 describe('two Factory workers sharing storage', () => {
   let dir: string | undefined;
   afterEach(async () => {
     vi.useRealTimers();
+    await Promise.all([...workers].map(kill => kill()));
     if (dir) await rm(dir, { recursive: true, force: true });
   });
 
