@@ -174,6 +174,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       origin_muted_at: { type: 'timestamp', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
+      sandbox_user_id: { type: 'text', nullable: true },
+      sandbox_actor_set: { type: 'boolean', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
@@ -367,6 +369,8 @@ export interface SourceControlSession {
   factoryProjectId: string | null;
   orgId: string;
   userId: string;
+  /** Authenticated card starter: null for automation, undefined for ordinary/legacy sessions. */
+  sandboxUserId?: string | null;
   branch: string;
   title: string | null;
   visibility: SourceControlSessionVisibility;
@@ -576,6 +580,8 @@ export interface SourceControlStorageHandle {
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
+    /** Persist a trusted card starter without reassigning an existing credential grant. */
+    setSandboxUser(args: { sessionId: string; userId: string | null }): Promise<SourceControlSession>;
     /**
      * Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner` conflict.
      * `releaseSandbox` clears the session's VM id in the same write, so the new owner never resumes a VM built for the
@@ -696,6 +702,8 @@ interface SessionDbRow extends Record<string, unknown> {
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
+  sandbox_user_id?: string | null;
+  sandbox_actor_set?: boolean | null;
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
@@ -816,6 +824,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
+    sandboxUserId: row.sandbox_actor_set ? (row.sandbox_user_id ?? null) : undefined,
     materializedAt: row.materialized_at,
     firstMessageAt: row.first_message_at,
     firstMeaningfulExecAt: row.first_meaningful_exec_at,
@@ -1869,6 +1878,17 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
           const session = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return { status: 'conflict', reason: 'stale_owner', session: session ? toSession(session) : null };
+        },
+        setSandboxUser: async ({ sessionId, userId }) => {
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, current => {
+            if (current.sandbox_actor_set && (current.sandbox_user_id ?? null) === userId) return null;
+            if (current.sandbox_actor_set || current.sandbox_id || current.materialized_at) {
+              throw new Error(`Factory session ${sessionId} cannot change its sandbox credential actor`);
+            }
+            return { sandbox_user_id: userId, sandbox_actor_set: true, updated_at: new Date() };
+          });
+          if (!row) throw new Error(`Factory session ${sessionId} not found`);
+          return toSession(row);
         },
         setSandbox: async ({ id, sandboxId, sandboxWorkdir, expectedUserId }) => {
           let written = false;

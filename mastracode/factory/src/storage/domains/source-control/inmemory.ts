@@ -568,6 +568,17 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.sessionsRows.push(session);
       return session;
     },
+    setSandboxUser: async ({ sessionId, userId }: { sessionId: string; userId: string | null }) => {
+      const session = this.sessionsRows.find(row => row.sessionId === sessionId);
+      if (!session) throw new Error(`Factory session ${sessionId} not found`);
+      if (session.sandboxUserId === userId) return session;
+      if (session.sandboxUserId !== undefined || session.sandboxId || session.materializedAt) {
+        throw new Error(`Factory session ${sessionId} cannot change its sandbox credential actor`);
+      }
+      const updated = { ...session, sandboxUserId: userId, updatedAt: new Date() };
+      this.sessionsRows[this.sessionsRows.indexOf(session)] = updated;
+      return updated;
+    },
     transferOwner: async ({
       sessionId,
       expectedUserId,

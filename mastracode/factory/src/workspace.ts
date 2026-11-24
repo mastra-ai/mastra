@@ -69,6 +69,7 @@ import {
   learnSandboxGithubAuth,
   sandboxAcceptsGithubToken,
   sandboxOwner,
+  sessionSandboxUser,
 } from './sandbox/vault.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
@@ -1090,7 +1091,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             factorySandbox.create(
               {
                 sessionId: session.id,
-                ...(session.userId ? { userId: session.userId } : {}),
+                ...(sessionSandboxUser(session) ? { userId: sessionSandboxUser(session) } : {}),
                 ...(session.factoryProjectId ? { factoryId: session.factoryProjectId } : {}),
                 ...(resolvedEnvironment ? { factoryName: resolvedEnvironment.factoryName } : {}),
                 // Physical VM id persisted from a prior start (undefined on first
@@ -1175,7 +1176,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // waits for this resolver to finish because the start hook reads
           // bindings declared further down.
           startEagerly = eagerSandboxStart;
-          bindSandboxOwner(sandbox, session.userId);
+          bindSandboxOwner(sandbox, sessionSandboxUser(session));
           return sandbox;
         },
         environment?.repos.map(repo => repo.slug) ?? [],
@@ -1204,11 +1205,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // (the first thing that would start or use the VM) refuses unless the mode
     // is known to be token.
     const vaultSandbox = sessionEntry.sandbox as WorkspaceSandbox & { vault?: boolean };
+    const credentialCaller = (callerId: string | undefined) =>
+      callerId === session.userId ? sessionSandboxUser(session) : callerId;
     const ownsVault = (callerId: string | undefined) =>
-      callerId === sandboxOwner(vaultSandbox, session.userId) || !('vault' in vaultSandbox);
+      (credentialCaller(callerId) !== undefined &&
+        credentialCaller(callerId) === sandboxOwner(vaultSandbox, sessionSandboxUser(session))) ||
+      !('vault' in vaultSandbox);
     const vaultCaller = (callerId: string | undefined) => ({
-      ownerId: session.userId,
-      callerId,
+      ownerId: sessionSandboxUser(session),
+      callerId: credentialCaller(callerId),
       sessionId: session.sessionId,
     });
     if (!ownsVault(userId)) {

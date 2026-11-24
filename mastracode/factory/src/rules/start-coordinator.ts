@@ -196,6 +196,11 @@ export class FactoryStartCoordinator {
       typeof this.#sourceControl === 'function' ? await this.#sourceControl(request) : this.#sourceControl;
     if (!sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(sourceControl, request);
+    const starter = request.startedBy;
+    await sourceControl.sessions.setSandboxUser({
+      sessionId: sourceSession.sessionId,
+      userId: starter?.type === 'human' && !isFactoryPrincipalId(starter.id) ? starter.id : null,
+    });
     const sessionModel =
       this.#projects && this.#modelDefaults
         ? await resolveFactorySessionModel({

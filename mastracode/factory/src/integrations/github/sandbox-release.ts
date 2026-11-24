@@ -1,6 +1,7 @@
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { evictSessionSandbox, peekSessionSandbox } from '../../sandbox/session-sandbox.js';
+import { sessionSandboxUser } from '../../sandbox/vault.js';
 import type { SourceControlSession } from '../../storage/domains/source-control/base.js';
 
 /**
@@ -51,12 +52,12 @@ export async function releaseSessionSandbox(options: {
  */
 export async function destroyDetachedSessionSandbox(options: {
   sandbox: FactorySandbox;
-  session: Pick<SourceControlSession, 'id' | 'sandboxId'> & { userId?: string };
+  session: Pick<SourceControlSession, 'id' | 'sandboxId' | 'sandboxUserId'> & { userId?: string };
 }): Promise<void> {
   const sandbox = options.sandbox.create(
     {
       sessionId: options.session.id,
-      ...(options.session.userId ? { userId: options.session.userId } : {}),
+      ...(sessionSandboxUser(options.session) ? { userId: sessionSandboxUser(options.session) } : {}),
       sandboxId: options.session.sandboxId ?? undefined,
       getRepositoryAccess: undefined,
     },
@@ -75,12 +76,12 @@ export async function destroyDetachedSessionSandbox(options: {
  */
 export async function stopDetachedSessionSandbox(options: {
   sandbox: FactorySandbox;
-  session: Pick<SourceControlSession, 'id' | 'sandboxId'> & { userId?: string };
+  session: Pick<SourceControlSession, 'id' | 'sandboxId' | 'sandboxUserId'> & { userId?: string };
 }): Promise<void> {
   const sandbox = options.sandbox.create(
     {
       sessionId: options.session.id,
-      ...(options.session.userId ? { userId: options.session.userId } : {}),
+      ...(sessionSandboxUser(options.session) ? { userId: sessionSandboxUser(options.session) } : {}),
       sandboxId: options.session.sandboxId ?? undefined,
       getRepositoryAccess: undefined,
     },

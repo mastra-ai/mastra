@@ -1,3 +1,11 @@
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+
+/** Card sessions delegate only to their durably recorded human starter. */
+export function sessionSandboxUser(session: { userId?: string; sandboxUserId?: string | null }): string | undefined {
+  if (session.sandboxUserId !== undefined) return session.sandboxUserId ?? undefined;
+  return session.userId && !isFactoryPrincipalId(session.userId) ? session.userId : undefined;
+}
+
 /**
  * How Factory may authenticate GitHub inside a sandbox.
  *
