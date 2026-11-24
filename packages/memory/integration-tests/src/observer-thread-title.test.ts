@@ -68,7 +68,7 @@ describe('Observer thread title generation', () => {
           enabled: true,
           observation: {
             model: google('gemini-2.5-flash'),
-            messageTokens: 100,
+            messageTokens: 1000,
             bufferTokens: false,
             previousObserverTokens: 1000,
             threadTitle: true,
@@ -115,7 +115,7 @@ describe('Observer thread title generation', () => {
     const omEngine = await memory.omEngine;
     expect(omEngine).toBeDefined();
 
-    const result = await omEngine!.observe({ threadId, resourceId });
+    const result = await omEngine!.observe({ threadId, resourceId, force: true });
     expect(result.observed).toBe(true);
     expect(result.record.activeObservations.trim().length).toBeGreaterThan(0);
 

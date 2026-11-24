@@ -70,6 +70,8 @@ it('bootstraps and observes more than one reverse page of LibSQL history', async
     expect(reverseReads[2]!.before?.id).toBe(rows[5]!.id);
     expect(prompts).toHaveLength(1);
     for (const row of rows) expect(prompts[0]).toContain(row.content.parts[0]!.text);
+    const positions = rows.map(row => prompts[0]!.indexOf(row.content.parts[0]!.text));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
     expect(new Set(result.record.observedMessageIds)).toEqual(new Set(rows.map(row => row.id)));
   } finally {
     await storage.close();
