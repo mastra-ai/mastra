@@ -8,7 +8,7 @@ export interface DataPanelLoadingDataProps {
 
 export function DataPanelLoadingData({ children }: DataPanelLoadingDataProps) {
   return (
-    <LoaderFill className="px-3 py-4 text-caption text-placeholder">
+    <LoaderFill className="px-3 py-4 text-caption text-subtle-foreground">
       <BrandLoader size="sm" /> {children ?? 'Loading...'}
     </LoaderFill>
   );

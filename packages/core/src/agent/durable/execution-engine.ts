@@ -21,11 +21,6 @@ import {
   markErrorForStreamRejection,
   RECOVER_SHUTDOWN_ERROR_ID,
 } from './constants';
-import type {
-  DurableAgentActiveRun,
-  DurableAgentListActiveRunsOptions,
-  DurableAgentListActiveRunsResult,
-} from './durable-agent';
 import type { UntrackedRunLiveness } from './execution-fence';
 import {
   DurableExecutionFenceError,
@@ -39,7 +34,14 @@ import {
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
-import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
+import type {
+  DurableAgentActiveRun,
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  AgentStreamEvent,
+  DurableAgenticWorkflowInput,
+  DurableToolCallInput,
+} from './types';
 import {
   createDurableAgenticWorkflow,
   defaultShouldPersistSnapshot,

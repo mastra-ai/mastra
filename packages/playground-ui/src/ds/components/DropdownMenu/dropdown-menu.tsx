@@ -1,6 +1,7 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import * as React from 'react';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -298,8 +299,12 @@ const DropdownMenuSeparator = React.forwardRef<HTMLDivElement, MenuPrimitive.Sep
 );
 DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';
 
-const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn(menuShortcutClass, className)} {...props} />;
+const DropdownMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span className={cn(menuShortcutClass, className)} {...props}>
+      <KeyLabel>{children}</KeyLabel>
+    </span>
+  );
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 

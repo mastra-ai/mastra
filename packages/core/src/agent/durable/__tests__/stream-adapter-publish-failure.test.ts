@@ -3,7 +3,7 @@ import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createDurableAgentStream, emitChunkEvent } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 class RejectingPubSub extends EventEmitterPubSub {
   override async publish(): Promise<void> {
@@ -23,7 +23,7 @@ describe('durable stream adapter publish failures', () => {
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       logger: logger as any,
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
     try {
       await ready;

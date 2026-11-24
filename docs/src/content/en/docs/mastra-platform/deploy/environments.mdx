@@ -75,7 +75,13 @@ Each environment-scoped variable is either a secret or config:
 - **Secrets**: Write-only. The platform encrypts the value when you save it and delivers it to your service only at boot. After saving, neither the dashboard nor `mastra env vars pull` shows the value. To change a secret, enter a new value.
 - **Config**: Readable. The platform stores the value as plain text on the hosting provider, and both the dashboard and `mastra env vars pull` show it. Use config for values that aren't sensitive, like `LOG_LEVEL` or feature flags.
 
-New variables are secrets by default, except a few non-sensitive names the platform itself defines. Use the **Secret** toggle in the dashboard to store a variable as config instead. To turn a secret into config, enter its value again, because the platform can't read the stored secret back.
+New variables are secrets by default, except a few non-sensitive names the platform itself defines. Use the **Secret** toggle in the dashboard, or [`mastra env vars set`](/reference/cli/mastra#mastra-env-vars-set) with `--secret` or `--config`, to choose how a variable is stored:
+
+```bash
+mastra env vars set staging LOG_LEVEL=debug --config
+```
+
+To turn a secret into config, enter its value again, because the platform can't read the stored secret back.
 
 :::note
 Environment variables don't override managed database variables. To point an environment at a different database, attach an [environment-scoped database](/docs/mastra-platform/database#attach-with-the-cli) instead.

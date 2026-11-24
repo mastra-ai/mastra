@@ -230,17 +230,7 @@ import {
   RECOVER_RUN_SUSPENDED_ERROR_ID,
   shouldRejectStream,
 } from './durable/constants';
-import type {
-  DurableAgentRecoveredRun,
-  DurableAgentListActiveRunsOptions,
-  DurableAgentListActiveRunsResult,
-  DurableAgentRecoverActiveRunsOptions,
-  DurableAgentRecoverActiveRunsResult,
-  DurableAgentRecoverOptions,
-  DurableAgent,
-  DurableAgentStreamOptions,
-  DurableAgentStreamResult,
-} from './durable/durable-agent';
+import type { DurableAgent } from './durable/durable-agent';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable/durable-stream-until-idle';
 import { DefaultAgentExecutionEngine, EventedAgentExecutionEngine } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
@@ -274,10 +264,7 @@ import {
 } from './durable/run-registry';
 import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
-import type {
-  DurableAgentStreamResult as DurableStreamAdapterResult,
-  DurableAgentStreamOptions as DurableStreamAdapterOptions,
-} from './durable/stream-adapter';
+import type { DurableStreamAdapterResult, DurableStreamAdapterOptions } from './durable/stream-adapter';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
@@ -290,6 +277,14 @@ import {
 } from './durable/stream-adapter';
 import { toLiveStructuredOutputSchema } from './durable/structured-output-null-transform';
 import type {
+  DurableAgentRecoveredRun,
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  DurableAgentRecoverActiveRunsOptions,
+  DurableAgentRecoverActiveRunsResult,
+  DurableAgentRecoverOptions,
+  DurableAgentStreamOptions,
+  DurableAgentStreamResult,
   AgentSuspendedEventData,
   AgentAbortEventData,
   AgentChunkEventData,
@@ -2271,8 +2266,7 @@ export class Agent<
 
   /**
    * Owner of a run this process tracks, or undefined. Native engine runs are tracked by
-   * the run registry until auto-cleanup clears their replay history. DurableAgent
-   * overrides this with the same registry lookup.
+   * the run registry until auto-cleanup clears their replay history.
    * @internal
    */
   __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
@@ -2285,7 +2279,7 @@ export class Agent<
    * Owner of an engine run whose replay history is still retained: the local owner,
    * else the shared record, including legacy records without stream status.
    * Undefined once the run's topic is cleared or when no engine is selected. Only used
-   * for replay access. Rejects when the shared cache cannot be read. DurableAgent overrides this.
+   * for replay access. Rejects when the shared cache cannot be read.
    * @internal
    */
   async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
