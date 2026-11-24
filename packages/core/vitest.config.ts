@@ -24,7 +24,6 @@ export default defineConfig({
     },
   },
   test: {
-    globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
     projects: [
       {
         define: {
@@ -40,6 +39,7 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts', ...isolatedTestFiles],
+          globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
           setupFiles: [
             '@internal/test-utils/setup',
             path.resolve(__dirname, 'vitest.no-isolate-setup.ts'),
@@ -68,6 +68,7 @@ export default defineConfig({
           name: 'unit:packages/core-isolated',
           environment: 'node',
           include: isolatedTestFiles,
+          globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
           setupFiles: ['@internal/test-utils/setup', path.resolve(__dirname, 'vitest.registry-guard-setup.ts')],
           testTimeout: 120000,
           env: unitEnv,
