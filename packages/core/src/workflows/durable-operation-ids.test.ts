@@ -316,10 +316,10 @@ describe('durable operation ids — repeated occurrences (issue #24044)', () => 
     const result = await (await workflow.createRun()).start({ inputData: { n: 0 } });
     expect(result.status).toBe('success');
     const ids = recorder.take();
-    expect(ids.some(id => id.includes('-iter-2.'))).toBe(true);
-    // The legacy one-shot retry id carries no run id; each child run is its own
-    // memoization scope (an invoked function on Inngest), so it may repeat across them.
-    expect(duplicatesOf(ids.filter(id => id !== 'workflow.occ-loop-child.step.inc'))).toEqual([]);
+    // The child keeps the parent's run id, so its ids must stay distinct across parent
+    // iterations however that is achieved.
+    expect(ids.filter(id => id.startsWith('workflow.occ-loop-child.')).length).toBeGreaterThan(0);
+    expect(duplicatesOf(ids)).toEqual([]);
   });
 
   it('emits unique ids for a foreach nested inside a foreach item workflow', async () => {
@@ -404,5 +404,27 @@ describe('workflow output under a memoizing replay engine (issue #24044)', () =>
 
     expect(result.status === 'failed' ? result.error : undefined).toBeUndefined();
     expect(result.status === 'success' && result.result).toEqual({ n: 3 });
+  });
+
+  it('feeds each iteration of a nested workflow loop body the previous result', async () => {
+    memoizeLikeReplayEngine();
+    const seen: number[] = [];
+    const child = createWorkflow({ id: 'memo-nested-child', inputSchema: ioSchema, outputSchema: ioSchema })
+      .dountil(incStep(), async ({ inputData }) => inputData.n % 2 === 0)
+      .commit();
+    const workflow = createWorkflow({ id: 'memo-nested-parent', inputSchema: ioSchema, outputSchema: ioSchema })
+      .dountil(child, async ({ inputData }) => {
+        seen.push(inputData.n);
+        if (seen.length > 5) throw new Error(`nested loop body replayed a cached result: saw n=${seen.join(',')}`);
+        return inputData.n >= 6;
+      })
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'memo-nested-parent': workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: { n: 0 } });
+
+    expect(result.status === 'failed' ? result.error : undefined).toBeUndefined();
+    expect(result.status === 'success' && result.result).toEqual({ n: 6 });
+    expect(seen).toEqual([2, 4, 6]);
   });
 });

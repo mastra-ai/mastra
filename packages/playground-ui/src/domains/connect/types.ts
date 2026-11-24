@@ -17,6 +17,19 @@ export interface UserConnectAuthField {
   label?: string | null;
   description?: string | null;
   placeholder?: string | null;
+  defaultValue?: string | null;
+  /** Value format to validate against; unknown formats are ignored. */
+  format?: string | null;
+  pattern?: string | null;
+  /** When set, the value must be one of these options (rendered as a select). */
+  options?: readonly string[] | null;
+  prefix?: string | null;
+  suffix?: string | null;
+  documentationUrl?: string | null;
+  /** Warnings to show when the field holds a given value, keyed by value. */
+  warnings?: Readonly<Record<string, string>> | null;
+  /** Only show (and submit) the field while another field equals a value. */
+  visibleWhen?: { field: string; equals: string } | null;
   secret?: boolean | null;
   required?: boolean | null;
   order?: number | null;
@@ -78,6 +91,12 @@ export interface UserConnectSessionResponse {
    * URL is never exposed to the browser.
    */
   launchUrl: string;
+  /**
+   * Base URL of the vendor API the headless connect SDK must call (e.g. a
+   * self-hosted Nango). Absent or null on servers/platforms that predate it,
+   * in which case the SDK keeps its default host.
+   */
+  apiBaseUrl?: string | null;
   expiresAt: string | null;
 }
 
@@ -112,7 +131,19 @@ export interface ConnectPromptPayload {
   type: 'connect-prompt';
   requestedProvider?: string;
   providers: ConnectPromptProvider[];
+  /** Outcome for the model once a paused prompt resumes, e.g. "Linear connected successfully." */
+  message?: string;
+  /** Why the connection failed, when a paused prompt resumed without one. */
+  error?: string;
 }
+
+/**
+ * What the card resumes a paused `request_connection` call with once the
+ * connection settles: `active`, or `failed` with the reason the card showed.
+ */
+export type ConnectPromptResume =
+  | { provider: string; status: 'active' }
+  | { provider: string; status: 'failed'; error: string };
 
 /** Narrows an arbitrary tool output to a connect-prompt payload. */
 export function isConnectPromptPayload(output: unknown): output is ConnectPromptPayload {

@@ -162,9 +162,9 @@ describe('InngestExecutionEngine nested workflow output', () => {
   it.each([
     [{}, 'parent-run'],
     [{ loopIteration: 1 }, 'parent-run'],
-    [{ loopIteration: 3 }, 'parent-run-iter-3'],
+    [{ loopIteration: 3 }, 'parent-run'],
     [{ foreachIndex: 2 }, 'parent-run-foreach-2'],
-  ])('derives a distinct child run id per occurrence %o', async (occurrence, childRunId) => {
+  ])('derives the child run id for occurrence %o', async (occurrence, childRunId) => {
     const invoke = vi.fn().mockResolvedValue({
       result: { status: 'success', result: {}, state: {} },
       runId: childRunId,

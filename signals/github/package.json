@@ -1,12 +1,13 @@
 {
   "name": "@mastra/github-signals",
-  "version": "0.5.2",
+  "version": "0.5.4-alpha.0",
   "description": "GitHub PR notification signal provider for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {
@@ -57,7 +58,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

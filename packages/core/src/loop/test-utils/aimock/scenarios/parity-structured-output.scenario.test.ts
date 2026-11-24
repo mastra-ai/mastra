@@ -30,14 +30,10 @@
  * The unconditional part of the harness checks is the F15 regression guard — the model request must
  * carry `responseFormat: { type: 'json' }` with a plain JSON schema, never the raw Zod schema.
  *
- * Chunk order and content on the object-emitting variants (COR-1390, declared below): `fallback`,
- * `json-schema` and `nested` emit an `object-result` chunk before `step-finish`/`finish` on plain and
- * after them on durable/evented, and plain's `step-finish` payload carries the parsed object at
- * `output.object` where the wrapped engines omit it. `strict` has the same split one chunk over: plain
- * emits `error` before `step-finish`/`finish`, durable and evented emit it after `finish` (identical
- * payload). That ordering is recorded per engine in the harness but is not one of its checks; the
- * `strict` test below pins each engine's own order (COR-1390), so the wrapped engines go red when the
- * error chunk moves back before `step-finish`.
+ * Structured results and strict validation errors precede `finish` on every engine (COR-1499).
+ * The remaining COR-1390 difference is their position relative to `step-finish`: plain emits them
+ * before that chunk, while durable/evented emit them after. Plain also carries `output.object` in
+ * `step-finish`, where the wrapped engines omit it.
  */
 
 import type { JSONSchema7 } from 'json-schema';
@@ -106,7 +102,7 @@ const STRUCTURED: Record<Variant, PublicStructuredOutputOptions<any>> = {
  *    `output.toolCalls` but not `output.object`. The helper is frozen for this branch, so the path is
  *    stripped here rather than added to the shared list.
  *
- * Move `object-result` to the tail of plain's chunk arrays and drop `output.object` from its chunk
+ * Move `object-result` immediately before `finish` and drop `output.object` from its chunk
  * payloads so plain matches what the wrapped engines emit. Both edits are the difference, so the
  * declaration fails once either is fixed.
  */
@@ -128,7 +124,7 @@ function toWrappedChunkShape(turn: ParitySnapshot): ParitySnapshot {
   const move = <T>(items: T[]): T[] => {
     const copy = items.slice();
     const [item] = copy.splice(index, 1);
-    copy.push(item as T);
+    copy.splice(turn.chunkTypes.filter(type => type !== 'object-result').indexOf('finish'), 0, item as T);
     return copy;
   };
   return {
@@ -142,7 +138,7 @@ function toWrappedChunkShape(turn: ParitySnapshot): ParitySnapshot {
 /** Only the object-emitting variants need the reshape; `warn` streams no `object-result`. */
 const OBJECT_RESULT_ORDER: EngineDifference = {
   reason:
-    'COR-1390: plain emits the object-result chunk before step-finish/finish and carries the parsed object in the step-finish output; durable and evented emit object-result after and omit the object.',
+    'COR-1390: wrapped engines emit object-result after step-finish but before finish and omit the parsed object from step-finish.',
   expect: plain => ({ ...plain, turns: plain.turns.map(toWrappedChunkShape) }),
 };
 
@@ -246,50 +242,53 @@ const PLAIN_CONTRACTS: Record<Variant, Record<string, unknown>> = {
 
 const STRICT_ERROR_MESSAGE = 'Structured output validation failed';
 
-/**
- * Chunk order per engine for `strict`, pinned from the recording (…/plain-strict-none-post and the
- * wrapped cells). The wrappers emit the `error` chunk after `finish`; plain emits it before
- * `step-finish` (COR-1390), so pinning each engine's own order makes the wrappers go red when that is
- * fixed.
- */
+/** Strict errors must precede finish, even though wrapped engines validate after step-finish. */
 const STRICT_CHUNK_TYPES: Record<ParityEngine, string[]> = {
   plain: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'error', 'step-finish', 'finish'],
-  durable: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'finish', 'error'],
-  evented: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'finish', 'error'],
+  durable: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'error', 'finish'],
+  evented: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'error', 'finish'],
 };
 
-function moveErrorLast(turn: ParitySnapshot): ParitySnapshot {
+const STRICT_USAGE = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
+
+function moveErrorBeforeFinish(turn: ParitySnapshot): ParitySnapshot {
   const index = turn.chunkTypes.indexOf('error');
   if (index < 0) return turn;
   const move = <T>(values: T[]): T[] => {
     const copy = [...values];
     const [value] = copy.splice(index, 1);
-    copy.push(value!);
+    copy.splice(turn.chunkTypes.filter(type => type !== 'error').indexOf('finish'), 0, value!);
     return copy;
   };
   const chunkTypes = move(turn.chunkTypes);
   const chunkPayloads = move(turn.chunkPayloads);
   const stepFinishIndex = chunkTypes.indexOf('step-finish');
-  const stepFinishPayload = chunkPayloads[stepFinishIndex] as { stepResult?: { reason?: string } } | undefined;
+  const stepFinishPayload = chunkPayloads[stepFinishIndex] as
+    | { stepResult?: { reason?: string }; output?: { usage?: unknown } }
+    | undefined;
+  const usage = { ...STRICT_USAGE, raw: STRICT_USAGE };
   if (stepFinishPayload?.stepResult) stepFinishPayload.stepResult.reason = 'stop';
+  if (stepFinishPayload?.output) stepFinishPayload.output.usage = usage;
   return {
     ...turn,
     chunks: move(turn.chunks),
     chunkTypes,
     chunkPayloads,
     finishReason: 'stop',
-    finishChunk: { ...turn.finishChunk, reason: 'stop' },
+    usage,
+    finishChunk: { ...turn.finishChunk, reason: 'stop', usage },
   };
 }
 
 const STRICT_ORDER: EngineDifference = {
-  reason: 'COR-1390: wrapped engines emit the structured-output error chunk after step-finish and finish.',
-  expect: plain => ({ ...plain, turns: plain.turns.map(moveErrorLast) }),
+  reason:
+    'COR-1390: wrapped engines validate after step-finish, retaining provider usage and stop reason; the error still precedes finish.',
+  expect: plain => ({ ...plain, turns: plain.turns.map(moveErrorBeforeFinish) }),
 };
 
 async function runStrict(target: ParityTarget) {
   return expectParity(target, {
-    model: { tapes: [textOnlyTape(BAD)] },
+    model: { tapes: [textOnlyTape(BAD, STRICT_USAGE)] },
     buildAgent: ({ model }) =>
       new Agent({
         id: AGENT_ID,

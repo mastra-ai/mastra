@@ -350,10 +350,43 @@ export class MessageMerger {
 
   private static createMergeIndex(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): MergeIndex {
     const keys = new Map<MessagePart, string>();
+    const baseKeyOf = (part: MessagePart) => CacheKeyGenerator.fromDBParts([part]);
+    const dataPartId = (part: MessagePart) =>
+      part.type.startsWith('data-') && 'id' in part && typeof part.id === 'string' ? part.id : undefined;
+    // Data part ids only distinguish parts when both sides carry ids. A stored part without an id
+    // (legacy rows, regular-agent persistence) still matches one incoming copy that has an id the
+    // other side lacks; every other id keeps its own key. The id-less part matches the last such
+    // copy, so suppressing it doesn't shift where the earlier ones are inserted.
+    const keyParts = (parts: MessagePart[], otherParts: MessagePart[]) => {
+      const otherIds = new Set<string>();
+      const otherIdless = new Map<string, number>();
+      for (const part of otherParts) {
+        if (!part.type.startsWith('data-')) continue;
+        const baseKey = baseKeyOf(part);
+        const id = dataPartId(part);
+        if (id !== undefined) otherIds.add(`${baseKey}|id:${JSON.stringify(id)}`);
+        else otherIdless.set(baseKey, (otherIdless.get(baseKey) ?? 0) + 1);
+      }
+      for (const part of [...parts].reverse()) {
+        if (keys.has(part)) continue;
+        const baseKey = baseKeyOf(part);
+        const id = dataPartId(part);
+        const unmatched = otherIdless.get(baseKey) ?? 0;
+        const idKey = id !== undefined ? `${baseKey}|id:${JSON.stringify(id)}` : undefined;
+        if (idKey !== undefined && !otherIds.has(idKey) && unmatched > 0) {
+          otherIdless.set(baseKey, unmatched - 1);
+          keys.set(part, baseKey);
+        } else {
+          keys.set(part, idKey ?? baseKey);
+        }
+      }
+    };
+    keyParts(latestMessage.content.parts, incomingMessage.content.parts);
+    keyParts(incomingMessage.content.parts, latestMessage.content.parts);
     const keyOf = (part: MessagePart) => {
       let key = keys.get(part);
       if (key === undefined) {
-        key = CacheKeyGenerator.fromDBParts([part]);
+        key = baseKeyOf(part);
         keys.set(part, key);
       }
       return key;

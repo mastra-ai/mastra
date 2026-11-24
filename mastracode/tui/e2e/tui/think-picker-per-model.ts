@@ -78,7 +78,8 @@ export const thinkPickerPerModelScenario = {
     await switchModel(terminal, runtime, 'xai', 'grok-4.20-0309-reasoning');
     const grok420Picker = await openThinkPicker(terminal, runtime);
     runtime.printScreen('/think on Grok 4.20 without reasoning controls', terminal);
-    assert.match(grok420Picker, /none\s+Reasoning disabled/);
+    // Only OpenAI models show the provider value ("none"); other providers label it "Off".
+    assert.match(grok420Picker, /Off\s+Reasoning disabled/);
     assert.doesNotMatch(grok420Picker, /Light reasoning|Balanced reasoning|Deep reasoning|Very High/);
     await closeThinkPicker(terminal, runtime);
 

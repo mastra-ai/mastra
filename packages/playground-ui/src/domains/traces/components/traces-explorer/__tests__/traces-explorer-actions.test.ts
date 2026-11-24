@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getTracePropertyFilterTokens } from '../../../trace-filters';
 import {
   EMPTY_TRACES_SELECTION,
   applyDate,
@@ -75,11 +76,10 @@ describe('isSelectionEmpty', () => {
 
 describe('selectSpan', () => {
   describe('when another span is selected', () => {
-    it('drops the previous span’s tab and score but keeps the highlight', () => {
+    it('keeps the open tab and the highlight but drops the previous span’s score', () => {
       expect(selectSpan(openTrace, 'span-2')).toEqual({
         ...openTrace,
         spanId: 'span-2',
-        spanTab: undefined,
         scoreId: undefined,
       });
     });
@@ -228,6 +228,18 @@ describe('applyDateRange', () => {
 });
 
 describe('sanitizeTracesFilters', () => {
+  it.each(['all', 'input', 'output', 'error', 'inputPreview', 'outputPreview', 'errorPreview'])(
+    'drops unsupported %s content chips and preserves supported chips',
+    field => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
+      };
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([]);
+      expect(sanitizeTracesFilters(filters, { withTokenSearch: true })).toBe(filters);
+    },
+  );
+
   describe('when the filters hold entries the query cannot run', () => {
     it('drops a running status, unsupported fields and root duration without support', () => {
       const filters: TracesFilters = {
@@ -240,14 +252,60 @@ describe('sanitizeTracesFilters', () => {
         ],
       };
 
-      expect(sanitizeTracesFilters(filters, false).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
     });
   });
 
   describe('when the server supports root duration', () => {
     it('keeps the duration token', () => {
       const filters: TracesFilters = { ...baseFilters, tokens: [{ fieldId: 'durationMs', value: '100' }] };
-      expect(sanitizeTracesFilters(filters, true)).toBe(filters);
+      expect(sanitizeTracesFilters(filters, { withRootDuration: true })).toBe(filters);
+    });
+  });
+  describe('when the server does not record time to first chunk or token', () => {
+    it('drops root and span time to first chunk and token tokens', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'threadId', value: 'thread-1' },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
+    });
+  });
+
+  describe('when the server records time to first chunk but not token', () => {
+    it('keeps only the chunk tokens', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, { withTimeToFirstChunk: true }).tokens).toEqual([
+        { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+      ]);
+    });
+  });
+
+  describe('when the server records both', () => {
+    it('keeps every time to first chunk and token token', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, { withTimeToFirstChunk: true, withTimeToFirstToken: true })).toBe(filters);
     });
   });
 });
@@ -274,6 +332,16 @@ describe('getSelectedEntityOption / getSelectedStatus', () => {
       expect(getSelectedStatus(tokens)).toBeUndefined();
     });
   });
+
+  describe('when the tokens exclude an entity type and a status', () => {
+    it('reads nothing, since nothing is selected', () => {
+      const tokens = getTracePropertyFilterTokens(
+        new URLSearchParams('rootEntityType=agent&rootEntityType.op=isNot&status=error&status.op=isNot'),
+      );
+      expect(getSelectedEntityOption(tokens)).toBeUndefined();
+      expect(getSelectedStatus(tokens)).toBeUndefined();
+    });
+  });
 });
 
 describe('resolveTracesDateWindow', () => {
@@ -285,7 +353,7 @@ describe('resolveTracesDateWindow', () => {
       vi.setSystemTime(new Date('2026-06-10T12:00:00.000Z'));
 
       expect(resolveTracesDateWindow('last-3d', new Date(0), new Date(1))).toEqual({
-        dateFrom: new Date(Date.now() - 72 * 3600_000),
+        dateFrom: new Date('2026-06-07T12:00:00.000Z'),
         dateTo: undefined,
       });
     });
@@ -335,11 +403,60 @@ describe('buildTracesQueryRequest', () => {
     });
   });
 
+  describe.each([
+    { param: 'status', path: 'status', value: 'error' },
+    { param: 'rootEntityType', path: 'entityType', value: 'agent' },
+  ])('when the URL excludes one $param', ({ param, path, value }) => {
+    const whereFor = (query: string) =>
+      buildTracesQueryRequest({
+        filters: { ...baseFilters, tokens: getTracePropertyFilterTokens(new URLSearchParams(query)) },
+        now,
+      }).where;
+
+    it('with "is not", queries only traces without it', () => {
+      expect(whereFor(`${param}=${value}&${param}.op=isNot`)).toEqual({
+        op: 'and',
+        args: [{ op: 'ne', left: { path }, right: { literal: value } }],
+      });
+    });
+
+    it('with "is not any of", queries only traces without it', () => {
+      expect(whereFor(`${param}=${value}&${param}.op=notIn`)).toEqual({
+        op: 'and',
+        args: [{ op: 'notIn', value: { path }, set: [value] }],
+      });
+    });
+  });
+
   describe('when the server supports root duration', () => {
     it('queries duration conditions in tokens and groups', () => {
       const body = JSON.stringify(buildTracesQueryRequest({ filters, withRootDuration: true, now }));
 
       expect(body.match(/durationMs/g)).toHaveLength(2);
+    });
+  });
+
+  describe('when the server lacks time to first token', () => {
+    it('leaves time to first token conditions out of groups, keeping time to first chunk ones', () => {
+      const streamedFilters: TracesFilters = {
+        ...baseFilters,
+        groups: [
+          {
+            id: 'group-streaming',
+            logic: 'or',
+            nodes: [
+              { fieldId: 'spans.timeToFirstTokenMs', operatorId: 'gt', value: '900' },
+              { fieldId: 'timeToFirstChunkMs', operatorId: 'gt', value: '700' },
+            ],
+          },
+        ],
+      };
+      const body = JSON.stringify(
+        buildTracesQueryRequest({ filters: streamedFilters, withTimeToFirstChunk: true, now }),
+      );
+
+      expect(body).not.toContain('timeToFirstTokenMs');
+      expect(body).toContain('timeToFirstChunkMs');
     });
   });
 
@@ -375,6 +492,19 @@ describe('buildTracesLegacyFilters', () => {
         startedAt: { start: dateFrom },
         endedAt: { end: dateTo },
       });
+    });
+  });
+
+  describe.each(['isNot', 'notIn'])('when the URL excludes a root entity type and a status with %s', operator => {
+    it('does not filter the light list to them', () => {
+      const tokens = getTracePropertyFilterTokens(
+        new URLSearchParams(`rootEntityType=agent&rootEntityType.op=${operator}&status=error&status.op=${operator}`),
+      );
+
+      const legacy = buildTracesLegacyFilters({ filters: { ...baseFilters, tokens } });
+
+      expect(legacy).not.toHaveProperty('entityType');
+      expect(legacy).not.toHaveProperty('status');
     });
   });
 });

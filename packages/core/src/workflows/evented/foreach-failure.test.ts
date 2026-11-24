@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
+import type { WorkflowOptions } from '../types';
 import { createStep, createWorkflow } from '.';
 
 // Issue #26390: a failed .foreach() iteration must fail the run on the evented engine.
@@ -82,17 +83,27 @@ describe('evented foreach with a failing iteration', () => {
 describe('evented foreach with several failing iterations', () => {
   const item = z.object({ n: z.number() });
 
-  async function setup(id: string, execute: (n: number, runFailed: Promise<void>) => Promise<{ n: number }>) {
+  async function setup(
+    id: string,
+    execute: (n: number, runFailed: Promise<void>) => Promise<{ n: number }>,
+    options?: WorkflowOptions<1 | 2>,
+  ) {
     let markRunFailed!: () => void;
     const runFailed = new Promise<void>(resolve => (markRunFailed = resolve));
     const pubsub = new EventEmitterPubSub();
     const failEvents: unknown[] = [];
+    const failedIterations: unknown[] = [];
     const publish = pubsub.publish.bind(pubsub);
     pubsub.publish = async (topic, event) => {
       await publish(topic, event);
       if (topic === 'workflows' && event.type === 'workflow.fail') {
         failEvents.push(event);
         markRunFailed();
+      }
+      // Published for each settled iteration right before it decides whether to fail the run.
+      const progress = (event.data as any)?.payload;
+      if ((event.data as any)?.type === 'workflow-step-progress' && progress?.iterationStatus === 'failed') {
+        failedIterations.push(progress.currentIndex);
       }
     };
 
@@ -109,7 +120,7 @@ describe('evented foreach with several failing iterations', () => {
       retries: 0,
       execute: ({ inputData }) => execute(inputData.n, runFailed),
     });
-    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.array(item) })
+    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.array(item), options })
       .then(list)
       .foreach(boom, { concurrency: 2 })
       .commit();
@@ -128,7 +139,7 @@ describe('evented foreach with several failing iterations', () => {
         );
         expect(recorded).toEqual(statuses);
       });
-    return { mastra, run, failEvents, loadForeach, allIterationsRecorded };
+    return { mastra, run, failEvents, failedIterations, loadForeach, allIterationsRecorded };
   }
 
   it('keeps the first failure when a sibling fails after the run failed', async () => {
@@ -150,6 +161,35 @@ describe('evented foreach with several failing iterations', () => {
       expect(foreach.status, 'stored foreach status after the late siblings finished').toBe('failed');
       expect(foreach.error?.message, 'stored foreach error after a second iteration failed').toBe('first failure');
       expect(failEvents, 'workflow.fail events for one failed run').toHaveLength(1);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('fails the run once when two iterations fail at the same time', async () => {
+    let arrive!: () => void;
+    let arrived = 0;
+    const bothRunning = new Promise<void>(resolve => (arrive = resolve));
+    const { mastra, run, failEvents, failedIterations, loadForeach } = await setup(
+      'foreach-simultaneous-failures',
+      async n => {
+        if (++arrived === 2) arrive();
+        await bothRunning;
+        throw new Error(`failure ${n}`);
+      },
+    );
+    try {
+      const result: any = await run.start({ inputData: {} });
+      expect(result.status).toBe('failed');
+
+      await vi.waitFor(() => expect(failedIterations).toHaveLength(2));
+      await new Promise(resolve => setTimeout(resolve, 20));
+      const foreach = await loadForeach();
+      expect(failEvents, 'workflow.fail events for one failed run').toHaveLength(1);
+      expect(foreach.status, 'stored foreach status after both iterations failed').toBe('failed');
+      expect(foreach.error?.message, 'stored foreach error is the error the run failed with').toBe(
+        result.error?.message,
+      );
     } finally {
       await mastra.stopWorkers();
     }
@@ -180,5 +220,38 @@ describe('evented foreach with several failing iterations', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  // Declining running snapshots used to leave the failed foreach record in storage during the
+  // replay: replaying the foreach kept the old error, and replaying from an earlier step hung.
+  describe.each([1, 2] as const)('time-travel replay with running snapshots declined (storage v%s)', storageVersion => {
+    it.each(['boom', 'list'])('succeeds when replaying from %s', async step => {
+      let replaying = false;
+      const { mastra, run, allIterationsRecorded } = await setup(
+        `foreach-time-travel-succeeds-v${storageVersion}-${step}`,
+        async (n, runFailed) => {
+          if (replaying) return { n };
+          if (n === 1) throw new Error('first failure');
+          await runFailed;
+          throw new Error('second failure');
+        },
+        { storageVersion, shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+      );
+      try {
+        expect(((await run.start({ inputData: {} })) as any).status).toBe('failed');
+        await allIterationsRecorded(['failed', 'failed']);
+
+        replaying = true;
+        const replay: any = await Promise.race([
+          run.timeTravel(step === 'list' ? { step, inputData: {} } : { step }),
+          new Promise(resolve => setTimeout(() => resolve('HANG'), 3000)),
+        ]);
+        expect(replay).not.toBe('HANG');
+        expect(replay.status).toBe('success');
+        expect(replay.result).toEqual([{ n: 1 }, { n: 2 }]);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 });

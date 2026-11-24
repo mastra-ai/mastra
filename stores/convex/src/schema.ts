@@ -159,6 +159,8 @@ export const mastraSchedulesTable = defineTable({
   metadata: v.optional(v.union(v.string(), v.null())),
   owner_type: v.optional(v.union(v.string(), v.null())),
   owner_id: v.optional(v.union(v.string(), v.null())),
+  run_at: v.optional(v.union(v.number(), v.null())),
+  end_at: v.optional(v.union(v.number(), v.null())),
   workflow_id: v.optional(v.union(v.string(), v.null())),
 })
   .index('by_record_id', ['id'])
@@ -269,6 +271,9 @@ export const mastraBackgroundTasksTable = defineTable({
   // field would reject those documents and fail `convex deploy`.
   ownerId: v.optional(v.union(v.string(), v.null())),
   leaseExpiresAt: v.optional(v.union(v.string(), v.null())),
+  // Optional for the same reason: rows written before these fields existed.
+  expiresAt: v.optional(v.union(v.string(), v.null())),
+  metadata: v.optional(v.union(v.string(), v.null())),
 })
   .index('by_record_id', ['id'])
   .index('by_status_created', ['status', 'createdAt'])

@@ -162,6 +162,9 @@ describe('Anthropic e2e test', () => {
       }),
       prompt:
         'You are a test agent. Your task is to respond with valid JSON matching the schema provided. When a field is optional or nullable please mark it as null..',
+      // From @ai-sdk/anthropic 3.0.138, `auto` falls back to a JSON tool when the schema has an
+      // open object (objectPassthrough, objectLoose). This test covers native structured output.
+      providerOptions: { anthropic: { structuredOutputMode: 'outputFormat' } },
     });
 
     expect(result.finishReason).toBe('stop');

@@ -1,4 +1,5 @@
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import { MASTRA_NORMALIZED_USER_KEY, MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import type { MastraUser } from '@mastra/core/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RESOURCE_ID_HEADER } from '../client.js';
@@ -38,6 +39,8 @@ function fakePlatform(options?: {
   integrations?: Array<Record<string, unknown>>;
   endUserProviders?: string[] | null;
   gateConnectUrl?: string;
+  /** Vendor API host on session responses; null mimics a platform that predates the field. */
+  apiBaseUrl?: string | null;
 }) {
   const connections = options?.connections ?? [makeConnection()];
   const integrations = options?.integrations ?? [
@@ -87,6 +90,7 @@ function fakePlatform(options?: {
         // reader.
         connectUrl: body.resourceId ? null : 'https://connect.test/session',
         sessionToken: body.resourceId ? null : 'sess_tok',
+        ...(options?.apiBaseUrl === null ? {} : { apiBaseUrl: options?.apiBaseUrl ?? 'https://nango.example.test' }),
         expiresAt: '2026-10-13T15:00:00Z',
       });
     }
@@ -131,12 +135,13 @@ function makeCtx(options?: {
   params?: Record<string, string>;
   query?: Record<string, string>;
   requestHeaders?: Record<string, string>;
-  user?: unknown;
+  user?: MastraUser;
+  rawUser?: unknown;
 }) {
-  const store = new Map<string, unknown>();
-  if (options?.resourceId !== undefined) store.set(MASTRA_RESOURCE_ID_KEY, options.resourceId);
-  if (options?.user !== undefined) store.set('user', options.user);
-  const requestContext = { get: (key: string) => store.get(key) };
+  const requestContext = new RequestContext();
+  if (options?.resourceId !== undefined) requestContext.set(MASTRA_RESOURCE_ID_KEY, options.resourceId);
+  if (options?.rawUser !== undefined) requestContext.set('user', options.rawUser);
+  if (options?.user !== undefined) requestContext.set(MASTRA_NORMALIZED_USER_KEY, options.user);
   const headers: Record<string, string> = {};
   return {
     req: {
@@ -266,15 +271,15 @@ describe('identity gate', () => {
     expect(emptyResponse.status).toBe(401);
   });
 
-  it('derives the key from the resourceId callback, exposing the authenticated user', async () => {
+  it('derives the key from the resourceId callback, exposing the normalized authenticated user', async () => {
     const { fetchMock, requests } = fakePlatform();
     const routes = userConnectRoutes(
       routeOptions(fetchMock as unknown as typeof fetch, {
-        resourceId: ctx => (ctx.user as { id: string }).id,
+        resourceId: ({ user }) => user?.id,
       }),
     );
     const response = await (findRoute(routes, 'GET', '/connect/connections') as any).handler(
-      makeCtx({ user: { id: 'end-user-7' } }),
+      makeCtx({ rawUser: { sub: 'end-user-7', claims: {} }, user: { id: 'end-user-7', name: 'Ada' } }),
     );
     expect(response.status).toBe(200);
     expect(requests[0]!.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-7');
@@ -447,11 +452,24 @@ describe('POST /:provider/sessions', () => {
       // The browser gets the launch-gate path only — never a launch
       // capability (vendor connect URL or session token).
       launchUrl: '/connect/connections/c_new1/launch',
+      // Not a capability: the browser needs it to point the connect SDK at
+      // a self-hosted Nango.
+      apiBaseUrl: 'https://nango.example.test',
       expiresAt: '2026-10-13T15:00:00Z',
     });
     const sessionRequest = requests.find(request => request.url.pathname.includes('/connect-sessions'))!;
     expect(sessionRequest.body).toEqual({ resourceId: 'end-user-42' });
     expect(sessionRequest.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('returns a null apiBaseUrl when the platform predates the field, so the browser keeps the default Nango host', async () => {
+    const { fetchMock } = fakePlatform({ apiBaseUrl: null });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { provider: 'linear' } }),
+    );
+    expect(response.status).toBe(201);
+    expect((await json(response)).apiBaseUrl).toBeNull();
   });
 
   it('404s for providers outside the allowlist without touching the platform', async () => {

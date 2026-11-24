@@ -144,8 +144,9 @@ describe('MessageRow error rendering', () => {
     // The visible summary echoes the parsed, sanitized provider message — not the
     // raw JSON envelope (which is hidden behind the Details toggle).
     const summary = screen.getByTestId('agent-builder-chat-error-summary');
-    const expected = parseStreamErrorText(openAIServerErrorPayload).summary;
-    expect(summary.textContent).toContain(expected);
+    expect(summary.textContent).toContain(
+      'The server had an error while processing your request. Sorry about that! You can retry your request.',
+    );
     expect(summary.textContent).not.toContain('AI_APICallError');
     expect(summary.textContent).not.toContain('req_abc123');
   });

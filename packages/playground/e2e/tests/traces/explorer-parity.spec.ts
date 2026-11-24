@@ -77,7 +77,7 @@ test.describe('Traces explorer', () => {
   test.describe('when a date preset is applied and the user navigates away and back', () => {
     test('restores the preset from storage and queries the matching time window', async ({ page }) => {
       await openTracesPage(page);
-      await page.getByRole('button', { name: 'Value: Last 7 days' }).click();
+      await page.getByRole('button', { name: 'Last 7 days' }).click();
       await page.getByRole('menuitemradio', { name: 'Last 24 hours' }).click();
       await expect(page).toHaveURL(/datePreset=last-24h/);
 
@@ -89,7 +89,7 @@ test.describe('Traces explorer', () => {
       const request = await restoredQuery;
 
       await expect(page).toHaveURL(/datePreset=last-24h/);
-      await expect(page.getByRole('button', { name: 'Value: Last 24 hours' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Last 24 hours' })).toBeVisible();
       const { timeRange }: { timeRange: { from: string; to: string } } = request.postDataJSON();
       const windowMs = new Date(timeRange.to).getTime() - new Date(timeRange.from).getTime();
       expect(Math.round(windowMs / (60 * 60 * 1000))).toBe(24);
@@ -123,14 +123,13 @@ test.describe('Traces explorer', () => {
     });
   });
 
-  test.describe('when auto refresh is on and a new trace is recorded', () => {
+  test.describe('when a new trace is recorded', () => {
     test('shows the new trace without a reload', async ({ page, request }) => {
       const agentId = await findAgentId(request);
       test.skip(!agentId, 'Needs a recorded agent trace to know which agent to call.');
       test.setTimeout(120_000);
 
       await openTracesPage(page);
-      await expect(page.getByRole('checkbox', { name: 'Auto refresh' })).toBeChecked();
 
       const prompt = `Reply with the single word ok (e2e ${Date.now()})`;
       const generated = await request.post(`/api/agents/${agentId}/generate`, {

@@ -8,6 +8,12 @@
         "type": "toggle"
       }
     ],
+    "fugu": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh"]
+      }
+    ],
     "fugu-ultra": [
       {
         "type": "effort",
@@ -15,12 +21,6 @@
       }
     ],
     "fugu-ultra-20260615": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh"]
-      }
-    ],
-    "fugu": [
       {
         "type": "effort",
         "values": ["high", "xhigh"]

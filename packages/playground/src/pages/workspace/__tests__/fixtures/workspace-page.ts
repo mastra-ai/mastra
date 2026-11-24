@@ -44,6 +44,11 @@ export const workspaceInfoWithoutSkills: WorkspaceInfoResponse = {
   capabilities: { ...capabilities, hasSkills: false },
 };
 
+export const workspaceInfoWithDynamicFilesystem: WorkspaceInfoResponse = {
+  ...workspaceInfo,
+  capabilities: { ...capabilities, hasDynamicFilesystem: true },
+};
+
 export const rootListing: WorkspaceFsListResponse = {
   path: '.',
   entries: [{ name: 'notes', type: 'directory' }],

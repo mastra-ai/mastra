@@ -141,7 +141,7 @@ function StubCreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDatase
         onSuccess(created.id);
       }}
     >
-      Create Dataset
+      Create dataset
     </button>
   );
 }
@@ -740,7 +740,7 @@ describe('AddDatasetItemDialog', () => {
       const createOption = await screen.findByRole('option', { name: 'Create dataset' });
       fireEvent.pointerDown(createOption);
       fireEvent.click(createOption);
-      fireEvent.click(await screen.findByRole('button', { name: 'Create Dataset' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Create dataset' }));
 
       await waitFor(() => expect(picker.textContent).toContain(freshDataset.name));
       await waitFor(() => expect(isDisabled('Next')).toBe(false));

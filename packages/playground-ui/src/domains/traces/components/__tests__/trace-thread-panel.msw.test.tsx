@@ -117,6 +117,17 @@ describe('TraceThreadPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
+    it('when the host names the close button, then clicking it calls onClose', async () => {
+      installHandlers();
+      const onClose = vi.fn();
+      const { queryClient } = renderPanel({ onClose, closeLabel: 'Close' });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('button', { name: 'Back to trace' })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
     it('when Escape is pressed, then onClose is called', async () => {
       installHandlers();
       const onClose = vi.fn();

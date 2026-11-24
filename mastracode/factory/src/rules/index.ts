@@ -1,22 +1,22 @@
-export { resolveFactoryStageRules } from './resolve.js';
-export type { ResolvedFactoryStageRule } from './resolve.js';
 export {
   FACTORY_GITHUB_EVENTS,
+  FACTORY_DEPENDABOT_EVENTS,
+  FACTORY_VANTA_EVENTS,
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
   FACTORY_LINEAR_EVENTS,
-  FACTORY_RULE_BOARDS,
   FACTORY_RULE_SOURCES,
-  FACTORY_RULE_STAGES,
   factoryRuleSourceForWorkItem,
-  isFactoryRuleStage,
 } from './types.js';
 export type {
-  FactoryBoardRuleLeaf,
   FactoryBoundRuleContext,
   FactoryCommitDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryDependabotEventName,
+  FactoryDependabotRuleContext,
+  FactoryVantaEventName,
+  FactoryVantaRuleContext,
   FactoryIncidentioEventName,
   FactoryIncidentioRuleContext,
   FactoryJiraEventName,

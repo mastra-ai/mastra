@@ -23,6 +23,7 @@ import { Input } from '@/ds/components/Input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { Txt } from '@/ds/components/Txt';
 import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@/ds/new/settings';
@@ -430,6 +431,7 @@ export const FullPage: Story = {
                 'Up to 3 projects',
               ]}
             >
+              {/* oxlint-disable-next-line mastra/sentence-case-labels -- plan names are proper nouns */}
               <Button>Downgrade to Free</Button>
             </PlanColumn>
             <PlanColumn
@@ -467,6 +469,7 @@ export const FullPage: Story = {
                 '2× Medium included',
               ]}
             >
+              {/* oxlint-disable-next-line mastra/sentence-case-labels -- plan names are proper nouns */}
               <Button variant="primary">Upgrade to Teams</Button>
             </PlanColumn>
             <PlanColumn
@@ -525,7 +528,7 @@ function AddCreditsDialog() {
           <DialogTitle>Add credits</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <SettingsContainer variant="inset">
+          <SettingsContainer>
             <SettingsRow label="Credits to purchase" description="$1.20 went to vCPU beyond your allowance this month.">
               <InputGroup size="sm" className="w-30">
                 <InputGroupAddon>$</InputGroupAddon>
@@ -579,11 +582,66 @@ export const AddCredits: Story = {
     docs: {
       description: {
         story:
-          'A short form dialog, and the one place the inset `SettingsContainer` is meant for: title and Close in the header, stacked settings rows on an inset panel in the body (an amount field, a switch with a badge, and a sentence of two small fields), and a footer whose status sits left of Cancel and the primary action.',
+          'A short form dialog: title and Close in the header, settings rows in a `SettingsContainer` in the body (an amount field, a switch with a badge, and a sentence of two small fields), and a footer whose status sits left of Cancel and the primary action.',
       },
     },
   },
   render: () => <AddCreditsDialog />,
+};
+
+export const SettingsRowsInDialog: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Settings rows in a default-size dialog: text fields sit beside their label like the select does, and only controls too wide for the row wrap under the label.',
+      },
+    },
+  },
+  render: () => (
+    <Dialog>
+      <DialogTrigger render={<Button>New destination</Button>} />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New destination</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <SettingsContainer>
+            <SettingsRow label="Type">
+              <Select defaultValue="email">
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="webhook">Webhook</SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsRow>
+            <SettingsRow label="Name">
+              <Input placeholder="e.g. On-call team" />
+            </SettingsRow>
+            <SettingsRow label="Webhook URL" description="Receives a POST for each alert.">
+              <Input placeholder="https://hooks.example.com/alerts" />
+            </SettingsRow>
+          </SettingsContainer>
+        </DialogBody>
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={() => {}}>Add destination</DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
+  play: async ({ canvas, userEvent, canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole('button', { name: 'New destination' }));
+    const name = await waitFor(() => page.getByRole('textbox', { name: 'Name' }));
+    // From `sm` up (below it the dialog is a drawer and rows stack), the field stays beside its label.
+    if (!canvasElement.ownerDocument.defaultView?.matchMedia('(min-width: 40rem)').matches) return;
+    const label = page.getByText('Name', { selector: 'label' });
+    await expect(name.getBoundingClientRect().left).toBeGreaterThan(label.getBoundingClientRect().right);
+  },
 };
 
 export const ResizeWhileOpen: Story = {

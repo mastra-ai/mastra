@@ -5,6 +5,7 @@ import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { McpEventDrawer } from '@/domains/mcps/components/mcp-event-drawer/mcp-event-drawer';
+import { McpTaskDrawer } from '@/domains/mcps/components/mcp-task-drawer/mcp-task-drawer';
 import { McpToolDrawerBody } from '@/domains/mcps/components/mcp-tool-drawer-body';
 import { MCPDetail } from '@/domains/mcps/components/MCPDetail';
 import { mcpServerCrumb, navCrumb } from '@/domains/navigation/crumbs';
@@ -39,7 +40,7 @@ export const McpServerPage = () => {
     ) : undefined;
 
   return (
-    <PageLayout variant="narrow" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} header={header}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} header={header}>
       <MCPDetail isLoading={isLoading} server={server} />
       {serverId && (
         <>
@@ -47,6 +48,7 @@ export const McpServerPage = () => {
             <McpToolDrawerBody serverId={serverId} />
           </ToolDrawer>
           <McpEventDrawer serverId={serverId} />
+          <McpTaskDrawer serverId={serverId} />
         </>
       )}
     </PageLayout>

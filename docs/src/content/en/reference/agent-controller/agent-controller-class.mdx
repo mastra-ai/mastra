@@ -601,7 +601,7 @@ Returns: `Promise<StorageListMessagesOutput>` with controller-format messages.
 
 #### `generateThreadTitle(options)`
 
-Generate and store a title from a thread's conversation without creating a Session. `threadId` is required. `sessionId`, `model`, and `requestContext` are optional; pass `sessionId` to borrow a live session's agent and request context. The method throws when the thread doesn't exist and returns `undefined` when the model produces no title.
+Generate and store a title from a thread's conversation without creating a Session. `threadId` is required. Optional fields include `sessionId`, `model`, and `requestContext`. Passing `sessionId` borrows a live session's agent and request context. The method throws when the thread doesn't exist and returns `undefined` when the model produces no title.
 
 ```typescript
 const title = await controller.generateThreadTitle({
@@ -651,6 +651,16 @@ const modes = controller.listModes()
 ```
 
 Returns: `AgentControllerMode[]`
+
+#### `getDefaultMode()`
+
+Return the mode the controller starts in. The constructor picks it in this order: the mode that matches `defaultModeId`, then the first mode with `default: true` or `metadata.default: true`, then the first configured mode. If `defaultModeId` doesn't match any mode, the constructor throws.
+
+```typescript
+const mode = controller.getDefaultMode()
+```
+
+Returns: `AgentControllerMode`
 
 #### `getCurrentAgent(session)`
 
@@ -750,7 +760,9 @@ Returns: `Promise<ModelAuthStatus>`
 
 #### `listAvailableModels()`
 
-List models from the configured and built-in gateways. Results are cached briefly and sorted with usage data when `modelUseCountProvider` is configured.
+List models from the configured and built-in gateways. Each model's `useCount` comes from `modelUseCountProvider` when you configure one.
+
+The built-in gateways download public catalogs (models.dev and Netlify). A call waits for a catalog only while none has downloaded yet. After that, calls return the last downloaded catalog, including when a download fails. Once it's 5 minutes old, the next call downloads a new one in the background without waiting for it. Configured gateways and API key availability are checked again after 10 seconds.
 
 ```typescript
 const models = await controller.listAvailableModels()
@@ -760,7 +772,7 @@ Returns: `Promise<AvailableModel[]>`
 
 #### `invalidateAvailableModelsCache()`
 
-Clear the available-model cache.
+Make the next `listAvailableModels()` call check configured gateways and API key availability again, and download the models.dev and Netlify catalogs again in the background. Call it after your app stores or removes a credential or changes a custom provider.
 
 ```typescript
 controller.invalidateAvailableModelsCache()

@@ -255,7 +255,7 @@ await sandbox.reloadVolumes()
 
 :::note
 
-Keep the working directory outside every Volume mount (for example `/workspace`). Modal can't reload a Volume that is the current working directory, so `ModalSandbox` throws if `workingDirectory` is at or inside a mount path.
+Keep the working directory outside every Volume mount (for example `/workspace`). Modal can't reload a Volume that's the current working directory, so `ModalSandbox` throws if `workingDirectory` is at or inside a mount path.
 
 :::
 

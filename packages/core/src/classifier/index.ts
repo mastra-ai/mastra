@@ -180,6 +180,41 @@ export type ClassifierResult<QUESTIONS extends ClassifierQuestions> = {
   };
 };
 
+/** Ids of the run a classifier decision belongs to. Each one is set only when the caller knows it. */
+export type ClassifierDecisionIds = {
+  runId?: string;
+  threadId?: string;
+  resourceId?: string;
+  messageId?: string;
+  traceId?: string;
+  spanId?: string;
+};
+
+/**
+ * A classifier call and its result, as passed to audit callbacks such as `ClassifierProcessor`'s `onDecision`.
+ * `result` is set when the classifier answered and `error` when the call failed.
+ */
+export type ClassifierDecision<QUESTIONS extends ClassifierQuestions> = {
+  classifierId: string;
+  /** The state sent to the classifier. */
+  state: ClassifierState;
+  /** Time spent in the classifier call, including retries. */
+  durationMs: number;
+  ids: ClassifierDecisionIds;
+} & (ClassifierDecisionSuccess<QUESTIONS> | ClassifierDecisionError);
+
+/** A successful classifier decision, containing the result and no error. */
+type ClassifierDecisionSuccess<QUESTIONS extends ClassifierQuestions> = {
+  result: ClassifierResult<QUESTIONS>;
+  error?: never;
+};
+
+/** A failed classifier decision, containing the error and no result. */
+type ClassifierDecisionError = {
+  result?: never;
+  error: unknown;
+};
+
 type CommonDecideOptions = {
   state: ClassifierState;
   abortSignal?: AbortSignal;

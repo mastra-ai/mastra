@@ -1,7 +1,8 @@
 {
   "name": "@mastra/couchbase",
-  "version": "1.1.3",
+  "version": "1.1.6-alpha.1",
   "description": "Couchbase vector store provider for Mastra",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,17 +31,17 @@
     "posttest": "docker compose down -v"
   },
   "dependencies": {
-    "couchbase": "^4.7.1"
+    "couchbase": "^4.7.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -49,7 +50,8 @@
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

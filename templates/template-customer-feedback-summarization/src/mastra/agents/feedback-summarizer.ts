@@ -24,7 +24,7 @@ export const feedbackSummarizer = new Agent({
     options: {
       lastMessages: 20,
       observationalMemory: {
-        model: 'openai/gpt-5-mini',
+        model: 'openai/gpt-6.1-terra',
       },
     },
   }),

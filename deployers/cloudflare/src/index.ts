@@ -213,7 +213,8 @@ throw new Error('@opentelemetry/api is not installed');
 
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
-      compatibility_date: '2025-04-01',
+      // WeakRef and FinalizationRegistry are available from this date.
+      compatibility_date: '2025-05-05',
       compatibility_flags: ['nodejs_compat', 'nodejs_compat_populate_process_env'],
       observability: {
         logs: {
@@ -333,7 +334,7 @@ try {
       `,
         }),
         ...inputOptions.plugins,
-        mastraInstanceWrapper(mastraEntryFile),
+        mastraInstanceWrapper(this.getConfigEntryFile(mastraEntryFile)),
       ];
 
       if (hasPostgresStore) {

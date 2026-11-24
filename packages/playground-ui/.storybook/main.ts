@@ -30,6 +30,12 @@ const config: StorybookConfig = {
       {
         resolve: {
           alias: [
+            // The real package, for the mock to mount its provider: hooks under `@mastra/react/hooks/*`
+            // read the client from it.
+            {
+              find: /^@mastra\/react\/provider$/,
+              replacement: fileURLToPath(import.meta.resolve('@mastra/react')),
+            },
             {
               find: /^@mastra\/react$/,
               replacement: fileURLToPath(new URL('./mocks/mastra-react.ts', import.meta.url)),

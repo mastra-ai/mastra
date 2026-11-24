@@ -29,4 +29,16 @@ describe('getIsLinkActive', () => {
       expect(getIsLinkActive(reviewQueue, '/experiments', siblings)).toBe(false);
     });
   });
+
+  describe('when on the spans page', () => {
+    it('activates Traces, the page the Traces/Spans switch lives on', () => {
+      expect(getIsLinkActive(findNavItem('/traces')!, '/spans')).toBe(true);
+    });
+  });
+
+  describe('when on the threads page', () => {
+    it('activates Traces, the page the observability switch lives on', () => {
+      expect(getIsLinkActive(findNavItem('/traces')!, '/threads')).toBe(true);
+    });
+  });
 });

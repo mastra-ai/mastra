@@ -32,7 +32,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
 import type { DsqlDomainConfig } from '../../db';
@@ -59,6 +59,42 @@ function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipReco
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
   };
+}
+
+/**
+ * The snapshot fields a `listWorkflowRuns({ summary: true })` row carries instead of the
+ * snapshot, so `context` is never sent. The snapshot is stored as TEXT. These columns use only the
+ * `::jsonb` cast and `->>` that the status filter already runs on Aurora DSQL, plus `->`, and
+ * `summarySnapshot` builds the summary from them in the app.
+ */
+const SUMMARY_COLUMNS_SQL = [
+  `snapshot::jsonb ->> 'status' AS "summaryStatus"`,
+  `snapshot::jsonb ->> 'timestamp' AS "summaryTimestamp"`,
+  `snapshot::jsonb -> 'parentWorkflow' ->> 'workflowId' AS "summaryParentWorkflowId"`,
+  `snapshot::jsonb -> 'parentWorkflow' ->> 'runId' AS "summaryParentRunId"`,
+].join(', ');
+
+/**
+ * The reduced snapshot of a summary row: `status` and `timestamp` when set, and `parentWorkflow`
+ * only when both of its IDs are non-empty strings.
+ */
+function summarySnapshot(row: Record<string, any>): WorkflowRunState {
+  const snapshot: Record<string, unknown> = {};
+
+  if (row.summaryStatus !== null && row.summaryStatus !== undefined) {
+    snapshot.status = row.summaryStatus;
+  }
+
+  if (row.summaryTimestamp !== null && row.summaryTimestamp !== undefined) {
+    snapshot.timestamp = Number(row.summaryTimestamp);
+  }
+
+  const { summaryParentWorkflowId: workflowId, summaryParentRunId: runId } = row;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    snapshot.parentWorkflow = { workflowId, runId };
+  }
+
+  return snapshot as unknown as WorkflowRunState;
 }
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -112,6 +148,10 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     return true;
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
   /**
    * Returns default index definitions for the workflows domain tables.
    * Currently no default indexes are defined for workflows.
@@ -126,6 +166,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for workflows domain
@@ -500,6 +541,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -508,19 +550,24 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       const resolvedFence = resolveRunFence(this, fence, runId);
-      await withRetry(() =>
+      // The status guard sits on the upsert itself, so a concurrent status change can't land
+      // between the check and the write. An empty list matches no status.
+      const guard = expectedStatus === undefined ? '' : ` WHERE t.snapshot::jsonb ->> 'status' = ANY($7::text[])`;
+      const written = await withRetry(() =>
         withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'persistWorkflowSnapshot', q =>
-          q.none(
-            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+          q.oneOrNone<{ written: number }>(
+            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6${guard}
+                 RETURNING 1 AS written`,
             [
               workflowName,
               runId,
@@ -528,10 +575,14 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               JSON.stringify(snapshot),
               createdAtValue.toISOString(),
               updatedAtValue.toISOString(),
+              ...(expectedStatus === undefined
+                ? []
+                : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
             ],
           ),
         ),
       );
+      return written !== null;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -539,6 +590,33 @@ export class WorkflowsDSQL extends WorkflowsStorage {
           id: createStorageErrorId('DSQL', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const row = await this.#db.client.oneOrNone<{ status: unknown }>(
+        `SELECT snapshot::jsonb ->> 'status' AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE "workflow_name" = $1 AND "run_id" = $2 ORDER BY "createdAt" DESC LIMIT 1`,
+        [workflowName, runId],
+      );
+      const status = row?.status;
+      return (status ?? null) as WorkflowRunStatus | null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );
@@ -664,6 +742,10 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -672,6 +754,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     page,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -727,8 +810,12 @@ export class WorkflowsDSQL extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : undefined;
 
+      // On older tables createTable adds the Z columns and init() adds resourceId, so they can be named here.
+      const columns = summary
+        ? `workflow_name, run_id, "resourceId", ${SUMMARY_COLUMNS_SQL}, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"`
+        : '*';
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+          SELECT ${columns} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
@@ -739,7 +826,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
-        return parseWorkflowRun(row);
+        return summary ? { ...parseWorkflowRun(row), snapshot: summarySnapshot(row) } : parseWorkflowRun(row);
       });
 
       return { runs, total: total || runs.length };

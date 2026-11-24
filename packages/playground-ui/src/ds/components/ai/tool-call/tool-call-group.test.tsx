@@ -30,20 +30,25 @@ describe('ToolCallGroup', () => {
     const incomplete: ToolCallGroupStep = { ...view('c.ts'), hasResult: false };
 
     it.each([
-      { steps: [success, success, success], summary: '3 OK' },
-      { steps: [success, failure, failure], summary: '1 OK · 2 failed' },
-      { steps: [failure, failure, failure], summary: '3 failed' },
-      { steps: [success, incomplete, incomplete], summary: '1 OK · 2 incomplete' },
-      { steps: [success, failure, incomplete], summary: '1 OK · 1 failed · 1 incomplete' },
-      { steps: [incomplete, incomplete, incomplete], summary: '3 incomplete' },
-    ])('shows $summary without expanding', ({ steps, summary }) => {
+      { steps: [success, success, success], outcomes: ['3 OK'] },
+      { steps: [success, failure, failure], outcomes: ['1 OK', '2 failed'] },
+      { steps: [failure, failure, failure], outcomes: ['3 failed'] },
+      { steps: [success, incomplete, incomplete], outcomes: ['1 OK', '2 incomplete'] },
+      { steps: [success, failure, incomplete], outcomes: ['1 OK', '1 failed', '1 incomplete'] },
+      { steps: [incomplete, incomplete, incomplete], outcomes: ['3 incomplete'] },
+    ])('shows $outcomes without expanding', ({ steps, outcomes }) => {
       render(
         <ToolCallGroup steps={steps}>
           <span>details</span>
         </ToolCallGroup>,
       );
-      expect(screen.getByText(summary)).toBeTruthy();
-      expect(screen.queryByRole('img', { name: 'Failed' }) !== null).toBe(summary.includes('failed'));
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(Array.from(group.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual(
+        outcomes,
+      );
+      expect(within(group).queryByRole('img', { name: 'Failed' }) !== null).toBe(
+        outcomes.some(outcome => outcome.includes('failed')),
+      );
       expect(screen.queryByText('details')).toBeNull();
     });
   });
@@ -99,7 +104,12 @@ describe('ToolCallGroup', () => {
           <span />
         </ToolCallGroup>,
       );
-      expect(screen.getByText('1 OK · 1 failed · 1 incomplete')).toBeTruthy();
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(Array.from(group.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
+        '1 OK',
+        '1 failed',
+        '1 incomplete',
+      ]);
       expect(screen.queryByText('1/3')).toBeNull();
     });
   });

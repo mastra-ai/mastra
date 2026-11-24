@@ -12,6 +12,11 @@ import {
   dataset,
   items,
 } from '@/domains/datasets/components/dataset-detail/__tests__/fixtures/dataset-items';
+import {
+  noAgents,
+  noScorers,
+  noWorkflows,
+} from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -34,6 +39,11 @@ function mockDataset(
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/versions`, () =>
       HttpResponse.json({ versions, pagination: { total: versions.length, page: 0, perPage: 10, hasMore: false } }),
     ),
+    // The experiment target pickers load these. Left unhandled, each request fails and the client
+    // retries it with backoff past the end of the test, after jsdom is gone.
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+    http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
   );
 }
 
@@ -142,23 +152,6 @@ describe('DatasetPage', () => {
       expect(await screen.findByRole('dialog', { name: 'Dataset schema' })).toBeDefined();
     });
 
-    it('does not show when the dataset was created in the page header', async () => {
-      mockDataset(dataset, items);
-      renderPage();
-      await screen.findByRole('button', { name: /new experiment/i });
-
-      expect(within(getPageHeader()).queryByText(/^Created/)).toBeNull();
-    });
-
-    it('keeps the toolbar free of page-level actions', async () => {
-      mockDataset(dataset, items);
-      renderPage();
-      await screen.findByRole('button', { name: /new experiment/i });
-
-      const toolbar = screen.getByTestId('dataset-items-toolbar');
-      expect(within(toolbar).queryByRole('link', { name: 'Experiments' })).toBeNull();
-    });
-
     it('shows the tag editor', async () => {
       mockDataset(dataset, items);
       renderPage();
@@ -177,7 +170,6 @@ describe('DatasetPage', () => {
       const header = getPageHeader();
       expect(within(header).getByRole('button', { name: 'Schema' })).toBeDefined();
       expect(within(header).getByRole('button', { name: 'Dataset actions menu' })).toBeDefined();
-      expect(within(header).queryByText(/^Created/)).toBeNull();
       expect(screen.queryByRole('button', { name: /new experiment/i })).toBeNull();
       expect(screen.queryByRole('link', { name: 'Experiments' })).toBeNull();
     });

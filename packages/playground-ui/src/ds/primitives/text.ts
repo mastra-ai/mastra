@@ -15,6 +15,7 @@ const roles: Record<TextRole, string> = {
   'card-title-tight': 'text-card-title-tight',
   'card-title-strong': 'text-card-title-strong',
   'body-sm': 'text-body-sm',
+  menu: 'text-menu',
   column: 'text-column',
   caption: 'text-caption',
   eyebrow: 'text-eyebrow uppercase',
@@ -24,7 +25,7 @@ const roles: Record<TextRole, string> = {
 const tones = {
   ink: 'text-foreground',
   muted: 'text-muted-foreground',
-  faint: 'text-placeholder',
+  faint: 'text-subtle-foreground',
 };
 
 const fonts = {

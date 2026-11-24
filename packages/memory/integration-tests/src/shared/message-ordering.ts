@@ -126,10 +126,9 @@ function verifyTextBeforeTool(order: OrderEntry[], source: string): boolean {
     if (firstText < firstTool) {
       console.info(`✅ ${source}: Text appears BEFORE tool`);
       return true;
-    } else {
-      console.info(`❌ ${source}: Text appears AFTER tool - BUG!`);
-      return false;
     }
+    console.info(`❌ ${source}: Text appears AFTER tool - BUG!`);
+    return false;
   } else if (firstTool !== -1 && firstText === -1) {
     console.info(`📝 ${source}: No text before tool (model went straight to tool)`);
     return true; // Not a bug, just model behavior

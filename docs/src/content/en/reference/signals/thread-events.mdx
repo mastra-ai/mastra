@@ -1,0 +1,88 @@
+---
+title: "Reference: Thread events | Signals"
+description: "Reference for subscribeThreadEvents(), its scope options, unsubscribe behavior, and the public queue-count-changed thread event."
+packages:
+  - "@mastra/core"
+---
+
+# Thread events
+
+`subscribeThreadEvents()` observes locally pending input on a thread. It's a narrow event surface for queue counts, separate from [`subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions), which streams agent output.
+
+## `subscribeThreadEvents(scope, listener)`
+
+Subscribe to thread events for one resource and thread.
+
+```typescript
+const scope = {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+}
+
+const unsubscribe = agent.subscribeThreadEvents(scope, event => {
+  if (event.type === 'queue-count-changed') {
+    console.log(`${event.count} messages are pending`)
+  }
+})
+
+// Later, when you no longer need updates:
+unsubscribe()
+```
+
+The count changes when you call [`queueMessage()`](/reference/agents/agent#queuemessagemessage-options) or [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) while a run is active on the thread.
+
+`SubscribeAgentThreadEventsOptions` accepts:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Resource that owns the thread.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread to observe.',
+  },
+  {
+    name: 'queueOwnerId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Restricts queue-count notifications to messages submitted by the calling Agent under this owner ID. Omit to observe all locally pending messages on the shared thread.',
+  },
+]}
+/>
+
+The listener receives a synchronous baseline event with the current local count when you subscribe, then updates only when its count changes. The returned unsubscribe function is idempotent and doesn't cancel queued messages.
+
+Counts are local to the runtime. The count includes messages submitted by other Sessions or Agents that use the same runtime and PubSub instance.
+
+The count includes messages waiting in the local FIFO and a non-cancelled message while it acquires or transfers its lease. It drops at cancellation, execution handoff, forwarding to another owner, or failure, not when model generation completes. An idle `queueMessage()` handoff is immediate and isn't represented as a cancellable pending slot.
+
+The count covers only entries in the queue shared by [`queueMessage()`](/reference/agents/agent#queuemessagemessage-options) and [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options). It doesn't include signals waiting for delivery into an active run.
+
+Owner-scoped observation matches the calling Agent, its local runtime, resource, thread, and owner ID. Use [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) to cancel selected pending input or an owner group.
+
+AgentController Sessions observe the shared thread count when they subscribe, even before submitting a follow-up. `session.steer()` aborts the current run before sending the new input without clearing queued follow-ups. Session cleanup stops observation and cancels unfinished local preparation, but leaves submitted messages in the Agent queue.
+
+## `AgentThreadEvent`
+
+The only event type emitted today is `queue-count-changed`.
+
+```typescript
+type AgentThreadEvent = {
+  type: 'queue-count-changed'
+  count: number
+}
+```
+
+`count` is the number of locally pending messages in the observed queue. Composite thread state, individual message lifecycle, run, and approval events aren't emitted as public thread events. Mastra may add them as separate event types in the future.
+
+## Related
+
+- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
+- [`Agent.cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions)
+- [ChunkType reference](/reference/streaming/ChunkType)
+- [AgentController follow-up queue](/reference/agent-controller/session#follow-ups)

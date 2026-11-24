@@ -1,13 +1,14 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { BuiltinMcpServerSection } from '@/domains/mcps/components/builtin-mcp-server/builtin-mcp-server-card';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
 import type { McpServersSort } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
@@ -22,7 +23,7 @@ const MCPs = () => {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -31,7 +32,7 @@ const MCPs = () => {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
         <PermissionDenied variant="fill" resource="MCP servers" />
       </PageLayout>
@@ -40,7 +41,7 @@ const MCPs = () => {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
         <EmptyState
           tone="error"
@@ -54,34 +55,46 @@ const MCPs = () => {
 
   if (mcpServers.length === 0 && !isLoading) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
-        <NoMCPServersInfo />
+        <div className="flex flex-col gap-6">
+          <BuiltinMcpServerSection />
+          <NoMCPServersInfo />
+        </div>
       </PageLayout>
     );
   }
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={setSearch}
+                label="Search MCP servers"
+                placeholder="Search by name"
+              />
             </div>
           </ActionRow.Start>
         </ActionRow>
       }
     >
       <h1 className="sr-only">MCP Servers</h1>
-      <McpServersList
-        mcpServers={mcpServers}
-        isLoading={isLoading}
-        search={search}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
-      />
+      <div className="flex flex-col gap-6">
+        <BuiltinMcpServerSection />
+        <McpServersList
+          mcpServers={mcpServers}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
+      </div>
     </PageLayout>
   );
 };

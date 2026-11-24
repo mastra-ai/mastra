@@ -2,15 +2,16 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { RefreshCw } from 'lucide-react';
-
+import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
 import type { ProviderInfo } from '../../../../../api/types';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { SharedCredentialNotice } from '../../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { useProviderModels } from '../../hooks/useProviderModels';
+import { preferredFactoryModel, useProviderModels } from '../../hooks/useProviderModels';
+import { MastraGatewayCreditsNotice } from '../MastraGatewayCreditsNotice';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 export interface CreateFactoryModelRowsProps {
   provider: ProviderInfo;
@@ -33,23 +34,33 @@ export function CreateFactoryModelRows({
   const catalog = useProviderModels(provider.provider);
 
   if (catalog.isPending) {
-    return <SkeletonRows label="Loading models" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading models" rows={3} />;
   }
   if (catalog.catalogError)
     return <CreateFactoryPaletteAlert>{catalog.catalogError.message}</CreateFactoryPaletteAlert>;
 
+  const preferredModelId = preferredFactoryModel(provider.provider);
   const normalizedQuery = query.trim().toLowerCase();
-  const models = catalog.models.filter(
-    model =>
-      model.id.toLowerCase().includes(normalizedQuery) || model.modelName.toLowerCase().includes(normalizedQuery),
-  );
+  const models = catalog.models
+    .filter(
+      model =>
+        model.id.toLowerCase().includes(normalizedQuery) || model.modelName.toLowerCase().includes(normalizedQuery),
+    )
+    .toSorted(
+      (a, b) =>
+        // The provider's preferred model leads, so a catalog as large as the gateway's opens on it.
+        Number(b.id === preferredModelId) - Number(a.id === preferredModelId) ||
+        compareModelReleaseDates(a.releaseDate, b.releaseDate) ||
+        a.modelName.localeCompare(b.modelName),
+    );
   const saving = savingModelId !== undefined;
 
   return (
     <>
       {error && <CreateFactoryPaletteAlert>{error}</CreateFactoryPaletteAlert>}
-      <div className="px-3 pt-2">
+      <div className="flex flex-col gap-2 px-3 pt-2">
         <SharedCredentialNotice modelId={catalog.suggestedModelId} />
+        {provider.connectWithMastraAccount && <MastraGatewayCreditsNotice />}
       </div>
       {models.length > 0 ? (
         <CommandGroup heading={`${providerDisplayName(provider.provider)} models`}>
@@ -78,7 +89,7 @@ export function CreateFactoryModelRows({
       )}
       <CommandGroup heading="Provider">
         <CommandPaletteItem
-          icon={<RefreshCw />}
+          icon={<IconArrowRotateClockwise />}
           title="Change provider"
           subtitle={providerDisplayName(provider.provider)}
           value="change-provider"

@@ -6,6 +6,7 @@ import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
 const OBJECTIVE = 'Preserve terminal API errors without autonomous continuation.';
 const ERROR_MESSAGE = 'Terminal goal API error from the e2e provider.';
+const ERROR_ON_SCREEN = new RegExp(ERROR_MESSAGE.replaceAll('.', '\\.').replaceAll(' ', '\\s+'));
 const SCORER_PREFIX = `Goal: ${OBJECTIVE}`;
 
 type RequestCounters = {
@@ -175,7 +176,7 @@ export const goalApiErrorStopsLoopScenario = {
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
 
     terminal.submit(`/goal ${OBJECTIVE}`);
-    await runtime.waitForScreenText(new RegExp(ERROR_MESSAGE), terminal, 15_000);
+    await runtime.waitForScreenText(ERROR_ON_SCREEN, terminal, 15_000);
     await new Promise(resolve => setTimeout(resolve, 3_000));
 
     writeProofCounters();
@@ -203,7 +204,7 @@ export const goalApiErrorStopsLoopScenario = {
     );
 
     const view = stripAnsi(terminal.serialize().view);
-    if (!view.includes(ERROR_MESSAGE)) throw new Error(`Expected visible terminal error state:\n${view}`);
+    if (!ERROR_ON_SCREEN.test(view)) throw new Error(`Expected visible terminal error state:\n${view}`);
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
