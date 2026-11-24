@@ -569,6 +569,17 @@ export class DefaultAgentExecutionEngine {
 
   getWorkflow(options: DurableWorkflowOptions) {
     if (!this.#workflow) {
+      if (options.storesRunsInJournal) {
+        // Workflow creation is synchronous; inspect the registered store without initializing it.
+        const storage = this.mastra?.getStorage();
+        const workflowsStore = storage?.stores?.workflows;
+        if (workflowsStore && !workflowsStore.supportsRunJournal()) {
+          options.guardrailLogger?.warn(
+            `DurableAgent '${this.id}' sets storageVersion: 2, which ${storage?.name ?? 'the configured'} storage ` +
+              `doesn't support yet; storing new runs as version 1.`,
+          );
+        }
+      }
       this.#workflow = this.createWorkflow(options);
       this.warnOnRiskyPersistencePolicy(options.shouldPersistSnapshot, options.guardrailLogger);
       // Register mastra on the workflow so execution steps can access agents/tools.

@@ -12992,10 +12992,13 @@ export class Agent<
     return this.#executionEnginePolicy.engine === 'evented' ? 'evented' : 'default';
   }
   protected getWorkflow(): ReturnType<DefaultAgentExecutionEngine['getWorkflow']> {
+    const durable = this.durable;
+    const config = typeof durable === 'object' ? durable : undefined;
     return this.executionEngine.getWorkflow({
+      maxSteps: config?.maxSteps,
       workflowEngine: this.workflowEngine,
-      storesRunsInJournal: false,
-      shouldPersistSnapshot: typeof this.durable === 'object' ? this.durable.shouldPersistSnapshot : undefined,
+      storesRunsInJournal: config?.storageVersion === 2,
+      shouldPersistSnapshot: config?.shouldPersistSnapshot,
       logger: this.logger,
       guardrailLogger: this.guardrailLogger,
     });
