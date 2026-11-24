@@ -187,15 +187,15 @@ describe('CompletenessMetric', () => {
     });
 
     it.each([
-      ['〇', ''],
-      ['一〇〇円', '一円'],
-      ['፲፰ ሰዓት', '፲፪ ሰዓት'],
-    ])('should not match the number in "%s" with "%s"', async (question, answer) => {
+      ['〇', '', 0],
+      ['一〇〇円', '一円', 2 / 3],
+      ['፲፰ ሰዓት', '፲፪ ሰዓት', 2 / 3],
+    ])('should not match the number in "%s" with "%s"', async (question, answer, score) => {
       const inputMessages = [createTestMessage({ content: question, role: 'user', id: 'test-input' })];
       const output = [createTestMessage({ content: answer, role: 'assistant', id: 'test-output' })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-      expect(result.score).toBeLessThan(1);
+      expect(result.score).toBeCloseTo(score);
     });
 
     it('should not count emoji and signs in Latin text as words', async () => {
