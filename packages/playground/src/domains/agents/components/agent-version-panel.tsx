@@ -136,7 +136,7 @@ export function AgentVersionPanel({
                     setTagName(event.target.value);
                     setTagNameError(undefined);
                   }}
-                  placeholder="production"
+                  placeholder="Tag name"
                   aria-label="Tag name"
                   error={Boolean(tagNameError)}
                 />

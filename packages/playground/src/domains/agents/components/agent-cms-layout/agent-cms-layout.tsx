@@ -12,20 +12,25 @@ interface AgentsCmsLayoutProps {
 
 export function AgentsCmsLayout({ children, currentPath, basePath, versionId, rightPanel }: AgentsCmsLayoutProps) {
   return (
+    // Below `md` the fixed side columns no longer fit beside the form, so the three areas stack and the page scrolls.
     <div
       className={cn(
-        'grid h-full overflow-y-auto',
-        rightPanel ? 'grid-cols-[240px_1fr_240px]' : 'grid-cols-[240px_1fr]',
+        'grid h-full grid-cols-1 overflow-y-auto',
+        rightPanel ? 'md:grid-cols-[240px_1fr_240px]' : 'md:grid-cols-[240px_1fr]',
       )}
     >
-      <div className="h-full overflow-y-auto border-r border-border">
+      <div className="border-b border-border md:h-full md:overflow-y-auto md:border-r md:border-b-0">
         <AgentCmsSidebar basePath={basePath} currentPath={currentPath} versionId={versionId} />
       </div>
-      <div className="flex h-full flex-col overflow-hidden">
-        <div className="w-full max-w-5xl flex-1 overflow-y-auto p-5">{children}</div>
+      <div className="flex min-w-0 flex-col md:h-full md:overflow-hidden">
+        <div className="w-full max-w-5xl flex-1 p-5 md:overflow-y-auto">{children}</div>
         <AgentCmsBottomBar basePath={basePath} currentPath={currentPath} />
       </div>
-      {rightPanel && <div className="h-full overflow-y-auto border-l border-border">{rightPanel}</div>}
+      {rightPanel && (
+        <div className="border-t border-border md:h-full md:overflow-y-auto md:border-t-0 md:border-l">
+          {rightPanel}
+        </div>
+      )}
     </div>
   );
 }
