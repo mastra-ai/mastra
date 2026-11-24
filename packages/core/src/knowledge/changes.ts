@@ -110,11 +110,14 @@ export function emitKnowledgeChanges(
       if (typeof value !== 'function') return value;
       if (property === 'transaction') {
         return async (operation: (tx: KnowledgeStorage) => Promise<unknown>, ...rest: unknown[]) => {
-          const held: Change[] = [];
+          let held: Change[] = [];
           const result = await value.call(
             target,
-            (tx: KnowledgeStorage) =>
-              operation(emitKnowledgeChanges(tx, change => held.push(change), listening, onError)),
+            (tx: KnowledgeStorage) => {
+              // A store may retry the operation (LibSQL does on a lock error); only the attempt that commits counts.
+              held = [];
+              return operation(emitKnowledgeChanges(tx, change => held.push(change), listening, onError));
+            },
             ...rest,
           );
           for (const change of held) {
