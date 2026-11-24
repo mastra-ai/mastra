@@ -361,6 +361,23 @@ describe('Datasets Handlers', () => {
         expect(events).toEqual([]);
       });
 
+      it('returns 400 instead of running in-process when the installed core has no durable experiments', async () => {
+        // Older cores don't have the experiment workflow and would ignore `durable`.
+        Object.defineProperty(mastra, '__ensureExperimentWorkflow', { value: undefined });
+
+        await expect(trigger({ durable: true })).rejects.toMatchObject({
+          status: 400,
+          message: expect.stringContaining('@mastra/core'),
+        });
+        const { experiments } = await (await mockStorage.getStore('experiments'))!.listExperiments({
+          pagination: { page: 0, perPage: 100 },
+        });
+        expect(experiments.filter(experiment => experiment.targetId === 'durable-agent')).toEqual([]);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(generate).not.toHaveBeenCalled();
+        expect(events).toEqual([]);
+      });
+
       it('rejects invalid durable, itemTimeout and maxRetries before the handler', () => {
         const base = { targetType: 'agent', targetId: 'durable-agent' };
         const parse = (body: Record<string, unknown>) =>

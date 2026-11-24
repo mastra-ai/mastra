@@ -986,6 +986,12 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       if (!targetType || !targetId) {
         throw new HTTPException(400, { message: 'targetType and targetId are required to start an experiment' });
       }
+      // Older cores ignore `durable` and would run the experiment in this process instead.
+      if (durable && typeof mastra.__ensureExperimentWorkflow !== 'function') {
+        throw new HTTPException(400, {
+          message: 'durable experiments need a newer @mastra/core; upgrade it together with @mastra/server',
+        });
+      }
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
