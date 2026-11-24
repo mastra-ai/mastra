@@ -226,7 +226,7 @@ describe('Settings ownership', () => {
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/factories/fp-1/new'] });
     renderWithProviders(<RouterProvider router={router} />);
 
-    await user.click(await screen.findByRole('link', { name: 'Open Models settings' }));
+    await user.click(await screen.findByRole('link', { name: 'More options in Models settings' }));
     expect(router.state.location.hash).toBe('#personal-defaults');
     await pickModel(user, 'Personal default model', 'openai/gpt-5');
     await waitFor(() => expect(personalDefaultModelId).toBe('openai/gpt-5'));

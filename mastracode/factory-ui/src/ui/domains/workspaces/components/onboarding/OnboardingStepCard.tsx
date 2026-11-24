@@ -15,26 +15,30 @@ import { ONBOARDING_FRAME_RADIUS, ONBOARDING_PINNED_PRIMARY } from './onboarding
 export function OnboardingStepCard({
   section,
   index,
-  headerEnd,
-  notice,
-  children,
-  note,
-  actions,
-  primary,
-}: {
+  ...card
+}: Omit<StepCardProps, 'label' | 'index'> & {
   section: OnboardingSection;
   /** Replaces the section's number when a card before it is left out (Accounts in local mode). */
   index?: number;
+}) {
+  const meta = ONBOARDING_SECTIONS[section];
+  return <StepCard label={meta.label} index={index ?? meta.index} {...card} />;
+}
+
+interface StepCardProps {
+  label: string;
+  index: number;
   headerEnd?: ReactNode;
   notice?: ReactNode;
   children: ReactNode;
   note?: string;
   actions?: ReactNode;
   primary?: ReactNode;
-}) {
+}
+
+/** The same frame for steps that aren't onboarding sections (a member's Factory setup). */
+export function StepCard({ label, index, headerEnd, notice, children, note, actions, primary }: StepCardProps) {
   const id = useId();
-  const { label, ...meta } = ONBOARDING_SECTIONS[section];
-  const shownIndex = index ?? meta.index;
   return (
     <section
       aria-labelledby={id}
@@ -46,7 +50,7 @@ export function OnboardingStepCard({
           aria-hidden="true"
         >
           <Txt as="span" variant="meta">
-            {shownIndex}
+            {index}
           </Txt>
         </span>
         {/* Focusable from script only: the page moves focus here when the section opens. */}

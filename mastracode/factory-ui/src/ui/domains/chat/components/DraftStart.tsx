@@ -17,6 +17,7 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import type { DraftModelGuards, MissingCredentialGuard } from '../hooks/useDraftModelGuards';
 import { useGlobalShortcuts } from '../hooks/useGlobalShortcuts';
 import { ComposerPanel } from './ComposerPanel';
+import { MissingPersonalModelState } from './MissingPersonalModelState';
 import { TranscriptEntries } from './Transcript';
 
 const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
@@ -148,16 +149,14 @@ function MissingCredentialState({
 }
 
 function MissingModelState({ factoryId, anchor }: { factoryId: string; anchor: ModelDefaultsAnchor }) {
+  if (anchor !== MODEL_DEFAULTS_ANCHORS.factory)
+    return <MissingPersonalModelState factoryId={factoryId} anchor={anchor} />;
   return (
     <EmptyState
       as="h2"
       iconSlot={<IconRobot />}
       titleSlot="No model available"
-      descriptionSlot={
-        anchor === MODEL_DEFAULTS_ANCHORS.factory
-          ? `Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`
-          : `Chats in this Factory run on your own keys. Connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`
-      }
+      descriptionSlot={`Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`}
       actionSlot={
         <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings

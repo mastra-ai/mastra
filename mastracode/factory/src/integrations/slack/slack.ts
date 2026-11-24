@@ -15,9 +15,11 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
 import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
+import { factorySetupUrl } from '../../links.js';
 import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
+  tenantHasModelAccess,
 } from '../../routes/tenant-credentials.js';
 import {
   createSourceControlSessionLookup,
@@ -36,6 +38,7 @@ import type {
   ChannelIdentityStorage,
 } from '../../storage/domains/channel-identity/base.js';
 import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
@@ -205,8 +208,9 @@ const retryHint = (thread: HandlerThread) => (thread.isDM ? 'message me again' :
 
 /**
  * The "connect your account" card. The link is deliberately identity-free —
- * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
- * runs the OIDC flow and Slack itself asserts the (team, user) pair.
+ * `/connect/slack` starts Sign in with Slack (after the web app's own login),
+ * where Slack itself asserts the (team, user) pair, and the flow ends on the
+ * member's setup page for their Factory.
  */
 function buildConnectCard(publicUrl: string, thread: HandlerThread, mentionUserId?: string) {
   const greeting = mentionUserId && !thread.isDM ? `${thread.mentionUser(mentionUserId)} ` : '';
@@ -222,6 +226,60 @@ function buildConnectCard(publicUrl: string, thread: HandlerThread, mentionUserI
       ]),
     ],
   });
+}
+
+/**
+ * The "finish setup" card: the sender is linked, but the Factory runs the
+ * sessions they start on their own model account and they have none yet. The
+ * link opens their setup page for that Factory, which knows the way back to
+ * this Slack workspace and channel.
+ */
+function buildFinishSetupCard(setupUrl: string | undefined, thread: HandlerThread, mentionUserId?: string) {
+  const greeting = mentionUserId && !thread.isDM ? `${thread.mentionUser(mentionUserId)} ` : '';
+  const why = 'This Factory runs the Slack threads you start on your own model account, and yours is not connected yet.';
+  if (!setupUrl) {
+    return `${greeting}${why} Connect one in the Factory web app, then ${retryHint(thread)}.`;
+  }
+  return Card({
+    title: 'Connect your model',
+    children: [
+      CardText(`${greeting}${why} Finish setup, then ${retryHint(thread)}.`),
+      Actions([LinkButton({ url: setupUrl, label: 'Finish setup' })]),
+    ],
+  });
+}
+
+/**
+ * Whether a linked sender's new session would start with no model it can call.
+ * A Factory whose sessions run on personal accounts (`user`, or `hybrid` for
+ * interactive sessions) gives the session the sender's personal default, else a
+ * connected provider's default; with neither, the run can only fail with
+ * "Provider sign-in required". Anything short of "nothing at all" dispatches,
+ * so a lookup failure or an unusual setup (a personal custom provider, say)
+ * never blocks a run the session could have resolved.
+ */
+async function senderNeedsModelSetup({
+  link,
+  factoryProjectId,
+  deps,
+}: {
+  link: ChannelAccountLink;
+  factoryProjectId: string;
+  deps: SlackChannelDeps;
+}): Promise<boolean> {
+  const { projects, modelDefaults } = deps;
+  const orgId = link.orgId;
+  if (!projects || !orgId) return false;
+  try {
+    // Cheapest first: the sender's personal credentials were just primed, so
+    // most messages stop here without another storage read.
+    if (await tenantHasModelAccess({ orgId, userId: link.userId, credentialScope: 'user' })) return false;
+    if ((await modelDefaults?.get({ orgId, userId: link.userId }))?.modelId) return false;
+    const project = await projects.get({ orgId, id: factoryProjectId });
+    return !!project && effectiveModelScope(project.modelScope, 'session') === 'user';
+  } catch {
+    return false;
+  }
 }
 
 /** Outcome of factory routing for one linked sender's inbound message. */
@@ -905,6 +963,27 @@ async function gateDispatch(
       ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
     }
     const { runFactory } = ownerContext;
+    // A new session starts on the sender's own model in a Factory that bills
+    // sessions to people; one they cannot run is better caught here than as a
+    // failed run. An existing session already has its owner and model.
+    if (
+      runFactory.kind === 'new-thread' &&
+      route.status === 'resolved' &&
+      (await senderNeedsModelSetup({ link: sender.link, factoryProjectId: route.factoryProjectId, deps }))
+    ) {
+      const teamId = slackTeamId(message);
+      const setupUrl = factorySetupUrl(route.factoryProjectId, {
+        from: 'slack',
+        ...(teamId ? { team: teamId } : {}),
+        ...(thread.channelId ? { channel: thread.channelId } : {}),
+      });
+      if (options.addressed ?? true) {
+        await thread.post(buildFinishSetupCard(setupUrl, thread, message.author.userId));
+      } else {
+        await thread.postEphemeral(message.author, buildFinishSetupCard(setupUrl, thread), { fallbackToDM: true });
+      }
+      return null;
+    }
     const factoryId =
       runFactory.kind === 'session'
         ? runFactory.resolve

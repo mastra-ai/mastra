@@ -33,10 +33,11 @@ export function providersQueryOptions(client: ApiClient) {
   });
 }
 
-export function useProvidersQuery() {
+export function useProvidersQuery({ enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
   return useQuery({
     ...providersQueryOptions(client),
+    enabled,
     select: (body: ProvidersResponse): ProviderInfo[] => body.providers,
   });
 }

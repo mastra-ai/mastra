@@ -28,6 +28,8 @@ import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
 import { AppPageLoader } from './layouts/AppPageLoader';
+import { useMemberSetupRedirect } from './domains/join/hooks/useMemberSetupRedirect';
+import { MemberSetupPage } from './domains/join/MemberSetupPage';
 import { lazyPage } from './layouts/PageSuspense';
 import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
@@ -172,6 +174,9 @@ function RetiredReviewBoardRedirect() {
 
 function FactoryHomeRedirect() {
   const { factoryId } = useParams<{ factoryId: string }>();
+  const setupRedirect = useMemberSetupRedirect(factoryId);
+  if (setupRedirect === 'pending') return null;
+  if (setupRedirect === 'setup') return <Navigate to="setup" replace />;
   return <FactoryBoardLanding factoryId={factoryId} />;
 }
 
@@ -208,6 +213,7 @@ function ChannelThreadRedirect() {
  */
 function ConnectionsRedirect() {
   const { data: factories, isPending } = useFactoriesQuery();
+  const { search } = useLocation();
 
   if (isPending) return null;
 
@@ -215,7 +221,9 @@ function ConnectionsRedirect() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
+  // The Slack sign-in callback lands here with its outcome when it knows no Factory: show it on Slack's page.
+  const section = new URLSearchParams(search).has('slack') ? 'connections/slack' : 'connections';
+  return <Navigate to={`/factories/${firstFactory.id}/settings/${section}${search}`} replace />;
 }
 
 /**
@@ -284,6 +292,8 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
               element: <FactoryLayout />,
               ...loadOnEntry(prefetchFactoryLayout),
               children: [
+                // Full-page like onboarding: no sidebar until the member can work here.
+                { path: 'setup', element: <MemberSetupPage /> },
                 {
                   element: <AppLayout />,
                   // Load the chat code while its session links appear, before a card or session is clicked.

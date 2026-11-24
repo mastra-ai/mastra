@@ -25,12 +25,35 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+/**
+ * Where a flow started, so its callback can send the user back there: `slack` for a link
+ * posted in Slack, `setup` for a Factory's member setup page.
+ */
+export type StateOrigin = 'slack' | 'setup';
+
+const STATE_ORIGINS: readonly StateOrigin[] = ['slack', 'setup'];
+
+/** True for a value the signer accepts as a {@link StateOrigin}. */
+export function isStateOrigin(value: unknown): value is StateOrigin {
+  return typeof value === 'string' && (STATE_ORIGINS as readonly string[]).includes(value);
+}
+
+/** Context a caller can bind into a signed `state` beside the tenant. */
+export interface StateContext {
+  /** Factory that initiated the integration flow. */
+  factoryProjectId?: string;
+  /** Where the flow started. */
+  from?: StateOrigin;
+}
+
 /** Verified tenant and optional Factory context carried by a signed `state`. */
 export interface StateTenant {
   orgId: string;
   userId: string;
   /** Factory that initiated the integration flow, when the caller supplied one. */
   factoryProjectId?: string;
+  /** Where the flow started, when the caller supplied it. */
+  from?: StateOrigin;
   /**
    * Per-`state` random value. A signed `state` stays valid for its whole
    * lifetime, so a flow that must not run twice off one `state` (account
@@ -42,7 +65,7 @@ export interface StateTenant {
 /** Signs and verifies OAuth `state` values bound to a tenant and optional Factory. */
 export interface StateSigner {
   /** Build a signed `state` bound to the tenant and optional initiating Factory. */
-  sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): string;
+  sign(orgId: string, userId: string, context?: StateContext): string;
   /** Verify a signed `state`; returns the bound tenant, or `null` if invalid. */
   verify(state: string | undefined): StateTenant | null;
   /**
@@ -57,6 +80,7 @@ interface StatePayload {
   orgId: string;
   userId: string;
   factoryProjectId?: string;
+  from?: StateOrigin;
   nonce: string;
   issuedAt: number;
 }
@@ -74,11 +98,12 @@ export function createStateSigner(secret?: string): StateSigner {
   const key = stable ? secret : Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).toString('hex');
   return {
     stable,
-    sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): string {
+    sign(orgId: string, userId: string, context?: StateContext): string {
       const payload: StatePayload = {
         orgId,
         userId,
         ...(context?.factoryProjectId ? { factoryProjectId: context.factoryProjectId } : {}),
+        ...(context?.from ? { from: context.from } : {}),
         nonce: Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(8))).toString('hex'),
         issuedAt: Date.now(),
       };
@@ -109,12 +134,14 @@ export function createStateSigner(secret?: string): StateSigner {
         ) {
           return null;
         }
+        if (parsed.from !== undefined && !isStateOrigin(parsed.from)) return null;
         const age = Date.now() - parsed.issuedAt;
         if (age < 0 || age > STATE_MAX_AGE_MS) return null;
         return {
           orgId: parsed.orgId,
           userId: parsed.userId,
           ...(parsed.factoryProjectId ? { factoryProjectId: parsed.factoryProjectId } : {}),
+          ...(parsed.from ? { from: parsed.from } : {}),
           nonce: parsed.nonce,
         };
       } catch {
