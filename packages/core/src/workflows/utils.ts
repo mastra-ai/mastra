@@ -670,11 +670,10 @@ export const createRestartExecutionParams = ({
   let nestedWorkflowPending = false;
 
   if (snapshot.status !== 'running' && snapshot.status !== 'waiting') {
-    // `pendingInput` survives JSON storage, which drops an `undefined` input from `context`.
     const hasPendingInput =
       snapshot.status === 'pending' &&
-      (snapshot.pendingInput === true ||
-        (!!snapshot.context && Object.prototype.hasOwnProperty.call(snapshot.context, 'input')));
+      snapshot.context &&
+      Object.prototype.hasOwnProperty.call(snapshot.context, 'input');
     if (hasPendingInput) {
       //possible the server died just before the nested workflow execution started.
       //only nested workflows have input data in context when it's still pending

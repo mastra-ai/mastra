@@ -3447,9 +3447,10 @@ export class Workflow<
         // A nested run restarted before its first step only has this snapshot to rebuild from,
         // so it must carry the parent's state alongside the input.
         value: nestedRunStart?.state ?? {},
+        // Only a truthy input is kept, as on main: a restart recognizes this snapshot by its input and
+        // restarts it without calling onStart, so a falsy input stays unrecognized and fails recovery.
         // @ts-expect-error - context type mismatch
-        context: nestedRunStart ? { input: nestedRunStart.input } : {},
-        ...(nestedRunStart ? { pendingInput: true as const } : {}),
+        context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
         activePaths: [],
         activeStepsPath: {},
         serializedStepGraph: this.serializedStepGraph,

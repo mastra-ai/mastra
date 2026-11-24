@@ -5,7 +5,8 @@
  * parent step with no nested run, and restarting the parent failed it with "This workflow run was
  * not active". Found by the workflow-chaos soak main-nostreams-1h.
  *
- * JSON stores drop an `undefined` value, so the falsy-input cases matter most on them.
+ * The cases run on JSON stores too, which drop an `undefined` value, so the falsy-input cases show
+ * the same behavior wherever a run is stored.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { describe, expect, it, vi } from 'vitest';
@@ -274,35 +275,53 @@ export function describeNestedRestartCases({ createStorage }: { createStorage: (
       expect(built.calls).toEqual({ first: 1, second: 1 });
     });
 
-    // The nested run saved its pending snapshot and its onStart accepted it, then the process died
-    // before the nested run's first step. onStart already ran, so the restart must not call it again:
-    // a gate such as a quota check would reject the recovery.
-    it.each([[{ n: 1 }], [null], [0], [false], [''], [undefined]])(
-      'does not call onStart again for a nested run it already accepted, with input %j',
+    /**
+     * The nested run saved its pending snapshot and its onStart accepted it, then the process died
+     * before the nested run's first step. The restart restarts a saved pending run without calling
+     * onStart, as main does, so the returned counter shows whether onStart ran again.
+     */
+    async function crashAfterNestedOnStart(value: unknown) {
+      const onStart = { calls: 0 };
+      const options: Pick<WorkflowOptions, 'onStart'> = {
+        onStart: () => {
+          // A gate such as a quota check, which rejects the run a second time.
+          if (++onStart.calls > 1) throw new Error('quota exceeded');
+        },
+      };
+      const { storage, store, runId, revived } = await crashAtNestedWrite(
+        buildSequential(options),
+        value,
+        args => args.workflowName === 'parent' || (args.snapshot ?? args.header)?.status === 'pending',
+      );
+      expect((await loadStored(store, version, 'nested', runId))?.status).toBe('pending');
+      expect(onStart.calls).toBe(1);
+      const built = buildSequential(options);
+      return { result: await restart(built, storage, runId, revived), built, onStart };
+    }
+
+    it('does not call onStart again for a nested run it already accepted', async () => {
+      const { result, built, onStart } = await crashAfterNestedOnStart({ n: 1 });
+
+      expect(result.status).toBe('success');
+      expect(result.status === 'success' && result.result).toEqual({ log: ['parent', 'first:{"n":1}', 'second'] });
+      expect(onStart.calls).toBe(1);
+      expect(built.calls).toEqual({ first: 1, second: 1 });
+    });
+
+    // A saved pending nested run is recognized by the input it saved, and is restarted without
+    // calling onStart, which may never have run. Main saves only a truthy input, so with a falsy
+    // one recovery fails and nothing runs without the gate. Recognizing these records too would
+    // let them run with their onStart never called; that waits for onStart to run on recovery.
+    it.each([[null], [0], [false], [''], [undefined]])(
+      'fails recovery of a saved pending nested run with input %j without running it, as main does',
       async value => {
-        let accepted = 0;
-        const options: Pick<WorkflowOptions, 'onStart'> = {
-          onStart: () => {
-            if (++accepted > 1) throw new Error('quota exceeded');
-          },
-        };
-        const { storage, store, runId, revived } = await crashAtNestedWrite(
-          buildSequential(options),
-          value,
-          args => args.workflowName === 'parent' || (args.snapshot ?? args.header)?.status === 'pending',
-        );
-        expect((await loadStored(store, version, 'nested', runId))?.status).toBe('pending');
-        expect(accepted).toBe(1);
+        const { result, built, onStart } = await crashAfterNestedOnStart(value);
 
-        const built = buildSequential(options);
-        const result = await restart(built, storage, runId, revived);
-
-        expect(result.status).toBe('success');
-        expect(result.status === 'success' && result.result).toEqual({
-          log: ['parent', `first:${JSON.stringify(value) ?? 'undefined'}`, 'second'],
-        });
-        expect(accepted).toBe(1);
-        expect(built.calls).toEqual({ first: 1, second: 1 });
+        expect(result.status).toBe('failed');
+        const { error } = result as { error?: { message?: string } };
+        expect(String(error?.message ?? error)).toContain('This workflow run was not active');
+        expect(onStart.calls).toBe(1);
+        expect(built.calls).toEqual({});
       },
     );
 
