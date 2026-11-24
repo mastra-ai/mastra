@@ -23,6 +23,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prettier from 'prettier';
+import { parse as parseYaml } from 'yaml';
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = join(PACKAGE_ROOT, 'src/event-payloads');
@@ -45,7 +46,98 @@ const SOURCES = {
   // records the description's version and the file's SHA-256.
   incidentIo: { file: 'incidentio-openapi.json', url: 'https://api.incident.io/v1/openapiV3.json' },
   jira: { file: 'jira-openapi.json', url: 'https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json' },
+  openai: {
+    file: 'openai-openapi.json',
+    url: 'https://raw.githubusercontent.com/openai/openai-openapi/9246b543933df37e7c1b36cd81ff0dd7f1be5149/openapi.json',
+  },
+  resend: {
+    file: 'resend-openapi.yaml',
+    url: 'https://raw.githubusercontent.com/resend/resend-openapi/b762fefba49273a0fb42f7ffb7cad147f730bc59/resend.yaml',
+  },
+  clerk: {
+    file: 'clerk-bapi.yaml',
+    url: 'https://raw.githubusercontent.com/clerk/openapi-specs/690b7c3ce8bb2c39273cdcf4b46724525a78fcb5/bapi/2025-11-10.yml',
+  },
+  workos: {
+    file: 'workos-openapi.yaml',
+    url: 'https://raw.githubusercontent.com/workos/openapi-spec/1d41b5272463af84b6acdb0804a9b66e874dfa3a/spec/open-api-spec.yaml',
+  },
+  // WorkOS's events reference: which object each event's `data` is, and samples.
+  workosEvents: { file: 'workos-events.md', url: 'https://workos.com/docs/events.md' },
+  // ElevenLabs and Telegram publish no versioned URL either.
+  elevenlabs: { file: 'elevenlabs-openapi.json', url: 'https://api.elevenlabs.io/openapi.json' },
+  telegram: { file: 'telegram-bot-api.html', url: 'https://core.telegram.org/bots/api' },
 } satisfies Record<string, Source>;
+
+/**
+ * Clerk's webhook events and the Backend API schema each one's `data` is, as
+ * Clerk's own SDK maps them. Events whose data has no Backend API schema
+ * (email, SMS, billing, directory sync, `user.merged`) are left out.
+ */
+const CLERK_WEBHOOKS_SOURCE =
+  'https://github.com/clerk/javascript/blob/dc25c3b43b534544ae4ec3bcdd062f65277595ab/packages/backend/src/api/resources/Webhooks.ts';
+const CLERK_EVENTS: Record<string, string> = {
+  'user.created': 'User',
+  'user.updated': 'User',
+  'user.deleted': 'DeletedObject',
+  'session.created': 'Session',
+  'session.ended': 'Session',
+  'session.removed': 'Session',
+  'session.revoked': 'Session',
+  'organization.created': 'Organization',
+  'organization.updated': 'Organization',
+  'organization.deleted': 'DeletedObject',
+  'organizationDomain.created': 'OrganizationDomain',
+  'organizationDomain.updated': 'OrganizationDomain',
+  'organizationDomain.deleted': 'DeletedObject',
+  'organizationMembership.created': 'OrganizationMembership',
+  'organizationMembership.updated': 'OrganizationMembership',
+  'organizationMembership.deleted': 'OrganizationMembership',
+  'organizationInvitation.created': 'OrganizationInvitation',
+  'organizationInvitation.accepted': 'OrganizationInvitation',
+  'organizationInvitation.revoked': 'OrganizationInvitation',
+  'role.created': 'Role',
+  'role.updated': 'Role',
+  'role.deleted': 'Role',
+  'permission.created': 'Permission',
+  'permission.updated': 'Permission',
+  'permission.deleted': 'Permission',
+  'waitlistEntry.created': 'WaitlistEntry',
+  'waitlistEntry.updated': 'WaitlistEntry',
+};
+
+/**
+ * WorkOS's webhook events and the API object each one's `data` is, as its
+ * events reference names them. `dsync.group.user_*`,
+ * `organization_domain.verification_failed` and `session.*` carry other
+ * shapes, written out in `generateWorkos`.
+ */
+const WORKOS_EVENTS: Record<string, string> = {
+  'connection.activated': 'Connection',
+  'connection.deactivated': 'Connection',
+  'connection.deleted': 'Connection',
+  'dsync.activated': 'Directory',
+  'dsync.deleted': 'Directory',
+  'dsync.group.created': 'DirectoryGroup',
+  'dsync.group.deleted': 'DirectoryGroup',
+  'dsync.group.updated': 'DirectoryGroup',
+  'dsync.user.created': 'DirectoryUser',
+  'dsync.user.deleted': 'DirectoryUser',
+  'dsync.user.updated': 'DirectoryUser',
+  'user.created': 'UserlandUser',
+  'user.updated': 'UserlandUser',
+  'user.deleted': 'UserlandUser',
+  'organization.created': 'Organization',
+  'organization.updated': 'Organization',
+  'organization.deleted': 'Organization',
+  'organization_membership.created': 'UserlandUserOrganizationMembership',
+  'organization_membership.updated': 'UserlandUserOrganizationMembership',
+  'organization_membership.deleted': 'UserlandUserOrganizationMembership',
+  'organization_domain.verified': 'OrganizationDomainStandAlone',
+  'invitation.created': 'UserlandUserInvite',
+  'invitation.accepted': 'UserlandUserInvite',
+  'invitation.revoked': 'UserlandUserInvite',
+};
 
 /** GitHub `X-GitHub-Event` values whose every action is typed. */
 const GITHUB_EVENTS = [
@@ -112,7 +204,9 @@ async function load(source: Source, cacheDir: string | undefined): Promise<Loade
       await writeFile(join(cacheDir, source.file), text);
     }
   }
-  return { text, sha256: createHash('sha256').update(text).digest('hex') };
+  // Telegram's page ends with how long it took to render, which changes on every fetch.
+  const stable = text.replace(/<!-- page generated in [\d.]+ms -->/g, '');
+  return { text, sha256: createHash('sha256').update(stable).digest('hex') };
 }
 
 // ---------------------------------------------------------------------------
@@ -883,6 +977,508 @@ export type LinearEventWebhook<Payload, Type extends string, Action extends stri
   );
 }
 
+// ---------------------------------------------------------------------------
+// OpenAPI `webhooks` (OpenAI, Resend)
+
+function parseDocument(source: Source, text: string): Schema {
+  return (source.file.endsWith('.json') ? JSON.parse(text) : parseYaml(text, { maxAliasCount: -1 })) as Schema;
+}
+
+function componentSchemas(document: Schema): Record<string, Schema> {
+  return (document.components as { schemas: Record<string, Schema> }).schemas;
+}
+
+/** The values a schema allows for one string property, through refs and unions. */
+function propertyValues(document: Schema, schema: Schema, property: string): string[] {
+  if (typeof schema.$ref === 'string') {
+    const component = /^#\/components\/schemas\/(.+)$/.exec(schema.$ref)?.[1];
+    const target = component && componentSchemas(document)[component];
+    return target ? propertyValues(document, target, property) : [];
+  }
+  const value =
+    isSchema(schema.properties) && isSchema(schema.properties[property]) ? schema.properties[property] : undefined;
+  if (value && typeof value.const === 'string') return [value.const];
+  if (value && Array.isArray(value.enum)) return value.enum.filter((item): item is string => typeof item === 'string');
+  return ['oneOf', 'anyOf', 'allOf'].flatMap(key => {
+    const branches = schema[key];
+    return Array.isArray(branches)
+      ? branches.filter(isSchema).flatMap(branch => propertyValues(document, branch, property))
+      : [];
+  });
+}
+
+/**
+ * Types an OpenAPI 3.1 description's `webhooks`: each one's request body
+ * schema, keyed by the single value its `type` property allows.
+ */
+async function generateOpenApiWebhooks(
+  cacheDir: string | undefined,
+  options: { source: Source; prefix: string; file: string; mapName: string; description: string },
+): Promise<void> {
+  const loaded = await load(options.source, cacheDir);
+  const document = parseDocument(options.source, loaded.text);
+  const webhooks = document.webhooks as Record<string, Record<string, Schema>>;
+  const emitter = new OpenApiEmitter(document, options.prefix);
+  const entries: Array<[string, string]> = [];
+
+  for (const [name, operations] of Object.entries(webhooks)) {
+    const requestBody = operations.post?.requestBody as Schema | undefined;
+    const schema = (requestBody?.content as Record<string, { schema: Schema }> | undefined)?.['application/json']
+      ?.schema;
+    const ref = /^#\/components\/schemas\/(.+)$/.exec(String(schema?.$ref))?.[1];
+    if (!ref) throw new Error(`${options.prefix} webhook ${name} has no component schema`);
+    const types = [...new Set(propertyValues(document, schema!, 'type'))];
+    if (types.length !== 1)
+      throw new Error(`${options.prefix} webhook ${name} has types ${types.join(', ') || 'none'}`);
+    entries.push([types[0]!, emitter.ref(ref)]);
+  }
+  if (entries.length === 0) throw new Error(`${options.prefix}'s description has no webhooks`);
+  const duplicate = entries.find(([key], index) => entries.findIndex(([other]) => other === key) !== index);
+  if (duplicate) throw new Error(`${options.prefix}'s description has two webhooks for ${duplicate[0]}`);
+
+  await emit(
+    options.file,
+    header([options.source.url]) +
+      mapInterface(options.mapName, options.description, entries) +
+      '\n\n' +
+      emitter.declarations(),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Clerk
+
+async function generateClerk(cacheDir: string | undefined): Promise<void> {
+  const loaded = await load(SOURCES.clerk, cacheDir);
+  const document = parseDocument(SOURCES.clerk, loaded.text);
+  const emitter = new OpenApiEmitter(document, 'Clerk');
+  const entries = Object.entries(CLERK_EVENTS).map(([event, component]): [string, string] => [
+    event,
+    `ClerkWebhook<${JSON.stringify(event)}, ${emitter.ref(component)}>`,
+  ]);
+
+  const envelope = `
+/** A Clerk webhook body: an event whose \`data\` is the Backend API object it concerns. */
+export interface ClerkWebhook<Type extends string, Data> {
+  type: Type;
+  object: 'event';
+  data: Data;
+  event_attributes: {
+    http_request: { client_ip: string; user_agent: string };
+  };
+  /** When the event happened, in milliseconds since the epoch. */
+  timestamp: number;
+  instance_id: string;
+}
+`;
+
+  await emit(
+    'clerk.generated.ts',
+    header([SOURCES.clerk.url, `${CLERK_WEBHOOKS_SOURCE} (each event's data)`]) +
+      mapInterface(
+        'ClerkWebhookPayloads',
+        "Clerk webhook payloads by Connect event type: the body's `type`.",
+        entries,
+      ) +
+      '\n' +
+      envelope +
+      '\n' +
+      emitter.declarations(),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// WorkOS
+
+/** The `data` of each sample event in WorkOS's events reference, by event. */
+function workosSamples(markdown: string): Map<string, Record<string, unknown>> {
+  const samples = new Map<string, Record<string, unknown>>();
+  for (const match of markdown.matchAll(/```json[^\n]*\n([\s\S]*?)\n```/g)) {
+    let sample: unknown;
+    try {
+      sample = JSON.parse(match[1]!);
+    } catch {
+      continue;
+    }
+    if (isSchema(sample) && typeof sample.event === 'string' && isSchema(sample.data)) {
+      samples.set(sample.event, sample.data);
+    }
+  }
+  return samples;
+}
+
+function sampleType(value: unknown): string {
+  if (Array.isArray(value)) return 'unknown[]';
+  if (value === null) return 'null';
+  if (typeof value === 'object') return 'Record<string, unknown>';
+  return ['string', 'number', 'boolean'].includes(typeof value) ? typeof value : 'unknown';
+}
+
+/**
+ * The API object a WorkOS event's data corresponds to, as its sample in the
+ * events reference shows it: required fields the sample leaves out (an
+ * invitation's token, a deleted directory's external key) are omitted, and
+ * fields only the sample has (an update's `previous_attributes`) are added,
+ * typed from the sample, as optional.
+ */
+function workosDataType(
+  emitter: OpenApiEmitter,
+  schemas: Record<string, Schema>,
+  component: string,
+  sample: Record<string, unknown> | undefined,
+): string {
+  const name = emitter.ref(component);
+  if (!sample) return name;
+  const schema = schemas[component]!;
+  const properties = isSchema(schema.properties) ? schema.properties : {};
+  const required = Array.isArray(schema.required) ? (schema.required as string[]) : [];
+  const missing = required.filter(key => !(key in sample));
+  const extra = Object.keys(sample).filter(key => !(key in properties));
+  let type = missing.length > 0 ? `Omit<${name}, ${union(missing.map(key => JSON.stringify(key)))}>` : name;
+  if (extra.length > 0) {
+    type += ` & { ${extra.map(key => `${propertyKey(key)}?: ${sampleType(sample[key])};`).join(' ')} }`;
+  }
+  return type;
+}
+
+async function generateWorkos(cacheDir: string | undefined): Promise<void> {
+  const loaded = await load(SOURCES.workos, cacheDir);
+  const reference = await load(SOURCES.workosEvents, cacheDir);
+  const document = parseDocument(SOURCES.workos, loaded.text);
+  const schemas = componentSchemas(document);
+  const samples = workosSamples(reference.text);
+  const emitter = new OpenApiEmitter(document, 'Workos');
+  const data = (component: string, sample: unknown) =>
+    workosDataType(emitter, schemas, component, isSchema(sample) ? sample : undefined);
+
+  const shapes: Record<string, string> = Object.fromEntries(
+    Object.entries(WORKOS_EVENTS).map(([event, component]) => [event, data(component, samples.get(event))]),
+  );
+  for (const event of ['dsync.group.user_added', 'dsync.group.user_removed']) {
+    const sample = samples.get(event);
+    shapes[event] =
+      `{ directory_id: string; user: ${data('DirectoryUser', sample?.user)}; group: ${data('DirectoryGroup', sample?.group)} }`;
+  }
+  const failed = samples.get('organization_domain.verification_failed');
+  shapes['organization_domain.verification_failed'] =
+    `{ reason: string; organization_domain: ${data('OrganizationDomainStandAlone', failed?.organization_domain)} }`;
+  shapes['session.created'] = 'WorkosSession';
+  shapes['session.revoked'] = 'WorkosSession';
+
+  const unsampled = Object.keys(shapes).filter(event => !samples.has(event));
+  if (unsampled.length > 0) throw new Error(`WorkOS's events reference has no sample for ${unsampled.join(', ')}`);
+
+  const entries = Object.entries(shapes).map(([event, type]): [string, string] => [
+    event,
+    `WorkosWebhook<${JSON.stringify(event)}, ${type}>`,
+  ]);
+  const envelope = `
+/** A WorkOS webhook body. */
+export interface WorkosWebhook<Event extends string, Data> {
+  id: string;
+  event: Event;
+  data: Data;
+  created_at: string;
+  context?: Record<string, unknown>;
+}
+
+/** An AuthKit session, as the events reference shows it; the API has no session object. */
+export interface WorkosSession {
+  object: 'session';
+  id: string;
+  user_id: string;
+  organization_id?: string;
+  /** Present when the session was started by impersonation. */
+  impersonator?: { email: string; reason: string | null };
+  ip_address: string;
+  user_agent: string;
+  created_at: string;
+  updated_at: string;
+}
+`;
+
+  await emit(
+    'workos.generated.ts',
+    header([
+      SOURCES.workos.url,
+      `${SOURCES.workosEvents.url} (each event's data and samples; SHA-256 ${reference.sha256})`,
+    ]) +
+      mapInterface(
+        'WorkosWebhookPayloads',
+        "WorkOS webhook payloads by Connect event type: the body's `event`.",
+        entries,
+      ) +
+      '\n' +
+      envelope +
+      '\n' +
+      emitter.declarations(),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ElevenLabs
+
+async function generateElevenlabs(cacheDir: string | undefined): Promise<void> {
+  const loaded = await load(SOURCES.elevenlabs, cacheDir);
+  const document = JSON.parse(loaded.text) as Schema;
+  const info = isSchema(document.info) ? document.info : {};
+  const emitter = new OpenApiEmitter(document, 'ElevenLabs');
+  const conversation = emitter.ref('GetConversationResponseModel');
+
+  const code = `${mapInterface(
+    'ElevenLabsWebhookPayloads',
+    "ElevenLabs post-call webhook payloads by Connect event type: the body's `type`.",
+    [
+      ['post_call_transcription', `ElevenLabsWebhook<'post_call_transcription', ElevenLabsWebhookConversation>`],
+      ['post_call_audio', `ElevenLabsWebhook<'post_call_audio', ElevenLabsWebhookAudio>`],
+      [
+        'call_initiation_failure',
+        `ElevenLabsWebhook<'call_initiation_failure', ElevenLabsWebhookCallInitiationFailure>`,
+      ],
+    ],
+  )}
+
+/** An ElevenLabs post-call webhook body. */
+export interface ElevenLabsWebhook<Type extends string, Data> {
+  type: Type;
+  /** When the event occurred, in Unix seconds. */
+  event_timestamp: number;
+  data: Data;
+}
+
+/**
+ * A finished conversation. The webhook reference doesn't list
+ * \`has_auxiliary_audio\`, so it is optional here though the API's model
+ * requires it.
+ */
+export type ElevenLabsWebhookConversation = Omit<${conversation}, 'has_auxiliary_audio'> &
+  Partial<Pick<${conversation}, 'has_auxiliary_audio'>>;
+
+/** A conversation's full audio, and nothing else. */
+export interface ElevenLabsWebhookAudio {
+  agent_id: string;
+  conversation_id: string;
+  branch_id?: string | null;
+  version_id?: string | null;
+  environment?: string | null;
+  /** The conversation's audio, as base64-encoded MP3. */
+  full_audio: string;
+}
+
+/** A telephony call that failed to start. */
+export interface ElevenLabsWebhookCallInitiationFailure {
+  agent_id: string;
+  conversation_id: string;
+  failure_reason: 'busy' | 'no-answer' | 'unknown';
+  metadata: ElevenLabsWebhookSipFailure | ElevenLabsWebhookTwilioFailure;
+}
+
+export interface ElevenLabsWebhookSipFailure {
+  type: 'sip';
+  body: {
+    from_number: number;
+    to_number: number;
+    sip_status_code: number;
+    error_reason: string;
+    call_sid: string;
+    twirp_code?: string;
+    sip_status?: string;
+  };
+}
+
+export interface ElevenLabsWebhookTwilioFailure {
+  type: 'twilio';
+  /** Twilio's StatusCallback body. */
+  body: Record<string, unknown>;
+}
+
+${emitter.declarations()}`;
+
+  await emit(
+    'elevenlabs.generated.ts',
+    header([
+      `${SOURCES.elevenlabs.url} (version ${String(info.version)}, SHA-256 ${loaded.sha256})`,
+      'https://elevenlabs.io/docs/agents-platform/workflows/post-call-webhooks (envelope, audio and failure data)',
+    ]) + code,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Telegram
+
+interface TelegramField {
+  name: string;
+  type: string;
+  optional: boolean;
+  description: string;
+}
+
+type TelegramDefinition =
+  | { kind: 'object'; name: string; description: string; fields: TelegramField[] }
+  | { kind: 'union'; name: string; description: string; members: string[] };
+
+function htmlText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** The Bot API's types: each is an `<h4>` followed by a field table or a list of the types it can be. */
+function parseTelegramTypes(html: string): Map<string, TelegramDefinition> {
+  const definitions = new Map<string, TelegramDefinition>();
+  const sections = html.split(/<h4>/).slice(1);
+  for (const section of sections) {
+    const end = section.search(/<h[34]>/);
+    const body = end < 0 ? section : section.slice(0, end);
+    const name = htmlText(body.slice(0, body.indexOf('</h4>')));
+    // Types are PascalCase; methods are camelCase.
+    if (!/^[A-Z][A-Za-z0-9]+$/.test(name)) continue;
+    const description = htmlText(body.match(/<p>([\s\S]*?)<\/p>/)?.[1] ?? '');
+    const table = body.match(/<table class="table">([\s\S]*?)<\/table>/)?.[1];
+    if (table && /<th>Field<\/th>/.test(table)) {
+      const fields = [
+        ...table.matchAll(/<tr>\s*<td>([\s\S]*?)<\/td>\s*<td>([\s\S]*?)<\/td>\s*<td>([\s\S]*?)<\/td>\s*<\/tr>/g),
+      ].map(
+        ([, field, type, text]): TelegramField => ({
+          name: htmlText(field!),
+          type: htmlText(type!),
+          optional: /^<em>Optional<\/em>/.test(text!.trim()),
+          description: htmlText(text!).replace(/^Optional\. /, ''),
+        }),
+      );
+      definitions.set(name, { kind: 'object', name, description, fields });
+      continue;
+    }
+    const list = body.match(/<ul>([\s\S]*?)<\/ul>/)?.[1];
+    const items = list ? [...list.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(m => m[1]!.trim()) : [];
+    const members = items.flatMap(item => item.match(/^<a href="#[a-z0-9]+">([A-Z][A-Za-z0-9]+)<\/a>$/)?.[1] ?? []);
+    if (members.length > 0 && members.length === items.length) {
+      // RichText can also be "a String ... an Array of RichText".
+      if (/\ba String\b/.test(description)) members.push('String');
+      const array = description.match(/\ban Array of ([A-Z][A-Za-z0-9]+)/)?.[1];
+      if (array) members.push(`Array of ${array}`);
+      definitions.set(name, { kind: 'union', name, description, members });
+    } else {
+      // Placeholders such as CallbackGame "hold no information".
+      definitions.set(name, { kind: 'object', name, description, fields: [] });
+    }
+  }
+  return definitions;
+}
+
+class TelegramEmitter {
+  readonly #definitions: Map<string, TelegramDefinition>;
+  readonly #queued = new Set<string>();
+  readonly #queue: string[] = [];
+
+  constructor(definitions: Map<string, TelegramDefinition>) {
+    this.#definitions = definitions;
+  }
+
+  ref(name: string): string {
+    if (!this.#definitions.has(name)) throw new Error(`Unknown Telegram type ${name}`);
+    if (!this.#queued.has(name)) {
+      this.#queued.add(name);
+      this.#queue.push(name);
+    }
+    return `Telegram${name}`;
+  }
+
+  type(field: TelegramField): string {
+    // A field documented as always one value is a discriminant.
+    const always = field.description.match(/(?:always|must be) [“"]([^”"]+)[”"]/);
+    if (always && field.type === 'String') return JSON.stringify(always[1]);
+    return this.#type(field.type);
+  }
+
+  #type(text: string): string {
+    const array = text.match(/^Array of (.+)$/);
+    if (array) return `${wrap(this.#type(array[1]!))}[]`;
+    if (/ or /.test(text) || /, /.test(text)) {
+      return union(text.split(/ or |, /).map(part => this.#type(part.trim())));
+    }
+    switch (text) {
+      case 'Integer':
+      case 'Float':
+      case 'Float number':
+        return 'number';
+      case 'String':
+        return 'string';
+      case 'Boolean':
+        return 'boolean';
+      case 'True':
+        return 'true';
+      case 'False':
+        return 'false';
+    }
+    return this.ref(text);
+  }
+
+  declarations(): string {
+    const out: string[] = [];
+    for (let i = 0; i < this.#queue.length; i++) {
+      const definition = this.#definitions.get(this.#queue[i]!)!;
+      const name = `Telegram${definition.name}`;
+      if (definition.kind === 'union') {
+        const members = definition.members.map(member => this.#type(member));
+        out.push(`${doc(definition.description)}export type ${name} = ${members.join(' | ')};`);
+      } else if (definition.fields.length === 0) {
+        out.push(`${doc(definition.description)}export type ${name} = Record<string, never>;`);
+      } else {
+        const fields = definition.fields
+          .map(
+            field =>
+              `${doc(field.description)}${propertyKey(field.name)}${field.optional ? '?' : ''}: ${this.type(field)};`,
+          )
+          .join('\n');
+        out.push(`${doc(definition.description)}export interface ${name} {\n${fields}\n}`);
+      }
+    }
+    return out.join('\n\n');
+  }
+}
+
+async function generateTelegram(cacheDir: string | undefined): Promise<void> {
+  const loaded = await load(SOURCES.telegram, cacheDir);
+  const version = loaded.text.match(/Bot API (\d+\.\d+)/)?.[1];
+  if (!version) throw new Error("Couldn't find the Bot API version in Telegram's reference");
+  const definitions = parseTelegramTypes(loaded.text);
+  const update = definitions.get('Update');
+  if (update?.kind !== 'object') throw new Error("Telegram's reference has no Update type");
+  const emitter = new TelegramEmitter(definitions);
+
+  // One event per update kind: every optional field besides update_id.
+  const kinds = update.fields.filter(field => field.name !== 'update_id');
+  if (kinds.some(field => !field.optional)) throw new Error('Expected every Update kind to be optional');
+  const entries = kinds.map((field): [string, string] => [
+    field.name,
+    `TelegramWebhook<${JSON.stringify(field.name)}, ${emitter.type(field)}>`,
+  ]);
+
+  await emit(
+    'telegram.generated.ts',
+    header([`${SOURCES.telegram.url} (Bot API ${version}, SHA-256 ${loaded.sha256})`]) +
+      mapInterface(
+        'TelegramWebhookPayloads',
+        'Telegram webhook payloads by Connect event type: the kind of update, the one field it carries besides `update_id`.',
+        entries,
+      ) +
+      `
+
+/** A Telegram update of one kind. */
+export type TelegramWebhook<Kind extends string, Value> = { update_id: number } & { [K in Kind]: Value };
+
+` +
+      emitter.declarations(),
+  );
+}
+
 async function main(): Promise<void> {
   const flag = process.argv.indexOf('--cache-dir');
   const cacheDir = flag >= 0 ? process.argv[flag + 1] : undefined;
@@ -891,6 +1487,24 @@ async function main(): Promise<void> {
   await generateLinear(cacheDir);
   await generateIncidentIo(cacheDir);
   await generateJira(cacheDir);
+  await generateOpenApiWebhooks(cacheDir, {
+    source: SOURCES.openai,
+    prefix: 'OpenAi',
+    file: 'openai.generated.ts',
+    mapName: 'OpenAiWebhookPayloads',
+    description: "OpenAI webhook payloads by Connect event type: the body's `type`.",
+  });
+  await generateOpenApiWebhooks(cacheDir, {
+    source: SOURCES.resend,
+    prefix: 'Resend',
+    file: 'resend.generated.ts',
+    mapName: 'ResendWebhookPayloads',
+    description: "Resend webhook payloads by Connect event type: the body's `type`.",
+  });
+  await generateClerk(cacheDir);
+  await generateWorkos(cacheDir);
+  await generateElevenlabs(cacheDir);
+  await generateTelegram(cacheDir);
 }
 
 await main();

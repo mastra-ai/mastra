@@ -47,12 +47,27 @@ export type {
   UntypedConnectEvent,
 } from './events.js';
 export type {
+  ClerkWebhookPayloads,
   ConnectEventPayloads,
+  ElevenLabsWebhookPayloads,
+  FirefliesWebhookPayloads,
   GithubWebhookPayloads,
   GitlabWebhookPayloads,
+  HubspotWebhookPayloads,
   IncidentIoWebhookPayloads,
   JiraWebhookPayloads,
   LinearWebhookPayloads,
+  NotionWebhookPayloads,
+  OpenAiWebhookPayloads,
+  OutlookWebhookPayloads,
+  ResendWebhookPayloads,
+  SendgridWebhookPayloads,
+  SlackEventCallback,
+  SlackWebhookPayloads,
+  SupabaseWebhookPayloads,
+  TelegramWebhookPayloads,
+  WorkosWebhookPayloads,
+  ZendeskWebhookPayloads,
 } from './event-payloads/index.js';
 export type {
   ConnectClientOptions,

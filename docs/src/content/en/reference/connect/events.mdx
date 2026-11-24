@@ -192,11 +192,27 @@ Payloads aren't validated at runtime. The types describe what the provider docum
 
 | Integration | `eventType` format | Example | Contract |
 | - | - | - | - |
+| `clerk` | The body's `type` | `user.created` | Clerk's Backend API description and SDK webhook types |
+| `elevenlabs` | The body's `type` | `post_call_transcription` | ElevenLabs' OpenAPI description and post-call webhook docs |
+| `fireflies` | The body's `event`, or `eventType` for V1 webhooks | `meeting.transcribed` | Fireflies' webhook docs |
 | `github` | `X-GitHub-Event` header, then `.` and the body's `action` when it has one | `pull_request.opened`, `push` | GitHub's REST API description |
-| `linear` | `Linear-Event` header, then `.` and the body's `action` | `Issue.create`, `OAuthApp.revoked` | Linear's GraphQL schema and webhook docs |
 | `gitlab` | `X-Gitlab-Event` header | `Merge Request Hook` | GitLab's webhook events docs |
-| `jira` | The body's `webhookEvent` | `jira:issue_updated` | Jira's REST API description and webhook docs |
+| `hubspot` | Each notification's `subscriptionType` | `contact.creation` | HubSpot's webhooks docs |
 | `incident-io` | The body's `event_type` | `public_incident.incident_created_v2` | incident.io's OpenAPI description |
+| `jira` | The body's `webhookEvent` | `jira:issue_updated` | Jira's REST API description and webhook docs |
+| `linear` | `Linear-Event` header, then `.` and the body's `action` | `Issue.create`, `OAuthApp.revoked` | Linear's GraphQL schema and webhook docs |
+| `notion` | The body's `type` | `page.properties_updated` | Notion's webhook events docs |
+| `openai` | The body's `type` | `response.completed` | OpenAI's OpenAPI description |
+| `outlook` | Each notification's resource type, then `.` and its `changeType`; or `lifecycle.` and its `lifecycleEvent` | `message.created`, `lifecycle.missed` | Microsoft Graph's change notification docs |
+| `resend` | The body's `type` | `email.delivered` | Resend's OpenAPI description |
+| `sendgrid` | Each event's `event` | `delivered` | SendGrid's Event Webhook reference |
+| `slack` | The inner event's `type` | `app_mention`, `message` | Slack's Events API docs |
+| `supabase` | The body's `type` | `INSERT` | Supabase's Database Webhooks docs |
+| `telegram` | The kind of update: the one field besides `update_id` | `message`, `callback_query` | Telegram's Bot API docs |
+| `workos` | The body's `event` | `dsync.user.created` | WorkOS' OpenAPI description and events docs |
+| `zendesk` | The body's `type` | `zen:event-type:ticket.created` | Zendesk's webhook event docs |
+
+HubSpot, Outlook and SendGrid send events in batches. Connect delivers each item as its own event, so a payload is one notification.
 
 Each integration's map is also exported, such as `GithubWebhookPayloads`, so you can name a payload type in your own code:
 
@@ -206,17 +222,28 @@ import type { GithubWebhookPayloads } from '@mastra/connect'
 type PullRequestOpened = GithubWebhookPayloads['pull_request.opened']
 ```
 
-To type events of another integration, or more events of a typed one, extend `ConnectEventPayloads`:
+To type events of another integration, extend `ConnectEventPayloads`. To type more events of a typed integration, extend its map:
 
 ```typescript title="src/connect-events.d.ts"
+import type { SlackEventCallback } from '@mastra/connect'
+
 declare module '@mastra/connect' {
   interface ConnectEventPayloads {
-    slack: {
-      message: { type: 'event_callback'; event: { text: string; channel: string } }
+    acme: {
+      'order.created': { orderId: string }
     }
+  }
+
+  interface SlackWebhookPayloads {
+    channel_rename: SlackEventCallback<{
+      type: 'channel_rename'
+      channel: { id: string; name: string }
+    }>
   }
 }
 ```
+
+The HubSpot and Outlook maps are type aliases, so they can't be extended.
 
 ## Errors
 

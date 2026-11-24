@@ -9,6 +9,7 @@ import type {
   GithubWebhookPayloads,
   JiraWebhookPayloads,
   UntypedConnectEvent,
+  WorkosWebhookPayloads,
 } from '../src/index.js';
 
 declare const event: ConnectEvent;
@@ -61,6 +62,79 @@ if (isConnectEvent(event, 'jira', 'jira:issue_updated')) {
 
 if (isConnectEvent(event, 'incident-io', 'public_incident.incident_created_v2')) {
   expectTypeOf(event.payload.event_type).toEqualTypeOf<'public_incident.incident_created_v2'>();
+}
+
+if (isConnectEvent(event, 'openai', 'response.completed')) {
+  expectTypeOf(event.payload.type).toEqualTypeOf<'response.completed'>();
+  expectTypeOf(event.payload.data.id).toBeString();
+}
+
+if (isConnectEvent(event, 'resend', 'email.sent')) {
+  expectTypeOf(event.payload.type).toEqualTypeOf<'email.sent'>();
+  expectTypeOf(event.payload.created_at).toBeString();
+}
+
+if (isConnectEvent(event, 'clerk', 'user.created')) {
+  expectTypeOf(event.payload.type).toEqualTypeOf<'user.created'>();
+  expectTypeOf(event.payload.data.id).toBeString();
+}
+
+if (isConnectEvent(event, 'workos', 'dsync.user.created')) {
+  expectTypeOf(event.payload.event).toEqualTypeOf<'dsync.user.created'>();
+  expectTypeOf(event.payload.data.email).toEqualTypeOf<WorkosWebhookPayloads['dsync.user.created']['data']['email']>();
+}
+
+if (isConnectEvent(event, 'elevenlabs', 'post_call_transcription')) {
+  expectTypeOf(event.payload.data.conversation_id).toBeString();
+}
+
+if (isConnectEvent(event, 'telegram', 'message')) {
+  expectTypeOf(event.payload.update_id).toBeNumber();
+  expectTypeOf(event.payload.message.chat.id).toBeNumber();
+}
+
+if (isConnectEvent(event, 'slack', 'message')) {
+  expectTypeOf(event.payload.type).toEqualTypeOf<'event_callback'>();
+  expectTypeOf(event.payload.event.channel).toBeString();
+}
+
+if (isConnectEvent(event, 'sendgrid', 'bounce')) {
+  expectTypeOf(event.payload.event).toEqualTypeOf<'bounce'>();
+  expectTypeOf(event.payload.email).toBeString();
+}
+
+if (isConnectEvent(event, 'hubspot', 'deal.propertyChange')) {
+  expectTypeOf(event.payload.subscriptionType).toEqualTypeOf<'deal.propertyChange'>();
+  expectTypeOf(event.payload.propertyName).toBeString();
+}
+
+if (isConnectEvent(event, 'outlook', ['message.created', 'lifecycle.missed'])) {
+  if (event.eventType === 'message.created') {
+    expectTypeOf(event.payload.changeType).toEqualTypeOf<'created'>();
+  } else {
+    expectTypeOf(event.payload.lifecycleEvent).toEqualTypeOf<'missed'>();
+  }
+}
+
+if (isConnectEvent(event, 'notion', 'page.properties_updated')) {
+  expectTypeOf(event.payload.data.updated_properties).toEqualTypeOf<string[]>();
+}
+
+if (isConnectEvent(event, 'zendesk', 'zen:event-type:ticket.status_changed')) {
+  expectTypeOf(event.payload.detail.status).toBeString();
+  expectTypeOf(event.payload.event.current).toEqualTypeOf<string | null>();
+}
+
+if (isConnectEvent(event, 'fireflies', 'meeting.transcribed')) {
+  expectTypeOf(event.payload.meeting_id).toBeString();
+}
+
+if (isConnectEvent(event, 'supabase', ['INSERT', 'DELETE'])) {
+  if (event.eventType === 'INSERT') {
+    expectTypeOf(event.payload.old_record).toBeNull();
+  } else {
+    expectTypeOf(event.payload.record).toBeNull();
+  }
 }
 
 // Unknown integrations and event types are compile errors.
