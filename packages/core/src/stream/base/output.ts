@@ -186,7 +186,23 @@ type DelayedPromises<OUTPUT = undefined> = {
 };
 
 /**
- * The complete output returned by `getFullOutput()`.
+ * The complete result of `agent.generate()` (and of `getFullOutput()` on a stream).
+ *
+ * - `text`: final text; `object`: typed structured output when `structuredOutput` was set.
+ * - `toolCalls` / `toolResults`: every tool call and result across all steps, as chunks whose
+ *   data is under `payload` — read `toolCalls[i].payload.toolName` / `.payload.args`
+ *   (`ToolCallPayload`) and `toolResults[i].payload.result` (`ToolResultPayload`).
+ * - `steps[i].toolCalls` / `steps[i].toolResults`: the same chunks, per step.
+ * - `usage` covers the last step; `totalUsage` covers the whole run.
+ *
+ * @example
+ * ```ts
+ * const result = await agent.generate('What is the weather in Paris?');
+ * for (const call of result.toolCalls) console.log(call.payload.toolName, call.payload.args);
+ * for (const res of result.toolResults) console.log(res.payload.result);
+ * ```
+ *
+ * @see [Agent.generate() response structure](https://mastra.ai/reference/agents/generate#response-structure)
  */
 export type FullOutput<OUTPUT = undefined> = {
   /** The text output from all steps, excluding rejected responses */
@@ -207,9 +223,15 @@ export type FullOutput<OUTPUT = undefined> = {
   reasoning: PromiseResults<OUTPUT>['reasoning'];
   /** Combined reasoning text */
   reasoningText: string | undefined;
-  /** Tool calls made during execution */
+  /**
+   * Every tool call made during the run, across all steps. Each entry is a chunk; the call is
+   * under `payload` (`payload.toolCallId`, `payload.toolName`, `payload.args`).
+   */
   toolCalls: PromiseResults<OUTPUT>['toolCalls'];
-  /** Results from tool executions */
+  /**
+   * Every tool result produced during the run, across all steps. Each entry is a chunk; the
+   * tool's return value is `payload.result`.
+   */
   toolResults: PromiseResults<OUTPUT>['toolResults'];
   /** Sources referenced by model */
   sources: PromiseResults<OUTPUT>['sources'];
