@@ -2,7 +2,7 @@ import { currentRunFenceScope, runInRunFenceScope } from '../agent/durable/run-f
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../agent/run-ownership';
 import type { IMastraLogger } from '../logger';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
-import { matchesRunFence } from '../storage/run-fencing';
+import { currentRunGeneration, matchesRunFence, RUN_FENCE_CONFLICT_ERROR_ID } from '../storage/run-fencing';
 import type { RunFence, RunFenceScope, RunOwnershipRecord } from '../storage/run-fencing';
 
 export const WORKFLOW_RUN_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
@@ -234,6 +234,27 @@ class WorkflowRunClaimScope implements RunFenceScope {
   generationFor(runId: string): number | undefined {
     return this.covers(runId) ? this.claim.fence.generation : this.outer?.generationFor?.(runId);
   }
+}
+
+/** The fence of the `RunFenceConflictError` in `error` or its cause chain, if there is one. */
+export function runFenceConflictOf(error: unknown): RunFence | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8 && current && typeof current === 'object'; depth++) {
+    const { id, code, details } = current as { id?: unknown; code?: unknown; details?: Partial<RunFence> };
+    const matches = id === RUN_FENCE_CONFLICT_ERROR_ID || code === RUN_FENCE_CONFLICT_ERROR_ID;
+    if (matches && details?.runId !== undefined) return details as RunFence;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+/**
+ * Whether storage refused `error`'s save because the claim the current fence scope holds was
+ * replaced, so this execution lost its run. A conflict on another run (one a step started) is not.
+ */
+export function isOwnRunFenceConflict(error: unknown): boolean {
+  const fence = runFenceConflictOf(error);
+  return !!fence && currentRunGeneration(fence.runId) === fence.generation;
 }
 
 /**

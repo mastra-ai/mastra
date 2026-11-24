@@ -7,6 +7,8 @@ Fixed a default-engine workflow run being overwritten by a stalled process after
 Now, on storage adapters with run fencing, storage refuses those saves and the stalled process's call rejects with `STORAGE_RUN_FENCE_CONFLICT`. No `onFinish` or `onError` callback fires for it.
 
 ```ts
+import { MastraError } from '@mastra/core/error';
+
 // Before: a stalled process could resolve and overwrite the run another process finished
 const result = await run.start({ inputData });
 
@@ -14,10 +16,10 @@ const result = await run.start({ inputData });
 try {
   await run.start({ inputData });
 } catch (error) {
-  if (error.id === 'STORAGE_RUN_FENCE_CONFLICT') {
+  if (error instanceof MastraError && error.id === 'STORAGE_RUN_FENCE_CONFLICT') {
     const current = await workflow.getWorkflowRunById(run.runId);
   }
 }
 ```
 
-This applies to runs that hold a lease, as default-engine runs do unless their workflow sets `autoRestartActiveRuns: false`. Storage adapters without run fencing behave as before. The step that was running when the run was taken over can still finish, so keep steps idempotent.
+This applies to default-engine runs that hold a run lease (see `autoRestartActiveRuns`). Storage adapters without run fencing behave as before. The step that was running when the run was taken over can still finish, so keep steps idempotent.

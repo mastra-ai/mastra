@@ -195,6 +195,129 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       expect(logged()).toEqual(LOST_RUN_ONLY);
     });
 
+    it("keeps the new owner's finished run when a stalled resume() wakes up", async () => {
+      const ran: string[] = [];
+      const stalled = gate();
+      const { store, workflow, id, logged } = await setup(({ id, options }) =>
+        createWorkflow({ id, inputSchema: empty, outputSchema: empty, options })
+          .then(
+            createStep({
+              id: 'approve',
+              inputSchema: empty,
+              outputSchema: empty,
+              resumeSchema: empty,
+              execute: async ({ resumeData, suspend }) => {
+                if (!resumeData) return suspend({});
+                ran.push('approve');
+                await stalled.wait();
+                return {};
+              },
+            }),
+          )
+          .commit(),
+      );
+
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const resumed = run.resume({ step: 'approve', resumeData: {} });
+      await vi.waitFor(() => expect(ran).toEqual(['approve']));
+      await takeOverAndFinish(store, id, run.runId);
+      stalled.open();
+
+      await expect(resumed).rejects.toMatchObject(conflict);
+      expect(await loadStatus(store, id, run.runId)).toBe('success');
+      expect(logged()).toEqual(LOST_RUN_ONLY);
+    });
+
+    // The takeover lands between time travel's lease claim and its first save, so the rollback of its
+    // status claim is refused as well, and the run stays as the new owner has it.
+    it('leaves a time-traveled run to the process that took it over before its first save', async () => {
+      const ran: string[] = [];
+      const open = gate();
+      open.open();
+      const { store, workflow, id, logged } = await setup(stalledThenNext(ran, open));
+
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('success');
+      const claim = store.claimRunOwnership.bind(store);
+      vi.spyOn(store, 'claimRunOwnership').mockImplementation(async args => {
+        const claimed = await claim(args);
+        if (args.ownerId !== 'other-process') await takeOver(store, run.runId);
+        return claimed;
+      });
+
+      await expect(run.timeTravel({ step: 'b' })).rejects.toMatchObject(conflict);
+      expect(ran).toEqual(['a', 'b']);
+      expect(await loadStatus(store, id, run.runId)).toBe('running');
+      expect(logged()).toEqual(LOST_RUN_ONLY);
+    });
+
+    // A step that starts another workflow by hand gets that run's conflict as an ordinary error. The
+    // outer run still holds its own claim, so it retries the step and fails as usual.
+    it('fails a step whose separately started run was taken over, like any step error', async () => {
+      const stalls: ReturnType<typeof gate>[] = [];
+      const innerRunIds: string[] = [];
+      let innerId = '';
+      const { store, workflow, id, callbacks } = await setup(({ id, options }) => {
+        innerId = `${id}-inner`;
+        const inner = createWorkflow({
+          id: innerId,
+          inputSchema: empty,
+          outputSchema: empty,
+          options: { storageVersion },
+        })
+          .then(
+            createStep({
+              id: 'i1',
+              inputSchema: empty,
+              outputSchema: empty,
+              execute: async () => {
+                const stall = gate();
+                stalls.push(stall);
+                await stall.wait();
+                return {};
+              },
+            }),
+          )
+          .commit();
+        const outer = createWorkflow({
+          id,
+          inputSchema: empty,
+          outputSchema: empty,
+          options,
+          retryConfig: { attempts: 1 },
+        })
+          .then(
+            createStep({
+              id: 'o1',
+              inputSchema: empty,
+              outputSchema: empty,
+              execute: async () => {
+                const innerRun = await inner.createRun();
+                innerRunIds.push(innerRun.runId);
+                await innerRun.start({ inputData: {} });
+                return {};
+              },
+            }),
+          )
+          .commit();
+        return [outer, inner];
+      });
+
+      const run = await workflow.createRun();
+      const done = run.start({ inputData: {} });
+      for (const attempt of [0, 1]) {
+        await vi.waitFor(() => expect(stalls).toHaveLength(attempt + 1));
+        await takeOverAndFinish(store, innerId, innerRunIds[attempt]!);
+        stalls[attempt]!.open();
+      }
+
+      expect((await done).status).toBe('failed');
+      expect(innerRunIds).toHaveLength(2);
+      expect(callbacks.onError).toHaveBeenCalledTimes(1);
+      expect(await loadStatus(store, id, run.runId)).toBe('failed');
+    });
+
     // The order seen in the chaos soak: the step's result save leaves before the database link is
     // cut and reaches it after another process took the run over.
     it('refuses a save sent before the takeover that reaches the store after it', async () => {

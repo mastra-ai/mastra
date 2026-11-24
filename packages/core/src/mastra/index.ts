@@ -82,7 +82,7 @@ import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
-import { isRunFenceConflictError, runOutsideRunFenceScope } from '../storage/run-fencing';
+import { runOutsideRunFenceScope } from '../storage/run-fencing';
 import type { RunFence, RunOwnershipRecord } from '../storage/run-fencing';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType, WorkflowRun } from '../storage/types';
@@ -117,7 +117,12 @@ import {
   nestedRunRecoveryAction,
   nestedRunStatusOf,
 } from '../workflows/nested-run-recovery';
-import { renewWorkflowLease, repeatAfterSettled, WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
+import {
+  renewWorkflowLease,
+  repeatAfterSettled,
+  runFenceConflictOf,
+  WORKFLOW_RUN_LEASE_TTL_MS,
+} from '../workflows/run-ownership';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
@@ -5032,7 +5037,7 @@ export class Mastra<
       await run.restart();
     } catch (error) {
       // Another process took the run over while this restart drove it; that process finishes it.
-      if (isRunFenceConflictError(error)) {
+      if (runFenceConflictOf(error)?.runId === runId) {
         this.#logger.debug('Stopped restarting workflow run another process took over', {
           workflow: workflow.id,
           runId,

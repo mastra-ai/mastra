@@ -11,7 +11,6 @@ import { createObservabilityContext, getWorkflowResumeTracingContext } from '../
 import { withSpanErrorAttempt } from '../observability/context-storage';
 import { getSpanErrorOrigin, setSpanErrorOrigin } from '../observability/error-count';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
-import { isRunFenceConflictError } from '../storage/run-fencing';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
@@ -42,6 +41,7 @@ import { executeStep as executeStepHandler } from './handlers/step';
 import { rebaseNestedState, withoutNestedRunStartState } from './nested-state';
 import { lazyStepResults, RunJournal } from './run-journal';
 import type { StateBase } from './run-journal';
+import { isOwnRunFenceConflict } from './run-ownership';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type {
@@ -580,8 +580,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return { ok: true, result };
       } catch (e) {
         // Storage refused a save from the step body (a nested run's): another process owns the run,
-        // so neither a retry nor a failed step result may follow.
-        if (isRunFenceConflictError(e)) throw e;
+        // so neither a retry nor a failed step result may follow. Another run's conflict is a step error.
+        if (isOwnRunFenceConflict(e)) throw e;
         const isNonRetryable = e instanceof MastraNonRetryableError;
 
         if (isNonRetryable || i === params.retries) {

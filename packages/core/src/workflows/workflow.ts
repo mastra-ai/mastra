@@ -74,7 +74,6 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import type { WorkflowRunHeader } from '../storage/domains/workflows/journal';
-import { isRunFenceConflictError } from '../storage/run-fencing';
 import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -102,7 +101,13 @@ import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
 import { loadedStepResults, residentStepResults } from './run-journal';
 import type { ParentStateLink, StateBase } from './run-journal';
-import { claimWorkflowRunOwnership, coverNestedWorkflowRun, UNCLAIMED_WORKFLOW_RUN } from './run-ownership';
+import {
+  claimWorkflowRunOwnership,
+  coverNestedWorkflowRun,
+  isOwnRunFenceConflict,
+  runFenceConflictOf,
+  UNCLAIMED_WORKFLOW_RUN,
+} from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
 import { createRunStorage } from './run-storage';
 import type { RunStorage } from './run-storage';
@@ -4938,7 +4943,7 @@ export class Run<
 
     void execution.catch(error => {
       // Another process took the run over and drives it now; the claim already logged that.
-      if (isRunFenceConflictError(error)) return;
+      if (runFenceConflictOf(error)?.runId === this.runId) return;
       this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
     });
     return { runId: this.runId };
@@ -5951,7 +5956,7 @@ export class Run<
         await this.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
       } catch (releaseError) {
         // A refused write leaves the run to the process that took it over, as intended.
-        if (isRunFenceConflictError(releaseError)) return;
+        if (isOwnRunFenceConflict(releaseError)) return;
         this.#mastra
           ?.getLogger()
           ?.warn(`[Workflow ${this.workflowId}] Failed to release resume claim for run ${this.runId}`, releaseError);
@@ -6111,7 +6116,7 @@ export class Run<
         );
       } catch (releaseError) {
         // A refused write leaves the parent to the process that took it over, as intended.
-        if (!isRunFenceConflictError(releaseError)) {
+        if (runFenceConflictOf(releaseError)?.runId !== parentRun.runId) {
           this.#mastra
             ?.getLogger()
             ?.warn(
@@ -6178,6 +6183,7 @@ export class Run<
       if (result.status === 'success') {
         if (claimedParent && this.parentWorkflow) {
           let parentExecutionStarted = false;
+          const parentRunId = claimedParent.run.runId;
           void claimedParent.run
             ._resume({
               step: this.parentWorkflow.stepId,
@@ -6197,7 +6203,7 @@ export class Run<
                 await releaseParentClaim();
               }
               // Another process took the parent's run over; the parent's claim already logged that.
-              if (isRunFenceConflictError(error)) return;
+              if (runFenceConflictOf(error)?.runId === parentRunId) return;
               this.#mastra
                 ?.getLogger()
                 ?.error('Failed to resume parent workflow after nested child completion.', error);
@@ -6606,6 +6612,8 @@ export class Run<
 
         await this.runStorage.updateHeader({ status: snapshot.status, expectedStatus: 'running' });
       } catch (releaseError) {
+        // A refused write leaves the run to the process that took it over, as intended.
+        if (isOwnRunFenceConflict(releaseError)) return;
         this.#mastra
           ?.getLogger()
           ?.warn(
