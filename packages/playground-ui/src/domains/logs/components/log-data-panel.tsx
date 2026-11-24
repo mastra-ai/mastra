@@ -88,6 +88,8 @@ export function LogDataPanel({
   const formattedDate = log ? (formatTimestampPrecise(log.timestamp) ?? '') : '';
   const dataEntries = Object.entries(log?.data ?? {});
   const dataIsFlat = dataEntries.every(([, value]) => isPrimitive(value));
+  const metadataEntries = Object.entries(log?.metadata ?? {});
+  const metadataIsFlat = metadataEntries.every(([, value]) => isPrimitive(value));
   const jsonMessage = log ? prettyJsonObject(log.message) : undefined;
 
   return (
@@ -142,7 +144,11 @@ export function LogDataPanel({
                 <DataPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} />
               )}
 
-              <InsetSection title="Metadata" rows={textRows(Object.entries(log.metadata ?? {}), true)} />
+              {metadataIsFlat ? (
+                <InsetSection title="Metadata" rows={textRows(metadataEntries, true)} />
+              ) : (
+                <DataPanel.CodeSection title="Metadata" codeStr={JSON.stringify(log.metadata, null, 2)} />
+              )}
 
               {(log.traceId || log.spanId) && (
                 <div className="grid gap-2">

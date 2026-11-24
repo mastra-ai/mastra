@@ -28,6 +28,7 @@ export interface LogViewRefreshProps {
 export function LogViewRefresh({ onRefresh, refreshing }: LogViewRefreshProps) {
   return (
     <Button
+      type="button"
       size="icon-sm"
       variant="ghost"
       onClick={onRefresh}

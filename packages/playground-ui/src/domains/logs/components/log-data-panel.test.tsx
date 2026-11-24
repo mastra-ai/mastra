@@ -96,4 +96,14 @@ describe('LogDataPanel sections', () => {
 
     expect(screen.getByRole('dialog').textContent).toContain('"msg": "request done"');
   });
+
+  it('shows nested metadata as JSON instead of [object Object]', () => {
+    render(
+      <LogDataPanel log={{ ...plainLine, metadata: { request: { path: '/api', status: 500 } } }} onClose={vi.fn()} />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('"path": "/api"');
+    expect(dialog.textContent).not.toContain('[object Object]');
+  });
 });

@@ -124,6 +124,7 @@ export interface LogsDataListLineCellProps {
   message: string;
   fields?: Record<string, unknown>;
   wrap?: boolean;
+  collapse?: boolean;
 }
 
 const COLLAPSED_LINE_COUNT = 3;
@@ -158,13 +159,13 @@ function LogFields({ entries }: { entries: Array<[string, unknown]> }) {
   ));
 }
 
-function LogMessage({ message }: { message: string }) {
+function LogMessage({ message, collapse }: { message: string; collapse: boolean }) {
   const json = parseJsonObject(message);
   if (json) return <LogFields entries={Object.entries(json)} />;
 
   const lines = message.split('\n');
   const hidden = lines.length - COLLAPSED_LINE_COUNT;
-  if (hidden < 2) return <>{message}</>;
+  if (!collapse || hidden < 2) return <>{message}</>;
 
   return (
     <>
@@ -177,7 +178,14 @@ function LogMessage({ message }: { message: string }) {
   );
 }
 
-export function LogsDataListLineCell({ timestamp, level, message, fields, wrap = true }: LogsDataListLineCellProps) {
+export function LogsDataListLineCell({
+  timestamp,
+  level,
+  message,
+  fields,
+  wrap = true,
+  collapse = true,
+}: LogsDataListLineCellProps) {
   const fieldEntries = fields ? Object.entries(fields) : [];
 
   return (
@@ -195,7 +203,7 @@ export function LogsDataListLineCell({ timestamp, level, message, fields, wrap =
           wrap ? 'wrap-anywhere whitespace-pre-wrap' : 'overflow-visible whitespace-pre',
         )}
       >
-        <LogMessage message={message} />
+        <LogMessage message={message} collapse={collapse} />
         {fieldEntries.length > 0 && (
           <span className="ml-3">
             <LogFields entries={fieldEntries} />

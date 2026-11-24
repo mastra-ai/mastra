@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
 import { LogViewFill } from './log-view/log-view-fill';
 import { LogsListRow } from './logs-list-row';
@@ -85,34 +85,47 @@ function LogViewRows({
   const lastRenderedIndex = virtualItems.at(-1)?.index;
 
   const pinnedToNewestRef = useRef(!isOldestFirst);
+  const loadOlder = () => {
+    if (pinnedToNewestRef.current && hasNextPage && !isFetchingNextPage) onFetchNextPage?.();
+  };
+  const loadOlderAfterPin = useEffectEvent(loadOlder);
+
   useEffect(() => {
-    if (pinnedToNewestRef.current || lastRenderedIndex === undefined) return;
-    if (lastRenderedIndex === lastLogIndex) {
+    if (pinnedToNewestRef.current || (lastLogIndex >= 0 && lastRenderedIndex === undefined)) return;
+    const frame = requestAnimationFrame(() => {
+      if (lastLogIndex >= 0) virtualizer.scrollToIndex(lastLogIndex, { align: 'end' });
       pinnedToNewestRef.current = true;
-      return;
-    }
-    const frame = requestAnimationFrame(() => virtualizer.scrollToIndex(lastLogIndex, { align: 'end' }));
+      const element = scrollRef.current;
+      if (element && element.scrollHeight <= element.clientHeight) loadOlderAfterPin();
+    });
     return () => cancelAnimationFrame(frame);
   }, [lastRenderedIndex, lastLogIndex, virtualizer]);
 
   const firstLogId = logs[0] && logIdMap.get(logs[0]);
-  const prependAnchorRef = useRef<{ firstLogId?: string; scrollHeight: number }>({ scrollHeight: 0 });
+  const lastLogId = logs[lastLogIndex] && logIdMap.get(logs[lastLogIndex]);
+  const prependAnchorRef = useRef<{ firstLogId?: string; lastLogId?: string; scrollHeight: number }>({
+    scrollHeight: 0,
+  });
   useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
     const previous = prependAnchorRef.current;
-    const previousFirstIndex = logs.findIndex(log => logIdMap.get(log) === previous.firstLogId);
-    if (isOldestFirst && previousFirstIndex > 0) element.scrollTop += element.scrollHeight - previous.scrollHeight;
-    prependAnchorRef.current = { firstLogId, scrollHeight: element.scrollHeight };
+    const indexOf = (id: string | undefined) => logs.findIndex(log => logIdMap.get(log) === id);
+    const previousFirstIndex = indexOf(previous.firstLogId);
+    if (isOldestFirst && previousFirstIndex > 0) {
+      const previousLastEnd = virtualizer.measurementsCache[indexOf(previous.lastLogId)]?.end;
+      const lastEnd = virtualizer.measurementsCache[lastLogIndex]?.end;
+      const appendedHeight = previousLastEnd !== undefined && lastEnd !== undefined ? lastEnd - previousLastEnd : 0;
+      element.scrollTop += element.scrollHeight - previous.scrollHeight - appendedHeight;
+    }
+    prependAnchorRef.current = { firstLogId, lastLogId, scrollHeight: element.scrollHeight };
   });
 
   const observeOlderEdge = (node: HTMLDivElement | null) => {
     if (!node) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting && pinnedToNewestRef.current && hasNextPage && !isFetchingNextPage) {
-          onFetchNextPage?.();
-        }
+        if (entry?.isIntersecting) loadOlder();
       },
       { root: scrollRef.current },
     );
@@ -171,6 +184,7 @@ function LogViewRows({
                 message={log.message}
                 fields={log.data ?? undefined}
                 wrap={wrap}
+                collapse={onLogClick !== undefined}
               />
             </LogsListRow>
           );

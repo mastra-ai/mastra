@@ -22,7 +22,13 @@ export function LogViewEmpty({ onClearFilters }: LogViewEmptyProps) {
       <EmptyState
         variant="fill"
         titleSlot={onClearFilters ? 'No logs match these filters' : 'No logs in this period'}
-        actionSlot={onClearFilters && <Button onClick={onClearFilters}>Clear filters</Button>}
+        actionSlot={
+          onClearFilters && (
+            <Button type="button" onClick={onClearFilters}>
+              Clear filters
+            </Button>
+          )
+        }
       />
     </LogViewFill>
   );

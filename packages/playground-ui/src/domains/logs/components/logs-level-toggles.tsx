@@ -35,6 +35,7 @@ export function LogsLevelToggles({ levels, value, onValueChange, ...props }: Log
               return (
                 <Button
                   key={level}
+                  type="button"
                   variant="ghost"
                   aria-pressed={on}
                   onClick={event => onValueChange(toggleLogLevel(levels, value, level, event.metaKey || event.ctrlKey))}
