@@ -11724,10 +11724,10 @@
       "reason": "seed-rule-b"
     },
     "packages/core/src/agent/durable/__tests__/durable-agent-callback-order.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-10-08",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-24",
+      "last_failure": "2026-11-24",
+      "reason": "versioning-fail"
     },
     "packages/core/src/agent/durable/__tests__/durable-agent-callback-payload.test.ts": {
       "tier": "out",
