@@ -275,7 +275,6 @@ function MarkdownCodeBlock({
       lang={fenced.language}
       overflow="scroll"
       className={cn('my-3 bg-nested', className)}
-      copyMessage="Copied code to clipboard"
     />
   );
 }

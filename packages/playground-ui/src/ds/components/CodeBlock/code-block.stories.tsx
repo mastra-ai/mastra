@@ -60,15 +60,7 @@ export const Default: Story = {
 export const WithSelect: Story = {
   render: () => {
     const [pm, setPm] = useState('pnpm');
-    return (
-      <CodeBlock
-        code={commands[pm] ?? ''}
-        options={packageManagers}
-        value={pm}
-        onValueChange={setPm}
-        copyMessage="Copied update command!"
-      />
-    );
+    return <CodeBlock code={commands[pm] ?? ''} options={packageManagers} value={pm} onValueChange={setPm} />;
   },
 };
 
@@ -94,14 +86,7 @@ export const WithTabs: Story = {
   render: () => {
     const [pm, setPm] = useState('pnpm');
     return (
-      <CodeBlock
-        code={commands[pm] ?? ''}
-        options={packageManagers}
-        value={pm}
-        onValueChange={setPm}
-        selector="tabs"
-        copyMessage="Copied update command!"
-      />
+      <CodeBlock code={commands[pm] ?? ''} options={packageManagers} value={pm} onValueChange={setPm} selector="tabs" />
     );
   },
 };

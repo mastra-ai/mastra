@@ -23,7 +23,7 @@ export function ToolRunStatus({ run }: ToolRunStatusProps) {
       <Txt as="span" variant="caption" font="mono" tone="muted">
         {formatDuration(run.durationMs)}
       </Txt>
-      <CopyButton content={getRunCode(run)} copyMessage="Response copied" tooltip="Copy response" size="icon-sm" />
+      <CopyButton content={getRunCode(run)} tooltip="Copy response" size="icon-sm" />
     </div>
   );
 }

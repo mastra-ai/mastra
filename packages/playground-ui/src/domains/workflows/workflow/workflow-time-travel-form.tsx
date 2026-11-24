@@ -5,6 +5,7 @@ import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowInputData } from './workflow-input-data';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { CopyIcon, CopyTooltip } from '@/ds/components/CopyButton';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Notice } from '@/ds/components/Notice';
@@ -13,7 +14,6 @@ import { Txt } from '@/ds/components/Txt';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 import { IconEyeSlash } from '@/ds/icons/central/IconEyeSlash';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -58,8 +58,8 @@ const JsonField = ({
   helperText?: string;
   exampleCode?: string;
 }) => {
-  const { handleCopy } = useCopyToClipboard({ text: value });
-  const { handleCopy: handleCopyExample } = useCopyToClipboard({ text: exampleCode ?? '{}' });
+  const { status, handleCopy } = useCopyToClipboard({ text: value });
+  const { status: exampleStatus, handleCopy: handleCopyExample } = useCopyToClipboard({ text: exampleCode ?? '{}' });
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isExampleOpen, setIsExampleOpen] = useState(false);
@@ -91,21 +91,13 @@ const JsonField = ({
             <Txt as="p" variant="caption" tone="muted">
               Example {label}
             </Txt>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={handleCopyExample}
-                  className={buttonClass}
-                  aria-label="Copy example JSON"
-                >
-                  <Icon>
-                    <IconSquareBehindSquare1 />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Copy example JSON</TooltipContent>
-            </Tooltip>
+            <CopyTooltip status={exampleStatus} label="Copy example JSON">
+              <button type="button" onClick={handleCopyExample} className={buttonClass} aria-label="Copy example JSON">
+                <Icon>
+                  <CopyIcon status={exampleStatus} />
+                </Icon>
+              </button>
+            </CopyTooltip>
           </div>
           <CodeEditor
             value={exampleCode}
@@ -139,16 +131,13 @@ const JsonField = ({
                 </TooltipTrigger>
                 <TooltipContent>Format JSON</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy JSON">
-                    <Icon>
-                      <IconSquareBehindSquare1 />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy JSON</TooltipContent>
-              </Tooltip>
+              <CopyTooltip status={status} label="Copy JSON">
+                <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy JSON">
+                  <Icon>
+                    <CopyIcon status={status} />
+                  </Icon>
+                </button>
+              </CopyTooltip>
               {exampleCode && (
                 <Tooltip>
                   <TooltipTrigger asChild>

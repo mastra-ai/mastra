@@ -5,13 +5,12 @@ import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { CollapsibleBox, DEFAULT_COLLAPSED_HEIGHT, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import type { CollapsibleBoxState } from '@/ds/components/CollapsibleBox';
+import { CopyIcon, CopyTooltip } from '@/ds/components/CopyButton';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
 import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { IconMinimize45 } from '@/ds/icons/central/IconMinimize45';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -101,24 +100,14 @@ export interface PlanCopyButtonProps extends Omit<
 }
 
 export function PlanCopyButton({ content, ...props }: PlanCopyButtonProps) {
-  const { isCopied, handleCopy } = useCopyToClipboard({
-    text: content,
-    copiedDuration: 1500,
-    showToast: false,
-  });
+  const { status, handleCopy } = useCopyToClipboard({ text: content });
 
   return (
-    <Button
-      {...props}
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      tooltip="Copy plan"
-      aria-label="Copy plan"
-      onClick={handleCopy}
-    >
-      {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
-    </Button>
+    <CopyTooltip status={status} label="Copy plan">
+      <Button {...props} type="button" variant="ghost" size="icon-sm" aria-label="Copy plan" onClick={handleCopy}>
+        <CopyIcon status={status} />
+      </Button>
+    </CopyTooltip>
   );
 }
 

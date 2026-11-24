@@ -1,4 +1,5 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { CopyIcon, CopyTooltip } from '@mastra/playground-ui/components/CopyButton';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -6,7 +7,6 @@ import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clip
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
-import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -25,7 +25,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { handleCopy } = useCopyToClipboard({ text: providerOptionsValue });
+  const { status, handleCopy } = useCopyToClipboard({ text: providerOptionsValue });
 
   const providerOptionsStr = JSON.stringify(settings?.modelSettings?.providerOptions ?? {});
 
@@ -235,16 +235,13 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 <TooltipContent>Format the provider options JSON</TooltipContent>
               </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
-                    <Icon>
-                      <IconSquareBehindSquare1 />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy provider options</TooltipContent>
-              </Tooltip>
+              <CopyTooltip status={status} label="Copy provider options">
+                <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
+                  <Icon>
+                    <CopyIcon status={status} />
+                  </Icon>
+                </button>
+              </CopyTooltip>
 
               {canEdit && (
                 <Tooltip>

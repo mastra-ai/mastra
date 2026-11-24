@@ -518,7 +518,6 @@ function JsonSection({ title, value }: { title: string; value: unknown }) {
         <DataPanel.SectionHeading>{title}</DataPanel.SectionHeading>
         <CopyButton
           content={JSON.stringify(value, null, 2)}
-          copyMessage={`${title} copied`}
           tooltip={`Copy ${title.toLowerCase()} as JSON`}
           variant="ghost"
         />
@@ -573,7 +572,6 @@ function Payload({
         )}
         <CopyButton
           content={JSON.stringify(raw, null, 2)}
-          copyMessage={`${label} copied`}
           tooltip={`Copy ${label.toLowerCase()} as JSON`}
           variant="ghost"
         />

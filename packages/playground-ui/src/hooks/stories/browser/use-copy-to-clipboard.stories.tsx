@@ -4,7 +4,6 @@ import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Button } from '@/ds/components/Button';
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
-import { Toaster } from '@/ds/components/Toaster';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 function CopyToClipboardDemo({ copiedDuration }: { copiedDuration: number }) {
@@ -27,7 +26,6 @@ function CopyToClipboardDemo({ copiedDuration }: { copiedDuration: number }) {
         <FieldLabel>Paste here to verify</FieldLabel>
         <Input />
       </Field>
-      <Toaster />
     </HookDemo>
   );
 }
@@ -40,7 +38,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Supports configured text through handleCopy and per-call text through copyToClipboard. Copied feedback follows a successful browser write. Import from `@mastra/playground-ui/hooks/use-copy-to-clipboard`.',
+          'Supports configured text through handleCopy and per-call text through copyToClipboard. `status` follows what the browser did with it: `copied`, `failed`, then back to `idle`. Import from `@mastra/playground-ui/hooks/use-copy-to-clipboard`.',
       },
     },
   },

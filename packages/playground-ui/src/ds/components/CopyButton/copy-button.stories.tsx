@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '../Button';
+import { DropdownMenu } from '../DropdownMenu';
 import { TooltipProvider } from '../Tooltip';
 import { CopyButton } from './copy-button';
+import { CopyIcon, CopyLabel } from './copy-feedback';
 
 const meta: Meta<typeof CopyButton> = {
   title: 'Composite/CopyButton',
@@ -33,11 +36,42 @@ export const WithCustomTooltip: Story = {
   },
 };
 
-export const WithCopyMessage: Story = {
+export const WithLabel: Story = {
   args: {
-    content: 'agent-id-12345',
-    copyMessage: 'Agent ID copied!',
+    content: 'Connect this project to Mastra.',
+    children: 'Copy prompt',
   },
+};
+
+/** The menu stays open long enough to show "Copied" on the item, then closes. */
+export const InMenu: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger>Account</DropdownMenu.Trigger>
+      <DropdownMenu.Content>
+        <DropdownMenu.CopyItem value="org_01KJGEY54">Copy organization ID</DropdownMenu.CopyItem>
+        <DropdownMenu.CopyItem value="acme">Copy organization slug</DropdownMenu.CopyItem>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ),
+};
+
+/** What a control shows before the copy, after it, and when the browser blocked it. */
+export const Statuses: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      {(['idle', 'copied', 'failed'] as const).map(status => (
+        <div key={status} className="flex items-center gap-3">
+          <Button size="icon-md" aria-label="Copy prompt">
+            <CopyIcon status={status} />
+          </Button>
+          <Button icon={<CopyIcon status={status} />}>
+            <CopyLabel status={status}>Copy prompt</CopyLabel>
+          </Button>
+        </div>
+      ))}
+    </div>
+  ),
 };
 
 // export const SmallIcon: Story = {

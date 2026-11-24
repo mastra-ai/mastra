@@ -1,18 +1,27 @@
 import { useCallback, useRef, useState } from 'react';
-import { toast } from '@/lib/toast';
+import { announce } from '@/lib/announce';
 
-type UseCopyToClipboardProps = {
-  text: string;
-  copyMessage?: string;
+/** What the last copy did, for as long as it should show: back to `idle` after `copiedDuration`. */
+export type CopyStatus = 'idle' | 'copied' | 'failed';
+
+type UseCopyToClipboardOptions = {
+  /** How long a copy shows as copied or failed, in milliseconds. Default `2000`. */
   copiedDuration?: number;
+  /** What a screen reader hears once it's copied. Default `'Copied to clipboard'`. */
+  announcement?: string;
+  /** @deprecated Copying no longer shows a toast, so this does nothing. Show `status` where the copy happens. */
+  copyMessage?: string;
+  /** @deprecated Copying no longer shows a toast, so this does nothing. */
   showToast?: boolean;
 };
 
-type UseCopyToClipboardOptions = Omit<UseCopyToClipboardProps, 'text'>;
+type UseCopyToClipboardProps = UseCopyToClipboardOptions & { text: string };
 
 type UseCopyToClipboardDynamicResult = {
+  status: CopyStatus;
   isCopied: boolean;
-  copyToClipboard: (value: string) => void;
+  /** Copies `value`; resolves to whether it reached the clipboard. */
+  copyToClipboard: (value: string) => Promise<boolean>;
 };
 
 type UseCopyToClipboardConfiguredResult = UseCopyToClipboardDynamicResult & {
@@ -70,43 +79,41 @@ const copyTextToClipboard = async (value: string): Promise<boolean> => {
   return copyViaExecCommand(value);
 };
 
+/**
+ * Copies text and reports how it went, so the control that copied can show it: `CopyIcon`, `CopyLabel` and
+ * `CopyTooltip` draw each status, and `CopyButton` is all of them in one button. Screen readers hear the result.
+ */
 export function useCopyToClipboard(props: UseCopyToClipboardProps): UseCopyToClipboardConfiguredResult;
-export function useCopyToClipboard(props: UseCopyToClipboardOptions): UseCopyToClipboardDynamicResult;
-export function useCopyToClipboard(props: UseCopyToClipboardProps | UseCopyToClipboardOptions) {
-  const { copyMessage = 'Copied to clipboard!', copiedDuration = 2000, showToast = true } = props;
+export function useCopyToClipboard(props?: UseCopyToClipboardOptions): UseCopyToClipboardDynamicResult;
+export function useCopyToClipboard(props: UseCopyToClipboardProps | UseCopyToClipboardOptions = {}) {
+  const { copiedDuration = 2000, announcement = 'Copied to clipboard' } = props;
   const hasConfiguredText = 'text' in props;
   const text = hasConfiguredText ? props.text : undefined;
-  const [isCopied, setIsCopied] = useState(false);
+  const [status, setStatus] = useState<CopyStatus>('idle');
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const copyToClipboard = useCallback(
-    (value: string) => {
-      void copyTextToClipboard(value).then(copied => {
-        if (!copied) {
-          if (showToast) toast.error('Failed to copy to clipboard.');
-          return;
-        }
+    async (value: string) => {
+      const copied = await copyTextToClipboard(value);
 
-        if (showToast) toast.success(copyMessage);
-        setIsCopied(true);
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-        timeoutRef.current = setTimeout(() => {
-          setIsCopied(false);
-        }, copiedDuration);
-      });
+      announce(copied ? announcement : 'Couldn’t copy');
+      setStatus(copied ? 'copied' : 'failed');
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setStatus('idle'), copiedDuration);
+
+      return copied;
     },
-    [copiedDuration, copyMessage, showToast],
+    [announcement, copiedDuration],
   );
 
   const handleCopy = useCallback(() => {
     if (!text) return;
-    copyToClipboard(text);
+    void copyToClipboard(text);
   }, [copyToClipboard, text]);
 
-  if (!hasConfiguredText) return { isCopied, copyToClipboard };
+  const isCopied = status === 'copied';
 
-  return { isCopied, handleCopy, copyToClipboard };
+  if (!hasConfiguredText) return { status, isCopied, copyToClipboard };
+
+  return { status, isCopied, handleCopy, copyToClipboard };
 }

@@ -5,7 +5,9 @@ import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
 import { KeyLabel } from '@/ds/components/Kbd/key-label';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { CopyMenuItem } from '@/ds/primitives/copy-menu-item';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { MenuActionsContext } from '@/ds/primitives/menu-actions-context';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -30,10 +32,6 @@ const ContextMenuSub = ContextMenuPrimitive.SubmenuRoot;
 const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup;
 
 const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
-
-const ContextMenuActionsContext = React.createContext<React.RefObject<ContextMenuPrimitive.Root.Actions | null> | null>(
-  null,
-);
 
 type ContextMenuContentPositionerProps = Omit<ContextMenuPositionerProps, keyof ContextMenuPopupProps>;
 
@@ -83,7 +81,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
     // Why: same stacking as DropdownMenu (z-50). Inside a modal Dialog/Drawer the popup must
     // portal into the trap container to stay clickable and above it; explicit `container` wins.
     const resolvedContainer = usePortalContainer(container);
-    const actions = React.useContext(ContextMenuActionsContext);
+    const actions = React.useContext(MenuActionsContext);
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
@@ -275,7 +273,7 @@ function ContextMenu({
   const actions = React.useRef<ContextMenuPrimitive.Root.Actions | null>(null);
 
   return (
-    <ContextMenuActionsContext.Provider value={actions}>
+    <MenuActionsContext.Provider value={actions}>
       <ContextMenuRoot
         open={open}
         defaultOpen={defaultOpen}
@@ -287,7 +285,7 @@ function ContextMenu({
       >
         {children}
       </ContextMenuRoot>
-    </ContextMenuActionsContext.Provider>
+    </MenuActionsContext.Provider>
   );
 }
 
@@ -296,6 +294,7 @@ ContextMenu.Content = ContextMenuContent;
 ContextMenu.Group = ContextMenuGroup;
 ContextMenu.Portal = ContextMenuPortal;
 ContextMenu.Item = ContextMenuItem;
+ContextMenu.CopyItem = CopyMenuItem;
 ContextMenu.CheckboxItem = ContextMenuCheckboxItem;
 ContextMenu.RadioItem = ContextMenuRadioItem;
 ContextMenu.Label = ContextMenuLabel;

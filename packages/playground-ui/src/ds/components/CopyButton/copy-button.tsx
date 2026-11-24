@@ -1,48 +1,64 @@
-import type { ButtonProps, IconButtonSize } from '../Button';
+import type { ReactNode } from 'react';
+import type { ButtonProps, IconButtonSize, TextButtonSize } from '../Button';
 import { Button } from '../Button';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
+import { CopyIcon, CopyLabel, CopyTooltip } from './copy-feedback';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
-export type CopyButtonProps = {
+type CopyButtonBaseProps = {
   content: string;
-  copyMessage?: string;
-  showToast?: boolean;
-  tooltip?: string;
   className?: string;
-  size?: IconButtonSize;
   variant?: ButtonProps['variant'];
   disabled?: boolean;
+  /** Shown until it's copied. Default: the copy icon. */
+  icon?: ReactNode;
+  /** @deprecated Copying no longer shows a toast, so this does nothing. */
+  copyMessage?: string;
+  /** @deprecated Copying no longer shows a toast, so this does nothing. */
+  showToast?: boolean;
 };
 
-export function CopyButton({
-  content,
-  copyMessage,
-  showToast,
-  tooltip = 'Copy to clipboard',
-  size = 'icon-sm',
-  variant,
-  className,
-  disabled,
-}: CopyButtonProps) {
-  const { isCopied, handleCopy } = useCopyToClipboard({
-    text: content,
-    copyMessage,
-    showToast,
-  });
+type CopyIconButtonProps = CopyButtonBaseProps & {
+  children?: undefined;
+  /** What it copies: the button's name and its tooltip. */
+  tooltip?: string;
+  size?: IconButtonSize;
+};
 
+type CopyTextButtonProps = CopyButtonBaseProps & {
+  /** The button's label. It reads "Copied" once copied, in the same width. */
+  children: string;
+  tooltip?: string;
+  size?: TextButtonSize;
+};
+
+export type CopyButtonProps = CopyIconButtonProps | CopyTextButtonProps;
+
+/** Copies `content`, and says so in place: its icon turns into a checkmark and its tooltip or label into "Copied". */
+export function CopyButton(props: CopyButtonProps) {
+  const { content, className, variant, disabled, children, icon, tooltip } = props;
+  const { status, handleCopy } = useCopyToClipboard({ text: content });
+  const buttonProps = { type: 'button', variant, className, disabled, onClick: handleCopy } as const;
+
+  if (children !== undefined) {
+    const button = (
+      <Button {...buttonProps} size={props.size} icon={<CopyIcon status={status} icon={icon} />}>
+        <CopyLabel status={status}>{children}</CopyLabel>
+      </Button>
+    );
+    if (!tooltip) return button;
+    return (
+      <CopyTooltip status={status} label={tooltip}>
+        {button}
+      </CopyTooltip>
+    );
+  }
+
+  const label = tooltip ?? 'Copy to clipboard';
   return (
-    <Button
-      onClick={handleCopy}
-      type="button"
-      size={size}
-      variant={variant}
-      className={className}
-      disabled={disabled}
-      tooltip={isCopied ? 'Copied!' : tooltip}
-      aria-label={isCopied ? 'Copied!' : tooltip}
-    >
-      {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
-    </Button>
+    <CopyTooltip status={status} label={label}>
+      <Button {...buttonProps} size={props.size ?? 'icon-sm'} aria-label={label}>
+        <CopyIcon status={status} icon={icon} />
+      </Button>
+    </CopyTooltip>
   );
 }

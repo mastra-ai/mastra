@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { CopyIcon, CopyTooltip } from '@mastra/playground-ui/components/CopyButton';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -7,7 +8,6 @@ import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clip
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -69,7 +69,7 @@ export const JsonObjectEditor = ({
     return getMatchingPresetKey(presets, valueStr);
   });
 
-  const { handleCopy } = useCopyToClipboard({ text: draft });
+  const { status, handleCopy } = useCopyToClipboard({ text: draft });
 
   // Re-seed synchronously when the stored value changes, so the editor never flashes empty.
   const [seededFrom, setSeededFrom] = useState(valueStr);
@@ -161,16 +161,13 @@ export const JsonObjectEditor = ({
                 <TooltipContent>Format the {label} JSON</TooltipContent>
               </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass}>
-                    <Icon>
-                      <IconSquareBehindSquare1 />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy {label}</TooltipContent>
-              </Tooltip>
+              <CopyTooltip status={status} label={`Copy ${label}`}>
+                <button type="button" onClick={handleCopy} className={buttonClass} aria-label={`Copy ${label}`}>
+                  <Icon>
+                    <CopyIcon status={status} />
+                  </Icon>
+                </button>
+              </CopyTooltip>
             </div>
           </div>
 

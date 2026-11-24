@@ -31,13 +31,7 @@ export function DebugSection() {
       description="The Mastra packages this Factory server was built with. Include them when you report an issue."
       action={
         query.data && (
-          <CopyButton
-            content={formatVersions(query.data)}
-            tooltip="Copy versions"
-            variant="ghost"
-            size="icon-sm"
-            showToast={false}
-          />
+          <CopyButton content={formatVersions(query.data)} tooltip="Copy versions" variant="ghost" size="icon-sm" />
         )
       }
     >

@@ -63,7 +63,6 @@ export const MastraPackagesPanel = ({ version }: MastraPackagesPanelProps) => {
             tooltip="Copy versions"
             variant="ghost"
             size="icon-sm"
-            showToast={false}
           />
           <Button
             variant="ghost"
@@ -204,7 +203,7 @@ function UpdateCommand({ packages }: { packages: PackageUpdateInfo[] }) {
         <Txt as="span" variant="meta" font="mono" className="min-w-0 flex-1 truncate" title={command}>
           {command}
         </Txt>
-        <CopyButton content={command} tooltip="Copy command" variant="ghost" size="icon-sm" showToast={false} />
+        <CopyButton content={command} tooltip="Copy command" variant="ghost" size="icon-sm" />
       </div>
     </div>
   );

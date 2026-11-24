@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { CopyIcon, CopyTooltip } from '@/ds/components/CopyButton';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { truncateString } from '@/lib/truncate-string';
 
@@ -18,19 +17,19 @@ export interface DataPanelCopyIdProps {
  * Truncated identifier rendered inline in a `DataPanel.Heading`; clicking copies the full value.
  */
 export function DataPanelCopyId({ id, maxLength = 12, ellipsis = true, icon }: DataPanelCopyIdProps) {
-  const { isCopied, handleCopy } = useCopyToClipboard({ text: id, showToast: false });
-  const [open, setOpen] = useState(false);
+  const { status, handleCopy } = useCopyToClipboard({ text: id });
 
   return (
-    <Tooltip open={isCopied || open} onOpenChange={setOpen}>
-      <TooltipTrigger
-        render={
-          <Button type="button" variant="ghost" size="sm" icon={icon} onClick={handleCopy}>
-            {ellipsis ? truncateString(id, maxLength) : id.slice(0, maxLength)}
-          </Button>
-        }
-      />
-      <TooltipContent>{isCopied ? 'Copied to clipboard' : 'Copy to clipboard'}</TooltipContent>
-    </Tooltip>
+    <CopyTooltip status={status} label="Copy to clipboard" openOnCopy>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        icon={icon && <CopyIcon status={status} icon={icon} />}
+        onClick={handleCopy}
+      >
+        {ellipsis ? truncateString(id, maxLength) : id.slice(0, maxLength)}
+      </Button>
+    </CopyTooltip>
   );
 }

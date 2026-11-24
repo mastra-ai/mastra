@@ -28,6 +28,7 @@ export interface CodeBlockProps {
   /** `wrap` (default) breaks long lines — best for commands and snippets.
    *  `scroll` preserves columns behind a horizontal scroll — best for source code. */
   overflow?: CodeBlockOverflow;
+  /** @deprecated Copying no longer shows a toast, so this does nothing. */
   copyMessage?: string;
   copyTooltip?: string;
   actions?: ReactNode;
@@ -43,7 +44,6 @@ export function CodeBlock({
   fileName,
   lang,
   overflow = 'wrap',
-  copyMessage,
   copyTooltip,
   actions,
   className,
@@ -120,7 +120,6 @@ export function CodeBlock({
         />
         <CopyButton
           content={code}
-          copyMessage={copyMessage}
           tooltip={copyTooltip}
           className={cn(
             'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',

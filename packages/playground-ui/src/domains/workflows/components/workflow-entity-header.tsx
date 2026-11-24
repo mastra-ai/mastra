@@ -1,10 +1,10 @@
 import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Badge } from '@/ds/components/Badge';
+import { CopyIcon, CopyTooltip } from '@/ds/components/CopyButton';
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { IconChip } from '@/ds/icons/central/IconChip';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -21,7 +21,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
     requestContext: requestContext,
     queryOptions: { enabled: Boolean(workflowId) },
   });
-  const { handleCopy } = useCopyToClipboard({ text: workflowId });
+  const { status, handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const workflowName = workflow?.name || workflowId;
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
@@ -30,14 +30,11 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
     <TooltipProvider>
       <EntityHeader icon={<WorkflowIcon />} title={workflowName} isLoading={isLoading}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={handleCopy} className="h-badge-default shrink-0">
-                <Badge icon={<IconSquareBehindSquare1 />}>{workflowId}</Badge>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy workflow ID for use in code</TooltipContent>
-          </Tooltip>
+          <CopyTooltip status={status} label="Copy workflow ID for use in code">
+            <button type="button" onClick={handleCopy} className="h-badge-default shrink-0">
+              <Badge icon={<CopyIcon status={status} />}>{workflowId}</Badge>
+            </button>
+          </CopyTooltip>
 
           <Badge>
             {stepsCount} step{stepsCount === 1 ? '' : 's'}

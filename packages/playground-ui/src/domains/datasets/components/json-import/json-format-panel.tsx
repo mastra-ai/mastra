@@ -1,13 +1,11 @@
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { InlineCode } from '@/ds/components/InlineCode';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { textStyle } from '@/ds/primitives/text';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 const DOCS_URL = 'https://mastra.ai/docs/evals/datasets';
 
@@ -26,8 +24,6 @@ const FIELDS = [
 ];
 
 export function JSONFormatPanel() {
-  const { isCopied, handleCopy } = useCopyToClipboard({ text: EXAMPLE_JSON, showToast: false });
-
   return (
     <div className="flex flex-col gap-4">
       <Txt variant="column" tone="ink" className="flex h-8 items-center">
@@ -63,14 +59,9 @@ export function JSONFormatPanel() {
           <Txt as="span" variant="meta" tone="muted" font="mono">
             example.json
           </Txt>
-          <Button
-            icon={isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
-            variant="ghost"
-            size="sm"
-            onClick={handleCopy}
-          >
-            {isCopied ? 'Copied' : 'Copy'}
-          </Button>
+          <CopyButton content={EXAMPLE_JSON} variant="ghost" size="sm">
+            Copy
+          </CopyButton>
         </div>
         <CodeEditor
           variant="embedded"

@@ -38,7 +38,7 @@ describe('Debug settings', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy versions' }));
 
-    await screen.findByRole('button', { name: 'Copied!' });
+    await screen.findByText('Copied to clipboard');
     expect(writeText).toHaveBeenCalledWith(
       '@mastra/core@1.83.0-alpha.0\n@mastra/factory@0.28.0-alpha.0\nnode@v22.15.0',
     );

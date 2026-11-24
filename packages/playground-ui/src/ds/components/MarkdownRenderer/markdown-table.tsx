@@ -3,34 +3,26 @@ import type { ExtraProps } from 'react-markdown';
 import { downloadTableCsv } from './table-csv';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 export function MarkdownTable({ node, children }: ComponentProps<'table'> & ExtraProps) {
   const markdown = node?.properties.tableMarkdown;
   const csv = node?.properties.tableCsv;
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copyMessage: 'Copied table markdown' });
 
   return (
     <div className="my-3 w-fit max-w-full min-w-0">
       <div className="flex justify-end">
         <ButtonsGroup size="sm" aria-label="Table actions">
-          <Button
-            icon={isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
-            type="button"
+          <CopyButton
+            content={typeof markdown === 'string' ? markdown : ''}
             variant="ghost"
             disabled={typeof markdown !== 'string'}
-            onClick={() => {
-              if (typeof markdown === 'string') copyToClipboard(markdown);
-            }}
-            aria-label="Copy table as markdown"
           >
-            {isCopied ? 'Copied!' : 'Copy table as markdown'}
-          </Button>
+            Copy table as markdown
+          </CopyButton>
           <DropdownMenu>
             <DropdownMenu.Trigger
               disabled={typeof csv !== 'string'}

@@ -1,9 +1,7 @@
 import { formatSignalValue } from '@/domains/chat/messages/signal-data';
 import type { SignalData } from '@/domains/chat/messages/signal-data';
 import { Badge } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
+import { CopyIcon, CopyTooltip } from '@/ds/components/CopyButton';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -24,28 +22,25 @@ function SignalDetail({ label, value }: { label: string; value: string }) {
 
 /** The id shortened to 6 characters like the trace and span ids; clicking copies the full value. */
 function SignalId({ id }: { id: string }) {
-  const { isCopied, handleCopy } = useCopyToClipboard({ text: id, showToast: false });
+  const { status, handleCopy } = useCopyToClipboard({ text: id });
   return (
     <li className="flex">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              onClick={handleCopy}
-              aria-label={`Copy signal id ${id}`}
-              className="group flex cursor-pointer rounded-[7px] outline-hidden focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-border-focus focus-visible:outline-solid"
-            />
-          }
+      <CopyTooltip status={status} label="Copy to clipboard">
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={`Copy signal id ${id}`}
+          className="group flex cursor-pointer rounded-[7px] outline-hidden focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-border-focus focus-visible:outline-solid"
         >
           <Badge variant="neutral" emphasis="subtle" size="sm" className="group-hover:bg-fill">
             <span className={badgeLabel}>Signal id</span>
             {id.slice(0, 6)}
-            <Icon size="xs">{isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}</Icon>
+            <Icon size="xs">
+              <CopyIcon status={status} />
+            </Icon>
           </Badge>
-        </TooltipTrigger>
-        <TooltipContent>{isCopied ? 'Copied to clipboard' : 'Copy to clipboard'}</TooltipContent>
-      </Tooltip>
+        </button>
+      </CopyTooltip>
     </li>
   );
 }

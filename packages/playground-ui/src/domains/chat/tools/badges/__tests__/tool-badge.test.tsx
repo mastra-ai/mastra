@@ -163,7 +163,7 @@ describe('ToolBadge edit body', () => {
       expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
       expect(screen.getByTestId('tool-result').textContent).toBe(result);
       fireEvent.click(screen.getByRole('button', { name: 'Copy to clipboard' }));
-      await screen.findByRole('button', { name: 'Copied!' });
+      await screen.findByText('Copied to clipboard');
       expect(writeText).toHaveBeenCalledExactlyOnceWith(result);
     });
   });
@@ -190,7 +190,7 @@ describe('ToolBadge edit body', () => {
       expect(screen.getByTestId('tool-args').textContent).toContain('"cwd": "/workspace"');
       expect(screen.getByTestId('tool-args').textContent).toContain('"timeout": 30000');
       fireEvent.click(screen.getByRole('button', { name: 'Copy to clipboard' }));
-      await screen.findByRole('button', { name: 'Copied!' });
+      await screen.findByText('Copied to clipboard');
       expect(writeText).toHaveBeenCalledExactlyOnceWith(JSON.stringify(args, null, 2));
     });
   });

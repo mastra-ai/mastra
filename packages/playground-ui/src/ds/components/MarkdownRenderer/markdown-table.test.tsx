@@ -39,21 +39,16 @@ describe('Markdown table copy', () => {
       expect(buttons).toHaveLength(2);
       buttons.forEach(button => fireEvent.click(button));
       await waitFor(() => expect(writeText.mock.calls).toEqual([[table], [other]]));
-      expect(screen.getAllByText('Copied!')).toHaveLength(2);
+      expect(await screen.findAllByRole('button', { name: 'Copied' })).toHaveLength(2);
     });
   });
 
   describe('when copying succeeds', () => {
     it('confirms that table markdown was copied', async () => {
       clipboard();
-      render(
-        <>
-          <Toaster />
-          <MarkdownRenderer tableActions>{table}</MarkdownRenderer>
-        </>,
-      );
+      render(<MarkdownRenderer tableActions>{table}</MarkdownRenderer>);
       fireEvent.click(screen.getByText('Copy table as markdown'));
-      expect(await screen.findByText('Copied table markdown')).toBeTruthy();
+      expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
     });
   });
 
@@ -151,8 +146,8 @@ describe('Markdown table copy', () => {
       const writeText = clipboard().mockRejectedValue(new Error('denied'));
       render(<MarkdownRenderer tableActions>{table}</MarkdownRenderer>);
       fireEvent.click(screen.getByRole('button', { name: 'Copy table as markdown' }));
-      await waitFor(() => expect(writeText).toHaveBeenCalled());
-      expect(screen.queryByText('Copied!')).toBeNull();
+      expect(await screen.findByRole('button', { name: 'Failed' })).toBeTruthy();
+      expect(writeText).toHaveBeenCalled();
     });
   });
 });

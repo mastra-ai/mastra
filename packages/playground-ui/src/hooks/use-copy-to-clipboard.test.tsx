@@ -1,21 +1,8 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { sonnerMock } = vi.hoisted(() => ({
-  sonnerMock: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), dismiss: vi.fn(), promise: vi.fn() },
-}));
-
-vi.mock('sonner', () => ({
-  toast: Object.assign((..._args: unknown[]) => undefined, sonnerMock),
-  Toaster: () => null,
-}));
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useCopyToClipboard } from './use-copy-to-clipboard';
-
-beforeEach(() => {
-  Object.values(sonnerMock).forEach(fn => fn.mockClear());
-});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -43,7 +30,7 @@ describe('useCopyToClipboard', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
-    const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me' }));
 
     act(() => {
       result.current.handleCopy();
@@ -59,7 +46,7 @@ describe('useCopyToClipboard', () => {
     mockClipboard(writeText);
     mockExecCommand(execCommand);
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     expect('handleCopy' in result.current).toBe(false);
 
@@ -77,7 +64,7 @@ describe('useCopyToClipboard', () => {
     const execCommand = vi.fn(() => true);
     mockExecCommand(execCommand);
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     act(() => {
       result.current.copyToClipboard('no clipboard api');
@@ -114,7 +101,7 @@ describe('useCopyToClipboard', () => {
       }),
     );
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     act(() => {
       result.current.copyToClipboard('the whole value');
@@ -144,7 +131,7 @@ describe('useCopyToClipboard', () => {
   });
 
   it('reports a failure when neither path is available', async () => {
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     await act(async () => {
       result.current.copyToClipboard('nowhere to put it');
@@ -160,7 +147,7 @@ describe('useCopyToClipboard', () => {
       }),
     );
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     await act(async () => {
       result.current.copyToClipboard('will not copy');
@@ -177,7 +164,7 @@ describe('useCopyToClipboard', () => {
     input.focus();
     mockExecCommand(vi.fn(() => true));
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     act(() => {
       result.current.copyToClipboard('focus me back');
@@ -193,7 +180,7 @@ describe('useCopyToClipboard', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     await act(async () => {
       result.current.copyToClipboard('');
@@ -210,7 +197,7 @@ describe('useCopyToClipboard', () => {
     const focus = vi.spyOn(input, 'focus');
     mockExecCommand(vi.fn(() => true));
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     act(() => {
       result.current.copyToClipboard('focus me back');
@@ -232,7 +219,7 @@ describe('useCopyToClipboard', () => {
 
     mockExecCommand(vi.fn(() => true));
 
-    const { result } = renderHook(() => useCopyToClipboard({ showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard());
 
     act(() => {
       result.current.copyToClipboard('focus is elsewhere');
@@ -248,7 +235,7 @@ describe('useCopyToClipboard', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
-    const { result } = renderHook(() => useCopyToClipboard({ text: '', showToast: false }));
+    const { result } = renderHook(() => useCopyToClipboard({ text: '' }));
 
     act(() => {
       result.current.handleCopy();
@@ -257,131 +244,114 @@ describe('useCopyToClipboard', () => {
     expect(writeText).not.toHaveBeenCalled();
   });
 
-  describe('toasts', () => {
-    it('announces a successful copy by default', async () => {
-      mockClipboard(vi.fn().mockResolvedValue(undefined));
+  it('copies the text it is configured with now, not the first one', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    mockClipboard(writeText);
 
-      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me' }));
-
-      act(() => {
-        result.current.handleCopy();
-      });
-
-      await waitFor(() => expect(sonnerMock.success).toHaveBeenCalledWith('Copied to clipboard!', {}));
+    const { result, rerender } = renderHook(props => useCopyToClipboard(props), {
+      initialProps: { text: 'first text' },
     });
 
-    it('uses the caller message', async () => {
-      mockClipboard(vi.fn().mockResolvedValue(undefined));
+    await act(async () => {
+      result.current.handleCopy();
+    });
+    expect(writeText).toHaveBeenLastCalledWith('first text');
 
-      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', copyMessage: 'Trace ID copied' }));
+    rerender({ text: 'second text' });
+    await act(async () => {
+      result.current.handleCopy();
+    });
+    expect(writeText).toHaveBeenLastCalledWith('second text');
+  });
 
-      act(() => {
-        result.current.handleCopy();
+  it('tells the caller whether the value reached the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+    mockClipboard(writeText);
+    const { result } = renderHook(() => useCopyToClipboard());
+
+    let copied: boolean | undefined;
+    await act(async () => {
+      copied = await result.current.copyToClipboard('a key');
+    });
+    expect(copied).toBe(true);
+
+    await act(async () => {
+      copied = await result.current.copyToClipboard('a key');
+    });
+    expect(copied).toBe(false);
+  });
+
+  it('reports a blocked copy as failed, then recovers', async () => {
+    vi.useFakeTimers();
+    mockClipboard(vi.fn().mockRejectedValue(new Error('denied')));
+    mockExecCommand(vi.fn(() => false));
+    const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me' }));
+
+    await act(async () => {
+      result.current.handleCopy();
+    });
+    expect(result.current.status).toBe('failed');
+    expect(result.current.isCopied).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(result.current.status).toBe('idle');
+  });
+
+  describe('what a screen reader hears', () => {
+    const liveRegion = () => document.querySelector('[aria-live]');
+
+    const copyAndWait = async (copy: () => void) => {
+      await act(async () => {
+        copy();
       });
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+    };
 
-      await waitFor(() => expect(sonnerMock.success).toHaveBeenCalledWith('Trace ID copied', {}));
+    it('says it was copied, in the caller’s words when it has some', async () => {
+      vi.useFakeTimers();
+      mockClipboard(vi.fn().mockResolvedValue(undefined));
+      const { result } = renderHook(() => ({
+        plain: useCopyToClipboard({ text: 'a' }),
+        named: useCopyToClipboard({ text: 'b', announcement: 'organization ID copied' }),
+      }));
+
+      await copyAndWait(result.current.plain.handleCopy);
+      expect(liveRegion()?.textContent).toBe('Copied to clipboard');
+
+      await copyAndWait(result.current.named.handleCopy);
+      expect(liveRegion()?.textContent).toBe('organization ID copied');
     });
 
-    it('announces a failure when neither path can copy', async () => {
+    it('repeats itself for a second copy', async () => {
+      vi.useFakeTimers();
+      mockClipboard(vi.fn().mockResolvedValue(undefined));
+      const { result } = renderHook(() => useCopyToClipboard({ text: 'a' }));
+      await copyAndWait(result.current.handleCopy);
+
+      await act(async () => {
+        result.current.handleCopy();
+      });
+      // Without the gap the text would not change, and the second copy would go unheard.
+      expect(liveRegion()?.textContent).toBe('');
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(liveRegion()?.textContent).toBe('Copied to clipboard');
+    });
+
+    it('says a copy failed', async () => {
+      vi.useFakeTimers();
       mockClipboard(vi.fn().mockRejectedValue(new Error('denied')));
       mockExecCommand(vi.fn(() => false));
+      const { result } = renderHook(() => useCopyToClipboard({ text: 'a' }));
 
-      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me' }));
+      await copyAndWait(result.current.handleCopy);
 
-      act(() => {
-        result.current.handleCopy();
-      });
-
-      await waitFor(() => expect(sonnerMock.error).toHaveBeenCalledWith('Failed to copy to clipboard.', {}));
-      expect(result.current.isCopied).toBe(false);
-    });
-
-    it('says nothing at all when there is no configured text to copy', async () => {
-      mockClipboard(vi.fn().mockResolvedValue(undefined));
-
-      const { result } = renderHook(() => useCopyToClipboard({ text: '' }));
-
-      await act(async () => {
-        result.current.handleCopy();
-      });
-
-      // Nothing was attempted, so there is no failure to report either.
-      expect(sonnerMock.error).not.toHaveBeenCalled();
-      expect(sonnerMock.success).not.toHaveBeenCalled();
-    });
-
-    it('stays silent about a successful copy when the caller asked it to', async () => {
-      mockClipboard(vi.fn().mockResolvedValue(undefined));
-
-      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', showToast: false }));
-
-      await act(async () => {
-        result.current.handleCopy();
-      });
-
-      expect(result.current.isCopied).toBe(true);
-      expect(sonnerMock.success).not.toHaveBeenCalled();
-    });
-
-    it('follows a change of message or of whether to speak at all', async () => {
-      mockClipboard(vi.fn().mockResolvedValue(undefined));
-
-      const { result, rerender } = renderHook(props => useCopyToClipboard(props), {
-        initialProps: { text: 'copy me', copyMessage: 'First message', showToast: true },
-      });
-
-      await act(async () => {
-        result.current.handleCopy();
-      });
-      expect(sonnerMock.success).toHaveBeenCalledWith('First message', {});
-
-      rerender({ text: 'copy me', copyMessage: 'Second message', showToast: true });
-      await act(async () => {
-        result.current.handleCopy();
-      });
-      expect(sonnerMock.success).toHaveBeenLastCalledWith('Second message', {});
-
-      rerender({ text: 'copy me', copyMessage: 'Second message', showToast: false });
-      sonnerMock.success.mockClear();
-      await act(async () => {
-        result.current.handleCopy();
-      });
-      expect(sonnerMock.success).not.toHaveBeenCalled();
-    });
-
-    it('follows a change of the text it was configured with', async () => {
-      const writeText = vi.fn().mockResolvedValue(undefined);
-      mockClipboard(writeText);
-
-      const { result, rerender } = renderHook(props => useCopyToClipboard(props), {
-        initialProps: { text: 'first text', showToast: false },
-      });
-
-      await act(async () => {
-        result.current.handleCopy();
-      });
-      expect(writeText).toHaveBeenLastCalledWith('first text');
-
-      rerender({ text: 'second text', showToast: false });
-      await act(async () => {
-        result.current.handleCopy();
-      });
-      expect(writeText).toHaveBeenLastCalledWith('second text');
-    });
-
-    it('stays silent when the caller asked it to', async () => {
-      mockClipboard(vi.fn().mockRejectedValue(new Error('denied')));
-      mockExecCommand(vi.fn(() => false));
-
-      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', showToast: false }));
-
-      act(() => {
-        result.current.handleCopy();
-      });
-
-      await waitFor(() => expect(result.current.isCopied).toBe(false));
-      expect(sonnerMock.error).not.toHaveBeenCalled();
-      expect(sonnerMock.success).not.toHaveBeenCalled();
+      expect(liveRegion()?.textContent).toBe('Couldn’t copy');
     });
   });
 
@@ -399,7 +369,7 @@ describe('useCopyToClipboard', () => {
       vi.useFakeTimers();
       mockClipboard(vi.fn().mockResolvedValue(undefined));
 
-      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', showToast: false }));
+      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me' }));
 
       await copyAndFlush(() => result.current.handleCopy());
       expect(result.current.isCopied).toBe(true);
@@ -419,9 +389,7 @@ describe('useCopyToClipboard', () => {
       vi.useFakeTimers();
       mockClipboard(vi.fn().mockResolvedValue(undefined));
 
-      const { result } = renderHook(() =>
-        useCopyToClipboard({ text: 'copy me', showToast: false, copiedDuration: 500 }),
-      );
+      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', copiedDuration: 500 }));
 
       await copyAndFlush(() => result.current.handleCopy());
       expect(result.current.isCopied).toBe(true);
@@ -441,9 +409,7 @@ describe('useCopyToClipboard', () => {
       vi.useFakeTimers();
       mockClipboard(vi.fn().mockResolvedValue(undefined));
 
-      const { result } = renderHook(() =>
-        useCopyToClipboard({ text: 'copy me', showToast: false, copiedDuration: 1000 }),
-      );
+      const { result } = renderHook(() => useCopyToClipboard({ text: 'copy me', copiedDuration: 1000 }));
 
       await copyAndFlush(() => result.current.handleCopy());
 

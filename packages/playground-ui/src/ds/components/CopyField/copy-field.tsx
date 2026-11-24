@@ -1,11 +1,10 @@
 'use client';
 
 import type { ClipboardEvent } from 'react';
+import { CopyIcon, CopyTooltip } from '../CopyButton';
 import { InputGroup, InputGroupAddon, InputGroupButton, inputGroupControlClassName } from '../InputGroup/input-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip';
 import { useMiddleTruncation } from './use-middle-truncation';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -27,7 +26,7 @@ export type CopyFieldProps = {
  */
 export function CopyField({ value, label, className }: CopyFieldProps) {
   const { ref, text, truncated } = useMiddleTruncation<HTMLSpanElement>(value);
-  const { isCopied, handleCopy } = useCopyToClipboard({ text: value, showToast: false });
+  const { status, handleCopy } = useCopyToClipboard({ text: value, announcement: `${label} copied` });
 
   // What's selected is the shortened text; put the real value on the clipboard instead.
   const copyWholeValue = (event: ClipboardEvent<HTMLElement>) => {
@@ -72,12 +71,11 @@ export function CopyField({ value, label, className }: CopyFieldProps) {
           <TooltipContent className="max-w-[min(32rem,90vw)] font-mono break-all">{value}</TooltipContent>
         </Tooltip>
         <InputGroupAddon align="inline-end">
-          <InputGroupButton onClick={handleCopy} tooltip="Copy" aria-label={`Copy ${label}`}>
-            {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
-          </InputGroupButton>
-          <span role="status" className="sr-only">
-            {isCopied ? `${label} copied` : ''}
-          </span>
+          <CopyTooltip status={status} label="Copy">
+            <InputGroupButton onClick={handleCopy} aria-label={`Copy ${label}`}>
+              <CopyIcon status={status} />
+            </InputGroupButton>
+          </CopyTooltip>
         </InputGroupAddon>
       </InputGroup>
     </TooltipProvider>

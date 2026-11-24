@@ -1,17 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemoryConfig } from '@mastra/react/hooks/memory';
@@ -38,10 +38,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
   // All hooks must be called before any early returns
-  const { isCopied, handleCopy } = useCopyToClipboard({
-    text: workingMemoryData ?? '',
-    copyMessage: 'Working memory copied!',
-  });
   const [editState, setEditState] = useState({
     source: workingMemoryData,
     value: workingMemoryData ?? '',
@@ -97,51 +93,30 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           {!isEditing ? (
             <>
               {workingMemoryData ? (
-                <>
+                <div className="group relative">
                   {workingMemoryData.trim().startsWith('{') ? (
                     <CodeDisplay
-                      content={workingMemoryData || ''}
-                      isCopied={isCopied}
-                      onCopy={handleCopy}
+                      content={workingMemoryData}
                       className={cn(raisedSurfaceStyle, 'min-h-[150px] rounded-lg')}
                     />
                   ) : (
-                    <>
-                      <div className={cn(raisedSurfaceStyle, 'rounded-lg')} style={{ height: '300px' }}>
-                        <ScrollArea className="h-full">
-                          <div className="group relative cursor-pointer p-3 hover:bg-fill-subtle">
-                            <button
-                              type="button"
-                              onClick={handleCopy}
-                              aria-label="Copy working memory"
-                              className={cn('absolute inset-0 z-10 rounded-lg', focusRingInset)}
-                            />
-                            <div className="pointer-events-none">
-                              <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
-                            </div>
-                            {isCopied && (
-                              <Txt
-                                as="span"
-                                variant="meta"
-                                className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-success-subtle px-1.5 py-0.5 text-success-subtle-foreground"
-                              >
-                                Copied!
-                              </Txt>
-                            )}
-                            <Txt
-                              as="span"
-                              variant="meta"
-                              tone="muted"
-                              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-card px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-                            >
-                              Click to copy
-                            </Txt>
-                          </div>
-                        </ScrollArea>
-                      </div>
-                    </>
+                    <div className={cn(raisedSurfaceStyle, 'rounded-lg')} style={{ height: '300px' }}>
+                      <ScrollArea className="h-full">
+                        <div className="p-3">
+                          <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
+                        </div>
+                      </ScrollArea>
+                    </div>
                   )}
-                </>
+                  <CopyButton
+                    content={workingMemoryData}
+                    tooltip="Copy working memory"
+                    className={cn(
+                      'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
+                      transitions.opacity,
+                    )}
+                  />
+                </div>
               ) : (
                 <Txt as="p" variant="body" tone="muted">
                   No working memory content yet. Click "Edit working memory" to add content.

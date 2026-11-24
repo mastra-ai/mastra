@@ -89,10 +89,7 @@ export const AgentLayout = ({ children }: { children: ReactNode }) => {
     : `/agents/${agentId}/traces`;
 
   const sessionUrl = `${window.location.origin}${withStudioBasePath(`/agents/${encodeURIComponent(agentId!)}/session`)}`;
-  const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
-    text: sessionUrl,
-    copyMessage: 'Session URL copied to clipboard!',
-  });
+  const { handleCopy: handleShareLink, status: shareStatus } = useCopyToClipboard({ text: sessionUrl });
   const editPath = paths.cmsAgentEditLink(agentId!);
 
   return (
@@ -115,7 +112,7 @@ export const AgentLayout = ({ children }: { children: ReactNode }) => {
           actions={{
             editHref: canCreateAgent && agent?.source === 'stored' ? editPath : undefined,
             onShare: handleShareLink,
-            isShareCopied,
+            shareStatus,
           }}
           tabs={{
             activeTab,

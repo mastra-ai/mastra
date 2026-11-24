@@ -4,7 +4,9 @@ import * as React from 'react';
 import { KeyLabel } from '@/ds/components/Kbd/key-label';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { CopyMenuItem } from '@/ds/primitives/copy-menu-item';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { MenuActionsContext } from '@/ds/primitives/menu-actions-context';
 import {
   MENU_SIDE_OFFSET,
   menuItemCheckClass,
@@ -387,10 +389,20 @@ function DropdownMenu({
   children: React.ReactNode;
   modal?: boolean;
 }) {
+  const actions = React.useRef<MenuPrimitive.Root.Actions | null>(null);
+
   return (
-    <DropdownMenuRoot modal={modal} open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-      {children}
-    </DropdownMenuRoot>
+    <MenuActionsContext.Provider value={actions}>
+      <DropdownMenuRoot
+        modal={modal}
+        open={open}
+        defaultOpen={defaultOpen}
+        actionsRef={actions}
+        onOpenChange={onOpenChange}
+      >
+        {children}
+      </DropdownMenuRoot>
+    </MenuActionsContext.Provider>
   );
 }
 
@@ -399,6 +411,7 @@ DropdownMenu.Content = DropdownMenuContent;
 DropdownMenu.Group = DropdownMenuGroup;
 DropdownMenu.Portal = DropdownMenuPortal;
 DropdownMenu.Item = DropdownMenuItem;
+DropdownMenu.CopyItem = CopyMenuItem;
 DropdownMenu.LinkItem = DropdownMenuLinkItem;
 DropdownMenu.CheckboxItem = DropdownMenuCheckboxItem;
 DropdownMenu.RadioItem = DropdownMenuRadioItem;

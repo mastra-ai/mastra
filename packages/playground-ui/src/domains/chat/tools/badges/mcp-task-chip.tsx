@@ -55,7 +55,7 @@ export function McpTaskChip({ task }: { task: McpTaskView }) {
       <Txt as="span" variant="meta" font="mono" tone="muted" className="tabular-nums">
         {formatElapsed(elapsed)}
       </Txt>
-      <CopyButton content={task.taskId} tooltip="Copy MCP task id" copyMessage="Copied MCP task id" />
+      <CopyButton content={task.taskId} tooltip="Copy MCP task id" />
     </span>
   );
 }

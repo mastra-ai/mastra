@@ -232,7 +232,7 @@ describe('MessageRow chrome', () => {
     const copyButton = screen.getByRole('button', { name: /copy/i });
     fireEvent.click(copyButton);
     expect(writeText).toHaveBeenCalledWith('copy me please');
-    await screen.findByRole('button', { name: 'Copied!' });
+    await screen.findByText('Copied to clipboard');
   });
 
   it('falls back when the browser blocks async clipboard writes', async () => {

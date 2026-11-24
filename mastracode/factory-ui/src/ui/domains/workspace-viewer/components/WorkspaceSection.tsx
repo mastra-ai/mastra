@@ -1,3 +1,4 @@
+import { CopyIcon } from '@mastra/playground-ui/components/CopyButton';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
@@ -13,8 +14,6 @@ import type { WorkspaceChangesSummary } from './WorkspaceChangesCard';
 import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
-import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
-import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 
 interface WorkspaceBranch {
   branch: string;
@@ -35,8 +34,7 @@ function MiddleTruncate({ text, tail }: { text: string; tail: number }) {
 }
 
 function BranchCopyButton({ branch }: { branch: string }) {
-  const { isCopied, handleCopy } = useCopyToClipboard({ text: branch });
-  const CopyIcon = isCopied ? IconCheckmark2Medium : IconSquareBehindSquare1;
+  const { status, handleCopy } = useCopyToClipboard({ text: branch });
   return (
     <button
       type="button"
@@ -49,10 +47,11 @@ function BranchCopyButton({ branch }: { branch: string }) {
         <MiddleTruncate text={branch} tail={12} />
       </Txt>
       <CopyIcon
-        aria-hidden
+        status={status}
         className={cn(
           'text-muted-foreground size-icon-xs shrink-0',
-          !isCopied && 'pointer-fine:opacity-0 group-hover/branch:opacity-100 group-focus-visible/branch:opacity-100',
+          status === 'idle' &&
+            'pointer-fine:opacity-0 group-hover/branch:opacity-100 group-focus-visible/branch:opacity-100',
         )}
       />
     </button>

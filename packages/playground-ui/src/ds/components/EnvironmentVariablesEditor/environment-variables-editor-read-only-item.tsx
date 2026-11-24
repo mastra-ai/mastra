@@ -4,14 +4,12 @@ import type { ReactNode } from 'react';
 import { EnvironmentVariablesEditorReadOnlyListContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorReadOnlyItemProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { DataList } from '@/ds/components/DataList/data-list';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 import { IconEyeSlash } from '@/ds/icons/central/IconEyeSlash';
-import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorReadOnlyItem({
@@ -30,12 +28,11 @@ export function EnvironmentVariablesEditorReadOnlyItem({
 }: EnvironmentVariablesEditorReadOnlyItemProps) {
   const { showIcon } = use(EnvironmentVariablesEditorReadOnlyListContext);
   const [uncontrolledRevealed, setUncontrolledRevealed] = useState(defaultRevealed ?? false);
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const isRevealed = revealed ?? uncontrolledRevealed;
   const displayedValue = isRevealed ? value : '************';
   const leadingIcon = icon ?? <IconCodeBrackets />;
   const resolvedCopyValue = copyValue ?? getCopyableReadOnlyValue(value);
-  const canCopyValue = isRevealed && Boolean(resolvedCopyValue);
+  const copyableValue = isRevealed ? resolvedCopyValue : undefined;
 
   function toggleRevealed() {
     const nextRevealed = !isRevealed;
@@ -45,12 +42,6 @@ export function EnvironmentVariablesEditorReadOnlyItem({
     }
 
     onRevealedChange?.(nextRevealed);
-  }
-
-  function handleCopyValue() {
-    if (!resolvedCopyValue) return;
-
-    copyToClipboard(resolvedCopyValue);
   }
 
   return (
@@ -85,22 +76,17 @@ export function EnvironmentVariablesEditorReadOnlyItem({
                 variant="meta"
                 tone="muted"
                 font="mono"
-                className={cn('block min-w-0 flex-1 truncate', canCopyValue && 'pr-7')}
+                className={cn('block min-w-0 flex-1 truncate', copyableValue && 'pr-7')}
               >
                 {displayedValue}
               </Txt>
-              {canCopyValue && (
-                <Button
-                  type="button"
+              {copyableValue && (
+                <CopyButton
+                  content={copyableValue}
                   variant="ghost"
-                  size="icon-sm"
-                  aria-label={isCopied ? 'Copied value' : copyLabel}
-                  tooltip={isCopied ? 'Copied' : copyLabel}
+                  tooltip={copyLabel}
                   className="absolute right-0 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100"
-                  onClick={handleCopyValue}
-                >
-                  {isCopied ? <IconCheckmark2Medium aria-hidden /> : <IconSquareBehindSquare1 aria-hidden />}
-                </Button>
+                />
               )}
             </span>
           </span>
