@@ -21355,8 +21355,8 @@
     },
     "packages/mcp/src/server/server-tasks.test.ts": {
       "tier": "in",
-      "since": "2026-11-21",
-      "last_failure": "2026-11-21",
+      "since": "2026-11-24",
+      "last_failure": "2026-11-24",
       "reason": "versioning-fail",
       "pr_failures": {
         "135808600513": {
