@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/components/EmptyState';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useId } from 'react';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
@@ -53,12 +52,7 @@ export function SessionSharingPopover({
           }
           actionSlot={
             onShare ? (
-              <Button
-                icon={sharing ? <Spinner size="sm" aria-hidden /> : <IconUserDuo />}
-                onClick={onShare}
-                disabled={disabled || sharing}
-                aria-busy={sharing}
-              >
+              <Button onClick={onShare} disabled={disabled} icon={<IconUserDuo />} loading={sharing}>
                 Share with organization
               </Button>
             ) : undefined

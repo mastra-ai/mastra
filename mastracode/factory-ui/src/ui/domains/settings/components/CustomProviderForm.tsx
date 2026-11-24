@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -122,13 +121,7 @@ export function CustomProviderForm({
         />
       </Field>
       <div className="flex items-center gap-2">
-        <Button
-          icon={saveMutation.isPending ? <Spinner size="sm" aria-hidden /> : undefined}
-          variant="primary"
-          size="sm"
-          disabled={saveMutation.isPending}
-          onClick={() => void save()}
-        >
+        <Button variant="primary" size="sm" onClick={() => void save()} loading={saveMutation.isPending}>
           {provider ? 'Save' : 'Add'}
         </Button>
         {onCancel && (

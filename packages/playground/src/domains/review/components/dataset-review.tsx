@@ -514,8 +514,8 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button size="icon-md" disabled={isAnalyzing} aria-label="More actions">
-                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <IconDotGrid1x3Horizontal />}
+                  <Button size="icon-md" aria-label="More actions" loading={isAnalyzing}>
+                    <IconDotGrid1x3Horizontal />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">

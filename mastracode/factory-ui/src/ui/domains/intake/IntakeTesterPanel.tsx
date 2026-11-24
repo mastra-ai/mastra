@@ -120,7 +120,7 @@ function TesterBody({ factoryProjectId, itemId, draft }: IntakeTesterPanelProps)
           disabled={test.isPending}
           onChange={event => setUrl(event.target.value)}
         />
-        <Button type="submit" variant="default" disabled={test.isPending || (url.trim() === '' && !itemId)}>
+        <Button type="submit" variant="default" disabled={url.trim() === '' && !itemId} loading={test.isPending}>
           Test
         </Button>
       </form>

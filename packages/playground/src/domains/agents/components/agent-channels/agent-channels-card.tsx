@@ -77,9 +77,9 @@ function ChannelAction({
         size="sm"
         variant="default"
         onClick={() => connect(agentId)}
-        disabled={isConnecting}
+        loading={isConnecting}
       >
-        {isConnecting ? 'Connecting...' : 'Connect'}
+        Connect
       </Button>
     </li>
   );

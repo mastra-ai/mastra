@@ -205,9 +205,10 @@ function CmsScorersEditForm({
               variant="default"
               size="sm"
               onClick={handlePublishVersion}
-              disabled={selectedVersionId === activeVersionId || isSubmitting}
+              disabled={selectedVersionId === activeVersionId}
+              loading={isSubmitting}
             >
-              {isSubmitting ? 'Publishing...' : 'Publish this version'}
+              Publish this version
             </Button>
           </div>
         </Notice>
