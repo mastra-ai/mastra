@@ -176,7 +176,14 @@ describe('ToneConsistencyMetric', () => {
       const kind = 'Thank you for reaching out. I am happy to help.';
       const kindScore = await scoreFor(kind);
 
-      for (const ending of ['This is terrible garbage and I hate it', '**I hate it**', '(I hate it)', 'Ужасно']) {
+      for (const ending of [
+        'This is terrible garbage and I hate it',
+        '**I hate it**',
+        '(I hate it)',
+        '(Your package arrives tomorrow)',
+        '(I love this and hate this)',
+        'Ужасно',
+      ]) {
         const score = await scoreFor(`${kind} ${ending}`);
         expect(score).toBeLessThan(kindScore);
         expect(score).toBe(await scoreFor(`${kind} ${ending}.`));
@@ -188,6 +195,7 @@ describe('ToneConsistencyMetric', () => {
         'I love this\nI hate this awful garbage',
         'I love this!I hate this awful garbage.',
         'I love this?I hate this awful garbage.',
+        'I love this.I hate this awful garbage.',
         '_Thank you for reaching out._ I hate this terrible garbage.',
         `${kind} Terrible.`,
         `${kind} (Terrible).`,
@@ -198,10 +206,12 @@ describe('ToneConsistencyMetric', () => {
       for (const ending of ['Thanks', 'Good luck 🍀', 'Best wishes,\nAnna']) {
         expect(await scoreFor(`Your refund is on the way. It takes three days.\n\n${ending}`)).toBeGreaterThan(0.85);
       }
-      for (const ending of [' [1, 2, 3]', ' (see source)', '</p>', ' 😊']) {
+      for (const ending of [' [1, 2, 3]', ' [see the source]', ' (see source)', ' (see\nsource)', '</p>', ' 😊']) {
         expect(await scoreFor(`${kind}${ending}`)).toBe(kindScore);
       }
-      expect(await scoreFor('Great news, you saved $3.50 on your order today')).toBe(1);
+      for (const link of ['$3.50', 'example.com', 'EXAMPLE.COM', 'example.рф']) {
+        expect(await scoreFor(`Great news, see ${link} for your order today`)).toBe(1);
+      }
       expect(await scoreFor('👍')).toBe(1);
     });
   });
