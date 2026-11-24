@@ -8,6 +8,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import { TokenCounter } from '@mastra/memory/processors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const RESOURCE = 'om-count-writeback-resource';
@@ -164,70 +165,85 @@ describe('Observational Memory token counts for stored history', () => {
     const pending = record?.pendingMessageTokens ?? 0;
     expect(pending).toBeGreaterThan(trueTotal + history.length * DRIFT);
   });
-  it('stores a count for a tool result that serializes through toJSON() that matches what storage holds', async () => {
-    const { storage, memory } = open(join(dbDir, 'to-json.db'));
-    const threadId = randomUUID();
-    await memory.saveThread({
-      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
-    });
-    // Its own fields are empty; JSON.stringify, and so storage, serializes it as the report.
-    class Report {
-      toJSON() {
-        return { report: 'Quarterly figures and notes. '.repeat(1_000) };
-      }
+  const report = 'Quarterly "figures"\nand notes. '.repeat(1_000);
+  class Report {
+    toJSON() {
+      return { report };
     }
-    const lookup = createTool({
-      id: 'lookup',
-      description: 'Look up the report.',
-      execute: async () => new Report(),
-    });
-    let step = 0;
-    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-    const model = new MockLanguageModelV2({
-      doStream: async () =>
-        ({
-          stream: convertArrayToReadableStream(
-            step++ === 0
-              ? [
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
-                  { type: 'finish', finishReason: 'tool-calls', usage },
-                ]
-              : [
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'text-start', id: 't' },
-                  { type: 'text-delta', id: 't', delta: 'OK.' },
-                  { type: 'text-end', id: 't' },
-                  { type: 'finish', finishReason: 'stop', usage },
-                ],
-          ) as any,
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }) as any,
-    });
-    const agent = new Agent({
-      id: 'to-json',
-      name: 'to-json',
-      instructions: 'Be brief.',
-      model,
-      tools: { lookup },
-      memory,
-    });
+  }
+  const serializers: [string, () => unknown][] = [
+    ['returns an object', () => ({ toJSON: () => ({ report }) })],
+    ['is a class method', () => new Report()],
+    ['returns a string', () => ({ toJSON: () => report })],
+    // JSON.stringify calls toJSON() once: the returned object's own toJSON() is not called.
+    ['returns an object with its own toJSON()', () => ({ toJSON: () => ({ report, toJSON: () => 'small' }) })],
+    ['is nested in the result', () => ({ summary: 'Q3', when: new Date(0), body: { toJSON: () => report } })],
+  ];
+  it.each(serializers)(
+    'stores the same count a fresh count of the stored message gives, for a tool result whose toJSON() %s',
+    async (_name, makeResult) => {
+      const { storage, memory } = open(join(dbDir, `to-json-${randomUUID()}.db`));
+      const threadId = randomUUID();
+      await memory.saveThread({
+        thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+      });
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look up the report.',
+        execute: async () => makeResult(),
+      });
+      let step = 0;
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      const model = new MockLanguageModelV2({
+        doStream: async () =>
+          ({
+            stream: convertArrayToReadableStream(
+              step++ === 0
+                ? [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+                    { type: 'finish', finishReason: 'tool-calls', usage },
+                  ]
+                : [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'text-start', id: 't' },
+                    { type: 'text-delta', id: 't', delta: 'OK.' },
+                    { type: 'text-end', id: 't' },
+                    { type: 'finish', finishReason: 'stop', usage },
+                  ],
+            ) as any,
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }) as any,
+      });
+      const agent = new Agent({
+        id: 'to-json',
+        name: 'to-json',
+        instructions: 'Be brief.',
+        model,
+        tools: { lookup },
+        memory,
+      });
 
-    const turn = await agent.stream('Get the report.', { memory: { thread: threadId, resource: RESOURCE } });
-    await turn.consumeStream();
-    expect(await turn.text).toBe('OK.');
+      const turn = await agent.stream('Get the report.', { memory: { thread: threadId, resource: RESOURCE } });
+      await turn.consumeStream();
+      expect(await turn.text).toBe('OK.');
 
-    const { messages } = await (await storage.getStore('memory'))!.listMessages({ threadId, perPage: false });
-    const toolPart = messages
-      .flatMap(message => message.content.parts as any[])
-      .find(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result');
-    expect(toolPart.toolInvocation.result.report).toContain('Quarterly figures');
-    const resultEntries = trustedEntries(toolPart).filter(entry => entry.key.includes('tool-result'));
-    expect(resultEntries).toHaveLength(1);
-    // The report is ~5,000 tokens; a count of the instance's own (empty) fields would be a handful.
-    expect(resultEntries[0]!.tokens).toBeGreaterThan(4_000);
-  });
+      const { messages } = await (await storage.getStore('memory'))!.listMessages({ threadId, perPage: false });
+      const toolMessage = messages.find(message =>
+        message.content.parts.some(
+          (part: any) => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
+        ),
+      )!;
+      const toolPart = toolMessage.content.parts.find((part: any) => part.type === 'tool-invocation') as any;
+      expect(trustedEntries(toolPart).filter(entry => entry.key.includes('tool-result'))).toHaveLength(1);
+
+      const withoutCounts = structuredClone(toolMessage);
+      for (const part of withoutCounts.content.parts as any[]) delete part.providerMetadata?.mastra?.tokenEstimate;
+      const counter = new TokenCounter();
+      expect(counter.countMessage(toolMessage)).toBe(counter.countMessage(withoutCounts));
+    },
+  );
   it("saves the Agent's final reply with its token counts", async () => {
     const { memory, agent } = open(join(dbDir, 'reply.db'));
     const threadId = randomUUID();

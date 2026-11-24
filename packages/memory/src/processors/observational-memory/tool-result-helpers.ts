@@ -11,6 +11,9 @@ function isObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** Thrown by {@link sanitizeToolResultValue} when the value holds a `toJSON()`, so the caller can serialize it natively. */
+const SERIALIZES_THROUGH_TO_JSON = Symbol('serializes-through-toJSON');
+
 function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> = new WeakMap()): unknown {
   if (!isObjectLike(value)) {
     return value;
@@ -20,11 +23,8 @@ function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> 
     return seen.get(value);
   }
 
-  // Count what storage and the model see: JSON.stringify serializes a value through its toJSON().
-  const toJSON = (value as { toJSON?: unknown }).toJSON;
-  if (typeof toJSON === 'function') {
-    const json = toJSON.call(value);
-    if (json !== value) return sanitizeToolResultValue(json, seen);
+  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') {
+    throw SERIALIZES_THROUGH_TO_JSON;
   }
 
   if (Array.isArray(value)) {
@@ -80,7 +80,23 @@ function stringifyToolResult(value: unknown): string {
     return value;
   }
 
-  const sanitized = sanitizeToolResultValue(value);
+  let sanitized: unknown;
+  try {
+    sanitized = sanitizeToolResultValue(value);
+  } catch (error) {
+    if (error !== SERIALIZES_THROUGH_TO_JSON) throw error;
+    // Count what storage holds and a reload reads back: the value as JSON.stringify writes it.
+    let json: string | undefined;
+    try {
+      json = JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+    if (json === undefined) return '';
+    const stored: unknown = JSON.parse(json);
+    if (typeof stored === 'string') return stored;
+    sanitized = sanitizeToolResultValue(stored);
+  }
   try {
     return JSON.stringify(sanitized, null, 2);
   } catch {
