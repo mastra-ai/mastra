@@ -724,12 +724,15 @@ export function createDurableToolCallStep() {
       // miss: tool ids are not unique across agents, so a global lookup first
       // could execute another agent's same-id tool. A hydrated registry's
       // per-step snapshot is authoritative and must not fall back to this full
-      // catalog when prepareStep or an input processor omitted a tool.
-      if (!tool && !hasAuthoritativeToolSnapshot) {
+      // catalog when prepareStep or an input processor omitted a tool. If a
+      // pinned agent could not be rebuilt, only an already-resolved tool is safe.
+      const canUseGlobalTools =
+        !hasAuthoritativeToolSnapshot && (!initData.agentVersionId || rebuiltTools !== undefined);
+      if (!tool && canUseGlobalTools) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool && !hasAuthoritativeToolSnapshot && mastra) {
+      if (!tool && canUseGlobalTools && mastra) {
         mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
         if (mastraTools) {
           tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
