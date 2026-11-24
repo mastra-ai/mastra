@@ -2,12 +2,12 @@
   "temperature": ["humain-m3-preview", "humain-m3-research-preview"],
   "structuredOutput": ["humain-m3-preview", "humain-m3-research-preview"],
   "reasoning": {
-    "humain-m3-research-preview": [
+    "humain-m3-preview": [
       {
         "type": "toggle"
       }
     ],
-    "humain-m3-preview": [
+    "humain-m3-research-preview": [
       {
         "type": "toggle"
       }

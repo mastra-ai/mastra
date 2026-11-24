@@ -563,6 +563,47 @@ describe('MessageHistory', () => {
   });
 
   describe('processOutputResult', () => {
+    it('saves a stored message marked for resave, once, with the response', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({ id: 'thread-1', title: 'T', metadata: {} }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const stored = (id: string, text: string): MastraDBMessage => ({
+        id,
+        role: 'user',
+        threadId: 'thread-1',
+        content: { format: 2, parts: [{ type: 'text', text }] },
+        createdAt: new Date('2024-01-01T00:00:01Z'),
+      });
+      const messageList = new MessageList({ threadId: 'thread-1' });
+      messageList.add([stored('old-1', 'old one'), stored('old-2', 'old two')], 'memory');
+      messageList.add(
+        {
+          id: 'reply',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Hi' }] },
+          createdAt: new Date('2024-01-01T00:00:03Z'),
+        },
+        'response',
+      );
+      messageList.markForResave(messageList.get.remembered.db()[0]!);
+
+      await processor.processOutputResult({
+        messageList,
+        messages: [],
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const saved = (mockStorage.saveMessages as any).mock.calls[0][0].messages.map((m: MastraDBMessage) => m.id);
+      expect(saved.sort()).toEqual(['old-1', 'reply']);
+    });
+
     it('should save user, assistant, and tool messages', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),

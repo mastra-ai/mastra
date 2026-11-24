@@ -179,6 +179,33 @@ describe('Knowledge read routes', () => {
       expect(graph.grants).toHaveLength(4);
     });
 
+    it("sends the store's declared grants and labels on the first request, before anything else resolved them", async () => {
+      const { mastra, support, eng } = await setup();
+      const store = await mastra.getKnowledge('main')!.getStorage();
+      vi.spyOn(store, 'getScopeDeclarations').mockResolvedValue({
+        ...declarations,
+        'org:$orgId': { displayLabel: '$orgId organization' },
+      });
+      const graph = await call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, knowledgeKey: 'main' });
+      expect(graph.grants).toEqual(
+        expect.arrayContaining([
+          { principal: 'role:acme:admin', principalLabel: 'acme admin', target: support.id, role: 'owner' },
+          { principal: 'role:acme:admin', principalLabel: 'acme admin', target: eng.id, role: 'owner' },
+        ]),
+      );
+      expect(graph.grants).toHaveLength(4);
+    });
+
+    it("labels scope pages from the store's declarations on the first tree request", async () => {
+      const { mastra } = await setup();
+      const store = await mastra.getKnowledge('main')!.getStorage();
+      vi.spyOn(store, 'getScopeDeclarations').mockResolvedValue({
+        'org:$orgId': { displayLabel: '$orgId organization' },
+      });
+      const tree = await call(GET_KNOWLEDGE_TREE_ROUTE, { mastra, knowledgeKey: 'main' });
+      expect(tree.pages.map((page: { displayLabel?: string }) => page.displayLabel)).toEqual(['acme organization']);
+    });
+
     it('sends a signed-in caller only grants from principal scopes it can read', async () => {
       const { mastra, acme, support } = await setup(declarations);
       const knowledge = mastra.listKnowledge().main as unknown as Record<string, unknown>;
@@ -338,6 +365,15 @@ describe('Knowledge read routes', () => {
     expect(names((await call(GET_KNOWLEDGE_TREE_ROUTE, { mastra, knowledgeKey: 'main', cursor: '' })).pages)).toEqual([
       'Acme',
     ]);
+  });
+
+  it('400s a cursor the store cannot decode', async () => {
+    const { mastra, acme } = await setup();
+    const args = { mastra, knowledgeKey: 'main', cursor: 'not-a-cursor' };
+    // The 400 keeps the caller's cursor out of the message.
+    const badRequest = { status: 400, message: 'Invalid Knowledge cursor: this store cannot decode it' };
+    await expect(call(GET_KNOWLEDGE_TREE_ROUTE, { ...args, parentId: acme.id })).rejects.toMatchObject(badRequest);
+    await expect(call(GET_KNOWLEDGE_ACTIVITY_ROUTE, args)).rejects.toMatchObject(badRequest);
   });
 
   it('filters instances and gates reads by FGA when configured', async () => {

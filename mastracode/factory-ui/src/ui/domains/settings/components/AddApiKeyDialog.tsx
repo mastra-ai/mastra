@@ -142,8 +142,12 @@ export function AddApiKeyDialog({
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!keyDraft.trim()} onConfirm={() => void saveKey()}>
-            {saveKeyMutation.isPending ? 'Saving…' : 'Save'}
+          <DialogAction
+            disabled={!keyDraft.trim()}
+            onConfirm={() => void saveKey()}
+            loading={saveKeyMutation.isPending}
+          >
+            Save
           </DialogAction>
         </DialogFooter>
       </DialogContent>

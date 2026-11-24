@@ -29,10 +29,21 @@ on:
         options: [all, core-list]
         default: all
 
-# Every run writes the same file on the same branch, so runs go one at a time.
+# Every run that updates the tiers writes the same file on the same branch, so those runs go one at a
+# time and all wait their turn (queue: max). By default GitHub keeps one pending run per group and a
+# job's `if` is only read when the run starts, so a Prebuild completion that would do nothing could
+# replace a failed versioning run's pending update; those runs get a group of their own instead. The
+# condition matches the update job's `if` apart from its repository check (workflow.test.mjs checks).
 concurrency:
-  group: test-tiers
+  group: >-
+    ${{ (github.event_name != 'workflow_run' || (
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'changeset-release/')
+    )) && 'test-tiers' || format('test-tiers-noop-{0}', github.run_id) }}
   cancel-in-progress: false
+  queue: max
 
 permissions: {}
 
@@ -189,7 +200,7 @@ jobs:
           echo "count=$(jq '.messages | length' "$RUNNER_TEMP/attribution.json")" >> "$GITHUB_OUTPUT"
           {
             echo '### Test-tier escape attribution'
-            jq -r '.results[] | "- `\(.file)`: \(.verdict)\(if .culprit then " (\(.culprit[0:10]))" else "" end)\(if .reason then " (\(.reason))" else "" end)"' "$RUNNER_TEMP/attribution.json"
+            jq -r '.results[] | "- `\(.file)`: \(.verdict)\(if .culprit then " (\(.culprit[0:10]))" else "" end)\(if .candidates then " (one of \(.candidates | map(.[0:10]) | join(", ")))" else "" end)\(if .reason then " (\(.reason))" else "" end)"' "$RUNNER_TEMP/attribution.json"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Posts what attribute found, or, when it failed or timed out, which files escaped. The only job with

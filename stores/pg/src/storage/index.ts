@@ -28,7 +28,7 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
-import { getPgKnowledgeIsolationKey, KnowledgePG } from './domains/knowledge';
+import { getPgKnowledgeIsolationKey, KnowledgePG, pgKnowledgeTransactionClient } from './domains/knowledge';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -143,6 +143,8 @@ export function exportSchemas(schemaName?: string): string {
   return statements.join('\n');
 }
 // Export domain classes for direct use with MastraStorage composition
+export { pgKnowledgeTransactionClient };
+export type { TxClient as PgKnowledgeTransactionClient } from './client';
 export {
   AgentsPG,
   BackgroundTasksPG,

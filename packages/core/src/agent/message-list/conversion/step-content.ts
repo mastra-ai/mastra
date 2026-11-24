@@ -5,7 +5,7 @@ import { convertDataContentToBase64String } from '../prompt/data-content';
 import { parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage } from '../state/types';
 import type { AIV5Type } from '../types';
-import { findToolCallArgs } from '../utils/provider-compat';
+import { createToolCallArgsLookup } from '../utils/provider-compat';
 import { sanitizeV5UIMessages } from './output-converter';
 
 /**
@@ -202,11 +202,12 @@ export class StepContentExtractor {
       return [{ type: 'text', text: latest.content }];
     }
 
+    const getToolCallArgs = createToolCallArgsLookup(dbMessages);
     return latest.content.map(c => {
       if (c.type === 'tool-result') {
         return {
           type: 'tool-result',
-          input: findToolCallArgs(dbMessages, c.toolCallId),
+          input: getToolCallArgs(c.toolCallId),
           output: c.output,
           toolCallId: c.toolCallId,
           toolName: c.toolName,

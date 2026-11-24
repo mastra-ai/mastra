@@ -89,9 +89,8 @@ export function ComparisonSideTitle({ role, label, experiment, onSetBaseline, on
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
-              <Button size="sm" className="max-w-full min-w-0">
+              <Button iconEnd={<IconChevronDownMedium />} size="sm" className="max-w-full min-w-0">
                 <span className="min-w-0 truncate">{experiment.name || shortId}</span>
-                <IconChevronDownMedium aria-hidden />
               </Button>
             }
           />

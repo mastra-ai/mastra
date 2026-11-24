@@ -83,8 +83,7 @@ export const WithAction: Story = {
     <Section variant={variant} className="w-125">
       <Section.Header inset={inset}>
         <Section.Heading>Agents</Section.Heading>
-        <Button size="md">
-          <IconPlusMedium className="size-4" />
+        <Button icon={<IconPlusMedium />} size="md">
           Add agent
         </Button>
       </Section.Header>

@@ -25,6 +25,7 @@ describe('LibSQL evented finished step deliveries', () => {
   // Each replica opens its own client on the same file, as separate pods share one database.
   describeFinishedOccurrenceCases({
     getStorage: () => storage,
+    stepGuards: true,
     connect: async () => {
       const replica = new LibSQLStore({ id: 'finished-occurrence', url });
       await replica.init();

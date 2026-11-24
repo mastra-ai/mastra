@@ -1478,7 +1478,8 @@ export class BackgroundTaskManager {
     // the worker crashed mid-run). A dispatch declined cleanly during shutdown
     // leaves the task `pending`, so the worker that picks up the redelivery
     // still gets the full retry budget.
-    const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
+    // Never lower the stored count: crash recovery may already have spent retries this message's delivery count doesn't know about.
+    const retryCount = task.status === 'running' ? Math.max(task.retryCount, deliveryAttempt - 1) : task.retryCount;
     // Claim execution ownership with an expiring lease. The compare-and-set on
     // the previously observed owner/lease fences concurrent dispatchers: when
     // two workers race for the same pending task, only the first claim wins and
@@ -2326,11 +2327,19 @@ export class BackgroundTaskManager {
           expectedOwnerId: task.ownerId ?? null,
           expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
         };
-        if (task.maxRetries > 0) {
+        // A lease that lapsed with its owner still set means the worker died
+        // mid-run, possibly because of this task, so re-pending it spends a
+        // retry like a lapsed pin in `#recoverLapsedPin`; otherwise a task that
+        // kills its worker is re-run by every process that starts. A graceful
+        // shutdown clears the owner to hand the task back, and that costs
+        // nothing.
+        const handedBack = !task.ownerId && task.maxRetries > 0;
+        if (handedBack || task.retryCount < task.maxRetries) {
           await storage.updateTask(
             task.id,
             {
               status: 'pending',
+              retryCount: handedBack ? task.retryCount : task.retryCount + 1,
               startedAt: undefined,
               ownerId: undefined,
               leaseExpiresAt: undefined,

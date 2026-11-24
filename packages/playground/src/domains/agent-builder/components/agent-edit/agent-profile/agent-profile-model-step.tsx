@@ -2,7 +2,6 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { Models } from './models';
@@ -46,11 +45,8 @@ export const AgentProfileModelStep = () => {
       }
       contentClassName="overflow-hidden"
       cta={
-        <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue{' '}
-          <Icon>
-            <IconArrowRight />
-          </Icon>
+        <Button iconEnd={<IconArrowRight />} onClick={handleContinue} disabled={isStreaming}>
+          Continue
         </Button>
       }
     >

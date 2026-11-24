@@ -50,6 +50,10 @@ describeParity('input-processor-error parity', target => {
         agents: { [agent.id]: wrapper ?? agent },
         storage: new InMemoryStore(),
         logger: false,
+        durable: {
+          executionEngine:
+            engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined,
+        },
       });
 
       let cleanup: (() => void | Promise<void>) | undefined;
@@ -119,6 +123,10 @@ describeParity('input-processor-error parity', target => {
         agents: { [agent.id]: wrapper ?? agent },
         storage: new InMemoryStore(),
         logger: false,
+        durable: {
+          executionEngine:
+            engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined,
+        },
       });
 
       let cleanup: (() => void | Promise<void>) | undefined;

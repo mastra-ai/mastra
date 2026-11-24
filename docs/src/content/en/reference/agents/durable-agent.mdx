@@ -60,7 +60,7 @@ const agent = new Agent({
   name: 'Support agent',
   instructions: 'Help customers with their orders.',
   model: '__GATEWAY_OPENAI_MODEL__',
-  durable: { executionEngine: 'default' },
+  durable: { executionEngine: 'default', maxSteps: 8, storageVersion: 2 },
 })
 
 const output: AgentStreamOutput = await agent.stream('Where is my order?')
@@ -70,11 +70,17 @@ output.cleanup?.()
 
 Both engines checkpoint each step. Use `'default'` to run on the default in-process engine, `'evented'` to run on workers over pubsub, or `false` for the plain agent loop, which doesn't checkpoint. Evented execution falls back to in-process durable execution when the agent has no Mastra host, or when the host's workflows store doesn't support concurrent updates. A host with no workflows store keeps evented execution.
 
-Set `Mastra.durable.executionEngine` to provide a default for agents registered through `agents` or `addAgent()`. An agent's explicit setting takes precedence. The engine selection is fixed at registration or first execution, carries over to editor forks, and remains unchanged when the agent is wrapped.
+Set `Mastra.durable.executionEngine` to provide a default for agents registered through `agents` or `addAgent()`. An agent's explicit setting takes precedence. The native engine selection is fixed for the lifetime of the agent instance once it registers or first executes. Editor forks keep that selection. A wrapper factory chooses the engine for calls made through the wrapper without changing the underlying agent's selection.
 
-Native `stream()` and `resumeStream()` return `MastraModelOutput`. When durable execution is selected, the output also carries `abort()`, `cleanup()`, `threadId`, and `resourceId`. Type it as `AgentStreamOutput` to access them. `generate()` keeps its usual result shape. The wrapper factories keep returning `DurableAgentStreamResult`, whose model output is in `.output`.
+Native `stream()` and `resumeStream()` return `MastraModelOutput`. When durable execution is selected, the output also carries `abort()`, `cleanup()`, `threadId`, and `resourceId`. Use `AgentStreamOutput` to access those optional fields. The public signatures for `stream()`, `resumeStream()`, and the tool approval and decline helpers remain typed as `MastraModelOutput`. `getFullOutput()` returns the usual `FullOutput`, without those lifecycle controls. `generate()` keeps its usual result shape. The wrapper factories keep returning `DurableAgentStreamResult`, whose model output is in `.output`.
 
-`durable: true` enables resumable-stream publication and inherits any Mastra execution default. `durable: false` opts out of both publication and inherited execution defaults. Without a Mastra execution default, neither boolean form enables checkpoint execution. Set `executionEngine` explicitly to select an execution backend. Configure `shouldPersistSnapshot` alongside it to control snapshot persistence.
+`durable: true` enables resumable-stream publication and inherits any Mastra execution default. `durable: false` opts out of both publication and inherited execution defaults. Without a Mastra execution default, neither boolean form enables checkpoint execution. Set `executionEngine` explicitly to select an execution backend.
+
+- `durable.maxSteps` sets the agent's durable step limit. A call's `maxSteps` takes precedence over `defaultOptions.maxSteps`, which takes precedence over `durable.maxSteps`. If none is set, the limit is five steps.
+- `durable.storageVersion` is experimental and defaults to `1`, which saves a full snapshot. Version `2` saves only what changed using the run journal. On a workflow store without journal support, Mastra logs a warning and starts new runs on version `1`. Existing runs keep the version they started with.
+- `durable.shouldPersistSnapshot` controls [which checkpoints are saved](/docs/harness/durable-agents#snapshot-persistence). Set `recovery.durableAgents: 'auto'` on `Mastra` to save running checkpoints under the default policy and recover orphaned runs on restart.
+
+Before switching engines, stop accepting new runs and let existing runs finish on their original engine. Resolve suspended runs there too. Don't rely on the new engine to resume or recover runs started by the old one.
 
 ## `createDurableAgent(options)`
 
@@ -161,6 +167,8 @@ Returns: `DurableAgent`
 ## `createEventedAgent(options)`
 
 Wraps an `Agent` with fire-and-forget durable execution on the built-in evented workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the run is started without being awaited: events on the Mastra instance's PubSub drive execution independently of the caller. Register the agent on a `Mastra` instance with storage to get evented execution; without one, the agent falls back to the default in-process engine and logs a warning. It doesn't accept `id` or `name` overrides.
+
+An evented agent runs in one process on any PubSub backend. Running its steps on several processes needs a backend that redelivers unacknowledged events and a storage adapter with workflow step guards. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
 
 ```typescript
 import { createEventedAgent } from '@mastra/core/agent/durable'

@@ -547,8 +547,11 @@ A manager treats a `running` task as abandoned only after its lease expires.
 
 When `recoverStaleTasksOnStart` is `true`, the default, each manager that runs tasks scans for abandoned tasks on startup. If the scan finds a lease that hasn't expired yet, the manager scans again shortly after that lease expires, and repeats until no live lease is left. A task that a manager starts after that and then abandons waits for the next startup scan. For each task the scan recovers:
 
-- If the task has `maxRetries` above `0`, it returns to `pending` and is dispatched again.
+- If the task's worker shut down gracefully, it returns to `pending` and is dispatched again without using a retry.
+- If the worker died and the task's `retryCount` is below `maxRetries`, it uses a retry, returns to `pending`, and is dispatched again.
 - Otherwise, it fails with `Worker process terminated before task completed`.
+
+Only a crash counts against `maxRetries`, so a task that keeps taking its worker down stops after its retries are used, while a deploy doesn't use one.
 
 The recovery write is conditional on the owner and lease that the scan read, so only one manager recovers each task.
 

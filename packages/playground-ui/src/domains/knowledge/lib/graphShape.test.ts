@@ -17,6 +17,7 @@ import {
   REST_BATCH,
   isScopeGroup,
   lazyGraph,
+  restRevealKey,
   radialLayout,
 } from './graphShape';
 
@@ -407,6 +408,60 @@ describe('lazyGraph', () => {
     expect(graph.wanted).toEqual(expect.arrayContaining(['site', 'other', 'k00', 'k01', 'k11']));
   });
 
+  describe('with nothing focused and many root scopes', () => {
+    const roots = (count: number) =>
+      Array.from({ length: count }, (_, index) =>
+        page(`r${String(index).padStart(2, '0')}`, null, { address: `team:${index}` }),
+      );
+    const drawnRoots = (graph: ReturnType<typeof lazyGraph>) =>
+      graph.pages.filter(p => p.parentId === null).map(p => p.id);
+
+    it('draws every root scope while there are up to 24 of them', () => {
+      const all = roots(14);
+      const graph = lazyGraph({ ...base, pages: all, loadedParents: new Set(['']), focusId: null });
+      expect(drawnRoots(graph).sort()).toEqual(all.map(p => p.id));
+      expect(graph.pages.find(isRestCircle)).toBeUndefined();
+      // Every drawn root is a full circle.
+      const shape = graphShape(graph.pages, graph.hub);
+      expect(all.every(p => shape.form.get(p.id) === 'full')).toBe(true);
+    });
+
+    it('counts the roots past 24 in a "+N more" circle instead of dropping them, and reveals them a batch at a time', () => {
+      const all = roots(30);
+      const input = { ...base, pages: all, loadedParents: new Set(['']), focusId: null };
+      const graph = lazyGraph(input);
+      expect(drawnRoots(graph)).toHaveLength(24);
+      const rest = graph.pages.find(isRestCircle);
+      if (!rest) throw new Error('no rest circle');
+      expect(rest.name).toBe('+6 more scopes');
+      expect(rest?.parentId).toBe(graph.hub);
+      expect(rest?.childCount).toBe(6);
+      // The roots' rest circle is its own, apart from the hub's children's.
+      expect(restRevealKey(rest)).toBe('');
+      // Only the drawn roots have their children fetched.
+      expect(graph.wanted).toHaveLength(24);
+      const shape = graphShape(graph.pages, graph.hub);
+      expect(shape.form.get(rest.id)).toBe('full');
+
+      const revealed = lazyGraph({ ...input, revealed: new Map([['', REST_BATCH]]) });
+      expect(drawnRoots(revealed)).toHaveLength(30);
+      expect(revealed.pages.find(isRestCircle)).toBeUndefined();
+    });
+
+    it('gives the circles to root scopes with pages, then the most recently active, before list order', () => {
+      const all = [
+        ...roots(26),
+        page('zz-busy', null, { address: 'rules:tylerbarnes', childCount: 4 }),
+        page('zz-fresh', null, { address: 'conventions:mastra', updatedAt: '2026-11-20T00:00:00.000Z' }),
+      ];
+      const graph = lazyGraph({ ...base, pages: all, loadedParents: new Set(['']), focusId: null });
+      const drawn = drawnRoots(graph);
+      expect(drawn).toContain('zz-busy');
+      expect(drawn).toContain('zz-fresh');
+      expect(graph.pages.find(isRestCircle)?.name).toBe('+4 more scopes');
+    });
+  });
+
   it("with a childless page focused, stands in its siblings' children as dots", () => {
     const siblings = Array.from({ length: 10 }, (_, index) =>
       page(`s${String(index).padStart(2, '0')}`, 'blog', { childCount: 3 }),
@@ -441,6 +496,7 @@ describe('lazyGraph', () => {
     const rest = graph.pages.find(isRestCircle);
     expect(rest?.name).toBe(`+${60 - GRAPH_CHILD_CAP} more`);
     expect(rest?.parentId).toBe('blog');
+    expect(rest && restRevealKey(rest)).toBe('blog');
   });
 
   it('draws a batch more children for each reveal, and drops the rest circle once all are drawn', () => {

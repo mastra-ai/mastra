@@ -1,6 +1,6 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -59,9 +59,7 @@ function CmsPromptBlocksEditPage() {
     return (
       <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{blockId}</h1>
-        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
-          <Spinner fill size="lg" />
-        </AgentEditLayout>
+        <BrandLoader fill />
       </PageLayout>
     );
   }

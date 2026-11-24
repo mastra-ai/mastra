@@ -19,7 +19,7 @@ vi.hoisted(() => {
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
-import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
+import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -139,7 +139,9 @@ function buildAgent(
       : engine === 'evented'
         ? createEventedAgent({ agent: base, pubsub })
         : base;
+  const executionEngine = nativeExecutionEngine(engine);
   const mastra = new Mastra({
+    ...(executionEngine && { durable: { executionEngine } }),
     agents: engine === 'fs' ? {} : { agent: wrapped as any },
     pubsub,
     storage,
@@ -191,7 +193,7 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       const agent = buildAgent(engine, llm.url, archive, pubsub, storage);
 
       const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
-      const output = isDurableEngineVariant(engine) ? result.output : result;
+      const output = 'output' in result ? result.output : result;
       const chunkTypes: string[] = [];
       for await (const chunk of result.fullStream) {
         chunkTypes.push(chunk.type);
@@ -255,7 +257,7 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     });
     const agent = buildAgent(engine, llm.url, archive, pubsub, new InMemoryStore());
     const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = 'output' in result ? result.output : result;
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'tool-call-approval') break;
     }
@@ -450,7 +452,7 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     const agent = buildAgent(engine, llm.url, ask, pubsub, new InMemoryStore());
 
     const result = await agent.stream(`ask two ${tag}`, { memory: { thread, resource: RESOURCE } });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = 'output' in result ? result.output : result;
     const suspended: string[] = [];
     for await (const chunk of result.fullStream) {
       if (chunk.type === 'tool-call-suspended') suspended.push(chunk.payload.toolCallId);

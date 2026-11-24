@@ -98,6 +98,24 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 </Button>
 ```
 
+### Loading buttons
+
+Pass `loading` to the button whose action is in progress. Don't put a `Spinner` in a button, swap its icon or change its label.
+
+```tsx
+<Button variant="primary" icon={<IconPlusMedium />} loading={createProject.isPending} onClick={create}>
+  Create project
+</Button>
+```
+
+- The loader takes the place of the button's icon (`icon`, else `iconEnd`, else the glyph of an icon-only button), so the button keeps its size. A button without an icon gets the loader on the left. Pass the icon through `icon`, not as a child, or it stays beside the loader.
+- The label stays: "Create project", not "Creating project…". The person sees which action is running, and the button's name doesn't change under a screen reader.
+- Clicks and submits do nothing, and the button keeps focus (`aria-disabled` and `aria-busy` instead of `disabled`). `disabled` only needs the other reasons the button can't be used.
+- The button keeps its own colours and the loader takes the icon's: loading isn't the disabled look, which is too faint to read in a light theme.
+- The loader appears after 150ms, so an action that finishes sooner changes nothing on screen.
+- Other buttons that must wait (Cancel, the second action) are `disabled`, not `loading`.
+- In a `Dialog` with `pending`, `DialogAction` is loading on its own. With two actions, pass `loading` to each. `AlertDialog.Action` closes the dialog when clicked; to keep it open while loading, use `Dialog` with `pending`.
+
 ### Central Icons
 
 Interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `Network`. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
@@ -623,6 +641,7 @@ export default defineConfig({
 | Rule                                   | Flags                                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `playground-ui/icon-button-size`       | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/button-icon-prop`       | An icon beside a `<Button>` label as a child instead of `icon` / `iconEnd`                       |
 | `playground-ui/text-role`              | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
 | `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
 | `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |

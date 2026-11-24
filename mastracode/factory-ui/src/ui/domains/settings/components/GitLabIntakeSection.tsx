@@ -57,12 +57,18 @@ export function GitLabIntakeSection({
         (listed ? (
           <>
             {status?.mode === 'platform' && (status.connections?.length ?? 0) > 0 && (
-              <AddPlatformAccountButton provider="gitlab" />
+              <>
+                <AddPlatformAccountButton provider="gitlab" />
+                <AddPlatformAccountButton provider="gitlab-self-hosted" buttonLabel="Add self-hosted" />
+              </>
             )}
             <PlatformConnectionActions provider="gitlab" connections={status?.connections ?? []} />
           </>
         ) : (
-          <PlatformConnectButton provider="gitlab" />
+          <>
+            <PlatformConnectButton provider="gitlab" />
+            <PlatformConnectButton provider="gitlab-self-hosted" buttonLabel="Connect self-hosted" />
+          </>
         ))
       }
       description={description}

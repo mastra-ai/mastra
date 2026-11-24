@@ -16,6 +16,8 @@ export const gitlabWorkItemAdapter = externalAdapter('gitlab', {
     'headBranch',
     'baseBranch',
     'requestedReviewers',
+    // A pull request closing several issues: the cards linked to it besides the one holding it.
+    'closesWorkItemIds',
   ],
   key: (source, metadata) => {
     if (source.type === 'pull-request') {

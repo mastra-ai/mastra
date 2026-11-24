@@ -18,7 +18,7 @@ export interface AskQuestionDialogOptions {
   question: string;
   /** Dialog heading. Defaults to "Question". */
   title?: string;
-  options?: Array<{ label: string; description?: string }>;
+  options?: Array<{ label: string; description?: string; recommended?: boolean }>;
   /** Controls whether options are single- or multi-select. Defaults to single_select. */
   selectionMode?: AskQuestionSelectionMode;
   /**
@@ -101,15 +101,20 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
     }
   }
 
-  private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
+  private buildSelectMode(opts: Array<{ label: string; description?: string; recommended?: boolean }>): void {
     // Each option renders as one row; a newline in a label or description (e.g. a
     // multi-line schedule prompt) would spill the row out of the menu.
     const singleLine = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
-    const items: SelectItem[] = opts.map(opt => ({
-      value: opt.label,
-      label: singleLine(opt.label),
-      description: opt.description ? singleLine(opt.description) : undefined,
-    }));
+    const items: SelectItem[] = opts.map(opt => {
+      // The tag leads the description: a long label is cut to its column, which would hide it there.
+      const description = [
+        opt.recommended ? theme.fg('accent', '(recommended)') : '',
+        opt.description ? singleLine(opt.description) : '',
+      ]
+        .filter(Boolean)
+        .join('  ');
+      return { value: opt.label, label: singleLine(opt.label), description: description || undefined };
+    });
 
     // "Custom response..." only applies to single-select: it switches to free-text.
     if (this.allowCustomResponse && !this.multiSelect) {
