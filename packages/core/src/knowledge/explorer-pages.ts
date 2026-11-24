@@ -72,6 +72,15 @@ async function allChildScopes(
 }
 
 /**
+ * The scopes among `pages` that have a child scope, readable or not, from one bulk count instead of a
+ * list call per scope. null when the store can't count.
+ */
+async function withChildScopes(store: KnowledgePageStore, pages: KnowledgePage[]): Promise<Set<string> | null> {
+  const counts = await countInBatches(pages, ids => store.countChildScopes({ parentIds: ids, read: 'all' }));
+  return counts && new Set(pages.filter(page => counts[page.id]).map(page => page.id));
+}
+
+/**
  * Child scopes of `parentId` that `read` allows. An unreadable child scope is not returned, but its
  * own readable descendant scopes are, in its place.
  */
@@ -84,12 +93,14 @@ async function visibleChildScopes(
   const direct = await allChildScopes(store, parentId, budget);
   let truncated = direct.truncated;
   const scopes: KnowledgePage[] = [];
+  const hidden = direct.scopes.filter(scope => !scopeVisible(scope, read));
+  const nesting = await withChildScopes(store, hidden);
   for (const scope of direct.scopes) {
     if (scopeVisible(scope, read)) {
       scopes.push(scope);
       continue;
     }
-    if (read === 'all') continue;
+    if (nesting && !nesting.has(scope.id)) continue;
     const hoisted = await visibleChildScopes(store, scope.id, read, budget);
     scopes.push(...hoisted.scopes);
     truncated ||= hoisted.truncated;
@@ -149,7 +160,10 @@ export async function listKnowledgeTreeChildren(
   };
 }
 
-/** Child counts for one level: one `countChildPages` call, plus a child-scope walk per scope page. */
+/**
+ * Child counts for one level: one `countChildPages` call, plus a child-scope walk per scope page that
+ * has child scopes.
+ */
 async function withChildCounts(
   store: KnowledgePageStore,
   pages: KnowledgePage[],
@@ -163,13 +177,17 @@ async function withChildCounts(
     if (error instanceof KnowledgeUnsupportedCapabilityError) return { pages, truncated: false };
     throw error;
   }
+  const nesting = await withChildScopes(
+    store,
+    pages.filter(page => page.isScope),
+  );
   const budget = { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN };
   let truncated = false;
   const counted: KnowledgeTreePage[] = [];
   for (const page of pages) {
     let childCount = Object.hasOwn(counts, page.id) ? (counts[page.id] ?? 0) : 0;
     let capped = false;
-    if (page.isScope) {
+    if (page.isScope && (!nesting || nesting.has(page.id))) {
       const childScopes = await visibleChildScopes(store, page.id, read, budget);
       childCount += childScopes.scopes.length;
       capped = childScopes.truncated;
@@ -291,6 +309,8 @@ export const DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS: KnowledgePageGraphLimits = {
 };
 
 const MAX_GRAPH_MENTIONS_PER_NOTE = 100;
+/** Mentioned pages found gone (deleted since) before the outside lookup gives up and reports a partial graph. */
+const MAX_MISSING_OUTSIDE_PAGES = 1_000;
 
 export interface KnowledgePageGraphEdge {
   source: string;
@@ -334,8 +354,9 @@ async function countInBatches(
 
 /**
  * Children of every parent in one graph level, in the tree's order: readable child scopes of scope
- * parents (scope pages only sit under scopes), then child pages, listed only for parents the level's
- * one count says have some. `null` lists the root scopes.
+ * parents (scope pages only sit under scopes), then child pages. One count per level says which
+ * parents have child scopes and which have child pages; only those are listed. `null` lists the root
+ * scopes.
  */
 async function* graphLevelChildren(
   store: KnowledgePageStore,
@@ -347,9 +368,14 @@ async function* graphLevelChildren(
 ) {
   const parents = level.flatMap(id => (id === null ? [] : [byId.get(id)!]));
   const pageCounts = await countInBatches(parents, ids => store.countChildPages({ parentIds: ids, read }));
+  const nesting = await withChildScopes(
+    store,
+    parents.filter(parent => parent.isScope),
+  );
   for (const parentId of level) {
     const parent = parentId === null ? null : byId.get(parentId)!;
-    if (!parent || parent.isScope) {
+    const listsScopes = !parent || (parent.isScope && (!nesting || nesting.has(parent.id)));
+    if (listsScopes) {
       const { scopes, truncated } = await visibleChildScopes(store, parentId, read, scopeBudget);
       yield { parentId, children: scopes, truncated };
     }
@@ -503,12 +529,20 @@ export async function readKnowledgePageGraph(
 
   const outsideIds: string[] = [];
   const wanted = [...outsideWanted];
+  let missing = 0;
   outside: for (let start = 0; start < wanted.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+    if (missing >= MAX_MISSING_OUTSIDE_PAGES) {
+      truncated = true;
+      break;
+    }
     const ids = wanted.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const found = new Map((await store.getPages({ ids, read })).map(page => [page.id, page]));
     for (const id of ids) {
       const page = found.get(id);
-      if (!page || page.deletedAt || page.mergedInto) continue;
+      if (!page || page.deletedAt || page.mergedInto) {
+        missing += 1;
+        continue;
+      }
       if (outsideIds.length >= limits.maxOutsidePages) {
         truncated = true;
         break outside;

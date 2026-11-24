@@ -471,6 +471,93 @@ describe('readKnowledgePageGraph', () => {
   });
 });
 
+describe('a level of many scopes', () => {
+  /** org:acme ─ 50 teams, one of which (t7) holds project Launch. */
+  async function manyTeams() {
+    const store = new InMemoryKnowledgePageStore();
+    const acme = (
+      await store.materializeScope({ address: 'org:acme', declaration: 'org:$orgId', name: 'Acme', provenance: host })
+    ).scope;
+    const teams = [];
+    for (let team = 0; team < 50; team++) {
+      const { scope } = await store.materializeScope({
+        address: `team:acme:t${team}`,
+        declaration: 'team:$orgId:$teamId',
+        name: `Team ${team}`,
+        parentId: acme.id,
+        provenance: host,
+      });
+      teams.push(scope);
+    }
+    await store.materializeScope({
+      address: 'project:acme:t7:launch',
+      declaration: 'project:$orgId:$teamId:$projectId',
+      name: 'Launch',
+      parentId: teams[7]!.id,
+      provenance: host,
+    });
+    return store;
+  }
+  const launchOnly: KnowledgeReadScope = { addresses: ['project:acme:t7:launch'], prefixes: [], children: [] };
+
+  it('lists child scopes only under the teams that have some, when the graph walks them', async () => {
+    const store = await manyTeams();
+    const listChildScopes = vi.spyOn(store, 'listChildScopes');
+
+    const graph = await readKnowledgePageGraph(store, { read: 'all' });
+
+    expect(graph?.pages).toHaveLength(1 + 50 + 1);
+    expect(graph?.pages.at(-1)?.name).toBe('Launch');
+    expect(listChildScopes).toHaveBeenCalledTimes(3);
+  });
+
+  it('looks under only the hidden teams that have scopes when hoisting for a bound reader', async () => {
+    const store = await manyTeams();
+    const listChildScopes = vi.spyOn(store, 'listChildScopes');
+
+    const roots = await listKnowledgeTreeChildren(store, { parentId: null, read: launchOnly });
+
+    expect(names(roots.pages)).toEqual(['Launch']);
+    expect(listChildScopes).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('mentioned pages deleted since', () => {
+  it('stops looking them up after 1,000 and reports a partial graph', async () => {
+    const store = new InMemoryKnowledgePageStore();
+    const docs = (
+      await store.materializeScope({ address: 'docs:acme', declaration: 'docs:$orgId', name: 'Docs', provenance: host })
+    ).scope;
+    const archive = (
+      await store.materializeScope({ address: 'org:acme', declaration: 'org:$orgId', name: 'Acme', provenance: host })
+    ).scope;
+    const index = await store.createPage({ parentId: docs.id, name: 'Index', provenance: host });
+    for (let note = 0; note < 15; note++) {
+      const targets = [];
+      for (let target = 0; target < 100; target++) {
+        targets.push(await store.createPage({ parentId: archive.id, name: `Old ${note}.${target}`, provenance: host }));
+      }
+      await store.addNote({
+        pageId: index.id,
+        text: 'Old links',
+        stampScopeIds: [docs.id],
+        mentions: targets.map(page => page.id),
+        provenance: host,
+      });
+      for (const page of targets) {
+        await store.deletePage({ id: page.id, expectedVersion: page.version, deletedBy: 'agent:alex' });
+      }
+    }
+    const getPages = vi.spyOn(store, 'getPages');
+
+    const graph = await readKnowledgePageGraph(store, { read: 'all', rootId: docs.id });
+
+    expect(graph?.outsideIds).toEqual([]);
+    expect(graph?.truncated).toBe(true);
+    expect(getPages).toHaveBeenCalledTimes(10);
+  });
+});
+
 describe('search and activity', () => {
   it('filters search hits and activity by the read scope', async () => {
     const { store, roadmap, refunds } = await seed();
