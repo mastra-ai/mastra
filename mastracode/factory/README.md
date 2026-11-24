@@ -392,7 +392,7 @@ Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `so
 
 ### Board engine
 
-The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all submitted to the engine as inputs; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each input through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions still reach the transition service through the dispatcher's decision queue.
+The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all submitted to the engine as inputs; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each input through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions are queued as decisions first; the dispatcher submits their moves to the same engine when it runs them.
 
 Pick the engine with the `boardEngine` option. It receives the transition service and returns the engine:
 
