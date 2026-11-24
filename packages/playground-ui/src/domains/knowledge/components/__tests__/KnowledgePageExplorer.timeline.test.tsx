@@ -147,6 +147,56 @@ describe('KnowledgePageExplorer timeline', () => {
     expect(screen.queryByRole('button', { name: 'Load older entries' })).toBeNull();
   });
 
+  it('reanchors loaded pages when polling shifts the first page', async () => {
+    const { source } = setup();
+    let polled = false;
+    source.useTimeline = (_pageId, requests) =>
+      requests.map(request =>
+        ok(
+          !polled
+            ? respond(request)
+            : request.cursor === 'shifted'
+              ? { entries: [root, older], nextCursor: null }
+              : request.cursor === 'older'
+                ? { entries: [older], nextCursor: null }
+                : { entries: [removed, reply], nextCursor: 'shifted' },
+        ),
+      );
+    const view = renderPage(source, 'general');
+    await userEvent.click(screen.getByRole('button', { name: 'Load older entries' }));
+    polled = true;
+    view.rerender(
+      <KnowledgePageExplorer
+        graph={graph}
+        source={source}
+        selectedPageId="general"
+        onSelect={() => {}}
+        view="page"
+        onViewChange={() => {}}
+      />,
+    );
+    expect(screen.getByText('Deploy is starting')).toBeTruthy();
+    expect(entryTexts()).toHaveLength(4);
+  });
+
+  it('leaves thread view when searching the whole timeline', async () => {
+    const { source, calls } = setup();
+    renderPage(source, 'general');
+    const thread = screen.getAllByRole('button', { name: 'Open thread' })[0];
+    expect(thread).toBeDefined();
+    if (thread) await userEvent.click(thread);
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search entries' }), 'deploy{Enter}');
+    expect(calls.at(-1)?.requests[0]).not.toHaveProperty('thread');
+    expect(screen.queryByText(/^Thread /)).toBeNull();
+  });
+
+  it('labels ascending pagination as newer entries', async () => {
+    const { source } = setup();
+    renderPage(source, 'general');
+    await userEvent.click(screen.getByRole('button', { name: 'Oldest first' }));
+    expect(screen.getByRole('button', { name: 'Load newer entries' })).toBeTruthy();
+  });
+
   it('opens a thread from a reply and goes back to every entry', async () => {
     const { source, calls } = setup();
     renderPage(source, 'general');

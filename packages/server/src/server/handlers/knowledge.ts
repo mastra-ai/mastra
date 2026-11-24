@@ -439,17 +439,19 @@ export const GET_KNOWLEDGE_TIMELINE_ROUTE = createRoute({
           ...range,
           limit: limit ?? 20,
         });
-        return { entries, nextCursor: null };
+        return { entries: entries.map(entry => ({ ...entry })), nextCursor: null };
       }
-      return await timelines.listEntries({
+      const entries = await timelines.listEntries({
         timelineId: page.id,
         read,
         ...range,
         order,
         threadExternalId: thread,
         cursor: cursor || undefined,
+        includeDeleted: true,
         limit: limit ?? 50,
       });
+      return { ...entries, entries: entries.entries.map(entry => ({ ...entry })) };
     } catch (error) {
       return handleError(error, 'Error reading Knowledge timeline');
     }

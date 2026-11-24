@@ -250,7 +250,6 @@ export function useKnowledgeTimeline(
         : skipToken,
       // Later pages are fetched once as the user loads them; only the first one polls.
       refetchInterval: request.cursor ? false : pollUnless(live),
-      placeholderData: keepPreviousData,
     })),
   });
 }

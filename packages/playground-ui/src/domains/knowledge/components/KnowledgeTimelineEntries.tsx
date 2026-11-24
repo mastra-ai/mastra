@@ -97,6 +97,20 @@ export function KnowledgeTimelineEntries({
   }, [from, to, ascending, thread, query]);
   const requests = useMemo(() => [filters, ...cursors.map(cursor => ({ ...filters, cursor }))], [filters, cursors]);
   const results = useTimeline(pageId, requests);
+  // Polling can move the boundary of any loaded page. Reanchor the following request before
+  // displaying it, then rebuild later pages from that response rather than keeping stale cursors.
+  for (let index = 0; index < cursors.length; index++) {
+    const previous = results[index]?.data;
+    if (!previous) break;
+    if (previous.nextCursor !== cursors[index]) {
+      setCursors(
+        previous.nextCursor
+          ? [...cursors.slice(0, index), previous.nextCursor, ...cursors.slice(index + 1)]
+          : cursors.slice(0, index),
+      );
+      break;
+    }
+  }
   const entries = results.flatMap(result => result.data?.entries ?? []);
   const next = results[results.length - 1]?.data?.nextCursor;
 
@@ -116,6 +130,7 @@ export function KnowledgeTimelineEntries({
           onSubmit={event => {
             event.preventDefault();
             refilter(setQuery)(draft.trim());
+            if (draft.trim()) setThread(null);
           }}
         >
           <SearchInput
@@ -192,7 +207,11 @@ export function KnowledgeTimelineEntries({
               onOpenThread={
                 thread || entry.deletedAt
                   ? undefined
-                  : () => refilter(setThread)(entry.threadExternalId ?? entry.externalId)
+                  : () => {
+                      setQuery('');
+                      setDraft('');
+                      refilter(setThread)(entry.threadExternalId ?? entry.externalId);
+                    }
               }
             />
           ))}
@@ -205,7 +224,7 @@ export function KnowledgeTimelineEntries({
           className="self-start"
           onClick={() => setCursors(current => [...current, next])}
         >
-          Load older entries
+          {filters.order === 'asc' ? 'Load newer entries' : 'Load older entries'}
         </Button>
       ) : null}
     </KnowledgeDetailSection>

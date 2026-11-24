@@ -1,3 +1,4 @@
+import { decodeKnowledgeTimelineCursor } from '@mastra/core/storage';
 import { z } from 'zod/v4';
 
 export const knowledgePathParams = z.object({
@@ -47,7 +48,17 @@ export const knowledgeTimelineQuerySchema = z.object({
   order: z.enum(['desc', 'asc']).optional().describe('Newest first (default) or oldest first'),
   thread: z.string().min(1).max(512).optional().describe("One thread: its root entry's externalId"),
   q: z.string().min(1).max(200).optional().describe('Keywords to match in entry bodies; results are ranked, not paged'),
-  cursor: z.string().optional(),
+  cursor: z
+    .string()
+    .refine(value => {
+      try {
+        decodeKnowledgeTimelineCursor(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'Invalid timeline cursor')
+    .optional(),
   limit,
 });
 

@@ -96,6 +96,24 @@ describe('Knowledge timeline route', () => {
     expect(ids(ranged)).toEqual(['m3']);
   });
 
+  it('rejects malformed timeline cursors at the HTTP boundary', () => {
+    for (const cursor of ['bad', 'tNaN_id', 't9007199254740992_id', 't0_']) {
+      expect(knowledgeTimelineQuerySchema.safeParse({ cursor }).success).toBe(false);
+    }
+    expect(knowledgeTimelineQuerySchema.safeParse({ cursor: 't0_id' }).success).toBe(true);
+  });
+
+  it('lists deleted entries as body-free tombstones', async () => {
+    const { mastra, knowledge, channel } = await setup();
+    const store = await knowledge.getStorage();
+    await store.timelines!.removeEntry({ timelineId: channel.id, externalId: 'm2', writtenBy });
+    const result = await call(GET_KNOWLEDGE_TIMELINE_ROUTE, { mastra, knowledgeKey: 'main', pageId: channel.id });
+    expect(result.entries.find((entry: { externalId: string }) => entry.externalId === 'm2')).toMatchObject({
+      body: '',
+      deletedAt: expect.any(Date),
+    });
+  });
+
   it('404s a page that is not a timeline, and an unknown page', async () => {
     const { mastra, refunds } = await setup();
     const args = { mastra, knowledgeKey: 'main' };
