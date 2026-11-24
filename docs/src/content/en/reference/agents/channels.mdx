@@ -13,12 +13,12 @@ Channels connect agents to messaging platforms. Configure them via the `channels
 
 ## Usage example
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 import { createDiscordAdapter } from '@chat-adapter/discord'
 
-export const supportAgent = new Agent({
+const agent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: 'You are a helpful support assistant.',
@@ -909,7 +909,7 @@ type InlineLinkEntry =
 
 Adapts a Mastra logger to the Chat SDK `Logger` interface. Pass the result to an adapter's `logger` option so its logs go to the same logger as the rest of your app. See [Logging](/docs/channels#logging) for when to use it.
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/agent.ts"
 import { toChatLogger } from '@mastra/core/channels'
 import { createDiscordAdapter } from '@chat-adapter/discord'
 import { PinoLogger } from '@mastra/loggers'
@@ -977,12 +977,12 @@ An `Error` passed directly or under an object's `error` key is normalized so it 
 
 `createChannelTools()` from `@mastra/core/channels` returns tools that read and post in the agent's chat platforms through the Chat SDK: `fetchMessages`, `fetchChannelMessages`, `fetchThread`, `listThreads`, `getThreadParticipants`, `getChannelInfo`, `postMessage` and `postChannelMessage`, plus `sendDirectMessage` when `directMessages` is `'anyone'`. Nothing is added to the agent for you. Spread the tools into `tools`:
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createChannelTools } from '@mastra/core/channels'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
-export const supportAgent = new Agent({
+const agent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: 'You are a helpful support assistant.',

@@ -396,7 +396,7 @@ import { createSlackTools } from '@mastra/slack'
 
 const limits = { channels: 'all', access: 'read' } as const
 
-export const supportAgent = new Agent({
+const agent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: 'You are a helpful support assistant.',
