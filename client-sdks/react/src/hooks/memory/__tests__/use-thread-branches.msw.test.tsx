@@ -1,10 +1,11 @@
-import { MastraReactProvider } from '@mastra/react';
+// @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { MastraReactProvider } from '../../../mastra-react-provider';
 import { useBranchThread, useThreadBranches } from '../use-memory';
 import {
   branchCreatedResponse,

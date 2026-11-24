@@ -49,6 +49,11 @@ export function StudioComposerFeatures(props: ThreadProps & { children: React.Re
   );
 }
 
+// Only persisted messages have UUID ids; the chat accumulator renders streamed
+// messages under synthetic ids (e.g. `text-<runId>-<ts>`) that the server cannot
+// fork at.
+const PERSISTED_MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function StudioThreadFeatures({
   children,
   threadInput,
@@ -80,11 +85,9 @@ function StudioThreadFeatures({
   const canBranch = Boolean(props.agentId && props.threadId && props.threadId !== 'new' && branchLineage?.isSupported);
   const branchMarkers = buildBranchForkMarkers(branchLineage);
 
-  // Only persisted messages have UUID ids; the chat accumulator renders
-  // streamed messages under synthetic ids (e.g. `text-<runId>-<ts>`) that the
-  // server cannot fork at. Hide the action while streaming and on synthetic
-  // ids rather than failing the branch with a 404.
-  const PERSISTED_MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // Only persisted messages have UUID ids; the chat accumulator renders streamed
+  // messages under synthetic ids (e.g. `text-<runId>-<ts>`) the server cannot
+  // fork at, so the action is hidden while streaming and on those ids.
   const canBranchMessage = (messageId: string) => canBranch && !isRunning && PERSISTED_MESSAGE_ID.test(messageId);
 
   const handleBranchFromMessage = async (messageId: string) => {

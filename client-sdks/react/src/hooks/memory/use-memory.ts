@@ -353,7 +353,7 @@ export const useBranchThread = ({
     onSuccess: (_, variables) => {
       const { agentId } = variables;
       if (agentId) {
-        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads'] });
         void queryClient.invalidateQueries({ queryKey: ['memory', 'thread-branches'] });
       }
     },
