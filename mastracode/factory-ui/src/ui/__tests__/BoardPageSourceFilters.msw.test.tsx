@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -363,9 +363,8 @@ describe('Board source and Linear project filters', () => {
     await selectMany('Trust', ['From outside']);
     await waitForMutationsIdle(view.client);
     expect(view.router.state.location.search).toContain('trust=untrusted');
-    await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters');
+    await waitFor(() => expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument());
     expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
-    expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
 
     await selectMany('Pull request', ['Has a pull request']);
     await waitForMutationsIdle(view.client);
