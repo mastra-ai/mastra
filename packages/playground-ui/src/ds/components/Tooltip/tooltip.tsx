@@ -53,15 +53,10 @@ const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipTriggerProps>(
     const child = asChild && React.isValidElement(children) ? children : undefined;
     const element = child ?? render;
     // A wait starts on mousemove, which React withholds from a disabled button, so that tooltip opens on mouseenter.
-    const defaultDelay =
-      React.isValidElement<{ disabled?: boolean }>(element) && element.props.disabled ? 'instant' : 'default';
+    const disabled = React.isValidElement<{ disabled?: boolean }>(element) && element.props.disabled;
+    const defaultDelay = disabled ? 'instant' : (providerDelay ?? 'default');
     return (
-      <TooltipPrimitive.Trigger
-        ref={ref}
-        render={element}
-        delay={resolveHoverDelay(delay ?? providerDelay ?? defaultDelay)}
-        {...props}
-      >
+      <TooltipPrimitive.Trigger ref={ref} render={element} delay={resolveHoverDelay(delay ?? defaultDelay)} {...props}>
         {child ? undefined : children}
       </TooltipPrimitive.Trigger>
     );
