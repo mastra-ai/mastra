@@ -9,6 +9,11 @@ import type {
   KnowledgeTreeResponse,
 } from '@mastra/client-js';
 import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+import {
+  knowledgePollInterval,
+  useKnowledgeChangeFeed,
+} from '@mastra/playground-ui/domains/knowledge/hooks/useKnowledgeChangeFeed';
+import type { KnowledgeChangeFeed } from '@mastra/playground-ui/domains/knowledge/hooks/useKnowledgeChangeFeed';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
