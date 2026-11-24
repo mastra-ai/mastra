@@ -31,17 +31,20 @@ export function ChangeRequestLink({
     label === 'number' ? repositoryElsewhere(changeRequestRepository(request.url), sessionRepository) : undefined;
   return (
     <Button
+      iconEnd={<IconArrowUpRight className={outboundArrowClass} />}
+      icon={
+        request.status ? (
+          <PullRequestStatusIcon status={request.status} provider={request.provider} size={14} decorative />
+        ) : (
+          <SourceIcon source={CHANGE_REQUEST_TERMS[request.provider].source} />
+        )
+      }
       render={<a href={request.url} target="_blank" rel="noreferrer" />}
       variant="ghost"
       size="sm"
       className="group/outbound w-full min-w-0 justify-start"
       aria-label={changeRequestLinkLabel(reference, request.status)}
     >
-      {request.status ? (
-        <PullRequestStatusIcon status={request.status} provider={request.provider} size={14} decorative />
-      ) : (
-        <SourceIcon source={CHANGE_REQUEST_TERMS[request.provider].source} className="size-3.5" />
-      )}
       <span className={label === 'number' ? 'shrink-0' : 'min-w-0 truncate'}>
         {label === 'number' ? (changeRequestNumberLabel(request) ?? reference) : reference}
       </span>
@@ -50,7 +53,6 @@ export function ChangeRequestLink({
           {elsewhere.split('/').at(-1)}
         </Txt>
       ) : null}
-      <IconArrowUpRight aria-hidden className={outboundArrowClass} />
     </Button>
   );
 }

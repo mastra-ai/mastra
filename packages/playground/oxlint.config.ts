@@ -72,6 +72,7 @@ export default defineConfig({
   ],
   rules: {
     'playground-ui/icon-button-size': 'error',
+    'playground-ui/button-icon-prop': 'error',
     'playground-ui/no-barrel-imports': 'error',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',

@@ -154,6 +154,7 @@ jobs:
               docs/src/content/en/integrations \
               docs/src/content/en/reference \
               docs/src/mastra-code \
+              docs/src/agent-builder \
               | grep '\.mdx$' || true
           )
 

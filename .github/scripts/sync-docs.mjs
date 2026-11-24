@@ -2,7 +2,11 @@
 
 // Mirrors docs directories of this monorepo into external docs repos, as listed
 // in .github/docs-sync.json. Each target's `dest` directory is fully owned by
-// the sync: files missing from `source` are deleted there.
+// the sync: files missing from `source` are deleted there. With `--target all`
+// (what the workflow runs on push), targets that share a repo (one site with
+// several docs sections) are synced in a single commit, so cross-section links
+// never deploy half-updated. A named `--target` syncs only that section and
+// leaves its siblings as they are.
 //
 // Usage:
 //   node sync-docs.mjs --target <name|all> --into <dir>   mirror into a local checkout, no git
@@ -26,6 +30,7 @@ const NAME_RE = /^[a-z0-9-]+$/;
 const REPO_RE = /^mastra-ai\/[\w.-]+$/;
 const BRANCH_RE = /^[\w./-]+$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
+const ROUTE_BASE_RE = /^\/([a-z0-9-]+(\/[a-z0-9-]+)*)?$/;
 
 function isSafeRelativePath(value) {
   if (typeof value !== 'string' || value === '' || value.includes('\\') || path.posix.isAbsolute(value)) return false;
@@ -57,7 +62,7 @@ export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
       errors.push(`${label}: must be an object`);
       return;
     }
-    const { name, source, repo, branch, dest } = target;
+    const { name, source, repo, branch, dest, routeBasePath } = target;
 
     if (typeof name !== 'string' || !NAME_RE.test(name)) errors.push(`${label}: "name" must match ${NAME_RE}`);
     else if (names.has(name)) errors.push(`${label}: duplicate name "${name}"`);
@@ -77,6 +82,10 @@ export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
       errors.push(`${label}: "branch" must be a plain branch name`);
     }
 
+    if (routeBasePath !== undefined && (typeof routeBasePath !== 'string' || !ROUTE_BASE_RE.test(routeBasePath))) {
+      errors.push(`${label}: "routeBasePath" must be "/" or a path like "/reference"`);
+    }
+
     if (!isSafeRelativePath(dest) || dest.split('/')[0] === '.git') {
       errors.push(`${label}: "dest" must be a non-empty relative path without "." or ".." segments, outside .git`);
     }
@@ -93,14 +102,26 @@ export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
     }
   });
 
-  // Two targets writing overlapping dirs in one repo would delete each other's files.
+  const overlaps = (a, b) =>
+    typeof a === 'string' && typeof b === 'string' && (a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`));
   for (let i = 0; i < targets.length; i++) {
     for (let j = i + 1; j < targets.length; j++) {
       const a = targets[i];
       const b = targets[j];
-      if (a?.repo !== b?.repo || typeof a?.dest !== 'string' || typeof b?.dest !== 'string') continue;
-      if (a.dest === b.dest || a.dest.startsWith(`${b.dest}/`) || b.dest.startsWith(`${a.dest}/`)) {
-        errors.push(`targets[${i}] and targets[${j}]: overlapping "dest" in ${a.repo}`);
+      const pair = `targets[${i}] and targets[${j}]`;
+      if (a?.repo !== b?.repo) continue;
+      // Within one site, a page must belong to exactly one section.
+      if (overlaps(a?.source, b?.source)) errors.push(`${pair}: overlapping "source" in ${a.repo}`);
+      // Overlapping dirs in one repo would delete each other's files.
+      if (overlaps(a?.dest, b?.dest)) errors.push(`${pair}: overlapping "dest" in ${a.repo}`);
+      if (a?.branch !== b?.branch) errors.push(`${pair}: same repo ${a.repo} needs the same "branch"`);
+      const routeA = a?.routeBasePath ?? '/';
+      const routeB = b?.routeBasePath ?? '/';
+      if (routeA === routeB) {
+        errors.push(`${pair}: same "routeBasePath" in ${a.repo}`);
+      } else if (routeA !== '/' && routeB !== '/' && overlaps(routeA, routeB)) {
+        // Nested section bases (e.g. /reference and /reference/api) can produce the same route from both sections.
+        errors.push(`${pair}: nested "routeBasePath" ${routeA} and ${routeB} in ${a.repo}`);
       }
     }
   }
@@ -183,28 +204,35 @@ function formatResult(name, { added, updated, deleted }) {
 }
 
 /**
- * Clones the target repo, mirrors `source` into `dest`, and pushes one commit if anything changed.
- * On a rejected push, resets to the remote branch and mirrors again (up to MAX_PUSH_ATTEMPTS).
+ * Clones the repo shared by `targets`, mirrors each `source` into its `dest`, and pushes one commit if anything
+ * changed. On a rejected push, resets to the remote branch and mirrors again (up to MAX_PUSH_ATTEMPTS).
  */
-export async function syncTarget({ target, remoteUrl, sha, beforePush, rootDir = ROOT_DIR, log = console.log }) {
+export async function syncRepo({ targets, remoteUrl, sha, beforePush, rootDir = ROOT_DIR, log = console.log }) {
   if (!SHA_RE.test(sha)) throw new Error(`Invalid source commit sha: ${sha}`);
-  const sourceDir = path.join(rootDir, target.source);
-  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `docs-sync-${target.name}-`));
+  const { repo, branch } = targets[0];
+  if (targets.some(target => target.repo !== repo || target.branch !== branch)) {
+    throw new Error('syncRepo targets must share one repo and branch');
+  }
+  const dests = targets.map(target => target.dest);
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-sync-'));
 
   try {
-    git(workDir, 'clone', '--quiet', '--depth', '1', '--branch', target.branch, '--', remoteUrl, 'repo');
+    git(workDir, 'clone', '--quiet', '--depth', '1', '--branch', branch, '--', remoteUrl, 'repo');
     const repoDir = path.join(workDir, 'repo');
-    const destDir = path.join(repoDir, target.dest);
 
     for (let attempt = 1; attempt <= MAX_PUSH_ATTEMPTS; attempt++) {
-      const result = mirror(sourceDir, destDir, { withinDir: repoDir });
-      if (git(repoDir, 'status', '--porcelain', '--', target.dest) === '') {
-        log(`${target.name}: no changes`);
+      for (const target of targets) {
+        const result = mirror(path.join(rootDir, target.source), path.join(repoDir, target.dest), {
+          withinDir: repoDir,
+        });
+        log(formatResult(target.name, result));
+      }
+      if (git(repoDir, 'status', '--porcelain', '--', ...dests) === '') {
+        log(`${repo}: no changes`);
         return { status: 'unchanged' };
       }
-      log(formatResult(target.name, result));
 
-      git(repoDir, 'add', '--all', '--', target.dest);
+      git(repoDir, 'add', '--all', '--', ...dests);
       git(
         repoDir,
         'commit',
@@ -217,13 +245,13 @@ export async function syncTarget({ target, remoteUrl, sha, beforePush, rootDir =
 
       if (attempt === 1 && beforePush) await beforePush();
       try {
-        git(repoDir, 'push', '--quiet', 'origin', `HEAD:refs/heads/${target.branch}`);
-        log(`${target.name}: pushed to ${target.repo}@${target.branch}`);
+        git(repoDir, 'push', '--quiet', 'origin', `HEAD:refs/heads/${branch}`);
+        log(`${repo}: pushed to ${branch}`);
         return { status: 'pushed', attempts: attempt };
       } catch (error) {
         if (attempt === MAX_PUSH_ATTEMPTS) throw error;
-        log(`${target.name}: push rejected (attempt ${attempt}), resetting to the remote branch and retrying`);
-        git(repoDir, 'fetch', '--quiet', '--depth', '1', 'origin', target.branch);
+        log(`${repo}: push rejected (attempt ${attempt}), resetting to the remote branch and retrying`);
+        git(repoDir, 'fetch', '--quiet', '--depth', '1', 'origin', branch);
         git(repoDir, 'reset', '--quiet', '--hard', 'FETCH_HEAD');
       }
     }
@@ -266,6 +294,12 @@ export async function main({
   }
 
   if (values.into) {
+    // A local dir is one checkout of one site; mirroring two sites into it would overwrite one with the other.
+    const repos = new Set(selected.map(target => target.repo));
+    if (repos.size > 1) {
+      logError(`--into takes one site, but "${values.target}" spans ${[...repos].join(', ')}. Pass a target name.`);
+      return 2;
+    }
     for (const target of selected) {
       const into = path.resolve(values.into);
       const result = mirror(path.join(rootDir, target.source), path.join(into, target.dest), { withinDir: into });
@@ -275,17 +309,18 @@ export async function main({
   }
 
   const sha = sourceSha(rootDir);
+  const byRepo = Map.groupBy(selected, target => target.repo);
   const failed = [];
-  for (const target of selected) {
+  for (const [repo, targets] of byRepo) {
     try {
-      await syncTarget({ target, remoteUrl: remoteUrl(target.repo), sha, rootDir, log });
+      await syncRepo({ targets, remoteUrl: remoteUrl(repo), sha, rootDir, log });
     } catch (error) {
-      failed.push(target.name);
-      logError(`${target.name}: sync failed: ${error.stderr?.toString().trim() || error.message}`);
+      failed.push(repo);
+      logError(`${repo}: sync failed: ${error.stderr?.toString().trim() || error.message}`);
     }
   }
   if (failed.length > 0) {
-    logError(`Failed targets: ${failed.join(', ')}`);
+    logError(`Failed repos: ${failed.join(', ')}`);
     return 1;
   }
   return 0;

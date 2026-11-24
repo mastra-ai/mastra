@@ -9,6 +9,7 @@ export default defineConfig({
   ignorePatterns: ['storybook-static/**'],
   rules: {
     'playground-ui/icon-button-size': 'error',
+    'playground-ui/button-icon-prop': 'error',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
     'typescript/no-unnecessary-type-arguments': 'error',
@@ -63,6 +64,7 @@ export default defineConfig({
         'mastra/sentence-case-labels': 'off',
         'playground-ui/placeholder-text': 'off',
         'playground-ui/date-locale': 'off',
+        'playground-ui/button-icon-prop': 'off',
       },
     },
     {

@@ -623,6 +623,7 @@ export default defineConfig({
 | Rule                                   | Flags                                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `playground-ui/icon-button-size`       | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/button-icon-prop`       | An icon beside a `<Button>` label as a child instead of `icon` / `iconEnd`                       |
 | `playground-ui/text-role`              | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
 | `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
 | `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |

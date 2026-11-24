@@ -1,0 +1,57 @@
+---
+title: "Workspace"
+description: Configure the default workspace for Agent Builder agents, filesystem, sandbox, and skills.
+---
+
+# Workspace
+
+A [workspace](https://mastra.ai/docs/workspace/overview) gives agents filesystem access, command execution, and skill loading. The Agent Builder pins a default workspace onto every new agent through `builder.configuration.agent.workspace`. End users can still override the workspace per agent through the Builder UI.
+
+## Quickstart
+
+Pin an inline workspace snapshot as the Builder default:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  editor: new MastraEditor({
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: {
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'project-workspace',
+              filesystem: {
+                provider: 'local',
+                config: { basePath: './workspace' },
+              },
+            },
+          },
+        },
+      },
+    },
+  }),
+})
+```
+
+The Builder derives a deterministic id from the inline config and persists the snapshot, so identical inline configs are deduplicated across agents.
+
+## Workspace references
+
+`configuration.agent.workspace` accepts a `StorageWorkspaceRef`:
+
+- **`{ type: 'inline', config }`**: Embeds a serialized workspace snapshot directly on the agent. Useful for per-agent, ad-hoc configurations.
+- **`{ type: 'id', workspaceId }`**: References a workspace already registered on the `Mastra` instance via `new Mastra({ workspace })` or `mastra.addWorkspace(...)`. Use this for shared workspaces.
+- **`{ type: 'provider', provider, config }`**: Names a registered workspace provider and passes it a config object. The provider builds the entire workspace.
+
+See the [StorageWorkspaceRef reference](https://mastra.ai/reference/editor/storage-workspace-ref) for all variants.
+
+## Filesystem and sandbox
+
+A workspace combines a `filesystem` (file tools) and an optional `sandbox` (command execution). For local development, point both at the same directory so files written through the filesystem are immediately visible to commands in the sandbox.
+
+For cloud deployments, swap `LocalFilesystem` / `LocalSandbox` for managed providers (e.g., S3, E2B). See [Deployment](/deployment) for the cloud-swap pattern.
