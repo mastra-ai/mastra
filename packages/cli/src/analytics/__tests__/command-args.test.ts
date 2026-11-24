@@ -152,7 +152,7 @@ describe('command analytics', () => {
     ).rejects.toBe(error);
 
     const events = await commandEvents();
-    expect(events[0]).toMatchObject({ status: 'error', error: 'Template "https://git.test/a/b" not found' });
+    expect(events[0]).toMatchObject({ status: 'error', error: 'Template "https://git.test/a/b not found' });
     expect(received.join()).not.toContain(API_KEY);
   });
 });
