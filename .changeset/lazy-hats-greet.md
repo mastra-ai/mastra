@@ -2,11 +2,11 @@
 '@mastra/code-sdk': minor
 ---
 
-Added `resolveModelFallbacks` to `createMastraCode`. A host can now supply fallback model IDs per request. When the session model is rate-limited, out of credits, unauthorized or unavailable, the request continues on the next fallback. With a tenant credential store, fallbacks the tenant has no key for are skipped. The next request starts on the session model again. While the hook is set, its list replaces the session's model pack route and sticky fallback on every request, even when it returns an empty list.
+Added `resolveModelFallbacks` to `createMastraCode`. A host can now supply fallback models per request, each with its own thinking level. When the session model is rate-limited, out of credits, unauthorized or unavailable, the request continues on the next fallback. With a tenant credential store, fallbacks the tenant has no key for are skipped. The next request starts on the session model again. While the hook is set, its list replaces the session's model pack route and sticky fallback on every request, even when it returns an empty list.
 
 ```ts
 const code = await createMastraCode({
-  resolveModelFallbacks: async () => ['openai/gpt-5.6-sol'],
+  resolveModelFallbacks: async () => [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' }],
 });
 ```
 

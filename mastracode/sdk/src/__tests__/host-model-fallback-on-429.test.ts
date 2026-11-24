@@ -10,6 +10,7 @@ import { resolveAuthenticatedCredentialTenant, setCredentialStoreProvider } from
 import type { CredentialStore } from '../auth/types.js';
 import { createMastraCode } from '../index.js';
 import { MODEL_FALLBACK_PART_TYPE, MODEL_FALLBACK_STATE_KEY, parseModelFallbackPart } from '../model-fallback.js';
+import type { ModelFallback } from '../model-fallback.js';
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -59,11 +60,12 @@ afterEach(async () => {
   for (const stop of stops.splice(0).reverse()) await stop();
   await mock.stop();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   rmSync(directory, { recursive: true, force: true });
 });
 
-async function startSession(initialFallbackModelIds?: readonly string[]) {
-  let fallbackModelIds = initialFallbackModelIds ?? [];
+async function startSession(initialFallbacks?: readonly ModelFallback[]) {
+  let fallbacks = initialFallbacks ?? [];
   const settingsPath = path.join(directory, 'settings.json');
   writeFileSync(
     settingsPath,
@@ -86,7 +88,7 @@ async function startSession(initialFallbackModelIds?: readonly string[]) {
     disablePlugins: true,
     disableGithubSignals: true,
     createInitialThread: false,
-    resolveModelFallbacks: initialFallbackModelIds ? () => fallbackModelIds : undefined,
+    resolveModelFallbacks: initialFallbacks ? () => fallbacks : undefined,
   });
   stops.push(() => code.controller.shutdown?.());
   const session = await code.controller.createSession({
@@ -123,17 +125,17 @@ async function startSession(initialFallbackModelIds?: readonly string[]) {
     const reply = (await savedMessages()).filter(message => message.role === 'assistant').at(-1);
     return reply?.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
   };
-  const setFallbackModelIds = (next: readonly string[]) => {
-    fallbackModelIds = next;
+  const setFallbacks = (next: readonly ModelFallback[]) => {
+    fallbacks = next;
   };
-  return { session, send, savedHops, lastReply, errors, pendingFailures, setFallbackModelIds };
+  return { session, send, savedHops, lastReply, errors, pendingFailures, setFallbacks };
 }
 
 describe('a Factory session whose model is rate-limited, with a host fallback configured', () => {
   it('finishes the turn on the fallback, records why, and starts the next turn on the session model', async () => {
     mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, savedHops, lastReply, errors, pendingFailures } = await startSession([FALLBACK]);
+    const { send, savedHops, lastReply, errors, pendingFailures } = await startSession([{ modelId: FALLBACK }]);
 
     const failedAt = Date.now();
     await send('Review the diff.');
@@ -166,11 +168,11 @@ describe('a Factory session whose model is rate-limited, with a host fallback co
   it('starts the next turn on the session model once the fallbacks are removed', async () => {
     mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, lastReply, errors, setFallbackModelIds } = await startSession([FALLBACK]);
+    const { send, lastReply, errors, setFallbacks } = await startSession([{ modelId: FALLBACK }]);
     await send('Review the diff.');
     expect(await lastReply()).toBe('Reviewed on the fallback');
 
-    setFallbackModelIds([]);
+    setFallbacks([]);
     mock.clearFixtures();
     mock.clearRequests();
     mock.on({ model: /claude/ }, { content: 'Back on Opus' });
@@ -181,6 +183,32 @@ describe('a Factory session whose model is rate-limited, with a host fallback co
     expect(new Set(mock.getRequests().map(request => `${request.path} ${request.response.status}`))).toEqual(
       new Set(['/v1/messages 200']),
     );
+  });
+});
+
+describe('a Factory session whose fallback sets its own thinking level', () => {
+  it('sends the fallback request at that level, not the session level', async () => {
+    mock.on({ model: /gpt/ }, { error: { message: 'Rate limit reached', type: 'requests' }, status: 429 });
+    mock.on({ model: /claude/ }, { content: 'Reviewed on the fallback' });
+    const originalFetch = globalThis.fetch;
+    const anthropicEfforts: unknown[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      if (String(input).endsWith('/v1/messages') && typeof init?.body === 'string') {
+        anthropicEfforts.push(JSON.parse(init.body).output_config?.effort);
+      }
+      return originalFetch(input, init);
+    });
+    const { session, send, lastReply, errors } = await startSession([
+      { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'high' },
+    ]);
+    await session.model.switch('openai/gpt-5.6-sol');
+    await session.state.set({ thinkingLevel: 'low' });
+
+    await send('Review the diff.');
+
+    expect(errors).toEqual([]);
+    expect(await lastReply()).toBe('Reviewed on the fallback');
+    expect(anthropicEfforts[0]).toBe('high');
   });
 });
 
@@ -197,7 +225,7 @@ describe('a Factory session whose Anthropic account is out of credit', () => {
       },
     );
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, savedHops, lastReply, errors } = await startSession([FALLBACK]);
+    const { send, savedHops, lastReply, errors } = await startSession([{ modelId: FALLBACK }]);
 
     await send('Review the diff.');
 
@@ -211,7 +239,10 @@ describe('a Factory session whose first fallback has no tenant credential', () =
   it('skips that fallback and hands the turn to the next one', async () => {
     mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, savedHops, lastReply, errors } = await startSession(['google/gemini-3.8-flash', FALLBACK]);
+    const { send, savedHops, lastReply, errors } = await startSession([
+      { modelId: 'google/gemini-3.8-flash' },
+      { modelId: FALLBACK },
+    ]);
 
     await send('Review the diff.');
 
@@ -231,7 +262,7 @@ describe('a Factory session whose model rejects the request', () => {
       },
     );
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, savedHops, errors } = await startSession([FALLBACK]);
+    const { send, savedHops, errors } = await startSession([{ modelId: FALLBACK }]);
 
     await send('Review the diff.');
 
@@ -250,7 +281,7 @@ describe('a Factory session whose every model is rate-limited', () => {
       { model: /gpt/ },
       { error: { message: 'Rate limit reached', type: 'requests' }, status: 429, retryAfter: 1 },
     );
-    const { send, savedHops, errors, pendingFailures } = await startSession([FALLBACK]);
+    const { send, savedHops, errors, pendingFailures } = await startSession([{ modelId: FALLBACK }]);
 
     await send('Review the diff.');
 

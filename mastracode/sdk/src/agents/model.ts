@@ -8,8 +8,8 @@ import type { RequestContextReader } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
-import { MODEL_FALLBACK_STATE_KEY, fallbackModelIdsToTry, pendingModelFallbackForThread } from '../model-fallback.js';
-import type { PendingModelFallback } from '../model-fallback.js';
+import { MODEL_FALLBACK_STATE_KEY, modelFallbacksToTry, pendingModelFallbackForThread } from '../model-fallback.js';
+import type { ModelFallback, PendingModelFallback } from '../model-fallback.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   getCustomProviderId,
@@ -498,24 +498,28 @@ const HOST_MODEL_ROUTE_CONTEXT_KEY = 'mastracodeHostModelRoute';
 export function setHostModelRoute(
   requestContext: RequestContext,
   primaryModelId: string | undefined,
-  fallbackModelIds: readonly string[] | undefined,
+  fallbacks: readonly ModelFallback[] | undefined,
 ): void {
-  if (!fallbackModelIds) {
+  if (!fallbacks) {
     requestContext.delete(HOST_MODEL_ROUTE_CONTEXT_KEY);
     return;
   }
-  const modelIds = primaryModelId
+  const route: ModelRouteEntry[] = primaryModelId
     ? [
-        primaryModelId,
-        ...fallbackModelIdsToTry(
+        { id: primaryModelId, label: primaryModelId, modelId: primaryModelId },
+        ...modelFallbacksToTry(
           primaryModelId,
-          fallbackModelIds,
+          fallbacks,
           modelId => canAuthenticateModel(modelId, requestContext),
           MODEL_ROUTE_MAX_ENTRIES - 1,
-        ),
+        ).map(({ modelId, thinkingLevel }) => ({
+          id: modelId,
+          label: modelId,
+          modelId,
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+        })),
       ]
     : [];
-  const route: ModelRouteEntry[] = modelIds.map(modelId => ({ id: modelId, label: modelId, modelId }));
   requestContext.set(HOST_MODEL_ROUTE_CONTEXT_KEY, route);
 }
 
@@ -600,7 +604,10 @@ export function getDynamicModel(
     }
     let entryModel: ResolvedModel;
     try {
-      entryModel = resolveModel(routeEntry.modelId, resolveOptions);
+      entryModel = resolveModel(routeEntry.modelId, {
+        ...resolveOptions,
+        thinkingLevel: routeEntry.thinkingLevel ?? thinkingLevel,
+      });
     } catch {
       break;
     }

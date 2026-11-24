@@ -807,7 +807,7 @@ export class AccountRotationProcessor implements Processor {
       if (entries.length > 0) {
         try {
           resolveModel(entry.modelId, {
-            thinkingLevel,
+            thinkingLevel: entry.thinkingLevel ?? thinkingLevel,
             remapForCodexOAuth: true,
             requestContext: args.requestContext,
           });

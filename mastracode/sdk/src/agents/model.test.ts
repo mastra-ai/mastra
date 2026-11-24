@@ -433,7 +433,7 @@ describe('getDynamicModel model route', () => {
         at: '2026-10-05T00:00:00.000Z',
       },
     });
-    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', ['openai/gpt-5.6-sol']);
+    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', [{ modelId: 'openai/gpt-5.6-sol' }]);
 
     const model = getDynamicModel(request);
 

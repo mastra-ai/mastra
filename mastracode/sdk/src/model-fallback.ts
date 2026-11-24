@@ -1,6 +1,7 @@
 import { classifyProviderError, getRetryAfterMs, PROVIDER_FAILURE_KINDS } from '@mastra/core/error';
 import type { ProviderFailureKind } from '@mastra/core/error';
 import { z } from 'zod';
+import type { ThinkingLevelSetting } from './thinking.js';
 
 export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
 
@@ -84,16 +85,24 @@ export function modelFallbackNoticeText(
   return `${clause(modelName(data.from.label))}, switched to ${modelName(data.to.label)}`;
 }
 
-export function fallbackModelIdsToTry(
+export interface ModelFallback {
+  modelId: string;
+  thinkingLevel?: ThinkingLevelSetting;
+}
+
+export function modelFallbacksToTry(
   primaryModelId: string,
-  fallbackModelIds: readonly string[],
+  fallbacks: readonly ModelFallback[],
   canUse: (modelId: string) => boolean,
   limit = Number.POSITIVE_INFINITY,
-): string[] {
-  const usable: string[] = [];
-  for (const modelId of new Set(fallbackModelIds)) {
+): ModelFallback[] {
+  const usable: ModelFallback[] = [];
+  const seen = new Set([primaryModelId]);
+  for (const fallback of fallbacks) {
     if (usable.length >= limit) break;
-    if (modelId !== primaryModelId && canUse(modelId)) usable.push(modelId);
+    if (seen.has(fallback.modelId)) continue;
+    seen.add(fallback.modelId);
+    if (canUse(fallback.modelId)) usable.push(fallback);
   }
   return usable;
 }
