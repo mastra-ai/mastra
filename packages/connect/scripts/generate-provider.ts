@@ -30,7 +30,7 @@ import {
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Node, Project, SyntaxKind } from 'ts-morph';
+import { Node, Project, SyntaxKind, VariableDeclarationKind } from 'ts-morph';
 import type { CallExpression, ImportDeclaration, ObjectLiteralExpression, SourceFile, Statement } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
@@ -148,6 +148,28 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
   const initializer = property.getInitializer();
   return initializer && Node.isIdentifier(initializer) ? initializer.getText() : undefined;
+}
+
+/**
+ * Some templates declare `output` inline (e.g. `output: z.null()` for a
+ * delete). Hoist it into a top-level schema declaration so it gets the same
+ * naming and export treatment as declared schemas.
+ */
+function hoistInlineOutputSchema(source: SourceFile, argument: ObjectLiteralExpression): void {
+  const property = argument.getProperty('output');
+  if (!property || !Node.isPropertyAssignment(property)) return;
+  const initializer = property.getInitializer();
+  if (!initializer || !Node.isCallExpression(initializer)) return;
+  let name = 'OutputSchema';
+  while (source.getVariableDeclaration(name)) name = `Inline${name}`;
+  const actionStatement = argument.getFirstAncestorOrThrow(
+    ancestor => Node.isStatement(ancestor) && ancestor.getParent() === source,
+  );
+  source.insertVariableStatement(actionStatement.getChildIndex(), {
+    declarationKind: VariableDeclarationKind.Const,
+    declarations: [{ name, initializer: initializer.getText() }],
+  });
+  property.setInitializer(name);
 }
 
 function normalizeSupportedRuntimeImports(source: SourceFile): void {
@@ -507,6 +529,7 @@ function extractAction(
     return { kind: 'skip', reason: 'createAction argument is not an object literal' };
   }
 
+  hoistInlineOutputSchema(source, argument);
   const inputName = readIdentifierPropertyInitializer(argument, 'input');
   const outputName = readIdentifierPropertyInitializer(argument, 'output');
   const execProperty = argument.getProperty('exec');
@@ -533,8 +556,10 @@ function extractAction(
     ? execBodyNode.getText()
     : `{ return ${execBodyNode.getText()}; }`;
   const usedContextMethods = new Set<string>();
-  for (const match of originalExecBody.matchAll(/\bnango\.([A-Za-z_$][\w$]*)/g)) {
-    usedContextMethods.add(match[1]!);
+  // Walk property accesses rather than matching text, so a comment such as a
+  // `docs.nango.dev` link isn't mistaken for a call to a `dev` helper.
+  for (const access of execBodyNode.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+    if (access.getExpression().getText() === 'nango') usedContextMethods.add(access.getName());
   }
   const unsupportedMethods = [...usedContextMethods].filter(method => !PROXY_CONTEXT_METHODS.has(method));
   if (unsupportedMethods.length > 0) {
@@ -603,6 +628,7 @@ function extractAction(
     [
       actionVariableName ? `Parameters<(typeof ${actionVariableName})['exec']>[0]` : undefined,
       "Parameters<Parameters<typeof createAction>[0]['exec']>[0]",
+      "Parameters<ReturnType<typeof createAction>['exec']>[0]",
     ].filter((text): text is string => text !== undefined),
   );
   const inlineContextNodes = source
@@ -1637,12 +1663,564 @@ function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   return description ? { ...adapted, description } : adapted;
 }
 
+const ATLASSIAN_API_ORIGIN = 'https://api.atlassian.com';
+const CONFLUENCE_SITE_BASE =
+  /^(?:`https:\/\/api\.atlassian\.com\/ex\/confluence\/\$\{(\w+)\}`|'https:\/\/api\.atlassian\.com\/ex\/confluence\/' \+ (\w+))$/;
+
+/**
+ * Lets the named fields of one schema statement be null. Confluence sends
+ * `null` for these when they are unset, and the templates only accept them
+ * absent, so a successful response (sometimes after a write) failed to parse.
+ */
+function nullableFields(action: ExtractedAction, schema: string, fields: readonly string[]): ExtractedAction {
+  const declares = new RegExp(`^(?:export )?const ${schema} = `);
+  const matching = action.moduleStatements.filter(statement => declares.test(statement));
+  if (matching.length !== 1) {
+    throw new Error(
+      `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${schema}); the upstream template shape changed.`,
+    );
+  }
+  return {
+    ...action,
+    moduleStatements: action.moduleStatements.map(statement =>
+      statement === matching[0]
+        ? fields.reduce(
+            (text, field) =>
+              replaceOnce(
+                text,
+                new RegExp(`\\b${field}: (z\\.\\w+\\(\\))(?:\\.optional\\(\\))?,`),
+                `${field}: $1.nullish(),`,
+                action,
+                `nullable ${schema}.${field}`,
+              ),
+            statement,
+          )
+        : statement,
+    ),
+  };
+}
+
+/** Maps a field only when it is set, now that it can be null. */
+function skipNullFields(action: ExtractedAction, record: string, fields: readonly string[]): ExtractedAction {
+  return {
+    ...action,
+    execBody: fields.reduce(
+      (body, field) =>
+        replaceOnce(
+          body,
+          new RegExp(`\\b${record}\\.${field} !== undefined`),
+          `${record}.${field} != null`,
+          action,
+          `null ${field}`,
+        ),
+      action.execBody,
+    ),
+  };
+}
+
+/** Adds a deterministic input constraint the template only checked in exec. */
+function refineInput(action: ExtractedAction, refinement: string): ExtractedAction {
+  return rewriteModuleStatements(action, [
+    {
+      pattern: new RegExp(`^(export const ${action.inputSchemaName} = z\\.object\\(\\{[\\s\\S]*\\}\\))(;?\\s*)$`),
+      replacement: `$1${refinement.replace(/\$/g, '$$$$')}$2`,
+      count: 1,
+      what: 'input constraint',
+    },
+  ]);
+}
+
+function rewriteExec(action: ExtractedAction, pattern: RegExp, replacement: string, what: string): ExtractedAction {
+  return { ...action, execBody: replaceOnce(action.execBody, pattern, replacement, action, what) };
+}
+
+/** The `{ results, meta, _links }` envelope Confluence v2 uses for included collections. */
+const CONFLUENCE_INCLUDED =
+  'z.object({ results: z.array(z.unknown()).optional(), meta: z.record(z.string(), z.unknown()).optional(), _links: z.record(z.string(), z.unknown()).optional() }).passthrough()';
+
+/** Lets an included content property keep its JSON value. */
+function keepPropertyValues(action: ExtractedAction, schema: string): ExtractedAction {
+  return rewriteModuleStatements(action, [
+    {
+      pattern: new RegExp(
+        `(const ${schema} = z\\.object\\(\\{\\s*id: z\\.string\\(\\)(?:\\.optional\\(\\))?,\\s*key: z\\.string\\(\\)(?:\\.optional\\(\\))?,)`,
+      ),
+      replacement: '$1\n  value: z.unknown().optional(),',
+      count: 1,
+      what: 'content property values',
+    },
+  ]);
+}
+
+/** A Confluence id as a decimal string, which an int64 id needs to stay exact. */
+const confluenceDecimalId = (what: string, example: string) =>
+  `z.string().regex(/^\\d+$/, 'must be a numeric ${what} id').describe('${what[0]!.toUpperCase()}${what.slice(1)} ID. Example: "${example}"')`;
+
+/** The formats the bulk page and blog-post endpoints return bodies in. */
+const CONFLUENCE_BULK_BODY_FORMAT = "z.enum(['storage', 'atlas_doc_format'])";
+
+/**
+ * Confluence template fixes, by action slug, for request and response shapes
+ * that don't match the Confluence API. Drop an entry once the upstream template
+ * is fixed; each rewrite fails generation if the template changes under it.
+ */
+const CONFLUENCE_FIXES: Readonly<Record<string, (action: ExtractedAction) => ExtractedAction>> = {
+  'create-page': action =>
+    nullableFields(action, 'ProviderPageSchema', ['parentId', 'parentType', 'position', 'ownerId']),
+  'create-inline-comment': action =>
+    refineInput(
+      rewriteExec(
+        nullableFields(action, 'ProviderInlineCommentSchema', ['resolutionLastModifierId', 'resolutionLastModifiedAt']),
+        // The input schema enforces both, so exec need not check them again.
+        /if \(!input\.pageId && !input\.blogPostId && !input\.parentCommentId\) \{[\s\S]*?\}\);\s*\}\s*if \(!input\.parentCommentId && !input\.inlineCommentProperties\) \{[\s\S]*?\}\);\s*\}/,
+        '',
+        'inline comment target checks',
+      ),
+      `.refine(input => Boolean(input.pageId || input.blogPostId || input.parentCommentId), 'At least one of pageId, blogPostId, or parentCommentId is required.').refine(input => Boolean(input.parentCommentId || input.inlineCommentProperties), { message: 'inlineCommentProperties is required for top-level inline comments.', path: ['inlineCommentProperties'] })`,
+    ),
+  'create-footer-comment': action =>
+    refineInput(
+      rewriteExec(
+        action,
+        // The input schema allows exactly one target, so exec only picks it.
+        /let targetKey: string \| undefined;[\s\S]*?type: 'missing_target',[\s\S]*?\}\);\s*\}/,
+        `const [targetKey, targetValue] = (
+        [
+          ['pageId', input.pageId],
+          ['blogPostId', input.blogPostId],
+          ['attachmentId', input.attachmentId],
+          ['parentCommentId', input.parentCommentId],
+          ['customContentId', input.customContentId],
+        ] as const
+      ).find(([, value]) => value !== undefined)!;`,
+        'footer comment target checks',
+      ),
+      `.refine(input => [input.pageId, input.blogPostId, input.attachmentId, input.parentCommentId, input.customContentId].filter(id => id !== undefined).length === 1, 'Exactly one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId is required.')`,
+    ),
+  'update-inline-comment': action =>
+    refineInput(
+      rewriteExec(
+        action,
+        // The input schema requires one of them, so exec need not check again.
+        /if \(input\.body === undefined && input\.resolved === undefined\) \{[\s\S]*?\}\);\s*\}/,
+        '',
+        'update field check',
+      ),
+      `.refine(input => input.body !== undefined || input.resolved !== undefined, 'At least one of body or resolved must be provided to update the inline comment.')`,
+    ),
+  'list-space-pages': action =>
+    rewriteModuleStatements(nullableFields(action, 'PageSchema', ['ownerId', 'position']), [
+      {
+        // The space pages endpoint takes PageSortOrder values.
+        pattern: /\.enum\(\[\s*'id',\s*'-id',\s*'createdAt',[^\]]*'-title',?\s*\]\)/,
+        replacement:
+          ".enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-title'])",
+        count: 1,
+        what: 'space page sorts',
+      },
+    ]),
+  'get-inline-comment': action =>
+    nullableFields(action, 'InlineCommentSchema', [
+      'resolutionLastModifierId',
+      'resolutionLastModifiedAt',
+      'resolutionStatus',
+    ]),
+  'get-attachment': action => keepPropertyValues(action, 'PropertySchema'),
+  'get-footer-comment': action => keepPropertyValues(action, 'PropertySchema'),
+  'get-page': action =>
+    rewriteModuleStatements(keepPropertyValues(action, 'PropertyResultSchema'), [
+      {
+        // A content property value is caller JSON, so its nulls are data; only
+        // the page's own nullable fields should become undefined.
+        pattern:
+          /function stripNulls\(value: unknown\): unknown \{\s*if \(value === null\) \{\s*return undefined;\s*\}\s*if \(Array\.isArray\(value\)\) \{\s*return value\.map\(stripNulls\);\s*\}\s*if \(typeof value === 'object' && value !== null\) \{\s*const result: Record<string, unknown> = \{\};\s*for \(const \[key, val\] of Object\.entries\(value\)\) \{\s*result\[key\] = stripNulls\(val\);\s*\}\s*return result;\s*\}\s*return value;\s*\}/,
+        replacement: `function stripNulls(value: unknown, path = ''): unknown {
+  if (path === 'properties.results.value') {
+    return value;
+  }
+  if (value === null) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => stripNulls(item, path));
+  }
+  if (typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = stripNulls(val, path ? \`\${path}.\${key}\` : key);
+    }
+    return result;
+  }
+  return value;
+}`,
+        count: 1,
+        what: 'content property value nulls',
+      },
+    ]),
+  'delete-page-property': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /pageId: z\.number\(\)\.describe\('Page ID\. Example: 123'\)/,
+        replacement: `pageId: ${confluenceDecimalId('page', '123')}`,
+        count: 1,
+        what: 'page id as a decimal string',
+      },
+      {
+        pattern: /propertyId: z\.number\(\)\.describe\('Property ID\. Example: 456'\)/,
+        replacement: `propertyId: ${confluenceDecimalId('property', '456')}`,
+        count: 1,
+        what: 'property id as a decimal string',
+      },
+    ]),
+  'list-pages-for-label': action => {
+    const fields = ['parentId', 'parentType', 'position', 'ownerId', 'lastOwnerId', 'subtype'];
+    return skipNullFields(nullableFields(action, 'PageSchema', fields), 'page', fields);
+  },
+  'list-pages': action => {
+    let fixed = rewriteModuleStatements(action, [
+      {
+        pattern: /subType: z\.enum\(\['page', 'blogpost'\]\)/,
+        replacement: "subType: z.enum(['page', 'live'])",
+        count: 1,
+        what: 'page subtypes',
+      },
+      {
+        pattern: /sort: z\.string\(\)\.optional\(\)\.describe\('Sort order\. Example: "title asc"'\)/,
+        replacement:
+          "sort: z.enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-title']).optional().describe('Sort order; a leading - sorts descending. Example: \"-modified-date\"')",
+        count: 1,
+        what: 'page sorts',
+      },
+      {
+        pattern: /bodyFormat: z\s*\.enum\(\[[^\]]*\]\)/,
+        replacement: `bodyFormat: ${CONFLUENCE_BULK_BODY_FORMAT}`,
+        count: 1,
+        what: 'bulk body formats',
+      },
+      {
+        pattern: /(const ProviderVersionSchema = z\.object\(\{)/,
+        replacement: '$1\n    authorId: z.string().optional(),',
+        count: 1,
+        what: 'version author id',
+      },
+    ]);
+    fixed = skipNullFields(nullableFields(fixed, 'ProviderPageSchema', ['position']), 'page', ['position']);
+    return rewriteExec(
+      fixed,
+      /(\.\.\.\(page\.version\.by !== undefined && \{)/,
+      '...(page.version.authorId !== undefined && { author: { accountId: page.version.authorId } }),\n$1',
+      'version author id',
+    );
+  },
+  'list-blog-posts': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /sort: z\.string\(\)\.optional\(\)\.describe\('Sort order, e\.g\. created-date desc\.'\)/,
+        replacement:
+          "sort: z.enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date']).optional().describe('Sort order; a leading - sorts descending. Example: \"-created-date\"')",
+        count: 1,
+        what: 'blog post sorts',
+      },
+      {
+        pattern:
+          /bodyFormat: z\.string\(\)\.optional\(\)\.describe\('Body format representation\. Defaults to storage\.'\)/,
+        replacement: `bodyFormat: ${CONFLUENCE_BULK_BODY_FORMAT}.optional().describe('Body format representation. Defaults to storage.')`,
+        count: 1,
+        what: 'bulk body formats',
+      },
+    ]),
+  'list-space-blog-posts': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern:
+          /bodyFormat: z\.string\(\)\.optional\(\)\.describe\('Body format to include such as storage, atlas_doc_format, or view\.'\)/,
+        replacement: `bodyFormat: ${CONFLUENCE_BULK_BODY_FORMAT}.optional().describe('Body format to include: storage or atlas_doc_format.')`,
+        count: 1,
+        what: 'bulk body formats',
+      },
+    ]),
+  'list-page-footer-comments': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern:
+          /pageId: z\.number\(\)\.describe\('The ID of the page whose footer comments should be listed\. Example: 123456'\)/,
+        replacement:
+          "pageId: z.string().regex(/^\\d+$/, 'must be a numeric page id').describe('The ID of the page whose footer comments should be listed. Example: \"123456\"')",
+        count: 1,
+        what: 'page id as a decimal string',
+      },
+    ]),
+  'list-page-attachments': action =>
+    rewriteExec(
+      rewriteModuleStatements(action, [
+        {
+          pattern: /(\s*)(links: z\s*\.object\(\{)/,
+          replacement:
+            '$1_links: z.object({ download: z.string().optional(), webui: z.string().optional(), thumbnail: z.string().optional() }).passthrough().optional(),$1downloadLink: z.string().optional(),$1webuiLink: z.string().optional(),$1$2',
+          count: 1,
+          what: 'attachment links',
+        },
+      ]),
+      /\.\.\.\(parsed\.links !== undefined && \{ links: parsed\.links \}\)/,
+      `...(() => {
+                const download = parsed.links?.download ?? parsed.downloadLink ?? parsed._links?.download;
+                const webui = parsed.links?.webui ?? parsed.webuiLink ?? parsed._links?.webui;
+                const thumbnail = parsed.links?.thumbnail ?? parsed._links?.thumbnail;
+                return download !== undefined || webui !== undefined || thumbnail !== undefined
+                    ? { links: { ...(download !== undefined && { download }), ...(webui !== undefined && { webui }), ...(thumbnail !== undefined && { thumbnail }) } }
+                    : {};
+            })()`,
+      'attachment links',
+    ),
+  'get-blog-post': action => {
+    const fixed = rewriteModuleStatements(action, [
+      {
+        pattern: /labels: z\.array\(z\.unknown\(\)\)\.optional\(\),/,
+        replacement: `labels: ${CONFLUENCE_INCLUDED}.optional(),`,
+        count: 2,
+        what: 'included labels',
+      },
+      {
+        pattern: /properties: z\.record\(z\.string\(\), z\.unknown\(\)\)\.optional\(\),/,
+        replacement: `properties: ${CONFLUENCE_INCLUDED}.optional(),`,
+        count: 2,
+        what: 'included properties',
+      },
+      {
+        pattern: /likes: z\.object\(\{ count: z\.number\(\)\.optional\(\) \}\)\.optional\(\)/,
+        replacement: `likes: ${CONFLUENCE_INCLUDED}.optional(), operations: ${CONFLUENCE_INCLUDED}.optional(), versions: ${CONFLUENCE_INCLUDED}.optional()`,
+        count: 2,
+        what: 'included likes, operations, and versions',
+      },
+    ]);
+    return rewriteExec(
+      rewriteExec(
+        fixed,
+        /params\['include'\] = include;/,
+        "for (const part of include.split(',')) {\n                params[`include-${part}`] = 'true';\n            }",
+        'v2 include parameters',
+      ),
+      /(\.\.\.\(blogPost\.likes !== undefined && \{ likes: blogPost\.likes \}\))/,
+      '$1,\n            ...(blogPost.operations !== undefined && { operations: blogPost.operations }),\n            ...(blogPost.versions !== undefined && { versions: blogPost.versions })',
+      'included operations and versions',
+    );
+  },
+  'search-content': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /(const SpaceSchema = z\s*\.object\(\{\s*)id: z\.string\(\),/,
+        replacement: '$1id: z.union([z.number().int(), z.string()]).optional(),',
+        count: 1,
+        what: 'v1 space id',
+      },
+    ]),
+  'delete-page': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /\.describe\('Permanently delete the page without moving it to trash\.'\)/,
+        replacement:
+          ".describe('Permanently delete a page that is already in the trash. Delete it without purge first to move it to the trash.')",
+        count: 1,
+        what: 'purge description',
+      },
+    ]),
+  'update-page': action =>
+    rewriteExec(
+      action,
+      /const nextVersionNumber = currentPage\.version\.number \+ 1;/,
+      // Confluence numbers a draft update as version 1.
+      "const nextVersionNumber = input.status === 'draft' ? 1 : currentPage.version.number + 1;",
+      'draft version number',
+    ),
+  'update-blog-post': action =>
+    rewriteExec(
+      action,
+      /number: currentVersion \+ 1/,
+      // Confluence numbers a draft update as version 1.
+      "number: (input.status ?? currentPost.status ?? 'current') === 'draft' ? 1 : currentVersion + 1",
+      'draft version number',
+    ),
+};
+
+/**
+ * Confluence templates point `baseUrlOverride` at
+ * `https://api.atlassian.com/ex/confluence/{cloudId}`. The platform proxy
+ * forwards only an override's origin (and only origins it allowlists), so the
+ * `/ex/confluence/{cloudId}` path would be dropped. Nango's Confluence
+ * provider already proxies to api.atlassian.com, so drop the override and send
+ * the site path as part of the endpoint instead.
+ */
+function routeConfluenceThroughProviderBase(action: ExtractedAction): ExtractedAction {
+  const slug = action.candidate.actionSlug;
+  const wrapped = dropConfluenceBaseUrlOverrides(`async function exec() {\n${action.execBody}\n}`, slug);
+  let execBody = wrapped.slice(wrapped.indexOf('{') + 1, wrapped.lastIndexOf('}')).replace(/^\n/, '');
+  if (slug === 'search-content') {
+    // Every other Confluence template reads the site the user connected from
+    // the connection config first; this one skips straight to metadata and
+    // accessible-resources, which fails for tokens that cover several sites.
+    execBody = replaceOnce(
+      execBody,
+      /let cloudId = metaResult\.success \? metaResult\.data\.cloudId : undefined;/,
+      `const connection = await platformProxy.getConnection();
+      const configCloudId = connection.connection_config?.['cloudId'];
+      let cloudId =
+        typeof configCloudId === 'string' && configCloudId
+          ? configCloudId
+          : metaResult.success
+            ? metaResult.data.cloudId
+            : undefined;`,
+      action,
+      'connection cloudId',
+    );
+  }
+  if (slug === 'delete-page-property') {
+    // This template skips the metadata lookup every other Confluence template
+    // does, so with no cloudId in the connection config it ignores the site
+    // the metadata names and asks Atlassian instead.
+    execBody = replaceOnce(
+      execBody,
+      /(let cloudId = z\.string\(\)\.optional\(\)\.parse\(connection\.connection_config\?\.\['cloudId'\]\);)/,
+      `$1
+        if (!cloudId) {
+            const metadata = MetadataSchema.safeParse(await platformProxy.getMetadata());
+            cloudId = metadata.success ? metadata.data.cloudId : undefined;
+        }`,
+      action,
+      'metadata cloudId',
+    );
+  }
+  if (slug === 'update-footer-comment') {
+    // Every other Confluence template lets the site in the connection config
+    // win over the one cached in metadata; this one checks metadata first, so
+    // when they disagree it writes to a different site than the reads use.
+    execBody = replaceOnce(
+      execBody,
+      /(const metadata = await (?:nango|platformProxy)\.getMetadata\(\);\s*const rawMetadataCloudId[\s\S]*?cloudId = rawMetadataCloudId;\s*\})(\s*)if \(!cloudId\) \{\s*(const connection = await (?:nango|platformProxy)\.getConnection\(\);[\s\S]*?cloudId = rawCloudId;\s*\}\s*\})\s*\}/,
+      `$3$2if (!cloudId) {
+            $1
+        }`,
+      action,
+      'connection cloudId first',
+    );
+  }
+  // Most Confluence templates refuse to pick a site when the token can see
+  // several and none has been chosen; these three take the first one and cache
+  // it, which silently moves every later call onto that site.
+  const pickedSite = {
+    'delete-page-property': [/const firstResource = resources\[0\];/, 'resources'],
+    'create-page': [/const firstResourceSchema = z\.object\(\{/, 'resources.data'],
+    'update-footer-comment': [/if \(!accessibleResources\[0\]\) \{/, 'accessibleResources'],
+  } as const satisfies Record<string, readonly [RegExp, string]>;
+  if (slug in pickedSite) {
+    const [anchor, list] = pickedSite[slug as keyof typeof pickedSite];
+    execBody = replaceOnce(
+      execBody,
+      new RegExp(`(${anchor.source})`),
+      `if (${list}.length > 1) {
+                throw new platformProxy.ActionError({
+                    type: 'ambiguous_cloud_id',
+                    message: 'Multiple Confluence sites found. Please set an explicit cloudId in the connection metadata.',
+                });
+            }
+            $1`,
+      action,
+      'single accessible site',
+    );
+  }
+  // Most templates put ids into the path as-is, so an id carrying `?`, `#`,
+  // `/` or `\` could add query options (such as purge=true) or reach another
+  // resource. Encoding keeps every input value inside its own path segment.
+  execBody = execBody.replace(/endpoint: `[^`]*`/g, endpoint =>
+    endpoint.replace(/\$\{(input\.\w+)\}/g, '${encodeURIComponent($1)}'),
+  );
+  const routed = {
+    ...action,
+    execBody,
+    moduleStatements: action.moduleStatements.map(statement =>
+      statement.includes('baseUrlOverride') ? dropConfluenceBaseUrlOverrides(statement, slug) : statement,
+    ),
+  };
+  return CONFLUENCE_FIXES[slug]?.(routed) ?? routed;
+}
+
+export function dropConfluenceBaseUrlOverrides(code: string, slug: string): string {
+  const source = new Project({ useInMemoryFileSystem: true }).createSourceFile('code.ts', code);
+  const initializerOf = (name: string): string | undefined =>
+    source
+      .getDescendantsOfKind(SyntaxKind.VariableDeclaration)
+      .find(declaration => declaration.getName() === name)
+      ?.getInitializer()
+      ?.getText();
+
+  const overrides = source.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression).flatMap(literal => {
+    const property = literal.getProperty('baseUrlOverride');
+    return property ? [{ literal, property }] : [];
+  });
+  for (const { literal, property } of overrides.reverse()) {
+    let value: string | undefined;
+    if (Node.isShorthandPropertyAssignment(property)) value = initializerOf(property.getName());
+    else if (Node.isPropertyAssignment(property)) {
+      const initializer = property.getInitializerOrThrow();
+      value = Node.isIdentifier(initializer) ? initializerOf(initializer.getText()) : initializer.getText();
+    }
+    if (value === `'${ATLASSIAN_API_ORIGIN}'`) {
+      property.remove();
+      continue;
+    }
+    const site = value?.match(CONFLUENCE_SITE_BASE);
+    const endpoint = literal.getProperty('endpoint');
+    const endpointValue = Node.isPropertyAssignment(endpoint) ? endpoint.getInitializer() : undefined;
+    if (
+      !site ||
+      !endpointValue ||
+      !(
+        Node.isStringLiteral(endpointValue) ||
+        Node.isTemplateExpression(endpointValue) ||
+        Node.isNoSubstitutionTemplateLiteral(endpointValue)
+      )
+    ) {
+      throw new Error(
+        `confluence/${slug}: unexpected baseUrlOverride ${value ?? property.getText()}; update routeConfluenceThroughProviderBase`,
+      );
+    }
+    const cloudId = site[1] ?? site[2];
+    const path = endpointValue.getText().slice(1, -1).replace(/^\//, '');
+    endpointValue.replaceWithText(`\`/ex/confluence/\${${cloudId}}/${path}\``);
+    property.remove();
+  }
+
+  // Drop the override variables the rewrite left unused; some templates also
+  // use theirs as the base for parsing `_links.next`, so keep those.
+  for (const declaration of source.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = declaration.getInitializer()?.getText();
+    if (!initializer || !CONFLUENCE_SITE_BASE.test(initializer)) continue;
+    const name = declaration.getName();
+    const uses = source
+      .getDescendantsOfKind(SyntaxKind.Identifier)
+      .filter(identifier => identifier.getText() === name && identifier.getParent() !== declaration);
+    if (uses.length > 0) continue;
+    // `const limit = 25, base = ...;` keeps `limit`; only the unused declarator goes.
+    const statement = declaration.getVariableStatementOrThrow();
+    if (statement.getDeclarations().length === 1) statement.remove();
+    else declaration.remove();
+  }
+
+  const rewritten = source.getFullText();
+  if (rewritten.includes('baseUrlOverride')) {
+    throw new Error(`confluence/${slug}: baseUrlOverride left after rewrite`);
+  }
+  return rewritten;
+}
+
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
   if (action.candidate.providerId === 'gitlab') {
     return adaptGitLabAction(action);
   }
   if (action.candidate.providerId === 'zendesk') {
     return adaptZendeskAction(action);
+  }
+  if (action.candidate.providerId === 'confluence') {
+    return routeConfluenceThroughProviderBase(action);
   }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);
