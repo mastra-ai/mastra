@@ -119,6 +119,7 @@ describe('validateManifest', () => {
     'dest inside .git': target({ dest: '.git/hooks' }),
     'source outside docs/': target({ source: 'packages/core' }),
     'source escaping docs/ with ..': target({ source: 'docs/../packages' }),
+    'source in docs/ but outside docs/src/': target({ source: 'docs/external' }),
     'missing source dir': target({ source: 'docs/src/missing' }),
   };
   for (const [label, bad] of Object.entries(invalid)) {
@@ -332,7 +333,14 @@ describe('main', () => {
     assert.deepEqual(fs.readdirSync(outside), []);
   });
 
-  test('--target all reports a failing target, still syncs the others, and uses the monorepo sha', async () => {
+  test('--target all reports a failing target, still syncs the others, and uses the monorepo checkout sha', async t => {
+    // A re-run keeps its original GITHUB_SHA; the trailer must still name the checked-out commit.
+    const previous = process.env.GITHUB_SHA;
+    process.env.GITHUB_SHA = 'b'.repeat(40);
+    t.after(() => {
+      if (previous === undefined) delete process.env.GITHUB_SHA;
+      else process.env.GITHUB_SHA = previous;
+    });
     const root = makeRoot();
     const good = makeRemote('good');
     const errors = [];
@@ -346,7 +354,6 @@ describe('main', () => {
       rootDir: root,
       manifestPath,
       remoteUrl: repo => (repo === 'mastra-ai/good' ? good.url : pathToFileURL(path.join(tmp, 'missing.git')).href),
-      env: {},
       log: quiet,
       logError: line => errors.push(line),
     });

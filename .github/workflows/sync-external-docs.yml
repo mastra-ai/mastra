@@ -42,6 +42,8 @@ jobs:
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
+          # Current main, not the run's GITHUB_SHA: re-running an older run must not publish stale docs.
+          ref: main
           fetch-depth: 1
           persist-credentials: false
 

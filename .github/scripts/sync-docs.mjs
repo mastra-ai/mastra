@@ -81,8 +81,8 @@ export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
       errors.push(`${label}: "dest" must be a non-empty relative path without "." or ".." segments, outside .git`);
     }
 
-    if (!isSafeRelativePath(source) || !source.startsWith('docs/')) {
-      errors.push(`${label}: "source" must be a relative path under docs/ without "." or ".." segments`);
+    if (!isSafeRelativePath(source) || !source.startsWith('docs/src/')) {
+      errors.push(`${label}: "source" must be a relative path under docs/src/ without "." or ".." segments`);
     } else {
       const sourceDir = path.join(rootDir, source);
       if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
@@ -232,8 +232,10 @@ export async function syncTarget({ target, remoteUrl, sha, beforePush, rootDir =
   }
 }
 
-function sourceSha(rootDir, env) {
-  return env.GITHUB_SHA || git(rootDir, 'rev-parse', 'HEAD');
+// Always the checked-out commit, never GITHUB_SHA: a re-run of an old workflow run keeps its original GITHUB_SHA,
+// while the workflow checks out the current main so it can't publish stale docs.
+function sourceSha(rootDir) {
+  return git(rootDir, 'rev-parse', 'HEAD');
 }
 
 /**
@@ -244,7 +246,6 @@ export async function main({
   rootDir = ROOT_DIR,
   manifestPath = MANIFEST_PATH,
   remoteUrl = repo => `https://github.com/${repo}.git`,
-  env = process.env,
   log = console.log,
   logError = console.error,
 } = {}) {
@@ -273,7 +274,7 @@ export async function main({
     return 0;
   }
 
-  const sha = sourceSha(rootDir, env);
+  const sha = sourceSha(rootDir);
   const failed = [];
   for (const target of selected) {
     try {

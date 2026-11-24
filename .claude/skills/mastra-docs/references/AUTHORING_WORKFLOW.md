@@ -115,4 +115,4 @@ Before handing off:
 - Each synced directory owns its `sidebars.js`. Add every new page there.
 - Validate them with the unscoped `pnpm check` or `pnpm check --rule 'mastra/external-*'`. File-scoped `pnpm check <file>` only accepts `src/content/en` pages, and inline `lint` comments don't apply to synced pages.
 - Deleting or renaming a synced page breaks inbound links to it, because synced directories have no redirects.
-- To add a site, add a manifest entry, install the Dane GitHub App on its repo, and remove any build-time docs fetching there.
+- To add a site, add a manifest entry whose `source` is under `docs/src/`, install the Dane GitHub App on its repo, and remove any build-time docs fetching there.
