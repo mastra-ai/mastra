@@ -177,7 +177,9 @@ In one process, an evented agent runs on the default PubSub backend with no extr
 
 ### Resumable streams for stored agents
 
-Agents created with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent) use the `durable` field to configure resumable streams only. The server hydrates a plain `Agent` with stream publishing and replay enabled:
+Stored agents inherit the server's `Mastra.durable.executionEngine` default unless their `durable` field is `false`. With no server engine default, `durable: true` enables resumable streams without checkpointing.
+
+Enable the stored agent's `durable` setting with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent):
 
 ```typescript
 await mastraClient.createStoredAgent({
@@ -419,7 +421,7 @@ for (const run of recovered) {
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
-`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. A skip carries a `retryAt` when another process still owns the run or the recovery attempt times out. For an owned run, `retryAt` is when the claim expires unless the owner renews it. For a timeout, the result also includes `reason: 'recovery-timeout'`.
+`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. A skipped result can include `retryAt`, for example when another process still owns the run, recovery times out, or recovery encounters a transient error. For an owned run, `retryAt` is when the claim expires unless the owner renews it. For a timeout, the result also includes `reason: 'recovery-timeout'`.
 
 If you call `recoverActiveRuns()` directly, use `retryAt` to schedule your own re-check. `mastra.recoverAllDurableAgents()` schedules eligible re-checks for you. It counts a timed-out attempt only as `skipped`, even if that attempt settles later.
 
