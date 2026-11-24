@@ -45,7 +45,7 @@ Gateway runs in two regions, US and EU. Each key belongs to one region, chosen w
 | US | `msk-gateway-` | `https://gateway-api.mastra.ai/v1` |
 | EU | `msk-gateway-eu_` | `https://gateway-api.eu.mastra.ai/v1` |
 
-To run inference in the EU, create an EU key and point your client at the EU base URL. The EU instance routes requests only to provider endpoints in the EU, and it rejects US keys with a `401 key_wrong_region` error.
+To run inference in the EU, create an EU key and point your client at the EU base URL. The EU instance routes requests only to Gateway-managed provider endpoints in the EU (BYOK is the exception, see below), and it rejects US keys with a `401 key_wrong_region` error.
 
 ```typescript
 import OpenAI from 'openai'
@@ -60,7 +60,7 @@ Things to know about EU keys:
 
 - **Model catalog**: The EU serves fewer models than the US, and prices can differ. With an EU key, [`GET /v1/models`](/docs/mastra-platform/gateway/api/models) lists only EU models at EU prices. Without a key, call `GET /v1/models?region=eu` to see the EU catalog.
 - **No cross-region failover**: Requests with an EU key never fall back to the US. If no EU route can serve the request, it fails.
-- **BYOK**: A [BYOK connection](#bring-your-own-key) isn't tied to a region. Requests on it go to the endpoint of your own provider account, even with an EU key. To keep BYOK traffic in the EU, configure an EU endpoint on the provider side.
+- **BYOK**: A [BYOK connection](#bring-your-own-key) isn't tied to a region. Requests on it, including custom HTTPS endpoints, go to the endpoint you configured, even when that endpoint is outside the EU and you use an EU key. To keep BYOK traffic in the EU, configure an endpoint in the EU.
 
 Keys created before regions existed are US keys. [Deployment keys](#deployment-keys) follow the region the deploy runs in, so a deploy in an EU region gets an EU key.
 
