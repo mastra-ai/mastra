@@ -1155,20 +1155,15 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             };
 
             const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
-            const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
-              requestContext,
-            });
-            const { agentSpanData, modelSpanData, carried } = segmentSpanData(
-              requestContext,
-              initData.runId,
-              initData,
-              reg,
-            );
+            let observability: ObservabilityInstance | undefined;
+            let segment: ReturnType<typeof segmentSpanData> | undefined;
             let agentSpan: Span<SpanType.AGENT_RUN> | undefined;
             try {
-              agentSpan = liveOrRebuiltAgentSpan(agentSpanData, reg, observability);
+              observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+              segment = segmentSpanData(requestContext, initData.runId, initData, reg);
+              agentSpan = liveOrRebuiltAgentSpan(segment.agentSpanData, reg, observability);
             } catch (error) {
-              logger?.warn?.(`[DurableAgent] Error rebuilding the run span: ${error}`);
+              logger?.warn?.(`[DurableAgent] Error resolving the run span: ${error}`);
             }
 
             const finishResult = await runDurableFinishSideEffects({
@@ -1290,12 +1285,15 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             try {
               // Rebuilt spans end from snapshots taken at run start, so the clocks the
               // steps carried are applied here.
-              const clocks = carriedSpanClocks(reg, state, carried);
+              const clocks = carriedSpanClocks(reg, state, segment?.carried);
               if (observability) {
+                const modelSpanData = segment?.modelSpanData;
                 if (modelSpanData) {
                   const modelSpan =
                     liveSegmentSpan(modelSpanData, reg?.resumeModelSpan, reg?.modelSpan) ??
                     (observability.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
+                  // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+                  if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
                   const toolCalls = steps.flatMap(step =>

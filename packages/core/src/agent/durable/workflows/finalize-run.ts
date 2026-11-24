@@ -227,6 +227,7 @@ export async function runDurableFinishSideEffects({
   if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
     const finishReason = outputResult?.finishReason;
     const truncated = finishReason === 'length' || finishReason === 'content-filter';
+    const failed = finishReason === 'abort' || finishReason === 'error';
     const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
     const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
     let value: unknown;
@@ -235,7 +236,6 @@ export async function runDurableFinishSideEffects({
       // separate structuring model turns that answer into the object.
       const structuringModel = liveStructuredOutput?.model ?? structuredOutput.structuringModelConfig?.originalConfig;
       // Never structure partial text from an aborted or failed turn.
-      const failed = finishReason === 'abort' || finishReason === 'error';
       if (structuringModel && !truncated && !failed) {
         structuredOutputChunks = await runStructuringPass({
           options: {
@@ -268,7 +268,8 @@ export async function runDurableFinishSideEffects({
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
-    object = value;
+    // The caller of a failed or aborted run gets no object.
+    object = failed ? undefined : value;
     if (value !== undefined && lastAssistantMessage) {
       lastAssistantMessage.content.metadata = {
         ...lastAssistantMessage.content.metadata,

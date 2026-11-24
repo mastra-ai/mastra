@@ -870,6 +870,8 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
             const modelSpan =
               liveSegmentSpan(modelSpanData, registry?.resumeModelSpan, registry?.modelSpan) ??
               (observability?.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -894,9 +896,6 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
 
           // End AGENT_RUN span with final output
           if (agentSpanData) {
-            const agentSpan =
-              liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
-              observability?.rebuildSpan(agentSpanData);
             agentSpan?.end({
               ...termination,
               output: {
