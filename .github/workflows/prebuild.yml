@@ -9,6 +9,10 @@ on:
   # full suite without duplicating these jobs. A call always runs the full suite on the
   # caller's commit.
   workflow_call:
+  # Release branches publish alphas without a PR: every push to one (the cut, each re-version,
+  # a cherry-pick) runs the full suite, and the release waits for it to be green.
+  push:
+    branches: ['release/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}

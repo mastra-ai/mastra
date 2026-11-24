@@ -96,10 +96,15 @@ function makeRepo(t, registryUrl) {
   write('package.json', pkg('fixture', '0.0.0', { private: true }));
   write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
   write('.npmrc', `${registryUrl.replace(/^http:/, '')}/:_authToken=test-token\n`);
-  write('packages/a/package.json', pkg('@fx/a', '1.1.0-alpha.0'));
+  write('packages/a/package.json', pkg('@fx/a', '1.0.0'));
   write('packages/a/index.js', 'export const a = 1;\n');
-  write('packages/b/package.json', pkg('@fx/b', '2.0.1-alpha.0'));
+  write('packages/b/package.json', pkg('@fx/b', '2.0.0'));
   write('packages/internal/package.json', pkg('@fx/internal', '0.0.1', { private: true }));
+  git('add', '-A');
+  git('commit', '-m', 'feat: a');
+  // The alpha commit: versions, changelogs and changesets only, on top of the code.
+  write('packages/a/package.json', pkg('@fx/a', '1.1.0-alpha.0'));
+  write('packages/b/package.json', pkg('@fx/b', '2.0.1-alpha.0'));
   write(
     '.changeset/pre.json',
     JSON.stringify({ mode: 'pre', tag: 'alpha', initialVersions: {}, changesets: ['feat-a'] }),
@@ -256,13 +261,22 @@ test('alpha: refuses stable after a cherry-pick without a changeset (versions pu
   const world = await startServer(t, { published: ALPHA_VERSIONS, publishRuns: { [alpha]: [alphaRun(alpha)] } });
   const result = await run(repo.cwd, world, ['alpha', '--sha', repo.head(), '--registry', world.url]);
   assert.equal(result.status, 1, result.output);
-  assert.match(
-    result.output,
-    /No successful prerelease publish ran on [0-9a-f]{40}\. The branch moved after the last alpha/,
-  );
+  assert.match(result.output, /is not a version commit \(it changes packages\/a\/index\.js\)/);
 });
 
-test('alpha: refuses when only a stable or a failed publish ran on the commit', async t => {
+test('alpha: refuses a code commit even after a prerelease run on it succeeded (it published nothing new)', async t => {
+  const server = await startServer(t, { published: ALPHA_VERSIONS });
+  const repo = makeRepo(t, server.url);
+  repo.write('packages/a/index.js', 'export const a = 2;\n');
+  repo.git('commit', '-qam', 'fix: a without a changeset');
+  const sha = repo.head();
+  const world = await startServer(t, { published: ALPHA_VERSIONS, publishRuns: { [sha]: [alphaRun(sha)] } });
+  const result = await run(repo.cwd, world, ['alpha', '--sha', sha, '--registry', world.url]);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /is not a version commit/);
+});
+
+test('alpha: refuses when only a stable, an enter-prerelease or a failed publish ran on the commit', async t => {
   const server = await startServer(t);
   const repo = makeRepo(t, server.url);
   const sha = repo.head();
@@ -272,6 +286,7 @@ test('alpha: refuses when only a stable or a failed publish ran on the commit', 
       [sha]: [
         alphaRun(sha, { conclusion: 'failure' }),
         alphaRun(sha, { id: 3, display_title: 'npm publish stable on release/2026-11-24' }),
+        alphaRun(sha, { id: 4, display_title: 'npm publish enter-prerelease on release/2026-11-24' }),
       ],
     },
   });
@@ -315,6 +330,30 @@ test('alpha: refuses a pushed stable commit that also changes a source file', as
   const result = await run(repo.cwd, world, ['alpha', '--sha', repo.head(), '--registry', world.url]);
   assert.equal(result.status, 1, result.output);
   assert.match(result.output, /also changes:\n {2}packages\/a\/index\.js/);
+});
+
+test('stable-head: a re-run builds on the version commit an earlier attempt pushed, nothing else', async t => {
+  const server = await startServer(t);
+  const repo = makeRepo(t, server.url);
+  const alpha = repo.head();
+  let result = await run(repo.cwd, server, ['stable-head', '--sha', alpha, '--ref', 'release/2026-11-24']);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, new RegExp(`sha=${alpha}`));
+
+  versionStable(repo);
+  repo.git('commit', '-qam', 'chore: version - exit prerelease mode');
+  repo.git('push', '-q', 'origin', 'HEAD:refs/heads/release/2026-11-24');
+  const version = repo.head();
+  result = await run(repo.cwd, server, ['stable-head', '--sha', alpha, '--ref', 'release/2026-11-24']);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, new RegExp(`sha=${version}`));
+
+  repo.write('packages/a/index.js', 'export const a = 3;\n');
+  repo.git('commit', '-qam', 'fix: after the approval');
+  repo.git('push', '-q', 'origin', 'HEAD:refs/heads/release/2026-11-24');
+  result = await run(repo.cwd, server, ['stable-head', '--sha', alpha, '--ref', 'release/2026-11-24']);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /moved since [0-9a-f]{40} was dispatched/);
 });
 
 test('diff: allows the stable version changes and refuses a source file', async t => {

@@ -238,6 +238,15 @@ jobs:
           fetch-tags: true
           persist-credentials: true
 
+      # "Re-run" keeps the dispatched (alpha) commit; if an earlier attempt already pushed the
+      # stable version commit on top of it, build on that commit instead of versioning again
+      # (a second version commit could not be pushed).
+      - name: Guard - stable builds on the approved commit
+        id: head
+        run: |
+          node .github/scripts/release-guards.mjs stable-head --sha "$GITHUB_SHA" --ref "$GITHUB_REF_NAME"
+          git checkout -q "$(git rev-parse FETCH_HEAD)"
+
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
@@ -278,8 +287,9 @@ jobs:
       # the alpha.
       - name: Guard - the release branch head is the published alpha
         id: alpha
-        run: node .github/scripts/release-guards.mjs alpha --sha "$GITHUB_SHA"
+        run: node .github/scripts/release-guards.mjs alpha --sha "$HEAD_SHA"
         env:
+          HEAD_SHA: ${{ steps.head.outputs.sha }}
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Exit prerelease mode

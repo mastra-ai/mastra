@@ -13,11 +13,18 @@
 //     Finds the alpha commit stable builds on: <sha> while it still holds
 //     .changeset/pre.json, otherwise its parent (a rerun after the stable
 //     version commit was pushed; that commit must only touch version files).
-//     Every non-private package version at the alpha commit is on npm, and a
-//     prerelease run of npm-publish.yml succeeded for it — so a cherry-pick
-//     with no changeset, which leaves the versions alone, is still refused.
+//     The alpha commit only changes version files over its parent, every
+//     non-private package version at it is on npm, and a prerelease run of
+//     npm-publish.yml succeeded for it — so a cherry-pick with no changeset,
+//     which leaves the versions alone, is refused even if a prerelease run
+//     (which published nothing) succeeded on it.
 //     Writes alpha_sha and versioned (whether <sha> is already the stable
 //     version commit) to $GITHUB_OUTPUT.
+//   node release-guards.mjs stable-head --sha <sha> --ref <branch> [--remote origin]
+//     The commit a stable run builds on: <sha> while it is still the branch
+//     head, or the head when it sits directly on <sha> (the version commit an
+//     earlier attempt of a re-run pushed). Refuses when the branch moved any
+//     other way. Writes sha to $GITHUB_OUTPUT.
 //   node release-guards.mjs diff --base <sha>
 //     The working tree and commits since <sha> only touch package.json,
 //     CHANGELOG.md and .changeset/.
@@ -102,6 +109,20 @@ function checkBranch({ ref, remote }) {
     throw new Refusal(`More than one release branch is open (${heads.join(', ')}); only one may publish.`);
   }
   console.log(`${ref} is the only open release branch.`);
+}
+
+function stableHead({ sha, ref, remote }) {
+  if (!sha || !ref) throw new Error('--sha and --ref are required');
+  git('fetch', '--quiet', remote, `refs/heads/${ref}`);
+  const head = git('rev-parse', 'FETCH_HEAD');
+  const dispatched = git('rev-parse', sha);
+  if (head !== dispatched && git('rev-parse', `${head}^`) !== dispatched) {
+    throw new Refusal(
+      `${ref} moved since ${dispatched} was dispatched (head ${head}); stable only ships the approved commit.`,
+    );
+  }
+  if (head !== dispatched) console.log(`Re-run: building on the version commit ${head} an earlier attempt pushed.`);
+  setOutput({ sha: head });
 }
 
 const publishRuns = sha => githubAll(`/actions/workflows/${PUBLISH_WORKFLOW}/runs?head_sha=${sha}`, 'workflow_runs');
@@ -221,6 +242,15 @@ async function checkAlpha({ sha, registry }) {
     assertVersionOnly(alpha, sha);
   }
 
+  // An alpha is a version commit on top of the code it publishes. A prerelease run on a code-only
+  // commit (a cherry-pick without a changeset) succeeds while publishing nothing new.
+  const code = changedFiles(`${alpha}^`, alpha).filter(file => !VERSION_FILES.some(pattern => pattern.test(file)));
+  if (code.length > 0) {
+    throw new Refusal(
+      `${alpha} is not a version commit (it changes ${code.join(', ')}), so no alpha published its code. Add a changeset so the branch is re-versioned, and publish that alpha.`,
+    );
+  }
+
   const missing = await unpublished(registry, workspacePackages(alpha));
   if (missing.length > 0) {
     throw new Refusal(
@@ -232,7 +262,8 @@ async function checkAlpha({ sha, registry }) {
     run =>
       run.event === 'workflow_dispatch' &&
       run.conclusion === 'success' &&
-      /\bprerelease\b/.test(run.display_title ?? ''),
+      // The exact run-name of a prerelease publish; `enter-prerelease` runs publish nothing.
+      /^npm publish prerelease on release\//.test(run.display_title ?? ''),
   );
   if (!alphaPublished) {
     throw new Refusal(
@@ -297,6 +328,7 @@ const commands = {
   branch: checkBranch,
   checks: checkChecks,
   alpha: checkAlpha,
+  'stable-head': stableHead,
   diff: ({ base }) => {
     if (!base) throw new Error('--base is required');
     assertVersionOnly(base);
