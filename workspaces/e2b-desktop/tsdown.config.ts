@@ -9,7 +9,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   deps: {
     neverBundle: ['@mastra/core', '@mastra/e2b', '@e2b/desktop', 'e2b'],
   },

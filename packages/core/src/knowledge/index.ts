@@ -18,6 +18,7 @@ import type {
 } from './declarations';
 import {
   addKnowledgeNote,
+  moveKnowledgePage,
   removeKnowledgeNote,
   removeKnowledgePage,
   updateKnowledgeNote,
@@ -25,6 +26,7 @@ import {
 } from './host-writes';
 import type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
@@ -37,6 +39,8 @@ import { buildKnowledgePageTools } from './page-tools';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
+import { reembedKnowledge } from './reembed';
+import type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
 import type { KnowledgeRunContext } from './run';
 import { KnowledgeScopeRuntime } from './scope-runtime';
@@ -56,6 +60,19 @@ const MIN_TOKENS_PER_CONFIG_PIN = 50;
 
 /** Overrides which tool groups `createTools` and `getInstructions` cover. */
 type KnowledgeToolSelection = { read?: boolean; write?: boolean; pinnedContext?: boolean };
+
+/** Options for {@link Knowledge.createTools}. */
+export type KnowledgeCreateToolsOptions = KnowledgeToolSelection & {
+  /**
+   * **Host-only.** Fixed principals for every call, for hosts that run the tools outside an agent run
+   * (an MCP server acting for an external agent). Each must match a declared scope type (checked at each call, once the store's declarations have loaded). When set, the
+   * call's own run scopes and Memory ids are ignored, and access follows the scope rules for these
+   * principals. Never take them from the request.
+   */
+  principals?: readonly string[];
+  /** Author recorded on writes made through these tools. Defaults to `agent:<id>` of the run, or `agent`. */
+  author?: string;
+};
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
@@ -144,7 +161,8 @@ export class Knowledge extends MastraBase {
    * rules reach in one hop. Undeclared principals throw; an empty list reads nothing. Never `'all'`.
    * Pass the result as `read` to the store's read methods.
    */
-  readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+  async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+    await this.#runtime.resolve();
     return this.#runtime.readScopeFor(principals);
   }
 
@@ -158,18 +176,19 @@ export class Knowledge extends MastraBase {
    *
    * @experimental
    */
-  explainAccess(
+  async explainAccess(
     runScopes: readonly string[],
     target: { scope: string } | { page: string },
   ): Promise<KnowledgeAccessExplanation> {
+    await this.#runtime.resolve();
     return this.#runtime.explainAccess(runScopes, target);
   }
 
   /**
    * Who the declared rules give a role on one scope: each principal scope address (bound for this
-   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the address of
-   * the scope page's tree parent, needed for rules that bind through `belongsTo`. Declared config
-   * only; it reads no storage. For browsing UIs that draw access between scopes.
+   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the
+   * address of the scope page's tree parent, needed for rules that bind through `belongsTo`. Reads the
+   * declarations as last resolved, not storage. For browsing UIs that draw access between scopes.
    *
    * @experimental
    */
@@ -194,7 +213,8 @@ export class Knowledge extends MastraBase {
    *
    * @experimental
    */
-  renameScopeDeclaration(from: string, to: string): Promise<number> {
+  async renameScopeDeclaration(from: string, to: string): Promise<number> {
+    await this.#runtime.resolve();
     return this.#runtime.renameScopeDeclaration(from, to);
   }
 
@@ -208,7 +228,8 @@ export class Knowledge extends MastraBase {
   }
 
   /** Tools for explicit wiring; defaults to the groups configured on this Knowledge. */
-  createTools(options?: KnowledgeToolSelection): Record<string, ToolAction<any, any, any>> {
+  createTools(options?: KnowledgeCreateToolsOptions): Record<string, ToolAction<any, any, any>> {
+    const principals = options?.principals ? this.#hostPrincipals(options.principals) : undefined;
     return buildKnowledgePageTools(
       {
         runtime: this.#runtime,
@@ -216,6 +237,8 @@ export class Knowledge extends MastraBase {
         semantic: this.#semantic,
         warn: message => this.logger.warn(message),
         maxTokens: this.#tools.maxTokens,
+        ...(principals ? { principals } : {}),
+        ...(options?.author ? { author: options.author } : {}),
       },
       this.#groups(options),
       // A pin write changes what the pins lane shows; drop the turn's memoized read.
@@ -253,6 +276,21 @@ export class Knowledge extends MastraBase {
    */
   removePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
     return removeKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Moves the page at `scope#path`, with its subtree, under the page at `parent` (a key path; left
+   * out, the top of the scope), in `toScope` when given. The page keeps its id, notes, pins and
+   * vectors; paths below it change, and links by path are re-resolved. Throws
+   * `KnowledgeNotFoundError` for a missing page or parent, and refuses a page declared in config, a
+   * move into its own subtree, a key the new parent already has, and a move past the depth limit.
+   * Host-only, like {@link Knowledge.upsertPage}. Not retried: a concurrent write to the page
+   * between the read and the move throws.
+   *
+   * @experimental
+   */
+  movePage(input: KnowledgeMovePageInput): Promise<KnowledgePage> {
+    return moveKnowledgePage(this.#hostWriter(), input);
   }
 
   /**
@@ -305,6 +343,24 @@ export class Knowledge extends MastraBase {
     return reindexKnowledgeLinks(await this.getStorage());
   }
 
+  /**
+   * Embeds pages and notes that already exist, without changing them: content written before a
+   * `vector` and `embedder` were configured, or before switching embedders. Each call handles up to
+   * `limit` pages (default 50, at most 500) with their notes and returns `nextCursor`; pass it to the
+   * next call until it's absent. Handling a page again overwrites its vectors, so a run can stop and
+   * resume. Failures are listed, not thrown; if the embedder keeps rate limiting, the call stops
+   * early with `rateLimited: true` and a cursor that resumes where it stopped, mid-page if need be; wait before resuming. The
+   * cursor is not a snapshot: pages added or removed during a run can be missed or handled twice, and
+   * a page read before a concurrent edit can overwrite the vectors that edit wrote, so rerun after
+   * concurrent writes finish. Throws without `vector` and `embedder`.
+   *
+   * @experimental
+   */
+  async reembed(options?: KnowledgeReembedOptions): Promise<KnowledgeReembedResult> {
+    if (!this.#semantic) throw new Error('Knowledge has no `vector` and `embedder` to embed into.');
+    return reembedKnowledge(await this.getStorage(), this.#semantic, options);
+  }
+
   /** The usage block that goes with `createTools(options)`. */
   getInstructions(options?: KnowledgeToolSelection): string {
     return buildKnowledgeInstructions(this.#groups(options), this.#instructions);
@@ -315,9 +371,37 @@ export class Knowledge extends MastraBase {
     return this.#pins !== false;
   }
 
+  /** Which tool groups `createTools()` and `getInstructions()` include by default. @internal */
+  get __toolGroups(): { read: boolean; write: boolean } {
+    const { read, write } = this.#groups();
+    return { read, write };
+  }
+
   /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */
   __principalsKey(context: KnowledgeRunContext): string {
     return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
+  }
+
+  /**
+   * The pinned pages a host-run caller with these principals receives, rendered as an agent run
+   * receives them: only pages they can read, within this instance's pin budget. For hosts that serve
+   * Knowledge outside an agent run, alongside {@link Knowledge.createTools} with `principals`. Pass the
+   * same `read` as that `createTools` call, so entries name read tools only when the caller has them.
+   */
+  async getPinnedContext(options: { principals: readonly string[]; read?: boolean }): Promise<PinEntry[]> {
+    const principals = this.#hostPrincipals(options.principals);
+    const budget = this.#pins || resolvePins(true);
+    if (!budget) return [];
+    const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), undefined, { principals });
+    return knowledgeDeliveredPins(run, budget, this.#groups({ read: options.read }).read);
+  }
+
+  // Only the shape is checked here: whether each principal matches a declared scope type is checked
+  // when a call starts its run, after the store's declarations have loaded.
+  #hostPrincipals(principals: readonly string[]): string[] {
+    const unique = [...new Set(principals)];
+    if (unique.length === 0) throw new Error('Knowledge `principals` needs at least one scope address.');
+    return unique;
   }
 
   /** The pinned pages a run receives this turn. @internal */
@@ -325,7 +409,7 @@ export class Knowledge extends MastraBase {
     const budget = this.#pins || resolvePins(true);
     if (!budget) return [];
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
-    return knowledgeDeliveredPins(run, budget);
+    return knowledgeDeliveredPins(run, budget, this.#groups().read);
   }
 
   /** @internal */
@@ -489,6 +573,7 @@ export type {
   KnowledgeTreePage,
 } from './explorer-pages';
 export type { KnowledgeConfig } from './config';
+export type { PinEntry as KnowledgePinnedEntry } from './pinned';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export { decodeKnowledgeScopeId, encodeKnowledgeScopeId } from './scope-address';
 export type {
@@ -511,8 +596,10 @@ export interface KnowledgeScopeGrant {
   role: KnowledgeRole;
 }
 export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
+export type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
 export type {
   KnowledgeAddNoteInput,
+  KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,

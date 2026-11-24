@@ -167,8 +167,8 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   return (
     <span
       className={cn(
-        'flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0',
-        status === 'error' ? 'text-destructive-foreground' : 'text-placeholder',
+        'flex size-4 shrink-0 items-center justify-center [&_svg]:size-icon-sm [&_svg]:shrink-0',
+        status === 'error' ? 'text-destructive-foreground' : 'text-subtle-foreground',
         status !== 'error' && appearance === 'inline' && LIFTS_TO_MUTED,
         className,
       )}
@@ -271,7 +271,7 @@ export const ActivityDisclosure = ({ className, children, ...props }: ComponentP
       <span
         aria-hidden
         className={cn(
-          'flex shrink-0 items-center text-muted-foreground/60 transition duration-150 motion-reduce:transition-none',
+          'flex shrink-0 items-center text-subtle-foreground transition duration-150 motion-reduce:transition-none',
           'group-hover/row:text-muted-foreground group-has-focus-visible/row:text-muted-foreground',
           open && 'text-muted-foreground',
           open && children != null && 'rotate-90',

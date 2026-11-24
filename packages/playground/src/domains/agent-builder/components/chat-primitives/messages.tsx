@@ -95,29 +95,23 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
       </Txt>
       <div className="flex items-center gap-2">
         <Button
+          icon={pending === 'approve' ? <IconLoadingCircle className="animate-spin" /> : <IconCheckmark2Medium />}
           variant="default"
           onClick={handleApprove}
           disabled={decided}
           data-testid="agent-builder-chat-tool-approve"
           aria-label={`Approve ${toolName}`}
         >
-          <Icon>
-            {pending === 'approve' ? <IconLoadingCircle className="animate-spin" /> : <IconCheckmark2Medium />}
-          </Icon>
           Approve
         </Button>
         <Button
+          icon={pending === 'decline' ? <IconLoadingCircle className="animate-spin" /> : undefined}
           variant="ghost"
           onClick={handleDecline}
           disabled={decided}
           data-testid="agent-builder-chat-tool-decline"
           aria-label={`Decline ${toolName}`}
         >
-          {pending === 'decline' && (
-            <Icon>
-              <IconLoadingCircle className="animate-spin" />
-            </Icon>
-          )}
           Decline
         </Button>
       </div>
@@ -345,7 +339,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <Code
-              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
+              className="max-h-48 overflow-auto rounded-md bg-nested p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
               code={error.details}
             />

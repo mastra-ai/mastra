@@ -9,7 +9,11 @@ import {
 } from '../../handlers/observability';
 import {
   AGGREGATE_SPANS,
+  GET_CAPABILITIES,
   AGGREGATE_TRACES,
+  GET_ENTITY_NAMES,
+  GET_ENTITY_TYPES,
+  GET_ENVIRONMENTS,
   GET_FEEDBACK_AGGREGATE,
   GET_FEEDBACK_BREAKDOWN,
   GET_FEEDBACK_PERCENTILES,
@@ -25,6 +29,8 @@ import {
   GET_SCORE_BREAKDOWN,
   GET_SCORE_PERCENTILES,
   GET_SCORE_TIME_SERIES,
+  GET_SERVICE_NAMES,
+  GET_TAGS,
   GET_TRACE_QUERY_FIELDS,
   GET_TRACE_QUERY_VALUES,
   LIST_FEEDBACK,
@@ -35,10 +41,11 @@ import {
   QUERY_TRACES,
 } from '../../handlers/observability-new-endpoints';
 import type { ServerRoute } from '../../server-adapter';
-import type { Args, CatalogueKit } from '../catalogue';
+import type { Args, CatalogueKit, ModelSummary } from '../catalogue';
 import { toolError } from '../catalogue';
 import { fitRows } from '../result-size';
 import { compact, hoistRepeated, object, str, toJSONSchema } from '../schema';
+import { summarizeLogs, summarizeMetrics, summarizeTrace, summarizeTraces } from './observability-summary';
 
 const COMBINATORS = ['anyOf', 'oneOf', 'allOf', 'not'] as const;
 const DELTA_POLLING = ['mode', 'after', 'limit'];
@@ -152,18 +159,41 @@ function analyzeSchema(routes: Record<Op, ServerRoute>): JSONSchema7 {
 
 /** Observability (traces, spans, logs) and observability analytics (metrics, scores, feedback). */
 export function addObservabilityTools(kit: CatalogueKit) {
-  const { call, addOperation, addCombined, config } = kit;
+  const { call, addOperation, addCombined, config, offered } = kit;
+  const metricRoutes = {
+    aggregate: GET_METRIC_AGGREGATE,
+    breakdown: GET_METRIC_BREAKDOWN,
+    timeseries: GET_METRIC_TIME_SERIES,
+    percentiles: GET_METRIC_PERCENTILES,
+  };
+  // Hosts with MCP Apps open traces, logs, and metrics in Studio's observability explorer; others read the
+  // JSON as before. The explorer learns what it can show through the observability toolset's app-only tools.
+  const explorer =
+    kit.apps.observabilityExplorer && offered(GET_CAPABILITIES) ? kit.apps.observabilityExplorer : undefined;
+  // An app renders the full rows, so the model reads one line per row (see observability-summary.ts).
+  const opensIn = (app: string | undefined, summary: ModelSummary) =>
+    app ? { meta: { ui: { resourceUri: app } }, summary } : undefined;
 
   if (config.toolsets.has('observability')) {
-    const bodyTool = (route: ServerRoute, rows?: string, schema: unknown = route.bodySchema) =>
-      addOperation(route, hoistRepeated(asObjectSchema(toJSONSchema(schema))), async (args, signal) => {
-        const result = await call(route, { body: args }, signal);
-        // Trace and span rows are spans, which get_span returns in full.
-        const detail = rows === 'traces' || rows === 'spans' ? 'get_span' : undefined;
-        return rows ? fitRows(result, rows, PAGE_LIMIT_HINT, { cursors: CURSORS, detail }) : result;
-      });
+    const bodyTool = (
+      route: ServerRoute,
+      rows?: string,
+      schema: unknown = route.bodySchema,
+      options?: Parameters<typeof addOperation>[3],
+    ) =>
+      addOperation(
+        route,
+        hoistRepeated(asObjectSchema(toJSONSchema(schema))),
+        async (args, signal) => {
+          const result = await call(route, { body: args }, signal);
+          // Trace and span rows are spans, which get_span returns in full.
+          const detail = rows === 'traces' || rows === 'spans' ? 'get_span' : undefined;
+          return rows ? fitRows(result, rows, PAGE_LIMIT_HINT, { cursors: CURSORS, detail }) : result;
+        },
+        options,
+      );
 
-    bodyTool(QUERY_TRACES, 'traces');
+    bodyTool(QUERY_TRACES, 'traces', undefined, opensIn(explorer, summarizeTraces('traces')));
     bodyTool(AGGREGATE_TRACES);
     bodyTool(QUERY_SPANS, 'spans');
     bodyTool(AGGREGATE_SPANS);
@@ -206,6 +236,8 @@ export function addObservabilityTools(kit: CatalogueKit) {
         const kept = (result.spans as unknown[]).length;
         return kept < page.length ? { ...result, nextOffset: offset + kept } : result;
       },
+      // Hosts with MCP Apps draw the trace with Studio's timeline; others read the JSON as before.
+      opensIn(kit.apps.traceViewer, summarizeTrace),
     );
     addOperation(GET_SPAN_ROUTE, object({ traceId, spanId: str('Span id.') }, ['traceId', 'spanId']), (args, signal) =>
       call(GET_SPAN_ROUTE, { pathParams: { traceId: args.traceId, spanId: args.spanId } }, signal),
@@ -213,14 +245,63 @@ export function addObservabilityTools(kit: CatalogueKit) {
     addOperation(GET_TRACE_TRAJECTORY_ROUTE, object({ traceId }, ['traceId']), (args, signal) =>
       call(GET_TRACE_TRAJECTORY_ROUTE, { pathParams: { traceId: args.traceId } }, signal),
     );
-    addOperation(LIST_TRACES_ROUTE, hoistRepeated(listQuerySchema(LIST_TRACES_ROUTE)), async (args, signal) =>
-      fitRows(await call(LIST_TRACES_ROUTE, { query: args }, signal), 'spans', PER_PAGE_HINT, {
-        cursors: CURSORS,
-        detail: 'get_span',
-      }),
+    addOperation(
+      LIST_TRACES_ROUTE,
+      hoistRepeated(listQuerySchema(LIST_TRACES_ROUTE)),
+      async (args, signal) =>
+        fitRows(await call(LIST_TRACES_ROUTE, { query: args }, signal), 'spans', PER_PAGE_HINT, {
+          cursors: CURSORS,
+          detail: 'get_span',
+        }),
+      opensIn(explorer, summarizeTraces('spans')),
     );
-    addOperation(LIST_LOGS, hoistRepeated(listQuerySchema(LIST_LOGS)), async (args, signal) =>
-      fitRows(await call(LIST_LOGS, { query: args }, signal), 'logs', PER_PAGE_HINT, { cursors: CURSORS }),
+    // The explorer asks which views the store supports and which of them this caller's tools serve, and
+    // fills its filter bars from the values the store has seen; the model has no use for either.
+    if (explorer) {
+      const appOnly = { meta: { ui: { resourceUri: explorer, visibility: ['app'] } } };
+      addOperation(
+        GET_CAPABILITIES,
+        object({}),
+        async (_args, signal) => ({
+          ...((await call(GET_CAPABILITIES, {}, signal)) as Args),
+          tools: {
+            logs: offered(LIST_LOGS),
+            metrics: Object.values(metricRoutes).every(offered),
+          },
+        }),
+        appOnly,
+      );
+      const values = {
+        entityTypes: GET_ENTITY_TYPES,
+        entityNames: GET_ENTITY_NAMES,
+        serviceNames: GET_SERVICE_NAMES,
+        environments: GET_ENVIRONMENTS,
+        tags: GET_TAGS,
+      };
+      addCombined(
+        Object.values(values),
+        object(
+          {
+            kind: { type: 'string', enum: Object.keys(values), description: 'Which values to list.' },
+            ...(listQuerySchema(GET_ENTITY_NAMES).properties as Record<string, JSONSchema7>),
+            ...(listQuerySchema(GET_TAGS).properties as Record<string, JSONSchema7>),
+          },
+          ['kind'],
+        ),
+        (args, signal) => {
+          // The input schema only lets through a `kind` that names a route.
+          const { kind, ...query } = args as { kind: keyof typeof values };
+          return call(values[kind], { query }, signal);
+        },
+        appOnly,
+      );
+    }
+    addOperation(
+      LIST_LOGS,
+      hoistRepeated(listQuerySchema(LIST_LOGS)),
+      async (args, signal) =>
+        fitRows(await call(LIST_LOGS, { query: args }, signal), 'logs', PER_PAGE_HINT, { cursors: CURSORS }),
+      opensIn(explorer, summarizeLogs),
     );
   }
 
@@ -234,19 +315,19 @@ export function addObservabilityTools(kit: CatalogueKit) {
       );
     }
 
-    const analyze = (routes: Record<Op, ServerRoute>) =>
-      addCombined(Object.values(routes), hoistRepeated(analyzeSchema(routes)), (args, signal) => {
-        const { op, ...body } = args;
-        const route = typeof op === 'string' && Object.hasOwn(routes, op) ? routes[op as Op] : undefined;
-        if (!route) throw toolError(400, `Unknown op "${String(op)}". Use one of: ${OPS.join(', ')}.`);
-        return call(route, { body }, signal);
-      });
-    analyze({
-      aggregate: GET_METRIC_AGGREGATE,
-      breakdown: GET_METRIC_BREAKDOWN,
-      timeseries: GET_METRIC_TIME_SERIES,
-      percentiles: GET_METRIC_PERCENTILES,
-    });
+    const analyze = (routes: Record<Op, ServerRoute>, options?: Parameters<typeof addCombined>[3]) =>
+      addCombined(
+        Object.values(routes),
+        hoistRepeated(analyzeSchema(routes)),
+        (args, signal) => {
+          const { op, ...body } = args;
+          const route = typeof op === 'string' && Object.hasOwn(routes, op) ? routes[op as Op] : undefined;
+          if (!route) throw toolError(400, `Unknown op "${String(op)}". Use one of: ${OPS.join(', ')}.`);
+          return call(route, { body }, signal);
+        },
+        options,
+      );
+    analyze(metricRoutes, opensIn(explorer, summarizeMetrics));
     analyze({
       aggregate: GET_SCORE_AGGREGATE,
       breakdown: GET_SCORE_BREAKDOWN,

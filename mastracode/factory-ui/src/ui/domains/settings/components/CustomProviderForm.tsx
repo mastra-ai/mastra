@@ -17,14 +17,22 @@ interface DraftState {
 
 export interface CustomProviderFormProps {
   provider?: CustomProviderInfo;
+  /** Where the provider is saved. Omitted without sign-in, where there is one list. */
+  scope?: CustomProviderInfo['scope'];
   requireModels?: boolean;
   onCancel?: () => void;
   onSaved?: (provider: CustomProviderInfo) => void;
 }
 
-export function CustomProviderForm({ provider, requireModels = false, onCancel, onSaved }: CustomProviderFormProps) {
+export function CustomProviderForm({
+  provider,
+  scope,
+  requireModels = false,
+  onCancel,
+  onSaved,
+}: CustomProviderFormProps) {
   const saveMutation = useSaveCustomProvider();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
   const [draft, setDraft] = useState<DraftState>({
     name: provider?.name ?? '',
     url: provider?.url ?? '',
@@ -56,9 +64,10 @@ export function CustomProviderForm({ provider, requireModels = false, onCancel, 
       models,
       ...(apiKey ? { apiKey } : {}),
       ...(provider ? { previousId: provider.id } : {}),
+      ...(scope ? { scope } : {}),
     };
 
-    setError(null);
+    setError(undefined);
     try {
       const result = await saveMutation.mutateAsync(body);
       onSaved?.(result.provider);
@@ -94,7 +103,7 @@ export function CustomProviderForm({ provider, requireModels = false, onCancel, 
         />
       </Field>
       <Field className="gap-1">
-        <FieldLabel>API key {provider ? '(leave blank to keep)' : '(optional)'}</FieldLabel>
+        <FieldLabel>API key {provider ? '(leave blank to keep, unless the host changes)' : '(optional)'}</FieldLabel>
         <Input
           type="password"
           size="sm"
@@ -113,8 +122,13 @@ export function CustomProviderForm({ provider, requireModels = false, onCancel, 
         />
       </Field>
       <div className="flex items-center gap-2">
-        <Button variant="primary" size="sm" disabled={saveMutation.isPending} onClick={() => void save()}>
-          {saveMutation.isPending && <Spinner size="sm" aria-hidden className="size-3" />}
+        <Button
+          icon={saveMutation.isPending ? <Spinner size="sm" aria-hidden /> : undefined}
+          variant="primary"
+          size="sm"
+          disabled={saveMutation.isPending}
+          onClick={() => void save()}
+        >
           {provider ? 'Save' : 'Add'}
         </Button>
         {onCancel && (

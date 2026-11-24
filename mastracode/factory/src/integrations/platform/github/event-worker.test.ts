@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestDiscovery, GithubPullRequestReconciler } from '../../github/rules.js';
 import type { dispatchGithubWebhook } from '../../github/webhook.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventDispatchIntegration, PlatformGithubEventStorage } from './event-worker.js';
 
@@ -112,7 +112,7 @@ function createWorker(input: {
     },
   };
   return new PlatformGithubEventWorker({
-    client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
+    client: createPlatformConnectClient({ baseUrl, accessToken, fetch: input.fetchImpl }),
     controller: {} as never,
     github: input.github ?? createGithub(),
     storage: input.storage,
@@ -397,6 +397,62 @@ describe('PlatformGithubEventWorker', () => {
       expect.objectContaining({ deliveryId: 'delivery-review-edited' }),
     );
     expect(dispatch).toHaveBeenCalledTimes(5);
+    await worker.stop();
+  });
+
+  it("forwards issue label and assignee changes to Factory rules, so they reach the card's routes", async () => {
+    const settings = createSettingsStorage();
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+      delivered: 1,
+      failed: 0,
+      skipped: 0,
+      ignored: false,
+    });
+    const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
+    const actions = ['labeled', 'unlabeled', 'assigned', 'unassigned', 'milestoned'];
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101 }] });
+      }
+      if (url.pathname.endsWith('/repositories/101/events')) {
+        if (url.searchParams.has('afterTimestamp')) {
+          return json({
+            events: [
+              ...actions.map((action, index) => ({
+                id: `300${index}-0`,
+                deliveryId: `delivery-${action}`,
+                event: 'issues',
+                payload: { action },
+              })),
+              { id: '3100-0', deliveryId: 'delivery-pr-labeled', event: 'pull_request', payload: { action: 'labeled' } },
+              { id: '3101-0', deliveryId: 'delivery-pr-reopened', event: 'pull_request', payload: { action: 'reopened' } },
+              { id: '3102-0', deliveryId: 'delivery-pr-edited', event: 'pull_request', payload: { action: 'edited' } },
+            ],
+            nextCursor: '3102-0',
+          });
+        }
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({ fetchImpl, storage: settings.storage, now: () => 1_000, dispatch, ingestFactoryEvent });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ingestFactoryEvent.mock.calls.map(([event]) => (event as { deliveryId: string }).deliveryId)).toEqual([
+      'delivery-labeled',
+      'delivery-unlabeled',
+      'delivery-assigned',
+      'delivery-unassigned',
+      'delivery-pr-labeled',
+      'delivery-pr-reopened',
+    ]);
     await worker.stop();
   });
 
@@ -687,7 +743,7 @@ describe('PlatformGithubEventWorker', () => {
         })),
       );
       const worker = new PlatformGithubEventWorker({
-        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        client: createPlatformConnectClient({ baseUrl, accessToken, fetch: fetchImpl }),
         controller: {} as never,
         github: createGithub(),
         storage: settings.storage,

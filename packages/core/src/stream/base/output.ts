@@ -186,7 +186,26 @@ type DelayedPromises<OUTPUT = undefined> = {
 };
 
 /**
- * The complete output returned by `getFullOutput()`.
+ * The complete result of `agent.generate()` (and of `getFullOutput()` on a stream).
+ *
+ * - `text`: final text; `object`: typed structured output when `structuredOutput` was set.
+ * - `toolCalls` / `toolResults`: every tool call and result across all steps, as chunks whose
+ *   data is under `payload` — read `toolCalls[i].payload.toolName` / `.payload.args`
+ *   (`ToolCallPayload`) and `toolResults[i].payload.result` (`ToolResultPayload`).
+ * - `steps[i].toolCalls` / `steps[i].toolResults`: the same chunks, per step.
+ * - `usage` covers the last step; `totalUsage` covers the whole run.
+ * - Goal runs: each continuing goal evaluation clears `text`, `steps`, `toolCalls` and
+ *   `toolResults`, so they cover only the turns after the last such evaluation. `totalUsage`
+ *   stays cumulative.
+ *
+ * @example
+ * ```ts
+ * const result = await agent.generate('What is the weather in Paris?');
+ * for (const call of result.toolCalls) console.log(call.payload.toolName, call.payload.args);
+ * for (const res of result.toolResults) console.log(res.payload.result);
+ * ```
+ *
+ * @see [Agent.generate() response structure](https://mastra.ai/reference/agents/generate#response-structure)
  */
 export type FullOutput<OUTPUT = undefined> = {
   /** The text output from all steps, excluding rejected responses */
@@ -207,9 +226,17 @@ export type FullOutput<OUTPUT = undefined> = {
   reasoning: PromiseResults<OUTPUT>['reasoning'];
   /** Combined reasoning text */
   reasoningText: string | undefined;
-  /** Tool calls made during execution */
+  /**
+   * Every tool call made during the run, across all steps (for goal runs, only after the last
+   * continuing goal evaluation). Each entry is a chunk; the call is under `payload`
+   * (`payload.toolCallId`, `payload.toolName`, `payload.args`).
+   */
   toolCalls: PromiseResults<OUTPUT>['toolCalls'];
-  /** Results from tool executions */
+  /**
+   * Every tool result produced during the run, across all steps (for goal runs, only after the
+   * last continuing goal evaluation). Each entry is a chunk; the tool's return value is
+   * `payload.result`.
+   */
   toolResults: PromiseResults<OUTPUT>['toolResults'];
   /** Sources referenced by model */
   sources: PromiseResults<OUTPUT>['sources'];
@@ -630,6 +657,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     details: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]>;
   };
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
+  /** Run-level sources, files and tool calls as of the last `step-start` that has no `step-finish` yet. */
+  #runOutputAtStepStart?: { sources: number; files: number; toolCalls: number };
   // Records keyed by provider-supplied tool call IDs have no prototype, so IDs like "__proto__"
   // or "constructor" are plain keys.
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = Object.create(null);
@@ -1175,6 +1204,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#bufferedByStep.text = '';
                 self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
               }
+              // So does whatever else the unfinished request streamed: it belongs to no step. Its
+              // sources and files leave the run too. Its tool calls stay, since an eager tool may
+              // already have run and been carried into the next request, but a call the next
+              // request makes under the same id replaces the recorded one.
+              if (self.#runOutputAtStepStart) {
+                self.#bufferedSources.length = self.#runOutputAtStepStart.sources;
+                self.#bufferedFiles.length = self.#runOutputAtStepStart.files;
+                for (const call of self.#toolCalls.slice(self.#runOutputAtStepStart.toolCalls)) {
+                  self.#replaceableToolCallIds.add(call.payload.toolCallId);
+                }
+              }
+              self.#runOutputAtStepStart = {
+                sources: self.#bufferedSources.length,
+                files: self.#bufferedFiles.length,
+                toolCalls: self.#toolCalls.length,
+              };
+              Object.assign(self.#bufferedByStep, { sources: [], files: [], toolCalls: [], toolResults: [] });
               if (self.#reasoningAtStepStart) {
                 self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
                 self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;
@@ -1349,7 +1395,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#attemptToolCallIds.delete(chunk.payload.toolCallId);
                 for (const calls of [self.#toolCalls, self.#bufferedByStep.toolCalls]) {
                   const index = calls.findLastIndex(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
-                  if (index !== -1) calls.splice(index, 1);
+                  if (index === -1) continue;
+                  calls.splice(index, 1);
+                  // Keep the step-start boundary on the same call, so a later retry can still replace this one.
+                  if (
+                    calls === self.#toolCalls &&
+                    self.#runOutputAtStepStart &&
+                    index < self.#runOutputAtStepStart.toolCalls
+                  ) {
+                    self.#runOutputAtStepStart.toolCalls--;
+                  }
                 }
               }
               // A call already recorded under this id in this step (a repeated tool-call) is not emitted twice.
@@ -1526,6 +1581,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
               self.#bufferedByStepReasoningDetails = {};
               self.#reasoningAtStepStart = undefined;
+              self.#runOutputAtStepStart = undefined;
               self.#bufferedTextAtStepStart = self.#bufferedText.length;
 
               // A continuing goal evaluation arrived while this step was still
@@ -3110,6 +3166,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedReasoning.length = 0;
     this.#bufferedReasoningDetails = {};
     this.#reasoningAtStepStart = undefined;
+    this.#runOutputAtStepStart = undefined;
     this.#bufferedFiles.length = 0;
     this.#toolCalls.length = 0;
     this.#toolResults.length = 0;

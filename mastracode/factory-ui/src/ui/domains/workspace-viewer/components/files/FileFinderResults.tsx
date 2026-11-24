@@ -112,13 +112,13 @@ export function FileFinderResults({ workspacePath, finder, changes }: FileFinder
                 }}
                 onClick={() => finder.open(path)}
               >
-                <span aria-hidden className="flex shrink-0 items-center [&>svg]:size-3.5">
+                <span aria-hidden className="[&>svg]:size-icon-sm flex shrink-0 items-center">
                   {getFileIcon(path)}
                 </span>
                 <span className="text-muted-foreground max-w-full shrink-0 truncate">
                   <Marked text={path.slice(nameStart)} from={nameStart} matched={matched} />
                 </span>
-                <span className="text-placeholder min-w-0 flex-1 truncate">
+                <span className="text-subtle-foreground min-w-0 flex-1 truncate">
                   <Marked text={path.slice(0, Math.max(0, nameStart - 1))} from={0} matched={matched} />
                 </span>
                 {status ? <ChangeStatusLetter status={status} /> : null}

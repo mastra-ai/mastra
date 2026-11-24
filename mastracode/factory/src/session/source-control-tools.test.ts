@@ -517,17 +517,60 @@ describe('createSourceControlTools', () => {
     expect(setup.createPullRequest).not.toHaveBeenCalled();
   });
 
-  it('rejects checkout refresh outside a bound GitLab MR review session', async () => {
-    const setup = await fixture();
+  it('offers checkout refresh only in a bound GitLab merge-request review session', async () => {
+    const build = async (integrationId: string, branch?: string) => {
+      const setup = await fixture(integrationId);
+      if (branch) setup.storage.sessionsRows[0]!.branch = branch;
+      return createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: integrationId, storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+    };
+    const mrBranch = 'factory/gitlab-mr-17-abc123';
+
+    expect(await build('gitlab')).not.toHaveProperty('source_control_refresh_change_request_checkout');
+    expect(await build('github', mrBranch)).not.toHaveProperty('source_control_refresh_change_request_checkout');
+    const review = await build('gitlab', mrBranch);
+    expect(review).toHaveProperty('source_control_refresh_change_request_checkout');
+    expect(review).toHaveProperty('source_control_push_branch');
+  });
+
+  it('refreshes a bound GitLab merge-request checkout to the provider-reported head', async () => {
+    const branch = 'factory/gitlab-mr-17-abc123';
+    const newHead = 'b'.repeat(40);
+    const setup = await fixture('gitlab');
+    setup.storage.sessionsRows[0]!.branch = branch;
+    setup.getPullRequest.mockResolvedValue({ id: '17', state: 'open', merged: false, headSha: newHead } as never);
+    const executions: string[][] = [];
+    const sandbox = {
+      id: 'sandbox-1',
+      provider: 'custom',
+      workingDirectory: '/workspace',
+      executeCommand: vi.fn(async (_command: string, args: string[]) => {
+        executions.push(args);
+        if (args.includes('--show-current')) return { exitCode: 0, stdout: `${branch}\n`, stderr: '' };
+        if (args.includes('FETCH_HEAD') && args.includes('rev-parse')) {
+          return { exitCode: 0, stdout: `${newHead}\n`, stderr: '' };
+        }
+        if (args.includes('rev-parse')) return { exitCode: 0, stdout: `${'a'.repeat(40)}\n`, stderr: '' };
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+    };
     const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
     });
-    await expect((tools.source_control_refresh_change_request_checkout!.execute as any)({})).rejects.toThrow(
-      'only available in a bound GitLab merge-request review session',
+
+    const result = await (tools.source_control_refresh_change_request_checkout!.execute as any)(
+      {},
+      { workspace: { sandbox } },
     );
-    expect(setup.getRepositoryTarget).not.toHaveBeenCalled();
+
+    expect(result).toEqual({ headSha: newHead, changed: true });
+    expect(setup.getPullRequest).toHaveBeenCalledWith(expect.objectContaining({ pullRequestId: '17' }));
+    expect(executions).toContainEqual(expect.arrayContaining(['fetch', 'origin', 'refs/merge-requests/17/head']));
   });
 
   it('fails closed when a session exists in more than one provider partition', async () => {
@@ -573,6 +616,7 @@ describe('createSourceControlTools', () => {
           if (args.includes('show-ref')) {
             return { exitCode: checkouts.missingBranch?.includes(workdir) ? 1 : 0, stdout: '', stderr: '' };
           }
+          if (args.includes('rev-parse')) return { exitCode: 0, stdout: 'abc123\n', stderr: '' };
           if (args.includes('get-url')) {
             const remote = checkouts.remotes?.[workdir] ?? `https://gitlab.com/acme/${workdir.split('/').pop()}.git`;
             return { exitCode: 0, stdout: `${remote}\n`, stderr: '' };
@@ -649,9 +693,23 @@ describe('createSourceControlTools', () => {
 
       const result = await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/repo' });
+      expect(result).toEqual({
+        pushed: true,
+        branch: 'factory/issue-1',
+        repository: 'acme/repo',
+        commit: 'abc123',
+        upToDate: false,
+      });
       expect(pushes()).toHaveLength(1);
-      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1']);
+      expect(pushes()[0]!.args).toEqual([
+        '-C',
+        '/home/user/repo',
+        'push',
+        '--porcelain',
+        '-u',
+        'origin',
+        'factory/issue-1',
+      ]);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-1' });
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
         { projectRepositoryId: 'repo-link-1', branch: 'factory/issue-1', changeRequestUrl: null },
@@ -676,7 +734,13 @@ describe('createSourceControlTools', () => {
         { workspace: { sandbox } },
       );
 
-      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/other' });
+      expect(result).toEqual({
+        pushed: true,
+        branch: 'factory/issue-1',
+        repository: 'acme/other',
+        commit: 'abc123',
+        upToDate: false,
+      });
       expect(executions.map(entry => entry.args)).toContainEqual([
         '-C',
         '/home/user/other',
@@ -684,7 +748,15 @@ describe('createSourceControlTools', () => {
         '-c',
         'factory/issue-1',
       ]);
-      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1']);
+      expect(pushes()[0]!.args).toEqual([
+        '-C',
+        '/home/user/other',
+        'push',
+        '--porcelain',
+        '-u',
+        'origin',
+        'factory/issue-1',
+      ]);
       expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
       expect(JSON.stringify(executions)).not.toContain('glpat-secret');
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
@@ -1179,8 +1251,15 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       await push();
       expect(git('symbolic-ref', '--short', 'HEAD')).toBe(branch);
       const next = commit('next change');
-      await push();
+      await expect(push()).resolves.toMatchObject({ commit: next, upToDate: false });
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(next);
+    });
+
+    it('reports a push that sent nothing new as up to date', async () => {
+      const { commit, push } = await checkoutFixture(repository);
+      const head = commit('agent change');
+      await expect(push()).resolves.toMatchObject({ commit: head, upToDate: false });
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository, commit: head, upToDate: true });
     });
 
     it('pushes an ahead session branch without moving the active checkout', async () => {
@@ -1191,7 +1270,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
       writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted main work');
       const dirty = git('status', '--porcelain');
 
-      await expect(push()).resolves.toEqual({ pushed: true, branch, repository });
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository, commit: sessionHead, upToDate: false });
 
       expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(sessionHead);
       expect(remote('show', `${branch}:tracked.txt`)).toBe('session work');

@@ -46,7 +46,7 @@ export function SpanPayloadCollapsible({
 }) {
   return (
     <Collapsible defaultOpen={defaultOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1 text-meta text-placeholder uppercase">
+      <CollapsibleTrigger className="flex items-center gap-1 text-meta text-muted-foreground uppercase">
         <DisclosureChevron direction="right" className="size-3" />
         {label}
       </CollapsibleTrigger>

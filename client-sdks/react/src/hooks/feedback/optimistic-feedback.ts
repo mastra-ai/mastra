@@ -19,8 +19,10 @@ type ServerFeedbackItem = ListFeedbackResponse['feedback'][number];
 /**
  * A row of `useTraceFeedback` / `useSpanFeedback`. `isPending` marks a comment shown before the
  * server returns it: it has no stored record yet, so review/delete actions should not target it.
+ * `deleteStatus` is `deleting` while an accepted deletion waits for the server to drop the row,
+ * and `failed` when the row was still returned after the deletion window expired.
  */
-export type FeedbackListItem = ServerFeedbackItem & { isPending?: boolean };
+export type FeedbackListItem = ServerFeedbackItem & { isPending?: boolean; deleteStatus?: 'deleting' | 'failed' };
 export type FeedbackListResponse = Omit<ListFeedbackResponse, 'feedback'> & { feedback: FeedbackListItem[] };
 
 /** How long a pending comment stays visible if the server never returns it (e.g. a lost write). */

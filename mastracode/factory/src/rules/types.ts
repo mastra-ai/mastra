@@ -157,6 +157,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'pullRequestReviewSubmitted',
   'pullRequestMerged',
   'pullRequestClosed',
+  'pullRequestReopened',
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
@@ -720,6 +721,11 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
 export interface FactoryRouteEventDecision extends FactoryCommitDecisionBase {
   type: 'routeEvent';
   event: BoardEventFacts;
+  /**
+   * An update the card's own session made (its labels or assignees, set through Factory): held
+   * until the session's run ends, then combined with the session's other updates into one event.
+   */
+  fromCardSession?: true;
 }
 
 /**
@@ -749,6 +755,8 @@ export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase
 export interface FactoryPullRequestHome {
   workItemId: string;
   reason: 'authored' | 'closes';
+  /** The other unfinished cards of issues it closes: they link to it without holding it. */
+  alsoCloses?: string[];
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
@@ -780,9 +788,9 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
    */
   attachTo?: { workItemId: string };
   /**
-   * The card of the issue this pull or merge request closes. When no card holds the record yet,
-   * the project's intake routes can test that card and join the record to it (see
-   * `IntakeRouteTarget.joinClosedIssue`); otherwise it is filed as usual.
+   * The card of the issue this pull or merge request closes. When no card holds the record yet and
+   * that card is unfinished, the record links to it, whoever authored it, and the card gets a
+   * `pull_request.opened` for its board's card-move rules; otherwise it is filed as usual.
    */
   closesIssue?: { workItemId: string };
   metadata?: Record<string, FactoryRuleJsonValue>;
@@ -796,11 +804,18 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   cancelInFlight?: boolean;
   /**
    * Start this run even when the card was moved by the agent already running in
-   * this role's session. The prompt is queued onto that agent's run, so a phase
-   * that shares its context with the one before it still gets its own work.
+   * this role's session. The prompt starts once that agent's run ends, in a fresh
+   * run with this role's tools, so a phase that shares its context with the one
+   * before it still gets its own work.
    * Without it, an agent's own move into a phase of its role starts nothing.
    */
   startsAfterOwnMove?: boolean;
+  /**
+   * The run was queued by a card move on an outside author's pull request event. Starting a run
+   * stays a person's call there: the dispatcher parks it for approval even in a phase that
+   * starts on its own.
+   */
+  untrustedPullRequestEvent?: boolean;
   /**
    * Pursue the run's work as a goal: the session's thread holds `objective` until the card
    * leaves the phase, and the agent's goal judge keeps the run going until it is met.
@@ -839,6 +854,12 @@ export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   priority?: 'medium' | 'high' | 'urgent';
   idleBehavior?: 'persist' | 'wake';
   prepareBinding?: boolean;
+  /**
+   * The message answers an outside author's pull request event. Waking an idle session (or
+   * starting one with `prepareBinding`) on that author's say-so waits for a person; the
+   * dispatcher parks the decision as a proposal instead of delivering it.
+   */
+  untrustedPullRequestEvent?: boolean;
 }
 
 export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {

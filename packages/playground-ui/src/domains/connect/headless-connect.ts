@@ -241,6 +241,17 @@ export class HeadlessAuthError extends Error {
   }
 }
 
+function isSecureNangoHost(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  return url.protocol === 'https:' || (url.protocol === 'http:' && loopback);
+}
+
 /**
  * Starts a headless Nango auth flow keyed by the session token the launch
  * gate released. For OAuth this opens the provider's consent popup and
@@ -252,6 +263,8 @@ export class HeadlessAuthError extends Error {
  */
 export function startHeadlessAuth(input: {
   sessionToken: string;
+  /** Nango API host from the connect session; omitted means Nango Cloud. */
+  apiBaseUrl?: string | null;
   integrationId: string;
   authType?: string | null;
   credentials?: Record<string, string>;
@@ -265,7 +278,17 @@ export function startHeadlessAuth(input: {
       close: () => {},
     };
   }
-  const nango = new Nango({ connectSessionToken: input.sessionToken });
+  if (input.apiBaseUrl && !isSecureNangoHost(input.apiBaseUrl)) {
+    // Never hand the session token or credentials to a cleartext remote host.
+    return {
+      result: Promise.reject(new HeadlessAuthError('The Nango host must use HTTPS.', 'failed')),
+      close: () => {},
+    };
+  }
+  const nango = new Nango({
+    connectSessionToken: input.sessionToken,
+    ...(input.apiBaseUrl ? { host: input.apiBaseUrl } : {}),
+  });
   const request =
     input.authType != null && UNAUTHENTICATED_AUTH_TYPES.has(input.authType)
       ? nango.create(input.integrationId, input.params ? { params: input.params } : {})

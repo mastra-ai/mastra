@@ -1,3 +1,4 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -5,8 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
-import { externalLinkLabel } from '../boardItems';
-import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
+import { CARD_SOURCES } from '../cardSources';
+import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
@@ -15,7 +16,7 @@ import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
 
-const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
+export const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
 export function RelatedWorkItemLink({
   item,
@@ -41,7 +42,7 @@ export function RelatedWorkItemLink({
     pullRequest && pullRequestStatus ? changeRequestStatusLabel(pullRequest.provider, pullRequestStatus) : undefined;
   let ariaLabel = `Open ${name}`;
   if (live) ariaLabel = `Open live session for ${name}`;
-  if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${name}`;
+  if (external) ariaLabel = `${CARD_SOURCES[item.source].linkLabel}: ${name}`;
   if (statusLabel !== undefined) ariaLabel = `${ariaLabel}, ${statusLabel}`;
 
   const content = (

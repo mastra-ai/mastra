@@ -99,10 +99,12 @@ export async function loadGraph() {
     { createTool },
     { createDurableAgent },
     { createEventedAgent },
-    { globalRunRegistry },
+    { globalRunRegistry, takeRunScorerInstances },
     { __resetExecutionFencesForTests },
+    { releaseRunMessageRefs },
     workflows,
     eventedWorkflows,
+    { MockMemory },
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -112,8 +114,10 @@ export async function loadGraph() {
     import('../create-evented-agent'),
     import('../run-registry'),
     import('../execution-fence'),
+    import('../run-message-refs'),
     import('../../../workflows'),
     import('../../../workflows/evented'),
+    import('../../../memory/mock'),
   ]);
   return {
     Mastra,
@@ -123,12 +127,15 @@ export async function loadGraph() {
     createDurableAgent,
     createEventedAgent,
     globalRunRegistry,
+    takeRunScorerInstances,
     /** Stops this graph's claim heartbeats and forgets its local executions. */
     resetExecutionFences: __resetExecutionFencesForTests,
+    releaseRunMessageRefs,
     createWorkflow: workflows.createWorkflow,
     createStep: workflows.createStep,
     createEventedWorkflow: eventedWorkflows.createWorkflow,
     createEventedStep: eventedWorkflows.createStep,
+    MockMemory,
   };
 }
 
@@ -181,7 +188,7 @@ export function createGate() {
 
 export type Gate = ReturnType<typeof createGate>;
 
-type BuildContext = { core: CoreGraph; generation: number };
+type BuildContext = { core: CoreGraph; generation: number; storage: any };
 
 type AgentBuild = (ctx: BuildContext) => Agent<any, any, any>;
 type WorkflowBuild = (ctx: BuildContext) => any;
@@ -240,7 +247,7 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
     options.storageMode === 'serializing'
       ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore().store
       : new core.InMemoryStore();
-  const built = options.build({ core, generation } as BuildContext);
+  const built = options.build({ core, generation, storage } as BuildContext);
   let mastra: any;
   try {
     if (options.kind === 'workflow') {
@@ -530,12 +537,23 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       return result;
     },
 
-    /** Call at the end of a test to stop the event workers every graph started. */
+    /** Call at the end of a test to stop the event workers every graph started and release its graphs. */
     async stop() {
       // Release holds first: a parked write blocks the execution `stopWorkers()`
       // awaits, so stopping before releasing would deadlock.
       for (const hold of holds.splice(0)) hold.release();
-      for (const graph of graphs) await graph.mastra?.stopWorkers?.();
+      for (const graph of graphs.splice(0)) {
+        try {
+          await graph.mastra?.stopWorkers?.();
+        } finally {
+          // Module-level caches and heartbeats arm timers that would keep each
+          // graph alive long after the test, so empty them.
+          graph.core.resetExecutionFences();
+          graph.core.releaseRunMessageRefs(options.runId);
+          graph.core.globalRunRegistry.clear();
+          graph.core.takeRunScorerInstances(options.runId, undefined);
+        }
+      }
     },
   };
 }

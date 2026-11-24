@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
-import { KnowledgePageLink, useHasKnowledgeLinks, useKnowledgeLinksContext } from '../../knowledge/knowledge-links';
-import type { UseKnowledgePagePreview } from '../../knowledge/knowledge-links';
+import { KnowledgePageLink } from '../../knowledge/knowledge-links';
+import { useHasKnowledgeLinks, useKnowledgeLinksContext } from '../../knowledge/knowledge-links-context';
+import type { UseKnowledgePagePreview } from '../../knowledge/knowledge-links-context';
 import type { MessageMetadata } from '../message-metadata';
 import { TripwireNotice } from '../tripwire-notice';
 import { errorMessage, messageTextKind } from './message-text-kind';

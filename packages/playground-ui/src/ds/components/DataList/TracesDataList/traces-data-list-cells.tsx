@@ -38,7 +38,10 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
   const label = isRoot ? 'Trace' : 'Subtrace';
   const icon = (
     <span aria-label={label} className="inline-flex shrink-0">
-      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-muted-foreground' : 'text-placeholder')} aria-hidden />
+      <Icon
+        className={cn('size-4 shrink-0', isRoot ? 'text-muted-foreground' : 'text-subtle-foreground')}
+        aria-hidden
+      />
     </span>
   );
   return (
@@ -126,7 +129,7 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
     <DataListCell className="flex min-w-0 items-center gap-2">
       {display ? (
         <>
-          <display.Icon className="size-3.5 shrink-0 text-placeholder" aria-hidden />
+          <display.Icon className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden />
           <Txt as="span" variant="body-sm" className="min-w-0 truncate">
             {display.label}
           </Txt>

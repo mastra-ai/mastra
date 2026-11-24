@@ -31,10 +31,11 @@ export function ComposerHeader({
       className={cn('composer-header relative isolate mx-auto w-full max-w-3xl', className)}
       {...props}
     >
-      <Collapsible.Panel className="composer-header-panel">
+      {/* One px wider each side, so its inset rim lines up with the composer's outset one. */}
+      <Collapsible.Panel className="composer-header-panel -mx-px">
         <div
           data-slot="composer-header-surface"
-          className="flex flex-col gap-3 overflow-hidden rounded-t-[23px] border border-b-0 border-surface-rim bg-card px-3 pt-3 pb-8 text-body-sm text-muted-foreground empty:hidden"
+          className="flex flex-col gap-3 overflow-hidden rounded-t-(--composer-radius) bg-card px-3 pt-3 pb-8 text-body-sm text-muted-foreground shadow-[inset_0_0_0_1px_var(--surface-rim)] empty:hidden"
         >
           {children}
         </div>

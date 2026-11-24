@@ -3,19 +3,28 @@
 //
 //   node scripts/test-tiers/update.mjs versioning --tiers=<file> --run-id=<id> [--date=YYYY-MM-DD]
 //     Every unit test file that failed in a versioning-PR Prebuild run moves `in`.
-//   node scripts/test-tiers/update.mjs daily --tiers=<file> [--days=14] [--date=YYYY-MM-DD]
+//   node scripts/test-tiers/update.mjs daily --tiers=<file> [--days=14] [--date=YYYY-MM-DD] [--budget-minutes=45]
 //     Failures on PRs in the last 14 days that the PR then fixed in source (a catch)
 //     restart the file's 30-day clock, each failure counted once; deleted files leave; files clean for 30 days move `out`.
+//     Runs whose failures are all settled are remembered and never fetched again; past the time
+//     budget the rest wait for the next day, and nothing moves out that day.
 //
 // The pure functions below hold the rules; the CLI only gathers GitHub data for them.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { escapedFiles } from './attribute.mjs';
 import { WINDOW_DAYS, isExternalE2eTest, isJobKey } from './select.mjs';
 
 // PR failures are looked at for this long, so a fix that lands days later still counts.
 export const LOOKBACK_DAYS = 14;
+// The daily update stops inspecting runs after this long (listing included) and saves what it has,
+// inside the workflow's 60-minute job timeout. The next day picks up the runs it didn't reach.
+export const DAILY_BUDGET_MINUTES = 45;
+// No GitHub call starts, waits or keeps running past the budget plus this, so the day's results
+// are still written and committed inside the job timeout.
+const GH_GRACE_MINUTES = 8;
 
 // Same file classes E4 used to call the fix a test-only change or a source change.
 const TEST_PATH =
@@ -188,27 +197,144 @@ const NAMED_JOBS = {
   'Prebuild\tMemory Tests': 'job:memory',
   'Prebuild\tMastra Code E2E / Mastra Code E2E': 'job:mastracode-e2e',
   'Prebuild\tMastra Code E2E / Mastra Code web host OM scenarios': 'job:mastracode-om',
+  // Before r308 E merged it into `Validate repository files`; runs in the window still use it.
   'Quality assurance\tValidate changeset packages': 'job:qa/changeset-check',
 };
+const CHANGESET_STEPS = new Set([
+  'Test changeset package validator',
+  'Reject unknown or ignored changeset packages',
+  'Check whether this PR adds changesets',
+  'Validate changeset release plan',
+]);
+
+const MASTRACODE_E2E_STEPS = new Set([
+  'Build Mastra Code',
+  'Typecheck Code SDK',
+  'Run ACP unit tests',
+  'Check built SDK ACP conformance',
+  'Upload ACP conformance reports',
+  'Run Mastra Code E2E',
+]);
+
+/**
+ * Keys of a job that runs several tiered suites as steps: a suite ran when one of its steps ran.
+ * `isTest` names each suite's test step. `isGate` names steps that only run to fail a suite whose
+ * prerequisites failed: skipped, they say nothing about the suite.
+ */
+function stepKeys(steps, keyOf, isTest, isGate = () => false) {
+  const ran = new Set();
+  const failed = new Set();
+  const unfinished = new Set();
+  const tested = new Set();
+  for (const step of steps) {
+    const key = keyOf(step.name);
+    if (!key) continue;
+    if (step.conclusion === 'skipped' && isGate(step.name)) continue;
+    if (step.conclusion !== 'success') unfinished.add(key);
+    else if (isTest(step.name)) tested.add(key);
+    if (!step.conclusion || step.conclusion === 'skipped') continue;
+    ran.add(key);
+    if (step.conclusion === 'failure') failed.add(key);
+  }
+  // A suite passed only when its test step succeeded and none of its steps (installs, builds)
+  // failed, skipped or was cancelled; an install alone, or a missing test step, is not a pass.
+  const passed = [...tested].filter(key => !unfinished.has(key)).sort();
+  return { ran: [...ran].sort(), failed: [...failed].sort(), passed };
+}
+
+/** A job running several tiered suites as steps (its keys carry `passed`). */
+const isMergedSuiteJob = job => Boolean(jobKeysFor(job.workflow_name, job.name, () => '', job.steps ?? []).passed);
 
 /**
  * The tier keys one CI job ran, and which of them failed. `log` is only read for the jobs that
  * run several packages with `pnpm -r` (light stores, workspace unit tests): a package whose
  * script started (`stores/lance test$ …`) but never printed `Done` failed. Jobs that aren't
- * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing.
- * @returns {{ ran: string[], failed: string[] }}
+ * tiered as a whole (unit and package-E2E file lists, builds, gates) return nothing. `steps` (the
+ * jobs API's) is only read for the merged light E2E and Mastra Code jobs, for `Validate repository
+ * files` and for the grouped container-store jobs. Each merged suite's install and test steps are
+ * named after it (`E2E <label>…`, `Mastra Code web host OM scenarios…`), so a suite ran when one of
+ * its steps ran and failed when one failed. In `Validate repository files` just the changeset steps
+ * belong to job:qa/changeset-check (`passed` when every one that ran succeeded). A grouped store
+ * ran when its `Run <store> tests` step ran and failed when that step failed; a cancelled step
+ * didn't run, and a failed checkout, setup or group build fails every store the job name lists
+ * (`prerequisite`).
+ * @returns {{ ran: string[], failed: string[], passed?: string[], prerequisite?: string[] }}
  */
-export function jobKeysFor(workflow, name, log = () => '') {
+export function jobKeysFor(workflow, name, log = () => '', steps = []) {
   const one = key => ({ ran: [key], failed: [key] });
+  if (workflow === 'Prebuild' && name === 'Mastra Code E2E / Mastra Code E2E' && steps.length)
+    return stepKeys(
+      steps,
+      step =>
+        step.startsWith('Mastra Code web host OM scenarios')
+          ? 'job:mastracode-om'
+          : MASTRACODE_E2E_STEPS.has(step)
+            ? 'job:mastracode-e2e'
+            : null,
+      step => step === 'Run Mastra Code E2E' || step === 'Mastra Code web host OM scenarios',
+    );
   const named = NAMED_JOBS[`${workflow}\t${name}`];
   if (named) return one(named);
+  if (workflow === 'Quality assurance' && name === 'Validate repository files') {
+    const own = steps.filter(
+      step => CHANGESET_STEPS.has(step.name) && step.conclusion && step.conclusion !== 'skipped',
+    );
+    // A changeset step with no conclusion is still running, so the attempt hasn't passed yet.
+    const pending = steps.some(step => CHANGESET_STEPS.has(step.name) && !step.conclusion);
+    const key = ['job:qa/changeset-check'];
+    return {
+      ran: own.length ? key : [],
+      failed: own.some(step => step.conclusion === 'failure') ? key : [],
+      passed: !pending && own.length && own.every(step => step.conclusion === 'success') ? key : [],
+    };
+  }
   let m;
   if (workflow === 'Workspace Cloud Tests' && (m = /^test-cloud \(([\w-]+)\)$/.exec(name)))
     return one(`job:workspace-cloud/${m[1]}`);
   if (workflow !== 'Prebuild') return { ran: [], failed: [] };
+  if ((m = /^Combined Store Tests \/ test \(containers \d+(?:: ([\w -]+))?\)$/.exec(name))) {
+    const keysOf = stores =>
+      stores
+        .filter(Boolean)
+        .map(store => `job:store/${store}`)
+        .sort();
+    const firstTest = steps.findIndex(step => /^Run [\w-]+ tests$/.test(step.name));
+    const prerequisites = firstTest < 0 ? [] : steps.slice(0, firstTest);
+    // Checkout, setup or the shared build failed, so no store test ran: each selected store failed
+    // its prerequisite, as its own job used to. The job name lists the selected stores (older runs:
+    // the build step's name).
+    if (prerequisites.some(step => step.conclusion === 'failure')) {
+      const build = steps.find(step => /^Build grouped storage packages \(/.test(step.name));
+      const listed = m[1] ?? /\(([\w -]+)\)$/.exec(build?.name ?? '')?.[1] ?? '';
+      const keys = keysOf(listed.split(' '));
+      return { ran: keys, failed: keys, passed: [], prerequisite: keys };
+    }
+    const ran = [];
+    const failed = [];
+    const passed = [];
+    for (const step of steps) {
+      const store = /^Run ([\w-]+) tests$/.exec(step.name)?.[1];
+      // A cancelled step was killed by the job's time cap before it finished: it didn't run.
+      if (!store || !step.conclusion || step.conclusion === 'skipped' || step.conclusion === 'cancelled') continue;
+      ran.push(`job:store/${store}`);
+      if (step.conclusion === 'failure') failed.push(`job:store/${store}`);
+      if (step.conclusion === 'success') passed.push(`job:store/${store}`);
+    }
+    return { ran: ran.sort(), failed: failed.sort(), passed: passed.sort() };
+  }
   if ((m = /^Combined Store Tests \/ test \(([\w-]+)\)$/.exec(name))) return one(`job:store/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-unit \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-unit/${m[1]}`);
   if ((m = /^Workspace Tests \/ test-docker \(([\w-]+)\)$/.exec(name))) return one(`job:workspace-docker/${m[1]}`);
+  if (name === 'E2E Tests / E2E light suites')
+    return stepKeys(
+      steps,
+      step => {
+        const label = E2E_JOB_LABELS[/^E2E (.+?)(?::.*)?$/.exec(step)?.[1]];
+        return label && `job:e2e/${label}`;
+      },
+      step => !step.includes(':'),
+      step => step.endsWith(': not run, a prerequisite failed'),
+    );
   if ((m = /^E2E Tests \/ E2E (.+?)(?: \(\d+\/\d+\)| \(optional\))?$/.exec(name)) && E2E_JOB_LABELS[m[1]])
     return one(`job:e2e/${E2E_JOB_LABELS[m[1]]}`);
   const folded =
@@ -251,12 +377,116 @@ export function prRuns(runs, repo) {
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
+// GitHub's run listing reads at most this many runs per query, whatever total_count says.
+export const RUN_LIST_CAP = 1000;
+const isoSecond = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
 /**
- * Finished runs that did not pass. A skipped run never started a job, so fetching its jobs
+ * Every run created from `since` through `until` (UTC days, inclusive), listed a day at a
+ * time so each query stays under the cap. A day over the cap is halved until each part fits.
+ * listRange takes a `created` range (from..to, inclusive) and returns { total, runs }.
+ */
+export function listRunsByDay(listRange, since, until, cap = RUN_LIST_CAP) {
+  const runs = new Map();
+  const list = (from, to) => {
+    const { total, runs: listed } = listRange(`${isoSecond(from)}..${isoSecond(to)}`);
+    if (total > cap && to - from >= 2000) {
+      const mid = from + Math.floor((to - from) / 2000) * 1000;
+      list(from, mid);
+      list(mid + 1000, to);
+      return;
+    }
+    if (total > cap) console.error(`warning: ${total} runs created in one second, only ${cap} listed`);
+    for (const run of listed) runs.set(run.id, run);
+  };
+  const end = Date.parse(`${until}T00:00:00Z`);
+  for (let day = Date.parse(`${since}T00:00:00Z`); day <= end; day += 86_400_000) {
+    list(day, day + 86_399_000);
+  }
+  return [...runs.values()];
+}
+
+/**
+ * Finished runs that did not pass, and green reattempts: a merged job's earlier attempt may have
+ * failed a suite the green attempt skipped. A skipped run never started a job, so fetching its jobs
  * (one serial API call each, hundreds a day) cannot find a failure.
  */
 export function runsToInspect(runs) {
-  return runs.filter(r => r.conclusion && r.conclusion !== 'success' && r.conclusion !== 'skipped');
+  return runs.filter(
+    r => r.conclusion && r.conclusion !== 'skipped' && (r.conclusion !== 'success' || r.run_attempt > 1),
+  );
+}
+
+/**
+ * Fetches each run's failures, newest first, until the deadline (a backlog then drains from its
+ * newest end while each new day is covered at once). A run whose current attempt is in
+ * `tiers.inspected_runs` is skipped: either every failure it held was settled, or it is `waiting`
+ * on something that hasn't happened yet (a later green head, or a failed job reaching
+ * `recheck_after`, when it is old enough to call) and `ready` says nothing could settle it now. So runs that stay unresolved are not fetched
+ * again every day, and cannot use up the budget ahead of runs never looked at. A rerun keeps the
+ * run id but bumps the attempt, so it is inspected again. A transient GitHub error that outlasts
+ * the retries ends the day early the same way as the deadline.
+ * Returns the failures, the runs that settled, the runs still waiting, and how many were left.
+ */
+export function inspectRuns(tiers, runs, inspectRun, { deadline, now = Date.now, ready = () => true }) {
+  const pending = runs
+    .filter(r => {
+      const seen = tiers.inspected_runs?.[r.id];
+      return seen?.attempt !== r.run_attempt || (seen.waiting && ready(r, seen));
+    })
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const failures = [];
+  const settled = [];
+  const waiting = [];
+  for (const [i, run] of pending.entries()) {
+    if (now() >= deadline) return { failures, settled, waiting, left: pending.length - i };
+    if (i % 50 === 0) console.error(`  run ${i + 1}/${pending.length}`);
+    let found;
+    try {
+      found = inspectRun(run);
+    } catch (error) {
+      // Retries already ran out; keep what is settled rather than lose the whole day.
+      if (!isTransientGhError(error)) throw error;
+      console.error(`GitHub kept failing (${String(error.stderr ?? error.message).trim()}); stopping early`);
+      return { failures, settled, waiting, left: pending.length - i };
+    }
+    failures.push(...found);
+    const open = found.filter(f => (f.verdict ?? classifyPrFailure(f)) === 'unresolved');
+    if (!open.length) settled.push(run);
+    else
+      waiting.push({
+        run,
+        recheckAfter: open
+          .map(f => f.settlesAt)
+          .filter(Boolean)
+          .sort()
+          .at(-1),
+      });
+  }
+  return { failures, settled, waiting, left: 0 };
+}
+
+/**
+ * Records the day's failures and settled runs, then syncs the file list. Files move out only
+ * when every run was inspected: a run left for tomorrow may hold the catch that keeps a file in.
+ */
+export function settleDay(tiers, { failures, settled, waiting = [], left }, date, days, testFiles) {
+  const windowStart = daysBefore(date, days);
+  const { tally, caught } = recordPrFailures(tiers, failures, date, days);
+  const remembered = { ...tiers.inspected_runs };
+  for (const run of settled) remembered[run.id] = { day: run.created_at.slice(0, 10), attempt: run.run_attempt };
+  for (const { run, recheckAfter } of waiting)
+    remembered[run.id] = {
+      day: run.created_at.slice(0, 10),
+      attempt: run.run_attempt,
+      waiting: true,
+      ...(recheckAfter && { recheck_after: recheckAfter }),
+    };
+  for (const [id, seen] of Object.entries(remembered)) if (!seen.day || seen.day < windowStart) delete remembered[id];
+  tiers.inspected_runs = remembered;
+  const { removed, added } = syncFiles(tiers, testFiles, date);
+  const out = left ? [] : moveOut(tiers, date);
+  return { tally, caught, removed, added, out };
 }
 
 /** The first later green run of the same workflow on the same branch of the same repository, at a new head. */
@@ -269,6 +499,25 @@ export function nextGreenRun(runs, run) {
       r.created_at > run.created_at &&
       r.head_sha !== run.head_sha &&
       r.conclusion === 'success',
+  );
+}
+
+/**
+ * Whether a run left `waiting` could settle now: its branch has a later green run (a fix to
+ * diff against, or a pass that makes it a flake), or a failed job it held has reached
+ * `recheck_after` (24 hours after the job finished), when it is old enough to call.
+ */
+export function waitingRunReady(runs, run, seen, nowIso = new Date().toISOString()) {
+  return (
+    (seen.recheck_after !== undefined && seen.recheck_after <= nowIso) ||
+    runs.some(
+      r =>
+        r.workflow_id === run.workflow_id &&
+        r.head_repo === run.head_repo &&
+        r.head_branch === run.head_branch &&
+        r.created_at > run.created_at &&
+        r.conclusion === 'success',
+    )
   );
 }
 
@@ -300,13 +549,22 @@ export function isTransientGhError(error) {
 export const GH_RETRY_DELAYS_MS = [5_000, 20_000, 60_000];
 const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-/** Calls fn, repeating it after each delay while it throws a transient GitHub error. */
-export function retryTransient(fn, delays = GH_RETRY_DELAYS_MS, sleep = sleepSync) {
+/**
+ * Calls fn, repeating it after each delay while it throws a transient GitHub error, but never
+ * waiting past `stopAt`.
+ */
+export function retryTransient(
+  fn,
+  delays = GH_RETRY_DELAYS_MS,
+  sleep = sleepSync,
+  { stopAt = Infinity, now = Date.now } = {},
+) {
   for (let attempt = 0; ; attempt++) {
     try {
       return fn();
     } catch (error) {
       if (attempt >= delays.length || !isTransientGhError(error)) throw error;
+      if (now() + delays[attempt] >= stopAt) throw error;
       console.warn(
         `gh api failed (${String(error.stderr ?? error.message).trim()}); retrying in ${delays[attempt]} ms`,
       );
@@ -318,10 +576,37 @@ export function retryTransient(fn, delays = GH_RETRY_DELAYS_MS, sleep = sleepSyn
 // ---------------------------------------------------------------------------------------------
 // GitHub glue (not unit tested; exercised only in the workflow).
 
+/**
+ * One `gh api` call, retried on transient errors, that neither starts, waits nor runs past
+ * `stopAt`: a call still running then is killed. Either way it throws a transient error, which
+ * ends the day's inspection early with what was settled kept. A --paginate call is repeated
+ * whole, so a retry never mixes pages from two attempts.
+ */
+export function boundedGh(args, { stopAt = Infinity, now = Date.now, exec = execFileSync, delays, sleep } = {}) {
+  return retryTransient(() => boundedExec('gh', ['api', ...args], { stopAt, now, exec }), delays, sleep, {
+    stopAt,
+    now,
+  });
+}
+
+/**
+ * Runs a command that must not start or keep running past `stopAt`; past it, or killed at it,
+ * it throws an error `isTransientGhError` accepts, so the day ends early instead of timing out.
+ */
+function boundedExec(cmd, args, { cwd, stopAt = Infinity, now = Date.now, exec = execFileSync } = {}) {
+  const remaining = stopAt - now();
+  if (remaining <= 0) throw new Error(`${cmd} not started: the daily time limit has passed (ETIMEDOUT)`);
+  return exec(cmd, args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+    ...(Number.isFinite(remaining) && { timeout: remaining }),
+  });
+}
+
 const repo = process.env.GITHUB_REPOSITORY ?? 'mastra-ai/mastra';
-// A --paginate call is repeated whole, so a retry never mixes pages from two attempts.
-const gh = (...args) =>
-  retryTransient(() => execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 1 << 28 }));
+let ghStopAt = Infinity;
+const gh = (...args) => boundedGh(args, { stopAt: ghStopAt });
 const ghJson = (...args) =>
   gh('--paginate', ...args)
     .trim()
@@ -334,8 +619,8 @@ const ghJson = (...args) =>
  * checks out at depth 1, and a head rebased onto that checkout stops fetching at its boundary while
  * the merge base lies below it, so a shallow clone is unshallowed first. -z keeps paths literal.
  */
-export const gitDiffFiles = (base, head, cwd) => {
-  const git = args => execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+export const gitDiffFiles = (base, head, cwd, { stopAt = Infinity, now = Date.now, exec = execFileSync } = {}) => {
+  const git = args => boundedExec('git', args, { cwd, stopAt, now, exec });
   const shallow = git(['rev-parse', '--is-shallow-repository']).trim() === 'true';
   git([
     'fetch',
@@ -458,6 +743,9 @@ const runJobs = runId =>
   ghJson(`repos/${repo}/actions/runs/${runId}/jobs?filter=all&per_page=100`, '-q', '.jobs[]|@json');
 // Jobs whose log names the failing test files: the unit lists and the package E2E list.
 const isFileListJob = name => /UNIT Test|\/ E2E Test \(/.test(name);
+// Grouped container-store jobs: their store steps keep completed failures if the job ended early.
+const isGroupedJob = name => /^Combined Store Tests \/ test \(containers \d+/.test(name);
+const ENDED_EARLY = new Set(['cancelled', 'timed_out']);
 // Workflows with jobs tiered as a whole, beside Prebuild's.
 const JOB_WORKFLOWS = ['prebuild.yml', 'secrets.test-workspaces.yml', 'lint.yml'];
 // A failed job counts once it is this old, so a rerun has had time to mark it a flake.
@@ -491,7 +779,47 @@ function repoTestFiles() {
   return trackedTestFiles;
 }
 
-function versioningCommand(tiers, { runId, date }) {
+/**
+ * The keys a job failed. A job tiered as a whole blames its key only when the job failed; a
+ * grouped job (its keys carry `passed`) keeps the store steps that completed with a failure even
+ * when a later step's timeout or a cancellation ended the job.
+ */
+export function failedJobKeys(job, keys) {
+  return job.conclusion === 'failure' || keys.passed ? keys.failed : [];
+}
+
+/**
+ * Whether a failed job's tier key passed on a later attempt of the job or in a later green run of
+ * the same head (`candidates` holds those runs' jobs; the caller keeps them to the same workflow
+ * and head). Grouped jobs are judged by the key's own store step in any grouped job, since a
+ * group's name lists the stores it selected and that can change between runs; a sibling's new
+ * failure doesn't hide a recovery and a skipped or cancelled retry isn't one. Jobs tiered as a
+ * whole go by the conclusion of the job with the same name.
+ */
+export function passedOnRetry(job, key, candidates, keysOf) {
+  const grouped = Boolean(keysOf(job).passed);
+  return candidates.some(j => {
+    if (j === job) return false;
+    if (j.run_id === job.run_id && !(j.run_attempt > job.run_attempt)) return false;
+    const { passed } = keysOf(j);
+    if (grouped) return Boolean(passed?.includes(key));
+    return j.name === job.name && !passed && j.conclusion === 'success';
+  });
+}
+
+/**
+ * The verdict for each tier key a failed PR job failed: `flake` when the key passed on a later
+ * attempt or in a later green run of the same head (`candidates`, see passedOnRetry), else `fail`
+ * once the failure has settled and `unresolved` before.
+ */
+export function failureVerdicts(job, keys, candidates, keysOf, settled) {
+  return failedJobKeys(job, keys).map(key => ({
+    key,
+    verdict: passedOnRetry(job, key, candidates, keysOf) ? 'flake' : settled ? 'fail' : 'unresolved',
+  }));
+}
+
+function versioningCommand(tiers, { runId, date, escapesOut }) {
   const jobs = runJobs(runId).filter(j => j.conclusion && j.conclusion !== 'skipped');
   const files = jobs
     .filter(j => j.conclusion === 'failure' && isFileListJob(j.name))
@@ -499,28 +827,42 @@ function versioningCommand(tiers, { runId, date }) {
   const ran = [];
   const failedJobs = [];
   for (const job of jobs) {
-    const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id));
+    const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
     ran.push(...keys.ran);
-    if (job.conclusion === 'failure') failedJobs.push(...keys.failed);
+    failedJobs.push(...failedJobKeys(job, keys));
   }
   // The versioning PR runs every job, so this is where new jobs join the list.
   const added = addJobKeys(tiers, ran, date);
+  const before = structuredClone(tiers);
   const moved = applyVersioningFailures(tiers, [...files, ...failedJobs], date);
+  if (escapesOut) {
+    const escaped = escapedFiles(before, moved);
+    fs.writeFileSync(escapesOut, `${JSON.stringify({ run_id: runId, ...escaped })}\n`);
+    console.error(`escaped (out before this run): ${escaped.files.length} files, ${escaped.jobs.length} jobs`);
+  }
   console.error(`versioning run ${runId}: ${moved.length} files and jobs in; new jobs: ${added.length}`);
   for (const f of moved) console.error(`  in ${f}`);
   for (const k of added) console.error(`  new ${k}`);
 }
 
-function dailyCommand(tiers, { days, date }) {
+function dailyCommand(tiers, { days, date, budgetMinutes }) {
+  const startedAt = Date.now();
+  ghStopAt = startedAt + (Number(budgetMinutes) + GH_GRACE_MINUTES) * 60_000;
   const since = daysBefore(date, Number(days));
+  // One page line per page carries total_count, so a range over the cap can be split.
+  const listRange = workflow => range => {
+    const lines = ghJson(
+      `repos/${repo}/actions/workflows/${workflow}/runs?created=${range}&per_page=100`,
+      '-q',
+      '{total:.total_count}, (.workflow_runs[]|select(.event=="pull_request" or .event=="workflow_run")|{id,head_branch,head_repo:.head_repository.full_name,head_sha,created_at,conclusion,run_attempt,workflow_id})|@json',
+    );
+    return {
+      total: Math.max(0, ...lines.filter(l => 'total' in l).map(l => l.total)),
+      runs: lines.filter(l => !('total' in l)),
+    };
+  };
   const runs = prRuns(
-    JOB_WORKFLOWS.flatMap(workflow =>
-      ghJson(
-        `repos/${repo}/actions/workflows/${workflow}/runs?created=>=${since}&per_page=100`,
-        '-q',
-        '.workflow_runs[]|select(.event=="pull_request" or .event=="workflow_run")|{id,head_branch,head_repo:.head_repository.full_name,head_sha,created_at,conclusion,run_attempt,workflow_id}|@json',
-      ),
-    ),
+    JOB_WORKFLOWS.flatMap(workflow => listRunsByDay(listRange(workflow), since, date)),
     repo,
   );
   const laterGreenRun = run =>
@@ -533,23 +875,52 @@ function dailyCommand(tiers, { days, date }) {
         r.conclusion === 'success',
     );
 
-  const failures = [];
+  const laterGreenJobsCache = new Map();
+  const laterGreenJobs = run => {
+    if (!laterGreenJobsCache.has(run.id))
+      laterGreenJobsCache.set(
+        run.id,
+        runs
+          .filter(
+            r =>
+              r.id !== run.id &&
+              r.workflow_id === run.workflow_id &&
+              r.head_sha === run.head_sha &&
+              r.created_at > run.created_at &&
+              r.conclusion === 'success',
+          )
+          .flatMap(r => runJobs(r.id)),
+      );
+    return laterGreenJobsCache.get(run.id);
+  };
   const compareCache = new Map();
   const toInspect = runsToInspect(runs);
-  console.error(`inspecting ${toInspect.length} of ${runs.length} PR runs since ${since}`);
-  for (const [i, run] of toInspect.entries()) {
-    if (i % 50 === 0) console.error(`  run ${i + 1}/${toInspect.length}`);
+  const ready = (run, seen) => waitingRunReady(runs, run, seen);
+  const remembered = toInspect.filter(r => tiers.inspected_runs?.[r.id]?.attempt === r.run_attempt);
+  const skipped = remembered.filter(r => !tiers.inspected_runs[r.id].waiting || !ready(r, tiers.inspected_runs[r.id]));
+  console.error(
+    `inspecting ${toInspect.length - skipped.length} of ${runs.length} PR runs since ${since} (${skipped.length} settled or still waiting)`,
+  );
+  const inspectRun = run => {
+    const failures = [];
     const jobs = runJobs(run.id);
     const passedLater = job =>
       jobs.some(j => j.name === job.name && j.run_attempt > job.run_attempt && j.conclusion === 'success') ||
       laterGreenRun(run);
-    for (const job of jobs.filter(j => j.conclusion === 'failure')) {
+    for (const job of jobs.filter(
+      j => j.conclusion === 'failure' || (isGroupedJob(j.name) && ENDED_EARLY.has(j.conclusion)),
+    )) {
       const failedOn = job.completed_at?.slice(0, 10) ?? run.created_at.slice(0, 10);
+      // A green reattempt is inspected only for its merged jobs' suites; first-attempt green
+      // policy for everything else is unchanged.
+      if (run.conclusion === 'success' && !isMergedSuiteJob(job)) continue;
       if (!isFileListJob(job.name)) {
-        const { failed } = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id));
+        const keys = jobKeysFor(job.workflow_name, job.name, () => jobLog(job.id), job.steps);
         const settled = Date.now() - Date.parse(job.completed_at ?? run.created_at) >= JOB_SETTLE_MS;
-        const verdict = passedLater(job) ? 'flake' : settled ? 'fail' : 'unresolved';
-        for (const key of failed) failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict });
+        const settlesAt = new Date(Date.parse(job.completed_at ?? run.created_at) + JOB_SETTLE_MS).toISOString();
+        const keysOf = j => jobKeysFor(j.workflow_name, j.name, () => '', j.steps);
+        for (const { key, verdict } of failureVerdicts(job, keys, [...jobs, ...laterGreenJobs(run)], keysOf, settled))
+          failures.push({ file: key, jobId: String(job.id), date: failedOn, verdict, settlesAt });
         continue;
       }
       const rerunPassed = passedLater(job);
@@ -559,7 +930,10 @@ function dailyCommand(tiers, { days, date }) {
         const key = `${run.head_sha}...${next.head_sha}`;
         if (!compareCache.has(key)) {
           const pages = ghJson(`repos/${repo}/compare/${key}?per_page=100`, '-q', '{files}|@json');
-          compareCache.set(key, compareFiles(pages) ?? gitDiffFiles(run.head_sha, next.head_sha));
+          compareCache.set(
+            key,
+            compareFiles(pages) ?? gitDiffFiles(run.head_sha, next.head_sha, undefined, { stopAt: ghStopAt }),
+          );
         }
         diffFiles = compareCache.get(key);
       }
@@ -575,10 +949,18 @@ function dailyCommand(tiers, { days, date }) {
         });
       }
     }
+    return failures;
+  };
+  const inspected = inspectRuns(tiers, toInspect, inspectRun, {
+    deadline: startedAt + Number(budgetMinutes) * 60_000,
+    ready,
+  });
+  if (inspected.left) {
+    console.error(
+      `stopped early (time budget ${budgetMinutes} min or GitHub errors): ${inspected.left} runs left for the next run; no files move out today`,
+    );
   }
-  const { tally, caught } = recordPrFailures(tiers, failures, date, Number(days));
-  const { removed, added } = syncFiles(tiers, repoTestFiles(), date);
-  const out = moveOut(tiers, date);
+  const { tally, caught, removed, added, out } = settleDay(tiers, inspected, date, Number(days), repoTestFiles());
   console.error(`PR failures since ${since}: ${JSON.stringify(tally)}`);
   console.error(
     `catches and job failures: ${caught.length} in; deleted: ${removed.length}; new: ${added.length}; moved out: ${out.length}`,
@@ -589,7 +971,14 @@ function dailyCommand(tiers, { days, date }) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, ...rest] = process.argv.slice(2);
-  const args = { tiers: null, runId: null, days: String(LOOKBACK_DAYS), date: new Date().toISOString().slice(0, 10) };
+  const args = {
+    tiers: null,
+    runId: null,
+    days: String(LOOKBACK_DAYS),
+    date: new Date().toISOString().slice(0, 10),
+    budgetMinutes: String(DAILY_BUDGET_MINUTES),
+    escapesOut: null,
+  };
   for (const arg of rest) {
     const m = /^--([a-z-]+)=(.*)$/.exec(arg);
     const key = m?.[1].replace(/-([a-z])/g, (_, c) => c.toUpperCase());

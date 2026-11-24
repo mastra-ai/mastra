@@ -306,7 +306,9 @@ export type ModelForProvider<P extends Provider> = ProviderModelsMap[P][number];
  * @param jsonPath - Path to write the JSON file
  * @param typesPath - Path to write the .d.ts file
  * @param providers - Provider configurations
- * @param models - Model lists by provider
+ * @param models - Model lists by provider (used for the .d.ts; the JSON derives them from `providers[*].models`)
+ * @param options.includeModelsKey - Also write the top-level `models` map. Only needed for files that
+ *   older @mastra/core versions may read (the shared ~/.cache/mastra registry), since they require it.
  */
 export async function writeRegistryFiles(
   jsonPath: string,
@@ -317,6 +319,7 @@ export async function writeRegistryFiles(
   temperatureCapabilities?: TemperatureCapabilities,
   structuredOutputCapabilities?: StructuredOutputCapabilities,
   reasoningCapabilities?: ReasoningCapabilities,
+  options: { includeModelsKey?: boolean } = {},
 ): Promise<void> {
   // 0. Ensure directories exist
   const jsonDir = path.dirname(jsonPath);
@@ -325,9 +328,11 @@ export async function writeRegistryFiles(
   await fs.mkdir(typesDir, { recursive: true });
 
   // 1. Write JSON file atomically to prevent corruption from concurrent writes
+  // Each provider already carries its model list, so the top-level `models` map is omitted
+  // by default to avoid storing every list twice. Readers derive it from `providers`.
   const registryData = {
     providers,
-    models,
+    ...(options.includeModelsKey ? { models } : {}),
     version: '1.0.0',
   };
 

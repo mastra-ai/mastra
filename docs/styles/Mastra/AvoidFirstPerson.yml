@@ -1,8 +1,12 @@
 extends: existence
 message: "Avoid first-person singular ('%s'). Mastra docs are not about the author."
-level: warning
-ignorecase: true
+level: error
+# Case-sensitive so "I/O" is not matched; the capitalized forms cover
+# sentence-initial "My" and "Mine". "My Drive" is the Google Drive product name.
+ignorecase: false
 tokens:
-  - '\bI\b'
+  - '\bI\b(?:[^/]|$)'
   - '\bmy\b'
+  - '\bMy\b(?! Drive\b)'
   - '\bmine\b'
+  - '\bMine\b'

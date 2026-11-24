@@ -20,7 +20,7 @@ import {
   listConnectionsToolKey,
 } from './multi-connection.js';
 import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
-import { PROVIDERS } from './registry.js';
+import { PROVIDERS, registrationIntegrationIds } from './registry.js';
 import {
   connectionIdEnvVar,
   groupByIntegrationId,
@@ -566,7 +566,7 @@ async function loadSnapshotInputs(
   }
 
   const { overrides, only } = state.normalizedProviders;
-  const checkedIn = new Set(PROVIDERS.map(registration => registration.integrationId));
+  const checkedIn = new Set(PROVIDERS.flatMap(registrationIntegrationIds));
   const needsCatalog = connections.some(
     connection =>
       connection.status === 'active' &&
@@ -1194,9 +1194,24 @@ function buildRequests(
 ): NormalizedRequest[] {
   const { overrides, only } = providers;
   const registrations = new Map(PROVIDERS.map(registration => [registration.integrationId, registration]));
+  // Alias catalog ids (e.g. `gitlab-self-hosted`) resolve through their
+  // checked-in registration, so options must be set on that registration.
+  const aliasOwners = new Map(
+    PROVIDERS.flatMap(registration =>
+      (registration.aliasIntegrationIds ?? []).map(alias => [alias, registration.integrationId] as const),
+    ),
+  );
+  const misplaced = Object.keys(overrides).filter(integrationId => aliasOwners.has(integrationId));
+  if (misplaced.length > 0) {
+    const alias = misplaced[0]!;
+    const owner = aliasOwners.get(alias)!;
+    throw new MastraConnectConfigError(
+      `'${alias}' connections use the '${owner}' toolset; configure them under providers.${owner}.`,
+    );
+  }
   const catalogIds = new Set(catalog.map(integration => integration.id));
   for (const integration of catalog) {
-    if (!integration.capabilities.mcp) continue;
+    if (!integration.capabilities.mcp || aliasOwners.has(integration.id)) continue;
     registrations.set(integration.id, {
       integrationId: integration.id,
       envVar: connectionIdEnvVar(integration.id),
@@ -1270,7 +1285,7 @@ async function mapTools(
     const integrationId = request.registration.integrationId;
     let providerTools: ToolsInput | undefined;
     try {
-      const candidates = byIntegrationId.get(integrationId) ?? [];
+      const candidates = registrationIntegrationIds(request.registration).flatMap(id => byIntegrationId.get(id) ?? []);
       if (candidates.length === 0) continue;
       const resolution = resolveProviderConnection(
         {

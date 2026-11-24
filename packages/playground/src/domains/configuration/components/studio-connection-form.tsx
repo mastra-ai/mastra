@@ -2,7 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
-import { SettingsContainer, SettingsListHeader, SettingsRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsEmptyRow,
+  SettingsListHeader,
+  SettingsRow,
+} from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -33,12 +38,6 @@ function matchesConfig(draft: ConnectionDraft, config: StudioConfig) {
   );
 }
 
-function headerCountLabel(count: number) {
-  if (count === 0) return 'No request headers';
-  if (count === 1) return '1 request header';
-  return `${count} request headers`;
-}
-
 /**
  * The URL, API prefix and headers only work as a set (a new instance often needs its own prefix and auth header), so
  * edits stay a draft until "Save changes" applies them together: Studio switches once, from one working connection
@@ -57,6 +56,21 @@ export function StudioConnectionForm({ initialConfig }: { initialConfig: StudioC
   const [draft, setDraft] = useState(draftFromConfig);
   const [urlError, setUrlError] = useState<string>();
   const changed = !matchesConfig(draft, initialConfig);
+  const addHeader = (
+    <Button
+      type="button"
+      size="sm"
+      icon={<IconPlusMedium />}
+      onClick={() =>
+        setDraft(current => ({
+          ...current,
+          headers: [...current.headers, { id: nextId.current++, name: '', value: '' }],
+        }))
+      }
+    >
+      Add header
+    </Button>
+  );
 
   const updateHeader = (id: number, patch: Partial<HeaderRow>) =>
     setDraft(current => ({
@@ -107,25 +121,13 @@ export function StudioConnectionForm({ initialConfig }: { initialConfig: StudioC
             onChange={event => setDraft(current => ({ ...current, apiPrefix: event.target.value }))}
           />
         </SettingsRow>
-        <SettingsListHeader
-          action={
-            <Button
-              type="button"
-              size="sm"
-              icon={<IconPlusMedium />}
-              onClick={() =>
-                setDraft(current => ({
-                  ...current,
-                  headers: [...current.headers, { id: nextId.current++, name: '', value: '' }],
-                }))
-              }
-            >
-              Add header
-            </Button>
-          }
-        >
-          {headerCountLabel(draft.headers.length)}
-        </SettingsListHeader>
+        {draft.headers.length === 0 ? (
+          <SettingsEmptyRow action={addHeader}>No request headers</SettingsEmptyRow>
+        ) : (
+          <SettingsListHeader action={addHeader}>
+            {draft.headers.length === 1 ? '1 request header' : `${draft.headers.length} request headers`}
+          </SettingsListHeader>
+        )}
         {draft.headers.map(row => (
           <div key={row.id} className="flex min-w-0 items-center gap-2">
             <Input

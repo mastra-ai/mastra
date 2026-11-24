@@ -179,7 +179,7 @@ const store4 = new PostgresStore({
 
 ## Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -226,13 +226,13 @@ const storage = new PostgresStoreVNext({
 })
 ```
 
-Lower `lookbackSeconds` if refreshes are slow, and raise `ttlSeconds` if they run more often than your filter values change. Only one process refreshes a given cache entry at a time, so adding server instances doesn't multiply the work.
+Lower `lookbackSeconds` if refreshes are slow, and raise `ttlSeconds` if they run more often than your filter values change. Only one process refreshes each cache entry at a time, so adding server instances doesn't multiply the work.
 
 #### Day partitions
 
-`PostgresStoreVNext` stores observability events in tables partitioned by day. If TimescaleDB or pg_partman is installed, that extension creates partitions for you. Without an extension, `init()` creates the partitions for yesterday, today, and the next `futureDays` days (default 14), and a write that lands on a day inside that window with no partition creates it before it retries, so writes keep working after the pre-created window runs out. Rows dated outside the window are still rejected.
+`PostgresStoreVNext` stores observability events in tables partitioned by day. If TimescaleDB or pg_partman is installed, that extension creates partitions for you. Without an extension, `init()` creates the partitions for yesterday, today, and the next `futureDays` days (default 14), and a write that targets a day inside that window with no partition creates it before it retries, so writes keep working after the pre-created window runs out. Rows dated outside the window are still rejected.
 
-Creating a partition is DDL. If the role your app runs with cannot create tables, or does not own the observability tables, the write fails with an error that names the table and the missing day, and the exporter drops that batch after its retries. In that setup, call `ensurePartitions()` on a schedule, at least once every `futureDays` days, with a role that can create tables and owns the observability tables. It only extends the native day-partition window, and does nothing with TimescaleDB or pg_partman. You can also install TimescaleDB, or pg_partman with its background worker or a scheduled `run_maintenance()` call, so the database maintains the partitions itself.
+Creating a partition is DDL. If the role your app runs with can't create tables, or doesn't own the observability tables, the write fails with an error that names the table and the missing day, and the exporter drops that batch after its retries. In that setup, call `ensurePartitions()` on a schedule, at least once every `futureDays` days, with a role that can create tables and owns the observability tables. It only extends the native day-partition window, and does nothing with TimescaleDB or pg_partman. You can also install TimescaleDB, or pg_partman with its background worker or a scheduled `run_maintenance()` call, to have the database maintain the partitions itself.
 
 A larger `futureDays` gives the scheduled job more time between runs:
 
@@ -345,7 +345,7 @@ export const mastra = new Mastra({
 
 `disableInit: true` also makes explicit `init()` calls a no-op, so leave it off the store in the deployment script.
 
-### Using an Existing Pool
+### Using an existing pool
 
 If you already have a `pg.Pool` in your application (e.g., shared with an ORM or for Row Level Security), you can pass it directly to `PostgresStore`:
 
@@ -370,7 +370,7 @@ const storage = new PostgresStore({
 - When you **provide a pool**: Mastra uses your pool but **doesn't** close it when `store.close()` is called. You manage the pool lifecycle.
 - When Mastra **creates a pool**: Mastra owns the pool and will close it when `store.close()` is called.
 
-### Direct Database and Pool Access
+### Direct database and pool access
 
 `PostgresStore` exposes the underlying database client and pool for advanced use cases:
 
@@ -559,7 +559,7 @@ for await (const chunk of stream.textStream) {
 
 PostgreSQL storage provides index management to optimize query performance.
 
-### Default Indexes
+### Default indexes
 
 PostgreSQL storage creates composite indexes during initialization for common query patterns:
 
@@ -575,7 +575,7 @@ PostgreSQL storage creates composite indexes during initialization for common qu
 
 These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries and Studio's workflow runs-list.
 
-### Configuring Indexes
+### Configuring indexes
 
 You can control index creation via constructor options:
 
@@ -616,7 +616,7 @@ For advanced index types, you can specify additional options:
 - `storage: { fillfactor: 90 }` for update-heavy tables
 - `concurrent: true` for non-blocking creation (default)
 
-### Index Options
+### Index options
 
 <PropertiesTable
   content={[
@@ -683,7 +683,7 @@ For advanced index types, you can specify additional options:
 ]}
 />
 
-### Schema-Specific Indexes
+### Schema-specific indexes
 
 When using custom schemas, index names are prefixed with the schema name:
 
@@ -704,7 +704,7 @@ const storage = new PostgresStore({
 // Creates index as: custom_schema_idx_threads_status
 ```
 
-### Managing Indexes via SQL
+### Managing indexes via SQL
 
 For advanced index management (listing, dropping, analyzing), use direct SQL queries via the `db` accessor:
 
@@ -727,15 +727,15 @@ const stats = await storage.db.one(`
 `)
 ```
 
-### Index Types and Use Cases
+### Index types and use cases
 
 PostgreSQL offers different index types optimized for specific scenarios:
 
 | Index Type | Best For | Storage size | Speed |
 | - | - | - | - |
 | **btree** (default) | Range queries, sorting, general purpose | Moderate | Fast |
-| **hash** | Equality comparisons only | Small | Very fast for `=` |
+| **hash** | Equality comparisons only | Small | Fast for `=` |
 | **gin** | JSONB, arrays, full-text search | Large | Fast for contains |
 | **gist** | Geometric data, full-text search | Moderate | Fast for nearest-neighbor |
 | **spgist** | Non-balanced data, text patterns | Small | Fast for specific patterns |
-| **brin** | Large tables with natural ordering | Very small | Fast for ranges |
+| **brin** | Large tables with natural ordering | Small | Fast for ranges |

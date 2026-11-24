@@ -8,10 +8,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { queryKeys } from '../../../api/keys';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { createAppRoutes } from '../../router';
+import {
+  findPageHeader,
+  renderWithProviders,
+  TEST_API,
+  TEST_BASE_URL,
+  waitForMutationsIdle,
+} from '../../../../e2e/ui/render';
+import { createQueryClient } from '../../../query-client';
+import { createAppRouter, createAppRoutes } from '../../router';
 import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
-import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
+import { assistantOnlyThreadMessages, threadRailMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -162,7 +169,7 @@ describe('ThreadPage loading shell', () => {
     const textarea = within(composer).getByRole('textbox', { name: 'Message' });
     const send = within(composer).getByRole('button', { name: 'Send message' });
     const conversation = screen.getByRole('region', { name: 'Conversation' });
-    expect(within(conversation).getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(within(conversation).getByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
     expect(conversation).not.toContainElement(composer);
     expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'true');
@@ -177,12 +184,12 @@ describe('ThreadPage loading shell', () => {
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
     expect(textarea).toHaveValue('Draft written while opening the session');
     expect(send).toBeDisabled();
-    expect(screen.getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
     messagesGate.resolve();
     await waitFor(() => expect(send).toBeEnabled());
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
     expect(textarea).toHaveValue('Draft written while opening the session');
-    expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
     // The dock opened by default, so it leaves an idle sandbox asleep.
     expect(onChanges).not.toHaveBeenCalled();
   });
@@ -193,11 +200,11 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     await findPageHeader();
-    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
 
     messagesGate.resolve();
-    await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
     expect(await findPageHeader()).toBeInTheDocument();
   });
 
@@ -205,7 +212,7 @@ describe('ThreadPage loading shell', () => {
     const { sessionGate, messagesGate } = stubThreadRoute({ messages: assistantOnlyThreadMessages });
     renderThreadRoute();
     sessionGate.resolve();
-    await screen.findByRole('status', { name: 'Preparing session' });
+    await screen.findByRole('status', { name: 'Loading messages' });
 
     let renderedEmptyState = false;
     const observer = new MutationObserver(records => {
@@ -226,14 +233,14 @@ describe('ThreadPage loading shell', () => {
     const { sessionGate, messagesGate } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
     renderThreadRoute();
     sessionGate.resolve();
-    await screen.findByRole('status', { name: 'Preparing session' });
+    await screen.findByRole('status', { name: 'Loading messages' });
 
     messagesGate.resolve();
     await screen.findByText('Run the focused checks');
 
     expect(screen.getByText('Review the implementation plan')).toBeInTheDocument();
     expect(document.body).toHaveTextContent('The implementation is ready to review.');
-    expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
   });
 
   it('waits for sandbox readiness before synchronizing an existing route thread', async () => {
@@ -243,11 +250,135 @@ describe('ThreadPage loading shell', () => {
     });
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
 
-    expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
     expect(onSwitchThread).not.toHaveBeenCalled();
 
     sessionGate.resolve();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
+  });
+});
+
+/** The app's own router: route loaders start the page's reads, and navigations never wait for them. */
+function renderThreadRouteWithLoaders(path: string) {
+  const queryClient = createQueryClient();
+  const router = createAppRouter({ queryClient, api: TEST_API }, routes =>
+    createMemoryRouter(routes, { initialEntries: [path] }),
+  );
+  return { router, ...renderWithProviders(<RouterProvider router={router} />, queryClient) };
+}
+
+describe('ThreadPage opened through the app router', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const WORKSPACE_PATH = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`;
+
+  it('shows a reloaded session’s transcript while the session itself is still loading', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
+    messagesGate.resolve();
+    const user = userEvent.setup();
+    renderThreadRouteWithLoaders(WORKSPACE_PATH);
+
+    // The history read does not wait for the session read: the transcript is readable first.
+    expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
+    expect(screen.getByText('Review the implementation plan')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
+    // Sending still waits for the session.
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Next step');
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+
+    sessionGate.resolve();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    expect(screen.getByText('Run the focused checks')).toBeInTheDocument();
+  });
+
+  it('keeps a restored approval locked until the session loads', async () => {
+    const args = { path: 'src/agent.ts' };
+    const parkedApproval: MastraDBMessage = {
+      id: 'assistant-parked-approval',
+      role: 'assistant',
+      createdAt: new Date('2026-08-03T09:05:00.000Z'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'call-write', toolName: 'write_file', args },
+          },
+        ],
+        metadata: {
+          pendingToolApprovals: { 'call-write': { toolCallId: 'call-write', toolName: 'write_file', args } },
+        },
+      },
+    };
+    const { sessionGate, messagesGate } = stubThreadRoute({ messages: [...threadRailMessages, parkedApproval] });
+    messagesGate.resolve();
+    renderThreadRouteWithLoaders(WORKSPACE_PATH);
+
+    expect(await screen.findByRole('button', { name: 'Approve write_file' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Decline write_file' })).toBeDisabled();
+
+    sessionGate.resolve();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve write_file' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Decline write_file' })).toBeEnabled();
+  });
+
+  // Clicking a card or a session on a slow server used to do nothing until the next session's
+  // details, card and PR subscriptions had all answered: the route's loader held the navigation.
+  it('opens another session on the click, before any of its reads answer, then fills it in', async () => {
+    const NEXT_SESSION_ID = 'sess-3';
+    const nextPath = `/factories/${FACTORY_ID}/workspaces/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}`;
+    // Wide enough for the session panel to open beside the chat.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
+    const { sessionGate, messagesGate } = stubThreadRoute();
+    sessionGate.resolve();
+    messagesGate.resolve();
+    const nextSession = deferred();
+    const nextMessages = deferred();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${NEXT_SESSION_ID}`, async () => {
+        await nextSession.promise;
+        return HttpResponse.json({ session: { ...userSession, id: 'row-3', sessionId: NEXT_SESSION_ID } });
+      }),
+      http.get(`${AC}/sessions/${NEXT_SESSION_ID}`, () =>
+        HttpResponse.json({
+          controllerId: 'code',
+          resourceId: NEXT_SESSION_ID,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: NEXT_SESSION_ID,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${AC}/sessions/${NEXT_SESSION_ID}/threads/${NEXT_SESSION_ID}/messages`, async () => {
+        await nextMessages.promise;
+        return HttpResponse.json({ messages: threadRailMessagesWithEcho });
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderThreadRouteWithLoaders(WORKSPACE_PATH);
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
+
+    const navigation = router.navigate(nextPath);
+
+    // The page moves while every read of the next session is still out, and its composer takes a draft.
+    await waitFor(() => expect(router.state.location.pathname).toBe(nextPath));
+    expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading overview' })).toBeInTheDocument();
+    await act(() => navigation);
+    const composer = screen.getByRole('region', { name: 'Thread composer' });
+    const message = within(composer).getByRole('textbox', { name: 'Message' });
+    const send = within(composer).getByRole('button', { name: 'Send message' });
+    await user.type(message, 'Typed right after the click');
+    expect(send).toBeDisabled();
+
+    // The transcript fills in before the session's details; sending waits for them.
+    nextMessages.resolve();
+    expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
+    expect(send).toBeDisabled();
+
+    nextSession.resolve();
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Typed right after the click');
   });
 });
 

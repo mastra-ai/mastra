@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { Mastra } from '@mastra/core';
 import type { MastraServerCache } from '@mastra/core/cache';
 import type { RequestContext } from '@mastra/core/di';
@@ -1708,6 +1709,58 @@ const workflowEventSchema = z.object({
   deliveryAttempt: z.number().optional(),
 });
 
+/** Core's internal durable-experiment workflow (`EXPERIMENT_WORKFLOW_ID`, not exported from `@mastra/core`). */
+const EXPERIMENT_WORKFLOW_ID = '__mastra-experiment';
+
+/** The only events a durable experiment run sends. It never suspends, resumes or time travels. */
+const EXPERIMENT_EVENT_TYPES = new Set([
+  'workflow.start',
+  'workflow.step.run',
+  'workflow.step.end',
+  'workflow.end',
+  'workflow.fail',
+  'workflow.cancel',
+]);
+
+/**
+ * The experiment workflow's steps read the dataset, experiment and request context from the run
+ * input, so a pushed event must belong to a run Mastra started, be an event such a run sends, and
+ * carry that run's stored input wherever it carries one. Starting a durable experiment saves the
+ * run before publishing its start event.
+ */
+function assertExperimentEventMatchesRun(
+  event: Event,
+  run: { snapshot: WorkflowRunState | string } | null | undefined,
+): void {
+  if (!run) throw new HTTPException(404, { message: 'Workflow run not found' });
+  const data = event.data as {
+    runId?: unknown;
+    prevResult?: { output?: unknown };
+    stepResults?: { input?: unknown };
+    restart?: { stepResults?: { input?: unknown } };
+    timeTravel?: unknown;
+  };
+  const snapshot = (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot) as WorkflowRunState;
+  const storedInput = asJson(snapshot.context?.input);
+  const carriedInputs = [
+    ...(event.type === 'workflow.start' ? [data.prevResult?.output] : []),
+    ...(data.stepResults && 'input' in data.stepResults ? [data.stepResults.input] : []),
+    ...(data.restart?.stepResults && 'input' in data.restart.stepResults ? [data.restart.stepResults.input] : []),
+  ];
+  if (
+    !EXPERIMENT_EVENT_TYPES.has(event.type) ||
+    data.timeTravel !== undefined ||
+    data.runId !== event.runId ||
+    carriedInputs.some(input => !isDeepStrictEqual(asJson(input), storedInput))
+  ) {
+    throw new HTTPException(400, { message: 'Workflow event does not match its run' });
+  }
+}
+
+function asJson(value: unknown): unknown {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
 const receiveWorkflowEventBodySchema = z.object({
   event: workflowEventSchema.passthrough(),
 });
@@ -1762,6 +1815,7 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
         runId: event.runId,
         ...(typeof workflowName === 'string' ? { workflowName } : {}),
       });
+      if (workflowName === EXPERIMENT_WORKFLOW_ID) assertExperimentEventMatchesRun(event, existingRun);
       await validateRunOwnership(
         existingRun,
         getEffectiveResourceId(requestContext, undefined),

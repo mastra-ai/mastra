@@ -133,6 +133,17 @@ describe('envListAction', () => {
     expect(out).toContain('SHORT=ab');
     spy.mockRestore();
   });
+
+  it('labels write-only secrets instead of showing the placeholder', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ API_KEY: '__mastra_secret__' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envListAction } = await import('./env.js');
+    await envListAction({});
+    const out = spy.mock.calls.map(c => c[0]).join('\n');
+    expect(out).toContain('API_KEY=(write-only secret)');
+    expect(out).not.toContain('__ma');
+    spy.mockRestore();
+  });
 });
 
 describe('envSetAction', () => {
@@ -249,6 +260,19 @@ describe('envPullAction', () => {
     expect(options).toEqual({ encoding: 'utf-8', mode: 0o600 });
     expect(mockChmod).toHaveBeenCalledWith(filePath, 0o600);
     expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s)'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('lists write-only secrets as comments instead of writing the placeholder', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ LOG_LEVEL: 'debug', API_KEY: '__mastra_secret__' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('LOG_LEVEL="debug"');
+    expect(content).toMatch(/^# API_KEY$/m);
+    expect(content).not.toContain('__mastra_secret__');
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Listed 1 write-only secret name(s)'))).toBe(true);
     spy.mockRestore();
   });
 

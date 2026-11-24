@@ -6,7 +6,6 @@
  * define its version rule; endedAt alone is not a general-purpose revision number.
  */
 import { z } from 'zod/v4';
-import { observabilityTextSearchSchema } from './text-search';
 import {
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
@@ -53,7 +52,6 @@ const requestSchema = z
   .object({
     timeRange: timeRangeSchema,
     where: traceQueryScalarPredicateSchema.optional(),
-    textSearch: observabilityTextSearchSchema.optional(),
     orderBy: z
       .array(z.object({ field: z.enum(SPAN_QUERY_ORDER_FIELDS), direction: z.enum(['asc', 'desc']) }).strict())
       .length(1)
@@ -240,7 +238,6 @@ export interface TrustedSpanQueryPlan {
   result: 'spans';
   timeRange: { from: string; to: string };
   where?: TrustedTraceQueryScalarPredicate;
-  textSearch?: string;
   scope?: TraceQueryPlanOptions['scope'];
   orderBy: NormalizedSpanQueryRequest['orderBy'][number];
   limit: number;
@@ -275,7 +272,9 @@ export function planSpanQuery(input: unknown, options: SpanQueryPlanOptions = {}
       message: 'Span model/provider ordering requires a supporting host and store',
     });
   }
-  const where = request.where ? planSpanQuerySelectionPredicate(request.where, issues) : undefined;
+  const where = request.where
+    ? planSpanQuerySelectionPredicate(request.where, issues, options.allowTokenSearch)
+    : undefined;
   if (issues.length) throw new TraceQueryValidationError(issues);
   const scope = normalizeTraceQueryTenantScope(options.scope);
   const timeRange = {
@@ -286,7 +285,6 @@ export function planSpanQuery(input: unknown, options: SpanQueryPlanOptions = {}
   // Page size may change without invalidating a cursor.
   const binding = digestBinding({
     version: 1,
-    textSearch: request.textSearch,
     result: 'spans',
     timeRange,
     where,
@@ -326,7 +324,6 @@ export function planSpanQuery(input: unknown, options: SpanQueryPlanOptions = {}
   }
   return {
     result: 'spans',
-    textSearch: request.textSearch,
     timeRange,
     where,
     scope,

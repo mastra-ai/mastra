@@ -102,6 +102,123 @@ describeForAllEngines('AIMock loop scenario: cancelling an untilIdle stream whil
     expect(textOf(chunks)).toBe('Dero is dero@example.com.');
   }
 
+  it('a resumed idle stream delivers a background continuation', async () => {
+    const llm = getMock();
+    let releaseResearch!: () => void;
+    const researchGate = new Promise<void>(resolve => {
+      releaseResearch = resolve;
+    });
+    const authorize = createTool({
+      id: 'authorize',
+      description: 'Authorize research',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async () => ({ authorized: true }),
+    });
+    const research = createTool({
+      id: 'research',
+      description: 'Research a record in the background',
+      inputSchema: z.object({}),
+      background: { enabled: true },
+      execute: async () => {
+        await researchGate;
+        return { amount: 42 };
+      },
+    });
+    const { agent } = await createSharedAgent(llm, {
+      tools: { authorize, research },
+      memory: new MockMemory(),
+      backgroundTasks: BG_CONFIG,
+      agentBackgroundTasks: { tools: { research: true } },
+      engine,
+    });
+    const memory = { thread: 'idle-resumed-research', resource: 'idle-researcher' };
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 0 },
+      { toolCalls: [{ id: 'authorize-1', name: 'authorize', arguments: {} }] },
+    );
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 1 },
+      {
+        toolCalls: [{ id: 'research-1', name: 'research', arguments: { _background: { disposition: 'deferred' } } }],
+      },
+    );
+    llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'Waiting for research.' });
+    llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'The amount is 42.' });
+
+    try {
+      const first = await agent.stream('Authorize then research the record', { memory, closeOnSuspend: true });
+      await collect(first.fullStream as AsyncIterable<unknown>);
+      const resumed = await agent.resumeStreamUntilIdle(
+        { approved: true },
+        { runId: first.runId, toolCallId: 'authorize-1', memory },
+      );
+      const chunks: Chunk[] = [];
+      for await (const chunk of resumed.fullStream as AsyncIterable<Chunk>) {
+        chunks.push(chunk);
+        if (textOf(chunks).includes('Waiting for research.')) releaseResearch();
+      }
+      expect(chunks.some(c => c.type === 'background-task-started')).toBe(true);
+      expect(chunks.some(c => c.type === 'background-task-completed')).toBe(true);
+      expect(textOf(chunks)).toBe('Waiting for research.The amount is 42.');
+      expect(JSON.stringify(llm.getRequests().at(-1)?.body?.messages)).toContain('42');
+    } finally {
+      releaseResearch();
+    }
+  }, 30_000);
+
+  it('a resumed idle stream closes at the next approval and remains resumable', async () => {
+    const llm = getMock();
+    const transfers: number[] = [];
+    const transfer = createTool({
+      id: 'transfer',
+      description: 'Transfer an approved amount',
+      inputSchema: z.object({ amount: z.number() }),
+      requireApproval: true,
+      execute: async ({ amount }) => {
+        transfers.push(amount);
+        return { transferred: amount };
+      },
+    });
+    const { agent } = await createSharedAgent(llm, {
+      tools: { transfer },
+      memory: new MockMemory(),
+      backgroundTasks: BG_CONFIG,
+      engine,
+    });
+    const memory = { thread: 'idle-sequential-approval', resource: 'idle-approver' };
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 0 },
+      { toolCalls: [{ id: 'transfer-1', name: 'transfer', arguments: { amount: 42 } }] },
+    );
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 1 },
+      { toolCalls: [{ id: 'transfer-2', name: 'transfer', arguments: { amount: 7 } }] },
+    );
+    llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'Both transfers approved.' });
+
+    const first = await agent.stream('Transfer 42, then 7', { memory, closeOnSuspend: true });
+    const firstChunks = await collect(first.fullStream as AsyncIterable<unknown>);
+    expect(firstChunks.some(c => c.type === 'tool-call-approval')).toBe(true);
+    expect(transfers).toEqual([]);
+
+    const resumed = await agent.resumeStreamUntilIdle(
+      { approved: true },
+      { runId: first.runId, toolCallId: 'transfer-1', memory, maxIdleMs: 50 },
+    );
+    const resumedChunks = await collect(resumed.fullStream as AsyncIterable<unknown>);
+    expect(resumedChunks.find(c => c.type === 'tool-call-approval')?.payload.toolCallId).toBe('transfer-2');
+    expect(transfers).toEqual([42]);
+
+    const final = await agent.resumeStreamUntilIdle(
+      { approved: true },
+      { runId: first.runId, toolCallId: 'transfer-2', memory, maxIdleMs: 50 },
+    );
+    expect(textOf(await collect(final.fullStream as AsyncIterable<unknown>))).toBe('Both transfers approved.');
+    expect(transfers).toEqual([42, 7]);
+    expect(JSON.stringify(llm.getRequests().at(-1)?.body?.messages)).toContain('transferred');
+  }, 30_000);
+
   for (const mode of ['approval', 'suspend'] as const) {
     it(`breaking out of the stream at ${pauseChunkType(mode)} keeps the run resumable`, async () => {
       const { shared, thread, resume } = await setup(mode, 'break');

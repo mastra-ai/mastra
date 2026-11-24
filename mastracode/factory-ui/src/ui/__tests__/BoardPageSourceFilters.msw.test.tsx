@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -15,6 +15,7 @@ import {
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import type { IntakeConfig, IntakeSourceBinding } from '../domains/factory/services/intake';
+import type { PlatformProviderConnection } from '../domains/factory/services/platformConnect';
 import { linearProjects, wireSourceCards } from './fixtures/boardSourceFilters';
 import {
   docsWatchId,
@@ -128,12 +129,30 @@ async function expectPortalView() {
 }
 
 describe('Board source and Linear project filters', () => {
-  it('offers connected providers and Manual, but not unconnected sources', async () => {
+  it('offers connected providers, Detail and Manual, but not unconnected sources', async () => {
     stubSources();
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
     // Pull requests are offered while a code host is connected: they replace the retired Review board.
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual', 'Pull requests']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Detail', 'Manual', 'Pull requests']);
+  });
+
+  describe('when the organization has connected Vanta', () => {
+    it('offers Vanta, so its vulnerability cards can be found on the board', async () => {
+      stubSources();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/vanta/connections`, () =>
+          HttpResponse.json({
+            connections: [
+              { id: 'conn-1', integrationId: 'vanta', status: 'active', accountLabel: 'Acme' },
+            ] satisfies PlatformProviderConnection[],
+          }),
+        ),
+      );
+      const view = renderBoard();
+      await waitForMutationsIdle(view.client);
+      expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Vanta', 'Detail', 'Manual', 'Pull requests']);
+    });
   });
 
   it('shows Linear, Jira and incident.io cards without asking those providers for their issue lists', async () => {
@@ -207,11 +226,11 @@ describe('Board source and Linear project filters', () => {
     stubSources();
     const view = renderBoard('?source=gitlab');
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual', 'Pull requests']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Detail', 'Manual', 'Pull requests']);
     expect(screen.getByRole('menuitemcheckbox', { name: 'GitLab' })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('offers only Manual when configured providers are disconnected', async () => {
+  it('offers only Detail and Manual when configured providers are disconnected', async () => {
     stubSources();
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -223,7 +242,7 @@ describe('Board source and Linear project filters', () => {
     );
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
-    expect(await intakeSourceOptions()).toEqual(['Manual']);
+    expect(await intakeSourceOptions()).toEqual(['Detail', 'Manual']);
   });
 
   describe('when a hosted Linear project is selected', () => {
@@ -332,6 +351,26 @@ describe('Board source and Linear project filters', () => {
     expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
+  });
+
+  it('narrows the board by pull request and by trust, next to the source filter', async () => {
+    stubSources();
+    const view = renderBoard();
+    await screen.findByText('GitHub: update dependencies');
+    await waitForMutationsIdle(view.client);
+
+    // The GitHub card carries no trust stamp, so like intake it counts as from outside.
+    await selectMany('Trust', ['From outside']);
+    await waitForMutationsIdle(view.client);
+    expect(view.router.state.location.search).toContain('trust=untrusted');
+    await waitFor(() => expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument());
+    expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
+
+    await selectMany('Pull request', ['Has a pull request']);
+    await waitForMutationsIdle(view.client);
+    expect(view.router.state.location.search).toContain('pullRequest=with');
+    expect(await screen.findAllByText('No work items match filters')).not.toHaveLength(0);
+    expect(screen.queryByText('GitHub: update dependencies')).not.toBeInTheDocument();
   });
 
   it('explains that filters excluded Intake cards instead of suggesting an integration setup', async () => {

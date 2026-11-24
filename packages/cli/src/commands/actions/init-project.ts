@@ -32,7 +32,14 @@ export const initProject = async (args: InitArgs) => {
 
   await analytics.trackCommandExecution({
     command: 'init',
-    args: { ...args },
+    args: {
+      default: args.default,
+      components: args.components,
+      llm: args.llm,
+      example: args.example,
+      mcp: args.mcp,
+      observability: args.observability,
+    },
     execution: async () => {
       await checkForPkgJson();
 

@@ -147,7 +147,7 @@ describe('buildFullBundles', () => {
       pages: [
         ...pages,
         page('/404', 'Page not found'),
-        page('/learn/what-is-an-agent', 'Lesson'),
+        page('/blog/announcing-mastra-1', 'Blog post'),
         page('/docs/private/secret', 'Secret'),
         page('/docsearch', 'Not in docs'),
         { route: '/docs/empty', title: 'Empty', content: '  ' },
@@ -159,7 +159,7 @@ describe('buildFullBundles', () => {
     const titles = headings(bundles.root)
     expect(titles).toEqual(['Get started', 'Agents', 'Tools', 'Workflows'])
     expect(bundles.root).not.toContain('/404')
-    expect(bundles.root).not.toContain('/learn/')
+    expect(bundles.root).not.toContain('/blog/')
   })
 
   it('replaces the root bundle with an index of section bundles when it exceeds the size limit', () => {

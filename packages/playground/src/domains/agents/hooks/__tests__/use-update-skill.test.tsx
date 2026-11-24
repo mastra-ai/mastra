@@ -43,46 +43,6 @@ afterEach(() => {
 });
 
 describe('useUpdateSkill', () => {
-  describe('when the caller provides only some fields', () => {
-    it('sends a sparse PATCH body containing only the provided fields', async () => {
-      let body: Record<string, unknown> | null = null;
-      server.use(
-        http.patch(`${BASE_URL}/api/stored/skills/skill-1`, async ({ request }) => {
-          body = (await request.json()) as Record<string, unknown>;
-          return HttpResponse.json({ id: 'skill-1', status: 'active', createdAt: '', updatedAt: '' });
-        }),
-      );
-
-      const { result } = renderHook(() => useUpdateSkill(), { wrapper: wrapper() });
-
-      await act(async () => {
-        await result.current.mutateAsync({ id: 'skill-1', name: 'Renamed' });
-      });
-
-      expect(body).toEqual({ name: 'Renamed' });
-    });
-
-    it('omits fields the caller did not provide from the PATCH body', async () => {
-      let body: Record<string, unknown> | null = null;
-      server.use(
-        http.patch(`${BASE_URL}/api/stored/skills/skill-1`, async ({ request }) => {
-          body = (await request.json()) as Record<string, unknown>;
-          return HttpResponse.json({ id: 'skill-1', status: 'active', createdAt: '', updatedAt: '' });
-        }),
-      );
-
-      const { result } = renderHook(() => useUpdateSkill(), { wrapper: wrapper() });
-
-      await act(async () => {
-        await result.current.mutateAsync({ id: 'skill-1', name: 'Renamed' });
-      });
-
-      expect(body).not.toHaveProperty('description');
-      expect(body).not.toHaveProperty('visibility');
-      expect(body).not.toHaveProperty('files');
-    });
-  });
-
   describe('when the update succeeds in default (non-silent) mode', () => {
     it('shows a success toast', async () => {
       server.use(

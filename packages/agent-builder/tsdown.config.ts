@@ -9,7 +9,6 @@ export default defineConfig({
   nodeProtocol: 'strip',
   dts: false,
   clean: true,
-  sourcemap: true,
   deps: {
     alwaysBundle: ['@internal/ai-sdk-v5'],
     neverBundle: ['typescript'],

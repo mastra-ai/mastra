@@ -874,4 +874,140 @@ describe('agent error surfaces', () => {
       ).toEqual([]);
     });
   });
+
+  describe("a step that ends with finishReason 'length' before any answer", () => {
+    // A model that spends its whole output budget on reasoning stops with finishReason
+    // 'length' and no text. AgentController reports this as an error; the plain Agent
+    // used to resolve with empty text and nothing telling the caller why.
+    function createLengthModel(parts: Array<Record<string, unknown>>) {
+      const usage = { inputTokens: 10, outputTokens: 4096, totalTokens: 4106 };
+      const content = parts.flatMap(part =>
+        part.type === 'reasoning-delta'
+          ? [{ type: 'reasoning' as const, text: part.delta as string }]
+          : part.type === 'text-delta'
+            ? [{ type: 'text' as const, text: part.delta as string }]
+            : [],
+      );
+      return new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          finishReason: 'length',
+          usage,
+          content,
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            ...parts,
+            { type: 'finish', finishReason: 'length', usage },
+          ] as any),
+        }),
+      });
+    }
+
+    const reasoningOnly = [
+      { type: 'reasoning-start', id: 'r-1' },
+      { type: 'reasoning-delta', id: 'r-1', delta: 'Let me think about this for a long time...' },
+      { type: 'reasoning-end', id: 'r-1' },
+    ];
+    const lengthMessage = 'The model stopped because it reached its maximum output length before finishing.';
+
+    it('rejects generate with the output-length error when the step only reasoned', async () => {
+      const agent = new Agent({
+        id: 'length-reasoning-only-generate',
+        name: 'Length Reasoning Only',
+        model: createLengthModel(reasoningOnly),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      await expect(agent.generate('Hello', { modelSettings: { maxRetries: 0 } })).rejects.toThrow(lengthMessage);
+    });
+
+    it('emits an error chunk and calls onError on stream when the step only reasoned', async () => {
+      const onError = vi.fn();
+      const agent = new Agent({
+        id: 'length-reasoning-only-stream',
+        name: 'Length Reasoning Only',
+        model: createLengthModel(reasoningOnly),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 }, onError });
+      const errorChunks: any[] = [];
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'error') errorChunks.push(chunk);
+      }
+
+      expect(errorChunks).toHaveLength(1);
+      expect((errorChunks[0].payload.error as Error).message).toContain(lengthMessage);
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+
+    it('errors on stream when the only text-delta is an empty one carrying provider metadata', async () => {
+      const agent = new Agent({
+        id: 'length-metadata-only-text',
+        name: 'Length Metadata Only Text',
+        model: createLengthModel([
+          ...reasoningOnly,
+          { type: 'text-start', id: 't-1' },
+          { type: 'text-delta', id: 't-1', delta: '', providerMetadata: { google: { thoughtSignature: 'sig' } } },
+          { type: 'text-end', id: 't-1' },
+        ]),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const errorChunks: any[] = [];
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'error') errorChunks.push(chunk);
+      }
+
+      expect(errorChunks).toHaveLength(1);
+      expect((errorChunks[0].payload.error as Error).message).toContain(lengthMessage);
+    });
+
+    it('errors on stream when the step only reasoned and cited a source', async () => {
+      const agent = new Agent({
+        id: 'length-source-only',
+        name: 'Length Source Only',
+        model: createLengthModel([
+          ...reasoningOnly,
+          { type: 'source', sourceType: 'url', id: 's-1', url: 'https://example.com', title: 'Example' },
+        ]),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+      const errorChunks: any[] = [];
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'error') errorChunks.push(chunk);
+      }
+
+      expect(errorChunks).toHaveLength(1);
+      expect((errorChunks[0].payload.error as Error).message).toContain(lengthMessage);
+    });
+
+    it('still returns truncated text without an error when the step produced text', async () => {
+      const agent = new Agent({
+        id: 'length-with-text',
+        name: 'Length With Text',
+        model: createLengthModel([
+          ...reasoningOnly,
+          { type: 'text-start', id: 't-1' },
+          { type: 'text-delta', id: 't-1', delta: 'A partial answer' },
+          { type: 'text-end', id: 't-1' },
+        ]),
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const result = await agent.generate('Hello', { modelSettings: { maxRetries: 0 } });
+      expect(result.text).toBe('A partial answer');
+      expect(result.finishReason).toBe('length');
+      expect(result.error).toBeUndefined();
+    });
+  });
 });

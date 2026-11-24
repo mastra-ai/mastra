@@ -3,6 +3,7 @@ import type { StateRef, StepResultSummary, WorkflowRunHeader } from '../storage/
 import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
+import type { RunFence } from '../storage/run-fencing';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
 import type { WorkflowStepCompletionGuard, WorkflowStepStartGuard } from '../storage/workflow-step-guard';
 import { stubStepResult } from './run-journal';
@@ -26,9 +27,14 @@ export interface RunStorage {
   /**
    * Replaces the stored run: the pending/waiting snapshot written before the engine runs, or a
    * pruned one. With `stateBase` (a storage v2 nested run starting from a stored version of its
-   * parent's state), the state is stored as that version instead of a copy.
+   * parent's state), the state is stored as that version instead of a copy. `fence` makes the store
+   * reject the write when this execution no longer owns the run.
    */
-  writeSnapshot(snapshot: WorkflowRunState, resourceId?: string, opts?: { stateBase?: StateRef }): Promise<void>;
+  writeSnapshot(
+    snapshot: WorkflowRunState,
+    resourceId?: string,
+    opts?: { stateBase?: StateRef; fence?: RunFence },
+  ): Promise<void>;
   /** After a claim: has nothing been written to the run since `claimed` was loaded? */
   isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean>;
   /**
@@ -150,13 +156,18 @@ class RunStorageV1 implements RunStorage {
     return this.#load(await this.#getStore());
   }
 
-  async writeSnapshot(snapshot: WorkflowRunState, resourceId?: string): Promise<void> {
+  async writeSnapshot(
+    snapshot: WorkflowRunState,
+    resourceId?: string,
+    { fence }: { fence?: RunFence } = {},
+  ): Promise<void> {
     const store = await this.#getStore();
     await store?.persistWorkflowSnapshot({
       workflowName: this.#workflowName,
       runId: this.#runId,
       resourceId,
       snapshot,
+      fence,
     });
   }
 
@@ -351,7 +362,7 @@ class RunStorageV2 implements RunStorage {
   async writeSnapshot(
     snapshot: WorkflowRunState,
     resourceId?: string,
-    { stateBase }: { stateBase?: StateRef } = {},
+    { stateBase, fence }: { stateBase?: StateRef; fence?: RunFence } = {},
   ): Promise<void> {
     const store = await this.#getStore();
     // The evented engine keeps its state in `context.__state`; on v2 that's the run's state, not a step.
@@ -364,6 +375,7 @@ class RunStorageV2 implements RunStorage {
       threadId: getSnapshotMemoryInfo(snapshot)?.threadId,
       header,
       steps: steps as WorkflowRunState['context'],
+      fence,
       ...(stateBase ? { stateBase } : { state: value }),
     });
   }
@@ -413,12 +425,10 @@ class RunStorageV2 implements RunStorage {
 
   async loadStep(stepId: string): Promise<StepSnapshot | null> {
     const store = await this.#getStore();
-    const args = { workflowName: this.#workflowName, runId: this.#runId };
-    const stored = await store?.loadWorkflowRunHeader(args);
-    if (!stored) return null;
-    // Bounded by the header's `lastSeq`, so a write landing between the two reads isn't half-seen.
-    const context = (await store!.loadWorkflowRunSteps({ ...args, stepIds: [stepId], upToSeq: stored.lastSeq })) ?? {};
-    return { ...stored.header, context } as StepSnapshot;
+    // One store read, so the header and the step are the same version of the run even while other
+    // writers keep appending to it.
+    const stored = await store?.loadWorkflowRunStep({ workflowName: this.#workflowName, runId: this.#runId, stepId });
+    return stored ? ({ ...stored.header, context: stored.steps } as StepSnapshot) : null;
   }
 
   async loadSteps(stepIds: string[], { upToSeq }: { upToSeq?: number } = {}): Promise<StepResults> {

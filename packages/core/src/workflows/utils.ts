@@ -7,6 +7,7 @@ import type { StandardSchemaWithJSON } from '../schema';
 import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { removeUndefinedValues } from '../utils';
 import { waitMs } from '../utils/test-waits';
+import { MAX_DRAIN_TIMEOUT_MS as MAX_TIMER_DELAY_MS } from '../worker/drain-timeout';
 import type { ExecutionGraph } from './execution-engine';
 import { withoutNestedRunStartState } from './nested-state';
 import type { Step } from './step';
@@ -227,6 +228,27 @@ export function getResumeLabelsByStepId(
     }, {});
 }
 
+/**
+ * Calls `callback` once `duration` ms have passed and returns a function that cancels it.
+ * Node and Bun fire a `setTimeout` delay above 2^31-1 ms after 1 ms, so a longer duration
+ * is waited out in consecutive timers. A duration that is not positive (including NaN)
+ * fires at once; `Infinity` never fires.
+ * @internal
+ */
+export function setLongTimeout(callback: () => void, duration: number): () => void {
+  let timer: ReturnType<typeof setTimeout>;
+  const arm = (remaining: number) => {
+    if (!(remaining > 0)) {
+      timer = setTimeout(callback, 0);
+      return;
+    }
+    const chunk = Math.min(remaining, MAX_TIMER_DELAY_MS);
+    timer = setTimeout(() => (chunk === remaining ? callback() : arm(remaining - chunk)), chunk);
+  };
+  arm(duration);
+  return () => clearTimeout(timer);
+}
+
 export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
   return new Promise(resolve => {
     if (signal?.aborted) {
@@ -235,16 +257,13 @@ export function abortableSleep(duration: number, signal?: AbortSignal): Promise<
     }
 
     const onAbort = () => {
-      clearTimeout(timeout);
+      cancel();
       resolve();
     };
-    const timeout = setTimeout(
-      () => {
-        signal?.removeEventListener('abort', onAbort);
-        resolve();
-      },
-      Math.max(0, duration),
-    );
+    const cancel = setLongTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, duration);
 
     signal?.addEventListener('abort', onAbort, { once: true });
   });
@@ -477,6 +496,43 @@ export const assertTimeTravelGraphMatchesSnapshot = (params: {
   }
 };
 
+// Takes only the stored step result, so caller-supplied context cannot choose another run.
+const nestedRunIdentity = (stored: Record<string, any> | undefined, isForeach: boolean) => {
+  const metadata = stored?.metadata;
+  const foreachNestedRunIds =
+    metadata?.foreachNestedRunIds && typeof metadata.foreachNestedRunIds === 'object'
+      ? metadata.foreachNestedRunIds
+      : undefined;
+  // A foreach's `nestedRunId` names only its last-started iteration. Without per-iteration ids it is
+  // kept only when the stored foreach input has one item, so it can only be item 0's.
+  const keepNestedRunId =
+    !isForeach || (!foreachNestedRunIds && Array.isArray(stored?.payload) && stored.payload.length === 1);
+  const identity = removeUndefinedValues({
+    nestedRunId: keepNestedRunId && typeof metadata?.nestedRunId === 'string' ? metadata.nestedRunId : undefined,
+    foreachNestedRunIds,
+  });
+  return Object.keys(identity).length > 0 ? identity : undefined;
+};
+
+// The evented engine keeps each foreach iteration's output in its own slot, but concurrent
+// iterations rewrite the whole per-iteration record list and can drop each other's entries.
+// Time travel replays every iteration without a success record, so fill those gaps from the
+// slots: a settled slot that is neither empty nor suspended holds a successful iteration.
+const withSettledForeachRecords = (suspendPayload: any, output: unknown) => {
+  const records = suspendPayload?.__workflow_meta?.foreachOutput;
+  if (!Array.isArray(records) || !Array.isArray(output)) return suspendPayload;
+  let changed = false;
+  const foreachOutput = output.map((slot: any, index) => {
+    const record = records[index];
+    if (record || slot === null || slot === undefined || slot?.status === 'suspended') return record ?? null;
+    changed = true;
+    return { status: 'success', output: slot };
+  });
+  return changed
+    ? { ...suspendPayload, __workflow_meta: { ...suspendPayload.__workflow_meta, foreachOutput } }
+    : suspendPayload;
+};
+
 export const createTimeTravelExecutionParams = (params: {
   steps: string[];
   inputData?: any;
@@ -592,12 +648,14 @@ export const createTimeTravelExecutionParams = (params: {
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
         resumePayload: stepContext?.resumePayload,
-        suspendPayload: stepContext?.suspendPayload,
+        suspendPayload: withSettledForeachRecords(stepContext?.suspendPayload, stepContext?.output),
         suspendOutput: stepContext?.suspendOutput,
         startedAt: stepContext?.startedAt ?? Date.now(),
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
+        // The evented engine reuses the recorded nested run (and its snapshot) only when these ids survive.
+        metadata: nestedRunIdentity(snapshotContext[stepId], entry.type === 'foreach'),
       };
       const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (

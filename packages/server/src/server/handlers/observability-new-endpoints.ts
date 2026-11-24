@@ -90,6 +90,7 @@ import { handleError } from './error';
 import { exportPersistedEvent, persistedFeedbackEvent, persistedScoreEvent } from './observability-export';
 import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
+  isTraceQueryUnsupportedError,
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
   assertObservabilitySpanDurationSortSupported,
@@ -120,7 +121,6 @@ import {
   isObservabilityOutcomeField,
   supportsObservabilityTraceQueryOutcomeFields,
   assertObservabilityTraceQuerySupported,
-  assertObservabilityTextSearchSupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
   getObservabilityStore,
@@ -341,7 +341,6 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     requestContext,
     timeRange,
     where,
-    textSearch,
     rootSource,
     group,
     orderBy,
@@ -350,7 +349,14 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     mode,
     after,
     limit,
+    ...legacy
   }) => {
+    if ('textSearch' in legacy && legacy.textSearch !== undefined) {
+      throwTraceQueryError(501, {
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'The experimental textSearch field is no longer supported',
+      });
+    }
     if (rootSource === 'aggregated') {
       throwTraceQueryError(501, {
         code: 'TRACE_QUERY_UNSUPPORTED',
@@ -380,7 +386,6 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
           timeRange,
           where,
           ...(rootSource === undefined || rootSource === 'legacy' ? {} : { rootSource }),
-          ...(textSearch === undefined ? {} : { textSearch }),
           group,
           orderBy,
           page,
@@ -408,7 +413,6 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
-      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'trace');
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
@@ -434,6 +438,9 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       return await observabilityStore.queryTraces(plan);
     } catch (error) {
+      if (isTraceQueryUnsupportedError(error)) {
+        throwTraceQueryError(501, { code: 'TRACE_QUERY_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryCursorError) {
         throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
           code: error.code,
@@ -543,7 +550,16 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     let plan;
     try {
       plan = coreStorage.planTraceAggregate(
-        { timeRange, where, groupBy, interval, measures, having, orderBy, limit },
+        {
+          timeRange,
+          where,
+          groupBy,
+          interval,
+          measures,
+          having,
+          orderBy,
+          limit,
+        },
         { scope: resolveTraceQueryScope(requestContext, 'TRACE_AGGREGATE_UNSUPPORTED') },
       );
     } catch (error) {
@@ -578,6 +594,9 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     try {
       return await observabilityStore.aggregateTraces(plan);
     } catch (error) {
+      if (isTraceQueryUnsupportedError(error)) {
+        throwTraceQueryError(501, { code: 'TRACE_AGGREGATE_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });
       }
@@ -680,7 +699,16 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     let plan;
     try {
       plan = coreStorage.planSpanAggregate(
-        { timeRange, where, groupBy, interval, measures, having, orderBy, limit },
+        {
+          timeRange,
+          where,
+          groupBy,
+          interval,
+          measures,
+          having,
+          orderBy,
+          limit,
+        },
         { scope: resolveTraceQueryScope(requestContext, 'SPAN_AGGREGATE_UNSUPPORTED') },
       );
     } catch (error) {
@@ -713,6 +741,9 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     try {
       return await observabilityStore.aggregateSpans(plan);
     } catch (error) {
+      if (isTraceQueryUnsupportedError(error)) {
+        throwTraceQueryError(501, { code: 'SPAN_AGGREGATE_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryResourceLimitError) {
         throwTraceQueryError(503, { code: error.code, message: error.message });
       }
@@ -793,11 +824,17 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       code: 'SPAN_QUERY_UNSUPPORTED',
       message: 'Span queries require a newer @mastra/core. Please upgrade.',
     }),
-  handler: async ({ mastra, requestContext, timeRange, where, textSearch, orderBy, page }) => {
+  handler: async ({ mastra, requestContext, timeRange, where, orderBy, page, ...legacy }) => {
+    if ('textSearch' in legacy && legacy.textSearch !== undefined) {
+      throwTraceQueryError(501, {
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: 'The experimental textSearch field is no longer supported',
+      });
+    }
     let plan;
     try {
       plan = coreStorage.planSpanQuery(
-        { timeRange, where, ...(textSearch === undefined ? {} : { textSearch }), orderBy, page },
+        { timeRange, where, orderBy, page },
         {
           scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED'),
           allowSpanDurationOrdering: true,
@@ -823,7 +860,6 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanDurationSortSupported(observabilityStore, plan.orderBy);
       assertObservabilitySpanModelProviderSortSupported(observabilityStore, plan.orderBy);
-      assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'span');
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);
@@ -845,6 +881,9 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       return await observabilityStore.querySpans(plan);
     } catch (error) {
+      if (isTraceQueryUnsupportedError(error)) {
+        throwTraceQueryError(501, { code: 'SPAN_QUERY_UNSUPPORTED', message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryCursorError) {
         throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {
           code: error.code,
@@ -1860,6 +1899,13 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
 });
 
 export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseSchema: getEntityTypesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1868,6 +1914,13 @@ export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, 
 });
 
 export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   queryParamSchema: wrapSchemaForQueryParams(getEntityNamesArgsSchema.partial()),
   responseSchema: getEntityNamesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1878,6 +1931,13 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
 });
 
 export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseSchema: getServiceNamesResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1886,6 +1946,13 @@ export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES
 });
 
 export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseSchema: getEnvironmentsResponseSchema,
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1894,6 +1961,13 @@ export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, 
 });
 
 export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
+  // Only the observability MCP App calls it (as an app-only tool), for its filter bars' suggestions.
+  mcp: {
+    toolset: 'observability',
+    name: 'list_observability_values',
+    description: 'Values seen in observability data (entity types and names, service names, environments, tags).',
+    requires: capabilities => capabilities.observability !== null,
+  },
   queryParamSchema: wrapSchemaForQueryParams(getTagsArgsSchema.partial()),
   responseSchema: getTagsResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1919,6 +1993,13 @@ const getObservabilityCapabilitiesResponseSchema = z.object({
 // even on an @mastra/core too old for the newer observability endpoints.
 export const GET_CAPABILITIES = createRoute({
   ...NEW_ROUTE_DEFS.GET_CAPABILITIES,
+  // Only the observability explorer MCP App calls it (as an app-only tool), to learn which views the store supports.
+  mcp: {
+    toolset: 'observability',
+    name: 'get_observability_capabilities',
+    description: 'Which optional observability APIs the observability store supports.',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseType: 'json',
   responseSchema: getObservabilityCapabilitiesResponseSchema,
   tags: ['Observability'],

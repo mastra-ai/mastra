@@ -6,7 +6,7 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useCardSessions } from '../../../../hooks/useSessionRows';
 import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
@@ -14,7 +14,6 @@ import { phaseName } from '../boardStages';
 import { cardStages, elapsedLabel, enteredCurrentStageAt, stageBlockReason, stageDescription } from '../cardStageBar';
 import type { StageStep } from '../cardStageBar';
 import { useItemDecisions } from '../hooks/useBoardDecisions';
-import { useItemSessionStatuses } from '../hooks/useItemSessionStatuses';
 import { useBoardItems } from '../hooks/useBoardItems';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
 import type { WorkItem } from '../services/workItems';
@@ -22,8 +21,6 @@ import { BoardStageIcon, phaseIconKind } from './BoardIcons';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 import { IconChevronLeftMedium } from '@mastra/playground-ui/icons/central/IconChevronLeftMedium';
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
-
-const NO_SESSIONS: readonly string[] = [];
 
 export function CardStageBar({
   item,
@@ -50,11 +47,9 @@ export function CardStageBar({
   const { session, links } = useSessionSubscriptions();
   const repository = session.repository;
   const subscriptions = links.subscriptions;
-  const parkedSessionIds = useSidebarWorkItemsQuery(factory.id).data?.parkedSessionIds ?? NO_SESSIONS;
-  const sessionStatus = useItemSessionStatuses({ factoryProjectId: factory.id, items: [item], parkedSessionIds }).get(
-    item.id,
-  );
-  const { owner } = boardCardState({ decision: effectByItem.get(item.id), sessionStatus });
+  const cardSessions = useCardSessions(factory.id);
+  const sessionHolds = cardSessions.current && cardSessions.held.has(item.id);
+  const { owner } = boardCardState({ decision: effectByItem.get(item.id), sessionHolds });
   const stages = cardStages(item, board);
   const enteredAt = stages?.current.kind === 'working' ? enteredCurrentStageAt(item, stages.current.id) : undefined;
   const elapsed = useClock(now => (enteredAt === undefined ? undefined : elapsedLabel(enteredAt, now)));
@@ -166,6 +161,8 @@ function NeighbourButton({
   const reason = stageBlockReason(step) ?? (held ? BUSY_CARD_MOVE_REFUSAL : undefined);
   return (
     <Button
+      iconEnd={direction === 'next' ? <IconChevronRightMedium /> : undefined}
+      icon={direction === 'previous' ? <IconChevronLeftMedium /> : undefined}
       variant="ghost"
       size="sm"
       aria-label={reason ? `${action}, ${reason}` : action}
@@ -173,9 +170,7 @@ function NeighbourButton({
       disabled={disabled || held || step.blocked !== undefined}
       onClick={() => onMove(step.phase.id)}
     >
-      {direction === 'previous' ? <IconChevronLeftMedium aria-hidden /> : null}
       <span className="hidden @2xl:inline">{name}</span>
-      {direction === 'next' ? <IconChevronRightMedium aria-hidden /> : null}
     </Button>
   );
 }

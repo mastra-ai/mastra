@@ -1,3 +1,4 @@
+import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -6,12 +7,13 @@ import { Link } from 'react-router';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { boardOf } from '../boardFlow';
 import { currentItemStage, phaseLabel } from '../boardStages';
-import { cardChangeRequest, changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
+import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipPath, workItemReference } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { WorkItemSourceIcon } from './BoardCardParts';
 import { BoardStageIcon, boardPhaseIconKind, stageColorClass } from './BoardIcons';
+import { threadPath } from '../../workspaces/services/factoryPaths';
 
 export function RelatedCardLink({
   item,
@@ -31,9 +33,7 @@ export function RelatedCardLink({
   const session = Object.values(item.sessions)
     .filter(candidate => liveSessions.includes(candidate.sessionId))
     .at(-1);
-  const to = session
-    ? `/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`
-    : relationshipPath(item, factoryId);
+  const to = session ? threadPath(factoryId, session) : relationshipPath(item, factoryId);
   const board = boardOf(boards, item);
   const stage = boards === undefined ? undefined : currentItemStage(item, board);
   const kind = stage === undefined ? undefined : boardPhaseIconKind(board, stage);
@@ -44,8 +44,14 @@ export function RelatedCardLink({
   const name = [`Open ${relatedCardName(item, repository)}`, phase, statusLabel].filter(Boolean).join(', ');
   const reference = workItemReference(item, repository);
   return (
-    <Button variant="ghost" size="sm" className="w-full justify-start" aria-label={name} render={<Link to={to} />}>
-      <WorkItemSourceIcon item={item} subscriptions={subscriptions} />
+    <Button
+      icon={<WorkItemSourceIcon item={item} subscriptions={subscriptions} />}
+      variant="ghost"
+      size="sm"
+      className="w-full justify-start"
+      aria-label={name}
+      render={<Link to={to} />}
+    >
       {reference === undefined ? null : (
         <Txt as="span" variant="caption" tone="muted" className="shrink-0">
           {reference}

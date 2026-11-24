@@ -1,3 +1,4 @@
+import type { KnowledgeScopeDeclarations } from '../../../knowledge/declarations';
 import { StorageDomain } from '../base';
 import type { KnowledgePageStore } from './pages';
 
@@ -17,6 +18,11 @@ export interface KnowledgeStorageCapabilities {
    * pin kinds don't report it, and core refuses listing pins on them rather than store a page pin.
    */
   supportsPinKinds?: boolean;
+  /**
+   * `listPageActivity` accepts `since`, `until` and `before` (dated mode). Adapters without it don't
+   * report it, and core refuses dated activity reads on them rather than return unbounded history.
+   */
+  supportsActivityDateRange?: boolean;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -188,6 +194,18 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
 
   async dangerouslyReset(): Promise<void> {
     throw new Error('This Knowledge storage adapter does not support an explicit Knowledge-only reset.');
+  }
+
+  /**
+   * Scope declarations the store supplies itself, such as the scopes a hosted store's importers write
+   * to, with their access rules. Knowledge merges them under its config's, reusing the answer for a
+   * short window, so a declaration the store adds, removes or changes (revoking access included)
+   * applies within it; a key the config declares keeps the config's declaration. None by default.
+   *
+   * @experimental
+   */
+  async getScopeDeclarations(): Promise<KnowledgeScopeDeclarations> {
+    return {};
   }
 
   // Schema-4 page store (see ./pages.ts). Adapters override every method; the defaults refuse, so an

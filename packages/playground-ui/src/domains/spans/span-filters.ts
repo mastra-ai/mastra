@@ -1,5 +1,6 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { tokenSearchPredicate } from '../observability/lib/token-search-predicate';
 import {
   isLegacyAnyValue,
   ROOT_ENTITY_TYPE_OPTIONS,
@@ -260,8 +261,11 @@ export function createSpanFilterBarFields({
 function tokenToSpanQueryPredicate(
   token: TraceFilterToken,
   allowedFieldIds: ReadonlySet<string>,
+  withTokenSearch: boolean,
 ): TraceQueryScalarPredicate | undefined {
   const { fieldId } = token;
+  if (token.operatorId === 'hasAllTokens')
+    return withTokenSearch ? tokenSearchPredicate(fieldId, token.value) : undefined;
   if (!allowedFieldIds.has(fieldId)) return undefined;
   const operatorId = token.operatorId ?? 'is';
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
@@ -295,12 +299,13 @@ function tokenToSpanQueryPredicate(
 function groupToSpanQueryPredicate(
   group: TraceFilterGroup,
   allowedFieldIds: ReadonlySet<string>,
+  withTokenSearch: boolean,
 ): TraceQueryScalarPredicate | undefined {
   const args = group.nodes
     .map(node =>
       isTraceFilterGroup(node)
-        ? groupToSpanQueryPredicate(node, allowedFieldIds)
-        : tokenToSpanQueryPredicate(node, allowedFieldIds),
+        ? groupToSpanQueryPredicate(node, allowedFieldIds, withTokenSearch)
+        : tokenToSpanQueryPredicate(node, allowedFieldIds, withTokenSearch),
     )
     .filter((predicate): predicate is TraceQueryScalarPredicate => Boolean(predicate));
   if (args.length === 0) return undefined;
@@ -317,10 +322,16 @@ export function buildSpanQueryWhere(
   groups: TraceFilterGroup[],
   {
     withContextFields,
+    withTokenSearch = false,
     withOutcomeFields = false,
     withModelFields = false,
     ...support
-  }: StreamingTimingSupport & { withContextFields: boolean; withOutcomeFields?: boolean; withModelFields?: boolean },
+  }: StreamingTimingSupport & {
+    withTokenSearch?: boolean;
+    withContextFields: boolean;
+    withOutcomeFields?: boolean;
+    withModelFields?: boolean;
+  },
 ): TraceQueryScalarPredicate | undefined {
   const allowedFieldIds = withoutUnrecordedStreamingTimings(
     new Set([
@@ -332,8 +343,8 @@ export function buildSpanQueryWhere(
     support,
   );
   const args = [
-    ...tokens.map(token => tokenToSpanQueryPredicate(token, allowedFieldIds)),
-    ...groups.map(group => groupToSpanQueryPredicate(group, allowedFieldIds)),
+    ...tokens.map(token => tokenToSpanQueryPredicate(token, allowedFieldIds, withTokenSearch)),
+    ...groups.map(group => groupToSpanQueryPredicate(group, allowedFieldIds, withTokenSearch)),
   ].filter((predicate): predicate is TraceQueryScalarPredicate => Boolean(predicate));
   return args.length ? { op: 'and', args } : undefined;
 }
