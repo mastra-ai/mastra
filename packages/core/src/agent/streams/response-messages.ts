@@ -117,20 +117,38 @@ export function applyResponseMessages(
   replay: ResponseMessagesReplay,
   payload: { _durableResponseMessagesDiff?: ResponseMessagesDiff; _durableResponseMessages?: ResponseMessage[] },
 ): ResponseMessage[] | undefined {
+  return applyDiff(replay, payload).messages;
+}
+
+/**
+ * {@link applyResponseMessages}, also telling whether the list is the run's current one: it
+ * comes from the newest producer the reader has seen (or a producer that sends no diffs). A
+ * late event of an earlier producer, an execution that lost the run, reports that producer's
+ * own list.
+ */
+function applyDiff(
+  replay: ResponseMessagesReplay,
+  payload: Parameters<typeof applyResponseMessages>[1],
+): { messages: ResponseMessage[] | undefined; current: boolean } {
   const diff = payload._durableResponseMessagesDiff;
   if (!diff) {
-    if (!Array.isArray(payload._durableResponseMessages)) return undefined;
+    if (!Array.isArray(payload._durableResponseMessages)) return { messages: undefined, current: false };
     replay.messages = payload._durableResponseMessages;
-    return replay.messages;
+    return { messages: replay.messages, current: true };
   }
-  if (replay.retired?.has(diff.producer)) return diff.from === 0 ? diff.messages : undefined;
+  if (replay.retired?.has(diff.producer)) {
+    return { messages: diff.from === 0 ? diff.messages : undefined, current: false };
+  }
   const producers = (replay.producers ??= new Map());
+  const isNewest = () => [...producers.keys()].at(-1) === diff.producer;
   const held = producers.get(diff.producer);
   if (held && diff.seq <= held.seq) {
     // A step-finish delivered twice still reports its list; anything older says nothing new.
-    return diff.seq === held.seq && diff.hash === held.hash ? held.messages : undefined;
+    return diff.seq === held.seq && diff.hash === held.hash
+      ? { messages: held.messages, current: isNewest() }
+      : { messages: undefined, current: false };
   }
-  if (diff.from !== 0 && (!held || diff.base !== held.hash)) return undefined;
+  if (diff.from !== 0 && (!held || diff.base !== held.hash)) return { messages: undefined, current: false };
   const messages = [...(held?.messages.slice(0, diff.from) ?? []), ...diff.messages];
   producers.set(diff.producer, { messages, hash: diff.hash, seq: diff.seq });
   if (producers.size > KEPT_PRODUCERS) {
@@ -139,7 +157,7 @@ export function applyResponseMessages(
     (replay.retired ??= new Set()).add(oldest);
   }
   replay.messages = messages;
-  return messages;
+  return { messages, current: isNewest() };
 }
 
 /**
@@ -151,11 +169,32 @@ export function withRebuiltResponseMessages<T extends Parameters<typeof applyRes
   replay: ResponseMessagesReplay,
   payload: T,
 ): Omit<T, '_durableResponseMessagesDiff'> & { _durableResponseMessages?: ResponseMessage[] } {
+  return rebuildResponseMessages(replay, payload).payload;
+}
+
+/**
+ * Like {@link withRebuiltResponseMessages}, also returning the rebuilt list, or undefined
+ * when the reader couldn't rebuild it (the payload then reports an empty list). `current` is
+ * true when the list is the run's current one, which a reader may take as the run's response
+ * messages; a late event of an execution that lost the run only reports its own step.
+ */
+export function rebuildResponseMessages<T extends Parameters<typeof applyResponseMessages>[1]>(
+  replay: ResponseMessagesReplay,
+  payload: T,
+): {
+  payload: Omit<T, '_durableResponseMessagesDiff'> & { _durableResponseMessages?: ResponseMessage[] };
+  messages: ResponseMessage[] | undefined;
+  current: boolean;
+} {
   const { _durableResponseMessagesDiff, ...rest } = payload;
   // A reader that can't rebuild the list (it missed an earlier part) reports none for this step
   // rather than a list that may not match it.
-  const messages = applyResponseMessages(replay, payload);
-  return _durableResponseMessagesDiff || messages ? { ...rest, _durableResponseMessages: messages ?? [] } : rest;
+  const { messages, current } = applyDiff(replay, payload);
+  return {
+    payload: _durableResponseMessagesDiff || messages ? { ...rest, _durableResponseMessages: messages ?? [] } : rest,
+    messages,
+    current,
+  };
 }
 
 /**

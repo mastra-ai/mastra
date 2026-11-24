@@ -1,0 +1,306 @@
+import type { DatasetItem } from '@mastra/client-js';
+import { useDataset, useDatasetItemVersion, useDatasetItemVersions } from '@mastra/react/hooks/datasets';
+import type { DatasetItemVersion } from '@mastra/react/hooks/datasets';
+import { DatasetBreadcrumbs } from './dataset-page';
+import { DatasetItemDetails } from './items/dataset-item-details';
+import { PermissionDenied } from '@/domains/auth/components/permission-denied';
+import { SessionExpired } from '@/domains/auth/components/session-expired';
+import { Badge } from '@/ds/components/Badge';
+import { Crumb } from '@/ds/components/Breadcrumb';
+import { Button } from '@/ds/components/Button';
+import { Card, CardContent, CardHeader } from '@/ds/components/Card';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { Metadata } from '@/ds/components/Metadata';
+import { PageLayout } from '@/ds/components/PageLayout';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Txt } from '@/ds/components/Txt';
+import { IconChanges } from '@/ds/icons/central/IconChanges';
+import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
+import { IconHistory } from '@/ds/icons/central/IconHistory';
+import { useLinkComponent } from '@/lib/framework';
+import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
+import { formatDate } from '@/utils/date-format';
+import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
+
+function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
+  return {
+    id: version.id,
+    datasetId,
+    datasetVersion: version.datasetVersion,
+    input: version.input,
+    groundTruth: version.groundTruth,
+    expectedTrajectory: version.expectedTrajectory,
+    toolMocks: version.toolMocks,
+    scorerIds: version.scorerIds,
+    requestContext: version.requestContext,
+    metadata: version.metadata,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  };
+}
+
+function versionOptions(allVersions: DatasetItemVersion[], disabled?: Set<number>) {
+  return allVersions.map(v => {
+    const date = typeof v.updatedAt === 'string' ? new Date(v.updatedAt) : v.updatedAt;
+    return {
+      value: String(v.datasetVersion),
+      label: (
+        <span className="flex w-full items-center gap-2">
+          <Metadata>
+            <Metadata.Item>
+              <b>v. {v.datasetVersion}</b>
+            </Metadata.Item>
+            <Metadata.Item>
+              <Txt as="span" variant="caption" tone="muted">
+                {formatDate(date, 'date-time')}
+              </Txt>
+            </Metadata.Item>
+          </Metadata>
+          {v.isLatest ? (
+            <Badge variant="blue" size="xs" className="ml-auto">
+              Latest
+            </Badge>
+          ) : null}
+        </span>
+      ),
+      disabled: disabled?.has(v.datasetVersion) ?? false,
+    };
+  });
+}
+
+function parseVersionParam(value: string | null): number | null {
+  const n = Number(value);
+  return value != null && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export interface DatasetItemVersionsPageProps {
+  datasetId: string;
+  itemId: string;
+  datasetsHref: string;
+  searchParams: URLSearchParams;
+  setSearchParams: SetURLSearchParamsLike;
+}
+
+function truncateId(id: string) {
+  return id.length > 8 ? `${id.slice(0, 8)}...` : id;
+}
+
+/** Compares two versions of one dataset item, shared by Studio and Platform. */
+export function DatasetItemVersionsPage({
+  datasetId,
+  itemId,
+  datasetsHref,
+  searchParams,
+  setSearchParams,
+}: DatasetItemVersionsPageProps) {
+  const { Link, paths } = useLinkComponent();
+  const crumbs = (
+    <DatasetBreadcrumbs datasetId={datasetId} datasetsHref={datasetsHref}>
+      <Crumb as={Link} href={paths.datasetItemLink(datasetId, itemId)}>
+        {truncateId(itemId)}
+      </Crumb>
+      <Crumb as="span" isCurrent>
+        Item Version History
+      </Crumb>
+    </DatasetBreadcrumbs>
+  );
+
+  // Whole view lives in the URL so a link reproduces it:
+  // ?version=3 — left column; ?compare=2 — right column; ?view=diff
+  const selectedVersion = parseVersionParam(searchParams.get('version'));
+  const compareVersion = parseVersionParam(searchParams.get('compare'));
+  const isDiffView = searchParams.get('view') === 'diff';
+
+  const { data: dataset, error } = useDataset({
+    datasetId: datasetId,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
+  const { data: allVersions, isLoading } = useDatasetItemVersions({
+    datasetId: datasetId,
+    itemId: itemId,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) },
+  });
+
+  // URL is the source of truth; fall back to latest when absent or unknown.
+  const leftVersion =
+    (selectedVersion != null ? allVersions?.find(v => v.datasetVersion === selectedVersion) : undefined) ??
+    allVersions?.[0];
+  const leftNumber = leftVersion?.datasetVersion ?? null;
+  const rightNumber = compareVersion != null && compareVersion !== leftNumber ? compareVersion : null;
+
+  const { data: rightVersion, isLoading: isRightLoading } = useDatasetItemVersion({
+    datasetId: datasetId,
+    itemId: itemId,
+    datasetVersion: rightNumber ?? 0,
+    latestVersion: dataset?.version,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) && (rightNumber ?? 0) > 0 },
+  });
+
+  const setParam = (key: 'version' | 'compare' | 'view', value: string | number | null) =>
+    setSearchParams(
+      prev => {
+        const params = new URLSearchParams(prev);
+        if (value == null) params.delete(key);
+        else params.set(key, String(value));
+        return params;
+      },
+      { replace: true },
+    );
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
+        <h1 className="sr-only">Item Version History</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
+        <h1 className="sr-only">Item Version History</h1>
+        <PermissionDenied variant="fill" resource="datasets" />
+      </PageLayout>
+    );
+  }
+
+  if (!datasetId || !itemId) {
+    return (
+      <PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>
+        <h1 className="sr-only">Item Version History</h1>
+        <div className="grid h-full min-w-min content-start items-start overflow-auto">
+          <div className="py-5 text-center text-muted-foreground">
+            <p>Item not found.</p>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  const canDiff = Boolean(leftVersion && rightVersion);
+  const showDiff = isDiffView && canDiff;
+  const leftItem = leftVersion ? toDatasetItem(leftVersion, datasetId) : null;
+  const rightItem = rightVersion ? toDatasetItem(rightVersion, datasetId) : null;
+  // Red/green follows chronology, not column position: the older version shows removals, the newer one additions.
+  const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
+
+  return (
+    <PageLayout
+      variant="page"
+      body="fixed"
+      breadcrumbs={crumbs}
+      headerActions={
+        canDiff && (
+          <Button variant="ghost" size="sm" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
+            {isDiffView ? (
+              <>
+                <IconColumns3 /> Default view
+              </>
+            ) : (
+              <>
+                <IconChanges /> Diff view
+              </>
+            )}
+          </Button>
+        )
+      }
+    >
+      <h1 className="sr-only">Item Version History</h1>
+      <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              label="Version"
+              value={leftNumber != null ? String(leftNumber) : ''}
+              options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
+              onValueChange={val => setParam('version', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {isLoading ? (
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
+            ) : leftItem ? (
+              <DatasetItemDetails
+                item={leftItem}
+                diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
+              />
+            ) : (
+              <Txt as="p" variant="body" tone="muted">
+                Item data not available
+              </Txt>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+          <CardHeader>
+            <VersionSelect
+              label="Compare version"
+              value={rightNumber != null ? String(rightNumber) : ''}
+              placeholder="Select a version to compare"
+              options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
+              onValueChange={val => setParam('compare', Number(val))}
+            />
+          </CardHeader>
+          <CardContent className="grid content-start gap-5 overflow-y-auto">
+            {rightNumber == null ? (
+              <EmptyState
+                className="h-full"
+                titleSlot="No version selected"
+                descriptionSlot="Pick a version above to compare it with the one on the left."
+              />
+            ) : isRightLoading ? (
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
+            ) : rightItem ? (
+              <DatasetItemDetails
+                item={rightItem}
+                diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
+              />
+            ) : (
+              <Txt as="p" variant="body" tone="muted">
+                Version {rightNumber} not found
+              </Txt>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </PageLayout>
+  );
+}
+
+function VersionSelect({
+  label,
+  value,
+  options,
+  placeholder = 'Select version',
+  onValueChange,
+}: {
+  label: string;
+  value: string;
+  options: ReturnType<typeof versionOptions>;
+  placeholder?: string;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[auto_1fr] items-center gap-4">
+      <IconHistory className="size-icon-md opacity-50" />
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger aria-label={label} className="w-full">
+          <SelectValue placeholder={placeholder} className="flex-1" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(option => (
+            <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}

@@ -54,7 +54,7 @@ export const WorkflowEdgeDataButton = ({
             <DialogTitle>Step output</DialogTitle>
           </DialogHeader>
           <DialogBody>
-            <div className="min-w-0 rounded-lg border border-border bg-background p-3">
+            <div className="min-w-0 rounded-lg bg-nested p-3">
               <Txt variant="caption" tone="ink" className="mb-2 block">
                 {dataLabel}
               </Txt>

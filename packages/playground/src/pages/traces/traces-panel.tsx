@@ -1,3 +1,4 @@
+import { CreateDatasetDialog } from '@mastra/playground-ui/domains/datasets';
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
 import { ScoreAsItemDialog } from '@mastra/playground-ui/domains/scores/components/score-as-item-dialog';
 import { TraceScoresList } from '@mastra/playground-ui/domains/scores/components/trace-scores-list';
@@ -24,7 +25,6 @@ import { useScorers, useTriggerScorer } from '@mastra/react/hooks/scores';
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
 import { STUDIO_TRACES_FEATURES } from './features';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
 import { paths, traceScoreLink } from '@/lib/app-routing';
 

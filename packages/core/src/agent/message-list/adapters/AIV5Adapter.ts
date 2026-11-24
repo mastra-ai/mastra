@@ -23,6 +23,7 @@ import type {
 } from '../state/types';
 import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
+import { hasReplayableReasoningMetadata } from '../utils/reasoning-metadata';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
 import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
@@ -387,7 +388,10 @@ export class AIV5Adapter {
               return p;
             }, '') ??
               '');
-          if (text || part.details?.length) {
+          // Signed-but-empty reasoning (Anthropic thinking with no visible text) still has to
+          // reach the model prompt: dropping it here loses the signature before the provider
+          // conversion ever sees it (GRWTH-1919).
+          if (text || part.details?.length || hasReplayableReasoningMetadata(part.providerMetadata)) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,
               text: text || '',

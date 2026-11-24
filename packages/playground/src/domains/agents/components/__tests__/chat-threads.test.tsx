@@ -1,9 +1,8 @@
+import { ThreadsPanelProvider, useThreadsPanel } from '@mastra/playground-ui/domains/agents/chat';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ThreadsPanelProvider } from '../../context/threads-panel-context';
-import { useThreadsPanel } from '../../context/use-threads-panel';
 import { writeAllowedCapabilities, writeDeniedCapabilities } from '../../hooks/__tests__/fixtures/auth';
 import type { ChatThreadsProps } from '../chat-threads';
 import { ChatThreads } from '../chat-threads';

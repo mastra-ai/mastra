@@ -30,9 +30,13 @@ interface RegistryData {
   version: string;
 }
 
+// On disk the registry has no top-level `models` map (registry files written by
+// older versions may still have one); it is derived from `providers[*].models` on load.
+type RegistryFileData = Omit<RegistryData, 'models'> & { models?: Record<string, string[]> };
+
 // JSON imports widen string literals to `string`, so fields like
 // `modelOverrides[*].shape` don't match their literal-union types.
-const staticRegistry = staticRegistryJson as RegistryData;
+const staticRegistry = staticRegistryJson as RegistryFileData;
 
 /**
  * Check if running in offline/air-gapped mode.
@@ -56,12 +60,14 @@ function getEnabledGatewayIds(gateways: MastraModelGatewayInterface[]): Set<stri
   return enabledGatewayIds;
 }
 
-function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: Set<string>): RegistryData {
+function sanitizeRegistryDataForRuntime(data: RegistryFileData, enabledGatewayIds: Set<string>): RegistryData {
   const providers = Object.fromEntries(
     Object.entries(data.providers).filter(([, config]) => enabledGatewayIds.has(config.gateway)),
   );
 
-  const models = Object.fromEntries(Object.entries(data.models).filter(([providerId]) => providerId in providers));
+  const models = Object.fromEntries(
+    Object.entries(providers).map(([providerId, config]) => [providerId, config.models]),
+  );
 
   return {
     ...data,
@@ -72,6 +78,11 @@ function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: S
 
 // In-memory cache for dynamic loading mode
 let registryData: RegistryData | null = null;
+
+// Static mode: the bundled registry never changes, so its filtered view only depends on which
+// gateways are enabled. That set is recomputed on every read because gateway enablement can
+// depend on env vars and custom gateways can be registered at any time.
+let filteredStaticRegistry: { enabledGatewayKey: string; data: RegistryData } | null = null;
 
 // Cache file helpers (dev mode only)
 // Use functions so we don't call os.homedir() at top level, which
@@ -255,7 +266,14 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
 
   // Production: use static import (bundled at build time)
   if (!useDynamicLoading) {
-    return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
+    const enabledGatewayKey = JSON.stringify([...enabledGatewayIds].sort());
+    if (filteredStaticRegistry?.enabledGatewayKey !== enabledGatewayKey) {
+      filteredStaticRegistry = {
+        enabledGatewayKey,
+        data: sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds),
+      };
+    }
+    return filteredStaticRegistry.data;
   }
 
   // Dynamic loading mode: check in-memory cache first. The registry proxy calls this on every
@@ -285,7 +303,7 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
   for (const jsonPath of possiblePaths) {
     try {
       const content = fs.readFileSync(jsonPath, 'utf-8');
-      const parsed = JSON.parse(content) as RegistryData;
+      const parsed = JSON.parse(content) as RegistryFileData;
       registryData = sanitizeRegistryDataForRuntime(parsed, enabledGatewayIds);
       return registryData;
     } catch (err) {
@@ -904,6 +922,8 @@ export class GatewayRegistry {
           temperatureCapabilities,
           structuredOutputCapabilities,
           reasoningCapabilities,
+          // The global cache is shared with older @mastra/core versions, which require the top-level `models` map.
+          { includeModelsKey: true },
         );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {

@@ -1,6 +1,5 @@
 export { SettingsContainer, type SettingsContainerProps } from './settings-container';
 export { SettingsDescription, SettingsGroup, SettingsHeader, SettingsTitle } from './settings-header';
-export { SettingsLayout, type SettingsLayoutProps } from './settings-layout';
 export {
   SettingsEmptyRow,
   SettingsItem,

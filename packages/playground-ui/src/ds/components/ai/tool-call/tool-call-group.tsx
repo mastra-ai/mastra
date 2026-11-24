@@ -48,7 +48,7 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
         <ActivityHeader>
           <ActivityLeading>{leading}</ActivityLeading>
           <ActivityIcon>
-            <IconArrowsHide aria-hidden className="size-icon-sm text-placeholder" />
+            <IconArrowsHide aria-hidden className="size-icon-sm text-subtle-foreground" />
           </ActivityIcon>
           <ActivityLabel>{steps.length} steps</ActivityLabel>
           {live && live.description ? (
@@ -120,7 +120,7 @@ function GroupKinds({ steps }: { steps: ToolCallGroupStep[] }) {
   return (
     <ActivitySummary role="img" aria-label={[...labels].join(', ')} className="shrink-0 gap-1.5">
       {glyphs.map(([pose, Kind]) => (
-        <Kind key={pose} size={12} className="text-placeholder" />
+        <Kind key={pose} size={12} className="text-subtle-foreground" />
       ))}
     </ActivitySummary>
   );

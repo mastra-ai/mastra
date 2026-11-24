@@ -48,21 +48,14 @@ export function wrapExperimentalAgent(agent: Agent, selection: ExperimentalAgent
   return agent;
 }
 
-interface WorkflowBackedAgent extends Agent {
-  getWorkflow(): { engineType?: string };
-}
-
 export function validateExperimentalAgent(
   agent: Agent,
   mastra: Mastra | undefined,
   report: (message: string) => void = console.info,
 ): void {
-  const selection: ExperimentalAgent | null = isEventedAgent(agent)
-    ? 'evented'
-    : isDurableAgent(agent)
-      ? 'durable'
-      : null;
-  if (!selection) return;
+  const evented = isEventedAgent(agent);
+  if (!evented && !isDurableAgent(agent)) return;
+  const selection: ExperimentalAgent = evented ? 'evented' : 'durable';
 
   if (selection === 'evented' && (!mastra || agent.getMastraInstance() !== mastra)) {
     throw new Error(
@@ -80,7 +73,7 @@ export function validateExperimentalAgent(
     );
   }
 
-  const engineType = (agent as WorkflowBackedAgent).getWorkflow().engineType;
+  const engineType = agent.getWorkflow().engineType;
   const expectedEngine = selection === 'evented' ? 'evented' : 'default';
   if (engineType !== expectedEngine) {
     throw new Error(
