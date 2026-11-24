@@ -1,12 +1,8 @@
-// eslint-disable-next-line import/order -- Emitted self-import ordering differs before and after the package build.
-import { describe, expectTypeOf, it } from 'vitest';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
-import {
-  persistGeneratedMessages,
-  persistMessagesWithThreadCreation,
-  type GeneratedMessagePersistenceInput,
-} from '@mastra/core/memory/internal';
+import { persistGeneratedMessages, persistMessagesWithThreadCreation } from '@mastra/core/memory/internal';
+import type { GeneratedMessagePersistenceInput } from '@mastra/core/memory/internal';
+import { describe, expectTypeOf, it } from 'vitest';
 
 describe('@mastra/core/memory/internal generated-message persistence types', () => {
   it('exports the framework persistence contract from the emitted subpath', () => {
