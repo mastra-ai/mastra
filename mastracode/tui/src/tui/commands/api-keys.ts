@@ -13,6 +13,9 @@ import { showModalOverlay } from '../overlay.js';
 import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
+/** The Mac key labelled delete is Backspace, which edits the search. */
+const DELETE_KEY = process.platform === 'darwin' ? 'Fn+Delete' : 'Delete';
+
 interface ProviderInfo {
   provider: string;
   envVar?: string;
@@ -103,7 +106,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
           theme.fg('dim', '  Key set via environment variable. Press Enter to store a local override.'),
         );
       } else if (info.source === 'stored') {
-        detailText.setText(theme.fg('dim', '  Key stored locally. Press Enter to update or Delete to remove.'));
+        detailText.setText(theme.fg('dim', `  Key stored locally. Press Enter to update or ${DELETE_KEY} to remove.`));
       } else {
         detailText.setText(theme.fg('dim', '  No key configured. Press Enter to add one.'));
       }
@@ -211,6 +214,9 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
     const modal = Object.assign(container, {
       handleInput: (data: string) => selectList.handleInput(data),
     });
-    showModalOverlay(ctx.state.ui, modal, { title: 'API keys', hints: [{ key: 'delete', label: 'remove' }] });
+    showModalOverlay(ctx.state.ui, modal, {
+      title: 'API keys',
+      hints: [{ key: DELETE_KEY.toLowerCase(), label: 'remove' }],
+    });
   });
 }
