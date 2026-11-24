@@ -60,10 +60,14 @@ export function createMcpTokenVerifier(options: {
       if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');
       return createRemoteJWKSet(new URL(jwks_uri), { timeoutDuration: timeoutMs });
     })();
-    const entry = { keys, readAt: Date.now() };
+    // The lifetime starts once the lookup answers, so a slow lookup is never repeated.
+    const entry = { keys, readAt: Infinity };
     keySets.set(issuer, entry);
-    // Retry a failed lookup on the next request instead of caching the failure.
-    keys.catch(() => keySets.get(issuer) === entry && keySets.delete(issuer));
+    keys.then(
+      () => (entry.readAt = Date.now()),
+      // Retry a failed lookup on the next request instead of caching the failure.
+      () => keySets.get(issuer) === entry && keySets.delete(issuer),
+    );
     return keys;
   };
 

@@ -95,6 +95,8 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
   };
   const hanging: Array<() => void> = [];
   const discovery: { kind: 'oauth' | 'openid'; issuer?: string } = { kind: 'oauth' };
+  /** How long metadata takes to answer, and how often it has been read. */
+  const metadata = { delayMs: 0, reads: 0 };
   hangingResponses.push(() => hanging.splice(0).forEach(end => end()));
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -103,9 +105,13 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
         ? `/.well-known/oauth-authorization-server${path}`
         : `${path}/.well-known/openid-configuration`;
     if (req.url === document) {
+      metadata.reads++;
       if (outage.metadata === 'hang') hanging.push(() => res.end());
       else if (outage.metadata) res.writeHead(503).end('{}');
-      else res.end(JSON.stringify({ issuer: discovery.issuer ?? issuer, jwks_uri: `${origin}${jwksPath}` }));
+      else {
+        const body = JSON.stringify({ issuer: discovery.issuer ?? issuer, jwks_uri: `${origin}${jwksPath}` });
+        setTimeout(() => res.end(body), metadata.delayMs);
+      }
     } else if (req.url === jwksPath) {
       if (outage.jwks === 'hang') hanging.push(() => res.end());
       else if (outage.jwks === 'malformed') res.end('{}');
@@ -123,6 +129,7 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
     issuer,
     outage,
     discovery,
+    metadata,
     /** Sign with a new key published at a new JWKS URL, retiring the old URL. */
     rotateKeys: async (newJwksPath: string) => {
       key = await signingKey(`key-${Date.now()}`);
@@ -510,6 +517,20 @@ describe('Factory MCP server', () => {
     // Once the metadata is read again, the Factory finds the new key at the new URL.
     await new Promise(resolve => setTimeout(resolve, 150));
     expect((await claudeRequest(url, 'server/discover', {}, token)).status).toBe(200);
+  });
+
+  it('requests arriving during a slow metadata lookup share it', async () => {
+    const { url, authServer } = await setup({ metadataMaxAgeMs: 100 });
+    authServer.metadata.delayMs = 300;
+
+    const first = claudeRequest(url, 'server/discover', {}, 'token-alice');
+    // Arrives after the cache lifetime has passed, but before the lookup answers.
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const second = claudeRequest(url, 'server/discover', {}, 'token-bob');
+
+    expect((await first).status).toBe(200);
+    expect((await second).status).toBe(200);
+    expect(authServer.metadata.reads).toBe(1);
   });
 
   it('accepts tokens from an authorization server that only publishes OpenID Connect discovery', async () => {
