@@ -1415,6 +1415,25 @@ describe('provisioning protocol', () => {
         expect(z?.rev).toBe(3);
       });
 
+      // Atlas Local rejects two concurrent updateSearchIndex calls on one id ("indexes had duplicate
+      // ids"), so identical refreshes racing each other must not both send one.
+      it('P-REFRESH-NOOP: a refresh whose mapping is already listed sends no updateSearchIndex', async () => {
+        const coll = await byoColl('prnoop');
+        await createByo(a, coll, { searchIndexName: 'V' });
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T' });
+        const t = await listedId(db, coll, 'T');
+        expect(idOf(await entry(coll), 'T')).toBe(t);
+        await waitFor(async () => (await db.collection(coll).listSearchIndexes('T').toArray())[0]?.latestDefinition);
+        const events = captureCommands(a);
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T' });
+        expect(events.filter(e => e.commandName === 'updateSearchIndex')).toEqual([]);
+        // A different mapping on the same recorded index still updates it in place.
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T', fields: ['title'] });
+        const updates = events.filter(e => e.commandName === 'updateSearchIndex');
+        expect(updates.map(e => String(e.command.id))).toEqual([t]);
+        await a.deleteIndex({ indexName: coll });
+      });
+
       it('R7a: without transactions, a recipient that stops using the name makes the delete refuse instead of orphaning it', async () => {
         const coll = await byoColl('r7a');
         await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
