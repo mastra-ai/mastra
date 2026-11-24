@@ -33,14 +33,14 @@ export const askUserRecommendedOptionScenario: McE2eScenario = {
     if (rowWith(terminal, 'Staging').includes('(recommended)')) {
       throw new Error('An option the agent did not recommend is tagged');
     }
-    if (!rowWith(terminal, 'Staging').includes('❯')) {
+    if (!rowWith(terminal, 'Staging').includes('→')) {
       throw new Error('The cursor moved off the first option; the recommendation must not choose for the user');
     }
 
     // Pick the recommended option. The answered view ticks the option whose label equals the answer,
     // so a tick on Production proves the answer is the bare label, without the tag.
     terminal.write('\x1b[B');
-    await runtime.waitForScreenText(/❯ Production/, terminal);
+    await runtime.waitForScreenText(/→ Production/, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/✓ Production/, terminal);
     await runtime.waitForScreenText(/Recommended option answer received\./i, terminal, 10_000);
