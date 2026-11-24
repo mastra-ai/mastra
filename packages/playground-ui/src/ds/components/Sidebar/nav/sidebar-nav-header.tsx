@@ -1,6 +1,7 @@
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from '../root/sidebar-context';
 import { useMaybeSidebarState } from '../root/sidebar-context';
+import { navRowInset } from './sidebar-nav-item-classes';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
@@ -39,7 +40,10 @@ export function SidebarNavHeader({
       {showTitle ? (
         <>
           {icon ? (
-            <span aria-hidden="true" className={cn('flex shrink-0 pl-3 [&_svg]:size-icon-md', toneClassName)}>
+            <span
+              aria-hidden="true"
+              className={cn('flex shrink-0 [&_svg]:size-icon-md', navRowInset, 'pr-0', toneClassName)}
+            >
               {icon}
             </span>
           ) : null}

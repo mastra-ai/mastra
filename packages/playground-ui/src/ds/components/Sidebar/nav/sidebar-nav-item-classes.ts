@@ -38,8 +38,12 @@ type NavItemLayoutOptions = {
 
 type ItemStyleOptions = NavRowSurfaceOptions & NavItemLayoutOptions;
 
+// Splits what the icon leaves of the rail's 40px row evenly, so the icon stays centred at any icon size.
+// Expanded rows keep it, so icons don't move between the two states.
+export const navRowInset = 'px-[calc((var(--spacing)*10-var(--spacing-icon-md))/2)]';
+
 const nestedExpandedItemClasses = (level: number) => {
-  if (level <= 0) return 'gap-2 py-1 px-3';
+  if (level <= 0) return `gap-2 py-1 ${navRowInset}`;
   if (level === 1) return `gap-2 py-1 pr-3 pl-8 ${controlHeight.md}`;
   if (level === 2) return `gap-2 py-1 pr-3 pl-10 ${controlHeight.md}`;
   return `gap-2 py-1 pr-3 pl-12 ${controlHeight.md}`;
@@ -78,8 +82,7 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
     !isCollapsed && withDescriptionClasses,
-    // The rail's 40px rows keep the expanded rows' 12px padding, so icons don't move between the two states.
-    isCollapsed && 'gap-0 px-3 py-0',
+    isCollapsed && `gap-0 py-0 ${navRowInset}`,
   );
 
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>
