@@ -1,9 +1,5 @@
 ---
 '@mastra/mcp': minor
-'@mastra/server-adapters-test-suite': patch
-'@mastra/hono': patch
-'@mastra/server': patch
-'@mastra/core': patch
 ---
 
 Added Agent Skills over MCP. `MCPServer` serves skills to clients that support the MCP Skills extension, such as VS Code and ChatGPT, and `MCPClient` reads skills from MCP servers.
