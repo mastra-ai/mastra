@@ -1014,7 +1014,7 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-Stored agents inherit `Mastra.durable.executionEngine` unless `durable` is `false`. With no server engine default, `durable: true` enables resumable streams without checkpointing. Stored agents accept only serializable options and inherit cache and PubSub from the server's `Mastra` instance. To select an engine for an individual agent, set `durable.executionEngine` on a [code-defined agent](/docs/harness/durable-agents#quickstart).
+Stored agents inherit `Mastra.durable.executionEngine` when registered, unless `durable` is `false`. Loading a specific `versionId` of an already registered stored agent creates a separate instance that doesn't inherit the engine default. When no engine default applies, `durable: true` enables resumable streams without checkpointing. Stored agents accept only serializable options and inherit cache and PubSub from the server's `Mastra` instance. To select an engine for an individual agent, set `durable.executionEngine` on a [code-defined agent](/docs/harness/durable-agents#quickstart).
 
 ### `getStoredAgent()`
 

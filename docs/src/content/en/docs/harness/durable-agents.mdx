@@ -177,7 +177,7 @@ In one process, an evented agent runs on the default PubSub backend with no extr
 
 ### Resumable streams for stored agents
 
-Stored agents inherit the server's `Mastra.durable.executionEngine` default unless their `durable` field is `false`. With no server engine default, `durable: true` enables resumable streams without checkpointing.
+Stored agents inherit the server's `Mastra.durable.executionEngine` default when registered, unless their `durable` field is `false`. Loading a specific `versionId` of an already registered stored agent creates a separate instance that doesn't inherit the engine default. When no engine default applies, `durable: true` enables resumable streams without checkpointing.
 
 Enable the stored agent's `durable` setting with [`createStoredAgent()`](/reference/client-js/agents#createstoredagent):
 
