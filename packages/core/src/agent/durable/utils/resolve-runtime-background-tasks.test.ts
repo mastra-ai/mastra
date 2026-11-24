@@ -83,13 +83,53 @@ describe.each(Object.entries(rebuilds))('rebuilding a run in %s on another proce
     const mastra = setup();
     await rebuild(mastra, { disableBackgroundTasks: true });
 
-    expect(getRunRegistryEntry(RUN_ID, mastra)?.backgroundTaskManager).toBeUndefined();
+    const entry = getRunRegistryEntry(RUN_ID, mastra);
+    expect(entry).toBeDefined();
+    expect(entry?.backgroundTaskManager).toBeUndefined();
   });
 
   it('keeps dispatch off when the run policy forbids tool dispatch', async () => {
     const mastra = setup();
     await rebuild(mastra, { backgroundTaskPolicy: { allowToolDispatch: false } });
 
-    expect(getRunRegistryEntry(RUN_ID, mastra)?.backgroundTaskManager).toBeUndefined();
+    const entry = getRunRegistryEntry(RUN_ID, mastra);
+    expect(entry).toBeDefined();
+    expect(entry?.backgroundTaskManager).toBeUndefined();
+  });
+});
+
+describe('a persistence-only rebuild before the tool-call rebuild', () => {
+  // The save step can rebuild the run first. The entry keeps the first manager
+  // a rebuild restores, so that rebuild must not restore one the run disabled.
+  it.each([
+    ['without the run options', undefined],
+    ['with the run options', { disableBackgroundTasks: true }],
+  ])('keeps dispatch off for a run that disabled background tasks (%s)', async (_name, saveStepOptions) => {
+    const mastra = setup();
+    await rebuildRunToolsFromMastra({
+      mastra,
+      runId: RUN_ID,
+      agentId: 'brewer',
+      state: { threadId: undefined, resourceId: undefined } as any,
+      options: saveStepOptions as any,
+    });
+    await rebuilds['the tool-call step'](mastra, { disableBackgroundTasks: true });
+
+    const entry = getRunRegistryEntry(RUN_ID, mastra);
+    expect(entry).toBeDefined();
+    expect(entry?.backgroundTaskManager).toBeUndefined();
+  });
+
+  it('still lets the tool-call rebuild restore dispatch for a run that allows it', async () => {
+    const mastra = setup();
+    await rebuildRunToolsFromMastra({
+      mastra,
+      runId: RUN_ID,
+      agentId: 'brewer',
+      state: { threadId: undefined, resourceId: undefined } as any,
+    });
+    await rebuilds['the tool-call step'](mastra, {});
+
+    expect(getRunRegistryEntry(RUN_ID, mastra)?.backgroundTaskManager).toBe(mastra.backgroundTaskManager);
   });
 });

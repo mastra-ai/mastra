@@ -205,6 +205,10 @@ function assertToolsetToolsAvailable(
  * the same way as in preparation.ts. Only the process that started the run has
  * them on its registry entry, so a worker rebuilding the run restores them here;
  * without them every background-eligible tool runs inline (#31090).
+ *
+ * Dispatch stays off when the run's options are unknown: the entry keeps the
+ * first manager a rebuild restores, so restoring one ungated could dispatch for
+ * a run that disabled background tasks.
  */
 function resolveBackgroundTasks(
   mastra: Mastra,
@@ -212,7 +216,7 @@ function resolveBackgroundTasks(
   execOptions: SerializableDurableOptions | undefined,
 ): Pick<RunRegistryEntry, 'backgroundTaskManager' | 'backgroundTasksConfig'> {
   const dispatchDisabled =
-    execOptions?.disableBackgroundTasks || execOptions?.backgroundTaskPolicy?.allowToolDispatch === false;
+    !execOptions || execOptions.disableBackgroundTasks || execOptions.backgroundTaskPolicy?.allowToolDispatch === false;
   return {
     backgroundTaskManager: dispatchDisabled ? undefined : mastra.backgroundTaskManager,
     backgroundTasksConfig: agent.getBackgroundTasksConfig?.(),
