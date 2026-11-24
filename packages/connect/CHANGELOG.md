@@ -1,5 +1,50 @@
 # @mastra/connect
 
+## 1.5.0-alpha.2
+
+### Minor Changes
+
+- Added `ConnectEvents`, a single class for receiving a project's provider events. It takes the client configuration and where to start in one options object, and you iterate it directly: ([#31222](https://github.com/mastra-ai/mastra/pull/31222))
+
+  ```ts
+  import { ConnectEvents } from '@mastra/connect';
+
+  const events = new ConnectEvents({
+    cursorStore: { load: () => db.get('events-cursor'), save: cursor => db.set('events-cursor', cursor) },
+    onGap: () => resyncFromProviders(),
+  });
+
+  for await (const event of events) {
+    await handle(event.integrationId, event.eventType, event.payload);
+  }
+  ```
+
+  **Breaking (prerelease only):** `EventsClient`, `EventSubscription`, `connectEvents()`, `ConnectClient.events`, the `eventsUrl` option on `ConnectClient`, and the `EventsClientOptions`, `SubscribeOptions` and `TopicEvent` types are no longer exported. Pass `eventsUrl` to `ConnectEvents` instead.
+
+- Added support for self-hosted GitLab. Connections on the platform's **GitLab (self-hosted)** integration (`gitlab-self-hosted`), which connect a self-managed instance with an access token and its hostname, now get the same `gitlab_*` tools as gitlab.com connections. Calls go to the instance the connection was made for. ([#30954](https://github.com/mastra-ai/mastra/pull/30954))
+
+  Configure both kinds under `providers.gitlab`. With both a gitlab.com and a self-hosted connection, the agent picks one per call through `gitlab__list_connections` and `connection_name`, or you pin one:
+
+  ```ts
+  const connectTools = tools({
+    providers: { gitlab: { connectionId: process.env.SELF_HOSTED_GITLAB_CONNECTION_ID } },
+  });
+  ```
+
+  Options keyed by `gitlab-self-hosted` are rejected with a message pointing at `providers.gitlab`.
+
+### Patch Changes
+
+- Raised the `@mastra/core` peer range to `>=1.86.0-0 <2.0.0-0`, matching `@mastra/slack`, which now needs the channel tool helpers added in that core release. ([#31220](https://github.com/mastra-ai/mastra/pull/31220))
+
+- Fixed the Google Analytics `run_pivot_report` tool so it accepts a property as `properties/123456789` as well as `123456789`, like `run_report` and `batch_run_reports`. Passing the prefixed form sent the request to the wrong URL and Google answered 404. ([#31194](https://github.com/mastra-ai/mastra/pull/31194))
+
+- Connect sessions now include `apiBaseUrl`, the Nango host the platform issued the session for. `POST /connect/:provider/sessions` returns it so browsers can reach a self-hosted Nango; it is `null` when the platform does not report one. ([#31187](https://github.com/mastra-ai/mastra/pull/31187))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/slack@1.10.0-alpha.1
+
 ## 1.5.0-alpha.1
 
 ### Minor Changes
