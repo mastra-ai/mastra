@@ -392,7 +392,7 @@ export class Knowledge extends MastraBase {
     const budget = this.#pins || resolvePins(true);
     if (!budget) return [];
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), undefined, { principals });
-    return knowledgeDeliveredPins(run, budget);
+    return knowledgeDeliveredPins(run, budget, this.#groups().read);
   }
 
   // Only the shape is checked here: whether each principal matches a declared scope type is checked

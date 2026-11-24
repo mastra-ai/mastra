@@ -191,6 +191,23 @@ describe('Knowledge guidance for an agent without read tools', () => {
     }
   });
 
+  it('renders host pinned context without naming read tools when the instance has no read tools', async () => {
+    for (const pins of ['page', 'listing', 'overflow'] as const) {
+      const storage = new InMemoryStore({ id: `host-${pins}` });
+      await seedPins(storage, pins);
+      const host = (tools: { read?: boolean; write?: boolean }) =>
+        new Knowledge({
+          storage,
+          scopes: knowledgeMemoryScopes(),
+          tools,
+          pinnedContext: pins === 'overflow' ? { maxPins: 1 } : { maxTokens: 150 },
+        }).getPinnedContext({ principals: ['org:acme'] });
+      const without = JSON.stringify(await host({ write: true }));
+      expect(without).not.toMatch(/knowledge_read|knowledge_list/);
+      expect(JSON.stringify(await host({ read: true }))).toMatch(/knowledge_read|knowledge_list/);
+    }
+  });
+
   it('names knowledge_read and knowledge_search in pinned guidance only when read is on', () => {
     for (const write of [true, false]) {
       expect(pinnedGuidance(new PinnedStateProcessor({ ...deps, read: false, write }))).not.toMatch(
@@ -208,6 +225,7 @@ describe('Knowledge guidance for an agent without write tools', () => {
     const knowledge = new Knowledge({ scopes, tools: { read: true } });
     const options = { write: false, pinnedContext: false };
     expect(Object.keys(knowledge.createTools(options)).sort()).toEqual([
+      'knowledge_activity',
       'knowledge_list',
       'knowledge_read',
       'knowledge_search',
@@ -340,7 +358,13 @@ describe('Knowledge guidance for an agent without write tools', () => {
     });
 
     await agent.generate('Hi', { memory: { thread: 'thread-1', resource: 'user-1' } });
-    expect(toolNames[0]).toEqual(['knowledge_list', 'knowledge_pin', 'knowledge_read', 'knowledge_search']);
+    expect(toolNames[0]).toEqual([
+      'knowledge_activity',
+      'knowledge_list',
+      'knowledge_pin',
+      'knowledge_read',
+      'knowledge_search',
+    ]);
     const system = prompts[0]!
       .filter(message => message.role === 'system')
       .map(message => message.content)
