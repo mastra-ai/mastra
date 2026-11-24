@@ -30,9 +30,11 @@ type GuardState = {
 const g = globalThis as { __mastraRegistryFileGuard?: GuardState };
 const state = (g.__mastraRegistryFileGuard ??= ((): GuardState => {
   // Not under os.tmpdir(): the seatbelt sandbox allows writes to temp dirs, and its tests expect
-  // writes to the home directory to be blocked.
-  const homesDir = path.join(__dirname, 'node_modules', '.cache', 'test-homes');
-  fs.mkdirSync(homesDir, { recursive: true });
+  // writes to the home directory to be blocked. The per-run parent dir comes from
+  // vitest.registry-guard-global.ts, which also removes it.
+  const homesDir = process.env.MASTRA_CORE_TEST_HOMES_DIR;
+  if (!homesDir)
+    throw new Error('MASTRA_CORE_TEST_HOMES_DIR is unset; run core tests via packages/core/vitest.config.ts');
   const home = fs.mkdtempSync(path.join(homesDir, 'home-'));
   process.env.HOME = home;
   process.env.USERPROFILE = home;
