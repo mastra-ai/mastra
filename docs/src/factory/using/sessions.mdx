@@ -1,0 +1,62 @@
+---
+title: Sessions | Core concepts
+description: Find work needing attention, inspect an agent session, and collaborate through card descriptions and Slack threads.
+---
+
+# Sessions
+
+A session contains the agent conversation and workspace for a task. Open it from its card to inspect decisions, commands, files, and changes before deciding what to do next.
+
+## Find the work that needs you
+
+Open **Overview** to see Factory activity, including work waiting on a decision or reporting a problem. To find a specific item, search by issue title, issue number, or session name.
+
+Open the card and check its status and linked issue or pull request. You may need to start a waiting run or accept a task before work can continue. If a plan is ready, review it before approving implementation. See [Work items](/using/work-and-approvals#make-the-right-decision) for details.
+
+## Inspect and continue a session
+
+Open a card to see its session. Read the latest agent result and tool output, then use the workspace's files and changes views to inspect the repository.
+
+| What you see | What to check |
+| - | - |
+| A question | Supply the missing requirement or repository context. |
+| A plan | Confirm scope, files, checks, and the intended deliverable before approval. |
+| A failed command | Read the error, working directory, and setup command before retrying. |
+| A completed implementation | Review the diff and checks, then open the PR source link. |
+| A completed review | Read the findings against the current PR revision. |
+
+Send the agent a message in the session with a specific next step, such as investigating a failed test. Use the existing session to follow a run already in progress.
+
+## Private and shared sessions
+
+A session is either private or shared with your organization:
+
+- **Private**: Only you can see it.
+- **Shared**: Anyone in your organization can view it and continue the conversation.
+
+Where a session starts decides its first setting:
+
+| Session | Starts as |
+| - | - |
+| A chat you start in the web app | Private |
+| A Slack direct message | Private |
+| A Slack channel thread | Shared |
+| A run on a Work or Review card | Shared |
+
+Runs on cards are always shared, so teammates can open them and answer their approvals. This is true even when a private session started the run.
+
+To share a private session, open its menu and select **Share with organization**. A lock icon marks a private session. Select it to see who can start or continue the session, and to share it from there. To hide a shared session again, select **Make private** in the session menu.
+
+In Slack, only the owner can continue a private session. Messages from other people in its thread don't reach the agent.
+
+## Keep discussion with the work
+
+The card's description records what needs doing and why, and every run on the card starts from it. Ask the agent to update the description when the scope changes.
+
+From the card, you can:
+
+- Open the session to follow the agent's progress.
+- Accept a task with the card's actions.
+- Respond to plan or tool approval requests in the session.
+
+When work starts in [Slack](/configure/slack), subsequent messages in the subscribed thread continue that session. A message beginning with `aside` is treated as discussion without triggering the normal agent reply.

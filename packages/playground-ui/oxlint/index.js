@@ -458,6 +458,113 @@ const PAGE_WIDTH_MESSAGE = `Let PageLayout set the page width instead of buildin
 const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
 const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
 
+const PAGE_SPACING_MESSAGE = cls =>
+  `Drop ${cls}: PageLayout puts 16px under the header and 48px at the end of the page. Stack the page's sections with gap-6 (or space-y-6) and nothing else.`;
+
+const SPACING_UTILITY = /^-?(m|p)[xytrblse]?-/;
+const COLUMN_GAP_UTILITY = /^(space-y|gap-y|gap)-(.+)$/;
+
+const alternative = (literals = [], assumes = new Map()) => ({ literals, assumes });
+
+function merge(a, b) {
+  const assumes = new Map(a.assumes);
+  for (const [test, value] of b.assumes) {
+    if (assumes.has(test) && assumes.get(test) !== value) return null;
+    assumes.set(test, value);
+  }
+  return alternative([...a.literals, ...b.literals], assumes);
+}
+
+const product = parts =>
+  parts.reduce(
+    (combos, options) => combos.flatMap(combo => options.map(option => merge(combo, option)).filter(Boolean)),
+    [alternative()],
+  );
+
+const assuming = (options, test, value) =>
+  options.map(option => merge(option, alternative([], new Map([[test, value]])))).filter(Boolean);
+
+function classAlternatives(node, source) {
+  if (!node) return [alternative()];
+  const next = child => classAlternatives(child, source);
+  if (node.type === 'Literal' && /^['"]/.test(node.raw)) return [alternative([{ node, text: node.value }])];
+  if (node.type === 'TemplateLiteral')
+    return product([
+      [alternative(node.quasis.map(quasi => ({ node: quasi, text: quasi.value.raw })))],
+      ...node.expressions.map(next),
+    ]);
+  if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') return next(node.expression);
+  if (node.type === 'LogicalExpression') {
+    if (node.operator !== '&&') return [...next(node.left), ...next(node.right)];
+    const test = source.getText(node.left);
+    return [...assuming([alternative()], test, false), ...assuming(next(node.right), test, true)];
+  }
+  if (node.type === 'ConditionalExpression') {
+    const test = source.getText(node.test);
+    return [...assuming(next(node.consequent), test, true), ...assuming(next(node.alternate), test, false)];
+  }
+  if (node.type === 'CallExpression') return product(node.arguments.map(next));
+  if (node.type === 'ArrayExpression') return product(node.elements.map(next));
+  return [alternative()];
+}
+
+function pageRoots(node, { throughFragments = true } = {}, roots = []) {
+  if (!node) return roots;
+  const next = child => pageRoots(child, { throughFragments }, roots);
+  if (node.type === 'JSXElement') roots.push(node);
+  else if (node.type === 'JSXFragment' && throughFragments) node.children.forEach(next);
+  else if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') next(node.expression);
+  else if (node.type === 'LogicalExpression') next(node.right);
+  else if (node.type === 'ConditionalExpression') {
+    next(node.consequent);
+    next(node.alternate);
+  }
+  return roots;
+}
+
+function stacksColumn(classes) {
+  if (classes.some(cls => cls.startsWith('space-y-') || cls.startsWith('gap-y-'))) return true;
+  if (classes.includes('flex-col')) return true;
+  return classes.includes('grid') && !classes.some(cls => cls.startsWith('grid-cols-') && cls !== 'grid-cols-1');
+}
+
+function noPageSpacing(context) {
+  const check = (root, isBody) => {
+    const attribute = root.openingElement.attributes.find(
+      item => item.type === 'JSXAttribute' && item.name.name === 'className',
+    );
+    if (!attribute) return;
+    const reported = new Map();
+    for (const { literals } of classAlternatives(attribute.value, context.sourceCode)) {
+      const classes = literals.flatMap(({ text }) => text.split(/\s+/)).map(cls => cls.split(':').pop());
+      const column = stacksColumn(classes);
+      for (const { node, text } of literals) {
+        for (const raw of text.split(/\s+/).filter(Boolean)) {
+          const cls = raw.split(':').pop();
+          const gap = COLUMN_GAP_UTILITY.exec(cls);
+          const spacing = SPACING_UTILITY.test(cls) && cls !== 'mx-auto';
+          const offRhythmGap = isBody && gap && (gap[1] !== 'gap' || column) && gap[2] !== '6';
+          const seen = reported.get(node) ?? new Set();
+          if (!(spacing || offRhythmGap) || seen.has(raw)) continue;
+          reported.set(node, seen.add(raw));
+          context.report({ node, message: PAGE_SPACING_MESSAGE(raw) });
+        }
+      }
+    }
+  };
+  return {
+    JSXElement(node) {
+      const { name } = node.openingElement;
+      if (name.type !== 'JSXIdentifier' || name.name !== 'PageLayout') return;
+      const attribute = attributeName =>
+        node.openingElement.attributes.find(item => item.type === 'JSXAttribute' && item.name.name === attributeName);
+      const fixedBody = literalAttribute(attribute('body')?.value) === 'fixed';
+      if (!fixedBody) for (const child of node.children) for (const root of pageRoots(child)) check(root, true);
+      for (const root of pageRoots(attribute('header')?.value, { throughFragments: false })) check(root, false);
+    },
+  };
+}
+
 const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
 // The variants PageLayout used to take, and what each became.
 const REMOVED_PAGE_LAYOUT_VARIANTS = {
@@ -607,6 +714,7 @@ const plugin = {
     'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
     'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
     'date-locale': { meta: { type: 'suggestion', schema: false }, create: dateLocale },
+    'no-page-spacing': { meta: { type: 'suggestion', schema: false }, create: noPageSpacing },
   },
 };
 
@@ -637,6 +745,7 @@ export const recommended = {
   'playground-ui/placeholder-text': 'error',
   'playground-ui/page-layout-props': 'error',
   'playground-ui/date-locale': 'error',
+  'playground-ui/no-page-spacing': 'error',
   ...copyRules,
 };
 

@@ -324,11 +324,11 @@ describe('theme.css export', () => {
   it('keeps display-lg a complete fixed-size role without changing display', () => {
     const variables = parseVariables(themeCss);
     expect(variables.get('text-display-lg')).toBe('1.75rem');
-    expect(variables.get('text-display-lg--line-height')).toBe('127%');
+    expect(variables.get('text-display-lg--line-height')).toBe('2.25rem');
     expect(variables.get('text-display-lg--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
     expect(variables.get('text-display')).toBe('1.375rem');
-    expect(variables.get('text-display--line-height')).toBe('127%');
+    expect(variables.get('text-display--line-height')).toBe('1.75rem');
     expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
   });
