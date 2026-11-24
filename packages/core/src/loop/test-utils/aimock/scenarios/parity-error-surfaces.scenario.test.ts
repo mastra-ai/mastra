@@ -41,7 +41,6 @@ import {
   type EngineParityResults,
   type ModelScript,
   type ParityTarget,
-  FAILED_STEP_WARNINGS_DIFFERENCE,
   describeParity,
   expectParity,
 } from '../parity';
@@ -68,8 +67,8 @@ const STREAM_CUT: ModelScript = {
   ],
 };
 
-/** One turn of `input` on plain and `target`. */
-function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParityScenario, 'engines'> {
+/** One turn of `input` with the given model script. */
+function scenario(model: ModelScript): Omit<EngineParityScenario, 'engines'> {
   return {
     model,
     buildAgent: ({ model: recordingModel }) =>
@@ -84,11 +83,6 @@ function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParitySc
       }),
     input: 'Go.',
     options: { memory: { thread: THREAD, resource: RESOURCE } },
-    ...(model === MODEL_4XX
-      ? {
-          differences: { [target]: FAILED_STEP_WARNINGS_DIFFERENCE },
-        }
-      : {}),
   };
 }
 
@@ -721,7 +715,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
 
 describeParity('error-surfaces parity', target => {
   it('model-4xx: an up-front model failure surfaces the same way on every engine', async () => {
-    const results = await expectParity(target, scenario(target, MODEL_4XX));
+    const results = await expectParity(target, scenario(MODEL_4XX));
 
     for (const { engine, turn } of turnsByEngine(target, results)) {
       expect(turn.chunks, `${engine} chunks`).toEqual([
@@ -739,7 +733,7 @@ describeParity('error-surfaces parity', target => {
   });
 
   it('stream-cut: the partial text survives and the failure surfaces the same way on every engine', async () => {
-    const results = await expectParity(target, scenario(target, STREAM_CUT));
+    const results = await expectParity(target, scenario(STREAM_CUT));
 
     for (const { engine, turn } of turnsByEngine(target, results)) {
       // The delta that arrived before the failure is kept, and the failure is
