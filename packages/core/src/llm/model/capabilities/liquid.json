@@ -27,13 +27,7 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -57,13 +51,19 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4.1-flash-1017": [
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-k3.1-pro": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

@@ -24,12 +24,6 @@
     "tinfoil/gpt-oss-120b"
   ],
   "reasoning": {
-    "tinfoil/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "tinfoil/gpt-oss-120b": [
       {
         "type": "effort",
@@ -42,12 +36,13 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "regolo/qwen3.5-122b": [
+    "tinfoil/glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "greenpt/glm-5.3": [
+    "greenpt/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -59,10 +54,15 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "greenpt/glm-5.3-flash": [
+    "greenpt/glm-5.3": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "regolo/qwen3.5-122b": [
+      {
+        "type": "toggle"
       }
     ]
   }
