@@ -73,7 +73,7 @@ describe('Factory recommended question option', () => {
     const other = screen.getByRole('radio', { name: /Regenerate the client/ });
     const tags = screen.getAllByText('Recommended');
     expect(tags).toHaveLength(1);
-    expect(tags[0]!.closest('label')?.textContent).toContain('Keep the current client');
+    expect(tags[0].closest('label')?.textContent).toContain('Keep the current client');
     expect(recommended.getAttribute('aria-checked')).toBe('false');
     expect(other.getAttribute('aria-checked')).toBe('false');
 
