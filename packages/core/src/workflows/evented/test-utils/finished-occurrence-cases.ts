@@ -139,6 +139,21 @@ const shapes = {
   },
 };
 
+/** A foreach that runs up to three of its items at once, so their dispatches and ends interleave. */
+const concurrentForeach = (report: Report) =>
+  createWorkflow({ id: 'finished', inputSchema: z.array(Num), outputSchema: z.any() }).foreach(
+    createStep({
+      id: 'item',
+      inputSchema: Num,
+      outputSchema: Num,
+      execute: async ({ inputData }) => {
+        await report(`item:${inputData.n}`);
+        return inputData;
+      },
+    }),
+    { concurrency: 3 },
+  );
+
 /** A promise and the functions that settle it; `Promise.withResolvers` is newer than the library target. */
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -921,6 +936,27 @@ export function describeFinishedOccurrenceCases({
             .commit(),
         resume: { step: ['finished-child', 'ask'] },
       },
+      'concurrent foreach': {
+        input: [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }],
+        build: report => concurrentForeach(report).commit(),
+      },
+      'concurrent foreach before a step': {
+        input: [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }],
+        build: report =>
+          concurrentForeach(report)
+            .then(
+              createStep({
+                id: 'after',
+                inputSchema: z.array(Num),
+                outputSchema: z.any(),
+                execute: async () => {
+                  await report('after');
+                  return {};
+                },
+              }),
+            )
+            .commit(),
+      },
     };
 
     // A broker reclaims a step end or a foreach's item dispatch from a worker that stopped before
@@ -1141,6 +1177,83 @@ export function describeFinishedOccurrenceCases({
 
       expect(b.published).toEqual([]);
       expect(await storedRuns(runs)).toEqual(before);
+    }, 20_000);
+
+    it('keeps a failed run as it is when concurrent foreach items finish after one item failed the run', async () => {
+      // The failing item waits for both siblings to start, and the siblings wait for the run to
+      // read failed, so their ends come after the failure.
+      const executions: string[] = [];
+      const started: number[] = [];
+      const siblingsStarted = deferred<void>();
+      const release = deferred<void>();
+      const build = () =>
+        createWorkflow({ id: 'finished', inputSchema: z.array(Num), outputSchema: z.any() })
+          .foreach(
+            createStep({
+              id: 'item',
+              inputSchema: Num,
+              outputSchema: Num,
+              execute: async ({ inputData }) => {
+                executions.push(`item:${inputData.n}`);
+                if (inputData.n === 1) {
+                  await siblingsStarted.promise;
+                  throw new Error('broken');
+                }
+
+                if (started.push(inputData.n) === 2) siblingsStarted.resolve();
+                await release.promise;
+                return inputData;
+              },
+            }),
+            { concurrency: 3 },
+          )
+          .then(
+            createStep({
+              id: 'after',
+              inputSchema: z.array(Num),
+              outputSchema: z.any(),
+              execute: async () => {
+                executions.push('after');
+                return {};
+              },
+            }),
+          )
+          .commit();
+      const siblingEnds: Event[] = [];
+      const bothEnded = deferred<void>();
+      const a = await startReplica(build(), event => {
+        if (event.type !== 'workflow.step.end' || !(samePath(event, [0, 1]) || samePath(event, [0, 2]))) {
+          return undefined;
+        }
+
+        if (siblingEnds.push(copyEvent(event)) === 2) bothEnded.resolve();
+        return 'drop';
+      });
+      const finishes: Event[] = [];
+      await a.mastra.pubsub.subscribe('workflows-finish', event => void finishes.push(event));
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: [{ n: 1 }, { n: 2 }, { n: 3 }] })).status).toBe('failed');
+      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('failed');
+      release.resolve();
+      await bothEnded.promise;
+      const runs = new Map([[run.runId, 'finished']]);
+      const before = await storedRuns(runs);
+
+      const b = await startReplica(build());
+      await b.mastra.pubsub.subscribe('workflows-finish', event => void finishes.push(event));
+      for (const event of siblingEnds) {
+        expect(await redeliver(b, event, 1)).toEqual({ ok: true });
+      }
+
+      expect(b.published).toEqual([]);
+      expect(await storedRuns(runs)).toEqual(before);
+      const stored = await storedRun(run.runId);
+      expect(stored?.status).toBe('failed');
+      expect(stored?.error?.message).toBe('broken');
+      expect(stored?.context.item?.metadata?.foreachFailedIndex).toBe(0);
+      expect(a.published.filter(event => event.runId === run.runId && event.type === 'workflow.fail')).toHaveLength(1);
+      expect(finishes.filter(event => event.runId === run.runId)).toHaveLength(1);
+      expect(executions.sort()).toEqual(['item:1', 'item:2', 'item:3']);
     }, 20_000);
 
     it('keeps a finished run successful when a workflow.fail for it arrives late', async () => {
