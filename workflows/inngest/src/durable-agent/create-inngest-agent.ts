@@ -639,6 +639,14 @@ export interface InngestAgent<TOutput = undefined> {
   recoverActiveRuns(options?: unknown): Promise<{ recovered: never[]; succeeded: number; failed: number }>;
 
   /**
+   * The owner and lifecycle of one of this agent's runs, read from its saved workflow
+   * row: `running`, `suspended`, or `finished`. Undefined when the run is unknown,
+   * belongs to another agent, or storage is not configured.
+   * @internal Used by resumable chat routes to reconnect to a run.
+   */
+  __getRunRecord: Agent<any, any, TOutput>['__getRunRecord'];
+
+  /**
    * Get the durable workflows required by this agent.
    * Called by Mastra during agent registration.
    * @internal
@@ -1500,6 +1508,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'recover'
     | 'listActiveRuns'
     | 'recoverActiveRuns'
+    | '__getRunRecord'
     | 'generate'
     | 'resumeGenerate'
     | 'resumeStream'
@@ -2442,6 +2451,33 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async recoverActiveRuns() {
       return { recovered: [], succeeded: 0, failed: 0 };
+    },
+
+    async __getRunRecord(runId) {
+      // Inngest runs publish no core run record. Their loop row is written as `running`
+      // before dispatch and replaced by the engine once the run suspends or ends, so it
+      // carries the same owner and lifecycle a run record would.
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      const input = snapshot?.context?.input as
+        | { agentId?: string; state?: { threadId?: string; resourceId?: string } }
+        | undefined;
+      if (!snapshot || !input || input.agentId !== agentId) return undefined;
+      const parked =
+        snapshot.status === 'suspended' ||
+        (snapshot.status === 'running' && Object.keys(snapshot.suspendedPaths ?? {}).length > 0);
+      const live = ['running', 'waiting', 'pending'].includes(snapshot.status);
+      return {
+        agentId,
+        runId,
+        threadId: input.state?.threadId,
+        resourceId: input.state?.resourceId,
+        status: parked ? 'suspended' : live ? 'running' : 'finished',
+        updatedAt: snapshot.timestamp,
+      };
     },
 
     async observe(runId, observeOptions) {

@@ -4,6 +4,7 @@ import { resolveModelConfig } from '../../../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
+import { resolveAgentById } from '../../../mastra/resolve-agent';
 import type { MastraMemory } from '../../../memory/memory';
 import type {
   ProcessorState,
@@ -135,6 +136,49 @@ export class DurableProcessorRebuildError extends Error {
     );
     this.name = 'DurableProcessorRebuildError';
     this.cause = cause;
+  }
+}
+
+/**
+ * The process running a step could not find the run's agent in its registry
+ * or editor. Running on would execute the step with no tools, memory or
+ * processors, so the step fails instead.
+ */
+export class DurableAgentNotFoundError extends Error {
+  constructor(agentId: string, runId: string, cause?: unknown) {
+    super(
+      `[DurableAgent:${agentId}] Agent "${agentId}" is not registered and the editor could not load it, so run ${runId} cannot run here${cause ? `: ${cause instanceof Error ? cause.message : String(cause)}` : ''}`,
+    );
+    this.name = 'DurableAgentNotFoundError';
+    this.cause = cause;
+  }
+}
+
+async function resolveRunAgent(
+  mastra: Mastra,
+  agentId: string,
+  runId: string,
+  agentVersionId?: string,
+): Promise<Agent<any, any, any, any>> {
+  const version = agentVersionId ? { versionId: agentVersionId } : undefined;
+  const result = await resolveAgentById(mastra, agentId, version);
+  if (result.status !== 'found') {
+    throw new DurableAgentNotFoundError(agentId, runId, result.status === 'error' ? result.error : undefined);
+  }
+
+  const { agent } = result;
+  if (!version || agent.toRawConfig()?.resolvedVersionId === agentVersionId) return agent;
+
+  try {
+    // A stored definition replaces the previous one; code-backed versions instead overlay the code agent.
+    const pinned =
+      agent.source === 'stored'
+        ? await mastra.getEditor()?.agent.getById(agentId, version)
+        : await mastra.resolveVersionedAgent(agent, version);
+    if (pinned && pinned.toRawConfig()?.resolvedVersionId === version.versionId) return pinned;
+    throw new Error(`Agent version "${agentVersionId}" was not found`);
+  } catch (error) {
+    throw new DurableAgentNotFoundError(agentId, runId, error);
   }
 }
 
@@ -298,7 +342,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
   } else if (mastra) {
     try {
-      const agent = mastra.getAgentById(agentId);
+      const agent = await resolveRunAgent(mastra, agentId, runId, input.agentVersionId);
       rebuiltAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
 
       // Restore the caller's request context from the JSON-safe snapshot on
@@ -360,7 +404,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       rehydratedFromMastra = true;
     } catch (error) {
-      if (error instanceof DurableProcessorRebuildError) throw error;
+      if (error instanceof DurableProcessorRebuildError || error instanceof DurableAgentNotFoundError) throw error;
       if ((input.options?.toolsetToolNames?.length ?? 0) > 0) throw error;
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
       model = resolveModel(input.modelConfig, mastra);
@@ -482,6 +526,7 @@ export async function rebuildRunToolsFromMastra(options: {
   mastra?: Mastra;
   runId: string;
   agentId: string;
+  agentVersionId?: string;
   state: SerializableDurableState;
   options?: SerializableDurableOptions;
   /** JSON-safe request-context snapshot from the workflow input (see preparation.ts). */
@@ -509,7 +554,7 @@ export async function rebuildRunToolsFromMastra(options: {
 
   let agentResolved = false;
   try {
-    const agent = mastra.getAgentById(agentId);
+    const agent = await resolveRunAgent(mastra, agentId, runId, options.agentVersionId);
     agentResolved = true;
     const processorAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
     // Restore the caller's request context so request-scoped tools, workspace
