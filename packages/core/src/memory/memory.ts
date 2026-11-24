@@ -1244,6 +1244,12 @@ https://mastra.ai/en/docs/memory/overview`,
         configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
         isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
+      // SemanticRecall's output step embeds the turn's messages, so the history
+      // save skips vectors only when that processor is in the pipeline.
+      const semanticRecallWritesVectors = [...configuredProcessors, ...processors].some(
+        p => !isProcessorWorkflow(p) && p.id === 'semantic-recall',
+      );
+
       // Skip MessageHistory output processor if ObservationalMemory handles message saving
       if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
@@ -1261,7 +1267,11 @@ https://mastra.ai/en/docs/memory/overview`,
             ...(this.supportsThreadBranching
               ? {
                   persistMessages: (input, generatedMessageIds) =>
-                    persistMessagesWithThreadCreation(this, input, generatedMessageIds),
+                    persistMessagesWithThreadCreation(
+                      this,
+                      { ...input, skipVectors: semanticRecallWritesVectors },
+                      generatedMessageIds,
+                    ),
                   persistMessagesCreatesThread: true,
                 }
               : {}),

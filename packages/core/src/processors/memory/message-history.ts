@@ -403,7 +403,7 @@ export class MessageHistory implements Processor {
     const persistedGeneratedIds = generatedMessageIds.filter(messageId => persistedIds.has(messageId));
     if (this.persistMessagesHook && (persistedGeneratedIds.length > 0 || this.persistMessagesCreatesThread)) {
       await this.persistMessagesHook(
-        { messages: filtered, thread: threadToCreate, skipVectors: true },
+        { messages: filtered, thread: threadToCreate },
         persistedGeneratedIds,
       );
       return;
@@ -411,7 +411,7 @@ export class MessageHistory implements Processor {
 
     if (threadToCreate) await this.storage.saveThread({ thread: threadToCreate });
     if (this.persistMessagesHook) {
-      await this.persistMessagesHook({ messages: filtered, skipVectors: true }, persistedGeneratedIds);
+      await this.persistMessagesHook({ messages: filtered }, persistedGeneratedIds);
       return;
     }
     await this.storage.saveMessages({ messages: filtered });
