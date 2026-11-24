@@ -101,9 +101,7 @@ export function DatasetItemsToolbar({
   const selectionDropdown = selectedCount > 0 && (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button>
-          {selectedCount} selected <IconChevronDownMedium />
-        </Button>
+        <Button iconEnd={<IconChevronDownMedium />}>{selectedCount} selected</Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
         {onExportClick && (

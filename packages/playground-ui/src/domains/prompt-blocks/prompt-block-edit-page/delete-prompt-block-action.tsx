@@ -33,13 +33,13 @@ export function DeletePromptBlockAction({ blockId, blockName, disabled = false }
   return (
     <>
       <Button
+        icon={<TrashIcon />}
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="prompt-block-delete"
         variant="ghost"
         size="sm"
       >
-        <TrashIcon />
         Delete
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>

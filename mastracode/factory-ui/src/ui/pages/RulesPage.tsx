@@ -116,12 +116,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             const Icon = entry.icon;
             return (
               <Button
+                icon={<Icon />}
                 key={entry.key}
                 variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
-                <Icon aria-hidden />
                 {entry.label}
               </Button>
             );

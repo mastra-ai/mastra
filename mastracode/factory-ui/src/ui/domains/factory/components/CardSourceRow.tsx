@@ -31,6 +31,7 @@ export function CardSourceRow({
         <div className="flex min-w-0 items-center gap-1.5">
           {url ? (
             <Button
+              iconEnd={<IconArrowUpRight className={outboundArrowClass} />}
               render={<a href={url} target="_blank" rel="noreferrer" />}
               variant="ghost"
               size="sm"
@@ -38,7 +39,6 @@ export function CardSourceRow({
               aria-label={`Open ${reference}`}
             >
               <span className="truncate">{reference}</span>
-              <IconArrowUpRight aria-hidden className={outboundArrowClass} />
             </Button>
           ) : null}
           <SourceStateBadge item={item} />

@@ -55,8 +55,13 @@ export function AccountSettingsSection() {
         <SettingsSubsection scope="personal" title="Session">
           <SettingsContainer>
             <SettingsRow label="Log out" description="End your session on this device.">
-              <Button type="button" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
-                <IconArrowBoxLeft aria-hidden="true" />
+              <Button
+                icon={<IconArrowBoxLeft />}
+                type="button"
+                size="sm"
+                aria-label="Log out of MastraCode"
+                onClick={logOut}
+              >
                 Log out
               </Button>
             </SettingsRow>
