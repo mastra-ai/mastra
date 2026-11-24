@@ -1,6 +1,8 @@
 import { createKnowledgeLegacyUpgradeTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { MongoClient } from 'mongodb';
-import { afterAll, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+
+import { MongoDBConnector } from '../../connectors/MongoDBConnector';
 
 import { KnowledgeMongoDB } from '.';
 
@@ -11,7 +13,60 @@ const uri =
   process.env.MONGODB_RS_URL ||
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
 
-createKnowledgePageStoreTests(() => new KnowledgeMongoDB({ uri, dbName: 'knowledge_contract_test' }));
+const contractStore = () => new KnowledgeMongoDB({ uri, dbName: 'knowledge_contract_test' });
+createKnowledgePageStoreTests(contractStore, { reopen: contractStore });
+
+describe('knowledge removal without transactions', () => {
+  it('refuses to remove or restore, and writes nothing, on a server without transactions', async () => {
+    const store = new KnowledgeMongoDB({ uri, dbName: 'knowledge_atomic_test' });
+    await store.init();
+    await store.dangerouslyClearAll();
+    const host = { author: 'host' };
+    const { scope } = await store.materializeScope({
+      address: 'account:acme:1',
+      declaration: 'account:$orgId:$accountId',
+      name: 'Account 1',
+      pages: [{ key: 'overview', name: 'Overview' }],
+      provenance: host,
+    });
+    const overview = (await store.getPageByPath({ scopeId: scope.id, path: ['overview'], read: 'all' }))!;
+    const empty = (
+      await store.materializeScope({
+        address: 'account:acme:2',
+        declaration: 'account:$orgId:$accountId',
+        name: 'A2',
+        provenance: host,
+      })
+    ).scope;
+    const removed = await store.removeScope({ id: empty.id, expectedVersion: empty.version, provenance: host });
+
+    const standalone = vi.spyOn(MongoDBConnector.prototype, 'supportsTransactions').mockResolvedValue(false);
+    try {
+      const refused = /needs MongoDB transactions/;
+      await expect(
+        store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host }),
+      ).rejects.toThrow(refused);
+      await expect(
+        store.removeScope({ id: scope.id, expectedVersion: scope.version, provenance: host }),
+      ).rejects.toThrow(refused);
+      await expect(store.restoreScope({ id: removed.id, provenance: host })).rejects.toThrow(refused);
+    } finally {
+      standalone.mockRestore();
+    }
+
+    expect(await store.getPage({ id: overview.id, read: 'all' })).toMatchObject({ version: overview.version });
+    expect((await store.getPage({ id: overview.id, read: 'all' }))?.deletedAt).toBeUndefined();
+    expect(await store.getPage({ id: scope.id, read: 'all' })).toMatchObject({ version: scope.version });
+    expect((await store.getPage({ id: removed.id, read: 'all' }))?.deletedAt).toBeInstanceOf(Date);
+    const actions = [scope.id, empty.id].map(async scopeId =>
+      (await store.listPageActivity({ scopeId, read: 'all' })).events.map(event => event.action),
+    );
+    const [first, second] = await Promise.all(actions);
+    expect(first).not.toContain('template-removed');
+    expect(first).not.toContain('scope-removed');
+    expect(second).not.toContain('scope-restored');
+  });
+});
 
 const LEGACY_DB = 'knowledge_legacy_test';
 const client = new MongoClient(uri);

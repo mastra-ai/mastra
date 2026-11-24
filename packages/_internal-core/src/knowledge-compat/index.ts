@@ -362,3 +362,15 @@ export function knowledgePageKeyProblem(key: string): string | undefined {
   if (/[/#%]/.test(key)) return `Knowledge page key "${key}" must not contain "/", "#" or "%"`;
   return undefined;
 }
+
+/**
+ * A write tried to materialize a scope that was removed. Stores throw it instead of reviving the
+ * scope; only an explicit `restoreScope` brings it back. Callers match it by `name`, since each
+ * adapter bundle carries its own copy of this class.
+ */
+export class KnowledgeScopeRemovedError extends Error {
+  constructor(readonly address: string) {
+    super(`Knowledge scope ${address} was removed. Restore it before writing to it.`);
+    this.name = 'KnowledgeScopeRemovedError';
+  }
+}

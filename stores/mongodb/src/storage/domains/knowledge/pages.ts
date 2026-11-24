@@ -6,6 +6,7 @@ import {
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
   knowledgePageKeyProblem,
+  KnowledgeScopeRemovedError,
   knowledgePagesResetMessage,
   legacyKnowledgeTablesToDrop,
   KnowledgeInvalidCursorError,
@@ -223,6 +224,22 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   #tx<T>(operation: (session: Session) => Promise<T>): Promise<T> {
     return this.#connector.withTransaction(operation);
+  }
+
+  /**
+   * Like {@link #tx}, but refuses to run without a transaction instead of falling back to
+   * sequential writes: removal and restore promise an atomic delete-and-tombstone and a scope
+   * with no children, which a standalone server can't keep. Nothing is written when refused.
+   */
+  #atomic<T>(operation: string, run: (session: Session) => Promise<T>): Promise<T> {
+    return this.#connector.withTransaction(async session => {
+      if (!session) {
+        throw new Error(
+          `Knowledge ${operation} needs MongoDB transactions (a replica set or sharded cluster); this server doesn't support them.`,
+        );
+      }
+      return run(session);
+    });
   }
 
   // Schema ---------------------------------------------------------------------------------------
@@ -539,6 +556,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return this.#tx(async session => {
       const now = new Date();
       let scope = await this.#scopeByAddress(input.address, session);
+      if (scope?.deletedAt) throw new KnowledgeScopeRemovedError(input.address);
       let created = false;
       let parentConflict: MaterializeKnowledgeScopeResult['parentConflict'];
 
@@ -556,7 +574,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         created = true;
       } else if (input.parentId && scope.parentId === null) {
         // Late link: the first non-null parent wins; the conditional update makes it atomic.
-        await this.#requireLivePage(input.parentId, session);
+        await this.#claimParent(session, input.parentId, now);
         const linked = await (
           await this.#c('pages')
         ).findOneAndUpdate(
@@ -574,6 +592,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       }
 
       for (const child of input.children ?? []) {
+        // A removed child scope stays removed: its document still holds the address.
         if (await this.#scopeByAddress(child.address, session)) continue;
         await this.#insertScope(session, {
           address: child.address,
@@ -607,6 +626,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         { parentId: parent.id, key: template.key, ...live },
         { ...noProjection, session },
       );
+      // A removed template stays removed with everything declared under it, even when an ordinary page now holds its key.
+      if (await this.#templateRemoved(session, parent.id, template.key)) continue;
       const page = existing
         ? toPage(existing)
         : await this.#insertPage(session, {
@@ -619,6 +640,32 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           });
       if (template.pages?.length) await this.#materializeTemplates(session, page, template.pages, provenance, at);
     }
+  }
+
+  /**
+   * Whether a template page with this key under this parent was removed. Any document carrying the
+   * key counts, not just the latest deleted one, so an ordinary page reusing the key can't hide it.
+   */
+  async #templateRemoved(session: Session, parentId: string, key: string): Promise<boolean> {
+    const ids = (
+      await (await this.#c('pages')).find({ parentId, key }, { projection: { _id: 0, id: 1 }, session }).toArray()
+    ).map(row => String(row.id));
+    if (!ids.length) return false;
+    return !!(await (
+      await this.#c('activity')
+    ).findOne({ action: 'template-removed', pageId: { $in: ids } }, { projection: { _id: 1 }, session }));
+  }
+
+  /**
+   * Writes to the live parent before a child is written under it. Removal writes the same document,
+   * so a concurrent removal and child write conflict and one of them retries against the other's
+   * result, instead of both committing (snapshot reads alone would allow that).
+   */
+  async #claimParent(session: Session, parentId: string, at: Date): Promise<void> {
+    const claimed = await (
+      await this.#c('pages')
+    ).updateOne({ id: parentId, ...live }, { $set: { childWrittenAt: at } }, { session });
+    if (claimed.matchedCount === 0) throw new KnowledgeNotFoundError('page', parentId);
   }
 
   async #scopeByAddress(address: string, session?: Session): Promise<KnowledgePage | null> {
@@ -639,6 +686,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     },
   ): Promise<KnowledgePage> {
     const core = await loadPagesCore();
+    if (input.parentId !== null) await this.#claimParent(session, input.parentId, input.at);
     const id = createKnowledgeUlid();
     const doc = {
       id,
@@ -679,7 +727,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const rows = await (
       await this.#c('pages')
     )
-      .find({ isScope: true, address: { $in: addresses } }, noProjection)
+      .find({ isScope: true, address: { $in: addresses }, ...live }, noProjection)
       .toArray();
     const byAddress = new Map(rows.map(row => [String(row.address), toPage(row)]));
     return [...new Set(addresses)].flatMap(address => byAddress.get(address) ?? []);
@@ -690,7 +738,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       await this.#c('pages')
     )
       .aggregate([
-        { $match: { isScope: true, declaration: { $type: 'string' } } },
+        { $match: { isScope: true, declaration: { $type: 'string' }, ...live } },
         { $group: { _id: '$declaration', scopes: { $sum: 1 } } },
       ])
       .toArray();
@@ -931,6 +979,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     },
   ): Promise<KnowledgePage> {
     const core = await loadPagesCore();
+    await this.#claimParent(session, input.parent.id, input.at);
     const id = input.id ?? createKnowledgeUlid();
     const scopeId = input.parent.isScope ? input.parent.id : input.parent.scopeId;
     const depth = input.parent.isScope ? 1 : (await this.#depthOf(input.parent.id, session)) + 1;
@@ -1044,6 +1093,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       const tree = await this.#subtree(input.id, session, input.parentId);
       if (tree.found) throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
+      // Claimed, not just read: removal of the destination writes the same document.
+      await this.#claimParent(session, input.parentId, new Date());
       const parent = await this.#requireLivePage(input.parentId, session);
       if (tree.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES)
         throw new core.KnowledgeMoveTooLargeError(input.id, tree.live + 1);
@@ -1103,6 +1154,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const target = await this.#requireLivePage(input.targetId, session);
       if (source.version !== input.sourceVersion) throw new KnowledgeConflictError(input.sourceId);
       if (source.isScope || target.isScope) throw new Error("Knowledge scope pages can't be merged");
+      // The source's children land under the target, so claim it like any other new parent.
+      await this.#claimParent(session, target.id, new Date());
       const tree = await this.#subtree(source.id, session, target.id);
       if (tree.found) {
         throw new Error(`Knowledge page ${source.id} can't merge into itself or its own subtree`);
@@ -1253,6 +1306,104 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         scopeId: page.scopeId,
         pageId: page.id,
         provenance: { author: input.deletedBy },
+        at: now,
+      });
+      return toPage(updated);
+    });
+  }
+
+  async removeTemplatePage(input: {
+    id: string;
+    expectedVersion: number;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#atomic('removeTemplatePage', async session => {
+      const page = await this.#requireLivePage(input.id, session);
+      if (page.isScope) throw new Error(`Knowledge scope page ${input.id} isn't a template page`);
+      return this.#removeEmpty(session, page, input, 'template-removed');
+    });
+  }
+
+  async removeScope(input: {
+    id: string;
+    expectedVersion: number;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#atomic('removeScope', async session => {
+      const scope = await this.#requireLivePage(input.id, session);
+      if (!scope.isScope) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
+      return this.#removeEmpty(session, scope, input, 'scope-removed');
+    });
+  }
+
+  /** Soft-deletes a page with no live children (pages or scopes) and drops its pins. */
+  async #removeEmpty(
+    session: Session,
+    page: KnowledgePage,
+    input: { id: string; expectedVersion: number; provenance: KnowledgeProvenance },
+    action: 'template-removed' | 'scope-removed',
+  ): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
+    if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
+    const pages = await this.#c('pages');
+    if (await pages.findOne({ parentId: input.id, ...live }, { projection: { id: 1 }, session })) {
+      throw new core.KnowledgePageHasChildrenError(input.id);
+    }
+    const now = new Date();
+    const updated = await pages.findOneAndUpdate(
+      { id: input.id, version: input.expectedVersion, ...live },
+      {
+        $set: { deletedAt: now, deletedBy: input.provenance.author, updatedAt: now, updatedBy: input.provenance },
+        $unset: { activeKey: '' },
+        $inc: { version: 1 },
+      },
+      { returnDocument: 'after', projection: { _id: 0 }, session },
+    );
+    if (!updated) throw new KnowledgeConflictError(input.id);
+    await (await this.#c('pins')).deleteMany({ pageId: input.id }, { session });
+    await this.#log(session, { action, scopeId: page.scopeId, pageId: page.id, provenance: input.provenance, at: now });
+    return toPage(updated);
+  }
+
+  async restoreScope(input: {
+    id: string;
+    declaration: string;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#atomic('restoreScope', async session => {
+      const scope = await this.#page(input.id, session);
+      if (!scope) throw new KnowledgeNotFoundError('page', input.id);
+      if (!scope.isScope) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
+      if (!scope.deletedAt) throw new Error(`Knowledge scope ${scope.address} is not removed`);
+      if (scope.declaration !== input.declaration) throw new KnowledgeConflictError(input.id);
+      // Claiming the parent both checks it is live and conflicts with a concurrent removal of it.
+      if (scope.parentId !== null) {
+        await this.#claimParent(session, scope.parentId, new Date()).catch(error => {
+          if (error instanceof KnowledgeNotFoundError) {
+            throw new Error(`Knowledge scope ${scope.address} can't be restored while its parent scope is removed`);
+          }
+          throw error;
+        });
+      }
+      const now = new Date();
+      const updated = await (
+        await this.#c('pages')
+      ).findOneAndUpdate(
+        // A declaration rename doesn't bump the version, so the declaration is part of the condition.
+        { id: input.id, version: scope.version, declaration: input.declaration, deletedAt: { $exists: true } },
+        {
+          $set: { updatedAt: now, updatedBy: input.provenance },
+          $unset: { deletedAt: '', deletedBy: '' },
+          $inc: { version: 1 },
+        },
+        { returnDocument: 'after', projection: { _id: 0 }, session },
+      );
+      if (!updated) throw new KnowledgeConflictError(input.id);
+      await this.#log(session, {
+        action: 'scope-restored',
+        scopeId: scope.id,
+        pageId: scope.id,
+        provenance: input.provenance,
         at: now,
       });
       return toPage(updated);

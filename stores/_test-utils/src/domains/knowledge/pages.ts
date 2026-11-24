@@ -34,7 +34,10 @@ async function rejectsNamed(promise: Promise<unknown>, name: string | RegExp): P
  * Shared schema-4 page-store contract (see `@mastra/core/storage` pages.ts). Every adapter runs it;
  * the in-memory store is the reference. `createStore` returns a fresh or cleared store each time.
  */
-export function createKnowledgePageStoreTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
+export function createKnowledgePageStoreTests(
+  createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage,
+  options: { reopen?: () => Promise<KnowledgeStorage> | KnowledgeStorage } = {},
+): void {
   describe('knowledge page store contract (schema 4)', () => {
     let store: KnowledgeStorage;
 
@@ -202,6 +205,315 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(await store.countChildScopes({ parentIds: [acme.id], read: read([]) })).toEqual({ [acme.id]: 0 });
         expect(await store.countChildScopes({ parentIds: [], read: reader })).toEqual({});
       });
+    });
+
+    describe('removing template pages and scopes', () => {
+      const templates = [{ key: 'overview', name: 'Overview' }];
+      const account = (pages = templates) =>
+        store.materializeScope({
+          address: 'account:acme:1',
+          declaration: ACCOUNT,
+          name: 'Account 1',
+          pages,
+          provenance: host,
+        });
+      const liveByKey = async (parentId: string, key: string) =>
+        (await store.listChildPages({ parentId, read: 'all' })).pages.filter(child => child.key === key);
+
+      it('keeps a removed template page removed when the scope is materialized again', async () => {
+        const { scope: acct } = await account();
+        const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+        const removed = await store.removeTemplatePage({
+          id: overview.id,
+          expectedVersion: overview.version,
+          provenance: host,
+        });
+        expect(removed.deletedAt).toBeInstanceOf(Date);
+
+        // Config reconciliation: the same templates, plus one declared later.
+        await account([...templates, { key: 'contacts', name: 'Contacts' }]);
+        expect(await liveByKey(acct.id, 'overview')).toEqual([]);
+        expect(await liveByKey(acct.id, 'contacts')).toHaveLength(1);
+        const activity = await store.listPageActivity({ scopeId: acct.id, read: 'all' });
+        expect(activity.events.map(event => event.action)).toContain('template-removed');
+      });
+
+      it('keeps the removal when an ordinary page later reuses the key and is deleted', async () => {
+        const { scope: acct } = await account();
+        const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+        await store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host });
+        const ordinary = await page(acct.id, 'My overview', { key: 'overview' });
+        await account();
+        expect(ids(await liveByKey(acct.id, 'overview'))).toEqual([ordinary.id]);
+        await store.deletePage({ id: ordinary.id, expectedVersion: ordinary.version, deletedBy: 'host' });
+        await account();
+        expect(await liveByKey(acct.id, 'overview')).toEqual([]);
+      });
+
+      it('keeps nested removed templates removed when an ordinary page reuses the removed ancestor key', async () => {
+        const nested = [{ key: 'start', name: 'Start', pages: [{ key: 'faq', name: 'FAQ' }] }];
+        const { scope: acct } = await account(nested);
+        const start = (await store.getPageByPath({ scopeId: acct.id, path: ['start'], read: 'all' }))!;
+        const faq = (await store.getPageByPath({ scopeId: acct.id, path: ['start', 'faq'], read: 'all' }))!;
+        await store.removeTemplatePage({ id: faq.id, expectedVersion: faq.version, provenance: host });
+        const current = (await store.getPage({ id: start.id, read: 'all' }))!;
+        await store.removeTemplatePage({ id: start.id, expectedVersion: current.version, provenance: host });
+        const ordinary = await page(acct.id, 'My start', { key: 'start' });
+        await account(nested);
+        expect(ids(await liveByKey(acct.id, 'start'))).toEqual([ordinary.id]);
+        expect(await liveByKey(ordinary.id, 'faq')).toEqual([]);
+      });
+
+      it('refuses to create a scope under a removed parent scope', async () => {
+        const acme = await scope('org:acme', ORG);
+        await store.removeScope({ id: acme.id, expectedVersion: acme.version, provenance: host });
+        await rejectsNamed(
+          store.materializeScope({
+            address: 'team:acme:eng',
+            declaration: TEAM,
+            name: 'Eng',
+            parentId: acme.id,
+            provenance: host,
+          }),
+          'KnowledgeNotFoundError',
+        );
+        expect(await store.getScopesByAddress(['team:acme:eng'])).toEqual([]);
+      });
+
+      it('still creates a template whose key only an ordinary deleted page used', async () => {
+        const { scope: acct } = await account([]);
+        const ordinary = await page(acct.id, 'Old overview', { key: 'overview' });
+        await store.deletePage({ id: ordinary.id, expectedVersion: ordinary.version, deletedBy: 'host' });
+        await account();
+        expect(await liveByKey(acct.id, 'overview')).toHaveLength(1);
+      });
+
+      it('refuses to remove a template page that has live children, or at a stale version', async () => {
+        const { scope: acct } = await account();
+        const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+        await page(overview.id, 'Child');
+        await rejectsNamed(
+          store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host }),
+          'KnowledgePageHasChildrenError',
+        );
+        await rejectsNamed(
+          store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version + 1, provenance: host }),
+          'KnowledgeConflictError',
+        );
+      });
+
+      it('never leaves a removed template live when removal races materialization', async () => {
+        for (let round = 0; round < 5; round++) {
+          await store.dangerouslyClearAll();
+          const { scope: acct } = await account();
+          const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+          await Promise.all([
+            store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host }),
+            account(),
+            account(),
+          ]);
+          await account();
+          expect(await liveByKey(acct.id, 'overview')).toEqual([]);
+        }
+      });
+
+      it('removes an empty scope: readers stop seeing it and its pins go', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:eng', TEAM, acme.id);
+        await store.addPinAudience({ pageId: team.id, kind: 'page', audience: ['org:acme'], createdBy: 'host' });
+        const removed = await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
+        expect(removed.deletedAt).toBeInstanceOf(Date);
+        expect(await store.getScopesByAddress(['team:acme:eng'])).toEqual([]);
+        expect((await store.listChildScopes({ parentId: acme.id })).pages).toEqual([]);
+        expect(await store.countChildScopes({ parentIds: [acme.id], read: 'all' })).toEqual({ [acme.id]: 0 });
+        expect((await store.getPage({ id: team.id, read: 'all' }))?.deletedAt).toBeInstanceOf(Date);
+        expect((await store.listPins({ audience: ['org:acme'], read: 'all' })).pins).toEqual([]);
+        const activity = await store.listPageActivity({ scopeId: team.id, read: 'all' });
+        expect(activity.events.map(event => event.action)).toContain('scope-removed');
+      });
+
+      it('refuses to remove a scope with a live page or child scope, or at a stale version', async () => {
+        const acme = await scope('org:acme', ORG);
+        await scope('team:acme:eng', TEAM, acme.id);
+        await rejectsNamed(
+          store.removeScope({ id: acme.id, expectedVersion: acme.version, provenance: host }),
+          'KnowledgePageHasChildrenError',
+        );
+        const ops = await scope('team:acme:ops', TEAM, acme.id);
+        const note = await page(ops.id, 'Runbook');
+        await rejectsNamed(
+          store.removeScope({ id: ops.id, expectedVersion: ops.version, provenance: host }),
+          'KnowledgePageHasChildrenError',
+        );
+        await store.deletePage({ id: note.id, expectedVersion: note.version, deletedBy: 'host' });
+        await rejectsNamed(
+          store.removeScope({ id: ops.id, expectedVersion: ops.version + 1, provenance: host }),
+          'KnowledgeConflictError',
+        );
+        await store.removeScope({ id: ops.id, expectedVersion: ops.version, provenance: host });
+      });
+
+      it('refuses writes to a removed scope instead of reviving it', async () => {
+        const acme = await scope('org:acme', ORG);
+        await store.removeScope({ id: acme.id, expectedVersion: acme.version, provenance: host });
+        await rejectsNamed(scope('org:acme', ORG), 'KnowledgeScopeRemovedError');
+        await rejectsNamed(page(acme.id, 'Late'), /not found|removed/i);
+        expect(await store.getScopesByAddress(['org:acme'])).toEqual([]);
+      });
+
+      it('skips a removed child scope when its parent is materialized again', async () => {
+        const internal = { address: 'account:acme:1/internal', declaration: ACCOUNT_INTERNAL, name: 'internal' };
+        const materialize = () =>
+          store.materializeScope({
+            address: 'account:acme:1',
+            declaration: ACCOUNT,
+            name: 'Account 1',
+            children: [internal],
+            provenance: host,
+          });
+        await materialize();
+        const [child] = await store.getScopesByAddress([internal.address]);
+        await store.removeScope({ id: child!.id, expectedVersion: child!.version, provenance: host });
+        await materialize();
+        expect(await store.getScopesByAddress([internal.address])).toEqual([]);
+      });
+
+      it('never both removes a scope and creates a page in it', async () => {
+        for (let round = 0; round < 5; round++) {
+          await store.dangerouslyClearAll();
+          const acme = await scope('org:acme', ORG);
+          const [removal, creation] = await Promise.allSettled([
+            store.removeScope({ id: acme.id, expectedVersion: acme.version, provenance: host }),
+            page(acme.id, 'Racer'),
+          ]);
+          expect([removal.status, creation.status].filter(status => status === 'fulfilled')).toHaveLength(1);
+          const live = (await store.listChildPages({ parentId: acme.id, read: 'all' })).pages;
+          if (removal.status === 'fulfilled') expect(live).toEqual([]);
+          else expect(await store.getScopesByAddress(['org:acme'])).toHaveLength(1);
+        }
+      });
+
+      it('stops counting a removed scope toward its declaration, and counts it again once restored', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:eng', TEAM, acme.id);
+        const counts = async () =>
+          Object.fromEntries((await store.listScopeDeclarations()).map(row => [row.declaration, row.scopes]));
+        expect(await counts()).toEqual({ [ORG]: 1, [TEAM]: 1 });
+        await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
+        expect(await counts()).toEqual({ [ORG]: 1 });
+        await store.restoreScope({ id: team.id, declaration: TEAM, provenance: host });
+        expect(await counts()).toEqual({ [ORG]: 1, [TEAM]: 1 });
+      });
+
+      it('never both removes a scope and moves or merges a page into it', async () => {
+        for (let round = 0; round < 5; round++) {
+          await store.dangerouslyClearAll();
+          const acme = await scope('org:acme', ORG);
+          const other = await scope('org:other', ORG);
+          const mover = await page(other.id, 'Mover');
+          const [removal, move] = await Promise.allSettled([
+            store.removeScope({ id: acme.id, expectedVersion: acme.version, provenance: host }),
+            store.movePage({ id: mover.id, expectedVersion: mover.version, parentId: acme.id, provenance: host }),
+          ]);
+          expect([removal.status, move.status].filter(status => status === 'fulfilled')).toHaveLength(1);
+          const live = (await store.listChildPages({ parentId: acme.id, read: 'all' })).pages;
+          if (removal.status === 'fulfilled') expect(live).toEqual([]);
+          else expect(await store.getScopesByAddress(['org:acme'])).toHaveLength(1);
+        }
+      });
+
+      it('never both removes a template page and merges children into it', async () => {
+        for (let round = 0; round < 5; round++) {
+          await store.dangerouslyClearAll();
+          const { scope: acct } = await account();
+          const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+          const source = await page(acct.id, 'Source');
+          await page(source.id, 'Child');
+          const [removal, merge] = await Promise.allSettled([
+            store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host }),
+            store.mergePages({
+              sourceId: source.id,
+              sourceVersion: source.version,
+              targetId: overview.id,
+              provenance: host,
+            }),
+          ]);
+          expect([removal.status, merge.status].filter(status => status === 'fulfilled')).toHaveLength(1);
+          const children = (await store.listChildPages({ parentId: overview.id, read: 'all' })).pages;
+          if (removal.status === 'fulfilled') expect(children).toEqual([]);
+        }
+      });
+
+      it('restores a removed scope with its id, leaving removed template pages removed', async () => {
+        const { scope: acct } = await account();
+        const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+        await store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host });
+        const current = (await store.getScopesByAddress(['account:acme:1']))[0]!;
+        const removed = await store.removeScope({ id: acct.id, expectedVersion: current.version, provenance: host });
+        const restored = await store.restoreScope({ id: acct.id, declaration: ACCOUNT, provenance: host });
+        expect(restored).toMatchObject({ id: acct.id, address: 'account:acme:1' });
+        expect(restored.deletedAt).toBeUndefined();
+        expect(restored.version).toBe(removed.version + 1);
+        expect(ids(await store.getScopesByAddress(['account:acme:1']))).toEqual([acct.id]);
+        await account();
+        expect(await liveByKey(acct.id, 'overview')).toEqual([]);
+        const activity = await store.listPageActivity({ scopeId: acct.id, read: 'all' });
+        expect(activity.events.map(event => event.action)).toContain('scope-restored');
+      });
+
+      it('refuses to restore a scope whose parent scope is removed, or one that is not removed', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:eng', TEAM, acme.id);
+        await rejectsNamed(store.restoreScope({ id: team.id, declaration: TEAM, provenance: host }), /not removed/i);
+        await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
+        const parent = (await store.getScopesByAddress(['org:acme']))[0]!;
+        await store.removeScope({ id: acme.id, expectedVersion: parent.version, provenance: host });
+        await rejectsNamed(store.restoreScope({ id: team.id, declaration: TEAM, provenance: host }), /parent/i);
+      });
+
+      it('refuses to restore a scope whose declaration was renamed after the caller checked it', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:eng', TEAM, acme.id);
+        await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
+        // A rename re-keys removed rows too and doesn't bump their version.
+        await store.renameScopeDeclaration({ from: TEAM, to: 'team:$orgId:$squadId', check: () => {} });
+        await rejectsNamed(
+          store.restoreScope({ id: team.id, declaration: TEAM, provenance: host }),
+          'KnowledgeConflictError',
+        );
+        const after = (await store.getPage({ id: team.id, read: 'all' }))!;
+        expect(after.declaration).toBe('team:$orgId:$squadId');
+        expect(after.deletedAt).toBeDefined();
+        const activity = await store.listPageActivity({ scopeId: team.id, read: 'all' });
+        expect(activity.events.map(event => event.action)).not.toContain('scope-restored');
+      });
+
+      if (options.reopen) {
+        it('keeps removals after the store is reopened', async () => {
+          const { scope: acct } = await account();
+          const overview = (await store.getPageByPath({ scopeId: acct.id, path: ['overview'], read: 'all' }))!;
+          await store.removeTemplatePage({ id: overview.id, expectedVersion: overview.version, provenance: host });
+          const team = await scope('team:acme:eng', TEAM);
+          await store.removeScope({ id: team.id, expectedVersion: team.version, provenance: host });
+
+          const reopened = await options.reopen!();
+          await reopened.init();
+          await reopened.materializeScope({
+            address: 'account:acme:1',
+            declaration: ACCOUNT,
+            name: 'Account 1',
+            pages: templates,
+            provenance: host,
+          });
+          expect(
+            (await reopened.listChildPages({ parentId: acct.id, read: 'all' })).pages.filter(p => p.key === 'overview'),
+          ).toEqual([]);
+          await rejectsNamed(
+            reopened.materializeScope({ address: 'team:acme:eng', declaration: TEAM, name: 'eng', provenance: host }),
+            'KnowledgeScopeRemovedError',
+          );
+        });
+      }
     });
 
     describe('scope declaration keys', () => {

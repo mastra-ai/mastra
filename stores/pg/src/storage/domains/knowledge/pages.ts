@@ -1,6 +1,7 @@
 import {
   createKnowledgePagesCoreLoader,
   knowledgePageKeyProblem,
+  KnowledgeScopeRemovedError,
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
   KnowledgeInvalidCursorError,
@@ -585,17 +586,18 @@ export class PgKnowledgePages implements KnowledgePageStore {
     checkTemplates(input.pages ?? []);
 
     return this.#tx(async tx => {
-      await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-        `mastra-knowledge-scope:${this.#schemaName ?? ''}:${input.address}`,
-      ]);
+      // Lock order everywhere: scope advisory locks (this scope, then its declared children), then rows.
+      await this.#lockScopeAddress(tx, input.address);
+      for (const child of input.children ?? []) await this.#lockScopeAddress(tx, child.address);
       const now = new Date();
       const existing = await this.#scopeByAddress(tx, input.address);
+      if (existing?.deletedAt) throw new KnowledgeScopeRemovedError(input.address);
       let scope = existing;
       let created = false;
       let parentConflict: MaterializeKnowledgeScopeResult['parentConflict'];
 
       if (!scope) {
-        if (input.parentId) await this.#requireLivePage(tx, input.parentId, false);
+        if (input.parentId) await this.#requireLivePage(tx, input.parentId);
         scope = await this.#insertScope(tx, {
           address: input.address,
           declaration: input.declaration,
@@ -608,7 +610,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         created = true;
       } else if (input.parentId && scope.parentId === null) {
         // Late link: the first non-null parent wins; the advisory lock above makes it atomic.
-        await this.#requireLivePage(tx, input.parentId, false);
+        await this.#requireLivePage(tx, input.parentId);
         const rows = await this.#rows(
           tx,
           `UPDATE ${this.#pages} SET "parentId" = $2 WHERE "id" = $1 AND "parentId" IS NULL RETURNING *`,
@@ -619,10 +621,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
         parentConflict = { existingParentId: scope.parentId, requestedParentId: input.parentId ?? null };
       }
 
+      if (input.children?.length || input.pages?.length) await this.#requireLivePage(tx, scope.id);
       for (const child of input.children ?? []) {
-        await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-          `mastra-knowledge-scope:${this.#schemaName ?? ''}:${child.address}`,
-        ]);
+        // A removed child scope stays removed: the row still holds its address.
         if (await this.#scopeByAddress(tx, child.address)) continue;
         await this.#insertScope(tx, {
           address: child.address,
@@ -657,6 +658,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
         `SELECT * FROM ${this.#pages} WHERE "parentId" = $1 AND "key" = $2 AND "deletedAt" IS NULL`,
         [parent.id, template.key],
       );
+      // A removed template stays removed with everything declared under it, even when an ordinary page now holds its key.
+      if (await this.#templateRemoved(db, parent.id, template.key)) continue;
       const page =
         rows[0] === undefined
           ? await this.#insertPage(db, {
@@ -670,6 +673,26 @@ export class PgKnowledgePages implements KnowledgePageStore {
           : toPage(rows[0]);
       if (template.pages?.length) await this.#materializeTemplates(db, page, template.pages, provenance, at);
     }
+  }
+
+  /**
+   * Whether a template page with this key under this parent was removed. Any row carrying the key
+   * counts, not just the latest deleted one, so an ordinary page reusing the key can't hide it.
+   */
+  async #templateRemoved(db: Queryable, parentId: string, key: string): Promise<boolean> {
+    const rows = await this.#rows(
+      db,
+      `SELECT 1 FROM ${this.#activity} a JOIN ${this.#pages} p ON p."id" = a."pageId"
+       WHERE a."action" = 'template-removed' AND p."parentId" = $1 AND p."key" = $2 LIMIT 1`,
+      [parentId, key],
+    );
+    return rows.length > 0;
+  }
+
+  async #lockScopeAddress(db: Queryable, address: string): Promise<void> {
+    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      `mastra-knowledge-scope:${this.#schemaName ?? ''}:${address}`,
+    ]);
   }
 
   async #scopeByAddress(db: Queryable, address: string): Promise<KnowledgePage | null> {
@@ -723,7 +746,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     if (addresses.length === 0) return [];
     const rows = await this.#rows(
       this.#client,
-      `SELECT * FROM ${this.#pages} WHERE "isScope" AND "address" = ANY($1::text[])`,
+      `SELECT * FROM ${this.#pages} WHERE "isScope" AND "deletedAt" IS NULL AND "address" = ANY($1::text[])`,
       [addresses],
     );
     const byAddress = new Map(rows.map(row => [String(row.address), toPage(row)]));
@@ -734,7 +757,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const rows = await this.#rows(
       this.#client,
       `SELECT "declaration", COUNT(*)::int AS "scopes" FROM ${this.#pages}
-       WHERE "isScope" AND "declaration" IS NOT NULL
+       WHERE "isScope" AND "declaration" IS NOT NULL AND "deletedAt" IS NULL
        GROUP BY "declaration" ORDER BY "declaration" COLLATE "C"`,
       [],
     );
@@ -1210,6 +1233,104 @@ export class PgKnowledgePages implements KnowledgePageStore {
         scopeId: page.scopeId,
         pageId: page.id,
         provenance: { author: input.deletedBy },
+        at: now,
+      });
+      return toPage(rows[0]!);
+    });
+  }
+
+  async removeTemplatePage(input: {
+    id: string;
+    expectedVersion: number;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#tx(async tx => {
+      const unlocked = await this.#requireLivePage(tx, input.id, false);
+      if (unlocked.isScope) throw new Error(`Knowledge scope page ${input.id} isn't a template page`);
+      // Parent first, the same order template materialization takes, so the two serialize.
+      await this.#lockPage(tx, unlocked.parentId!);
+      const page = await this.#requireLivePage(tx, input.id);
+      return this.#removeLocked(tx, page, input, 'template-removed');
+    });
+  }
+
+  async removeScope(input: {
+    id: string;
+    expectedVersion: number;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#tx(async tx => {
+      const unlocked = await this.#requireLivePage(tx, input.id, false);
+      if (!unlocked.isScope) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
+      await this.#lockScopeAddress(tx, unlocked.address!);
+      const scope = await this.#requireLivePage(tx, input.id);
+      return this.#removeLocked(tx, scope, input, 'scope-removed');
+    });
+  }
+
+  /** Soft-deletes a locked page with no live children (pages or scopes) and drops its pins. */
+  async #removeLocked(
+    tx: Queryable,
+    page: KnowledgePage,
+    input: { expectedVersion: number; provenance: KnowledgeProvenance },
+    action: 'template-removed' | 'scope-removed',
+  ): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
+    if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(page.id);
+    const children = await this.#rows(
+      tx,
+      `SELECT 1 FROM ${this.#pages} WHERE "parentId" = $1 AND "deletedAt" IS NULL LIMIT 1`,
+      [page.id],
+    );
+    if (children.length) throw new core.KnowledgePageHasChildrenError(page.id);
+    const now = new Date();
+    const rows = await this.#rows(
+      tx,
+      `UPDATE ${this.#pages} SET "deletedAt" = $2, "deletedBy" = $3, "version" = "version" + 1, "updatedAt" = $2, "updatedBy" = $4::jsonb WHERE "id" = $1 RETURNING *`,
+      [page.id, iso(now), input.provenance.author, JSON.stringify(input.provenance)],
+    );
+    await tx.query(`DELETE FROM ${this.#pins} WHERE "pageId" = $1`, [page.id]);
+    await this.#logActivity(tx, {
+      action,
+      scopeId: page.scopeId,
+      pageId: page.id,
+      provenance: input.provenance,
+      at: now,
+    });
+    return toPage(rows[0]!);
+  }
+
+  async restoreScope(input: {
+    id: string;
+    declaration: string;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#tx(async tx => {
+      const [unlockedRow] = await this.#rows(tx, `SELECT * FROM ${this.#pages} WHERE "id" = $1`, [input.id]);
+      if (!unlockedRow) throw new KnowledgeNotFoundError('page', input.id);
+      const unlocked = toPage(unlockedRow);
+      if (!unlocked.isScope) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
+      await this.#lockScopeAddress(tx, unlocked.address!);
+      const scope = (await this.#lockPage(tx, input.id))!;
+      if (!scope.deletedAt) throw new Error(`Knowledge scope ${scope.address} is not removed`);
+      if (scope.declaration !== input.declaration) throw new KnowledgeConflictError(scope.id);
+      if (scope.parentId !== null) {
+        const parent = await this.#lockPage(tx, scope.parentId);
+        if (!parent || parent.deletedAt) {
+          throw new Error(`Knowledge scope ${scope.address} can't be restored while its parent scope is removed`);
+        }
+      }
+      const now = new Date();
+      const rows = await this.#rows(
+        tx,
+        `UPDATE ${this.#pages} SET "deletedAt" = NULL, "deletedBy" = NULL, "version" = "version" + 1, "updatedAt" = $2, "updatedBy" = $3::jsonb WHERE "id" = $1 RETURNING *`,
+        [scope.id, iso(now), JSON.stringify(input.provenance)],
+      );
+      await this.#logActivity(tx, {
+        action: 'scope-restored',
+        scopeId: scope.id,
+        pageId: scope.id,
+        provenance: input.provenance,
         at: now,
       });
       return toPage(rows[0]!);

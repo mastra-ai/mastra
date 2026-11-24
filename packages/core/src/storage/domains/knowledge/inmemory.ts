@@ -87,6 +87,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   ): ReturnType<KnowledgePageStore['deletePage']> {
     return this.#pageStore.deletePage(input);
   }
+  override removeTemplatePage(
+    input: Parameters<KnowledgePageStore['removeTemplatePage']>[0],
+  ): ReturnType<KnowledgePageStore['removeTemplatePage']> {
+    return this.#pageStore.removeTemplatePage(input);
+  }
+  override removeScope(
+    input: Parameters<KnowledgePageStore['removeScope']>[0],
+  ): ReturnType<KnowledgePageStore['removeScope']> {
+    return this.#pageStore.removeScope(input);
+  }
+  override restoreScope(
+    input: Parameters<KnowledgePageStore['restoreScope']>[0],
+  ): ReturnType<KnowledgePageStore['restoreScope']> {
+    return this.#pageStore.restoreScope(input);
+  }
   override getNote(input: Parameters<KnowledgePageStore['getNote']>[0]): ReturnType<KnowledgePageStore['getNote']> {
     return this.#pageStore.getNote(input);
   }

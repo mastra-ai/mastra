@@ -21,6 +21,9 @@ import {
   moveKnowledgePage,
   removeKnowledgeNote,
   removeKnowledgePage,
+  removeKnowledgeScope,
+  removeKnowledgeTemplatePage,
+  restoreKnowledgeScope,
   updateKnowledgeNote,
   upsertKnowledgePage,
 } from './host-writes';
@@ -28,6 +31,8 @@ import type {
   KnowledgeAddNoteInput,
   KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
+  KnowledgeRemoveScopeInput,
+  KnowledgeRestoreScopeInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,
@@ -289,6 +294,42 @@ export class Knowledge extends MastraBase {
    */
   removePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
     return removeKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Removes the page declared in config (a scope's `pages`) at `scope#path` for good: reopening the
+   * store or materializing the scope again never brings it back, even after another page reuses
+   * its key. `null` when there is none; refuses a page that isn't declared in config (use
+   * {@link Knowledge.removePage}) and one with child pages. Host-only, like {@link Knowledge.upsertPage};
+   * agent tools can't remove declared pages.
+   *
+   * @experimental
+   */
+  removeTemplatePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
+    return removeKnowledgeTemplatePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Removes the scope at `scope` (an address); `null` when there is none. Refuses while it has pages
+   * or child scopes. Its pins go. Afterwards writes to that address, from the host or a run, fail
+   * with `KnowledgeScopeRemovedError` instead of re-creating it; bring it back with
+   * {@link Knowledge.restoreScope}. Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  removeScope(input: KnowledgeRemoveScopeInput): Promise<KnowledgePage | null> {
+    return removeKnowledgeScope(this.#hostWriter(), input);
+  }
+
+  /**
+   * Restores a scope removed with {@link Knowledge.removeScope}, by id, keeping the id. Refuses when
+   * its address no longer matches a declaration or its parent scope is removed. Template pages
+   * removed before stay removed. Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  restoreScope(input: KnowledgeRestoreScopeInput): Promise<KnowledgePage> {
+    return restoreKnowledgeScope(this.#hostWriter(), input);
   }
 
   /**
@@ -616,6 +657,8 @@ export type {
   KnowledgeAddNoteInput,
   KnowledgeMovePageInput,
   KnowledgeRemovePageInput,
+  KnowledgeRemoveScopeInput,
+  KnowledgeRestoreScopeInput,
   KnowledgeUpdateNoteInput,
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,

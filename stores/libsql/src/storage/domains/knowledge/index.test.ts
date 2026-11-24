@@ -48,8 +48,9 @@ describe('Knowledge Core compatibility', () => {
   });
 });
 
-createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
-createKnowledgeHostWriteTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+const contractStore = () => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' });
+createKnowledgePageStoreTests(contractStore, { reopen: contractStore });
+createKnowledgeHostWriteTests(contractStore);
 
 async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
   const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');

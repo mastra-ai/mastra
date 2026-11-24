@@ -20,6 +20,9 @@
  */
 
 import { knowledgePageKeyProblem } from '@internal/core/knowledge-compat';
+
+/** @experimental */
+export { KnowledgeScopeRemovedError } from '@internal/core/knowledge-compat';
 import { estimateTokenCount } from 'tokenx';
 
 /**
@@ -640,6 +643,9 @@ export type KnowledgePageActivityAction =
   | 'page-moved'
   | 'page-merged'
   | 'page-deleted'
+  | 'template-removed'
+  | 'scope-removed'
+  | 'scope-restored'
   | 'note-added'
   | 'note-restamped'
   | 'note-removed'
@@ -701,7 +707,10 @@ export interface KnowledgePageStore {
   materializeScope(input: MaterializeKnowledgeScopeInput): Promise<MaterializeKnowledgeScopeResult>;
   /** Scope pages by address, unfiltered (names and descriptions are not secret to the host). */
   getScopesByAddress(addresses: string[]): Promise<KnowledgePage[]>;
-  /** Every `declaration` key stored on scope pages, with how many scope pages carry it, in key order. */
+  /**
+   * Every `declaration` key stored on live scope pages, with how many carry it, in key order. Removed
+   * scopes don't count, so a declaration whose scopes were all removed can be dropped from config.
+   */
   listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]>;
   /**
    * Re-keys scope pages created from declaration `from` (and its template children, `from/<name>`)
@@ -834,6 +843,34 @@ export interface KnowledgePageStore {
   mergePages(input: MergeKnowledgePagesInput): Promise<KnowledgePage>;
   /** Soft-deletes an ordinary page with no live children and drops its pin; refuses scope pages. */
   deletePage(input: { id: string; expectedVersion: number; deletedBy: string }): Promise<KnowledgePage>;
+  /**
+   * Soft-deletes a template page (an ordinary page core materialized from a scope's `pages`) with no
+   * live children, drops its pin and logs `template-removed`. From then on {@link materializeScope}
+   * never re-creates a template with that key under that parent, whatever other rows reuse the key
+   * later. Removal and template materialization under one parent are serialized. Core decides which
+   * pages are templates; the store only remembers the removal.
+   */
+  removeTemplatePage(input: {
+    id: string;
+    expectedVersion: number;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage>;
+  /**
+   * Soft-deletes a scope page with no live child pages or child scopes, drops its pins and logs
+   * `scope-removed`. Refuses (KnowledgePageHasChildrenError) while a child exists; serialized against
+   * child creation. A removed scope disappears from every reader, {@link materializeScope} throws
+   * `KnowledgeScopeRemovedError` for its address instead of reviving it, and parent materialization
+   * skips it as a child.
+   */
+  removeScope(input: { id: string; expectedVersion: number; provenance: KnowledgeProvenance }): Promise<KnowledgePage>;
+  /**
+   * Brings a removed scope back with the same id (its notes and activity stay attached), bumps its
+   * version and logs `scope-restored`. Refuses a scope that isn't removed and one whose parent scope is
+   * removed. Removed template pages stay removed. Core checks the current declaration first and passes
+   * the `declaration` it checked; the store compares it on the locked row and throws
+   * `KnowledgeConflictError` when it changed (a declaration rename doesn't bump the version).
+   */
+  restoreScope(input: { id: string; declaration: string; provenance: KnowledgeProvenance }): Promise<KnowledgePage>;
 
   // Notes
   getNote(input: { id: string; read: KnowledgeReadScope; includeDeleted?: boolean }): Promise<KnowledgeNote | null>;

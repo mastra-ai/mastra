@@ -1,6 +1,7 @@
 import {
   createKnowledgePagesCoreLoader,
   knowledgePageKeyProblem,
+  KnowledgeScopeRemovedError,
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
   KnowledgeInvalidCursorError,
@@ -482,6 +483,17 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     return row;
   }
 
+  /**
+   * A live parent read with a shared lock, taken before writing under it. It reads the latest row and
+   * conflicts with the exclusive lock removeScope/removeTemplatePage take, so a child is never
+   * written under a parent being removed.
+   */
+  async #liveParent(executor: PageExecutor, id: string): Promise<Row> {
+    const row = (await this.#query(executor, `SELECT * FROM ${T.pages} WHERE id = ? FOR SHARE`, [id]))[0];
+    if (!row || row.deletedAt) throw new KnowledgeNotFoundError('page', id);
+    return row;
+  }
+
   async #logActivity(
     tx: PageExecutor,
     action: KnowledgePageActivityAction,
@@ -537,10 +549,10 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
       ) => {
         await assertKnowledgePageDescriptionWithinBound(spec.description);
         const existing = (
-          await this.#query(tx, `SELECT * FROM ${T.pages} WHERE isScope = 1 AND address = ?`, [spec.address])
+          await this.#query(tx, `SELECT * FROM ${T.pages} WHERE isScope = 1 AND address = ? FOR SHARE`, [spec.address])
         )[0];
         if (existing) return { row: existing, created: false };
-        if (parentId !== null) await this.#livePage(tx, parentId);
+        if (parentId !== null) await this.#liveParent(tx, parentId);
         const id = createKnowledgeUlid();
         const position = core.knowledgePositionBetween(await this.#lastPosition(tx, parentId, true));
         const who = JSON.stringify(input.provenance);
@@ -568,12 +580,14 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
       };
 
       const ensured = await ensureScope(input, input.parentId ?? null);
+      // A removed scope stays removed until restoreScope; a removed child scope is skipped below.
+      if (str(ensured.row.deletedAt) !== undefined) throw new KnowledgeScopeRemovedError(input.address);
       let row = ensured.row;
       const created = ensured.created;
       const scopeId = String(row.id);
       if (!created && input.parentId != null && str(row.parentId) === undefined) {
         // An unlinked scope takes its first parent; the conditional UPDATE keeps the first writer's link.
-        await this.#livePage(tx, input.parentId);
+        await this.#liveParent(tx, input.parentId);
         if (input.parentId === scopeId) throw new Error(`Scope ${scopeId} cannot be its own parent`);
         let ancestor: string | undefined = input.parentId;
         while (ancestor) {
@@ -611,6 +625,8 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
               [parentId, template.key],
             )
           )[0];
+          // A removed template stays removed with everything declared under it, even when an ordinary page now holds its key.
+          if (await this.#templateRemoved(tx, parentId, template.key)) continue;
           const id = existing
             ? String(existing.id)
             : (
@@ -637,7 +653,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
   async listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]> {
     const rows = await this.#query(
       this.#read,
-      `SELECT declaration, COUNT(*) AS scopes FROM ${T.pages} WHERE isScope = 1 AND declaration IS NOT NULL GROUP BY declaration ORDER BY declaration`,
+      `SELECT declaration, COUNT(*) AS scopes FROM ${T.pages} WHERE isScope = 1 AND declaration IS NOT NULL AND deletedAt IS NULL GROUP BY declaration ORDER BY declaration`,
     );
     return rows.map(row => ({ declaration: String(row.declaration), scopes: Number(row.scopes) }));
   }
@@ -669,9 +685,11 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
 
   async getScopesByAddress(addresses: string[]): Promise<KnowledgePage[]> {
     if (addresses.length === 0) return [];
-    const rows = await this.#query(this.#read, `SELECT * FROM ${T.pages} WHERE isScope = 1 AND address IN ${JV}`, [
-      jsonList(addresses),
-    ]);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT * FROM ${T.pages} WHERE isScope = 1 AND deletedAt IS NULL AND address IN ${JV}`,
+      [jsonList(addresses)],
+    );
     return rows.map(toPage);
   }
 
@@ -699,7 +717,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     args.push(limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT p.* FROM ${T.pages} p WHERE p.isScope = 1 AND p.parentId <=> ?${filter}${after} ORDER BY p.position, p.id LIMIT ?`,
+      `SELECT p.* FROM ${T.pages} p WHERE p.isScope = 1 AND p.deletedAt IS NULL AND p.parentId <=> ?${filter}${after} ORDER BY p.position, p.id LIMIT ?`,
       args,
     );
     return this.#pageOutput(rows, limit, row => [String(row.position), String(row.id)]);
@@ -844,7 +862,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
   async #insertPage(tx: PageExecutor, input: CreateKnowledgePageInput): Promise<KnowledgePage> {
     const core = await loadPagesCore();
     await assertKnowledgePageDescriptionWithinBound(input.description);
-    const parent = await this.#livePage(tx, input.parentId);
+    const parent = await this.#liveParent(tx, input.parentId);
     const isScopeParent = Number(parent.isScope) === 1;
     const scopeId = isScopeParent ? String(parent.id) : String(parent.scopeId);
     const depth = isScopeParent ? 1 : Number(parent.depth) + 1;
@@ -989,7 +1007,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
       const row = await this.#livePage(tx, input.id);
       if (Number(row.isScope) === 1) throw new Error(`Cannot move ${input.id}: it is a scope page`);
       if (Number(row.version) !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
-      const parent = await this.#livePage(tx, input.parentId);
+      const parent = await this.#liveParent(tx, input.parentId);
       const path = String(row.path);
       if (String(parent.id) === input.id || String(parent.path).startsWith(path)) {
         throw new Error(`Cannot move ${input.id} into its own subtree`);
@@ -1012,7 +1030,8 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const core = await loadPagesCore();
     return this.#transaction(async tx => {
       const source = await this.#livePage(tx, input.sourceId);
-      const target = await this.#livePage(tx, input.targetId);
+      // The source's children land under the target, so lock it like any other new parent.
+      const target = await this.#liveParent(tx, input.targetId);
       if (Number(source.isScope) === 1 || Number(target.isScope) === 1) {
         throw new Error('Cannot merge a scope page: merging applies to non-scope pages only');
       }
@@ -1129,6 +1148,117 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     });
   }
 
+  /**
+   * Whether a template page with this key under this parent was removed. Any row carrying the key
+   * counts, not just the latest deleted one, so an ordinary page reusing the key can't hide it.
+   */
+  async #templateRemoved(tx: PageExecutor, parentId: string, key: string): Promise<boolean> {
+    const rows = await this.#query(
+      tx,
+      `SELECT 1 FROM ${T.activity} a JOIN ${T.pages} p ON p.id = a.pageId
+       WHERE a.action = 'template-removed' AND p.parentId = ? AND p.${KEY} = ? LIMIT 1`,
+      [parentId, key],
+    );
+    return rows.length > 0;
+  }
+
+  async removeTemplatePage(input: {
+    id: string;
+    expectedVersion: number;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#transaction(async tx => {
+      const row = await this.#lockedLivePage(tx, input.id);
+      if (Number(row.isScope) === 1) throw new Error(`Knowledge scope page ${input.id} isn't a template page`);
+      return this.#removeEmpty(tx, row, input, 'template-removed');
+    });
+  }
+
+  async removeScope(input: {
+    id: string;
+    expectedVersion: number;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#transaction(async tx => {
+      const row = await this.#lockedLivePage(tx, input.id);
+      if (Number(row.isScope) !== 1) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
+      return this.#removeEmpty(tx, row, input, 'scope-removed');
+    });
+  }
+
+  async #lockedLivePage(tx: PageExecutor, id: string): Promise<Row> {
+    const row = (await this.#query(tx, `SELECT * FROM ${T.pages} WHERE id = ? FOR UPDATE`, [id]))[0];
+    if (!row || row.deletedAt) throw new KnowledgeNotFoundError('page', id);
+    return row;
+  }
+
+  /** Soft-deletes a page, locked by the caller, with no live children (pages or scopes); drops its pins. */
+  async #removeEmpty(
+    tx: PageExecutor,
+    row: Row,
+    input: { id: string; expectedVersion: number; provenance: KnowledgeProvenance },
+    action: 'template-removed' | 'scope-removed',
+  ): Promise<KnowledgePage> {
+    const core = await loadPagesCore();
+    if (Number(row.version) !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
+    const children = await this.#query(
+      tx,
+      `SELECT 1 FROM ${T.pages} WHERE parentId = ? AND deletedAt IS NULL LIMIT 1 FOR UPDATE`,
+      [input.id],
+    );
+    if (children.length > 0) throw new core.KnowledgePageHasChildrenError(input.id);
+    const now = new Date().toISOString();
+    await tx.execute({
+      sql: `UPDATE ${T.pages} SET deletedAt = ?, deletedBy = ?, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
+      args: [now, input.provenance.author, JSON.stringify(input.provenance), now, input.id],
+    });
+    await tx.execute({
+      sql: `DELETE FROM ${T.pinAudiences} WHERE pinId IN (SELECT id FROM ${T.pins} WHERE pageId = ?)`,
+      args: [input.id],
+    });
+    await tx.execute({ sql: `DELETE FROM ${T.pins} WHERE pageId = ?`, args: [input.id] });
+    await this.#logActivity(
+      tx,
+      action,
+      { scopeId: String(row.scopeId), pageId: input.id, provenance: input.provenance },
+      now,
+    );
+    return toPage((await this.#pageRow(tx, input.id))!);
+  }
+
+  async restoreScope(input: {
+    id: string;
+    declaration: string;
+    provenance: KnowledgeProvenance;
+  }): Promise<KnowledgePage> {
+    return this.#transaction(async tx => {
+      const row = (await this.#query(tx, `SELECT * FROM ${T.pages} WHERE id = ? FOR UPDATE`, [input.id]))[0];
+      if (!row) throw new KnowledgeNotFoundError('page', input.id);
+      if (Number(row.isScope) !== 1) throw new Error(`Knowledge page ${input.id} isn't a scope page`);
+      if (str(row.deletedAt) === undefined) throw new Error(`Knowledge scope ${String(row.address)} is not removed`);
+      if (str(row.declaration) !== input.declaration) throw new KnowledgeConflictError(input.id);
+      const parentId = str(row.parentId);
+      if (parentId !== undefined) {
+        const parent = (await this.#query(tx, `SELECT * FROM ${T.pages} WHERE id = ? FOR SHARE`, [parentId]))[0];
+        if (!parent || str(parent.deletedAt) !== undefined) {
+          throw new Error(`Knowledge scope ${String(row.address)} can't be restored while its parent scope is removed`);
+        }
+      }
+      const now = new Date().toISOString();
+      await tx.execute({
+        sql: `UPDATE ${T.pages} SET deletedAt = NULL, deletedBy = NULL, version = version + 1, updatedBy = ?, updatedAt = ? WHERE id = ?`,
+        args: [JSON.stringify(input.provenance), now, input.id],
+      });
+      await this.#logActivity(
+        tx,
+        'scope-restored',
+        { scopeId: input.id, pageId: input.id, provenance: input.provenance },
+        now,
+      );
+      return toPage((await this.#pageRow(tx, input.id))!);
+    });
+  }
+
   // Notes
 
   async #hydrateNotes(executor: PageExecutor, rows: Row[]): Promise<KnowledgeNote[]> {
@@ -1205,7 +1335,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const readable = pageReadable('p', input.read);
     const rows = await this.#query(
       this.#read,
-      `SELECT p.parentId AS parentId, COUNT(*) AS total FROM ${T.pages} p WHERE p.parentId IN ${JV} AND p.isScope = 1 AND ${readable.sql} GROUP BY p.parentId`,
+      `SELECT p.parentId AS parentId, COUNT(*) AS total FROM ${T.pages} p WHERE p.parentId IN ${JV} AND p.isScope = 1 AND p.deletedAt IS NULL AND ${readable.sql} GROUP BY p.parentId`,
       [jsonList(ids), ...readable.args],
     );
     for (const row of rows) counts[String(row.parentId)] = Number(row.total);
