@@ -70,31 +70,63 @@ export class KnowledgeSemanticIndex {
     private readonly embedderOptions?: MastraEmbeddingOptions,
   ) {}
 
-  async indexPage(page: KnowledgePage): Promise<void> {
-    if (page.isScope || page.deletedAt) return this.removePage(page.id);
+  /**
+   * Returns how many chunks the body made before the {@link KNOWLEDGE_MAX_PAGE_CHUNKS} cap (0 when
+   * removed). `fromChunk` skips chunks an earlier call already stored. When an embed fails after
+   * retrying, the chunks before it are stored anyway and the error carries how many are in
+   * (`knowledgeStoredChunks`), so a caller resuming after a rate limit doesn't embed them again.
+   */
+  async indexPage(page: KnowledgePage, fromChunk = 0): Promise<number> {
+    if (page.isScope || page.deletedAt) {
+      await this.removePage(page.id);
+      return 0;
+    }
     const head = sliceByTokens([page.name, page.description].filter(Boolean).join('\n'), 0, MAX_HEAD_TOKENS);
     const room = Math.max(
       KNOWLEDGE_EMBED_CHUNK_TOKENS - estimateTokenCount(head) - 1,
       KNOWLEDGE_EMBED_CHUNK_TOKENS / 2,
     );
-    const chunks = page.body ? knowledgeBodyChunks(page.body, room).slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS) : [''];
-    const ids = pageChunkIds(page.id, 0, chunks.length);
+    const allChunks = page.body ? knowledgeBodyChunks(page.body, room) : [''];
+    const chunks = allChunks.slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS);
+    const from = Math.min(fromChunk, chunks.length);
     const pMap = (await import('p-map')).default;
     const parallel = 'supportsParallelCalls' in this.embedder ? await this.embedder.supportsParallelCalls : true;
+    // The earliest chunk whose embed failed; chunks not yet started after a failure are skipped.
+    const failed: { at?: number; error?: unknown } = {};
     const embeddings = await pMap(
-      chunks,
-      chunk => this.#retry(() => this.#embed([head, chunk].filter(Boolean).join('\n'))),
+      chunks.slice(from),
+      async (chunk, i) => {
+        if (failed.at !== undefined) return undefined;
+        try {
+          return await this.#retry(() => this.#embed([head, chunk].filter(Boolean).join('\n')));
+        } catch (error) {
+          if (failed.at === undefined || i < failed.at) Object.assign(failed, { at: i, error });
+          return undefined;
+        }
+      },
       { concurrency: parallel ? EMBED_CONCURRENCY : 1 },
     );
-    await this.#retry(() =>
-      this.#store(
-        ids,
-        embeddings,
-        ids.map((_, chunk) => ({ kind: 'page', pageId: page.id, chunk })),
-        // A shorter rewrite leaves the old tail chunks behind; drop them.
-        pageChunkIds(page.id, chunks.length),
-      ),
-    );
+    const done = failed.at === undefined ? embeddings.length : embeddings.findIndex(e => !e);
+    const stored = embeddings.slice(0, done) as number[][];
+    if (stored.length) {
+      const ids = pageChunkIds(page.id, from, from + stored.length);
+      await this.#retry(() =>
+        this.#store(
+          ids,
+          stored,
+          ids.map((_, n) => ({ kind: 'page', pageId: page.id, chunk: from + n })),
+          // A shorter rewrite leaves the old tail chunks behind; drop them once the page is complete.
+          failed.at === undefined ? pageChunkIds(page.id, chunks.length) : [],
+        ),
+      );
+    }
+    if (failed.at !== undefined) {
+      const error = failed.error;
+      if (error && typeof error === 'object')
+        (error as { knowledgeStoredChunks?: number }).knowledgeStoredChunks = from + done;
+      throw error;
+    }
+    return allChunks.length;
   }
 
   /** Drops every chunk of a page from the index. */

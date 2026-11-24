@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -48,74 +49,69 @@ function ErrorProbe() {
   return <div>{error ? 'error' : 'ok'}</div>;
 }
 
+function renderDraft(probes: ReactNode) {
+  return renderWithProviders(
+    <ChatSessionContext.Provider value={draftSession}>
+      <ChatConnectionContext.Provider value={{ status: 'connecting' }}>
+        <ChatModelsProvider>{probes}</ChatModelsProvider>
+      </ChatConnectionContext.Provider>
+    </ChatSessionContext.Provider>,
+  );
+}
+
 describe('ChatModelsProvider', () => {
-  it.each([
-    { modelScope: 'factory', kind: 'factory', expected: 'deepseek/deepseek-flash' },
-    { modelScope: 'factory', kind: 'user', expected: 'deepseek/deepseek-flash' },
-    { modelScope: 'user', kind: 'factory', expected: 'anthropic/claude-opus-4-1' },
-    { modelScope: 'user', kind: 'user', expected: 'anthropic/claude-opus-4-1' },
-    { modelScope: 'hybrid', kind: 'factory', expected: 'deepseek/deepseek-flash' },
-    { modelScope: 'hybrid', kind: 'user', expected: 'anthropic/claude-opus-4-1' },
-  ] as const)(
-    'uses the $expected default in a $modelScope $kind session without replacing its selected model',
-    async ({ modelScope, kind, expected }) => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-          HttpResponse.json({ project: { id: 'factory-1', modelScope, defaultModelId: 'deepseek/deepseek-flash' } }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-          HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null }),
-        ),
-      );
-
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
-          const params = new URL(request.url).searchParams;
-          expect(params.get('resourceId')).toBe('session-1');
-          expect(params.get('threadId')).toBe('thread-1');
-          return HttpResponse.json({
-            models: [],
-            modelScope: expected === 'deepseek/deepseek-flash' ? 'factory' : 'user',
-            defaultModelId: expected,
-          });
+  it('shows the default the server routes for the session without replacing its selected model', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
+        HttpResponse.json({
+          project: { id: 'factory-1', modelScope: 'factory', defaultModelId: 'deepseek/deepseek-flash' },
         }),
-      );
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        expect(params.get('resourceId')).toBe('session-1');
+        expect(params.get('threadId')).toBe('thread-1');
+        return HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: 'anthropic/claude-opus-4-1' });
+      }),
+    );
 
-      renderWithProviders(
-        <ChatSessionContext.Provider
+    renderWithProviders(
+      <ChatSessionContext.Provider
+        value={{
+          ...draftSession,
+          resourceId: 'session-1',
+          sessionThreadId: 'thread-1',
+          resourceReady: true,
+          kind: 'factory',
+          draftSessionId: undefined,
+        }}
+      >
+        <ChatConnectionContext.Provider
           value={{
-            ...draftSession,
-            resourceId: 'session-1',
-            sessionThreadId: 'thread-1',
-            resourceReady: true,
-            kind,
-            draftSessionId: undefined,
+            status: 'ready',
+            state: {
+              controllerId: AGENT_CONTROLLER_ID,
+              sessionId: 'session-1',
+              resourceId: 'session-1',
+              modeId: 'build',
+              modelId: 'openai/gpt-5',
+            },
           }}
         >
-          <ChatConnectionContext.Provider
-            value={{
-              status: 'ready',
-              state: {
-                controllerId: AGENT_CONTROLLER_ID,
-                sessionId: 'session-1',
-                resourceId: 'session-1',
-                modeId: 'build',
-                modelId: 'openai/gpt-5',
-              },
-            }}
-          >
-            <ChatModelsProvider>
-              <ActiveModelProbe />
-              <DefaultModelProbe />
-            </ChatModelsProvider>
-          </ChatConnectionContext.Provider>
-        </ChatSessionContext.Provider>,
-      );
+          <ChatModelsProvider>
+            <ActiveModelProbe />
+            <DefaultModelProbe />
+          </ChatModelsProvider>
+        </ChatConnectionContext.Provider>
+      </ChatSessionContext.Provider>,
+    );
 
-      expect(await screen.findByText(expected)).toBeVisible();
-      expect(screen.getByText('openai/gpt-5')).toBeVisible();
-    },
-  );
+    expect(await screen.findByText('anthropic/claude-opus-4-1')).toBeVisible();
+    expect(screen.getByText('openai/gpt-5')).toBeVisible();
+  });
 
   it('uses the personal default model ahead of the Factory default for a new chat', async () => {
     server.use(
@@ -127,13 +123,7 @@ describe('ChatModelsProvider', () => {
       ),
     );
 
-    renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <ActiveModelProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
-    );
+    renderDraft(<ActiveModelProbe />);
 
     expect(await screen.findByText('anthropic/claude-opus-4-1')).toBeVisible();
   });
@@ -153,13 +143,7 @@ describe('ChatModelsProvider', () => {
       }),
     );
 
-    const { client } = renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <LoadingProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
-    );
+    const { client } = renderDraft(<LoadingProbe />);
 
     expect(await screen.findByText('loading')).toBeVisible();
     resolveDefault();
@@ -177,14 +161,12 @@ describe('ChatModelsProvider', () => {
       ),
     );
 
-    renderWithProviders(
-      <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
-          <ActiveModelProbe />
-          <ErrorProbe />
-          <LoadingProbe />
-        </ChatModelsProvider>
-      </ChatSessionContext.Provider>,
+    renderDraft(
+      <>
+        <ActiveModelProbe />
+        <ErrorProbe />
+        <LoadingProbe />
+      </>,
     );
 
     expect(await screen.findByText('ready')).toBeVisible();

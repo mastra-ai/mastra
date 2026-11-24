@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
-import { createBoardRegistry } from '../boards/registry.js';
+import { boardRegistryOf, createBoardRegistry } from '../boards/registry.js';
 import type { FactoryRuleDecision } from './types.js';
 import {
   assertFactoryConfigVersion,
@@ -29,6 +29,24 @@ describe('Factory rule validation', () => {
       expect(validateFactoryRuleDecision(linked)).toEqual(linked);
     },
   );
+
+  it('keeps a linked-item description and rejects one over the length limit', () => {
+    const linked = {
+      type: 'upsertLinkedWorkItem',
+      idempotencyKey: 'vuln:1',
+      board: 'work',
+      stage: 'intake',
+      source: 'manual',
+      sourceKey: 'vuln:1',
+      title: 'Upgrade lodash',
+      description: '**Severity:** high',
+      url: null,
+    };
+    expect(validateFactoryRuleDecision(linked)).toEqual(linked);
+    expect(() => validateFactoryRuleDecision({ ...linked, description: 'x'.repeat(8001) })).toThrow(
+      FactoryRuleValidationError,
+    );
+  });
 
   it('accepts a saved linked-item decision that still carries a claim key and drops the claim', () => {
     const unclaimed = {
@@ -87,23 +105,20 @@ describe('Factory rule validation', () => {
   );
 
   describe('installed decision targets', () => {
-    const boards = createBoardRegistry({
-      includeDefaultBoards: false,
-      boards: [
-        defineBoard({
-          id: 'release',
-          title: 'Release',
-          initialPhase: 'queued',
-          phases: { queued: { title: 'Queued', kind: 'resting' }, shipped: { title: 'Shipped', kind: 'terminal' } },
-        }),
-        defineBoard({
-          id: 'archive',
-          title: 'Archive',
-          initialPhase: 'waiting',
-          phases: { waiting: { title: 'Waiting', kind: 'resting' } },
-        }),
-      ],
-    });
+    const boards = boardRegistryOf([
+      defineBoard({
+        id: 'release',
+        title: 'Release',
+        initialPhase: 'queued',
+        phases: { queued: { title: 'Queued', kind: 'resting' }, shipped: { title: 'Shipped', kind: 'terminal' } },
+      }),
+      defineBoard({
+        id: 'archive',
+        title: 'Archive',
+        initialPhase: 'waiting',
+        phases: { waiting: { title: 'Waiting', kind: 'resting' } },
+      }),
+    ]);
     const transition: FactoryRuleDecision = {
       type: 'transition',
       idempotencyKey: 'target',
@@ -356,6 +371,34 @@ describe('Factory rule validation', () => {
     }
   });
 
+  it('carries a goal on an invokeSkill decision and refuses a malformed one', () => {
+    const base = {
+      type: 'invokeSkill',
+      idempotencyKey: 'build-goal',
+      role: 'work',
+      skillName: 'factory-build',
+    } as const;
+    expect(validateFactoryRuleDecision({ ...base, goal: { objective: '  Ship the plan.  ', maxRuns: 20 } })).toEqual({
+      ...base,
+      goal: { objective: 'Ship the plan.', maxRuns: 20 },
+    });
+    expect(validateFactoryRuleDecision({ ...base, goal: { objective: 'Ship the plan.' } })).toEqual({
+      ...base,
+      goal: { objective: 'Ship the plan.' },
+    });
+    for (const goal of [
+      'Ship the plan.',
+      { objective: '' },
+      { objective: 'x'.repeat(2001) },
+      { objective: 'Ship.', maxRuns: 0 },
+      { objective: 'Ship.', maxRuns: 51 },
+      { objective: 'Ship.', maxRuns: 1.5 },
+      { objective: 'Ship.', judge: 'model' },
+    ]) {
+      expect(() => validateFactoryRuleDecision({ ...base, goal } as never)).toThrow(/Factory skill goal/);
+    }
+  });
+
   it('accepts and normalizes the optional cancelInFlight flag on invokeSkill decisions', () => {
     expect(
       validateFactoryRuleDecision({
@@ -501,5 +544,22 @@ describe('Factory activity signal validation', () => {
     ['an unknown idle behavior', { ...signal, idleBehavior: 'interrupt' }],
   ])('refuses %s', (_label, decision) => {
     expect(() => validateFactoryRuleDecision(decision)).toThrow(FactoryRuleValidationError);
+  });
+});
+
+describe('routeEvent decisions carrying what changed', () => {
+  const route = (event: unknown) => ({ type: 'routeEvent', idempotencyKey: 'delivery-1:event-route', event });
+
+  it.each([
+    ['changes on an event that is not an update', { type: 'work_item.closed', labels: { added: ['x'], removed: [] } }],
+    ['a change that is not two lists', { type: 'work_item.updated', labels: { added: 'ship' } }],
+    ['a change with an extra field', { type: 'pull_request.updated', labels: { added: [], removed: [], kept: [] } }],
+    ['a blank name', { type: 'work_item.updated', assignees: { added: [' '], removed: [] } }],
+    [
+      'too many names',
+      { type: 'work_item.updated', labels: { added: Array.from({ length: 101 }, (_, i) => `l${i}`), removed: [] } },
+    ],
+  ])('refuses %s', (_name, event) => {
+    expect(() => validateFactoryRuleDecision(route(event))).toThrow(FactoryRuleValidationError);
   });
 });

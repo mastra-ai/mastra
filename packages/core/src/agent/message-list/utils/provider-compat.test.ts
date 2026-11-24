@@ -1,8 +1,15 @@
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../../logger';
+import { StepContentExtractor } from '../conversion/step-content';
 import type { MastraDBMessage } from '../state/types';
-import { dropCrossProviderExecutedParts, pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
+import {
+  dropCrossProviderExecutedParts,
+  ensureAnthropicCompatibleMessages,
+  findToolCallArgs,
+  pairOrphanedToolCalls,
+  sanitizeOrphanedToolPairs,
+} from './provider-compat';
 
 const assistantWithToolCalls = (...callIds: string[]): ModelMessage => ({
   role: 'assistant',
@@ -22,6 +29,90 @@ const toolMessageWithResults = (...callIds: string[]): ModelMessage => ({
     toolName: 'fetch',
     output: { type: 'text', value: `result-${toolCallId}` },
   })),
+});
+
+describe.each([
+  [
+    'Anthropic history',
+    (message: ModelMessage, history: MastraDBMessage[]) =>
+      ensureAnthropicCompatibleMessages([message], history)[0]!.content,
+  ],
+  [
+    'step content',
+    (message: ModelMessage, history: MastraDBMessage[]) =>
+      StepContentExtractor.convertToStepContent(message, history, () => undefined),
+  ],
+] as const)('%s tool inputs', (_name, convert) => {
+  const invocation = (toolCallId: string, args: Record<string, unknown> | undefined) => ({
+    type: 'tool-invocation' as const,
+    toolInvocation: { state: 'call' as const, toolName: 'fetch', toolCallId, args },
+  });
+  const row = (id: string, parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+    id,
+    role: 'assistant',
+    createdAt: new Date(0),
+    content: { format: 2, parts },
+  });
+
+  it('recovers a large tool batch with one history scan', () => {
+    let reads = 0;
+    const ids = Array.from({ length: 100 }, (_, i) => `call-${i}`);
+    const history = ids.map((id, i) => {
+      const parts = [invocation(id, { index: i })];
+      const message = row(id, parts);
+      Object.defineProperty(message.content, 'parts', {
+        get: () => {
+          reads++;
+          return parts;
+        },
+      });
+      return message;
+    });
+    expect(convert(toolMessageWithResults(...ids), history)).toMatchObject(
+      ids.map((_, i) => ({ type: 'tool-result', input: { index: i } })),
+    );
+    expect(reads).toBeLessThanOrEqual(history.length * 3);
+  });
+
+  it('preserves newest-message, first-match and legacy fallback selection without stale reuse', () => {
+    const older = row('older', [
+      invocation('latest', { old: true }),
+      invocation('duplicate', { old: true }),
+      invocation('legacy', { old: true }),
+      invocation('missing-args', { old: true }),
+    ]);
+    const newer = row('newer', [
+      invocation('latest', { latest: true }),
+      invocation('duplicate', undefined),
+      invocation('duplicate', { wrongSecondMatch: true }),
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolName: 'fetch',
+          toolCallId: 'missing-args',
+          args: undefined,
+          result: 'done',
+        },
+      },
+    ]);
+    newer.content.toolInvocations = [
+      { state: 'call', toolName: 'fetch', toolCallId: 'legacy', args: { legacy: true } },
+      { state: 'call', toolName: 'fetch', toolCallId: 'duplicate', args: {} },
+      { state: 'call', toolName: 'fetch', toolCallId: 'duplicate', args: { wrongSecondLegacy: true } },
+    ];
+    const decoy = { ...row('decoy', [invocation('latest', { wrongRole: true })]), role: 'user' as const };
+    const history = [older, newer, decoy];
+    const ids = ['latest', 'duplicate', 'legacy', 'missing-args', 'absent'];
+    const prompt = toolMessageWithResults(...ids);
+    expect(convert(prompt, history)).toMatchObject(ids.map(id => ({ input: findToolCallArgs(history, id) })));
+    const first = newer.content.parts[0]!;
+    if (first.type !== 'tool-invocation') throw new Error('Invalid test fixture');
+    first.toolInvocation.args = { edited: true };
+    expect(convert(prompt, history)).toMatchObject(ids.map(id => ({ input: findToolCallArgs(history, id) })));
+    first.toolInvocation.args.edited = false;
+    expect(convert(prompt, history)).toMatchObject(ids.map(id => ({ input: findToolCallArgs(history, id) })));
+  });
 });
 
 describe('sanitizeOrphanedToolPairs', () => {

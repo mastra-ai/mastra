@@ -4,7 +4,7 @@ const { discoverWorkspacePackages, selectWorkspacePackages } = require('./ci-rou
 const { dependencyAffectedTests } = require('./dependency-test-routing.cjs');
 const { experimentWorkerE2eChanged } = require('./experiment-worker-routing.cjs');
 const { studioE2eChanged } = require('./studio-e2e-routing.cjs');
-const { shardCount } = require('./test-shards.cjs');
+const { loadTiers, selectJobs, selectUnitTests } = require('../../scripts/test-tiers/select.mjs');
 
 // Prebuild's test routing: which tests and suites a diff needs. Run by the
 // "Compute affected test files" step in .github/workflows/prebuild.yml.
@@ -14,12 +14,24 @@ const EXPERIMENT_ENTRY_FILES = ['packages/cli/src/commands/index.ts', 'packages/
 const WORKSPACE_DOCKER_PACKAGES = ['s3', 'gcs', 'azure'];
 const TEST_FILE_RE = /\.(?:test|spec)(?:-d)?\.tsx?$/;
 const FIXTURE_RE = /__fixtures__|\/fixtures\//;
+// Jobs of e2e-tests.yml tiered as a whole (job:e2e/<name>); experiments is tiered on its own.
+const E2E_TIER_JOBS = [
+  'monorepo',
+  'kitchen-sink',
+  'deployers',
+  'create-mastra',
+  'commonjs',
+  'no-bundling',
+  'mcp-compat',
+  'client-js',
+  'type-check',
+];
 
+// Must match the `e2e:<dir>/*` projects in test-suite.yml's e2e-test matrix, or the file runs nowhere.
 const isPackageE2eTest = file =>
-  file.startsWith('packages/') &&
-  (file.includes('.e2e.') ||
-    file.startsWith('packages/evals/src/scorers/llm/') ||
-    file.startsWith('packages/rag/src/'));
+  ((file.startsWith('packages/') || file.startsWith('client-sdks/')) && file.includes('.e2e.')) ||
+  file.startsWith('packages/evals/src/scorers/llm/') ||
+  file.startsWith('packages/rag/src/');
 const isExternalE2eTest = file => file.startsWith('e2e-tests/') || file.startsWith('packages/playground/e2e/');
 const storeOf = file => (file.match(/^stores\/([^/]+)\//) || [])[1];
 
@@ -32,7 +44,8 @@ const storeOf = file => (file.match(/^stores\/([^/]+)\//) || [])[1];
  *   fullSuite: boolean,
  *   workspacePackages: ReturnType<typeof discoverWorkspacePackages>,
  *   experimentEntryDiff?: string,
- *   timings?: Record<string, number>,
+ *   tiers?: { tiers: object | null, problem?: string | null, fullTestsLabel: boolean },
+ *   storeNames?: string[],
  * }} input
  */
 function routeTests({
@@ -41,7 +54,8 @@ function routeTests({
   fullSuite,
   workspacePackages,
   experimentEntryDiff = '',
-  timings = {},
+  tiers = { tiers: null, problem: 'no tiers given', fullTestsLabel: false },
+  storeNames = [],
 }) {
   const codeFiles = changedFiles.filter(file => !file.endsWith('.md'));
   const changed = predicate => codeFiles.some(predicate);
@@ -118,41 +132,60 @@ function routeTests({
       ),
   };
 
-  // Which stores' suites run when stores_changed: those with affected tests or changed files.
-  // Shared store test code, the store workflows, the routing, the lockfile or a workspace
-  // manifest outside stores/ (the import graph doesn't follow dependencies or exports) run all.
-  const allStores =
-    fullSuite ||
-    routingChanged ||
-    lockfileChanged ||
-    changed(
-      file =>
-        file.startsWith('stores/_test-utils/') ||
-        (/(^|\/)package\.json$/.test(file) && !file.startsWith('stores/')) ||
-        file === '.github/workflows/test-combined-stores.yml',
-    );
-  const storeSelection = allStores
-    ? 'all'
-    : [...new Set([...affectedTests, ...codeFiles].map(storeOf))]
-        .filter(store => store && store !== '_test-utils')
-        .sort();
-
+  // Test tiers (scripts/test-tiers/select.mjs): drop `out` files and skip `out` jobs unless
+  // this is a full suite, the PR has the full-tests label, or the PR edits the file or the
+  // job's own paths. Any problem with tiers.json drops nothing.
+  const tierInput = { ...tiers, changedFiles, fullSuite };
   // The full suite runs every test itself, so it carries no selection.
-  const unitTestFiles = fullSuite
-    ? []
-    : affectedTests.filter(file => !isPackageE2eTest(file) && !isExternalE2eTest(file));
+  const unitTiers = selectUnitTests({
+    files: fullSuite ? [] : affectedTests.filter(file => !isPackageE2eTest(file) && !isExternalE2eTest(file)),
+    ...tierInput,
+  });
+  const e2eTiers = selectUnitTests({ files: fullSuite ? [] : affectedTests.filter(isPackageE2eTest), ...tierInput });
+  const unitTestFiles = unitTiers.kept;
+
+  const workspaceDockerPackages = workspaceSelection.packages.filter(pkg => WORKSPACE_DOCKER_PACKAGES.includes(pkg));
+  const jobs = selectJobs({
+    keys: [
+      ...storeNames.map(name => `job:store/${name}`),
+      'job:memory',
+      ...workspaceSelection.packages.map(name => `job:workspace-unit/${name}`),
+      ...workspaceDockerPackages.map(name => `job:workspace-docker/${name}`),
+      ...E2E_TIER_JOBS.map(name => `job:e2e/${name}`),
+      'job:e2e/experiments',
+      'job:mastracode-e2e',
+      'job:mastracode-om',
+    ],
+    ...tierInput,
+  });
+  const runs = key => !jobs.skipped.includes(key);
+  // A gate whose every job is skipped turns off, so its workflow doesn't start at all.
+  const workspaceUnitRun = workspaceSelection.packages.filter(name => runs(`job:workspace-unit/${name}`));
+  const workspaceDockerRun = workspaceDockerPackages.filter(name => runs(`job:workspace-docker/${name}`));
+  flags.stores_changed &&= storeNames.length === 0 || storeNames.some(name => runs(`job:store/${name}`));
+  flags.memory_changed &&= runs('job:memory');
+  // e2e_changed stays as routed: E2E npm import is not tiered, so the workflow always has a job to run.
+  flags.experiment_worker_e2e_changed &&= runs('job:e2e/experiments');
+  flags.mastracode_e2e_changed &&= runs('job:mastracode-e2e') || runs('job:mastracode-om');
+  flags.workspaces_changed = workspaceUnitRun.length + workspaceDockerRun.length > 0;
 
   return {
     runFull: fullSuite,
     unitTestFiles,
-    // As many shards as the recorded durations call for (about 2.5 minutes each, at most 16);
-    // each runs `vitest --shard=k/N`, balanced by the same timings
-    // (scripts/vitest-timing-sequencer.ts). Narrow PRs stay one job.
-    unitShards: Array.from({ length: Math.max(1, shardCount({ files: unitTestFiles, timings })) }, (_, i) => i + 1),
-    e2eTestFiles: fullSuite ? [] : affectedTests.filter(isPackageE2eTest),
-    storeSelection,
+    // Core-touching PRs select 2,000+ unit files, which runs past the job's cap on one
+    // machine. Lists that large run on three; narrow PRs stay one job.
+    unitShards: unitTestFiles.length >= UNIT_SHARD_THRESHOLD ? [1, 2, 3] : [1],
+    e2eTestFiles: e2eTiers.kept,
     workspaceSelection,
-    workspaceDockerPackages: workspaceSelection.packages.filter(pkg => WORKSPACE_DOCKER_PACKAGES.includes(pkg)),
+    workspaceDockerPackages,
+    // What the workspace-tests job runs; workspaceSelection stays whole for the cloud tests.
+    workspaceUnitRun,
+    workspaceDockerRun,
+    tiers: {
+      reason: unitTiers.reason,
+      droppedFiles: [...unitTiers.dropped, ...e2eTiers.dropped],
+      skippedJobs: jobs.skipped,
+    },
     flags,
   };
 }
@@ -173,7 +206,8 @@ function diffLockfiles(git, { baseSha, headSha, changedFiles }) {
 }
 
 function main() {
-  const { BASE_SHA, HEAD_SHA, FULL_SUITE, GITHUB_OUTPUT, GITHUB_STEP_SUMMARY, TEST_TIMINGS } = process.env;
+  const { BASE_SHA, HEAD_SHA, FULL_SUITE, GITHUB_OUTPUT, GITHUB_STEP_SUMMARY, TIERS_PATH, FULL_TESTS_LABEL } =
+    process.env;
   const requestedFullSuite = FULL_SUITE === 'true';
   const git = (...args) => execFileSync('git', args, { encoding: 'utf-8', maxBuffer: 1 << 28 });
   const lines = text => text.split(/\r?\n/).filter(Boolean);
@@ -242,7 +276,14 @@ function main() {
     fullSuite: requestedFullSuite || Boolean(dependencySelection?.runFull),
     workspacePackages: discoverWorkspacePackages(),
     experimentEntryDiff: changedEntryFiles.length ? git('diff', '--unified=0', range, '--', ...changedEntryFiles) : '',
-    timings,
+    tiers: {
+      ...(TIERS_PATH ? loadTiers(TIERS_PATH) : { tiers: null, problem: 'TIERS_PATH not set' }),
+      fullTestsLabel: FULL_TESTS_LABEL === 'true',
+    },
+    storeNames: fs
+      .readdirSync('stores', { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && entry.name !== '_test-utils')
+      .map(entry => entry.name),
   });
 
   const { workspaceSelection } = routing;
@@ -253,9 +294,9 @@ function main() {
     // output only says whether there is one.
     has_unit_tests: routing.unitTestFiles.length > 0,
     unit_shards: JSON.stringify(routing.unitShards),
-    store_selection: routing.storeSelection === 'all' ? 'all' : JSON.stringify(routing.storeSelection),
-    workspace_packages: JSON.stringify(workspaceSelection.packages),
-    workspace_docker_packages: JSON.stringify(routing.workspaceDockerPackages),
+    workspace_packages: JSON.stringify(routing.workspaceUnitRun),
+    workspace_docker_packages: JSON.stringify(routing.workspaceDockerRun),
+    tier_skip_jobs: JSON.stringify(routing.tiers.skippedJobs),
   };
   fs.appendFileSync(
     GITHUB_OUTPUT,
@@ -268,12 +309,23 @@ function main() {
   // Read by test-suite.yml (unit list) and secrets.test-workspaces.yml (the rest).
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(`${outDir}/unit_test_files.txt`, routing.unitTestFiles.map(file => `${file}\n`).join(''));
-  fs.writeFileSync(`${outDir}/workspace_packages.json`, `${outputs.workspace_packages}\n`);
+  // The cloud workspace tests tier their own packages (secrets.test-workspaces.yml).
+  fs.writeFileSync(`${outDir}/workspace_packages.json`, `${JSON.stringify(workspaceSelection.packages)}\n`);
   fs.writeFileSync(`${outDir}/base_sha.txt`, `${BASE_SHA}\n`);
   fs.writeFileSync(`${outDir}/head_sha.txt`, `${HEAD_SHA}\n`);
   // The unit test shards balance their files by the same timings.
   fs.writeFileSync(`${outDir}/test-timings.json`, JSON.stringify(timings));
 
+  const { droppedFiles, skippedJobs, reason } = routing.tiers;
+  console.error(`Tier filter: dropped ${droppedFiles.length} files, skipped ${skippedJobs.length} jobs (${reason})`);
+  summary(
+    `## Test tier filter\n\n- ${reason}\n- Dropped ${droppedFiles.length} test files (add the \`full-tests\` label and re-run to run them)\n` +
+      `- Skipped ${skippedJobs.length} jobs${skippedJobs.length ? `: ${skippedJobs.map(key => `\`${key}\``).join(', ')}` : ''}\n` +
+      (droppedFiles.length
+        ? `\n<details><summary>Dropped files</summary>\n\n${droppedFiles.map(file => `- \`${file}\``).join('\n')}\n\n</details>\n`
+        : '') +
+      '\n',
+  );
   const packages = workspaceSelection.packages.map(pkg => `\`${pkg}\``).join(', ') || 'none';
   summary(`## Workspace test routing\n\n- Reason: \`${workspaceSelection.reason}\`\n- Packages: ${packages}\n`);
   console.error(`Affected: ${affectedTests.length}/${testFiles.length} tests`);

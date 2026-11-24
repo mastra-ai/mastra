@@ -826,6 +826,79 @@ describe('input box mouse mode', () => {
     expect(h.editor.getText()).toBe('hello brave world');
   });
 
+  const copied = (h: ReturnType<typeof createHarness>, text: string) =>
+    h.written.includes(`\x1b]52;c;${Buffer.from(text).toString('base64')}\x07`);
+
+  it('a double click selects and copies the word under the pointer', async () => {
+    const h = await inputHarness('hello brave world');
+    const word = h.find('brave');
+    for (let i = 0; i < 2; i++) {
+      await h.click(word.row, word.col + 2);
+      await h.release(word.row, word.col + 2);
+    }
+    expect(copied(h, 'brave')).toBe(true);
+    h.send('Z');
+    expect(h.editor.getText()).toBe('hello Z world');
+  });
+
+  it('two clicks on different characters are not a double click', async () => {
+    const h = await inputHarness('hello brave world');
+    const word = h.find('brave');
+    await h.click(word.row, word.col);
+    await h.release(word.row, word.col);
+    await h.click(word.row, word.col + 2);
+    await h.release(word.row, word.col + 2);
+    h.send('Z');
+    expect(h.editor.getText()).toBe('hello brZave world');
+  });
+
+  it('a drag followed by a click where it started is not a double click', async () => {
+    const h = await inputHarness('hello brave world');
+    const word = h.find('brave');
+    await h.click(word.row, word.col);
+    await h.drag(word.row, word.col + 2);
+    await h.release(word.row, word.col + 2);
+    await h.click(word.row, word.col);
+    await h.release(word.row, word.col);
+    h.send('Z');
+    expect(h.editor.getText()).toBe('hello Zbrave world');
+  });
+
+  it('a triple click selects the whole line', async () => {
+    const h = await inputHarness('first line\nhello brave world\nlast');
+    const word = h.find('brave');
+    for (let i = 0; i < 3; i++) {
+      await h.click(word.row, word.col);
+      await h.release(word.row, word.col);
+    }
+    expect(copied(h, 'hello brave world')).toBe(true);
+    h.send('\x7f');
+    expect(h.editor.getText()).toBe('first line\n\nlast');
+  });
+
+  it('dragging after a double click grows the selection by whole words, both ways', async () => {
+    const h = await inputHarness('one two three four five');
+    const three = h.find('three');
+    await h.click(three.row, three.col + 1);
+    await h.release(three.row, three.col + 1);
+    await h.click(three.row, three.col + 1);
+    const four = h.find('four');
+    await h.drag(four.row, four.col + 1);
+    await h.release(four.row, four.col + 1);
+    expect(copied(h, 'three four')).toBe(true);
+
+    // A single click elsewhere first, so the next two clicks count as a fresh double click.
+    const one = h.find('one');
+    await h.click(one.row, one.col);
+    await h.release(one.row, one.col);
+    await h.click(three.row, three.col + 1);
+    await h.release(three.row, three.col + 1);
+    await h.click(three.row, three.col + 1);
+    const two = h.find('two');
+    await h.release(two.row, two.col + 1);
+    expect(copied(h, 'two three')).toBe(true);
+  });
+
   it('arrow keys clear the selection without editing', async () => {
     const h = await inputHarness('hello brave world');
     const word = h.find('brave');
@@ -849,6 +922,77 @@ describe('input box mouse mode', () => {
     // The selection is gone: Backspace now deletes one character, not "brave".
     h.send('\x7f');
     expect(h.editor.getText()).toBe('hello brav world');
+  });
+
+  describe('keyboard selection (works with the Mouse setting off)', () => {
+    const SHIFT_LEFT = '\x1b[1;2D';
+    const SHIFT_RIGHT = '\x1b[1;2C';
+    const keyHarness = async (text: string) => {
+      harness = createHarness({ dialogMouseEnabled: false });
+      harness.editor.setText(text);
+      await harness.render();
+      return harness;
+    };
+
+    it('Shift+← selects characters, and Backspace removes them as one undoable edit', async () => {
+      const h = await keyHarness('hello world');
+      for (let i = 0; i < 5; i++) h.send(SHIFT_LEFT);
+      await h.render();
+      expect(h.screen.modes.mouseTrackingMode).toBe('none');
+      h.send('\x7f');
+      expect(h.editor.getText()).toBe('hello ');
+      h.send(UNDO);
+      expect(h.editor.getText()).toBe('hello world');
+    });
+
+    it('Shift+→ back over the start shrinks and then flips the selection', async () => {
+      const h = await keyHarness('abcdef');
+      h.send('\x1b[H');
+      for (let i = 0; i < 3; i++) h.send(RIGHT);
+      for (let i = 0; i < 2; i++) h.send(SHIFT_LEFT);
+      for (let i = 0; i < 3; i++) h.send(SHIFT_RIGHT);
+      h.send('X');
+      expect(h.editor.getText()).toBe('abcXef');
+    });
+
+    it('Shift+Alt+← selects a word, Shift+Home to the line start', async () => {
+      const h = await keyHarness('one two three');
+      h.send('\x1b[1;4D');
+      h.send('X');
+      expect(h.editor.getText()).toBe('one two X');
+      h.send('\x1b[1;2H');
+      h.send('\x7f');
+      expect(h.editor.getText()).toBe('');
+    });
+
+    it('Shift+↑ on the first line selects to its start instead of browsing history', async () => {
+      const h = await keyHarness('first\nsecond');
+      h.send('\x1b[1;2A');
+      h.send('\x1b[1;2A');
+      h.send('\x7f');
+      expect(h.editor.getText()).toBe('');
+    });
+
+    it('a plain arrow drops the selection, so the next Shift+key starts from the cursor', async () => {
+      const h = await keyHarness('abcdef');
+      for (let i = 0; i < 2; i++) h.send(SHIFT_LEFT);
+      h.send('\x1b[D');
+      h.send(SHIFT_LEFT);
+      h.send('X');
+      // ← moved the cursor from d to c as usual; Shift+← then selected just c.
+      expect(h.editor.getText()).toBe('abXdef');
+    });
+
+    it('an empty selection (Shift+← then Shift+→) is forgotten by the next plain key', async () => {
+      const h = await keyHarness('abcdef');
+      h.send(SHIFT_LEFT);
+      h.send(SHIFT_RIGHT);
+      h.send('\x1b[D');
+      h.send(SHIFT_LEFT);
+      h.send('X');
+      // Selects only d (from the cursor), not "de" from where the empty selection began.
+      expect(h.editor.getText()).toBe('abcdXf');
+    });
   });
 
   it('typing and editing keys turn mouse mode on; submit turns it off until the next one', async () => {

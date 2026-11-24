@@ -43,9 +43,6 @@ async function seedLinkedRepository(options?: { pinnedBranch?: string; integrati
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
     ...(options?.pinnedBranch ? { branch: options.pinnedBranch } : {}),
   });
   return { seeded, sourceControl, project, repository, projectRepository };
@@ -217,9 +214,6 @@ describe('ensureFactorySourceSession', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: other.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra-website',
     });
     const first = await ensureFactorySourceSession({
       sourceControl,
@@ -343,9 +337,6 @@ describe('ensureFactorySourceSession', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: other.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/other',
     });
 
     const result = await ensureFactorySourceSession({
@@ -374,9 +365,6 @@ describe('ensureFactorySourceSession', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: other.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/other',
     });
     await sourceControl.projectRepositories.update({
       orgId: 'org-1',
@@ -725,9 +713,6 @@ describe('resolvePrimaryEnvironmentRepository', () => {
       orgId: 'org-1',
       connectionId: projectRepository.connectionId,
       repositoryId: docs.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/docs',
     });
     // The FACT-334 shape: docs-expert first, mastra second.
     await sourceControl.projectRepositories.update({ orgId: 'org-1', id: docsLink.id, input: { position: 1 } });
@@ -833,9 +818,6 @@ describe('resolvePrimaryEnvironmentRepository', () => {
       orgId: 'org-1',
       connectionId: staleConnection.id,
       repositoryId: staleRepository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     // The reinstall: the installation row goes away, the connection stays.
     await sourceControl.installations.delete({ orgId: 'org-1', id: staleInstallation.id });
@@ -864,9 +846,6 @@ describe('resolvePrimaryEnvironmentRepository', () => {
       orgId: 'org-1',
       connectionId: freshConnection.id,
       repositoryId: freshRepository.id,
-      createdByUserId: 'user-2',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     // The same slug linked twice: the dedupe keeps the oldest link in the
     // environment, so the reinstall has to put the fresh link back (the

@@ -1,0 +1,137 @@
+---
+title: Environment variables | Reference
+description: Look up the generated Factory Server's environment variables, defaults, credential scopes, and conditional requirements.
+---
+
+# Environment variables
+
+This reference describes the generated Factory Server. Set local values in its ignored `.env` and deployed values in the environment's secret settings. Restart the server after changes. For provider setup, see [Auth](/configure/auth), [Storage](/configure/storage), and [Sandboxes](/configure/sandboxes). See the [API reference](/reference/mastra-factory-api).
+
+## Server and storage
+
+| Variable | Default or condition | Purpose |
+| - | - | - |
+| `PORT` | The development server normally starts at 4111. | Listening port. Keep the local public URL aligned with it. |
+| `MASTRACODE_PUBLIC_URL` | Defaults to `http://localhost:4111` when unset. | Browser-facing origin used for authentication and integration callbacks. Set explicitly for a different port or deployed server. |
+| `MASTRACODE_ALLOWED_ORIGINS` | Empty | Comma-separated UI origins allowed for credentialed cross-origin requests when the UI uses another origin. |
+| `DATABASE_URL` | Required outside development and tests by the generated entry. | Postgres connection string. The installer provisions this database connection. |
+| `APP_DATABASE_URL` | Deprecated fallback | Use `DATABASE_URL` for new configuration. |
+| `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Dispatcher default when unset or invalid | Positive integer limiting concurrent background dispatches per replica, not across all replicas. |
+
+Without a database URL, the generated entry uses local LibSQL only in development or tests. Configure persistent storage for a deployed server.
+
+## Stored credential encryption
+
+| Variable | Format | Purpose |
+| - | - | - |
+| `FACTORY_CREDENTIAL_ENCRYPTION_KEY` | Base64-encoded 32-byte key | Primary encryption key for persisted provider and integration credentials. Configure before saving credentials. |
+| `FACTORY_CREDENTIAL_ENCRYPTION_KEY_ID` | String, default `v1` | Identifier stored with newly encrypted values. |
+| `FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS` | JSON object of key IDs to Base64 keys | Previous keys retained during rotation. |
+
+Configure encryption before users save credentials, following [Get started](/#configure-credential-encryption). Preserve the same key with the database across restarts and replicas. Restart after configuration and confirm the missing-encryption warning is gone.
+
+The generated entry defaults the key identifier to `v1`. This identifier is metadata, not another encryption key. Missing encryption triggers plaintext compatibility warnings in the current runtime. For a custom server, pass [`secretEncryption`](/reference/mastra-factory-api#constructor-parameters) to `MastraFactory`.
+
+### Rotate encryption keys
+
+Before rotation, take a database backup and preserve the active key. Coordinate the change across every replica sharing that database.
+
+1. Generate a new 32-byte key and give it a new identifier, such as `v2`.
+1. Set the new primary key and identifier on the server.
+1. Set `FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS` to a JSON object mapping the old identifier to the old Base64 key.
+1. Restart every replica with the same primary and previous-key configuration.
+1. Verify existing provider and integration connections, then verify new credentials can be saved and used.
+
+The previous keys allow existing ciphertext to be read while records are re-encrypted with the primary key. Keep them until migration is verified for all credential storage and retained backups have an appropriate recovery plan.
+
+For unreadable credentials, see [Troubleshooting](/troubleshooting#stored-credentials-stop-working).
+
+## Platform authentication and integrations
+
+| Variable | Purpose |
+| - | - |
+| `MASTRA_SHARED_API_URL` | Platform API root. When set, the generated server prioritizes Platform authentication over self-managed providers. |
+| `MASTRA_ORGANIZATION_ID` | Optional organization restriction on the Platform authentication path. |
+| `MASTRA_COOKIE_DOMAIN` | Optional cookie-domain override for Platform authentication. Leave unset unless your deployment layout requires it. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform integration and sandbox credential, checked before the scaffolding secret. |
+| `MASTRA_PLATFORM_SECRET_KEY` | Platform integration and sandbox credential written by scaffolding. Used when the access token is absent. |
+| `MASTRA_PLATFORM_REGION` | `us` or `eu`, which selects the integrations API URL for Platform integrations. Any other value uses the global default. |
+| `MASTRA_INTEGRATIONS_API_URL` | Explicit override for the integrations API URL. Takes precedence over `MASTRA_PLATFORM_REGION`. |
+| `MASTRA_GITLAB_WEBHOOK_SECRET` | Secret used to verify webhooks for the Platform GitLab integration. |
+
+Factory uses Mastra platform authentication by default. To use another provider, pass it to the `auth` constructor option. See [Auth](/configure/auth) for provider configuration.
+
+## Sandbox selection
+
+| Variable | Condition |
+| - | - |
+| `FACTORY_SANDBOX_PROVIDER` | Set to `local` to override Platform and E2B selection. Otherwise, Factory selects a provider from the credentials below. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` | Either credential is required with both IDs below to select Platform. |
+| `MASTRA_PROJECT_ID` | Mastra platform project ID. |
+| `MASTRA_ENVIRONMENT_ID` | Environment ID within that project. |
+| `MASTRA_WORKSPACE_PROXY_URL` | Optional Platform workspace proxy override. Normally use the provider default. |
+| `E2B_API_KEY` | Selects direct E2B when the complete Platform configuration is absent. |
+| `MASTRACODE_LOCAL_SANDBOX_ROOT` | Local fallback root. Defaults to `~/.mastracode/web/sandboxes`. |
+| `FACTORY_BROWSER` | Set to `local` to attach a headless browser to each session in this deployment. When unset, sessions get no browser. |
+
+Read [Sandboxes](/configure/sandboxes) for provider precedence and how to verify a started session. Partial remote configuration can leave the local fallback active.
+
+## Slack
+
+| Variable | Purpose |
+| - | - |
+| `SLACK_APP_SIGNING_SECRET` | Enables Slack in the generated entry and verifies request signatures. Also provides the fallback state-signing secret. |
+| `SLACK_APP_BOT_TOKEN` | Posts replies through the installed app. |
+| `SLACK_APP_CLIENT_ID` | Client ID for linking a user's Slack identity. |
+| `SLACK_APP_CLIENT_SECRET` | Client secret for account linking. |
+| `MASTRACODE_CHANNELS_PUBLIC_URL` | Public HTTPS origin for Slack callbacks and links. Falls back to the public URL when unset. Use a tunnel origin for local Slack testing. |
+
+For setup instructions, see [Slack](/configure/slack).
+
+## Custom integration credentials
+
+Complete explicit integration configurations take precedence over the corresponding automatic Platform integration.
+
+| Integration | Variables | Callback configuration |
+| - | - | - |
+| GitHub App | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG` | Public origin plus `/auth/github/callback` for the App's callback and setup URL. |
+| GitLab access token | `GITLAB_ACCESS_TOKEN`, `GITLAB_ACCESS_TOKEN_TYPE`, `GITLAB_BASE_URL`, `GITLAB_WEBHOOK_SECRET` | Optional project webhook at the public origin plus `/web/gitlab/webhook`. |
+| Linear OAuth app | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Public origin plus `/auth/linear/callback`. |
+| Jira API token | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, optional `JIRA_API_BASE_URL` | None. Basic authentication without a callback. |
+| incident.io API key | `INCIDENT_IO_API_KEY` | None. |
+
+`GITHUB_APP_WEBHOOK_SECRET` is separate from that group. Set it to the App's webhook secret. GitHub signs each delivery with that secret, and Factory rejects a delivery whose signature doesn't match.
+
+The generated entry derives its integration state-signing secret from `GITHUB_APP_WEBHOOK_SECRET`, then `WORKOS_COOKIE_PASSWORD`, then `SLACK_APP_SIGNING_SECRET`. Integrations that require stable state signing reject a temporary per-process signer. Configure a stable secret and preserve it across replicas and restarts. A custom server can pass `stateSecret` directly.
+
+To use your own authentication provider, see [Auth](/configure/auth).
+
+## Health metrics
+
+| Variable | Default | Purpose |
+| - | - | - |
+| `FACTORY_METRICS` | Off | Metric groups to collect: `all`, a comma-separated list of `process`, `postgres`, `redis`, `sandbox`, `session`, and `intake`, or `0` to turn metrics off. Overrides the `metrics` constructor option. |
+| `FACTORY_METRICS_INTERVAL_MS` | 60000 | How often gauges are sampled and aggregated counts and timings are sent, in milliseconds. Minimum 15000. |
+| `FACTORY_METRICS_MAX_PER_MIN` | 500 | Most records each process sends per minute. Records over the cap are dropped and counted in `mastra_factory_metrics_dropped_total`. |
+
+Metric records count toward your observability usage. See [Health metrics](/configure/metrics) for what each group collects.
+
+## Event delivery
+
+| Variable | Default | Purpose |
+| - | - | - |
+| `MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` | Enabled | Platform GitHub event polling. |
+| `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` | 20000 | Positive polling interval in milliseconds. |
+| `MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED` | Enabled | State reconciliation for missed GitHub events. |
+| `MASTRACODE_GITHUB_RECONCILE_ENABLED` | Enabled | Reconciliation for a self-managed GitHub integration. |
+| `MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS` | 3600000 | Self-managed GitHub reconciliation interval in milliseconds, unless overridden by the issue- or PR-specific interval. |
+| `MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS` | Value of the interval above | Self-managed GitHub issue reconciliation interval in milliseconds. |
+| `MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS` | Value of the interval above | Self-managed GitHub pull-request reconciliation interval in milliseconds. |
+| `MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS` | 300000 | How often the GitHub reconciler looks for pull-request cards it hasn't created yet. |
+| `MASTRACODE_GITLAB_RECONCILE_INTERVAL_MS` | 300000 | GitLab issue reconciliation interval in milliseconds. `MASTRACODE_GITLAB_ISSUE_RECONCILE_INTERVAL_MS` is the older name and is used when this one is unset. |
+| `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED` | Enabled | Platform GitLab event polling. |
+| `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | 20000 | Positive polling interval in milliseconds. |
+| `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` | 300000 | Jira reconciliation interval in milliseconds. |
+| `MASTRACODE_INCIDENT_IO_RECONCILE_INTERVAL_MS` | 300000 | incident.io reconciliation interval in milliseconds. |
+
+Organization-wide issue selections and [source routing](/configure/linear#select-projects-or-teams-and-route-issues) remain necessary even when workers are enabled. Use the [generated environment schema](https://github.com/mastra-ai/mastra/blob/main/mastracode/web/.env.schema) for additional server-specific overrides.

@@ -49,9 +49,6 @@ describe('GitLab issue reconciler', () => {
         orgId: project.orgId,
         connectionId: connection.id,
         repositoryId: repository.id,
-        createdByUserId: project.createdBy,
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/workspace',
       });
       await seeded.intake.saveConfig({
         orgId: project.orgId,
@@ -63,7 +60,6 @@ describe('GitLab issue reconciler', () => {
         integrationId: 'gitlab',
         sourceId: SOURCE_ID,
         factoryProjectId: project.id,
-        board: 'work',
       });
       await seeded.workItems.upsert({
         orgId: project.orgId,

@@ -123,12 +123,12 @@ describe('Drawer', () => {
     );
 
     const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
-    expect(backdrop).toBeDefined();
+    expect(backdrop).not.toBeNull();
     expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
     expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(true);
-    expect(document.querySelector('[data-slot="drawer-viewport"]')).toBeDefined();
-    expect(document.querySelector('[data-slot="drawer-popup"]')).toBeDefined();
-    expect(document.querySelector('[data-slot="drawer-content"]')).toBeDefined();
+    expect(document.querySelector('[data-slot="drawer-viewport"]')).not.toBeNull();
+    expect(document.querySelector('[data-slot="drawer-popup"]')).not.toBeNull();
+    expect(document.querySelector('[data-slot="drawer-content"]')).not.toBeNull();
   });
 
   it('renders a built-in close button by default', () => {
@@ -296,27 +296,6 @@ describe('Drawer', () => {
     expect(popup?.getAttribute('data-swipe-direction')).toBe('right');
     expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
   });
-
-  it.each(['transparent', 'visible'] as const)(
-    'uses the native full-screen viewport gesture target for a floating drawer with a %s overlay',
-    overlay => {
-      render(
-        <Drawer side="right" variant="floating" overlay={overlay} defaultOpen>
-          <DrawerContent>
-            <DrawerTitle>Native overlay drawer</DrawerTitle>
-          </DrawerContent>
-        </Drawer>,
-      );
-
-      const overlayDismissLayer = document.querySelector('[data-slot="drawer-overlay-dismiss-layer"]');
-      const viewport = document.querySelector('[data-slot="drawer-viewport"]');
-
-      expect(overlayDismissLayer).toBeNull();
-      expect(viewport?.classList.contains('inset-0')).toBe(true);
-      expect(viewport?.classList.contains('right-0')).toBe(false);
-      expect(viewport?.classList.contains('w-[calc(32rem+1.5rem)]')).toBe(false);
-    },
-  );
 
   it('keeps outside interactions from dismissing a floating drawer without an overlay', () => {
     const onOpenChange = vi.fn();

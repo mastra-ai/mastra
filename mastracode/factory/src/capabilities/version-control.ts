@@ -21,6 +21,11 @@ export interface RepositoryInput {
 }
 
 export type RepositoryAccess = FactoryRepositoryAccess;
+/** One credential for a set of repositories, plus each repository's own access under it. */
+export type RepositoriesAccess = RepositoryAccess & {
+  /** Keyed by repository id: that repository's clone URL with the shared credential. */
+  repositories?: Record<string, RepositoryAccess>;
+};
 export interface RepositoryTarget {
   connection: IntegrationConnection;
   sourceId: string;
@@ -287,7 +292,7 @@ export interface VersionControl {
    * (several installations, more repositories than one token allows); the
    * caller then falls back to `getRepositoryAccess` for the primary.
    */
-  getRepositoriesAccess?(input: { orgId: string; repositoryIds: string[] }): Promise<RepositoryAccess | undefined>;
+  getRepositoriesAccess?(input: { orgId: string; repositoryIds: string[] }): Promise<RepositoriesAccess | undefined>;
   listPullRequests(input: ListPullRequestsInput): Promise<PullRequestPage>;
   getPullRequest(input: PullRequestRef): Promise<PullRequest | null>;
   createPullRequest(input: CreatePullRequestInput): Promise<PullRequest>;

@@ -76,6 +76,7 @@ type ConvertMastraChunkToAISDKOptions<OUTPUT> = {
   normalizeUsage: (usage: any) => any;
   normalizeFinishReason: (reason: MastraFinishReason) => string;
   includeRawFinishReason?: boolean;
+  includeToolTitle?: boolean;
 };
 
 type ToolPayloadTransformTarget = 'display' | 'transcript';
@@ -161,6 +162,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
   normalizeUsage,
   normalizeFinishReason,
   includeRawFinishReason = false,
+  includeToolTitle = false,
 }: ConvertMastraChunkToAISDKOptions<OUTPUT>): OutputChunkType<OUTPUT> {
   const displayInputTransform = getTransformedToolPayload(chunk.metadata, 'display', 'input-available');
   const displayInputDeltaTransform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
@@ -277,6 +279,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
+        ...(includeToolTitle && chunk.payload.title != null ? { title: chunk.payload.title } : {}),
         input: hasTransformedToolPayload(displayInputTransform)
           ? displayInputTransform.transformed
           : chunk.payload.args,
@@ -359,6 +362,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         type: 'tool-input-start',
         id: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
+        ...(includeToolTitle && chunk.payload.title != null ? { title: chunk.payload.title } : {}),
         dynamic: !!chunk.payload.dynamic,
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
@@ -619,6 +623,7 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
     normalizeUsage: normalizeV6Usage,
     normalizeFinishReason: toAISDKFinishReasonV6,
     includeRawFinishReason: true,
+    includeToolTitle: true,
   });
 }
 
@@ -814,10 +819,12 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'tool-input-start': {
       const toolMetadata = (part as { toolMetadata?: Record<string, unknown> }).toolMetadata;
+      const title = (part as { title?: string }).title;
       return {
         type: 'tool-input-start',
         toolCallId: part.id,
         toolName: part.toolName,
+        ...(title != null ? { title } : {}),
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
         ...(toolMetadata != null ? { toolMetadata } : {}),
@@ -835,10 +842,12 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     case 'tool-call': {
       const observability = (part as { observability?: unknown }).observability;
       const toolMetadata = (part as { toolMetadata?: Record<string, unknown> }).toolMetadata;
+      const title = (part as { title?: string }).title;
       return {
         type: 'tool-input-available',
         toolCallId: part.toolCallId,
         toolName: part.toolName,
+        ...(title != null ? { title } : {}),
         input: part.input,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),

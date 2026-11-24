@@ -1,0 +1,77 @@
+---
+title: "Usage, pricing, and limits | Gateway"
+description: "How Gateway bills requests, records usage, applies spend caps and rate limits, and reports errors."
+---
+
+# Usage, pricing, and limits
+
+## Pricing
+
+Gateway uses prepaid credit. Each model's price is published in the [model catalog](https://mastra.ai/ai-gateway/models), and a model is listed in [`/v1/models`](/docs/mastra-platform/gateway/api/models) only when it has a price.
+
+- You pay for the attempt that served you. Failed token-endpoint attempts with a known provider cost are charged at that cost, without markup, even if every attempt fails.
+- Web search calls and generated images are priced separately. Images are charged only when delivered.
+- Requests over a [BYOK connection](/docs/mastra-platform/gateway/keys-and-byok#bring-your-own-key) are billed by your provider, not from Mastra credit.
+
+### Processing fee
+
+Inference usage paid from Mastra credit includes a 3% processing fee to cover card payment costs. As a launch offer, the fee is waived through December 31, 2026.
+
+When credit runs out, requests return `402` with `insufficient_credit`. Add credits or turn on auto top-up in **Billing** at [projects.mastra.ai](https://projects.mastra.ai).
+
+## Spend caps
+
+An organization can set a Gateway spend cap. It's separate from the auto top-up limit: auto top-up controls how much credit is bought, and the spend cap controls how much Gateway may use. When the cap is reached, requests return `402` with `spend_limit_reached`.
+
+## Usage logs
+
+Open **Gateway** > **Query** in [projects.mastra.ai](https://projects.mastra.ai) to see each request with its model, provider, tokens, cost, and every provider attempt. Find a specific request with the `x-request-id` response header.
+
+Gateway logs don't store prompts, completions, images, or audio.
+
+## Rate limits
+
+Each key has these limits:
+
+| Window | Requests |
+| - | - |
+| 1 minute | 2,000 |
+| 10 seconds | 400 |
+
+Organizations can also set an organization-wide per-minute cap. `GET /v1/models` and stored-response reads aren't counted.
+
+A rate-limited request returns `429` with these headers:
+
+| Header | Description |
+| - | - |
+| `retry-after` | Seconds to wait before retrying. |
+| `x-gateway-rate-limit-scope` | `key`, `organization`, or `upstream_provider`. |
+| `x-gateway-rate-limit-dimension` | The limit that was hit: `per_minute`, `burst`, or `global_per_minute`. |
+
+`upstream_provider` means every eligible provider route is rate limiting. See [cooldowns](/docs/mastra-platform/gateway/models-and-routing#failover).
+
+Request bodies can be up to 16 MiB.
+
+## Errors
+
+Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1/messages`](/docs/mastra-platform/gateway/api/messages) uses the Anthropic shape, `{ "type": "error", "error": { "type", "message" } }`, with the code at the end of `message`. Authentication errors (`401`) have `type: "authentication_error"` and no `code`.
+
+| Status | Common codes | Meaning |
+| - | - | - |
+| `400` | `invalid_request_error` (type) | The body isn't valid JSON. |
+| `400` | `unsupported_model_endpoint` | The model isn't available on this endpoint. |
+| `401` | | Missing, invalid, expired, or revoked key. The body has no `code`. |
+| `402` | `insufficient_credit`, `spend_limit_reached` | Out of credit, or a spend cap was reached. |
+| `403` | `no_eligible_route`, `byok_connection_inactive` | Key or policy doesn't allow the request. |
+| `404` | `model_not_found` | Unknown model ID. |
+| `409` | | A request with the same ID is already in progress. |
+| `413` | `request_body_too_large`, `context_too_large` | Body over 16 MiB, or input over the model's context window. |
+| `422` | `unsupported_or_invalid_request`, `output_limit_exceeded` | The body isn't valid for this endpoint, uses an unsupported field, or asks for more output than allowed. |
+| `429` | `rate_limit_exceeded`, `provider_rate_limited` | A Gateway or provider rate limit was hit, or spend capacity is held by in-flight requests. `provider_rate_limited` means every eligible provider route is rate limiting. Retry after `retry-after`. |
+| `502` | | The provider failed after the request may have been sent. |
+| `503` | `exhausted` | No route could serve the request. |
+| `504` | `deadline_exceeded` | The request timed out. |
+
+Some provider failures are passed through without a Gateway code. For example, [`/v1/audio/transcriptions`](/docs/mastra-platform/gateway/api/audio) returns `{ "error": { "message": "HTTP 400", "code": 400 } }` when the provider rejects the file, with a numeric `code` holding the provider's status. Check the HTTP status first, and treat `code` as optional.
+
+Include `x-request-id` when contacting support.

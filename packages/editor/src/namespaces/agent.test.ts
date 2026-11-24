@@ -21,7 +21,7 @@ async function createEditorWithStore(agents?: Record<string, Agent>) {
 
 describe('EditorAgentNamespace.update', () => {
   it('creates a new draft version when SDK updates agent snapshot fields', async () => {
-    const { editor, agentsStore } = await createEditorWithStore();
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
       id: 'sdk-updatable-agent',
@@ -43,9 +43,13 @@ describe('EditorAgentNamespace.update', () => {
 
     const latest = await editor.agent.getById('sdk-updatable-agent', { status: 'draft' });
     expect(await Promise.resolve(latest?.getInstructions())).toBe('TWO');
+    const registered = mastra.getAgent('sdk-updatable-agent');
+    expect(latest).not.toBe(registered);
 
     const versionTwoAgent = await editor.agent.getById('sdk-updatable-agent', { versionNumber: 2 });
     expect(await Promise.resolve(versionTwoAgent?.getInstructions())).toBe('TWO');
+    expect(versionTwoAgent).not.toBe(registered);
+    expect(mastra.getAgent('sdk-updatable-agent')).toBe(registered);
 
     const versions = await agentsStore.listVersions({ agentId: 'sdk-updatable-agent' });
     expect(versions.versions).toHaveLength(2);
@@ -59,7 +63,7 @@ describe('EditorAgentNamespace.update', () => {
   });
 
   it('keeps SDK config updates in draft until they are published', async () => {
-    const { editor, agentsStore } = await createEditorWithStore();
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
       id: 'published-sdk-agent',
@@ -82,6 +86,11 @@ describe('EditorAgentNamespace.update', () => {
     expect(await Promise.resolve(defaultAgent?.getInstructions())).toBe('ONE');
     const draftAgent = await editor.agent.getById('published-sdk-agent', { status: 'draft' });
     expect(await Promise.resolve(draftAgent?.getInstructions())).toBe('TWO');
+    const versionAgent = await editor.agent.getById('published-sdk-agent', { versionId: versionOne!.id });
+    expect(await Promise.resolve(versionAgent?.getInstructions())).toBe('ONE');
+    expect(draftAgent).not.toBe(defaultAgent);
+    expect(versionAgent).not.toBe(defaultAgent);
+    expect(mastra.getAgent('published-sdk-agent')).toBe(defaultAgent);
 
     const versions = await agentsStore.listVersions({ agentId: 'published-sdk-agent' });
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);
@@ -262,40 +271,45 @@ describe('EditorAgentNamespace.update', () => {
   });
 
   it.each([
-    true,
-    false,
-    { maxSteps: 25, cleanupTimeoutMs: 0 },
-    { id: 'old', name: 'Old', shouldPersistSnapshot: true },
-  ])('loads an existing persisted durable config %j without silent execution migration', async durable => {
-    const { editor, mastra, agentsStore } = await createEditorWithStore();
-    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
-    try {
-      await agentsStore.create({
-        agent: {
-          id: 'legacy-durable-agent',
-          name: 'Legacy Durable Agent',
-          instructions: 'ONE',
-          model: { provider: 'openai', name: 'gpt-4' },
-          durable,
-        },
-      });
-      const agent = await editor.agent.getById('legacy-durable-agent', { status: 'draft' });
-      expect(agent).toBe(mastra.getAgentById('legacy-durable-agent'));
-      expect(agent?.hasResumableStreams()).toBe(durable !== false);
-      expect(agent?.durable).toEqual(durable);
-      await expect(agent!.recover('existing-checkpoint')).rejects.toThrow('createDurableAgent');
-      const migrationWarnings = warn.mock.calls.filter(([message]) => message.includes('createDurableAgent'));
-      expect(migrationWarnings).toHaveLength(typeof durable === 'object' ? 1 : 0);
-      if (typeof durable === 'object') {
-        expect(migrationWarnings[0]![0]).toContain('legacy-durable-agent');
-        for (const key of Object.keys(durable).filter(key => key !== 'cleanupTimeoutMs')) {
-          expect(migrationWarnings[0]![0]).toContain(key);
+    { durable: true, ignoredKeys: [] },
+    { durable: false, ignoredKeys: [] },
+    { durable: { maxSteps: 25, cleanupTimeoutMs: 0 }, ignoredKeys: [] },
+    { durable: { id: 'old', name: 'Old', maxSteps: 25, shouldPersistSnapshot: true }, ignoredKeys: ['id', 'name'] },
+  ])(
+    'loads an existing persisted durable config $durable without silent execution migration',
+    async ({ durable, ignoredKeys }) => {
+      const { editor, mastra, agentsStore } = await createEditorWithStore();
+      const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+      try {
+        await agentsStore.create({
+          agent: {
+            id: 'legacy-durable-agent',
+            name: 'Legacy Durable Agent',
+            instructions: 'ONE',
+            model: { provider: 'openai', name: 'gpt-4' },
+            durable,
+          },
+        });
+        const agent = await editor.agent.getById('legacy-durable-agent', { status: 'draft' });
+        expect(agent).toBe(mastra.getAgentById('legacy-durable-agent'));
+        expect(agent?.hasResumableStreams()).toBe(durable !== false);
+        expect(agent?.durable).toEqual(durable);
+        await expect(agent!.recover('existing-checkpoint')).rejects.toThrow('createDurableAgent');
+        const migrationWarnings = warn.mock.calls.filter(([message]) => message.includes('createDurableAgent'));
+        expect(migrationWarnings).toHaveLength(ignoredKeys.length > 0 ? 1 : 0);
+        if (typeof durable === 'object' && ignoredKeys.length > 0) {
+          const message = migrationWarnings[0]?.[0];
+          expect(message).toContain('legacy-durable-agent');
+          for (const key of Object.keys(durable)) {
+            if (ignoredKeys.some(ignoredKey => ignoredKey === key)) expect(message).toContain(key);
+            else expect(message).not.toContain(key);
+          }
         }
+      } finally {
+        warn.mockRestore();
       }
-    } finally {
-      warn.mockRestore();
-    }
-  });
+    },
+  );
 
   it('creates a version when SDK updates durable', async () => {
     const { editor, agentsStore } = await createEditorWithStore();

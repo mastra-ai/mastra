@@ -8,7 +8,9 @@
  * The tool records the `tenant` it observed from `requestContext` into a file under a per-run OUT
  * dir, so the driver process (which can't see the worker's memory) can assert what the resumed tool
  * saw. Observability is configured so the workflow root span gets a real traceId — the test compares
- * the suspend snapshot's traceId with the resumed run's to prove the trace is continuous.
+ * the suspend snapshot's traceId with the resumed run's to prove the trace is continuous. Every
+ * process also appends its span starts and ends to `${outDir}/span-events.jsonl`, so the driver can
+ * check who ended which span.
  *
  * Both the driver and the connect() worker build the SAME agent from this factory, mirroring
  * production where a web replica and a worker pool each construct the agent from the same code but
@@ -27,43 +29,47 @@ import { z } from 'zod';
 
 import { createInngestAgent } from '../../durable-agent';
 import { createInngestDurableAgenticWorkflow } from '../../durable-agent/create-inngest-agentic-workflow';
+import { SpanEventsExporter } from './span-events';
 
-/** First turn calls the approval tool; a later turn answers with text. */
+export const SPAN_EVENTS_FILE = 'span-events.jsonl';
+
+/**
+ * Calls the approval tool until the transcript carries its result, then answers with text, so a
+ * worker restarted mid-run agrees on the turn.
+ */
 function toolCallThenText(): any {
-  let call = 0;
   return {
     specificationVersion: 'v2',
     provider: 'mock',
     modelId: 'mock-model',
     supportedUrls: {},
-    async doStream() {
-      call++;
-      const chunks =
-        call === 1
-          ? [
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
-              {
-                type: 'tool-call',
-                toolCallId: 'call-1',
-                toolName: 'save_note',
-                input: JSON.stringify({ text: 'note' }),
-                providerExecuted: false,
-              },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
-              },
-            ]
-          : [
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model', timestamp: new Date(0) },
-              { type: 'text-start', id: 't1' },
-              { type: 'text-delta', id: 't1', delta: 'Done.' },
-              { type: 'text-end', id: 't1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
-            ];
+    async doStream({ prompt }: { prompt: Array<{ role: string }> }) {
+      const saved = prompt.some(message => message.role === 'tool');
+      const chunks = !saved
+        ? [
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'save_note',
+              input: JSON.stringify({ text: 'note' }),
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+            },
+          ]
+        : [
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model', timestamp: new Date(0) },
+            { type: 'text-start', id: 't1' },
+            { type: 'text-delta', id: 't1', delta: 'Done.' },
+            { type: 'text-end', id: 't1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ];
       return {
         stream: simulateReadableStream({ chunks: chunks as any }),
         rawCall: { rawPrompt: null, rawSettings: {} },
@@ -77,11 +83,14 @@ export function buildResumeContextAgent({
   agentId,
   inngestPort,
   outDir,
+  role,
 }: {
   dbUrl: string;
   agentId: string;
   inngestPort: number;
   outDir: string;
+  /** Which process this is, recorded on every span event it writes. */
+  role: string;
 }) {
   const inngest = new Inngest({ id: 'resume-context-test', baseUrl: `http://localhost:${inngestPort}` });
 
@@ -128,7 +137,12 @@ export function buildResumeContextAgent({
     agents: { [agentId]: durableAgent } as any,
     workflows: { [workflow.id]: workflow } as any,
     observability: new Observability({
-      configs: { default: { serviceName: 'resume-context-test', exporters: [new MastraStorageExporter()] } },
+      configs: {
+        default: {
+          serviceName: 'resume-context-test',
+          exporters: [new MastraStorageExporter(), new SpanEventsExporter(`${outDir}/${SPAN_EVENTS_FILE}`, role)],
+        },
+      },
     }),
   });
 

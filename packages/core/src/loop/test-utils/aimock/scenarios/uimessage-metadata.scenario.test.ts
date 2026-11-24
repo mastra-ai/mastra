@@ -12,12 +12,7 @@
 
 import { expect, it } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 const RESOURCE = 'customer-12345';
 
@@ -45,7 +40,7 @@ describeForAllEngines('AIMock loop scenario: UI messages with metadata', engine 
 
   async function streamText(agent: any, messages: unknown[], options: unknown) {
     const result = await agent.stream(messages, options);
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     const text = await output.text;
     result.cleanup?.();
     return text;

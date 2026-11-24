@@ -6,7 +6,9 @@ import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
-import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
+import * as coreObservability from '@mastra/core/observability';
+import type { EntityType, SpanOutcomeFields, SpanSnapshot, SpanType } from '@mastra/core/observability';
+import * as coreContextStorage from '@mastra/core/observability/context-storage';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -70,6 +72,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
     private parentStream?: { workflowId: string; runId: string },
+    /** Inngest's id for this function run: stable across its replays, new for each resume. */
+    private inngestRunId?: string,
+    /** The run's root span. Step spans start without a live parent, so they take its trace state. */
+    private workflowSpan?: Pick<SpanSnapshot<SpanType>, 'traceState'>,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -98,7 +104,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       serializeStack: true, // Include stack in JSON for better debugging in Inngest
       fallbackMessage: 'Unknown workflow error',
     });
-    return errorInstance.toJSON();
+    const serialized = errorInstance.toJSON();
+    const origin = coreObservability.getSpanErrorOrigin?.(errorSource);
+    if (origin) coreObservability.setSpanErrorOrigin?.(serialized, origin);
+    return serialized;
   }
 
   /**
@@ -142,13 +151,28 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
       try {
-        const result = await retryCountStorage.run(i, () => this.runDurably(stepId, runStep, NonRetriableError));
+        const attemptId = `${params.stepSpan?.id ?? stepId}:attempt:${i}`;
+        const runAttempt = () => this.runDurably(stepId, runStep, NonRetriableError);
+        const result = await retryCountStorage.run(
+          i,
+          () => coreContextStorage.withSpanErrorAttempt?.(attemptId, runAttempt) ?? runAttempt(),
+        );
         return { ok: true, result };
       } catch (e) {
         // Decide from the serialized failure in the cause, not the thrown error: the
         // transport error is always NonRetriableError (a StepError named
         // "NonRetriableError" under a real Inngest server), whatever the step threw.
         const cause = (e as any)?.cause;
+        // This catch runs for both a fresh attempt and its memoized failure. Rebuild
+        // the local count from that same attempt identity, without re-exporting children.
+        const failure = getErrorFromUnknown(cause?.status === 'failed' ? cause.error : e);
+        const transportedOrigin = coreObservability.getSpanErrorOrigin?.(e);
+        if (transportedOrigin) coreObservability.setSpanErrorOrigin?.(failure, transportedOrigin);
+        const attemptId = `${params.stepSpan?.id ?? stepId}:attempt:${i}`;
+        const record = () => params.stepSpan?.recordError?.(failure, { occurrenceId: attemptId });
+        if (coreContextStorage.withSpanErrorAttempt) coreContextStorage.withSpanErrorAttempt(attemptId, record);
+        else record();
+        if (cause?.status === 'failed') cause.error = failure;
         const isNonRetryable = isNonRetryableStepFailure(cause?.status === 'failed' ? cause : e);
 
         if (isNonRetryable || i === params.retries) {
@@ -161,7 +185,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   status: 'failed',
                   error: cause.error,
                 }),
-                error: getErrorFromUnknown(e),
+                error: failure,
                 attributes: { status: 'failed' },
               },
             });
@@ -169,10 +193,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             if (cause.error && !(cause.error instanceof Error)) {
               cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
             }
+            const { __mastraSpanErrorOrigin: _transportOrigin, ...publicFailure } = cause;
             return {
               ok: false,
               error: {
-                ...cause,
+                ...publicFailure,
                 ...(isNonRetryable && { nonRetryable: true as const }),
               },
             };
@@ -266,6 +291,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           cause: {
             status: 'failed',
             error: errorInstance,
+            __mastraSpanErrorOrigin: coreObservability.getSpanErrorOrigin?.(errorInstance),
             endedAt: Date.now(),
             ...(isNonRetryable && { nonRetryable: true as const }),
           },
@@ -294,7 +320,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Provide Inngest step primitive in engine context
    */
   getEngineContext(): Record<string, any> {
-    return { step: this.inngestStep };
+    return { step: this.inngestStep, inngestRunId: this.inngestRunId };
   }
 
   /**
@@ -341,6 +367,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   // =============================================================================
 
   /**
+   * The trace's hidden input/output and request context keys. A live parent hands them down;
+   * spans here start from ids, so they take them from the nearest parent.
+   */
+  private inheritedTraceState(parentSpan: any) {
+    const parent: typeof this.workflowSpan = parentSpan ?? this.workflowSpan;
+    return parent?.traceState;
+  }
+
+  /**
    * Create a step span durably - on first execution, creates and exports span.
    * On replay, returns cached span data without re-creating.
    */
@@ -379,6 +414,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         entityType: options.entityType as EntityType | undefined,
         traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
+        samplingDecision: executionContext.tracingIds?.sampled,
+        traceState: this.inheritedTraceState(parentSpan),
       });
 
       // Return serializable form
@@ -421,15 +458,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
     const { span, operationId, errorOptions } = params;
     if (!span) return;
 
-    await this.wrapDurableOperation(operationId, async () => {
+    const origin = await this.wrapDurableOperation(operationId, async () => {
       span.error(errorOptions);
+      return coreObservability.getSpanErrorOrigin?.(errorOptions.error);
     });
+    // Restore attribution even when the error operation was replayed from its memoized result.
+    if (origin) coreObservability.setSpanErrorOrigin?.(errorOptions.error, origin);
   }
 
   /**
@@ -465,6 +506,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         ...options,
         traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
+        samplingDecision: executionContext.tracingIds?.sampled,
+        traceState: this.inheritedTraceState(parentSpan),
         tracingPolicy: this.options?.tracingPolicy,
       });
 
@@ -508,15 +551,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
     const { span, operationId, errorOptions } = params;
     if (!span) return;
 
-    await this.wrapDurableOperation(operationId, async () => {
+    const origin = await this.wrapDurableOperation(operationId, async () => {
       span.error(errorOptions);
+      return coreObservability.getSpanErrorOrigin?.(errorOptions.error);
     });
+    // Restore attribution even when the error operation was replayed from its memoized result.
+    if (origin) coreObservability.setSpanErrorOrigin?.(errorOptions.error, origin);
   }
 
   /**
@@ -570,11 +617,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       ? this.serializeRequestContext(parentRequestContext)
       : (inputData?.requestContextEntries ?? {});
 
-    // Build trace context to propagate to nested workflow
+    // Build trace context to propagate to nested workflow. Its root span starts in another function
+    // run, so the trace's hidden input/output and request context keys travel with the ids.
+    const { hideInput, hideOutput, requestContextKeys } = this.inheritedTraceState(stepSpan) ?? {};
     const nestedTracingContext = executionContext.tracingIds?.traceId
       ? {
           traceId: executionContext.tracingIds.traceId,
           parentSpanId: stepSpan?.id,
+          hideInput,
+          hideOutput,
+          requestContextKeys,
         }
       : undefined;
 
@@ -586,6 +638,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     // New invocations return compact output; legacy memoized WorkflowResult
     // envelopes are structural supersets of this parent-facing contract.
     let result: NestedWorkflowResult;
+    let nestedErrorOrigin: ReturnType<typeof coreObservability.getSpanErrorOrigin>;
     let runId: string;
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
@@ -660,6 +713,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            parentSampled: executionContext.tracingIds?.sampled,
             actor,
           },
         })) as any;
@@ -693,6 +747,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            parentSampled: executionContext.tracingIds?.sampled,
             actor,
           },
         })) as any;
@@ -719,6 +774,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            parentSampled: executionContext.tracingIds?.sampled,
             actor,
           },
         })) as any;
@@ -733,7 +789,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       // Try to extract runId from error cause or generate new one
       if (errorCause && typeof errorCause === 'object' && 'status' in errorCause && errorCause.status === 'failed') {
-        result = errorCause as Extract<NestedWorkflowResult, { status: 'failed' }>;
+        nestedErrorOrigin = coreObservability.getSpanErrorOrigin?.(errorCause);
+        const { __mastraSpanErrorOrigin: _transportOrigin, ...publicResult } = errorCause as Record<string, unknown>;
+        result = publicResult as Extract<NestedWorkflowResult, { status: 'failed' }>;
         runId =
           'runId' in errorCause && typeof errorCause.runId === 'string'
             ? errorCause.runId
@@ -774,7 +832,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
 
-          return { executionContext, result: { status: 'failed', error: result?.error, endedAt: Date.now() } };
+          return {
+            executionContext,
+            errorOrigin: nestedErrorOrigin,
+            result: { status: 'failed', error: result?.error, endedAt: Date.now() },
+          };
         } else if (result.status === 'suspended') {
           const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
             const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -959,6 +1021,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     );
 
     Object.assign(executionContext, res.executionContext);
+    if (res.result.status === 'failed' && 'error' in res.result) {
+      const failure = getErrorFromUnknown(res.result.error);
+      if ('errorOrigin' in res && res.errorOrigin) coreObservability.setSpanErrorOrigin?.(failure, res.errorOrigin);
+      res.result.error = failure;
+    }
     return {
       ...res.result,
       startedAt,

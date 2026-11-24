@@ -204,6 +204,13 @@ const result = await run.timeTravel({
       },
     ],
   },
+  {
+    name: 'perStep',
+    type: 'boolean',
+    isOptional: true,
+    description:
+      'Run only the target step, then stop with status `paused`. Use it to continue a run started with `perStep: true` one step at a time. See [Run one step at a time](./start#run-one-step-at-a-time).',
+  },
 ]}
 />
 
@@ -350,6 +357,8 @@ Storage adapters that report `supportsConcurrentUpdates()` enforce the claim ato
 - Time travel requires storage to be configured since it relies on persisted workflow snapshots
 - When re-executing a workflow, the workflow loads the existing snapshot from storage (if available)
 - Step results before the target step are reconstructed from the snapshot or provided context
+- When the target is the first step, any `inputData` other than `undefined` replaces the stored workflow input, including `null`, `false`, `0`, and `''`. If you omit `inputData`, the step reuses the stored workflow input, even when that input is `null` or `undefined`
+- For a later target, the step receives the output of the step before it. An output for that step in `context` takes precedence, then a truthy `inputData`, then the stored output. A falsy `inputData` such as `null`, `false`, `0`, or `''` is ignored. If none of these is set, or the stored output is `null` or `undefined`, the step receives `{}` instead, which can fail its input schema. Return an object from the previous step, or pass an object as `inputData` without a `context` output for the previous step
 - Execution begins from the specified step with the provided or reconstructed input data
 - If a step that precedes the target in the current workflow definition has no recorded entry in the snapshot (for example, the step was renamed since the run was recorded, or the run never reached it), `timeTravel` rejects with a descriptive error before anything executes and the stored snapshot is left unchanged
 - The workflow continues to completion from that point forward

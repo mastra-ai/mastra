@@ -40,6 +40,11 @@ function normalizeBasePath(basePath: string): string {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// frame-ancestors is not valid in a meta tag, so the document response sets it here.
+// The Studio shell also ships a matching frame-src meta policy.
+const STUDIO_DOCUMENT_CSP =
+  "frame-src 'self' blob: data: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'";
+
 export async function studio(
   options: StudioOptions = {
     serverHost: 'localhost',
@@ -151,8 +156,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     // Let static assets be served by serve-handler
     const isAssetsPath = /(^|\/)assets\//.test(pathWithoutBase);
     const isDistAssetsPath = /(^|\/)dist\/assets\//.test(pathWithoutBase);
-    const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
-    const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
+    // Studio's favicon (`packages/playground/index.html`)
+    const isFavicon = pathWithoutBase.endsWith('/mastra-dark-tile.svg');
+    const isStaticAsset = isAssetsPath || isDistAssetsPath || isFavicon;
 
     const rawEncoding = req.headers['accept-encoding'] ?? '';
     const encodingValues = Array.isArray(rawEncoding) ? rawEncoding : [rawEncoding];
@@ -171,13 +177,18 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
       if (supportsGzip) {
         res.writeHead(200, {
           'Content-Type': 'text/html',
+          'Content-Security-Policy': STUDIO_DOCUMENT_CSP,
           'Content-Encoding': 'gzip',
           'Content-Length': compressedHtml.length,
           Vary: 'Accept-Encoding',
         });
         return res.end(compressedHtml);
       }
-      res.writeHead(200, { 'Content-Type': 'text/html', Vary: 'Accept-Encoding' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html',
+        'Content-Security-Policy': STUDIO_DOCUMENT_CSP,
+        Vary: 'Accept-Encoding',
+      });
       return res.end(html);
     }
 

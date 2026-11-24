@@ -1,13 +1,73 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildMultiThreadObserverHistoryMessage,
+  buildObserverHistoryMessage,
   buildObserverSystemPrompt,
+  formatMultiThreadMessagesForObserver,
   formatMessagesForObserver,
   optimizeObservationsForContext,
   parseMultiThreadObserverOutput,
   parseObserverOutput,
   sortObservationsByTime,
 } from './observer-agent';
+
+describe('Observer history with incomplete text parts', () => {
+  it.each([undefined, null, 42, { partial: true }])(
+    'ignores non-string text %j without dropping adjacent content',
+    text => {
+      const messages = JSON.parse(
+        JSON.stringify([
+          {
+            id: 'incomplete',
+            role: 'assistant',
+            createdAt: '2026-01-01T12:00:00Z',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Before' },
+                { type: 'text', text },
+                { type: 'text', text: 'After' },
+              ],
+            },
+          },
+        ]),
+      );
+      const control = structuredClone(messages);
+      control[0].content.parts.splice(1, 1);
+
+      for (const maxPartLength of [500, undefined, 0]) {
+        const options = { maxPartLength, timeZone: 'UTC' };
+        expect(formatMessagesForObserver(messages, options)).toBe(formatMessagesForObserver(control, options));
+        expect(buildObserverHistoryMessage(messages, options)).toEqual(buildObserverHistoryMessage(control, options));
+        const byThread = new Map([['t1', messages]]);
+        const controlByThread = new Map([['t1', control]]);
+        expect(formatMultiThreadMessagesForObserver(byThread, ['t1'], options)).toBe(
+          formatMultiThreadMessagesForObserver(controlByThread, ['t1'], options),
+        );
+        expect(buildMultiThreadObserverHistoryMessage(byThread, ['t1'], options)).toEqual(
+          buildMultiThreadObserverHistoryMessage(controlByThread, ['t1'], options),
+        );
+      }
+      expect(messages[0].content.parts).toHaveLength(3);
+    },
+  );
+
+  it('still truncates valid strings at a surrogate-safe boundary', () => {
+    const messages = JSON.parse(
+      JSON.stringify([
+        {
+          id: 'long-text',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Before😀After' }] },
+        },
+      ]),
+    );
+    const formatted = formatMessagesForObserver(messages, { maxPartLength: 7 });
+    expect(formatted).toContain('Before\n... [truncated 7 characters]');
+    expect(formatted).not.toContain('\uFFFD');
+  });
+});
 
 describe('optimizeObservationsForContext', () => {
   it('should strip yellow and green emojis', () => {
@@ -74,17 +134,17 @@ Line 2`;
     expect(optimized).toContain('[Item name](#preview=item&id=abc123)');
   });
 
-  it('should still strip semantic tags that are not markdown links', () => {
+  it('should preserve bracketed labels that are not markdown links', () => {
     const observations = '- 🔴 [tag one, tag two] User prefers direct answers';
     const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('[tag one, tag two]');
+    expect(optimized).toContain('[tag one, tag two]');
     expect(optimized).toContain('User prefers direct answers');
   });
 
-  it('should strip semantic tags while preserving an adjacent markdown link', () => {
+  it('should preserve bracketed labels alongside an adjacent markdown link', () => {
     const observations = '- 🔴 [internal] Agent shared [the guide](https://example.com/guide)';
     const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('[internal]');
+    expect(optimized).toContain('[internal]');
     expect(optimized).toContain('[the guide](https://example.com/guide)');
   });
 

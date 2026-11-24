@@ -305,6 +305,46 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries).toHaveLength(2);
   });
 
+  it('tells a follower how to approve or decline a tool that paused for a yes or no, whatever the tool', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: { status: 'blocked', toolName: 'sign_off', toolCallId: 'call-9', decision: true },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      kind: 'blocked',
+      priority: 'urgent',
+      summary:
+        'The work session for #7 is waiting on sign_off and needs an answer. Approve or decline it with factory_answer_approval (sessionId "session-w", toolCallId "call-9").',
+      // What the chat needs to answer it in place: the session that waits, and the call.
+      attributes: {
+        'parked-tool': 'sign_off',
+        'tool-call-id': 'call-9',
+        'waiting-for': 'approval',
+        'from-session': SENDER.sessionId,
+        'from-thread': SENDER.threadId,
+      },
+    });
+  });
+
+  it('sends a question to the session that asked it, with no approval to answer', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: { status: 'blocked', toolName: 'ask_user', toolCallId: 'call-9' },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      summary: 'The work session for #7 is waiting on ask_user and needs an answer.',
+    });
+    expect(env.deliveries[0]!.notification.attributes).not.toHaveProperty('waiting-for');
+  });
+
   it('names the failure code and the parked tool', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);
@@ -446,6 +486,45 @@ describe('createStageChangeNotifier', () => {
         attributes: { 'work-item': '#7', 'from-stage': 'plan', 'to-stage': 'work' },
       });
     }
+  });
+
+  it('names both boards when the card changed board, even into a same-named phase', async () => {
+    const env = reporting();
+    const notify = createStageChangeNotifier({
+      workItems: {
+        listWorkItemSubscribers: vi.fn(async () => [subscriber('item-7', 'session-1')]),
+        getForProject: vi.fn(
+          async () =>
+            ({
+              id: 'item-7',
+              title: 'Item',
+              workItem: createProviderWorkItemForTests({
+                id: 'item-7',
+                title: 'Item',
+                source: { integrationId: 'github', type: 'issue', externalId: '7' },
+                metadata: { number: 7 },
+              }),
+              metadata: {},
+            }) as never,
+        ),
+      },
+      reporting: async () => env.reporting,
+    });
+    await notify({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      workItemId: 'item-7',
+      fromStage: 'triage',
+      toStage: 'triage',
+      fromBoard: 'work',
+      toBoard: 'preview',
+    });
+
+    expect(env.deliveries).toHaveLength(1);
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      summary: '#7 moved from triage on the work board to triage on the preview board.',
+      attributes: { 'work-item': '#7', 'from-board': 'work', 'to-board': 'preview' },
+    });
   });
 
   it('does nothing for an item nobody follows', async () => {

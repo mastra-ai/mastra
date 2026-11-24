@@ -42,6 +42,8 @@ export interface ChatChannelRenderContext {
   textFormat?: 'markdown' | 'plain';
   /** `'hidden'` keeps reply text out of the channel. Absent means `'show'`. */
   textDisplay?: 'show' | 'hidden';
+  /** Whether the agent gets the `render_card` tool on this adapter. */
+  generativeUI?: boolean;
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };

@@ -44,21 +44,6 @@ describe('IntakeSection jira', () => {
         'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: 'Sync Jira issues' })).not.toBeInTheDocument();
-  });
-
-  it('enables the toggle and persists switching Jira on', async () => {
-    const { saved } = useJiraHandlers();
-
-    renderIntakeSection();
-
-    const toggle = await screen.findByRole('switch', { name: 'Sync Jira issues' });
-    expect(toggle).toBeEnabled();
-    expect(toggle).not.toBeChecked();
-
-    await userEvent.click(toggle);
-
-    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: null } }]));
   });
 
   it('shows a Platform-managed connection even when the status does not expose connection metadata', async () => {
@@ -79,12 +64,9 @@ describe('IntakeSection jira', () => {
     renderIntakeSection();
 
     expect(await screen.findByText('Connected through Mastra Platform')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Sync Jira issues' })).toBeEnabled();
     expect(
       within(screen.getByRole('region', { name: 'Jira' })).getByRole('link', { name: 'Manage Jira connection' }),
     ).toHaveAttribute('href', 'https://projects.mastra.ai');
-    await openSourcePicker('Jira projects');
-    expect(await screen.findByRole('group', { name: 'Jira projects' })).toBeInTheDocument();
   });
 
   it('shows the site and persists an explicit project selection', async () => {
@@ -99,6 +81,21 @@ describe('IntakeSection jira', () => {
     await openSourcePicker('Jira projects');
 
     const projects = await screen.findByRole('group', { name: 'Jira projects' });
+    await userEvent.click(within(projects).getByRole('button', { name: 'Add ENG: Engineering' }));
+
+    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: ['10001'] } }]));
+  });
+
+  it('shows projects saved behind the old sync switch as not selected, since they bring nothing in', async () => {
+    const { saved } = useJiraHandlers({
+      config: { ...baseConfig(), jira: { enabled: false, sourceIds: ['10001', '10002'] } },
+    });
+
+    renderIntakeSection();
+    await openSourcePicker('Jira projects');
+
+    const projects = await screen.findByRole('group', { name: 'Jira projects' });
+    expect(screen.queryByRole('button', { name: 'Remove OPS: Operations' })).not.toBeInTheDocument();
     await userEvent.click(within(projects).getByRole('button', { name: 'Add ENG: Engineering' }));
 
     await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: ['10001'] } }]));
@@ -121,7 +118,7 @@ describe('IntakeSection jira', () => {
 
     release();
 
-    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: true, sourceIds: null } }]));
+    await waitFor(() => expect(saved).toEqual([{ jira: { enabled: false, sourceIds: null } }]));
   });
 
   it('waits for Jira projects before listing saved sources, so rows never show raw project IDs', async () => {
@@ -139,7 +136,7 @@ describe('IntakeSection jira', () => {
     renderIntakeSection();
 
     const section = await screen.findByRole('region', { name: 'Jira' });
-    expect(await within(section).findByText('Loading Jira projects…')).toBeInTheDocument();
+    expect(await within(section).findByRole('status', { name: 'Loading Jira projects' })).toBeInTheDocument();
     expect(within(section).queryByText('10001')).not.toBeInTheDocument();
     expect(within(section).queryByLabelText('Factory to add for 10001')).not.toBeInTheDocument();
 
@@ -152,20 +149,12 @@ describe('IntakeSection jira', () => {
     integrationId: 'jira',
     sourceId: '10001',
     factoryProjectId: FACTORY_A,
-    board: 'work',
     labels: null,
     createdAt: '2026-10-01T00:00:00.000Z',
     ...overrides,
   });
 
-  const pickBoard = async (name: string) => {
-    const trigger = screen.getByLabelText(`Board for ${name}`);
-    await waitFor(() => expect(trigger).toBeEnabled());
-    await userEvent.click(trigger);
-    await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
-  };
-
-  it('routes a selected Jira project to a factory, taking all its issues, once a board is chosen', async () => {
+  it('routes a selected Jira project to a factory, taking all its issues', async () => {
     seedFactories();
     const { savedBindings } = useJiraHandlers({
       config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
@@ -178,8 +167,6 @@ describe('IntakeSection jira', () => {
     await userEvent.click(await screen.findByLabelText('Factory to add for ENG: Engineering'));
     await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
     expect(screen.getByText('Leave labels empty to take all issues.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
-    await pickBoard('ENG: Engineering in Acme Web');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() => expect(savedBindings).toHaveLength(1));
@@ -187,11 +174,9 @@ describe('IntakeSection jira', () => {
       integrationId: 'jira',
       sourceId: '10001',
       factoryProjectId: FACTORY_A,
-      board: 'work',
       labels: null,
     });
     expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent('All issues');
-    expect(screen.queryByText(/Choose a board/)).toBeNull();
   });
 
   it('routes the labelled issues of a project another factory already takes to a second factory', async () => {
@@ -208,7 +193,6 @@ describe('IntakeSection jira', () => {
     expect(
       screen.getByText('Another factory takes all issues, so name the labels this factory should take.'),
     ).toBeInTheDocument();
-    await pickBoard('ENG: Engineering in Acme API');
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
     await userEvent.type(screen.getByLabelText('Labels for Acme API'), 'payments, billing');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -216,7 +200,6 @@ describe('IntakeSection jira', () => {
     await waitFor(() => expect(savedBindings).toHaveLength(1));
     expect(savedBindings[0]).toMatchObject({
       factoryProjectId: FACTORY_B,
-      board: 'work',
       labels: ['payments', 'billing'],
     });
     expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme API')).toHaveTextContent(
@@ -228,35 +211,6 @@ describe('IntakeSection jira', () => {
       screen.getByText('Labelled factories take matching issues first, in the order they were added.'),
     ).toBeInTheDocument();
   });
-
-  it.each([
-    { board: 'work', allIssues: 'All other issues', precedenceExplained: true },
-    { board: null, allIssues: 'All issues', precedenceExplained: false },
-  ])(
-    'calls the all-issues filter "$allIssues" and explains label precedence only once the label factory board is set ($board)',
-    async ({ board, allIssues, precedenceExplained }) => {
-      seedFactories();
-      useJiraHandlers({
-        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
-        bindings: [
-          jiraBinding({}),
-          jiraBinding({
-            factoryProjectId: FACTORY_B,
-            board,
-            labels: ['payments', 'billing'],
-            createdAt: '2026-10-02T00:00:00.000Z',
-          }),
-        ],
-      });
-
-      renderIntakeSection();
-
-      expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent(allIssues);
-      expect(
-        screen.queryByText('Labelled factories take matching issues first, in the order they were added.') !== null,
-      ).toBe(precedenceExplained);
-    },
-  );
 
   it('keeps "Only issues labelled…" honest until a valid first label saves', async () => {
     seedFactories();
@@ -342,7 +296,6 @@ describe('IntakeSection jira', () => {
 
     await userEvent.click(await screen.findByLabelText('Factory to add for ENG: Engineering'));
     await userEvent.click(await screen.findByRole('option', { name: 'Acme API' }));
-    await pickBoard('ENG: Engineering in Acme API');
     const labels = screen.getByLabelText('Labels for Acme API');
     await userEvent.type(labels, 'payments');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));

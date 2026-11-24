@@ -28,7 +28,7 @@ import { ChannelsPG } from './domains/channels';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { FavoritesPG } from './domains/favorites';
-import { getPgKnowledgeIsolationKey, KnowledgePG } from './domains/knowledge';
+import { getPgKnowledgeIsolationKey, KnowledgePG, pgKnowledgeTransactionClient } from './domains/knowledge';
 import { MCPClientsPG } from './domains/mcp-clients';
 import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
@@ -143,6 +143,8 @@ export function exportSchemas(schemaName?: string): string {
   return statements.join('\n');
 }
 // Export domain classes for direct use with MastraStorage composition
+export { pgKnowledgeTransactionClient };
+export type { TxClient as PgKnowledgeTransactionClient } from './client';
 export {
   AgentsPG,
   BackgroundTasksPG,
@@ -236,8 +238,9 @@ export class PostgresStore extends MastraCompositeStore {
 
       // Wrap the writer adapter in a routing client so init() can temporarily
       // pin all DDL traffic to a single PoolClient. See PostgresStore.init().
-      this.#db = new RoutingDbClient(new PoolAdapter(this.#writePool));
-      this.#readDb = this.#readPool === this.#writePool ? this.#db : new PoolAdapter(this.#readPool);
+      const onRollbackError = (error: unknown) => this.logger?.error?.('Transaction rollback failed', { error });
+      this.#db = new RoutingDbClient(new PoolAdapter(this.#writePool, onRollbackError));
+      this.#readDb = this.#readPool === this.#writePool ? this.#db : new PoolAdapter(this.#readPool, onRollbackError);
 
       const domainConfig: PgDomainClientConfig = {
         client: this.#db,
@@ -364,7 +367,9 @@ export class PostgresStore extends MastraCompositeStore {
 
     try {
       pinnedClient = await this.#writePool.connect();
-      pinned = new PinnedClientAdapter(this.#writePool, pinnedClient);
+      pinned = new PinnedClientAdapter(this.#writePool, pinnedClient, error =>
+        this.logger?.error?.('Transaction rollback failed', { error }),
+      );
       this.#db.pin(pinned);
       // Read the schema's catalog once, up front, so the domains below can
       // answer "does this table/column/index already exist?" locally instead of
@@ -419,7 +424,7 @@ export class PostgresStore extends MastraCompositeStore {
       // failed connect() pinnedClient is undefined and pin() never ran.
       if (pinnedClient) {
         this.#db.unpin();
-        pinnedClient.release();
+        pinnedClient.release(pinned?.shouldDestroyClient || undefined);
       }
     }
   }

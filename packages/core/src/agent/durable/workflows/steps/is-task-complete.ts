@@ -8,9 +8,9 @@ import { DurableAgentDefaults, DurableStepIds } from '../../constants';
 import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import type { SerializableDurableOptions } from '../../types';
-import { restoreRequestContext } from '../../utils/resolve-runtime';
+import { restoreCustomContext, restoreRequestContext } from '../../utils/resolve-runtime';
 import { restoreCompletionPolicy } from '../../utils/restore-completion';
-import { readAccumulatedSteps } from '../shared/accumulated-steps';
+import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
@@ -98,7 +98,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         return messageList;
       };
 
-      const lastStep = readAccumulatedSteps(params.state, state).at(-1);
+      const lastStep = (await loadAccumulatedSteps(params, state)).at(-1);
       const outcome = await evaluateTaskCompletion({
         policy,
         // Durable steps replay under at-least-once redelivery: a
@@ -124,7 +124,10 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         agentName: initData.agentName,
         threadId: initData.state?.threadId,
         resourceId: initData.state?.resourceId,
-        customContext: initData.requestContextEntries,
+        customContext: restoreCustomContext(
+          initData.requestContextEntries,
+          registryEntry?.requestContext ?? params.requestContext,
+        ),
         generateId: () => mastra?.generateId?.(),
         emitChunk: chunk => {
           if (!pubsub) return;

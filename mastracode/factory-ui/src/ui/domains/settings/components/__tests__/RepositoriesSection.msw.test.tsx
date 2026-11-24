@@ -15,7 +15,6 @@ const PRIMARY_PROJECT = 'rhys-group1/factory-validation-rhys-20260916/factory-gi
 const primaryRepository = listedRepository('repo-1', PRIMARY_PROJECT, {
   integrationId: 'gitlab',
   branch: 'main',
-  sandboxWorkdir: '~/factory-gitlab-primary',
 });
 
 function repositoryEnvironment() {
@@ -78,8 +77,6 @@ describe('Repositories settings', () => {
               installationStorageId: 'inst-1',
               accountLabel: 'gitlab.com',
               defaultBranch: 'main',
-              sandboxProvider: 'custom',
-              sandboxWorkdir: '~/factory-gitlab-control',
             },
           ],
         });
@@ -128,7 +125,6 @@ describe('Repositories settings', () => {
     const repository = {
       id: 'repo-2',
       branch: 'main',
-      sandboxWorkdir: '~/widget',
       repository: { externalId: '42', slug: 'acme/widget', defaultBranch: 'main' },
     };
     server.use(
@@ -147,8 +143,6 @@ describe('Repositories settings', () => {
               private: true,
               installationId: 1,
               installationStorageId: 'inst-1',
-              sandboxProvider: 'custom',
-              sandboxWorkdir: '~/widget',
             },
           ],
         }),
@@ -164,7 +158,6 @@ describe('Repositories settings', () => {
                     listedRepository('repo-2', 'acme/widget', {
                       externalId: '42',
                       branch: 'main',
-                      sandboxWorkdir: '~/widget',
                     }),
                   ]
                 : [],
@@ -217,6 +210,49 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add repository' })).not.toBeInTheDocument());
     expect(await screen.findByRole('button', { name: 'Remove acme/widget' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
+  });
+
+  it('asks for a search instead of claiming nothing is left when the recent repositories are all added', async () => {
+    const user = userEvent.setup();
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      id: 100 + index,
+      fullName: `acme/recent-${index}`,
+      name: `recent-${index}`,
+      owner: 'acme',
+      defaultBranch: 'main',
+      private: true,
+      installationId: 1,
+      installationStorageId: 'inst-1',
+      sandboxProvider: 'custom',
+      sandboxWorkdir: `~/recent-${index}`,
+    }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, installations: [], reason: 'ready' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: recent })),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'factory-gitlab-primary',
+              repositories: [
+                primaryRepository,
+                ...recent.map(repo => listedRepository(`linked-${repo.id}`, repo.fullName)),
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+
+    expect(await screen.findByText(/most recent repositories are already added/)).toBeInTheDocument();
+    expect(screen.queryByText(/No more repositories available/)).not.toBeInTheDocument();
   });
 
   it('does not mistake an unsettled GitHub search or a failed request for an empty result', async () => {
@@ -370,7 +406,7 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Show settings for acme/other' }));
     await user.click(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` }));
-    expect(await screen.findByText('Removing…')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: `Remove ${PRIMARY_PROJECT}`, busy: true })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Clone acme/other into every session' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Add repository' })).toBeDisabled();
     releaseRemoval();
@@ -475,7 +511,7 @@ describe('Repositories settings', () => {
             {
               id: FACTORY_ID,
               name: 'personal-factory',
-              repositories: [listedRepository('repo-1', 'octo/agent', { branch: 'main', sandboxWorkdir: '~/agent' })],
+              repositories: [listedRepository('repo-1', 'octo/agent', { branch: 'main' })],
             },
           ],
         }),
@@ -510,8 +546,6 @@ describe('Repositories settings', () => {
               private: false,
               installationId: 7,
               installationStorageId: 'inst-7',
-              sandboxProvider: 'none',
-              sandboxWorkdir: '~/hello',
             },
           ],
         });

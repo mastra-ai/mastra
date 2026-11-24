@@ -17,7 +17,8 @@
     "claude-sonnet-4-6",
     "gpt-5.3-codex",
     "gpt-5.4",
-    "gpt-5.4-mini"
+    "gpt-5.4-mini",
+    "gpt-5.5"
   ],
   "structuredOutput": ["gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"],
   "reasoning": {
@@ -31,13 +32,31 @@
         "min": 1024
       }
     ],
+    "claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "claude-haiku-4-5-20251001": [
       {
         "type": "budget_tokens",
         "min": 1024
       }
     ],
-    "claude-fable-5": [
+    "gpt-5.3-codex": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "claude-opus-4-7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -47,12 +66,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gpt-5.4-mini": [
@@ -71,22 +84,10 @@
         "min": 1024
       }
     ],
-    "claude-opus-4-7": [
+    "claude-opus-4-8": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gpt-5.3-codex": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

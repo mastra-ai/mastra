@@ -1,36 +1,50 @@
-import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import type {
+  TracesExplorerCapabilities,
+  TracesExplorerTraces,
+  TracesFilters,
+  TracesMetricsSupport,
+  TracesSelection,
+} from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import type { TraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { memo } from 'react';
-import { useNavigate } from 'react-router';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
-import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
-import { traceScoreLink } from '@/lib/app-routing';
+import { TracesChart } from './traces-chart';
+import { TracesList } from './traces-list';
+import { TracesPanel } from './traces-panel';
+import { TracesToolbar } from './traces-toolbar';
 
-// Memoized so a URL change (trace click, filter edit) re-renders only the explorer parts whose
-// context slice changed, not the whole tree.
-export const TracesPageContent = memo(function TracesPageContent({ isScoped }: { isScoped: boolean }) {
-  const navigate = useNavigate();
+type TracesPageContentProps = {
+  isScoped: boolean;
+  selection: TracesSelection;
+  filters: TracesFilters;
+  capabilities: TracesExplorerCapabilities;
+  columns: TraceColumnPreferences;
+  metricsSupport: TracesMetricsSupport;
+  traces: Pick<TracesExplorerTraces, 'rows' | 'isLoading'>;
+};
 
-  const toolbar = (
-    <ActionRow>
-      <ActionRow.Start>
-        <TracesExplorer.FilterBar />
-      </ActionRow.Start>
-      <ActionRow.End>
-        <TracesExplorer.ColumnsMenu />
-      </ActionRow.End>
-    </ActionRow>
-  );
-  const chart = <TracesExplorer.Histogram />;
+// Memoized so a list refresh (a poll tick) re-renders only the explorer parts whose context slice changed,
+// not the whole tree. Each Studio part below loads its own records once the body shows it.
+export const TracesPageContent = memo(function TracesPageContent({
+  isScoped,
+  selection,
+  filters,
+  capabilities,
+  columns,
+  metricsSupport,
+  traces,
+}: TracesPageContentProps) {
+  const toolbar = <TracesToolbar filters={filters} capabilities={capabilities} />;
+  const chart = <TracesChart filters={filters} capabilities={capabilities} />;
   const content = (
     <>
-      <TracesExplorer.List />
-      <TracesExplorer.Panel
-        headerActionsSlot={({ traceId, spans }) => (
-          <LiveKitRecordingReview key={traceId} traceId={traceId} spans={spans} />
-        )}
-        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
-        renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
+      <TracesList rows={traces.rows} />
+      <TracesPanel
+        selection={selection}
+        traces={traces}
+        capabilities={capabilities}
+        columns={columns}
+        metricsSupport={metricsSupport}
       />
     </>
   );

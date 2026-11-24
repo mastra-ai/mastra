@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-cloud",
-  "version": "1.2.8",
+  "version": "1.2.10-alpha.0",
   "description": "Mastra Cloud authentication with PKCE OAuth",
   "type": "module",
   "main": "dist/index.js",
@@ -44,7 +44,8 @@
     "vitest": "catalog:"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -1,5 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -23,7 +23,6 @@ import {
   workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
-import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
@@ -136,8 +135,7 @@ declare global {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -157,8 +155,7 @@ const RootLayout = () => {
 
 const MinimalRootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -540,11 +537,7 @@ function App() {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
     // The instance probe can also be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <BrandLoader fill="screen" />;
   }
 
   if (!baseUrl) {

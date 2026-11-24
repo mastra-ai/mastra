@@ -75,7 +75,7 @@ export async function resolveSignalContext(
     parentEntityName: parent?.entityName ?? target.parentEntityName ?? null,
     parentEntityVersionId: parent?.entityVersionId ?? target.parentEntityVersionId ?? null,
     ...scope,
-    // Like buildRecordedScoreEventFromTrace/buildRecordedFeedbackEventFromTrace,
+    // Like recorded-span annotations,
     // inherit target-span metadata and let caller metadata override matching keys.
     metadata: { ...target.metadata, ...record.metadata },
   };

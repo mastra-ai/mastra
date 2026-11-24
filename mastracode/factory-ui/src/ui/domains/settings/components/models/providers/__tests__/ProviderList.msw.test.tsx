@@ -5,19 +5,26 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../../e2e/ui/render';
-import type { OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
+import type { CustomProviderInfo, OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
 import { useAvailableModelsQuery } from '../../../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import { ProviderList } from '../ProviderList';
 import {
+  CUSTOM_PROVIDERS_URL,
   PROVIDERS_URL,
+  customProviderUrl,
+  fillCustomEndpoint,
+  findCustomRow,
   keyUrl,
   oauthUrl,
   openAddProvider,
+  openCustomEndpointForm,
   pasteCodeSession,
+  pickCustomRowAction,
   pickRowAction,
   rowFor,
   saveKey,
+  stubCustomProviders,
   stubProviders,
 } from './provider-list-test-utils';
 
@@ -51,6 +58,71 @@ describe('ProviderList', () => {
     expect(await screen.findByText('OpenAI')).toBeInTheDocument();
     expect(within(rowFor('openai')).getByText('Key saved')).toBeInTheDocument();
     expect(screen.queryByText('Anthropic')).not.toBeInTheDocument();
+  });
+
+  it('connects the Mastra Gateway in one click and offers to add credits when the organization has none', async () => {
+    let connected = false;
+    server.use(
+      http.get(PROVIDERS_URL, () =>
+        HttpResponse.json({
+          providers: [
+            connected
+              ? { provider: 'mastra', source: 'stored-user', userCredential: 'api_key', connectWithMastraAccount: true }
+              : { provider: 'mastra', source: 'none', connectWithMastraAccount: true },
+            { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+          ],
+        }),
+      ),
+      http.post(`${PROVIDERS_URL}/mastra/connect`, () => {
+        connected = true;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get(`${PROVIDERS_URL}/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 0,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const drawer = await openAddProvider(user);
+    expect(await within(drawer).findByText('Pay with your organization’s Mastra credits ($0.00 left)')).toBeVisible();
+    await user.click(within(drawer).getByRole('button', { name: 'Connect Mastra Gateway' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add provider' })).not.toBeInTheDocument());
+    expect(await screen.findByText('No gateway credits left')).toBeInTheDocument();
+    expect(within(rowFor('mastra')).getByText('Key saved')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add credits' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai/add-credits/org-1',
+    );
+  });
+
+  it('lets the user remove the Mastra Gateway key Factory created, but not replace it', async () => {
+    stubProviders([
+      { provider: 'mastra', source: 'stored-user', userCredential: 'api_key', connectWithMastraAccount: true },
+    ]);
+    server.use(
+      http.get(`${PROVIDERS_URL}/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 5,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Mastra Gateway actions' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Remove key' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: 'Update key' })).not.toBeInTheDocument();
   });
 
   it('surfaces a provider list error', async () => {
@@ -283,5 +355,196 @@ describe('ProviderList', () => {
 
     await waitFor(() => expect(signedOut).toBe(true));
     await waitFor(() => expect(screen.queryByText('Anthropic')).not.toBeInTheDocument());
+  });
+});
+
+describe('ProviderList custom endpoints', () => {
+  const myLlm: CustomProviderInfo = {
+    id: 'my-llm',
+    name: 'my-llm',
+    url: 'https://api.example.com/v1',
+    hasApiKey: true,
+    models: ['model-a', 'model-b'],
+    scope: 'user',
+  };
+
+  it('lists an endpoint with its URL and model count, with its own actions instead of key actions', async () => {
+    // The provider catalog reports the endpoint too; it must not also be drawn
+    // as a built-in provider whose key can be updated.
+    stubProviders([
+      { provider: 'openai', source: 'stored' },
+      { provider: 'my-llm', source: 'stored', custom: true },
+    ]);
+    stubCustomProviders([myLlm]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const row = await findCustomRow('my-llm');
+    expect(within(row).getByText('https://api.example.com/v1')).toBeInTheDocument();
+    expect(within(row).getByText('2 models')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /actions$/ })).toHaveLength(2);
+
+    await user.click(within(row).getByRole('button', { name: 'my-llm actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Update key' })).not.toBeInTheDocument();
+  });
+
+  it('marks an endpoint this server refuses to call and keeps it editable', async () => {
+    stubProviders([]);
+    stubCustomProviders([
+      {
+        ...myLlm,
+        url: 'http://10.0.0.5/v1',
+        urlProblem: 'Use an HTTPS address: a hosted Factory only calls custom endpoints over HTTPS.',
+      },
+    ]);
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const row = await findCustomRow('my-llm');
+    expect(within(row).getByText('URL not allowed')).toBeInTheDocument();
+    expect(within(row).queryByText('2 models')).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole('button', { name: 'my-llm actions' }));
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  it('adds an endpoint from the Add provider dialog, even when no provider matches the search', async () => {
+    const saved: CustomProviderInfo[] = [];
+    let postBody: unknown;
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: saved })),
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        saved.push(myLlm);
+        return HttpResponse.json({ ok: true, provider: myLlm });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const dialog = await openAddProvider(user);
+    await user.type(within(dialog).getByLabelText('Search providers'), 'no-such-provider');
+    expect(within(dialog).getByText(/No providers match/)).toBeInTheDocument();
+
+    const form = await openCustomEndpointForm(user, dialog);
+    await fillCustomEndpoint(user, form, {
+      name: 'my-llm',
+      url: 'https://api.example.com/v1',
+      models: 'model-a, model-b',
+    });
+    await user.click(within(form).getByRole('button', { name: 'Add' }));
+
+    await waitFor(() =>
+      expect(postBody).toEqual({
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        models: ['model-a', 'model-b'],
+        scope: 'user',
+      }),
+    );
+    expect(await findCustomRow('my-llm')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the form open with the server message when saving fails', async () => {
+    stubProviders([{ provider: 'openai', source: 'none' }]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, () =>
+        HttpResponse.json(
+          { error: 'provider_name_taken', message: '"OpenAI" is already a built-in provider. Choose another name.' },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const form = await openCustomEndpointForm(user, await openAddProvider(user));
+    await fillCustomEndpoint(user, form, { name: 'OpenAI', url: 'https://proxy.example.com/v1', models: 'gpt' });
+    await user.click(within(form).getByRole('button', { name: 'Add' }));
+
+    expect(await within(form).findByText(/already a built-in provider/)).toBeInTheDocument();
+  });
+
+  it('edits an endpoint without sending its key again', async () => {
+    let postBody: unknown;
+    stubProviders([]);
+    stubCustomProviders([myLlm]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, async ({ request }) => {
+        postBody = await request.json();
+        return HttpResponse.json({ ok: true, provider: { ...myLlm, url: 'https://api.example.com/v2' } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+    await user.clear(url);
+    await user.type(url, 'https://api.example.com/v2');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(postBody).toEqual({
+        name: 'my-llm',
+        url: 'https://api.example.com/v2',
+        models: ['model-a', 'model-b'],
+        previousId: 'my-llm',
+        scope: 'user',
+      }),
+    );
+  });
+
+  it('keeps the form open and asks for the key when the server needs it again', async () => {
+    stubProviders([]);
+    stubCustomProviders([myLlm]);
+    server.use(
+      http.post(CUSTOM_PROVIDERS_URL, () =>
+        HttpResponse.json(
+          {
+            error: 'api_key_required',
+            message: 'Enter the API key again: the saved key is only kept while the URL stays on the same host.',
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Edit');
+    const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
+    const url = within(form).getByPlaceholderText('https://api.example.com/v1');
+    await user.clear(url);
+    await user.type(url, 'https://elsewhere.example.com/v1');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    expect(await within(form).findByText(/Enter the API key again/)).toBeInTheDocument();
+  });
+
+  it('removes an endpoint from its row menu', async () => {
+    const saved: CustomProviderInfo[] = [myLlm];
+    let removedWith: string | undefined;
+    stubProviders([]);
+    server.use(
+      http.get(CUSTOM_PROVIDERS_URL, () => HttpResponse.json({ providers: saved })),
+      http.delete(customProviderUrl('my-llm'), ({ request }) => {
+        removedWith = new URL(request.url).search;
+        saved.length = 0;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    await pickCustomRowAction(user, 'my-llm', 'Remove');
+
+    await waitFor(() => expect(removedWith).toBe('?scope=user'));
+    await waitFor(() => expect(screen.queryByText('my-llm')).not.toBeInTheDocument());
   });
 });

@@ -1,18 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useGitLabProjectsQuery } from '../../../../hooks/useGitLabData';
 import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/services/gitlab';
 import type { GitLabStatus } from '../../factory/services/gitlab';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupGitLabProjectsByAccount } from './intakeSourceGroups';
-import { PlatformConnectButton, PlatformConnectionActions } from './PlatformProviderConnections';
+import {
+  AddPlatformAccountButton,
+  PlatformConnectButton,
+  PlatformConnectionActions,
+} from './PlatformProviderConnections';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
-import { IntakeSyncControl } from './common/IntakeSyncControl';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function GitLabIntakeSection({
   config,
@@ -52,30 +55,37 @@ export function GitLabIntakeSection({
       connection={
         platformManaged &&
         (listed ? (
-          <PlatformConnectionActions provider="gitlab" connections={status?.connections ?? []} />
+          <>
+            {status?.mode === 'platform' && (status.connections?.length ?? 0) > 0 && (
+              <>
+                <AddPlatformAccountButton provider="gitlab" />
+                <AddPlatformAccountButton provider="gitlab-self-hosted" buttonLabel="Add self-hosted" />
+              </>
+            )}
+            <PlatformConnectionActions provider="gitlab" connections={status?.connections ?? []} />
+          </>
         ) : (
-          <PlatformConnectButton provider="gitlab" />
+          <>
+            <PlatformConnectButton provider="gitlab" />
+            <PlatformConnectButton provider="gitlab-self-hosted" buttonLabel="Connect self-hosted" />
+          </>
         ))
       }
       description={description}
-      syncControl={
-        <IntakeSyncControl
-          accessibleLabel="Sync GitLab issues"
-          description="Open issues from selected projects feed your board."
-          checked={config.gitlab.enabled}
-          disabled={!configured}
-          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
-        />
-      }
       action={
         statusUnavailable && (
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
             Retry
           </Button>
         )
       }
     >
-      {configured && config.gitlab.enabled && !authError && (
+      {configured && !authError && (
         <RoutedSourcePicker
           integrationId="gitlab"
           routingLabel="GitLab"
@@ -89,9 +99,7 @@ export function GitLabIntakeSection({
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load GitLab projects." : undefined}
           onRetry={() => void projectsQuery.refetch()}
-          onToggleItem={id =>
-            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
-          }
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
         />
       )}
     </IntakeProviderCard>

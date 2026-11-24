@@ -760,4 +760,142 @@ describe('workspace_read_file', () => {
 
     expect(result).toContain('[output truncated');
   });
+
+  describe('media content check', () => {
+    // A download that got a rate-limit page instead of the PDF, saved as `.pdf`. Sent as
+    // application/pdf, the provider answers 400 `invalid_file` and the run ends.
+    const RATE_LIMIT_PAGE =
+      '<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="utf-8"><title>429 Too Many Requests</title></head>\n' +
+      '<body><h1>429 Too Many Requests</h1><p>You have sent too many requests. Please wait a few minutes and try again.</p></body>\n</html>\n';
+    // 1x1 transparent PNG.
+    const PNG_1X1 = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    // 1x1 lossless WebP (RIFF....WEBPVP8L) and 1x1 greyscale JFIF JPEG; both decode with ffprobe.
+    const WEBP_1X1 = Buffer.from('UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==', 'base64');
+    const JPEG_1X1 = Buffer.from(
+      '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
+      'base64',
+    );
+    // A complete one-page PDF 1.4 (catalog, page tree, page, xref, trailer).
+    const MINIMAL_PDF = Buffer.from(
+      [
+        '%PDF-1.4',
+        '%\xe2\xe3\xcf\xd3',
+        '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+        '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+        '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >> endobj',
+        'xref',
+        '0 4',
+        '0000000000 65535 f ',
+        '0000000015 00000 n ',
+        '0000000064 00000 n ',
+        '0000000121 00000 n ',
+        'trailer << /Size 4 /Root 1 0 R >>',
+        'startxref',
+        '192',
+        '%%EOF',
+        '',
+      ].join('\n'),
+      'latin1',
+    );
+
+    async function read(name: string, content: Buffer | string, input: Record<string, unknown> = {}) {
+      await fs.writeFile(path.join(tempDir, name), content);
+      const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+      const tools = await createWorkspaceTools(workspace);
+      return (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+        { path: name, ...input },
+        { workspace },
+      )) as any;
+    }
+
+    it('reads an HTML page named .pdf as text instead of sending it as a PDF', async () => {
+      const result = await read('report.pdf', RATE_LIMIT_PAGE);
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain(`${Buffer.byteLength(RATE_LIMIT_PAGE)} bytes`);
+      expect(result).toContain('the extension says application/pdf, but the content is not a valid file of that type');
+      expect(result).toContain('<h1>429 Too Many Requests</h1>');
+    });
+
+    it('reads a text file that mentions %PDF- as text, since it has no PDF version header', async () => {
+      const result = await read('notes.pdf', 'PDF files start with %PDF- and a version number.\n');
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('showing it as text');
+      expect(result).toContain('PDF files start with %PDF-');
+    });
+
+    it('returns metadata only when binary content follows a first KiB of text', async () => {
+      const content = Buffer.concat([Buffer.from('a'.repeat(1100)), Buffer.from([0x00, 0xff, 0xfe, 0x00])]);
+
+      const result = await read('report.pdf', content);
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('not sent as media');
+      expect(result).not.toContain('a'.repeat(100));
+    });
+
+    it('returns metadata only for binary content named .png that is not a PNG', async () => {
+      const result = await read('broken.png', Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe, 0x00]));
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('broken.png (6 bytes)');
+      expect(result).toContain('not sent as media');
+    });
+
+    it('returns raw bytes for mislabeled binary content when an encoding is given', async () => {
+      const result = await read('broken.png', Buffer.from([0x00, 0x01, 0x02]), { encoding: 'hex' });
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('000102');
+    });
+
+    it('still sends a real PDF as media', async () => {
+      const result = await read('real.pdf', MINIMAL_PDF);
+
+      expect(result).toMatchObject({
+        __workspaceMedia: true,
+        mediaType: 'application/pdf',
+        data: MINIMAL_PDF.toString('base64'),
+      });
+    });
+
+    it('still sends a real PNG as media', async () => {
+      const result = await read('real.png', PNG_1X1);
+
+      expect(result).toMatchObject({
+        __workspaceMedia: true,
+        mediaType: 'image/png',
+        data: PNG_1X1.toString('base64'),
+      });
+    });
+
+    // Screenshots saved as `.png` that are really WebP. Sent as image/png, the provider answers 400
+    // ("specified using the image/png media type, but the image appears to be a image/webp image"),
+    // and the retry carries the same part.
+    it.each([
+      ['a WebP named .png', 'screenshot.png', WEBP_1X1, 'image/webp'],
+      ['a PNG named .jpg', 'photo.jpg', PNG_1X1, 'image/png'],
+      ['a JPEG named .png', 'photo.png', JPEG_1X1, 'image/jpeg'],
+    ])('sends %s under the type its bytes show', async (_label, name, bytes, mediaType) => {
+      const result = await read(name, bytes);
+
+      expect(result).toMatchObject({ __workspaceMedia: true, mediaType, data: bytes.toString('base64') });
+      expect(result.text).toContain(mediaType);
+      // The part the provider receives carries the sniffed type, not the extension's.
+      const tools = await createWorkspaceTools(
+        new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) }),
+      );
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].toModelOutput?.(result)).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: result.text },
+          { type: 'media', data: bytes.toString('base64'), mediaType },
+        ],
+      });
+    });
+  });
 });

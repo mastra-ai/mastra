@@ -142,6 +142,12 @@ export function createControlFlowOutcomeTests({
       if (engine !== 'default') await host.startWorkers();
       const run = await workflow.createRun();
       if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
+      else if (mode === 'condition-error' && engine === 'default' && (kind === 'until' || kind === 'while'))
+        // A throwing loop condition fails the run instead of rejecting run.start().
+        expect(await run.start({ inputData: {} })).toMatchObject({
+          status: 'failed',
+          error: { message: 'Condition failed' },
+        });
       else if (mode === 'condition-error' && engine === 'default' && kind !== 'conditional')
         await expect(run.start({ inputData: {} })).rejects.toThrow('Condition failed');
       else await run.start({ inputData: {} });

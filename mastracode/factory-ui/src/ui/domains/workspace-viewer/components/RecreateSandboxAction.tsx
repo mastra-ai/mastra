@@ -1,14 +1,12 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
 import type { WorkspaceChanges } from '../../../../api/types';
 import { useRecreateSessionSandbox } from '../../workspaces/hooks/useRecreateSessionSandbox';
 import type { RecreateSandboxTarget } from '../../workspaces/hooks/useRecreateSessionSandbox';
-
-export type { RecreateSandboxTarget };
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 interface RecreateSandboxActionProps {
   target: RecreateSandboxTarget;
@@ -39,9 +37,8 @@ export function RecreateSandboxAction({ target, ...changesState }: RecreateSandb
 
   return (
     <>
-      <Button className="w-full justify-start" size="sm" variant="ghost" onClick={() => setDialogOpen(true)}>
-        <RotateCcw />
-        <span>Recreate sandbox</span>
+      <Button size="icon-sm" variant="ghost" tooltip="Recreate sandbox" onClick={() => setDialogOpen(true)}>
+        <IconArrowRotateCounterClockwise />
       </Button>
       <AlertDialog open={open} onOpenChange={setDialogOpen}>
         <AlertDialog.Content>
@@ -62,8 +59,8 @@ export function RecreateSandboxAction({ target, ...changesState }: RecreateSandb
           </AlertDialog.Body>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={recreate.isPending}>Cancel</AlertDialog.Cancel>
-            <Button variant="destructive" size="md" disabled={recreate.isPending} onClick={() => recreate.mutate()}>
-              {recreate.isPending ? 'Recreating…' : 'Recreate'}
+            <Button variant="destructive" size="md" onClick={() => recreate.mutate()} loading={recreate.isPending}>
+              Recreate
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

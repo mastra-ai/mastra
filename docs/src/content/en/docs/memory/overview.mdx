@@ -192,6 +192,8 @@ import { Memory } from '@mastra/memory'
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   memory: new Memory({
     options: {
       // highlight-next-line
@@ -200,6 +202,8 @@ export const memoryAgent = new Agent({
   }),
 })
 ```
+
+Observational Memory needs a storage adapter that supports it, and with any other adapter it turns off without a warning and stored history doesn't load.
 
 See [Observational Memory](../memory/observational-memory) for details on how observations and reflections work, and [the reference](/reference/memory/observational-memory) for all configuration options.
 

@@ -27,7 +27,7 @@ vi.hoisted(() => {
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
-import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
+import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -37,6 +37,12 @@ import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
 import { verifyRunLease } from '../run-lease-fence';
 import { isRetakeLeaseOwner } from '../thread-stream-runtime';
+
+// 'sends no retry when the lease is lost while a failed request waits to be retried'
+// takes the lease during the retry backoff, so it needs the real backoff rather
+// than the instant one from @internal/test-utils/setup.
+vi.unmock('../../utils/retry-after');
+vi.mock('../../../node_modules/p-retry', importOriginal => importOriginal());
 
 const THREAD = 'lease-loss-thread';
 const RESOURCE = 'lease-loss-user';
@@ -132,7 +138,7 @@ class NoLeasePubSub extends EventEmitterPubSub {
   }
 }
 
-describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
+function threadLeaseLoss(engine: EngineVariant) {
   let llm: LLMock;
 
   beforeAll(async () => {
@@ -167,14 +173,20 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: agent as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: agent as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: agent as any });
     return mastra.getAgent('agent') as any;
   }
 
   async function startStream(agent: any, prompt: string, options: Record<string, any>) {
     const result = await agent.stream(prompt, options);
-    if (!isDurableEngineVariant(engine)) return { output: result, drain: () => result.consumeStream() };
+    if (!('output' in result)) return { output: result, drain: () => result.consumeStream() };
     return {
       output: result.output,
       drain: async () => {
@@ -454,7 +466,13 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: built as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: built as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: built as any });
 
     try {
@@ -525,7 +543,13 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: built as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: built as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: built as any });
 
     try {
@@ -3168,4 +3192,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(modelCalls()).toBe(callsAtAbort);
     expect(shared.owner(key)).toBe('successor-run');
   }, 20_000);
-});
+}
+
+// 'fs' only changes how the agent is assembled and then runs on the normal engine (see EngineVariant),
+// so here it would repeat every 'normal' lease run; the other scenario files cover fs assembly.
+describeForAllEngines('thread lease loss', threadLeaseLoss, { skip: ['fs'] });

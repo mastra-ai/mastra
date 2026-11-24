@@ -31,10 +31,38 @@ export const CARD_RULE_FIELDS = [
   'item.labels',
   'item.title',
   'item.author',
-  'author.trusted',
+  'item.key',
+  'item.state',
+  'item.assignees',
+  'item.trusted',
+  'pullRequest.trusted',
   'source.kind',
   'source.integration',
+  'source.provider',
+  'source.repository',
+  'item.pullRequest',
+  'item.hasPullRequest',
+  'item.hasIssue',
 ] as const;
+
+/**
+ * Fields renamed since conditions were first saved, by their old name. A stored condition naming
+ * one reads, and is tested, as the new field: `author.trusted` became `item.trusted`.
+ */
+const RENAMED_FIELDS: Readonly<Record<string, string>> = { 'author.trusted': 'item.trusted' };
+
+const currentField = (field: string) => RENAMED_FIELDS[field] ?? field;
+
+/** A stored group as it reads today: conditions saved under a renamed field name the new one. */
+export function currentRuleGroup<T extends RuleGroup | null | undefined>(group: T): T {
+  if (!group) return group;
+  return {
+    ...group,
+    conditions: group.conditions.map(member =>
+      'conditions' in member ? currentRuleGroup(member) : { ...member, field: currentField(member.field) },
+    ),
+  } as T;
+}
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;
 
@@ -65,7 +93,11 @@ const ORDERED: ReadonlySet<RuleOperator> = new Set([
 
 function conditionSchema(fields: readonly [string, ...string[]]) {
   return z
-    .object({ field: z.enum(fields), operator: z.enum(RULE_OPERATORS), value: valueSchema.optional() })
+    .object({
+      field: z.preprocess(field => (typeof field === 'string' ? currentField(field) : field), z.enum(fields)),
+      operator: z.enum(RULE_OPERATORS),
+      value: valueSchema.optional(),
+    })
     .strict()
     .superRefine((condition, ctx) => {
       if (VALUELESS.has(condition.operator)) {
@@ -130,15 +162,20 @@ function compare(actual: unknown, expected: unknown, test: (left: number, right:
   return typeof actual === 'number' && typeof expected === 'number' && test(actual, expected);
 }
 
+/** Whether `actual` is `expected`; a list fact (labels, assignees) is when one of its members is. */
+const matches = (actual: unknown, expected: unknown) =>
+  Array.isArray(actual) ? actual.some(entry => same(entry, expected)) : same(actual, expected);
+
 /**
  * Evaluate one condition. Strings compare case-insensitively (labels and
  * repository slugs are case-insensitive on every provider Factory reads). A
+ * list fact is tested by its members, and an empty list counts as missing. A
  * missing fact fails every operator except `not_exists`, `not_equals`,
  * `not_contains` and `not_in`.
  */
 function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean {
-  const actual = facts[condition.field];
-  const present = actual !== undefined && actual !== null;
+  const actual = facts[currentField(condition.field)];
+  const present = actual !== undefined && actual !== null && !(Array.isArray(actual) && actual.length === 0);
   const expected = condition.value;
   switch (condition.operator) {
     case 'exists':
@@ -146,17 +183,17 @@ function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean 
     case 'not_exists':
       return !present;
     case 'equals':
-      return present && same(actual, expected);
+      return present && matches(actual, expected);
     case 'not_equals':
-      return !present || !same(actual, expected);
+      return !present || !matches(actual, expected);
     case 'contains':
       return present && contains(actual, expected);
     case 'not_contains':
       return !present || !contains(actual, expected);
     case 'in':
-      return present && Array.isArray(expected) && expected.some(candidate => same(actual, candidate));
+      return present && Array.isArray(expected) && expected.some(candidate => matches(actual, candidate));
     case 'not_in':
-      return !present || !Array.isArray(expected) || !expected.some(candidate => same(actual, candidate));
+      return !present || !Array.isArray(expected) || !expected.some(candidate => matches(actual, candidate));
     case 'greater_than':
       return compare(actual, expected, (left, right) => left > right);
     case 'less_than':
@@ -168,11 +205,36 @@ function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean 
   }
 }
 
+/** A condition a rule group failed on, with the fact it read (`null` when the item has none). */
+export interface FailedRuleCondition extends RuleCondition {
+  actual: unknown;
+}
+
+export interface RuleGroupExplanation {
+  matched: boolean;
+  /** The conditions that made the group fail: every failing one of an AND, every branch of an OR. Empty on a match. */
+  failed: FailedRuleCondition[];
+}
+
+/**
+ * Whether `facts` satisfy `group`, and the conditions it failed on when they don't.
+ * {@link evaluateRuleGroup} is this without the reasons, so anything that explains a rule
+ * decides exactly as the rule does.
+ */
+export function explainRuleGroup(group: RuleGroup | null | undefined, facts: RuleFacts): RuleGroupExplanation {
+  if (!group) return { matched: true, failed: [] };
+  const results = group.conditions.map(member =>
+    isGroup(member)
+      ? explainRuleGroup(member, facts)
+      : evaluateCondition(member, facts)
+        ? { matched: true, failed: [] }
+        : { matched: false, failed: [{ ...member, actual: facts[currentField(member.field)] ?? null }] },
+  );
+  const matched = group.operator === 'AND' ? results.every(r => r.matched) : results.some(r => r.matched);
+  return { matched, failed: matched ? [] : results.flatMap(r => r.failed) };
+}
+
 /** True when `facts` satisfy `group`. A `null`/absent group matches everything (an unconditional phase). */
 export function evaluateRuleGroup(group: RuleGroup | null | undefined, facts: RuleFacts): boolean {
-  if (!group) return true;
-  const results = group.conditions.map(member =>
-    isGroup(member) ? evaluateRuleGroup(member, facts) : evaluateCondition(member, facts),
-  );
-  return group.operator === 'AND' ? results.every(Boolean) : results.some(Boolean);
+  return explainRuleGroup(group, facts).matched;
 }

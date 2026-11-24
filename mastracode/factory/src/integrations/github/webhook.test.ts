@@ -72,7 +72,6 @@ function subscription(
     sessionId: `session-${id}`,
     resourceId: 'resource-1',
     threadId,
-    sessionScope: null,
     status: 'open',
     data: {
       installationExternalId: '7',
@@ -435,7 +434,7 @@ describe('dispatchGithubWebhook', () => {
     const resumedB = { thread: { getId: () => 'thread-b', switch: switchB }, sendNotificationSignal: sendB };
     const getSession = vi.fn(async (sessionId: string) => (sessionId === 'session-a' ? liveA : undefined));
     const createSession = vi.fn(async (_input: { requestContext: RequestContext }) => resumedB);
-    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' }));
+    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1', projectRepositoryId: 'project-repository-1' }));
     const rows = [subscription('a'), subscription('b')];
 
     const result = await dispatchGithubWebhook(
@@ -446,7 +445,7 @@ describe('dispatchGithubWebhook', () => {
       }),
       {
         controller: controllerStub({ getSession, createSession }),
-        github: githubWithSessionRow({ userId: 'user-1', orgId: 'org-1' }, getBySessionId),
+        github: githubWithSessionRow({ userId: 'user-1', orgId: 'org-1', projectRepositoryId: 'project-repository-1' }, getBySessionId),
         listSubscriptions: async () => rows,
         isAuthorizedSender: async () => true,
       },

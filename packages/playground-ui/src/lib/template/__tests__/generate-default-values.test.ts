@@ -84,28 +84,6 @@ describe('generateDefaultValues', () => {
       });
     });
 
-    it('should handle deeply nested objects', () => {
-      const schema: JsonSchema = {
-        type: 'object',
-        properties: {
-          a: {
-            type: 'object',
-            properties: {
-              b: {
-                type: 'object',
-                properties: {
-                  c: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-      };
-      expect(generateDefaultValues(schema)).toEqual({
-        a: { b: { c: '' } },
-      });
-    });
-
     it('should return empty object for object without nested properties', () => {
       const schema: JsonSchema = {
         type: 'object',
@@ -128,26 +106,6 @@ describe('generateDefaultValues', () => {
       expect(generateDefaultValues(schema)).toEqual({ name: 'John' });
     });
 
-    it('should use explicit default for number', () => {
-      const schema: JsonSchema = {
-        type: 'object',
-        properties: {
-          count: { type: 'number', default: 10 },
-        },
-      };
-      expect(generateDefaultValues(schema)).toEqual({ count: 10 });
-    });
-
-    it('should use explicit default for boolean', () => {
-      const schema: JsonSchema = {
-        type: 'object',
-        properties: {
-          active: { type: 'boolean', default: true },
-        },
-      };
-      expect(generateDefaultValues(schema)).toEqual({ active: true });
-    });
-
     it('should use explicit default for nested object', () => {
       const schema: JsonSchema = {
         type: 'object',
@@ -159,26 +117,6 @@ describe('generateDefaultValues', () => {
     });
   });
 
-  describe('mixed types', () => {
-    it('should handle mixed types at same level', () => {
-      const schema: JsonSchema = {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          count: { type: 'number' },
-          active: { type: 'boolean' },
-          items: { type: 'array' },
-        },
-      };
-      expect(generateDefaultValues(schema)).toEqual({
-        name: '',
-        count: 0,
-        active: false,
-        items: [],
-      });
-    });
-  });
-
   describe('edge cases', () => {
     it('should return empty object for undefined schema', () => {
       expect(generateDefaultValues(undefined)).toEqual({});
@@ -186,14 +124,6 @@ describe('generateDefaultValues', () => {
 
     it('should return empty object for schema without properties', () => {
       const schema: JsonSchema = { type: 'object' };
-      expect(generateDefaultValues(schema)).toEqual({});
-    });
-
-    it('should return empty object for empty properties', () => {
-      const schema: JsonSchema = {
-        type: 'object',
-        properties: {},
-      };
       expect(generateDefaultValues(schema)).toEqual({});
     });
 

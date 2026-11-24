@@ -4,8 +4,10 @@ import { z } from 'zod';
 
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { createDurableAgent, createEventedAgent } from '../durable';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { waitForCondition } from './signals-test-utils';
 
@@ -28,7 +30,7 @@ function scriptedStream(parts: any[]) {
  * An agent whose first step calls a tool and whose second step blocks until released, so a test can send a
  * signal while the turn is still running. Records every prompt the model receives.
  */
-function createBusyAgent() {
+function createBusyAgent(engine: 'regular' | 'durable' | 'evented') {
   const prompts: string[] = [];
   let releaseSecondStep!: () => void;
   const secondStepGate = new Promise<void>(resolve => (releaseSecondStep = resolve));
@@ -75,17 +77,19 @@ function createBusyAgent() {
     inputSchema: z.object({}),
     execute: async () => ({ done: true }),
   });
-  const agent = new Agent({
+  const storage = new InMemoryStore();
+  const base = new Agent({
     id: 'busy-thread-agent',
     name: 'Busy Thread Agent',
     instructions: 'Test',
     model,
-    memory: new MockMemory(),
+    memory: new MockMemory({ storage }),
     tools: { work },
   });
-  new Mastra({ agents: { busyThreadAgent: agent }, logger: false });
+  const wrap = { regular: () => base, durable: createDurableAgent, evented: createEventedAgent }[engine];
+  const mastra = new Mastra({ agents: { busyThreadAgent: wrap({ agent: base }) as any }, storage, logger: false });
 
-  return { agent, prompts, releaseSecondStep };
+  return { agent: mastra.getAgent('busyThreadAgent') as any, prompts, releaseSecondStep };
 }
 
 describe('Agent signals: a signal sent to a thread whose turn is running', () => {
@@ -93,17 +97,25 @@ describe('Agent signals: a signal sent to a thread whose turn is running', () =>
     agentThreadStreamRuntime.resetForTests();
   });
 
-  for (const method of ['generate', 'stream'] as const) {
-    it(`joins a running ${method}() turn instead of starting a second run that cannot see it`, async () => {
-      const { agent, prompts, releaseSecondStep } = createBusyAgent();
+  for (const [engine, method] of [
+    ['regular', 'generate'],
+    ['regular', 'stream'],
+    ['durable', 'generate'],
+    ['durable', 'stream'],
+    ['evented', 'generate'],
+    ['evented', 'stream'],
+  ] as const) {
+    it(`joins a running ${engine} ${method}() turn instead of starting a second run that cannot see it`, async () => {
+      const { agent, prompts, releaseSecondStep } = createBusyAgent(engine);
       const memory = { resource: thread.resourceId, thread: thread.threadId };
 
       let turn: Promise<unknown>;
       if (method === 'generate') {
         turn = agent.generate('MARKER-USER order 123', { memory, maxSteps: 3 });
       } else {
-        const output = await agent.stream('MARKER-USER order 123', { memory, maxSteps: 3 });
-        turn = output.consumeStream();
+        const result = await agent.stream('MARKER-USER order 123', { memory, maxSteps: 3 });
+        // A durable stream() returns its output wrapped.
+        turn = (result.output ?? result).consumeStream();
       }
 
       // The first step has finished and the second one is in flight.

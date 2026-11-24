@@ -23,7 +23,6 @@ import { createClient } from 'redis';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  flushRedis,
   getFreePort,
   makeStorageDir,
   PACKAGE_DIR,
@@ -189,7 +188,6 @@ describe('plain Agent runs across two servers (LibSQL file + Redis)', () => {
   const recordKey = (runId: string) => `${keyPrefix}:cache:agent.run.${AGENT_ID}.${runId}`;
 
   const startNodes = async (extraEnv: Record<string, string> = {}) => {
-    await flushRedis();
     const storage = await makeStorageDir('mastra-plain-run-');
     cleanupStorage = storage.cleanup;
     keyPrefix = `plain-${randomUUID()}`;

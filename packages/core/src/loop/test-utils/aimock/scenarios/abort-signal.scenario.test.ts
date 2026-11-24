@@ -17,13 +17,7 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 describeForAllEngines(
   'AIMock loop scenario: abort signal mid-stream',
@@ -117,7 +111,7 @@ describeForAllEngines(
         onAbort,
         onFinish,
       });
-      const output = isDurableEngineVariant(engine) ? result.output : result;
+      const output = result.output ?? result;
       await output.consumeStream().catch(() => undefined);
       result.cleanup?.();
 

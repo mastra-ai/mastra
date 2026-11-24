@@ -4,8 +4,7 @@ import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { settingsSectionPath } from '../settingsSections';
 import { GithubPatBlock } from './GithubPatBlock';
@@ -22,7 +21,7 @@ export function RepositoriesSection() {
     return (
       <SettingsSubsection scope="factory" title="Added to this Factory">
         <SettingsContainer>
-          <SettingsRowsSkeleton label="Loading repositories" />
+          <SettingsSkeleton variant="item" label="Loading repositories" />
         </SettingsContainer>
       </SettingsSubsection>
     );
@@ -38,7 +37,7 @@ export function RepositoriesSection() {
     githubConnected || activeFactory.repositories.some(repository => repository.provider !== 'gitlab');
 
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <>
       <SourceControlConnections />
 
       <SettingsSubsection
@@ -51,13 +50,13 @@ export function RepositoriesSection() {
 
       {githubRelevant && <GithubPatBlock />}
 
-      <Txt as="p" variant="meta" tone="muted">
+      <Txt as="p" variant="meta" tone="muted" className="ps-2.5">
         Configure sandbox resources and workspace setup in{' '}
         <Link to={settingsSectionPath(activeFactory.id, 'factory')} className="underline">
           Manage Factory
         </Link>
         .
       </Txt>
-    </div>
+    </>
   );
 }

@@ -4,7 +4,6 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -26,7 +25,6 @@ import type { Context, Middleware, Next } from 'koa';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 type RegisteredKoaRoute = {
   route: ServerRoute;
   prefix: string;
@@ -38,20 +36,6 @@ type RouteDispatcherGroup = {
   routes: RegisteredKoaRoute[];
   stackLengthAfterRegistration: number;
 };
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 /**
  * Once the adapter writes a streaming response itself, a client that leaves while a write is still pending makes the
@@ -511,38 +495,19 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       request: toWebRequest(ctx),
     };
 
-    // Check route permission requirement (EE feature)
-    // Uses convention-based permission derivation: permissions are auto-derived
-    // from route path/method unless explicitly set or route is public
-    const requestContext = ctx.state.requestContext;
-    // Check if any auth is configured (studio or server) for RBAC
-    const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-    if (hasAuth) {
-      const hasPermission = await loadHasPermission();
-      if (hasPermission) {
-        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
-
-        if (permissionError) {
-          ctx.status = permissionError.status;
-          ctx.body = {
-            error: permissionError.error,
-            message: permissionError.message,
-          };
-          return;
-        }
-      }
-    }
-
-    // Check FGA authorization (EE feature)
-    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
-      ...params.urlParams,
-      ...params.queryParams,
-      ...(typeof params.body === 'object' ? params.body : {}),
-    });
-    if (fgaError) {
-      ctx.status = fgaError.status;
-      ctx.body = { error: fgaError.error, message: fgaError.message };
+    // Check route permission (RBAC) and FGA authorization (EE features)
+    const authzError = await this.authorizeRoute(
+      route,
+      {
+        ...params.urlParams,
+        ...params.queryParams,
+        ...(typeof params.body === 'object' ? params.body : {}),
+      },
+      ctx.state.requestContext,
+    );
+    if (authzError) {
+      ctx.status = authzError.status;
+      ctx.body = { error: authzError.error, message: authzError.message };
       return;
     }
 
@@ -766,6 +731,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
@@ -843,7 +813,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
 
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
 
         await applyMcpRequestAuth({ req: rawReq, requestContext: ctx.state.requestContext, setRequestAuth });
 
@@ -884,7 +854,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         await applyMcpRequestAuth({
           req: rawReq,
           requestContext: ctx.state.requestContext,
-          setRequestAuth: this.mcpOptions?.setRequestAuth,
+          setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
         });
 
         await server.startSSE({
@@ -956,15 +926,17 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
     const server = this;
     this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {
-      // Check if this request matches a protected custom route and run auth
+      // Check auth against the custom route the custom-route app will actually run for
+      // the URL it's forwarded, which can differ from what Koa matched.
       const path = String(ctx.path || '/');
       const method = String(ctx.method || 'GET');
-      const matchedRoute = findMatchingCustomRoute(
-        path,
-        method,
-        server.customApiRoutes ?? server.mastra.getServer()?.apiRoutes,
-      );
-      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, server.customRouteAuthConfig);
+      const dispatchUrl = `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`;
+      const {
+        match: matchedRoute,
+        requiresAuth: shouldRunCustomRouteAuth,
+        serverRoute,
+        customRouteAuthConfig,
+      } = server.resolveCustomRouteAuth(dispatchUrl, method, path);
       const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
       const customRouteAbortController = new AbortController();
@@ -982,16 +954,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       try {
         if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
-          const serverRoute: ServerRoute = {
-            method: (matchedRoute?.route.method ?? method) as any,
-            path: matchedRoute?.route.path ?? path,
-            responseType: 'json',
-            handler: async () => {},
-            requiresAuth: matchedRoute?.route.requiresAuth,
-            requiresPermission: matchedRoute?.route.requiresPermission,
-            fga: matchedRoute?.route.fga,
-          };
-
           if (shouldRunCustomRouteAuth) {
             const authError = await server.checkRouteAuth(serverRoute, {
               path,
@@ -1001,6 +963,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
               requestContext: ctx.state.requestContext,
               request: toWebRequest(ctx),
               buildAuthorizeContext: () => toWebRequest(ctx),
+              customRouteAuthConfig,
             });
 
             if (authError) {
@@ -1018,28 +981,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             }
           }
 
-          const requestContext = ctx.state.requestContext;
-          // Check if any auth is configured (studio or server) for RBAC
-          const hasAuth = server.mastra.getStudio?.()?.auth || server.mastra.getServer()?.auth;
-          if (hasAuth) {
-            const hasPermission = await loadHasPermission();
-            if (hasPermission) {
-              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = server.checkRoutePermission(
-                serverRoute,
-                userPermissions,
-                hasPermission,
-                requestContext,
-              );
-              if (permissionError) {
-                ctx.status = permissionError.status;
-                ctx.body = {
-                  error: permissionError.error,
-                  message: permissionError.message,
-                };
-                return;
-              }
-            }
+          const permissionError = server.checkRouteRBAC(serverRoute, ctx.state.requestContext);
+          if (permissionError) {
+            ctx.status = permissionError.status;
+            ctx.body = {
+              error: permissionError.error,
+              message: permissionError.message,
+            };
+            return;
           }
 
           // Check FGA authorization (EE feature)
@@ -1060,7 +1009,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
 
         const response = await server.handleCustomRouteRequest(
-          `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
+          dispatchUrl,
           ctx.method,
           ctx.headers as Record<string, string | string[] | undefined>,
           ctx.request.body,

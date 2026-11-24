@@ -42,6 +42,42 @@ function toTaskError(err: unknown): { message: string; stack?: string } {
 /** Pending rows each lapsed-pin sweep reads; later pages are read on later ticks. */
 const PIN_SWEEP_PAGE_SIZE = 100;
 
+/** Test-only lower lease minimum; only ever lowers the default 3s. Read per manager, not at import. */
+function minLeaseOverride(): number | undefined {
+  const value = Number(process.env.MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS);
+  return Number.isFinite(value) && value > 0 && value < 3_000 ? value : undefined;
+}
+
+/**
+ * Runs, persists, and recovers background tasks for one Mastra process.
+ *
+ * Several managers (processes or replicas) may share one storage backend.
+ * Execution is owned through a lease persisted on each task record:
+ *
+ * - Identity: each manager has a random `ownerId` (`workerId`), so a restarted
+ *   process is a new owner.
+ * - Acquisition: `handleDispatch` claims a task with a compare-and-set on the
+ *   observed status/owner/lease, writing `ownerId` and
+ *   `leaseExpiresAt = now + leaseDurationMs`. Losers of a race skip the task.
+ * - Renewal: the heartbeat renews owned leases every `leaseDurationMs / 3`,
+ *   fenced on `running` + this owner. Workflow terminal writes carry the same
+ *   fence, so a superseded owner cannot commit results.
+ * - Expiry and adoption: `recoverStaleTasks` only reclaims a `running` task
+ *   once its lease has expired (or was released on shutdown), fenced on the
+ *   owner/lease it read so one manager wins. It re-runs when the earliest live
+ *   lease lapses. `restart()` is the one deliberate takeover of a live lease.
+ * - Loss: a failed renewal aborts the local run's signal when another owner
+ *   holds the task or it was cancelled.
+ *
+ * Guarantee: at most one owner can commit a task's state at a time, except
+ * for the shutdown rollback of an interrupted resume in `handleResume`, which is
+ * conditional on status only. The tool
+ * itself may still run more than once (stalled owner past its lease, crash
+ * before the result is saved, explicit restart), so external side effects need
+ * idempotency. Assumes storage applies `updateTask` conditions atomically and
+ * that clock skew between managers is well below `leaseDurationMs`, since
+ * `leaseExpiresAt` is written by the owner's clock and read by others'.
+ */
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   private readonly workerId = globalThis.crypto.randomUUID();
@@ -105,6 +141,8 @@ export class BackgroundTaskManager {
   // workers leave them alone until this manager claims them or dies.
   private pinnedPendingLeases = new Set<string>();
   private heartbeatInterval?: ReturnType<typeof setInterval>;
+  // Shortest heartbeat / stale-recovery delay: 1s, unless a test lowered the lease minimum.
+  readonly #timingFloorMs: number;
 
   // Pending follow-up pass for stale-task recovery. A running task whose lease
   // is still valid is left alone by a recovery scan, so if its owner died just
@@ -155,9 +193,15 @@ export class BackgroundTaskManager {
     // The heartbeat renews at `leaseDurationMs / 3`, floored to 1s. A lease
     // shorter than 3s therefore expires before it can be renewed, so reject it
     // rather than silently letting every task's lease lapse mid-run.
-    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < 3_000) {
+    //
+    // Internal, for tests that prove lease expiry: MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS
+    // lowers that 3s minimum, and the 1s timing floor scales down with it, so
+    // those tests wait milliseconds instead of seconds. Not a supported setting.
+    const minLeaseMs = minLeaseOverride() ?? 3_000;
+    this.#timingFloorMs = minLeaseMs / 3;
+    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < minLeaseMs) {
       throw new Error(
-        `BackgroundTaskManager leaseDurationMs must be a finite number of at least 3000ms (received: ${leaseDurationMs})`,
+        `BackgroundTaskManager leaseDurationMs must be a finite number of at least ${minLeaseMs}ms (received: ${leaseDurationMs})`,
       );
     }
     for (const [owner, limit] of Object.entries(config.perOwnerConcurrency ?? {})) {
@@ -695,6 +739,11 @@ export class BackgroundTaskManager {
    * re-registered via `registerTaskContext(taskId, ...)` because the original
    * registration is gone (e.g. process restart) — the manager doesn't
    * rehydrate executor closures from storage.
+   *
+   * Restarting a `running` task is an explicit takeover: the claim is fenced on
+   * status only, so it succeeds even while another manager holds a live lease.
+   * The previous owner's next renewal fails and aborts its run, but that run
+   * may overlap this one until then.
    */
   async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
     if (this.shuttingDown) {
@@ -1429,7 +1478,8 @@ export class BackgroundTaskManager {
     // the worker crashed mid-run). A dispatch declined cleanly during shutdown
     // leaves the task `pending`, so the worker that picks up the redelivery
     // still gets the full retry budget.
-    const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
+    // Never lower the stored count: crash recovery may already have spent retries this message's delivery count doesn't know about.
+    const retryCount = task.status === 'running' ? Math.max(task.retryCount, deliveryAttempt - 1) : task.retryCount;
     // Claim execution ownership with an expiring lease. The compare-and-set on
     // the previously observed owner/lease fences concurrent dispatchers: when
     // two workers race for the same pending task, only the first claim wins and
@@ -2113,7 +2163,7 @@ export class BackgroundTaskManager {
 
   #startLeaseHeartbeat(): void {
     if (this.heartbeatInterval) return;
-    const intervalMs = Math.max(1_000, Math.floor(this.config.leaseDurationMs / 3));
+    const intervalMs = Math.max(this.#timingFloorMs, Math.floor(this.config.leaseDurationMs / 3));
     this.heartbeatInterval = setInterval(() => {
       void this.#renewOwnedLeases();
       // Storage-wide admission can be freed by another process, which never
@@ -2277,11 +2327,19 @@ export class BackgroundTaskManager {
           expectedOwnerId: task.ownerId ?? null,
           expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
         };
-        if (task.maxRetries > 0) {
+        // A lease that lapsed with its owner still set means the worker died
+        // mid-run, possibly because of this task, so re-pending it spends a
+        // retry like a lapsed pin in `#recoverLapsedPin`; otherwise a task that
+        // kills its worker is re-run by every process that starts. A graceful
+        // shutdown clears the owner to hand the task back, and that costs
+        // nothing.
+        const handedBack = !task.ownerId && task.maxRetries > 0;
+        if (handedBack || task.retryCount < task.maxRetries) {
           await storage.updateTask(
             task.id,
             {
               status: 'pending',
+              retryCount: handedBack ? task.retryCount : task.retryCount + 1,
               startedAt: undefined,
               ownerId: undefined,
               leaseExpiresAt: undefined,
@@ -2471,9 +2529,10 @@ export class BackgroundTaskManager {
 
     // Wait just past the lease expiry (clocks drift between workers), but bound
     // the delay so a stray far-future lease cannot park recovery indefinitely.
+    const floor = this.#timingFloorMs;
     const delay = Math.min(
-      Math.max(nextSweepAt - Date.now() + 1_000, 1_000),
-      Math.max(this.config.leaseDurationMs, 1_000),
+      Math.max(nextSweepAt - Date.now() + floor, floor),
+      Math.max(this.config.leaseDurationMs, floor),
     );
     this.staleRecoveryTimeout = setTimeout(() => {
       this.staleRecoveryTimeout = undefined;

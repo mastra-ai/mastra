@@ -5,9 +5,8 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
-  dts: true,
+  dts: { sourcemap: false },
   clean: true,
-  sourcemap: true,
   deps: {
     neverBundle: ['@mastra/core'],
   },

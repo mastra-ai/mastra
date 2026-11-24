@@ -94,9 +94,9 @@ describe('createFactorySecretEncryption', () => {
       expect(secretKeyMismatchHint(error)).toContain('FACTORY_CREDENTIAL_ENCRYPTION_KEY');
     }
     const [wrongKey, unknownKeyId, noKey] = keyMismatches;
-    expect(secretKeyMismatchHint(wrongKey)).toContain('The encryption key changed');
-    expect(secretKeyMismatchHint(unknownKeyId)).toContain('The encryption key changed');
-    expect(secretKeyMismatchHint(noKey)).toContain('No encryption key is set');
+    expect(secretKeyMismatchHint(wrongKey)).toContain('using a different one than before');
+    expect(secretKeyMismatchHint(unknownKeyId)).toContain('using a different one than before');
+    expect(secretKeyMismatchHint(noKey)).toContain("doesn't have one set");
     expect(secretKeyMismatchHint(wrongKey)).not.toContain('`');
 
     const malformed = await createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } })

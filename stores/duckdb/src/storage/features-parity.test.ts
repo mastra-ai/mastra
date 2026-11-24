@@ -15,6 +15,9 @@ describe('DuckDBStore observability features', () => {
         const facade = (await store.getStore('observability'))!;
         const implementation = new ObservabilityStorageDuckDB({ db: new DuckDBConnection({ path: ':memory:' }) });
 
+        expect(facade.persistenceLocation).toBe('local');
+        expect(implementation.persistenceLocation).toBe('local');
+
         expect([...facade.getFeatures()].sort()).toEqual([...implementation.getFeatures()].sort());
         expect(facade.getFeatures()).toContain('span-aggregate');
       } finally {

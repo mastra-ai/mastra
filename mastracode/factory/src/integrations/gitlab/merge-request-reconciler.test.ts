@@ -56,9 +56,6 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
       orgId: project.orgId,
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: project.createdBy,
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace',
     });
   }
   const wrongInstallation = await sourceControl.installations.upsert({
@@ -86,9 +83,6 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
     orgId: project.orgId,
     connectionId: wrongConnection.id,
     repositoryId: wrongRepository.id,
-    createdByUserId: project.createdBy,
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace/other',
   });
   await seeded.intake.saveConfig({
     orgId: project.orgId,
@@ -100,7 +94,6 @@ async function seedMergeRequestCard({ initialStage, initialState, missingIdentit
     integrationId: 'gitlab',
     sourceId: SOURCE_ID,
     factoryProjectId: project.id,
-    board: 'review',
   });
   const item = await seeded.workItems.upsert({
     orgId: project.orgId,
@@ -228,7 +221,7 @@ describe('GitLab merge-request reconciler', () => {
       const decisions = await seeded.seeded.workItems.listDeferredDecisions(project.orgId, project.id);
       expect(decisions).toHaveLength(1);
       expect(decisions[0]).toMatchObject({
-        decision: { type: 'transition', board: 'review', stage: expectedStage },
+        decision: { type: 'transition', board: 'work', stage: expectedStage },
       });
       const [item] = await seeded.seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
       expect((item)).toMatchObject({ metadata: {authorTrusted: false, [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed'}, workItem: { metadata: {author: 'maintainer', state: 'closed', merged} } });
@@ -251,7 +244,7 @@ describe('GitLab merge-request reconciler', () => {
       expect(commitRuleEvaluation).toHaveBeenCalledTimes(1);
       const decisions = await seeded.seeded.workItems.listDeferredDecisions(project.orgId, project.id);
       expect(decisions).toHaveLength(1);
-      expect(decisions[0]).toMatchObject({ decision: { type: 'transition', board: 'review', stage: replayedStage } });
+      expect(decisions[0]).toMatchObject({ decision: { type: 'transition', board: 'work', stage: replayedStage } });
       const [item] = await seeded.seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
       expect(item?.stages).toEqual([initialStage]);
       expect((item)).toMatchObject({ metadata: {[FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed'}, workItem: { metadata: {state: 'closed', merged} } });

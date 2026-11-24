@@ -1,15 +1,19 @@
-import { ArrowLeftRightIcon, CircleCheckIcon, CircleDashedIcon, CircleXIcon, TriangleAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SpanOutcome, SpanOutcomeTone } from './span-outcome.utils';
 import { Notice } from '@/ds/components/Notice';
 import type { NoticeVariant } from '@/ds/components/Notice';
+import { IconArrowLeftRight } from '@/ds/icons/central/IconArrowLeftRight';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
+import { IconCircleDashed } from '@/ds/icons/central/IconCircleDashed';
+import { IconCircleX } from '@/ds/icons/central/IconCircleX';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 
 const TONES: Record<SpanOutcomeTone, { variant: NoticeVariant; icon: ReactNode }> = {
-  neutral: { variant: 'note', icon: <CircleDashedIcon /> },
-  success: { variant: 'success', icon: <CircleCheckIcon /> },
-  change: { variant: 'info', icon: <ArrowLeftRightIcon /> },
-  warning: { variant: 'warning', icon: <TriangleAlertIcon /> },
-  error: { variant: 'destructive', icon: <CircleXIcon /> },
+  neutral: { variant: 'note', icon: <IconCircleDashed /> },
+  success: { variant: 'success', icon: <IconCircleCheck /> },
+  change: { variant: 'info', icon: <IconArrowLeftRight /> },
+  warning: { variant: 'warning', icon: <IconExclamationTriangle /> },
+  error: { variant: 'destructive', icon: <IconCircleX /> },
 };
 
 export interface SpanOutcomeSummaryProps {

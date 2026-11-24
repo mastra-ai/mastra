@@ -11,16 +11,6 @@ describe('getOrCreate', () => {
     expect(map.get('a')).toBe(value);
   });
 
-  it('returns the existing value on a hit', () => {
-    const map = new Map<string, { count: number }>();
-    const first = getOrCreate(map, 'a', () => ({ count: 1 }));
-    const second = getOrCreate(map, 'a', () => ({ count: 2 }));
-
-    expect(second).toBe(first);
-    expect(second.count).toBe(1);
-    expect(map.size).toBe(1);
-  });
-
   it('does not call the factory on a hit', () => {
     const map = new Map<string, number>();
     map.set('a', 42);

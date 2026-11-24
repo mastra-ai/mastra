@@ -1,7 +1,9 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
-import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import {
   MENU_SIDE_OFFSET,
@@ -73,7 +75,7 @@ const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubT
         </span>
       )}
       <span className={cn(menuItemTrailingIconClass, hint != null && 'ml-0')}>
-        <ChevronDown className="-rotate-90" />
+        <IconChevronDownMedium className="-rotate-90" />
       </span>
     </MenuPrimitive.SubmenuTrigger>
   ),
@@ -260,7 +262,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.
     <MenuPrimitive.CheckboxItem ref={ref} className={cn(menuItemClass, className)} checked={checked} {...props}>
       {children}
       <MenuPrimitive.CheckboxItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </MenuPrimitive.CheckboxItemIndicator>
     </MenuPrimitive.CheckboxItem>
   ),
@@ -272,7 +274,7 @@ const DropdownMenuRadioItem = React.forwardRef<HTMLDivElement, MenuPrimitive.Rad
     <MenuPrimitive.RadioItem ref={ref} className={cn(menuItemClass, className)} {...props}>
       {children}
       <MenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
-        <CheckIcon />
+        <IconCheckmark2Medium />
       </MenuPrimitive.RadioItemIndicator>
     </MenuPrimitive.RadioItem>
   ),
@@ -297,8 +299,12 @@ const DropdownMenuSeparator = React.forwardRef<HTMLDivElement, MenuPrimitive.Sep
 );
 DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';
 
-const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn(menuShortcutClass, className)} {...props} />;
+const DropdownMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span className={cn(menuShortcutClass, className)} {...props}>
+      <KeyLabel>{children}</KeyLabel>
+    </span>
+  );
 };
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut';
 

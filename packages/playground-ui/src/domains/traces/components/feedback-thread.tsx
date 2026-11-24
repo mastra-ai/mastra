@@ -1,5 +1,5 @@
-import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
-import { ArrowUp, Trash2, ChevronRight, ChevronLeft, ClipboardCheck, EllipsisIcon } from 'lucide-react';
+import type { FeedbackItem } from '@mastra/client-js';
+import type { FeedbackListItem, FeedbackListResponse } from '@mastra/react/hooks/feedback';
 import { useState } from 'react';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
@@ -23,11 +23,22 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
 import { Icon } from '@/ds/icons/Icon';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { formatDate } from '@/utils/date-format';
 
-type FeedbackThreadProps = {
-  feedbackData?: ListFeedbackResponse | null;
+export type FeedbackThreadProps = {
+  /**
+   * Rows flagged `isPending` are not stored yet: they show "Sending…" and get no actions.
+   * Rows with `deleteStatus: 'deleting'` show "Deleting…" and get no actions; `failed` rows are
+   * shown again with an error.
+   */
+  feedbackData?: FeedbackListResponse | null;
   isLoadingFeedbackData?: boolean;
   onPageChange?: (page: number) => void;
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
@@ -37,6 +48,11 @@ type FeedbackThreadProps = {
   /** When provided, records with a feedbackId get a delete action. */
   onDelete?: (feedbackId: string) => void | Promise<unknown>;
   isDeleting?: boolean;
+  /**
+   * Shown in the delete confirmation when the delete request fails. Only shown after a delete is
+   * confirmed in the open dialog, so a stale error does not appear when the dialog is opened again.
+   */
+  deleteError?: string;
   /**
    * Comment layout variant. Defaults to `thread` (avatar gutter + content column);
    * `embed` renders a compact card suitable for inline use.
@@ -58,6 +74,24 @@ function FeedbackReviewStatusBadge({ status }: { status: FeedbackItem['reviewSta
   );
 }
 
+function FeedbackItemStatus({ item }: { item: FeedbackListItem }) {
+  if (item.isPending) {
+    return (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-pending">
+        Sending…
+      </Txt>
+    );
+  }
+  if (item.deleteStatus === 'deleting') {
+    return (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-deleting">
+        Deleting…
+      </Txt>
+    );
+  }
+  return <FeedbackReviewStatusBadge status={item.reviewStatus} />;
+}
+
 function formatBody(fb: FeedbackItem): string {
   const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
   if (text) return text;
@@ -67,7 +101,7 @@ function formatBody(fb: FeedbackItem): string {
 
 type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
   variant: CommentVariant;
-  items: FeedbackItem[];
+  items: FeedbackListItem[];
   onRequestDelete?: (feedbackId: string) => void;
   isDeleting: boolean;
 };
@@ -89,16 +123,19 @@ function FeedbackItems({
       <CommentItemTimestamp dateTime={ts.toISOString()}>{formatDate(ts, 'date-time')}</CommentItemTimestamp>
     );
     const feedbackId = fb.feedbackId;
-    const status = <FeedbackReviewStatusBadge status={fb.reviewStatus} />;
-    const canMarkReviewed = Boolean(onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed');
-    const canDelete = Boolean(onRequestDelete && feedbackId);
+    // A pending comment has no stored record yet, and a deleting one is on its way out,
+    // so there is nothing to review or delete.
+    const status = <FeedbackItemStatus item={fb} />;
+    const hasActions = Boolean(feedbackId && !fb.isPending && fb.deleteStatus !== 'deleting');
+    const canMarkReviewed = Boolean(hasActions && onMarkReviewed && fb.reviewStatus !== 'reviewed');
+    const canDelete = Boolean(hasActions && onRequestDelete);
     const actions = feedbackId && (canMarkReviewed || canDelete) && (
       <CommentItemActions>
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
               <Button size="icon-sm" variant="ghost" aria-label="Feedback actions">
-                <EllipsisIcon />
+                <IconDotGrid1x3Horizontal />
               </Button>
             }
           />
@@ -109,7 +146,7 @@ function FeedbackItems({
                 onSelect={() => onMarkReviewed?.(feedbackId)}
               >
                 <Icon size="xs">
-                  <ClipboardCheck />
+                  <IconClipboard2 />
                 </Icon>
                 Mark reviewed
               </DropdownMenu.Item>
@@ -117,7 +154,7 @@ function FeedbackItems({
             {canDelete && (
               <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
                 <Icon size="xs">
-                  <Trash2 />
+                  <TrashIcon />
                 </Icon>
                 Delete feedback
               </DropdownMenu.Item>
@@ -180,27 +217,36 @@ export function FeedbackThread({
   submitError,
   onDelete,
   isDeleting = false,
+  deleteError,
   variant = 'thread',
   onMarkReviewed,
   pendingFeedbackId,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const [feedbackIdToDelete, setFeedbackIdToDelete] = useState<string>();
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
   const sendBlocked = text.trim().length === 0 || isSubmitting;
 
   const feedbackItems = feedbackData?.feedback ?? [];
   const currentPage = feedbackData?.pagination?.page ?? 0;
   const hasMore = feedbackData?.pagination?.hasMore ?? false;
+  const deleteFailed = feedbackItems.some(item => item.deleteStatus === 'failed');
 
   const handleDeleteConfirm = async () => {
     if (!feedbackIdToDelete || !onDelete) return;
 
+    setDeleteConfirmed(true);
     try {
       await onDelete(feedbackIdToDelete);
       setFeedbackIdToDelete(undefined);
     } catch {
       // Keep the confirmation open so the deletion can be retried.
     }
+  };
+
+  const requestDelete = (feedbackId: string) => {
+    setDeleteConfirmed(false);
+    setFeedbackIdToDelete(feedbackId);
   };
 
   return (
@@ -229,7 +275,7 @@ export function FeedbackThread({
           />
           <InputGroupAddon align="inline-end">
             <InputGroupButton type="submit" aria-label="Send feedback" disabled={sendBlocked}>
-              <ArrowUp />
+              <IconArrowUp />
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -237,6 +283,11 @@ export function FeedbackThread({
       {submitError && (
         <Notice variant="destructive" role="alert">
           <Notice.Message>{submitError}</Notice.Message>
+        </Notice>
+      )}
+      {deleteFailed && (
+        <Notice variant="destructive" role="alert">
+          <Notice.Message>Could not delete feedback. Please try again.</Notice.Message>
         </Notice>
       )}
 
@@ -253,7 +304,7 @@ export function FeedbackThread({
           <FeedbackItems
             variant={variant}
             items={feedbackItems}
-            onRequestDelete={onDelete ? setFeedbackIdToDelete : undefined}
+            onRequestDelete={onDelete ? requestDelete : undefined}
             isDeleting={isDeleting}
             onMarkReviewed={onMarkReviewed}
             pendingFeedbackId={pendingFeedbackId}
@@ -264,7 +315,7 @@ export function FeedbackThread({
       {(hasMore || currentPage > 0) && (
         <div className="flex items-center gap-2">
           <Button
-            icon={<ChevronLeft />}
+            icon={<IconChevronLeftMedium />}
             size="sm"
             variant="ghost"
             disabled={currentPage === 0}
@@ -273,7 +324,7 @@ export function FeedbackThread({
             Previous
           </Button>
           <Button
-            icon={<ChevronRight />}
+            icon={<IconChevronRightMedium />}
             size="sm"
             variant="ghost"
             disabled={!hasMore}
@@ -297,10 +348,15 @@ export function FeedbackThread({
               This permanently deletes this feedback comment. This action cannot be undone.
             </AlertDialog.Description>
           </AlertDialog.Header>
+          {deleteConfirmed && deleteError && (
+            <Notice variant="destructive" role="alert">
+              <Notice.Message>{deleteError}</Notice.Message>
+            </Notice>
+          )}
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button icon={<Trash2 />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
-              {isDeleting ? 'Deleting…' : 'Delete'}
+            <Button icon={<TrashIcon />} variant="primary" onClick={handleDeleteConfirm} loading={isDeleting}>
+              Delete
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

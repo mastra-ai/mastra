@@ -137,4 +137,12 @@ export function createKnowledgeLegacyUpgradeTests(fixture: KnowledgeLegacyUpgrad
   });
 }
 
+export { createKnowledgeHostWriteTests } from './host-writes';
 export { createKnowledgePageStoreTests } from './pages';
+export { createKnowledgeTransactionTests, knowledgeStoreThroughTransactions } from './transaction';
+export type { KnowledgeTransactionFixture, KnowledgeTransactionImporterRows } from './transaction';
+export { createKnowledgeImportersStorageTests } from './importers';
+export { createKnowledgeImporterExportDDLTests, createKnowledgeImporterHostTests } from './importer-host';
+export { createKnowledgeHostedImporterHostTests } from './hosted-host';
+export type { KnowledgeImporterHostFixture } from './importer-host';
+export type { KnowledgeImportersFixture } from './importers';

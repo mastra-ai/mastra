@@ -169,6 +169,21 @@ DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
 REDIS_URL=redis://localhost:63799
 ```
 
+### Recall embedder
+
+With `DATABASE_URL` set, memory recall embeds thread text locally with fastembed on the server. To embed with a hosted model instead, set `FACTORY_EMBEDDER` in `mastracode/web/.env` to a `provider/model` embedding id, along with that provider's key:
+
+```dotenv
+FACTORY_EMBEDDER=openai/text-embedding-3-small
+OPENAI_API_KEY=...
+```
+
+Other providers work the same way, for example `google/gemini-embedding-001` with `GOOGLE_GENERATIVE_AI_API_KEY`. A Mastra gateway id such as `mastra/openai/text-embedding-3-small` reads `MASTRA_GATEWAY_API_KEY`. The server fails to start when the key is missing. Thread text is sent to the embedding provider.
+
+A server `MASTRA_GATEWAY_API_KEY` also lets every account run `mastra/` chat models on your gateway credits, when the account hasn't connected its own gateway key. To keep the embedding key out of chat, use a provider id instead: accounts never use the server's provider keys.
+
+Vector indexes are named by dimension, so a model with a different dimension starts with an empty index: recall doesn't find content observed before the switch. Earlier content isn't re-embedded. Don't switch between two models with the same dimension on one vector store, including from the default fastembed to a 384-dimension model: their vectors would share an index, can't be compared, and recall would return wrong results without an error.
+
 ### Amazon Bedrock
 
 Bedrock authenticates with the server's AWS credentials, not a key each account saves. With sign-in enabled, turn it on for every account by adding these values to `mastracode/web/.env`:

@@ -118,7 +118,7 @@ export const DisplayLarge: Story = {
       const style = getComputedStyle(canvas.getByText(value));
       await expect(style.fontSize).toBe('28px');
       await expect(style.fontWeight).toBe('500');
-      await expect(Number.parseFloat(style.lineHeight)).toBeCloseTo(35.56, 2);
+      await expect(style.lineHeight).toBe('36px');
       await expect(Number.parseFloat(style.letterSpacing)).toBeCloseTo(-0.28, 2);
     }
   },

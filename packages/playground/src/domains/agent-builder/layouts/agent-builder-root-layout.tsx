@@ -1,12 +1,13 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
 import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
-import { ArrowLeft, Eye } from 'lucide-react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';
 import { useRoleImpersonation } from '@/domains/auth/hooks/use-role-impersonation';
@@ -21,11 +22,7 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
   const { data: authCapabilities, isLoading } = useAuthCapabilities();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <BrandLoader fill="screen" />;
   }
 
   if (authCapabilities?.enabled && !isAuthenticated(authCapabilities)) {
@@ -42,11 +39,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
   const { isLoading, denialReason, hasAgentFeature } = useBuilderAgentAccess();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <BrandLoader fill="screen" />;
   }
 
   if (denialReason === 'permission-denied') {
@@ -102,11 +95,11 @@ function AccessDeniedScreen() {
           descriptionSlot="You don't have permission to access the Agent Builder."
         />
         <div className="flex items-center gap-2">
-          <Button render={<Link href="/agents" />} size="sm" icon={<ArrowLeft />}>
+          <Button render={<Link href="/agents" />} size="sm" icon={<IconArrowLeft />}>
             Back to Studio
           </Button>
           {isImpersonating && (
-            <Button variant="default" size="sm" onClick={stopImpersonation} icon={<Eye />}>
+            <Button variant="default" size="sm" onClick={stopImpersonation} icon={<IconEyeOpen />}>
               Exit {impersonatedRole?.name} preview
             </Button>
           )}
