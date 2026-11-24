@@ -25,18 +25,7 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "zai-org/GLM-5.2-FP8": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ambient/large": [
+    "z-ai/glm-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -51,7 +40,12 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.2": [
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -69,6 +63,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ]
   }

@@ -1,0 +1,77 @@
+/*
+ * One line until focus or a draft opens it. Actions keep their open-layout bottom inset whatever their size,
+ * and the content sits on the box's bottom edge, so "+" and Send never move. Hidden parts keep a box so the glide can fade them.
+ * Actions not grouped into start/end have no place on the line, so those composers stay open.
+ */
+[data-slot='composer']:not(
+  [data-engaged],
+  :has(
+    [data-slot='composer-input']:not(:placeholder-shown),
+    [data-slot='composer-input'][data-variant='textarea'],
+    [data-slot='composer-attachments'],
+    [data-slot='composer-annotations'],
+    [data-slot='composer-actions'] > :not([data-slot^='composer-actions-'])
+  )
+) {
+  --composer-line-input-min: 5rem;
+
+  & [data-slot='composer-box-content'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+
+    & > * {
+      flex-basis: 100%;
+    }
+
+    & > :has([data-slot='composer-input']) {
+      order: 2;
+      flex: 1 1 0;
+      min-width: var(--composer-line-input-min);
+    }
+  }
+
+  /* The fade lives in the end padding: a placeholder that fits never reaches it, one that overflows fades out. */
+  & [data-slot='composer-input'] {
+    --composer-line-fade: calc(var(--spacing) * 4);
+
+    display: block;
+    padding-block: calc((var(--composer-line-height) - 1lh) / 2);
+    padding-inline: calc(var(--spacing) * 1.5) var(--composer-line-fade);
+    white-space: nowrap;
+    mask-image: linear-gradient(to left, transparent, black var(--composer-line-fade));
+  }
+
+  & [data-slot='composer-actions'] {
+    display: contents;
+  }
+
+  & [data-slot='composer-actions-start'] {
+    order: 1;
+    flex: none;
+    padding-inline-start: var(--composer-inset);
+    padding-block-end: var(--composer-inset);
+  }
+
+  & [data-slot='composer-actions-end'] {
+    order: 3;
+    flex: 0 1 auto;
+    /* Leaves the input and a start control their room, so a wide end group truncates instead of wrapping the line. */
+    max-width: calc(100% - var(--composer-line-input-min) - var(--composer-line-height));
+    margin-inline-start: auto;
+    padding-inline-end: var(--composer-inset);
+    padding-block-end: var(--composer-inset);
+  }
+
+  & [data-slot='composer-actions-detail'] > * {
+    position: absolute;
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  @container (width < 40rem) {
+    & [data-composer-line-hidden] {
+      display: none;
+    }
+  }
+}

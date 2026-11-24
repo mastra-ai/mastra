@@ -9,10 +9,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "step-5-preview": [
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4-pro": [
@@ -30,13 +33,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
+    "step-5-preview": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ]
   }

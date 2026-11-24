@@ -35,7 +35,6 @@
   --surface-tint: transparent;
 
   box-shadow:
-    var(--elevation-lip),
     inset 0 0 0 1px var(--surface-rim),
     inset 0 0 0 9999px var(--surface-tint),
     var(--elevation-raised);
@@ -46,16 +45,12 @@
   --surface-rim: var(--field-rim);
 
   box-shadow:
-    var(--elevation-lip),
     inset 0 0 0 1px var(--surface-rim),
-    inset 0 0 0 9999px var(--surface-tint),
-    var(--elevation-raised);
+    inset 0 0 0 9999px var(--surface-tint);
 }
 
 @utility shadow-inset {
-  box-shadow:
-    inset 0 1px 0 var(--inset-highlight),
-    inset 0 0 0 1px var(--inset-rim);
+  box-shadow: inset 0 0 0 1px var(--inset-rim);
 }
 
 @utility shadow-rim {
@@ -66,8 +61,7 @@
   --surface-tint: transparent;
 
   box-shadow:
-    var(--elevation-lip),
-    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 1px var(--overlay-rim),
     inset 0 0 0 9999px var(--surface-tint),
     var(--elevation-overlay);
 }
@@ -184,6 +178,15 @@
 @layer base {
   * {
     border-color: var(--border);
+  }
+
+  /* A box painted with the card color directly gives its fields the same colors as `Card` does, or they would be
+   * the box's own color. The `fieldsOn*` utilities win over this. */
+  :where(.bg-card) {
+    --field: var(--field-on-surface);
+    --field-disabled: var(--field-on-surface);
+    --field-hover: var(--field-hover-on-surface);
+    --field-open: var(--field-open-on-surface);
   }
 
   :where(code, samp, pre, .font-mono) {

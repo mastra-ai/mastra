@@ -49,15 +49,18 @@ describe('RunStorage on storage v2', () => {
     expect(await createRunStorage({ ...args(), runId: 'missing' }).loadStep('a')).toBeNull();
   });
 
-  it('loads steps as of the write that returned `upToSeq`', async () => {
+  it('loads steps as of the write that returned `upToSeq`, leaving out steps written again since', async () => {
     const { runStorage } = storageFor(2);
     await runStorage.writeSnapshot(snapshot());
     const first = await runStorage.writeStepResult({ stepId: 'a', result: ok(1), requestContext });
-    await runStorage.writeStepResult({ stepId: 'a', result: ok(2), requestContext });
-    await runStorage.writeStepResult({ stepId: 'b', result: ok(3), requestContext });
+    const second = await runStorage.writeStepResult({ stepId: 'b', result: ok(2), requestContext });
 
     expect(await runStorage.loadSteps(['a', 'b'], { upToSeq: first!.seq })).toEqual({ a: ok(1) });
-    expect(await runStorage.loadSteps(['a', 'b'])).toEqual({ a: ok(2), b: ok(3) });
+    expect(await runStorage.loadSteps(['a', 'b'], { upToSeq: second!.seq })).toEqual({ a: ok(1), b: ok(2) });
+
+    await runStorage.writeStepResult({ stepId: 'a', result: ok(10), requestContext });
+    expect(await runStorage.loadSteps(['a', 'b'], { upToSeq: second!.seq })).toEqual({ b: ok(2) });
+    expect(await runStorage.loadSteps(['a', 'b'])).toEqual({ a: ok(10), b: ok(2) });
   });
 
   it('writes a step result with a state patch, keeping keys concurrent writers set', async () => {

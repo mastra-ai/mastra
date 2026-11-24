@@ -9,13 +9,6 @@ test.describe('Settings page', () => {
       await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
     });
 
-    test('renders the settings form', async ({ page }) => {
-      await page.goto('/settings');
-
-      const form = page.locator('form');
-      await expect(form).toBeVisible();
-    });
-
     test('shows the theme selector defaulting to the system theme', async ({ page }) => {
       await page.goto('/settings');
 

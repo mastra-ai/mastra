@@ -195,7 +195,7 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <h1 className="sr-only">Metrics</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -204,7 +204,7 @@ function MetricsContent() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <h1 className="sr-only">Metrics</h1>
         <PermissionDenied variant="fill" resource="metrics" />
       </PageLayout>
@@ -213,7 +213,7 @@ function MetricsContent() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
         <h1 className="sr-only">Metrics</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load metrics" descriptionSlot={error.message} />
       </PageLayout>

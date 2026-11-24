@@ -43,14 +43,14 @@ export function SpanPayloadProcessor({ value, hidden = [] }: SpanPayloadProcesso
   // With nothing placed, an "Other fields" disclosure would only wrap the whole payload: show it as JSON.
   if (!formatsAny) {
     return (
-      <div data-slot="span-payload-processor" data-phase={value.phase}>
+      <div data-slot="span-payload-processor">
         <SpanPayloadJson value={data} />
       </div>
     );
   }
 
   return (
-    <div data-slot="span-payload-processor" data-phase={value.phase} className="flex flex-col gap-3">
+    <div data-slot="span-payload-processor" className="flex flex-col gap-3">
       {messages.length > 0 && <SpanPayloadMessages value={messages} />}
       {toolCalls.length > 0 && (
         <SpanPayloadField label={`Tool calls (${toolCalls.length})`}>

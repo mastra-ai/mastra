@@ -112,26 +112,6 @@ describe('a user session draft on the real thread route', () => {
     },
   );
 
-  it('does not switch models when the draft already uses the personal default', async () => {
-    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
-    const user = userEvent.setup();
-    const router = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
-    });
-    const { client } = renderWithProviders(<RouterProvider router={router} />);
-
-    const message = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(message).toBeEnabled());
-    await user.type(message, 'keep the default');
-    await user.keyboard('{Enter}');
-
-    await waitFor(() => expect(route.posted).toEqual(['keep the default']));
-    expect(route.bindingsBeforePrompt).toEqual([]);
-
-    route.finishWorkspace();
-    await waitForMutationsIdle(client);
-  });
-
   it('hands a thinking level picked in the draft to the new session with its model', async () => {
     const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();

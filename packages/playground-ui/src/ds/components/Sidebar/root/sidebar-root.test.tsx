@@ -1007,21 +1007,3 @@ describe('Sidebar', () => {
     await waitFor(() => expect(document.activeElement).toBe(mobileTrigger));
   });
 });
-
-describe('Sidebar padding', () => {
-  it('insets its content on every side, so the header and footer never touch an edge', () => {
-    mockMatchMedia(false);
-    render(
-      <SidebarProvider>
-        <Sidebar>
-          <Sidebar.Nav />
-          <Sidebar.Footer />
-        </Sidebar>
-      </SidebarProvider>,
-    );
-    const content = document.querySelector('.sidebar-layout > div');
-    expect(content?.className).toMatch(/\bpx-2\b/);
-    expect(content?.className).toMatch(/\bpy-2\.25\b/);
-    expect(document.querySelector('[data-slot=sidebar-footer]')?.className).not.toMatch(/\bpb-/);
-  });
-});

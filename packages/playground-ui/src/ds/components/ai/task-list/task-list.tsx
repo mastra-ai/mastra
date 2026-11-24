@@ -107,7 +107,7 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
         className={cn(
           'col-start-1 row-start-1 truncate transition-[opacity,color,translate,filter]',
           taskGraphMotion,
-          task.status === 'pending' ? 'text-muted-foreground/70' : 'text-muted-foreground',
+          task.status === 'pending' ? 'text-subtle-foreground' : 'text-muted-foreground',
           active ? '-translate-y-1 opacity-0 blur-[2px]' : 'translate-y-0 opacity-100 blur-none',
         )}
       >

@@ -7,7 +7,7 @@ import { getSpanTimingLayout } from '../../utils/span-timing';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
 import type { TraceStreamingTimings } from '../trace-span-timeline';
-import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
+import { nestedSpanFixture } from './fixtures/trace-spans';
 import { formatDuration } from '@/utils/duration';
 
 const scrollIntoView = vi.fn();

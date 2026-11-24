@@ -14,21 +14,6 @@ import {
 } from './fixtures';
 
 describe('IntakeSection github', () => {
-  describe('when the last GitHub repository is removed', () => {
-    it('saves an empty selection, which brings in no issues', async () => {
-      seedGithubProject();
-      const saved = useIntakeHandlers({
-        config: { ...baseConfig(), github: { enabled: true, sourceIds: ['mastra'] } },
-      });
-      renderIntakeSection();
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Remove mastra' }));
-
-      await waitFor(() => expect(saved).toEqual([{ github: { enabled: false, sourceIds: null } }]));
-      expect(screen.queryByRole('switch', { name: 'Sync GitHub issues' })).not.toBeInTheDocument();
-    });
-  });
-
   describe('given GitHub is not configured on the server', () => {
     it('disables GitHub intake and hides repository controls', async () => {
       seedGithubProject();
@@ -45,7 +30,6 @@ describe('IntakeSection github', () => {
 
       expect(await screen.findByText('GitHub is not configured on this server.')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Add mastra' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     });
   });

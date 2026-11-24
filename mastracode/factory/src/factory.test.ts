@@ -449,6 +449,32 @@ describe('MastraFactory constructor', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
 
+  describe('recall embedder', () => {
+    afterEach(() => vi.unstubAllEnvs());
+    const vector = () => new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' });
+
+    it('refuses to start when the embedder has no API key, instead of failing at the first recall', () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      expect(
+        () =>
+          new MastraFactory({
+            secretEncryption,
+            storage: fakeStorage(),
+            vector: vector(),
+            embedder: 'openai/text-embedding-3-small',
+          }),
+      ).toThrow(/could not build the embedder 'openai\/text-embedding-3-small'.*OPENAI_API_KEY/);
+    });
+
+    it('refuses an embedder without the store it writes to', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-embeddings');
+      expect(
+        () =>
+          new MastraFactory({ secretEncryption, storage: fakeStorage(), embedder: 'openai/text-embedding-3-small' }),
+      ).toThrow("'embedder' needs 'vector'");
+    });
+  });
+
   it('rejects a board id already used by an installed built-in', () => {
     expect(
       () =>
@@ -1109,6 +1135,33 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage, vector });
     expect(config.storage).toBe(storage.getMastraStorage());
     expect(config.vector).toBe(vector);
+    expect(config.embedder).toBeUndefined();
+  });
+
+  it('gives the SDK mount the deployment embedder built once from its router id', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-embeddings');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const vector = new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' });
+    const embedderOptions = { headers: { 'x-team': 'factory' } };
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      vector,
+      embedder: 'openai/text-embedding-3-small',
+      embedderOptions,
+    });
+    expect(config.embedder).toMatchObject({ provider: 'openai', modelId: 'text-embedding-3-small' });
+    expect(config.embedderOptions).toBe(embedderOptions);
+  });
+
+  it('accepts a Mastra gateway embedder id, keyed by MASTRA_GATEWAY_API_KEY', async () => {
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'gateway-key');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      vector: new PgVector({ id: 'factory-test-vectors', connectionString: 'postgres://cfg/app' }),
+      embedder: 'mastra/openai/text-embedding-3-small',
+    });
+    expect(config.embedder).toMatchObject({ provider: 'mastra', modelId: 'openai/text-embedding-3-small' });
   });
 
   it('tells the SDK which backend the Mastra store uses (instanceof breaks across duplicate package copies)', async () => {

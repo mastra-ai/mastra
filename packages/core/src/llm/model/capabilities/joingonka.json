@@ -2,16 +2,16 @@
   "temperature": ["MiniMaxAI/MiniMax-M2.7", "deepseek-ai/DeepSeek-V4-Flash-0731", "zai-org/GLM-5.3-Flash"],
   "structuredOutput": ["MiniMaxAI/MiniMax-M2.7", "deepseek-ai/DeepSeek-V4-Flash-0731", "zai-org/GLM-5.3-Flash"],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "max"]
       }
     ]
   }

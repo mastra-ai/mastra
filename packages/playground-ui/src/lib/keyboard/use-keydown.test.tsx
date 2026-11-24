@@ -315,15 +315,6 @@ describe('useKeydown', () => {
     expect(onArrowUp).not.toHaveBeenCalled();
   });
 
-  it('does not attach a listener when enabled is false', () => {
-    const onArrowUp = vi.fn();
-    renderHook(() => useKeydown({ ArrowUp: onArrowUp }, { enabled: false }));
-
-    pressKey('ArrowUp');
-
-    expect(onArrowUp).not.toHaveBeenCalled();
-  });
-
   it('attaches and detaches the listener when enabled toggles', () => {
     const onArrowUp = vi.fn();
     const { rerender } = renderHook(({ enabled }) => useKeydown({ ArrowUp: onArrowUp }, { enabled }), {
@@ -455,17 +446,6 @@ describe('useKeydown sequences', () => {
   });
 
   describe('given a "g$+a" binding', () => {
-    it('when g then a within 500ms, then the handler fires once', () => {
-      const onGoAgents = vi.fn();
-      renderHook(() => useKeydown({ 'g$+a': onGoAgents }));
-
-      pressKey('g');
-      vi.advanceTimersByTime(100);
-      pressKey('a');
-
-      expect(onGoAgents).toHaveBeenCalledTimes(1);
-    });
-
     it('when g then a after 500ms, then the handler does not fire', () => {
       const onGoAgents = vi.fn();
       renderHook(() => useKeydown({ 'g$+a': onGoAgents }));

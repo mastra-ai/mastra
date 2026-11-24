@@ -19,10 +19,16 @@
     "kimi-k3-1-pro"
   ],
   "reasoning": {
-    "deepseek-v4-1-flash": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemma4-31b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "inkling-2-small": [
@@ -49,16 +55,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "deepseek-v4-1-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemma4-31b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ]
   }

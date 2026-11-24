@@ -1,12 +1,13 @@
 {
   "name": "@mastra/voice-xai-realtime",
-  "version": "0.2.18",
+  "version": "0.2.19-alpha.1",
   "description": "Mastra xAI Grok Voice Agent API integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

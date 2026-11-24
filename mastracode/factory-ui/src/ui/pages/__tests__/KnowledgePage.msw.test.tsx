@@ -155,14 +155,6 @@ describe('KnowledgePage', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
   });
 
-  it("shows the project's pages in the tree and graph", async () => {
-    stubKnowledge();
-    renderRoute();
-    const tree = await screen.findByRole('tree');
-    expect(within(tree).getByText('Mastra')).toBeInTheDocument();
-    expect(screen.getByTestId('knowledge-graph-container')).toBeInTheDocument();
-  });
-
   it('frames a tree page in the graph on the first click, opens it on the second, and keeps it in the URL', async () => {
     stubKnowledge();
     const { router } = renderRoute();

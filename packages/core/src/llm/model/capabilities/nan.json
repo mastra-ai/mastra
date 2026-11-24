@@ -41,22 +41,10 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4-pro": [
+    "deepseek-v4-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "glm5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm5.3": [
@@ -65,10 +53,16 @@
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "kimi-k3.1-pro": [
+    "deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
       }
     ],
     "gemma4": [
@@ -82,15 +76,10 @@
         "max": 32768
       }
     ],
-    "mimo-v2.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-flash": [
+    "glm5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "qwen3.8-flash": [
@@ -102,6 +91,17 @@
         "type": "budget_tokens",
         "min": 0,
         "max": 32768
+      }
+    ],
+    "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
