@@ -29,6 +29,7 @@ export function OnboardingConnectGatewayButton({
   return (
     <div className="flex flex-col items-start gap-2">
       <Button
+        icon={connection.connectingGateway ? <Spinner size="sm" aria-hidden="true" /> : undefined}
         variant="primary"
         disabled={connection.pending || !allowed}
         aria-describedby={allowed ? undefined : reasonId}
@@ -41,14 +42,7 @@ export function OnboardingConnectGatewayButton({
           preview();
         }}
       >
-        {connection.connectingGateway ? (
-          <>
-            <Spinner size="sm" aria-hidden="true" />
-            Connecting…
-          </>
-        ) : (
-          `${verb} Mastra Gateway`
-        )}
+        {connection.connectingGateway ? 'Connecting…' : `${verb} Mastra Gateway`}
       </Button>
       {!allowed && (
         <Txt id={reasonId} variant="meta" tone="muted">

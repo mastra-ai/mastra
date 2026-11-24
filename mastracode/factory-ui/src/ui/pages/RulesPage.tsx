@@ -60,8 +60,8 @@ export function RulesPage() {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant="fit" {...slots}>
-      <div className="flex min-h-0 flex-col p-4">
+    <PageLayout variant="page" {...slots}>
+      <div className="flex h-full min-h-0 flex-col">
         <RulesContent factoryProjectId={factory.id} />
       </div>
     </PageLayout>
@@ -116,12 +116,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             const Icon = entry.icon;
             return (
               <Button
+                icon={<Icon />}
                 key={entry.key}
                 variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
-                <Icon aria-hidden />
                 {entry.label}
               </Button>
             );

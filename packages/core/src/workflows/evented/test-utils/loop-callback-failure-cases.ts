@@ -1,9 +1,9 @@
 /**
  * Shared cases for user callbacks that a loop or foreach runs inline (COR-1466).
- * Run them against each storage: stores with workflow step guards (Postgres)
- * evaluate the loop condition on a different code path than stores without.
+ * Run them against each storage: stores with workflow step guards (Postgres,
+ * libSQL) evaluate the loop condition on a different code path than stores without.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { Event } from '../../../events';
 import { Mastra } from '../../../mastra';
@@ -294,6 +294,91 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
       expect(conditionCalls).toBe(2);
       // At-least-once delivery: the retry redelivers the event that ran the step body.
       expect(body.calls).toBe(2);
+    });
+
+    // Step guards commit the condition's failure under the body's occurrence, so a late
+    // redelivery replays it instead of running the body or the condition again.
+    describe('on stores with workflow step guards', () => {
+      beforeEach(async ctx => {
+        const store = await getStorage().getStore('workflows');
+        if (!store?.supportsWorkflowStepGuards()) ctx.skip();
+      });
+
+      // A lost ack redelivers the event that ran the body and the throwing condition.
+      it.each(['step', 'nested workflow'] as const)(
+        'does not run the loop again when the failed iteration is redelivered late (%s body)',
+        async bodyKind => {
+          const storage = getStorage();
+          const driver = new RedeliveryDriver();
+          let bodyCalls = 0;
+          let conditionCalls = 0;
+          const loopId = `late-redelivery-${bodyKind.replace(' ', '-')}`;
+          const charge = createStep({
+            id: 'charge',
+            inputSchema: schema,
+            outputSchema: schema,
+            execute: async ({ inputData }) => {
+              bodyCalls++;
+              return { n: inputData.n + 1 };
+            },
+          });
+          const body =
+            bodyKind === 'step'
+              ? charge
+              : createWorkflow({ id: `${loopId}-child`, inputSchema: schema, outputSchema: schema })
+                  .then(charge)
+                  .commit();
+          const workflow = createWorkflow({ id: loopId, inputSchema: schema, outputSchema: schema })
+            .dowhile(body, async () => {
+              conditionCalls++;
+              throw new Error('condition boom');
+            })
+            .commit();
+          const mastra = new Mastra({
+            logger: false,
+            storage,
+            pubsub: driver.pubsub,
+            workflows: { [loopId]: workflow },
+          });
+          await mastra.startWorkers();
+          try {
+            const run = await workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'failed' });
+
+            const original =
+              bodyKind === 'step'
+                ? driver.stepRuns({ spec: '0', runId: run.runId })[0]!
+                : driver.events.find(
+                    event => event.type === 'workflow.end' && event.data.workflowId === `${loopId}-child`,
+                  )!;
+            const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
+            const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+            if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+            const failures = () => driver.events.filter(event => event.type === 'workflow.fail').length;
+            const failuresBefore = failures();
+            const eventsBefore = driver.events.length;
+            await driver.redeliverEvent(original);
+
+            // The replay sees the ended run and publishes nothing: the only event is the replay itself.
+            // The run's failure was stored by its own workflow.fail, whose redelivery would finish it.
+            expect(driver.events.slice(eventsBefore).map(event => event.type)).toEqual([original.type]);
+            expect(failures()).toBe(failuresBefore);
+            expect(bodyCalls).toBe(1);
+            expect(conditionCalls).toBe(1);
+            const store = (await storage.getStore('workflows'))!;
+            const snapshot = await store.loadWorkflowSnapshot({ workflowName: loopId, runId: run.runId });
+            expect(snapshot?.status).toBe('failed');
+            expect(snapshot?.context[body.id]).toMatchObject({
+              status: 'failed',
+              error: { message: 'condition boom' },
+            });
+          } finally {
+            await mastra.stopWorkers();
+            driver.dispose();
+          }
+        },
+        8_000,
+      );
     });
   });
 }

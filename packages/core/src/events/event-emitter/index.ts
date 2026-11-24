@@ -20,12 +20,17 @@ const NOOP_ACK = async (): Promise<void> => {};
 
 /**
  * The default pubsub: delivers events inside the process that published them.
+ * It needs no external service, and nothing it holds outlives the process.
  *
- * Several Mastra instances that share one storage but each use their own
- * `EventEmitterPubSub` are not supported for evented workflows: every instance
- * treats the others' runs as its own to recover. A multi-instance evented
- * deployment needs a broker such as Redis Streams, Valkey Streams or Google
- * Cloud Pub/Sub.
+ * Evented workflows and evented agents run on it in one process: local
+ * development, tests, and a single server. It is not a transport for running
+ * them on several instances. Each instance has its own emitter, so an event
+ * never reaches another instance, and instances that share one storage each
+ * treat the others' runs as their own to recover. Use a pubsub that redelivers
+ * unacknowledged events for that.
+ *
+ * The leases, consumer groups and nack redelivery here coordinate subscribers
+ * of this one process. They give no guarantee across processes.
  */
 export class EventEmitterPubSub extends PubSub implements LeaseProvider {
   // EventEmitter dispatches synchronously to listeners, so it can serve both
@@ -46,6 +51,11 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
    */
   override get supportsNativeBatching(): boolean {
     return true;
+  }
+
+  /** Every subscriber is a listener on this process's emitter. */
+  override get deliversAcrossProcesses(): boolean {
+    return false;
   }
 
   /**

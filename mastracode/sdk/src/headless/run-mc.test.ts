@@ -269,6 +269,20 @@ describe('runMC', () => {
     expect(modelIdAtSend).toBe(explicitModel!.id);
   });
 
+  it('validates a Codex fast selection against its canonical catalog row', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Fast answer.') }),
+    });
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([
+      { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true },
+    ]);
+
+    const result = await runMC({ controller, session, prompt: 'Hello', model: 'openai/gpt-6.2-sol:fast' }).result;
+
+    expect(result.status).toBe('completed');
+    expect(session.model.get()).toBe('openai/gpt-6.2-sol:fast');
+  });
+
   it('applies an explicit mode and its model after restoring a thread', async () => {
     const { controller, session } = await makeHarness({
       doStream: async () => ({ stream: textStream('Alternate answer.') }),

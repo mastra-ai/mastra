@@ -1,5 +1,42 @@
 # create-factory
 
+## 0.5.2-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`9ba253f`](https://github.com/mastra-ai/mastra/commit/9ba253f4279cdad5480981074c696f7f9b132354), [`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`ef19996`](https://github.com/mastra-ai/mastra/commit/ef19996086ecf91da8df587c0368ca31f99474c1)]:
+  - mastra@1.40.2-alpha.8
+
+## 0.5.2-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`8371f09`](https://github.com/mastra-ai/mastra/commit/8371f0927ed964cd0dfb73250cd9bb8dc9bd8ac5), [`e7e5f7e`](https://github.com/mastra-ai/mastra/commit/e7e5f7ecac4293ad21e67657a69fc913e5ff8b15)]:
+  - mastra@1.40.2-alpha.7
+
+## 0.5.2-alpha.6
+
+### Patch Changes
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - mastra@1.40.2-alpha.6
+
+## 0.5.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.40.2-alpha.5
+
+## 0.5.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b6265ab`](https://github.com/mastra-ai/mastra/commit/b6265ab10fd0dbd3c21a414ff5a7833a110f58a8)]:
+  - mastra@1.40.2-alpha.4
+
 ## 0.5.2-alpha.3
 
 ### Patch Changes

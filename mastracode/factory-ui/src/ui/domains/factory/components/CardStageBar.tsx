@@ -161,6 +161,8 @@ function NeighbourButton({
   const reason = stageBlockReason(step) ?? (held ? BUSY_CARD_MOVE_REFUSAL : undefined);
   return (
     <Button
+      iconEnd={direction === 'next' ? <IconChevronRightMedium /> : undefined}
+      icon={direction === 'previous' ? <IconChevronLeftMedium /> : undefined}
       variant="ghost"
       size="sm"
       aria-label={reason ? `${action}, ${reason}` : action}
@@ -168,9 +170,7 @@ function NeighbourButton({
       disabled={disabled || held || step.blocked !== undefined}
       onClick={() => onMove(step.phase.id)}
     >
-      {direction === 'previous' ? <IconChevronLeftMedium aria-hidden /> : null}
       <span className="hidden @2xl:inline">{name}</span>
-      {direction === 'next' ? <IconChevronRightMedium aria-hidden /> : null}
     </Button>
   );
 }

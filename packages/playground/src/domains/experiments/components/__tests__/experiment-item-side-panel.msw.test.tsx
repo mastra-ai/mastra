@@ -1,3 +1,4 @@
+import { useExperimentItemPanel } from '@mastra/playground-ui/domains/experiments/context/experiment-item-panel-context';
 import type { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -10,10 +11,7 @@ import { noScorers } from './fixtures/target-registries';
 import { StudioFrame } from '@/components/layout';
 import { dataset } from '@/domains/datasets/components/datasets-list/__tests__/fixtures/datasets';
 import { emptyScoresResponse } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
-import {
-  ExperimentItemPanelProvider,
-  useExperimentItemPanel,
-} from '@/domains/experiments/context/experiment-item-panel-context';
+import { ExperimentRouteItemPanelProvider } from '@/domains/experiments/context/experiment-route-item-panel-provider';
 import { RouteSidePanelProvider } from '@/lib/route-side-panel';
 import { metricsUnavailableCapabilities } from '@/pages/traces/__tests__/fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -85,7 +83,7 @@ function renderExperimentPage(initialPath: string) {
   const view = renderWithProviders(
     <TestLinkProvider>
       <RouteSidePanelProvider>
-        <ExperimentItemPanelProvider
+        <ExperimentRouteItemPanelProvider
           experimentId="exp-1"
           datasetId="ds-1"
           experimentStatus="completed"
@@ -97,7 +95,7 @@ function renderExperimentPage(initialPath: string) {
           </StudioFrame>
           <ExperimentItemSidePanel withFeedback={false} />
           <LocationProbe />
-        </ExperimentItemPanelProvider>
+        </ExperimentRouteItemPanelProvider>
       </RouteSidePanelProvider>
     </TestLinkProvider>,
     { router: { initialEntries: [initialPath] } },

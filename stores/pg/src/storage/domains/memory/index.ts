@@ -2,9 +2,11 @@ import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
   withObservationalMemoryLifecycleColumns,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { MessageList } from '@mastra/core/agent';
@@ -3804,6 +3806,11 @@ export class MemoryPG extends MemoryStorage {
           if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
             return stored;
           }
+          // The swap must consume the buffer and reflected line count the caller read; another
+          // writer may have extended both since, which the activated text alone cannot reveal.
+          if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) {
+            return stored;
+          }
 
           // Split current activeObservations by the recorded boundary.
           // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
@@ -3844,7 +3851,7 @@ export class MemoryPG extends MemoryStorage {
           WHERE id = $3`,
             [nowStr, nowStr, stored.id],
           );
-          return newRecord;
+          return withBufferedReflectionVerified(newRecord, currentRecord);
         },
         'swapBufferedReflectionToActive',
       );

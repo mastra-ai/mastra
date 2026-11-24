@@ -147,7 +147,7 @@ export function ScoreDataPanelView({
               <div className="mb-6 text-muted-foreground">
                 <div
                   className={cn(
-                    'text-placeholder',
+                    'text-subtle-foreground',
                     'flex items-baseline gap-2',
                     '[&>svg]:size-icon-lg [&>svg]:translate-y-1',
                   )}

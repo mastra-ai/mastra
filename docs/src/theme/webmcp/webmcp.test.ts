@@ -339,9 +339,6 @@ describe('mapHit', () => {
     expect(markdownUrl('/docs/agents/overview#tools')).toBe('https://mastra.ai/docs/agents/overview.md')
     expect(markdownUrl('/docs/?q=1')).toBe('https://mastra.ai/docs.md')
     expect(markdownUrl('/')).toBe('https://mastra.ai/index.md')
-    // The course has no Markdown version.
-    expect(markdownUrl('/learn/deploy-to-mastra-platform')).toBeUndefined()
-    expect(mapHit({ url: '/learn' }, config.siteUrl)).not.toHaveProperty('markdownUrl')
   })
 
   it('uses the heading path as the excerpt when the record has no content', () => {

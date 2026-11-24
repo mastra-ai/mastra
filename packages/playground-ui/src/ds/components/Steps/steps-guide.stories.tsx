@@ -30,8 +30,7 @@ export const Default: Story = {
     <Steps>
       <Steps.Step title="Create an API key">
         <div>
-          <Button variant="primary" size="md">
-            <IconKey2 />
+          <Button icon={<IconKey2 />} variant="primary" size="md">
             Create API key
           </Button>
         </div>

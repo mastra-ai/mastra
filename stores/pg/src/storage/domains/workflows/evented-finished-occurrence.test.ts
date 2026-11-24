@@ -20,6 +20,7 @@ describe('Postgres evented finished step deliveries', () => {
   // Each replica opens its own connection pool, as separate pods do.
   describeFinishedOccurrenceCases({
     getStorage: () => storage,
+    stepGuards: true,
     connect: async () => {
       const replica = open();
       await replica.init();

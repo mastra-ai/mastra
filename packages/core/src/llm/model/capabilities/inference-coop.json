@@ -29,22 +29,10 @@
         "type": "toggle"
       }
     ],
-    "greenpt/deepseek-v4.1-flash": [
+    "tinfoil/glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "greenpt/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "greenpt/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "tinfoil/deepseek-v4-1-flash": [
@@ -59,10 +47,22 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "tinfoil/glm-5.3": [
+    "greenpt/glm-5.3": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "greenpt/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "greenpt/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ]
   }

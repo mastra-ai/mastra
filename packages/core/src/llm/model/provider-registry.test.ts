@@ -1,11 +1,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
+import { MastraModelGateway } from './gateways/base.js';
 import type { ModelReasoningOption, ProviderConfig, ReasoningCapabilities } from './gateways/base.js';
-import { MastraGateway } from './gateways/mastra.js';
-import { ModelsDevGateway } from './gateways/models-dev.js';
-import { NetlifyGateway } from './gateways/netlify.js';
 import {
   GatewayRegistry,
   getModelReasoningOptions,
@@ -14,6 +12,97 @@ import {
   modelSupportsTemperature,
   _resetCapabilityCaches,
 } from './provider-registry.js';
+
+// The registry writes to ~/.cache/mastra (shared by every Mastra project on the machine) and to the
+// @mastra/core package root it resolves through `require.resolve('@mastra/core/package.json')`, i.e.
+// the real packages/core/dist (and src/ for writeToSrc). Each test gets its own temp home and a temp
+// package root seeded like a fresh build, so syncs, cache writes and corrupted-file cleanup run for
+// real without touching the build or the user's cache. vitest.registry-guard-setup.ts fails any
+// test that still does.
+const fixture = vi.hoisted(() => ({ home: '', packageRoot: '' }));
+
+vi.mock('node:os', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  const { join } = await import('node:path');
+  // Before the first test (module scope, describe bodies) fall back to a temp path, never the real home.
+  const homedir = () => fixture.home || join(actual.tmpdir(), 'mastra-provider-registry-test-no-home');
+  return { ...actual, homedir, default: { ...actual, homedir } };
+});
+
+vi.mock('node:module', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const createRequire: typeof actual.createRequire = url => {
+    const require = actual.createRequire(url);
+    const resolve = Object.assign(
+      (id: string, options?: { paths?: string[] }) =>
+        id === '@mastra/core/package.json'
+          ? join(fixture.packageRoot || join(tmpdir(), 'mastra-provider-registry-test-no-root'), 'package.json')
+          : require.resolve(id, options),
+      { paths: require.resolve.paths },
+    );
+    return Object.assign(require, { resolve });
+  };
+  return { ...actual, createRequire, default: { ...actual, createRequire } };
+});
+
+const fixtureRoots: string[] = [];
+
+beforeEach(() => {
+  // No test here may reach models.dev or Netlify: a sync that is not mocked fails instead of
+  // writing live provider data into whichever fixture is current when it resolves.
+  vi.stubGlobal('fetch', () => Promise.reject(new Error('provider-registry tests must not use the network')));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-provider-registry-'));
+  fixtureRoots.push(root);
+  fixture.home = path.join(root, 'home');
+  fixture.packageRoot = path.join(root, 'core');
+  fs.mkdirSync(fixture.home);
+
+  const srcModel = path.join(fixture.packageRoot, 'src', 'llm', 'model');
+  const distModel = path.join(fixture.packageRoot, 'dist', 'llm', 'model');
+  fs.mkdirSync(srcModel, { recursive: true });
+  fs.mkdirSync(distModel, { recursive: true });
+  fs.writeFileSync(path.join(fixture.packageRoot, 'package.json'), '{"name":"@mastra/core"}');
+  for (const file of ['provider-registry.json', 'provider-types.generated.d.ts']) {
+    fs.copyFileSync(path.join(__dirname, file), path.join(srcModel, file));
+  }
+  fs.copyFileSync(
+    path.join(__dirname, 'provider-registry.json'),
+    path.join(fixture.packageRoot, 'dist', 'provider-registry.json'),
+  );
+  fs.copyFileSync(
+    path.join(__dirname, 'provider-types.generated.d.ts'),
+    path.join(distModel, 'provider-types.generated.d.ts'),
+  );
+  // Only in src/: the loader falls back to it when dist/capabilities is absent, and copying it once is enough.
+  fs.cpSync(path.join(__dirname, 'capabilities'), path.join(srcModel, 'capabilities'), { recursive: true });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+afterAll(() => {
+  for (const root of fixtureRoots) fs.rmSync(root, { recursive: true, force: true });
+});
+
+/**
+ * The gateway classes syncGateways() will instantiate. It imports them dynamically, so after a
+ * vi.resetModules() they are not the classes imported at the top of this file.
+ */
+async function loadedGateways() {
+  const [{ ModelsDevGateway }, { NetlifyGateway }, { MastraGateway }] = await Promise.all([
+    import('./gateways/models-dev.js'),
+    import('./gateways/netlify.js'),
+    import('./gateways/mastra.js'),
+  ]);
+  return { ModelsDevGateway, NetlifyGateway, MastraGateway };
+}
+
+const fixtureDist = (...segments: string[]) => path.join(fixture.packageRoot, 'dist', ...segments);
+const fixtureCache = (...segments: string[]) => path.join(fixture.home, '.cache', 'mastra', ...segments);
+const readJson = (file: string) => JSON.parse(fs.readFileSync(file, 'utf-8'));
 
 /** Remove a model from OpenRouter's checked-in capability arrays (all, or one dimension). */
 function stripFromOpenRouterCapabilities(modelId: string, dimension?: string) {
@@ -51,18 +140,8 @@ describe('modelSupportsAttachments', () => {
   });
 
   it('falls back to checked-in source capabilities when dist capability files are absent', async () => {
-    const originalExistsSync = fs.existsSync;
-    const packageRoot = process.cwd();
-    const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
-    const distOpenRouterCapabilities = path.join(distCapabilitiesDir, 'openrouter.json');
-
-    vi.spyOn(fs, 'existsSync').mockImplementation(filePath => {
-      if (typeof filePath !== 'string') return originalExistsSync(filePath);
-      const normalizedPath = path.normalize(filePath);
-      if (normalizedPath === path.normalize(distCapabilitiesDir)) return true;
-      if (normalizedPath === path.normalize(distOpenRouterCapabilities)) return false;
-      return originalExistsSync(filePath);
-    });
+    // A stale partial build: dist/capabilities exists but has no openrouter.json.
+    fs.mkdirSync(fixtureDist('capabilities'));
 
     // gpt-oss-120b is open-weight and text-only in both the OpenRouter and
     // OpenAI capability lists, so it stays false through the nested-provider fallback.
@@ -316,102 +395,32 @@ describe('getModelReasoningOptions', () => {
 });
 
 describe('GatewayRegistry Auto-Refresh', () => {
-  const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
-  const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
+  let CACHE_DIR: string;
+  let CACHE_FILE: string;
   let originalEnv: NodeJS.ProcessEnv;
-  let originalWriteFile: typeof fs.promises.writeFile;
-  let originalCopyFile: typeof fs.promises.copyFile;
-
-  // Store original file contents to restore after tests
-  const PROVIDER_REGISTRY_PATH = path.join(__dirname, 'provider-registry.json');
-  const PROVIDER_TYPES_PATH = path.join(__dirname, 'provider-types.generated.d.ts');
-  let originalProviderRegistryContent: string | null = null;
-  let originalProviderTypesContent: string | null = null;
-
-  beforeAll(() => {
-    // Save original file contents before any tests run
-    try {
-      if (fs.existsSync(PROVIDER_REGISTRY_PATH)) {
-        originalProviderRegistryContent = fs.readFileSync(PROVIDER_REGISTRY_PATH, 'utf-8');
-      }
-      if (fs.existsSync(PROVIDER_TYPES_PATH)) {
-        originalProviderTypesContent = fs.readFileSync(PROVIDER_TYPES_PATH, 'utf-8');
-      }
-    } catch (error) {
-      console.warn('Failed to save original file contents:', error);
-    }
-  });
 
   beforeEach(() => {
-    // Save original functions
-    originalWriteFile = fs.promises.writeFile;
-    originalCopyFile = fs.promises.copyFile;
+    CACHE_DIR = fixtureCache();
+    CACHE_FILE = fixtureCache('gateway-refresh-time');
     originalEnv = { ...process.env };
-
-    // Clean up cache file before each test
-    if (fs.existsSync(CACHE_FILE)) {
-      fs.unlinkSync(CACHE_FILE);
-    }
 
     // Reset the singleton instance
     // @ts-expect-error - accessing private property for testing
     GatewayRegistry['instance'] = undefined;
-
-    // Mock file write operations globally to prevent any test from modifying the actual registry files
-    // Only block writes to the actual provider-registry.json and provider-types.generated.d.ts files
-    vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath, ...args) => {
-      if (typeof filePath === 'string' && (filePath === PROVIDER_REGISTRY_PATH || filePath === PROVIDER_TYPES_PATH)) {
-        // Block writes to the actual registry files
-        return Promise.resolve();
-      }
-      // Allow all other writes (including temp files in tests)
-      return originalWriteFile(filePath, ...args);
-    });
-
-    vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (src, dest, ...args) => {
-      if (typeof dest === 'string' && (dest === PROVIDER_REGISTRY_PATH || dest === PROVIDER_TYPES_PATH)) {
-        // Block copies to the actual registry files
-        return Promise.resolve();
-      }
-      // Allow all other copies
-      return originalCopyFile(src, dest, ...args);
-    });
   });
 
   afterEach(() => {
-    // Restore original env
-    process.env = originalEnv;
+    // Restore env in place: assigning a new object to process.env detaches it from the real
+    // environment, so later HOME changes would no longer reach os.homedir().
+    for (const key of Object.keys(process.env)) if (!(key in originalEnv)) delete process.env[key];
+    Object.assign(process.env, originalEnv);
 
     // Stop any running intervals
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     registry.stopAutoRefresh();
 
-    // Clean up cache file
-    try {
-      if (fs.existsSync(CACHE_FILE)) {
-        fs.unlinkSync(CACHE_FILE);
-      }
-    } catch {
-      // Ignore errors during cleanup
-    }
-
     // Restore all mocks
     vi.restoreAllMocks();
-  });
-
-  afterAll(() => {
-    // Restore original file contents after all tests complete
-    // This ensures we only write back once, improving efficiency
-    try {
-      if (originalProviderRegistryContent !== null) {
-        fs.writeFileSync(PROVIDER_REGISTRY_PATH, originalProviderRegistryContent, 'utf-8');
-      }
-      if (originalProviderTypesContent !== null) {
-        fs.writeFileSync(PROVIDER_TYPES_PATH, originalProviderTypesContent, 'utf-8');
-      }
-    } catch (error) {
-      console.warn('Failed to restore files in afterAll:', error);
-    }
   });
 
   it('should not sync the global cache on every registry read once loaded', () => {
@@ -430,6 +439,10 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
   it('should create cache file on first sync', async () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+    vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+      openai: { name: 'OpenAI', models: ['gpt-4o'], apiKeyEnvVar: 'OPENAI_API_KEY', gateway: 'models.dev' },
+    });
+    vi.spyOn((await loadedGateways()).NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
 
     expect(fs.existsSync(CACHE_FILE)).toBe(false);
 
@@ -442,7 +455,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
     expect(cacheTime.getTime()).toBeGreaterThan(Date.now() - 5000); // Within last 5 seconds
     expect(cacheTime.getTime()).toBeLessThanOrEqual(Date.now());
-  }, 60000);
+  });
 
   it('should read last refresh time from disk cache', async () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
@@ -551,10 +564,10 @@ describe('GatewayRegistry Auto-Refresh', () => {
   it('should enable auto-refresh by default when MASTRA_DEV=true', () => {
     process.env.MASTRA_DEV = 'true';
 
-    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+    // Mock before construction: the constructor starts auto-refresh, which syncs immediately
+    vi.spyOn(GatewayRegistry.prototype, 'syncGateways').mockResolvedValue(undefined);
 
-    // Mock syncGateways to avoid actual network calls
-    vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Auto-refresh should start automatically
     // We can't directly check if it's running, but we can verify the interval is set
@@ -588,10 +601,10 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // @ts-expect-error - accessing private property for testing
     GatewayRegistry['instance'] = undefined;
 
-    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+    // Mock before construction: the constructor starts auto-refresh, which syncs immediately
+    vi.spyOn(GatewayRegistry.prototype, 'syncGateways').mockResolvedValue(undefined);
 
-    // Mock syncGateways to avoid actual network calls
-    vi.spyOn(registry, 'syncGateways').mockResolvedValue(undefined);
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Auto-refresh should start (explicit override)
     // @ts-expect-error - accessing private property for testing
@@ -618,6 +631,9 @@ describe('GatewayRegistry Auto-Refresh', () => {
   it('should stop auto-refresh if cache operations fail', async () => {
     // This test verifies that auto-refresh stops when cache operations fail persistently
 
+    // A fresh module: the failure flag is module state that would disable syncs in later tests.
+    vi.resetModules();
+    const { GatewayRegistry } = await import('./provider-registry.js');
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Stop any existing auto-refresh
@@ -692,13 +708,9 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Stop any existing auto-refresh
     registry.stopAutoRefresh();
 
-    // Create a temp directory for test files
-    const tempDir = path.join(os.tmpdir(), 'mastra-registry-test-' + Date.now());
-    const tempJsonPath = path.join(tempDir, 'provider-registry.json');
-    const tempTypesPath = path.join(tempDir, 'provider-types.generated.d.ts');
-
-    // Ensure temp directory exists
-    fs.mkdirSync(tempDir, { recursive: true });
+    // The sync writes the fixture's dist/ for real; read what it wrote.
+    const tempJsonPath = fixtureDist('provider-registry.json');
+    const tempTypesPath = fixtureDist('llm', 'model', 'provider-types.generated.d.ts');
 
     // Mock the gateways to return controlled data
     const { ModelsDevGateway } = await import('./gateways/models-dev.js');
@@ -707,100 +719,46 @@ describe('GatewayRegistry Auto-Refresh', () => {
     let modelsDevCallCount = 0;
 
     // Use vi.spyOn for proper mocking (automatically restored by vi.restoreAllMocks)
-    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockImplementation(async function (): Promise<
-      Record<string, ProviderConfig>
-    > {
-      modelsDevCallCount++;
-      if (modelsDevCallCount === 1) {
+    vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders').mockImplementation(
+      async function (): Promise<Record<string, ProviderConfig>> {
+        modelsDevCallCount++;
+        if (modelsDevCallCount === 1) {
+          return {
+            'test-provider': {
+              name: 'Test Provider',
+              url: 'https://test.com/v1',
+              apiKeyEnvVar: 'TEST_API_KEY',
+              models: ['model-a', 'model-b'],
+              gateway: 'models.dev',
+            },
+          };
+        }
+        // Second call - add a new model and a new provider
         return {
           'test-provider': {
             name: 'Test Provider',
             url: 'https://test.com/v1',
             apiKeyEnvVar: 'TEST_API_KEY',
-            models: ['model-a', 'model-b'],
+            models: ['model-a', 'model-b', 'model-c'], // Added model-c
+            gateway: 'models.dev',
+          },
+          'new-provider': {
+            name: 'New Provider',
+            url: 'https://new.com/v1',
+            apiKeyEnvVar: 'NEW_API_KEY',
+            models: ['new-model-1', 'new-model-2'],
             gateway: 'models.dev',
           },
         };
-      }
-      // Second call - add a new model and a new provider
-      return {
-        'test-provider': {
-          name: 'Test Provider',
-          url: 'https://test.com/v1',
-          apiKeyEnvVar: 'TEST_API_KEY',
-          models: ['model-a', 'model-b', 'model-c'], // Added model-c
-          gateway: 'models.dev',
-        },
-        'new-provider': {
-          name: 'New Provider',
-          url: 'https://new.com/v1',
-          apiKeyEnvVar: 'NEW_API_KEY',
-          models: ['new-model-1', 'new-model-2'],
-          gateway: 'models.dev',
-        },
-      };
-    });
+      },
+    );
 
     // Mock Netlify to return empty
-    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockImplementation(async function (): Promise<
-      Record<string, ProviderConfig>
-    > {
-      return {};
-    });
-
-    // Mock both fs.writeFileSync and fs.promises.writeFile to intercept writes
-    const originalWriteFileSync = fs.writeFileSync;
-    const originalWriteFile = fs.promises.writeFile;
-    const originalRename = fs.promises.rename;
-
-    // Track temp files for redirect mapping
-    const tempFileMap = new Map<string, string>();
-
-    // Mock sync version for cache files
-    fs.writeFileSync = vi.fn().mockImplementation((filePath, data, encoding) => {
-      // Let cache writes go through normally
-      return originalWriteFileSync(filePath, data, encoding);
-    });
-
-    // Mock async version for registry files - handles atomic write temp files
-    fs.promises.writeFile = vi.fn().mockImplementation(async (filePath, data, encoding) => {
-      if (typeof filePath === 'string') {
-        // Handle temp files from atomic writes
-        if (filePath.includes('.tmp') && filePath.includes('provider-registry.json')) {
-          const redirectedTempPath = `${tempJsonPath}.${Date.now()}.tmp`;
-          tempFileMap.set(filePath, redirectedTempPath);
-          return originalWriteFile(redirectedTempPath, data, encoding);
-        } else if (filePath.includes('.tmp') && filePath.includes('provider-types.generated.d.ts')) {
-          const redirectedTempPath = `${tempTypesPath}.${Date.now()}.tmp`;
-          tempFileMap.set(filePath, redirectedTempPath);
-          return originalWriteFile(redirectedTempPath, data, encoding);
-        } else if (filePath.includes('provider-registry.json')) {
-          // Direct write (non-atomic)
-          return originalWriteFile(tempJsonPath, data, encoding);
-        } else if (filePath.includes('provider-types.generated.d.ts')) {
-          // Direct write (non-atomic)
-          return originalWriteFile(tempTypesPath, data, encoding);
-        }
-      }
-      // Let other writes go through normally
-      return originalWriteFile(filePath, data, encoding);
-    });
-
-    // Mock rename to handle atomic write completion
-    fs.promises.rename = vi.fn().mockImplementation(async (oldPath, newPath) => {
-      if (typeof oldPath === 'string' && typeof newPath === 'string') {
-        const redirectedOldPath = tempFileMap.get(oldPath);
-        if (redirectedOldPath) {
-          // Redirect the rename to our temp location
-          if (newPath.includes('provider-registry.json')) {
-            return originalRename(redirectedOldPath, tempJsonPath);
-          } else if (newPath.includes('provider-types.generated.d.ts')) {
-            return originalRename(redirectedOldPath, tempTypesPath);
-          }
-        }
-      }
-      return originalRename(oldPath, newPath);
-    });
+    vi.spyOn((await loadedGateways()).NetlifyGateway.prototype, 'fetchProviders').mockImplementation(
+      async function (): Promise<Record<string, ProviderConfig>> {
+        return {};
+      },
+    );
 
     // First sync
     await registry.syncGateways(true);
@@ -809,7 +767,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const firstJson = JSON.parse(fs.readFileSync(tempJsonPath, 'utf-8'));
     expect(firstJson.providers['test-provider']).toBeDefined();
     expect(firstJson.providers['new-provider']).toBeUndefined();
-    expect(firstJson.models['test-provider']).toEqual(['model-a', 'model-b']);
+    expect(firstJson.providers['test-provider'].models).toEqual(['model-a', 'model-b']);
 
     const firstTypes = fs.readFileSync(tempTypesPath, 'utf-8');
     expect(firstTypes).toContain("'test-provider': readonly ['model-a', 'model-b']");
@@ -823,8 +781,8 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const secondJson = JSON.parse(fs.readFileSync(tempJsonPath, 'utf-8'));
     expect(secondJson.providers['test-provider']).toBeDefined();
     expect(secondJson.providers['new-provider']).toBeDefined();
-    expect(secondJson.models['test-provider']).toEqual(['model-a', 'model-b', 'model-c']);
-    expect(secondJson.models['new-provider']).toEqual(['new-model-1', 'new-model-2']);
+    expect(secondJson.providers['test-provider'].models).toEqual(['model-a', 'model-b', 'model-c']);
+    expect(secondJson.providers['new-provider'].models).toEqual(['new-model-1', 'new-model-2']);
 
     const secondTypes = fs.readFileSync(tempTypesPath, 'utf-8');
     expect(secondTypes).toContain("'test-provider': readonly ['model-a', 'model-b', 'model-c']");
@@ -834,11 +792,6 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Verify the ModelRouterModelId type definition exists (it's a template literal type)
     expect(secondTypes).toContain('export type ModelRouterModelId');
     expect(secondTypes).toContain('ProviderModelsMap[P][number]');
-
-    // Clean up temp directory
-    fs.rmSync(tempDir, { recursive: true, force: true });
-
-    // Note: Mocks are automatically restored by vi.restoreAllMocks() in afterEach
   });
 
   it('should hide disabled gateway providers at runtime when shouldEnable returns false', async () => {
@@ -875,33 +828,9 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
   it('should write to src/ when writeToSrc flag is true', async () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
-    const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
-    fs.mkdirSync(tmpDir, { recursive: true });
-
-    const writtenFiles: string[] = [];
-    const renamedFiles: { src: string; dest: string }[] = [];
-    const copiedFiles: { src: string; dest: string }[] = [];
-
-    // Mock fs.promises.writeFile to track where files are written
-    vi.spyOn(fs.promises, 'writeFile').mockImplementation(async (filePath: any) => {
-      writtenFiles.push(filePath.toString());
-      return Promise.resolve();
-    });
-
-    // Mock fs.promises.rename to track atomic writes (write-to-temp-then-rename)
-    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
-      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
-      return Promise.resolve();
-    });
-
-    // Mock fs.promises.copyFile to track file copies
-    vi.spyOn(fs.promises, 'copyFile').mockImplementation(async (src: any, dest: any) => {
-      copiedFiles.push({ src: src.toString(), dest: dest.toString() });
-      return Promise.resolve();
-    });
 
     // Mock gateway to return test data
-    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+    vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
       'test-provider': {
         name: 'Test Provider',
         models: ['model-a'],
@@ -910,30 +839,34 @@ describe('GatewayRegistry Auto-Refresh', () => {
       } as ProviderConfig,
     });
 
-    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
-    const mastraFetchProvidersSpy = vi.spyOn(MastraGateway.prototype, 'fetchProviders').mockResolvedValue({
-      mastra: {
-        name: 'Gateway',
-        models: ['anthropic/claude-sonnet-4.5'],
-        apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
-        gateway: 'mastra',
-      } as ProviderConfig,
-    });
+    vi.spyOn((await loadedGateways()).NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
+    const mastraFetchProvidersSpy = vi
+      .spyOn((await loadedGateways()).MastraGateway.prototype, 'fetchProviders')
+      .mockResolvedValue({
+        mastra: {
+          name: 'Gateway',
+          models: ['anthropic/claude-sonnet-4.5'],
+          apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+          gateway: 'mastra',
+        } as ProviderConfig,
+      });
 
     // Call syncGateways with writeToSrc=true
     await registry.syncGateways(true, true);
 
     expect(mastraFetchProvidersSpy).not.toHaveBeenCalled();
 
-    // Verify files were written to dist/ via atomic rename
-    expect(renamedFiles.some(f => f.dest.includes('dist/provider-registry.json'))).toBe(true);
-    expect(renamedFiles.some(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'))).toBe(true);
-
-    // Verify files were copied to src/
-    expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-registry.json'))).toBe(true);
-    expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-types.generated.d.ts'))).toBe(true);
-
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    // dist/ and src/ (of the fixture package root) both hold the generated registry and types
+    const srcModel = path.join(fixture.packageRoot, 'src', 'llm', 'model');
+    for (const jsonPath of [fixtureDist('provider-registry.json'), path.join(srcModel, 'provider-registry.json')]) {
+      expect(Object.keys(readJson(jsonPath).providers)).toEqual(['test-provider']);
+    }
+    for (const typesPath of [
+      fixtureDist('llm', 'model', 'provider-types.generated.d.ts'),
+      path.join(srcModel, 'provider-types.generated.d.ts'),
+    ]) {
+      expect(fs.readFileSync(typesPath, 'utf-8')).toContain("'test-provider': readonly ['model-a']");
+    }
   });
 
   it('should skip syncGateways when MASTRA_OFFLINE is set to true', async () => {
@@ -942,7 +875,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock fetchProviders to detect if network calls are attempted
-    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders');
+    const fetchSpy = vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders');
 
     await registry.syncGateways(true);
 
@@ -955,7 +888,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
 
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
-    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders');
+    const fetchSpy = vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders');
 
     await registry.syncGateways(true);
 
@@ -968,8 +901,10 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock fetchProviders to avoid actual network calls but verify it's called
-    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({});
-    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
+    const fetchSpy = vi
+      .spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders')
+      .mockResolvedValue({});
+    vi.spyOn((await loadedGateways()).NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
 
     await registry.syncGateways(true);
 
@@ -988,24 +923,8 @@ describe('GatewayRegistry Auto-Refresh', () => {
   });
 
   it('should write .d.ts file to correct dist subdirectory path', async () => {
-    const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
-    fs.mkdirSync(tmpDir, { recursive: true });
-
-    const renamedFiles: { src: string; dest: string }[] = [];
-
-    // Mock fs.promises.writeFile to allow temp file writes
-    const writeFileSpy = vi.spyOn(fs.promises, 'writeFile').mockImplementation(async () => {
-      return Promise.resolve();
-    });
-
-    // Mock fs.promises.rename to track where files are atomically written
-    const renameSpy = vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
-      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
-      return Promise.resolve();
-    });
-
     // Mock gateway to return test data
-    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+    vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
       'test-provider': {
         name: 'Test Provider',
         models: ['model-a'],
@@ -1014,29 +933,21 @@ describe('GatewayRegistry Auto-Refresh', () => {
       },
     } as Record<string, ProviderConfig>);
 
-    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({} as Record<string, ProviderConfig>);
+    vi.spyOn((await loadedGateways()).NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue(
+      {} as Record<string, ProviderConfig>,
+    );
 
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     await registry.syncGateways(true);
 
-    // Verify .d.ts file is written to both global cache and local dist/llm/model/ subdirectory
-    // With atomic writes, we check the rename destination (not writeFile path)
-    const typesFiles = renamedFiles.filter(f => f.dest.includes('provider-types.generated.d.ts'));
-    expect(typesFiles.length).toBeGreaterThanOrEqual(1);
-
-    // Should write to global cache
-    const globalTypesFile = typesFiles.find(f => f.dest.includes('.cache/mastra/provider-types.generated.d.ts'));
-    expect(globalTypesFile).toBeDefined();
-
-    // Should also write to local dist/llm/model/ (not dist/ root)
-    const localTypesFile = typesFiles.find(f => f.dest.includes('dist/llm/model/provider-types.generated.d.ts'));
-    expect(localTypesFile).toBeDefined();
-    expect(localTypesFile?.dest).not.toContain('dist/provider-types.generated.d.ts');
-
-    // Cleanup
-    writeFileSpy.mockRestore();
-    renameSpy.mockRestore();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    // The .d.ts goes to the global cache and to dist/llm/model/ (not the dist/ root)
+    for (const typesPath of [
+      fixtureCache('provider-types.generated.d.ts'),
+      fixtureDist('llm', 'model', 'provider-types.generated.d.ts'),
+    ]) {
+      expect(fs.readFileSync(typesPath, 'utf-8')).toContain("'test-provider': readonly ['model-a']");
+    }
+    expect(fs.existsSync(fixtureDist('provider-types.generated.d.ts'))).toBe(false);
   });
 });
 
@@ -1059,11 +970,8 @@ describe('Corrupted JSON recovery', () => {
   });
 
   it('should fall back to static registry when dynamic JSON is corrupted', async () => {
-    const tempDir = path.join(os.tmpdir(), `mastra-corrupted-json-test-${Date.now()}`);
-    originalMkdirSync(tempDir, { recursive: true });
-
     // Create a corrupted JSON file (like what would happen from dual writes)
-    const corruptedJsonPath = path.join(tempDir, 'provider-registry.json');
+    const corruptedJsonPath = fixtureDist('provider-registry.json');
     const corruptedContent = `{
   "providers": {
     "test": { "name": "Test", "models": ["a", "b"] }
@@ -1075,22 +983,16 @@ describe('Corrupted JSON recovery', () => {
 ]}
 }`; // <-- extra garbage from concurrent write
     originalWriteFileSync(corruptedJsonPath, corruptedContent, 'utf-8');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    // We need to test that loadRegistry detects corruption and falls back
-    // Let's call getProviderConfig which internally calls loadRegistry
-    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+    // A fresh module: the dev-mode registry is cached in module state once loaded.
+    vi.resetModules();
+    const fresh = await import('./provider-registry.js');
+    const providers = fresh.GatewayRegistry.getInstance({ useDynamicLoading: true }).getProviders();
 
-    // The corrupted file should be detected and deleted, falling back to static registry
-    // We can't easily mock the static import, so let's just verify it doesn't throw
-    // and that the corrupted file gets deleted
-    const providers = registry.getProviders();
-
-    // Should return providers (from static registry fallback)
-    expect(providers).toBeDefined();
-    expect(typeof providers).toBe('object');
-
-    // Clean up
-    originalRmSync(tempDir, { recursive: true, force: true });
+    // The corrupted file is deleted and the bundled registry is served instead
+    expect(providers.openai?.name).toBe('OpenAI');
+    expect(fs.existsSync(corruptedJsonPath)).toBe(false);
   });
 
   it('should delete corrupted JSON file silently without logging', async () => {
@@ -1223,12 +1125,12 @@ describe('Partial gateway sync should not corrupt registry', () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock ModelsDevGateway.fetchProviders to fail (simulating models.dev API being down)
-    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockRejectedValue(
+    vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders').mockRejectedValue(
       new Error('Failed to fetch from models.dev: Service Unavailable'),
     );
 
     // Mock NetlifyGateway.fetchProviders to succeed (only Netlify returns data)
-    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
+    vi.spyOn((await loadedGateways()).NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
       netlify: {
         name: 'Netlify',
         url: 'https://netlify.example.com',
@@ -1238,27 +1140,20 @@ describe('Partial gateway sync should not corrupt registry', () => {
       },
     } as Record<string, ProviderConfig>);
 
-    // Track files that would be written via atomic rename
-    const renamedFiles: { src: string; dest: string }[] = [];
-    vi.spyOn(fs.promises, 'writeFile').mockResolvedValue();
-    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
-      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
-    });
+    const distRegistryBefore = fs.readFileSync(fixtureDist('provider-registry.json'), 'utf-8');
 
     await registry.syncGateways(true);
 
     // No registry files should have been written since models.dev failed
-    const registryWrites = renamedFiles.filter(
-      f => f.dest.includes('provider-registry.json') || f.dest.includes('provider-types.generated'),
-    );
-    expect(registryWrites).toHaveLength(0);
+    expect(fs.readFileSync(fixtureDist('provider-registry.json'), 'utf-8')).toBe(distRegistryBefore);
+    expect(fs.existsSync(fixtureCache('provider-registry.json'))).toBe(false);
   });
 
   it('should write results when all gateways succeed', async () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
     // Mock both gateways to succeed
-    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+    vi.spyOn((await loadedGateways()).ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
       openai: {
         name: 'OpenAI',
         url: 'https://api.openai.com/v1',
@@ -1268,7 +1163,7 @@ describe('Partial gateway sync should not corrupt registry', () => {
       },
     } as Record<string, ProviderConfig>);
 
-    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
+    vi.spyOn((await loadedGateways()).NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
       netlify: {
         name: 'Netlify',
         url: 'https://netlify.example.com',
@@ -1278,19 +1173,12 @@ describe('Partial gateway sync should not corrupt registry', () => {
       },
     } as Record<string, ProviderConfig>);
 
-    const renamedFiles: { src: string; dest: string }[] = [];
-    vi.spyOn(fs.promises, 'writeFile').mockResolvedValue();
-    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
-      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
-    });
-
     await registry.syncGateways(true);
 
     // Registry files SHOULD be written since all gateways succeeded
-    const registryWrites = renamedFiles.filter(
-      f => f.dest.includes('provider-registry.json') || f.dest.includes('provider-types.generated'),
-    );
-    expect(registryWrites.length).toBeGreaterThan(0);
+    for (const jsonPath of [fixtureDist('provider-registry.json'), fixtureCache('provider-registry.json')]) {
+      expect(Object.keys(readJson(jsonPath).providers).sort()).toEqual(['netlify', 'openai']);
+    }
   });
 });
 
@@ -1465,5 +1353,266 @@ describe('Issue #10434: Concurrent write corruption', () => {
 
     // With atomic writes, corruption should NEVER occur
     expect(corruptionDetected).toBe(false);
+  });
+});
+
+describe('Runtime provider registry filtering', () => {
+  type RegistryModule = typeof import('./provider-registry.js');
+  type RegistryJson = { providers: Record<string, ProviderConfig>; version: string };
+
+  const ENV_KEYS = ['MASTRA_DEV', 'MASTRA_AUTO_REFRESH_PROVIDERS', 'MASTRA_GATEWAY_API_KEY', 'MASTRA_OFFLINE'];
+  let savedEnv: Record<string, string | undefined>;
+
+  class ToggleGateway extends MastraModelGateway {
+    readonly name = 'Toggle';
+    constructor(
+      readonly id: string,
+      public enabled = true,
+    ) {
+      super();
+    }
+    override shouldEnable() {
+      return this.enabled;
+    }
+    async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+      return {
+        [this.id]: { name: this.id, models: [`${this.id}-model`], apiKeyEnvVar: 'TOGGLE_KEY', gateway: this.id },
+      };
+    }
+    buildUrl() {
+      return 'https://example.invalid/v1';
+    }
+    async getApiKey() {
+      return 'key';
+    }
+    async resolveLanguageModel(): Promise<never> {
+      throw new Error('not used');
+    }
+  }
+
+  // A bundled registry that also carries providers for the Mastra gateway and a custom gateway,
+  // the way one does when it was generated with those gateways enabled.
+  async function loadWithBundledRegistry(): Promise<RegistryModule> {
+    const real = (await vi.importActual<{ default: RegistryJson }>('./provider-registry.json')).default;
+    const bundled: RegistryJson = {
+      ...real,
+      providers: {
+        ...real.providers,
+        'mastra/openai': {
+          name: 'Mastra OpenAI',
+          models: ['gpt-4o'],
+          apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+          gateway: 'mastra',
+        },
+        acme: { name: 'Acme', models: ['acme-1'], apiKeyEnvVar: 'ACME_API_KEY', gateway: 'acme' },
+      },
+    };
+    vi.doMock('./provider-registry.json', () => ({ default: bundled }));
+    return import('./provider-registry.js');
+  }
+
+  beforeEach(() => {
+    savedEnv = Object.fromEntries(ENV_KEYS.map(key => [key, process.env[key]]));
+    delete process.env.MASTRA_DEV;
+    delete process.env.MASTRA_AUTO_REFRESH_PROVIDERS;
+    delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_OFFLINE;
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    vi.doUnmock('./provider-registry.json');
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  // Importing @mastra/core enumerates PROVIDER_REGISTRY (gateways/defaults.ts does it at module scope).
+  // Every proxy trap used to re-filter the whole bundled registry, ~625 times per import.
+  it('filters the bundled registry once when @mastra/core is imported and on later reads', async () => {
+    const entriesSpy = vi.spyOn(Object, 'entries');
+
+    await import('../../index.js');
+    const bundled = ((await import('./provider-registry.json')) as unknown as { default: RegistryJson }).default;
+    const filterRuns = () => entriesSpy.mock.calls.filter(([value]) => value === bundled.providers).length;
+    expect(filterRuns()).toBe(1);
+
+    const llm = await import('../index.js');
+    expect(Object.keys(llm.PROVIDER_REGISTRY).length).toBeGreaterThan(100);
+    expect(llm.PROVIDER_REGISTRY.openai?.name).toBe('OpenAI');
+    expect(llm.GatewayRegistry.getInstance().getModels().openai).toContain('gpt-4o');
+    for (const id of Object.keys(llm.PROVIDER_REGISTRY))
+      void llm.PROVIDER_REGISTRY[id as keyof typeof llm.PROVIDER_REGISTRY];
+    expect(filterRuns()).toBe(1);
+  });
+
+  it('shows a custom gateway registered after the registry was first read, and hides it once unregistered', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY, PROVIDER_MODELS } = await loadWithBundledRegistry();
+    const registry = GatewayRegistry.getInstance();
+
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+
+    registry.registerCustomGateways([new ToggleGateway('acme')]);
+    expect(PROVIDER_REGISTRY['acme' as keyof typeof PROVIDER_REGISTRY]?.name).toBe('Acme');
+    expect(PROVIDER_MODELS['acme' as keyof typeof PROVIDER_MODELS]).toEqual(['acme-1']);
+    expect(registry.isProviderRegistered('acme')).toBe(true);
+
+    registry.registerCustomGateways([]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+    expect(registry.getModels().acme).toBeUndefined();
+  });
+
+  it('hides providers of gateways replaced by one whose id contains a newline', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
+    const registry = GatewayRegistry.getInstance();
+
+    registry.registerCustomGateways([new ToggleGateway('acme'), new ToggleGateway('acmf')]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(true);
+
+    registry.registerCustomGateways([new ToggleGateway('acme\nacmf')]);
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+  });
+
+  it('follows a registered gateway being disabled and re-enabled after the registry was first read', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
+    const acme = new ToggleGateway('acme');
+    GatewayRegistry.getInstance().registerCustomGateways([acme]);
+
+    expect('acme' in PROVIDER_REGISTRY).toBe(true);
+    acme.enabled = false;
+    expect('acme' in PROVIDER_REGISTRY).toBe(false);
+    expect(Object.keys(PROVIDER_REGISTRY)).not.toContain('acme');
+    acme.enabled = true;
+    expect(Object.keys(PROVIDER_REGISTRY)).toContain('acme');
+  });
+
+  it('shows Mastra gateway providers once MASTRA_GATEWAY_API_KEY is set after the registry was first read', async () => {
+    const { GatewayRegistry, PROVIDER_REGISTRY } = await loadWithBundledRegistry();
+    const registry = GatewayRegistry.getInstance();
+
+    expect(registry.getProviderConfig('mastra/openai')).toBeUndefined();
+
+    process.env.MASTRA_GATEWAY_API_KEY = 'msk_test';
+    expect(registry.getProviderConfig('mastra/openai')?.name).toBe('Mastra OpenAI');
+    expect(registry.getModels()['mastra/openai']).toEqual(['gpt-4o']);
+
+    delete process.env.MASTRA_GATEWAY_API_KEY;
+    expect('mastra/openai' in PROVIDER_REGISTRY).toBe(false);
+    // Unrelated providers are unaffected by the gateway toggling.
+    expect(PROVIDER_REGISTRY.openai?.name).toBe('OpenAI');
+  });
+
+  // Dev mode reads the registry from disk and reloads it after a gateway refresh.
+  it('serves refreshed provider data in dev mode after a gateway sync', async () => {
+    const { GatewayRegistry } = await import('./provider-registry.js');
+    const { ModelsDevGateway: FreshModelsDev } = await import('./gateways/models-dev.js');
+    const { NetlifyGateway: FreshNetlify } = await import('./gateways/netlify.js');
+
+    // The registry the dev server starts with.
+    fs.writeFileSync(
+      fixtureDist('provider-registry.json'),
+      JSON.stringify({
+        version: '1.0.0',
+        providers: {
+          openai: { name: 'OpenAI', models: ['gpt-old'], apiKeyEnvVar: 'OPENAI_API_KEY', gateway: 'models.dev' },
+          anthropic: {
+            name: 'Anthropic',
+            models: ['claude-old'],
+            apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+            gateway: 'models.dev',
+          },
+        },
+        models: { openai: ['gpt-old'], anthropic: ['claude-old'] },
+      }),
+    );
+
+    // Gateways are the network edge; everything after the fetch runs for real.
+    vi.spyOn(FreshModelsDev.prototype, 'fetchProviders').mockResolvedValue({
+      openai: { name: 'OpenAI', models: ['gpt-refreshed'], apiKeyEnvVar: 'OPENAI_API_KEY', gateway: 'models.dev' },
+    });
+    vi.spyOn(FreshNetlify.prototype, 'fetchProviders').mockResolvedValue({});
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+    expect(registry.getModels().openai).toEqual(['gpt-old']);
+    expect(registry.isProviderRegistered('anthropic')).toBe(true);
+
+    registry.registerCustomGateways([new ToggleGateway('acme')]);
+    await registry.syncGateways(true);
+
+    expect(registry.getModels().openai).toEqual(['gpt-refreshed']);
+    expect(registry.getProviderConfig('acme')?.models).toEqual(['acme-model']);
+    expect(registry.isProviderRegistered('anthropic')).toBe(false);
+  });
+});
+
+describe('Provider model lists derived from the registry file', () => {
+  // The registry file no longer repeats every model list in a top-level `models` map; `getModels()`
+  // and `PROVIDER_MODELS` derive it from `providers[*].models`. The dev-mode loader can also read a
+  // registry file written by an older @mastra/core that still has the map.
+  const originalReadFileSync = fs.readFileSync;
+
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function loadDynamicRegistryFrom(registryFile: object) {
+    vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, ...rest) => {
+      if (typeof filePath === 'string' && filePath.endsWith(path.join('dist', 'provider-registry.json'))) {
+        return JSON.stringify(registryFile);
+      }
+      return originalReadFileSync(filePath as any, ...(rest as [any]));
+    });
+    const fresh = await import('./provider-registry.js');
+    return { registry: fresh.GatewayRegistry.getInstance({ useDynamicLoading: true }), fresh };
+  }
+
+  const providers = {
+    openai: { name: 'OpenAI', models: ['gpt-4.1', 'gpt-5'], gateway: 'models.dev' },
+    'netlify/anthropic': { name: 'Anthropic', models: ['claude-haiku-4-5'], gateway: 'netlify' },
+  };
+
+  it('lists every bundled provider with exactly the models in its provider entry', async () => {
+    // A fresh module gives a fresh singleton; the shared one may have been switched to dynamic loading.
+    const fresh = await import('./provider-registry.js');
+    const registry = fresh.GatewayRegistry.getInstance({ useDynamicLoading: false });
+    const providerConfigs = registry.getProviders();
+    const models = registry.getModels();
+
+    expect(Object.keys(providerConfigs).length).toBeGreaterThan(100);
+    expect(Object.keys(models)).toEqual(Object.keys(providerConfigs));
+    for (const [providerId, config] of Object.entries(providerConfigs)) {
+      expect(models[providerId]).toEqual(config.models);
+    }
+  });
+
+  it('reads model lists from a registry file without the top-level map', async () => {
+    const { registry, fresh } = await loadDynamicRegistryFrom({ providers, version: '1.0.0' });
+
+    expect(registry.getModels()).toEqual({
+      openai: ['gpt-4.1', 'gpt-5'],
+      'netlify/anthropic': ['claude-haiku-4-5'],
+    });
+    expect(Object.keys(fresh.PROVIDER_MODELS)).toEqual(['openai', 'netlify/anthropic']);
+    expect(fresh.PROVIDER_MODELS.openai).toEqual(['gpt-4.1', 'gpt-5']);
+  });
+
+  it('reads model lists from a registry file written by an older version with the top-level map', async () => {
+    const { registry } = await loadDynamicRegistryFrom({
+      providers,
+      models: { openai: ['gpt-4.1', 'gpt-5'], 'netlify/anthropic': ['claude-haiku-4-5'] },
+      version: '1.0.0',
+    });
+
+    expect(registry.getModels()).toEqual({
+      openai: ['gpt-4.1', 'gpt-5'],
+      'netlify/anthropic': ['claude-haiku-4-5'],
+    });
   });
 });

@@ -755,6 +755,8 @@ export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase
 export interface FactoryPullRequestHome {
   workItemId: string;
   reason: 'authored' | 'closes';
+  /** The other unfinished cards of issues it closes: they link to it without holding it. */
+  alsoCloses?: string[];
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
@@ -802,8 +804,9 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   cancelInFlight?: boolean;
   /**
    * Start this run even when the card was moved by the agent already running in
-   * this role's session. The prompt is queued onto that agent's run, so a phase
-   * that shares its context with the one before it still gets its own work.
+   * this role's session. The prompt starts once that agent's run ends, in a fresh
+   * run with this role's tools, so a phase that shares its context with the one
+   * before it still gets its own work.
    * Without it, an agent's own move into a phase of its role starts nothing.
    */
   startsAfterOwnMove?: boolean;

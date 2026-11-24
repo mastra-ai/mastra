@@ -177,44 +177,26 @@ export function AgentPlaygroundVersionBar({
               </Button>
             ) : (
               <Button
+                icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
                 variant="primary"
                 size="md"
                 onClick={() => void (isDirty ? onSaveDraft() : onPublish())}
                 disabled={codeSaveDisabled}
               >
-                {isSavingDraft ? (
-                  <>
-                    <Spinner className="size-3.5" />
-                    Saving&hellip;
-                  </>
-                ) : (
-                  <>
-                    <Icon size="xs">
-                      <IconFloppyDisk1 />
-                    </Icon>
-                    Save to filesystem
-                  </>
-                )}
+                {isSavingDraft ? 'Saving…' : 'Save to filesystem'}
               </Button>
             )}
           </div>
         ) : readOnly && !isViewingPreviousVersion ? null : (
           <div className="flex flex-wrap items-center justify-end gap-2">
             <ButtonsGroup>
-              <Button variant="default" onClick={() => onSaveDraft()} disabled={saveDisabled}>
-                {isSavingDraft ? (
-                  <>
-                    <Spinner className="size-3.5" />
-                    Saving&hellip;
-                  </>
-                ) : (
-                  <>
-                    <Icon size="xs">
-                      <IconFloppyDisk1 />
-                    </Icon>
-                    Save new version
-                  </>
-                )}
+              <Button
+                icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
+                variant="default"
+                onClick={() => onSaveDraft()}
+                disabled={saveDisabled}
+              >
+                {isSavingDraft ? 'Saving…' : 'Save new version'}
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
@@ -234,6 +216,7 @@ export function AgentPlaygroundVersionBar({
             </ButtonsGroup>
 
             <Button
+              icon={isPublishing ? <Spinner /> : <IconCheckmark2Medium />}
               variant="primary"
               size="md"
               onClick={onPublish}
@@ -243,19 +226,7 @@ export function AgentPlaygroundVersionBar({
                   : readOnly || !hasDraft || isPublishing || isSavingDraft
               }
             >
-              {isPublishing ? (
-                <>
-                  <Spinner className="size-3.5" />
-                  Publishing&hellip;
-                </>
-              ) : (
-                <>
-                  <Icon size="xs">
-                    <IconCheckmark2Medium />
-                  </Icon>
-                  {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
-                </>
-              )}
+              {isPublishing ? 'Publishing…' : isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
             </Button>
           </div>
         )}

@@ -1,13 +1,14 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "71.0.0-alpha.3",
+  "version": "71.0.0-alpha.12",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
   ],
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "theme.css",
     "components.css",
     "sources.css",

@@ -50,8 +50,8 @@ export function TokenBudgetDetail({
         </span>
         <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
           {formatCompactTokens(tokens)}
-          <span className="text-placeholder">/{formatCompactTokens(threshold)}k</span>
-          {projected > 0 && <span className="text-placeholder"> −{formatCompactTokens(projected)}k</span>}
+          <span className="text-subtle-foreground">/{formatCompactTokens(threshold)}k</span>
+          {projected > 0 && <span className="text-subtle-foreground"> −{formatCompactTokens(projected)}k</span>}
         </Txt>
       </div>
       <div className="flex h-1.5 overflow-hidden rounded-full bg-current/15">

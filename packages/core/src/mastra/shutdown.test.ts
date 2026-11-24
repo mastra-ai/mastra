@@ -1,6 +1,8 @@
 import EventEmitter from 'node:events';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../agent';
+import { DurableStepIds } from '../agent/durable/constants';
 import { globalRunRegistry } from '../agent/durable/run-registry';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSubDeliveryMode } from '../events/pubsub';
@@ -21,6 +23,20 @@ function deferred<T = void>() {
 class PushOnlyPubSub extends EventEmitterPubSub {
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['push'];
+  }
+}
+
+/** Push-only pubsub that exposes the workflow subscriber so tests control ack timing. */
+class CapturingPushPubSub extends PushOnlyPubSub {
+  #workflowCallbacks: Array<(event: any, ack?: () => Promise<void>, nack?: () => Promise<void>) => unknown> = [];
+
+  override async subscribe(topic: string, cb: any, ...rest: any[]): Promise<void> {
+    if (topic === 'workflows') this.#workflowCallbacks.push(cb);
+    return (super.subscribe as any)(topic, cb, ...rest);
+  }
+
+  async deliver(event: any, ack?: () => Promise<void>): Promise<void> {
+    await Promise.all(this.#workflowCallbacks.map(cb => cb(event, ack)));
   }
 }
 
@@ -347,6 +363,76 @@ describe('Mastra shutdown lifecycle', () => {
       expect(flush).toHaveBeenCalled();
     } finally {
       handling.resolve();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('handles a push event for the loop of a native evented agent registered after workers started', async () => {
+    const pubsub = new CapturingPushPubSub();
+    const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
+    const handle = vi.spyOn(mastra, 'handleWorkflowEvent').mockResolvedValue({ ok: true });
+
+    try {
+      await mastra.startWorkers();
+      mastra.addAgent(
+        new Agent({
+          id: 'late-native',
+          name: 'late-native',
+          instructions: 'test',
+          model: 'openai/gpt-4o',
+          durable: { executionEngine: 'evented' },
+        }),
+        'late-native',
+      );
+
+      const ack = vi.fn(async () => {});
+      await pubsub.deliver(
+        {
+          type: 'workflow.step.run',
+          runId: 'run-1',
+          data: { workflowId: DurableStepIds.AGENTIC_LOOP, runId: 'run-1' },
+        } as any,
+        ack,
+      );
+      await mastra.stopWorkers();
+
+      expect(handle).toHaveBeenCalledOnce();
+      expect(ack).toHaveBeenCalledOnce();
+    } finally {
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('stopWorkers waits for the acknowledgement of a skipped foreign push event', async () => {
+    const acking = deferred();
+    const pubsub = new CapturingPushPubSub();
+    const flush = vi.spyOn(pubsub, 'flush');
+    const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
+
+    try {
+      await mastra.startWorkers();
+      const ack = vi.fn(() => acking.promise);
+      void pubsub.deliver(
+        { type: 'workflow.step.run', runId: 'run-1', data: { workflowId: 'foreign-loop', runId: 'run-1' } } as any,
+        ack,
+      );
+      await vi.waitFor(() => expect(ack).toHaveBeenCalledOnce());
+
+      let stopped = false;
+      const stop = mastra.stopWorkers().then(() => {
+        stopped = true;
+      });
+      await new Promise(r => setTimeout(r, 20));
+      expect(stopped).toBe(false);
+      expect(flush).not.toHaveBeenCalled();
+
+      acking.resolve();
+      await stop;
+      expect(flush).toHaveBeenCalled();
+    } finally {
+      acking.resolve();
       await mastra.shutdown();
       mastra.__unregisterHooks();
     }

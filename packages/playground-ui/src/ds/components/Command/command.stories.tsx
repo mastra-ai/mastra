@@ -193,11 +193,7 @@ export const WithDialog: Story = {
     return (
       <>
         <p className="mb-4 text-body text-muted-foreground">
-          Press{' '}
-          <kbd className="pointer-events-none inline-flex h-5 items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-meta text-foreground select-none">
-            <span className="text-caption">⌘</span>K
-          </kbd>{' '}
-          or click the button below
+          Press <Kbd size="sm">⌘K</Kbd> or click the button below
         </p>
         <Button onClick={() => setOpen(true)}>Open command palette</Button>
         <CommandDialog open={open} onOpenChange={setOpen}>
