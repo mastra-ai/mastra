@@ -62,6 +62,30 @@ beforeEach(() => {
   );
 });
 
+// Valid rank-three graphs with fixed output batch sizes, independent of the input batch.
+const fixedBatchModels = {
+  dense: {
+    1: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0OugBCiQKBWZpeGVkEhFsYXN0X2hpZGRlbl9zdGF0ZSIISWRlbnRpdHkSC2ZpeGVkLWJhdGNoKjEIAQgECAIQAUIFZml4ZWRKIAAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/WigKCWlucHV0X2lkcxIbChkIBxIVCgcSBWJhdGNoCgoSCHNlcXVlbmNlWi0KDmF0dGVudGlvbl9tYXNrEhsKGQgHEhUKBxIFYmF0Y2gKChIIc2VxdWVuY2ViJwoRbGFzdF9oaWRkZW5fc3RhdGUSEgoQCAESDAoCCAEKAggECgIIAkICEA0=',
+      'base64',
+    ),
+    3: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0OqgCCiQKBWZpeGVkEhFsYXN0X2hpZGRlbl9zdGF0ZSIISWRlbnRpdHkSC2ZpeGVkLWJhdGNoKnEIAwgECAIQAUIFZml4ZWRKYAAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAP1ooCglpbnB1dF9pZHMSGwoZCAcSFQoHEgViYXRjaAoKEghzZXF1ZW5jZVotCg5hdHRlbnRpb25fbWFzaxIbChkIBxIVCgcSBWJhdGNoCgoSCHNlcXVlbmNlYicKEWxhc3RfaGlkZGVuX3N0YXRlEhIKEAgBEgwKAggDCgIIBAoCCAJCAhAN',
+      'base64',
+    ),
+  },
+  sparse: {
+    1: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0Os4BChkKBWZpeGVkEgZvdXRwdXQiCElkZW50aXR5EgtmaXhlZC1iYXRjaCoxCAEIBAgCEAFCBWZpeGVkSiAAAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAP1ooCglpbnB1dF9pZHMSGwoZCAcSFQoHEgViYXRjaAoKEghzZXF1ZW5jZVopCgppbnB1dF9tYXNrEhsKGQgHEhUKBxIFYmF0Y2gKChIIc2VxdWVuY2ViHAoGb3V0cHV0EhIKEAgBEgwKAggBCgIIBAoCCAJCAhAN',
+      'base64',
+    ),
+    3: Buffer.from(
+      'CAkSDmZhc3RlbWJlZC10ZXN0Oo4CChkKBWZpeGVkEgZvdXRwdXQiCElkZW50aXR5EgtmaXhlZC1iYXRjaCpxCAMIBAgCEAFCBWZpeGVkSmAAAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPwAAgD9aKAoJaW5wdXRfaWRzEhsKGQgHEhUKBxIFYmF0Y2gKChIIc2VxdWVuY2VaKQoKaW5wdXRfbWFzaxIbChkIBxIVCgcSBWJhdGNoCgoSCHNlcXVlbmNlYhwKBm91dHB1dBISChAIARIMCgIIAwoCCAQKAggCQgIQDQ==',
+      'base64',
+    ),
+  },
+};
+
 describe.each(['dense', 'sparse'] as const)('%s model output', kind => {
   async function initialize() {
     const options = { modelAbsoluteDirPath: modelDir, modelName: 'model.onnx', maxLength: 4 };
@@ -77,6 +101,67 @@ describe.each(['dense', 'sparse'] as const)('%s model output', kind => {
     const outputName = kind === 'dense' ? 'last_hidden_state' : 'output';
     await expect(embedding.embed(['one three', 'two four']).next()).rejects.toThrow(
       `Expected model output "${outputName}" to have 3 dimensions, received [2, 4]`,
+    );
+  });
+
+  it.each(['embed', 'passageEmbed', 'queryEmbed'] as const)(
+    'identifies a missing model output through %s',
+    async method => {
+      const file = path.join(modelDir, kind === 'dense' ? 'model.onnx' : 'onnx/model.onnx');
+      const requiredName = kind === 'dense' ? 'last_hidden_state' : 'output';
+      const actualName = kind === 'dense' ? 'renamed_embedding' : 'tensor';
+      const original = kind === 'dense' ? denseModelBytes : sparseModelBytes;
+      // Rename the two ONNX graph references without changing their protobuf lengths.
+      fs.writeFileSync(file, Buffer.from(original.toString('latin1').replaceAll(requiredName, actualName), 'latin1'));
+      const embedding = await initialize();
+      const result =
+        method === 'queryEmbed' ? embedding.queryEmbed('one three') : embedding[method](['one three']).next();
+      await expect(result).rejects.toThrow(
+        `Expected model output "${requiredName}" was not found. Available outputs: ${actualName}`,
+      );
+    },
+  );
+
+  function writeModelWithValue(value: number) {
+    const bytes = Buffer.from(kind === 'dense' ? denseModelBytes : sparseModelBytes);
+    const marker = Buffer.from([0x42, 3, 0x6f, 0x6e, 0x65, 0x4a, 4]);
+    const offset = bytes.indexOf(marker);
+    if (offset < 0) throw new Error('Fixture initializer was not found');
+    bytes.writeFloatLE(value, offset + marker.length);
+    fs.writeFileSync(path.join(modelDir, kind === 'dense' ? 'model.onnx' : 'onnx/model.onnx'), bytes);
+  }
+
+  it.each([NaN, Infinity, -Infinity])('rejects a non-finite model value (%s)', async value => {
+    writeModelWithValue(value);
+    const embedding = await initialize();
+    await expect(embedding.embed(['one three']).next()).rejects.toThrow(/non-finite/);
+  });
+
+  it.each([0, -1])('preserves finite zero and negative model values (%s)', async value => {
+    writeModelWithValue(value);
+    const embedding = await initialize();
+    const result = (await embedding.embed(['one three']).next()).value!;
+    if (kind === 'dense') {
+      const vectors = result as number[][];
+      expect(vectors[0]![0]).toBeCloseTo(1 / Math.sqrt(1 + value * value));
+      expect(vectors[0]![1]).toBeCloseTo(value / Math.sqrt(1 + value * value));
+    } else {
+      const vectors = result as { indices: number[]; values: number[] }[];
+      expect(vectors[0]!.indices).toEqual([0]);
+      expect(vectors[0]!.values).toHaveLength(1);
+      expect(vectors[0]!.values[0]).toBeCloseTo(Math.log(4));
+    }
+  });
+
+  it.each([1, 3] as const)('rejects %s output rows for two input texts', async outputBatchSize => {
+    fs.writeFileSync(
+      path.join(modelDir, kind === 'dense' ? 'model.onnx' : 'onnx/model.onnx'),
+      fixedBatchModels[kind][outputBatchSize],
+    );
+    const embedding = await initialize();
+    const outputName = kind === 'dense' ? 'last_hidden_state' : 'output';
+    await expect(embedding.embed(['one', 'two three']).next()).rejects.toThrow(
+      `Expected model output "${outputName}" to have batch size 2, received ${outputBatchSize}`,
     );
   });
 

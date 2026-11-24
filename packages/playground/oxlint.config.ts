@@ -1,4 +1,4 @@
-import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, pageRules, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
 
@@ -92,14 +92,28 @@ export default defineConfig({
       files: ['src/**/*.{ts,tsx}'],
       rules: playgroundUiRules,
     },
+    copyRuleExclusions,
+    {
+      files: ['src/pages/**/*.tsx'],
+      rules: pageRules,
+    },
+    {
+      files: ['src/pages/agent-builder/skills/view.tsx'],
+      rules: { 'playground-ui/no-page-width': 'off' },
+    },
     {
       files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
-      rules: { 'playground-ui/text-role': 'off', 'playground-ui/txt-tone': 'off', 'playground-ui/font-mono': 'off' },
+      rules: {
+        'playground-ui/text-role': 'off',
+        'playground-ui/txt-tone': 'off',
+        'playground-ui/font-mono': 'off',
+        'playground-ui/icon-size-from-parent': 'off',
+      },
     },
     {
       // Test stubs aren't UI people see.
       files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/sentence-case-labels': 'off' },
+      rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
     },
     {
       files: ['src/**/*.{test,spec}.{ts,tsx}'],

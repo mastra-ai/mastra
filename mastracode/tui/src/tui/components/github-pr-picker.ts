@@ -1,10 +1,10 @@
-import { Box, Container, fuzzyFilter, getKeybindings, Spacer, Text, TruncatedText } from '@earendil-works/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { displayModeColor, getContrastText, mastra, theme } from '../theme.js';
-import { ListWindow } from './list-window.js';
 import type { Filterable, MenuChrome, MenuHint } from './menu-chrome.js';
 import { menuRow } from './menu-list.js';
+import { PickerList } from './picker-list.js';
 
 export interface GithubPRPickerItem {
   owner?: string;
@@ -70,8 +70,8 @@ function formatUpdatedAt(value: string | undefined): string | undefined {
 
 export class GithubPRPickerDialog extends Box implements Focusable, Filterable, MenuChrome {
   private query = '';
-  private readonly window = new ListWindow();
   private listContainer!: Container;
+  private list!: PickerList<GithubPRPickerItem>;
   private viewTabs!: Text;
   private currentView: PRView = 'mine';
   private myPullRequests: GithubPRPickerItem[];
@@ -147,6 +147,17 @@ export class GithubPRPickerDialog extends Box implements Focusable, Filterable, 
     this.addChild(this.viewTabs);
     this.addChild(new Spacer(1));
     this.listContainer = new Container();
+    this.list = new PickerList({
+      maxVisible: 12,
+      truncate: true,
+      renderItem: (item, highlighted) => [this.renderPullRequest(item, highlighted)],
+      onActivate: index => {
+        this.highlightedIndex = index;
+        this.handleInput('\r');
+      },
+      emptyText: () =>
+        this.errorMessage ? '  No PRs loaded. You can still use /github owner/repo#123.' : '  No matching PRs',
+    });
     this.addChild(this.listContainer);
     this.updateList();
   }
@@ -250,52 +261,29 @@ export class GithubPRPickerDialog extends Box implements Focusable, Filterable, 
     }
     if (this.errorMessage) this.listContainer.addChild(new Text(theme.fg('error', this.errorMessage), 2, 0));
 
-    const totalItems = this.filteredPullRequests.length;
-    const maxVisible = 12;
-    const { startIndex, endIndex } = this.window.range(this.highlightedIndex, totalItems, maxVisible);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      const item = this.filteredPullRequests[i];
-      if (!item) continue;
-      const id = githubPRId(item);
-      const isHighlighted = i === this.highlightedIndex;
-      const isSelected = this.hasId(this.selectedIds, item);
-      const isSubscribed = this.hasId(this.subscribedIds, item);
-      const checkMark = isSelected ? chalk.green('✓') : ' ';
-      const title = item.title ? ` ${item.title}` : '';
-      const meta = [
-        item.author ? `@${item.author}` : undefined,
-        formatUpdatedAt(item.updatedAt),
-        item.headRefName && item.baseRefName ? `${item.headRefName}→${item.baseRefName}` : undefined,
-      ]
-        .filter(Boolean)
-        .join(' · ');
-      const subscribedMark = isSubscribed ? theme.fg('success', ' ●') : '';
-      const details = `${meta ? theme.fg('muted', `(${meta})`) : ''}${subscribedMark}`;
-      this.listContainer.addChild(
-        new TruncatedText(menuRow(isHighlighted, `[${checkMark}] ${id}${title}`, details), 0, 0),
-      );
-    }
-
-    if (totalItems > maxVisible) {
-      this.listContainer.addChild(new Text(theme.fg('dim', `(${this.highlightedIndex + 1}/${totalItems})`), 2, 0));
-    }
-    if (totalItems === 0) {
-      this.listContainer.addChild(
-        new Text(
-          theme.fg(
-            'muted',
-            this.errorMessage ? 'No PRs loaded. You can still use /github owner/repo#123.' : 'No matching PRs',
-          ),
-          2,
-          0,
-        ),
-      );
-    }
+    this.list.setItems(this.filteredPullRequests, this.highlightedIndex);
+    this.listContainer.addChild(this.list);
     const selectedCount = this.getSelectedPullRequests().length;
     if (selectedCount > 0) {
       this.listContainer.addChild(new Text(theme.fg('accent', `\n${selectedCount} selected - Enter to confirm`), 2, 0));
     }
+  }
+
+  private renderPullRequest(item: GithubPRPickerItem, isHighlighted: boolean): string {
+    const isSelected = this.hasId(this.selectedIds, item);
+    const isSubscribed = this.hasId(this.subscribedIds, item);
+    const checkMark = isSelected ? chalk.green('✓') : ' ';
+    const title = item.title ? ` ${item.title}` : '';
+    const meta = [
+      item.author ? `@${item.author}` : undefined,
+      formatUpdatedAt(item.updatedAt),
+      item.headRefName && item.baseRefName ? `${item.headRefName}→${item.baseRefName}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const subscribedMark = isSubscribed ? theme.fg('success', ' ●') : '';
+    const details = `${meta ? theme.fg('muted', `(${meta})`) : ''}${subscribedMark}`;
+    return menuRow(isHighlighted, `[${checkMark}] ${githubPRId(item)}${title}`, details);
   }
 
   handleInput(keyData: string): void {

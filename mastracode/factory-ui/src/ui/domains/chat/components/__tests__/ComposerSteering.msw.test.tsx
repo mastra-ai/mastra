@@ -16,6 +16,7 @@ import { Composer } from '../Composer';
 import {
   FACTORY_ID,
   SESSION_ID,
+  pickImage,
   releaseSession,
   renderThread,
   stubPreparingSession,
@@ -95,7 +96,7 @@ describe('Composer steering', () => {
       const user = userEvent.setup();
       await renderActiveRun();
 
-      await user.upload(screen.getByLabelText('Attach images'), new File(['png'], 'shot.png', { type: 'image/png' }));
+      await pickImage(user, new File(['png'], 'shot.png', { type: 'image/png' }));
 
       expect(await screen.findByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Abort' })).toBeEnabled();
@@ -111,7 +112,7 @@ describe('Composer steering', () => {
     await session.emit({ type: 'agent_start' });
 
     const composer = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent'));
     await user.type(composer, MESSAGE);
     await user.keyboard('{Enter}');
 
@@ -158,7 +159,7 @@ describe('Composer steering', () => {
     await session.emit({ type: 'agent_start' });
 
     const composer = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent'));
     await user.type(composer, MESSAGE);
     await user.keyboard('{Enter}');
 
@@ -216,7 +217,7 @@ describe('Composer steering scroll', () => {
     await session.emit({ type: 'agent_start' });
 
     const composer = await screen.findByRole('textbox', { name: 'Message' });
-    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent…'));
+    await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Steer the agent'));
 
     const viewport = screen.getByTestId('steer-viewport');
     const scrollTo = vi.fn((options?: ScrollToOptions | number) => {

@@ -9,7 +9,7 @@
  */
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -169,6 +169,54 @@ describe('read_file media output (local shell)', () => {
         { type: 'media', data: png.toString('base64'), mediaType: 'image/png' },
       ],
     });
+  });
+});
+
+describe('write_file output (local shell)', () => {
+  // https://github.com/mastra-ai/mastra/issues/28862
+  it('reports the real sandbox path when an absolute path is mapped into the workspace', async () => {
+    const filesystem = createSandboxFilesystem();
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+    const realPath = join(filesystem.basePath, 'tmp/x');
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+      { path: '/tmp/x', content: 'hello' },
+      { workspace },
+    );
+
+    expect(readFileSync(realPath, 'utf8')).toBe('hello');
+    expect(result).toContain(realPath);
+  });
+
+  it('keeps the requested path when it already is the real path', async () => {
+    const filesystem = createSandboxFilesystem();
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+    const realPath = join(filesystem.basePath, 'notes.txt');
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+      { path: realPath, content: 'hello' },
+      { workspace },
+    );
+
+    expect(result).toBe(`Wrote 5 bytes to ${realPath}`);
+  });
+
+  it('reports the real path when the requested path walks through a missing directory', async () => {
+    const filesystem = createSandboxFilesystem();
+    const workspace = new Workspace({ filesystem });
+    const tools = await createWorkspaceTools(workspace);
+    const requestedPath = `${filesystem.basePath}/missing/../note.txt`;
+    const realPath = join(filesystem.basePath, 'note.txt');
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+      { path: requestedPath, content: 'hello' },
+      { workspace },
+    );
+
+    expect(readFileSync(realPath, 'utf8')).toBe('hello');
+    expect(result).toBe(`Wrote 5 bytes to ${requestedPath} (resolved to ${realPath})`);
   });
 });
 

@@ -7,6 +7,7 @@ import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { McpServerStatus, McpSkippedServer } from '@mastra/code-sdk/mcp/types';
 import { decodePrintableShortcut } from '../key-input.js';
+import { ClickableText } from '../mouse/hit-test.js';
 import { theme } from '../theme.js';
 import type { MenuChrome, MenuHint } from './menu-chrome.js';
 import { labelColumnWidth, menuRow } from './menu-list.js';
@@ -267,8 +268,12 @@ export class McpSelectorComponent extends Box implements Focusable, MenuChrome {
       const toolInfo =
         !this._reloading && status.toolCount > 0 ? theme.fg('muted', ` · ${status.toolCount} tools`) : '';
 
+      const serverIndex = i;
       this.listContainer.addChild(
-        new Text(menuRow(isSelected, status.name, `${icon} ${stateText} ${transport}${toolInfo}`, column), 0, 0),
+        new ClickableText(
+          menuRow(isSelected, status.name, `${icon} ${stateText} ${transport}${toolInfo}`, column),
+          () => this.clickItem(serverIndex),
+        ),
       );
 
       // Sub-menu for this server
@@ -276,7 +281,10 @@ export class McpSelectorComponent extends Box implements Focusable, MenuChrome {
         for (let j = 0; j < this.subMenuActions.length; j++) {
           const action = this.subMenuActions[j]!;
           const actionSelected = j === this.subMenuIndex;
-          this.listContainer.addChild(new Text(`  ${menuRow(actionSelected, action.label)}`, 0, 0));
+          const actionIndex = j;
+          this.listContainer.addChild(
+            new ClickableText(`  ${menuRow(actionSelected, action.label)}`, () => this.clickAction(actionIndex)),
+          );
         }
       }
     }
@@ -290,10 +298,9 @@ export class McpSelectorComponent extends Box implements Focusable, MenuChrome {
         const idx = this.statuses.length + i;
         const isSelected = idx === this.selectedIndex && !this.subMenuOpen;
         this.listContainer.addChild(
-          new Text(
+          new ClickableText(
             menuRow(isSelected, s.name, `${theme.fg('warning', '⊘')} ${theme.fg('muted', s.reason)}`, column),
-            0,
-            0,
+            () => this.clickItem(idx),
           ),
         );
       }
@@ -440,6 +447,23 @@ export class McpSelectorComponent extends Box implements Focusable, MenuChrome {
     this.subMenuOpen = true;
     this.subMenuIndex = 0;
     this.updateList();
+  }
+
+  /** A click on a server row does what the keyboard would: close any open action menu, move there, press Enter. */
+  private clickItem(index: number): void {
+    if (this._reloading) return;
+    if (this.subMenuOpen) this.handleInput('\x1b');
+    this.selectedIndex = index;
+    this.updateList();
+    this.handleInput('\r');
+  }
+
+  /** A click on an action row moves there and presses Enter. */
+  private clickAction(index: number): void {
+    if (this._reloading || !this.subMenuOpen) return;
+    this.subMenuIndex = index;
+    this.updateList();
+    this.handleInput('\r');
   }
 
   private handleSubMenuInput(data: string, kb: ReturnType<typeof getKeybindings>): void {

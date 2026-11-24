@@ -207,9 +207,8 @@ function extractPromptText(prompt: any): string {
         return String(msg);
       })
       .join(' ');
-  } else {
-    return String(prompt);
   }
+  return String(prompt);
 }
 
 /**
@@ -1831,16 +1830,15 @@ describe('Tracing Integration Tests', () => {
                 warnings: [],
                 response: { id: '00000000-0000-0000-0000-000000000001', modelId: 'mock-model-id' },
               };
-            } else {
-              // Second call: After tool execution, agent returns the final answer
-              return {
-                content: [{ type: 'text', text: 'The result of 5 + 3 is 8.' }],
-                finishReason: 'stop' as const,
-                usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-                warnings: [],
-                response: { id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
-              };
             }
+            // Second call: After tool execution, agent returns the final answer
+            return {
+              content: [{ type: 'text', text: 'The result of 5 + 3 is 8.' }],
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+              warnings: [],
+              response: { id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
+            };
           },
           doStream: async () => {
             callCount++;
@@ -1879,20 +1877,19 @@ describe('Tracing Integration Tests', () => {
                   },
                 ]),
               };
-            } else {
-              // Second call: After tool execution, agent returns the final answer
-              return {
-                stream: convertArrayToReadableStream([
-                  { type: 'response-metadata', id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
-                  { type: 'text-delta', id: '2', delta: 'The result of 5 + 3 is 8.' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-                  },
-                ]),
-              };
             }
+            // Second call: After tool execution, agent returns the final answer
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'response-metadata', id: '00000000-0000-0000-0000-000000000002', modelId: 'mock-model-id' },
+                { type: 'text-delta', id: '2', delta: 'The result of 5 + 3 is 8.' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+                },
+              ]),
+            };
           },
         });
 

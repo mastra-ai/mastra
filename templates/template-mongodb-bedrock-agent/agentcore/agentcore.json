@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.agentcore.aws.dev/v1/agentcore.json",
+  "name": "mastramongoaws",
+  "version": 1,
+  "managedBy": "CDK",
+  "tags": {
+    "agentcore:created-by": "agentcore-cli",
+    "agentcore:project-name": "mastramongoaws"
+  },
+  "runtimes": [
+    {
+      "name": "MastraAgent",
+      "build": "Container",
+      "entrypoint": "agent.ts",
+      "codeLocation": "./",
+      "dockerfile": "Dockerfile",
+      "runtimeVersion": "NODE_22",
+      "networkMode": "PUBLIC",
+      "protocol": "HTTP",
+      "additionalPolicies": ["agentcore/mongodb-secret-policy.json"],
+      "instrumentation": {
+        "enableOtel": true
+      },
+      "envVars": [
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "MONGODB_SECRET_ARN",
+          "value": "arn:aws:secretsmanager:us-east-1:123456789012:secret:mastra-docs-mongodb-ABCDEF"
+        },
+        {
+          "name": "MONGODB_DATABASE",
+          "value": "mastra_docs"
+        },
+        {
+          "name": "BEDROCK_MODEL_ID",
+          "value": "us.anthropic.claude-sonnet-4-6"
+        },
+        {
+          "name": "BEDROCK_EMBED_MODEL_ID",
+          "value": "amazon.titan-embed-text-v2:0"
+        },
+        {
+          "name": "EMBED_DIMENSION",
+          "value": "1024"
+        }
+      ]
+    }
+  ],
+  "memories": [],
+  "knowledgeBases": [],
+  "credentials": [],
+  "evaluators": [],
+  "onlineEvalConfigs": [],
+  "agentCoreGateways": [],
+  "policyEngines": [],
+  "configBundles": [],
+  "abTests": [],
+  "harnesses": [],
+  "datasets": [],
+  "payments": []
+}

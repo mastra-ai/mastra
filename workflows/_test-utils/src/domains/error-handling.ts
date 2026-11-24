@@ -8,10 +8,36 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '@mastra/core/error';
-import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
+import type { WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
+
+/**
+ * Records the step results a run hands to the workflows store. Storage v2 runs write
+ * through the checkpoint/append methods; every other run writes whole snapshots.
+ */
+function spyOnStepWrites(workflowsStore: WorkflowsStorage) {
+  const persist = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot');
+  const checkpoint = vi.spyOn(workflowsStore, 'writeWorkflowRunCheckpoint');
+  const append = vi.spyOn(workflowsStore, 'appendWorkflowRunEntries');
+
+  return {
+    failedStepResult(stepId: string) {
+      const written = [
+        ...persist.mock.calls.map(([args]) => args.snapshot.context),
+        ...checkpoint.mock.calls.map(([args]) => args.steps),
+        ...append.mock.calls.map(([args]) => args.steps),
+      ];
+      return written.find(steps => steps[stepId]?.status === 'failed')?.[stepId];
+    },
+    restore() {
+      persist.mockRestore();
+      checkpoint.mockRestore();
+      append.mockRestore();
+    },
+  };
+}
 
 /**
  * Create all workflows needed for error handling tests.
@@ -692,7 +718,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
           return; // Skip if workflows store not available
         }
 
-        const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot');
+        const writes = spyOnStepWrites(workflowsStore);
 
         const entry = registry!['error-persist-without-stack']!;
         const { workflow, errorMessage } = entry;
@@ -701,19 +727,8 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         const result = await execute(workflow, {}, { runId });
 
         expect(result.status).toBe('failed');
-        expect(persistSpy).toHaveBeenCalled();
 
-        // Find the last persist call with failed status
-        const persistCalls = persistSpy.mock.calls;
-        const failedCall = persistCalls.find((call: any) => call[0]?.snapshot?.status === 'failed');
-
-        expect(failedCall).toBeDefined();
-        const snapshot = failedCall?.[0]?.snapshot;
-
-        expect(snapshot).toBeDefined();
-        expect(snapshot!.status).toBe('failed');
-
-        const step1Result = snapshot!.context?.step1;
+        const step1Result = writes.failedStepResult('step1');
         expect(step1Result).toBeDefined();
         expect(step1Result?.status).toBe('failed');
 
@@ -727,7 +742,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         const serialized = JSON.stringify(failedStepResult.error);
         expect(serialized).not.toContain('"stack"');
 
-        persistSpy.mockRestore();
+        writes.restore();
       },
     );
 
@@ -749,7 +764,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
           return; // Skip if workflows store not available
         }
 
-        const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot');
+        const writes = spyOnStepWrites(workflowsStore);
 
         const entry = registry!['error-persist-mastra-error']!;
         const { workflow, errorMessage } = entry;
@@ -758,19 +773,8 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         const result = await execute(workflow, {}, { runId });
 
         expect(result.status).toBe('failed');
-        expect(persistSpy).toHaveBeenCalled();
 
-        // Find the last persist call with failed status
-        const persistCalls = persistSpy.mock.calls;
-        const failedCall = persistCalls.find((call: any) => call[0]?.snapshot?.status === 'failed');
-
-        expect(failedCall).toBeDefined();
-        const snapshot = failedCall?.[0]?.snapshot;
-
-        expect(snapshot).toBeDefined();
-        expect(snapshot!.status).toBe('failed');
-
-        const step1Result = snapshot!.context?.step1;
+        const step1Result = writes.failedStepResult('step1');
         expect(step1Result).toBeDefined();
         expect(step1Result?.status).toBe('failed');
 
@@ -784,14 +788,19 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         const serialized = JSON.stringify(failedStepResult.error);
         expect(serialized).not.toContain('"stack"');
 
-        persistSpy.mockRestore();
+        writes.restore();
       },
     );
 
     // NOTE: This test is opt-in (skipped by default) because the execution engine's
     // logger is not automatically updated when the Mastra logger is set via __registerPrimitives.
     it.skipIf(skipTests.errorLogger ?? true)('should log step execution errors via the Mastra logger', async () => {
-      const { createWorkflow: createWf, createStep: createSt } = ctx;
+      const { createWorkflow: createWf, createStep: createSt, Mastra } = ctx;
+
+      // Opt-in test: an engine that turns it on has to provide the Mastra class to host with.
+      if (!Mastra) {
+        throw new Error('errorLogger test is enabled but the engine factory does not provide Mastra');
+      }
 
       const mockLogger = {
         debug: vi.fn(),

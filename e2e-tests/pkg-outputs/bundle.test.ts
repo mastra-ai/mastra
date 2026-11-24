@@ -65,7 +65,9 @@ describe.for(
           pkgName === '@mastra/factory' ||
           pkgName === '@mastra/server-adapters-test-suite' ||
           pkgName === 'mastra' ||
-          pkgName.startsWith('@internal/'),
+          pkgName.startsWith('@internal/') ||
+          // ESM only: the TUI boot imports @mastra/code-sdk subpaths, which have no require condition.
+          (pkgName === 'mastracode' && importPath === './run-tui'),
       )('should use .cjs and .d.ts or .d.cts extensions when using require', async () => {
         if (importPath === './package.json') {
           return;
@@ -403,5 +405,39 @@ describe('@mastra/core export allowlist validation', () => {
           '\n\nAdd explicit export entries for these subpaths.',
       );
     }
+  });
+});
+
+// =============================================================================
+// Published packages should not ship JavaScript source maps
+// =============================================================================
+
+// Maps roughly doubled the unpacked size of @mastra/core and only pointed at
+// src/*.ts files that are not in the tarball. Declaration maps are a separate concern.
+// @mastra/playground-ui keeps its maps: it is a browser component library built with Vite.
+const keepsJsSourceMaps = ['@mastra/playground-ui'];
+
+describe.for(
+  allPackages
+    .filter(
+      pkg =>
+        !pkg.packageJson.private &&
+        !globalIgnore.includes(pkg.packageJson.name) &&
+        !keepsJsSourceMaps.includes(pkg.packageJson.name),
+    )
+    .map(pkg => [pkg.packageJson.name, pkg.dir] as const),
+)('%s', ([, pkgDir]) => {
+  it('should not ship JavaScript source maps', async () => {
+    const distDir = join(pkgDir, 'dist');
+    const maps = await globby(join(distDir, '**/*.{js,cjs,mjs}.map'));
+    expect(maps.map(file => relative(pkgDir, file))).toEqual([]);
+
+    const jsFiles = await globby(join(distDir, '**/*.{js,cjs,mjs}'));
+    const withComment: string[] = [];
+    for (const file of jsFiles) {
+      const content = await readFile(file, 'utf-8');
+      if (/^\/\/# sourceMappingURL=/m.test(content)) withComment.push(relative(pkgDir, file));
+    }
+    expect(withComment).toEqual([]);
   });
 });

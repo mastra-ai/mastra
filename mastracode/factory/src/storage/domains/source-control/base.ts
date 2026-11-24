@@ -1,6 +1,8 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionListOptions, CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { AnnouncedLists } from '../../announced-lists.js';
+import type { ProjectListScope } from '../../announced-lists.js';
 import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
 
 const FACTORY_PROJECTS = 'factory_projects';
@@ -125,17 +127,13 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       id: { type: 'uuid-pk' },
       connection_id: { type: 'text' },
       repository_id: { type: 'text' },
-      created_by_user_id: { type: 'text' },
       branch: { type: 'text', nullable: true },
-      sandbox_provider: { type: 'text' },
-      sandbox_workdir: { type: 'text' },
       setup_command: { type: 'text', nullable: true },
       teardown_command: { type: 'text', nullable: true },
       position: { type: 'integer', default: 0 },
       in_environment: { type: 'boolean', default: true },
       last_build_status: { type: 'text', default: 'unbuilt' },
       last_build_error: { type: 'text', nullable: true },
-      last_built_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -290,10 +288,7 @@ export interface ProjectRepository {
   id: string;
   connectionId: string;
   repositoryId: string;
-  createdByUserId: string;
   branch: string | null;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
   setupCommand: string | null;
   teardownCommand: string | null;
   /** 1-based order within the project's environment (display and setup order only). */
@@ -302,9 +297,15 @@ export interface ProjectRepository {
   inEnvironment: boolean;
   lastBuildStatus: ProjectRepositoryBuildStatus;
   lastBuildError: string | null;
-  lastBuiltAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** A project's connection with its installation and its links, each link with the repository behind it. */
+export interface ProjectConnectionWithRepositories extends ProjectSourceControlConnection {
+  installation: SourceControlInstallation;
+  /** `repository` is null when the repository row is gone or belongs to an installation outside the organization. */
+  repositories: Array<ProjectRepository & { repository: SourceControlRepository | null }>;
 }
 
 export interface ExternalRepositoryProjectTarget {
@@ -323,18 +324,13 @@ export interface LinkProjectRepositoryInput {
   orgId: string;
   connectionId: string;
   repositoryId: string;
-  createdByUserId: string;
   branch?: string | null;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
 }
 
 export interface UpdateProjectRepositoryInput {
   branch?: string | null;
-  sandboxProvider?: string;
-  sandboxWorkdir?: string;
   setupCommand?: string | null;
   teardownCommand?: string | null;
   position?: number;
@@ -346,7 +342,6 @@ export interface SetProjectRepositoryBuildStatusInput {
   id: string;
   status: ProjectRepositoryBuildStatus;
   error?: string | null;
-  builtAt?: Date | null;
 }
 
 /**
@@ -391,6 +386,10 @@ export interface SourceControlSession {
   firstMeaningfulExecAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export function isSeenBy(session: Pick<SourceControlSession, 'visibility' | 'userId'>, viewerUserId: string): boolean {
+  return session.visibility !== 'private' || session.userId === viewerUserId;
 }
 
 export interface CreateSourceControlSessionInput {
@@ -451,8 +450,22 @@ export type TransferSourceControlSessionOwnerResult =
   | { status: 'updated'; session: SourceControlSession }
   | { status: 'conflict'; reason: 'stale_owner' | 'branch_owned'; session: SourceControlSession | null };
 
+export interface LinkedRepositoriesChange {
+  integrationId: string;
+  /** False when another replica made the write. */
+  local: boolean;
+}
+
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
+  /**
+   * Fires after the set of repositories linked to projects may have changed
+   * for this integration, on this replica or (once the factory has wired the
+   * event bus) another one. Returns a function that removes the listener.
+   */
+  onLinkedRepositoriesChanged(listener: () => void): () => void;
+  /** False once the factory failed to share these changes between replicas. */
+  linkedRepositoryChangesShared(): boolean;
   readonly installations: {
     list(args: { orgId: string }): Promise<SourceControlInstallation[]>;
     get(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
@@ -479,6 +492,18 @@ export interface SourceControlStorageHandle {
   };
   readonly connections: {
     list(args: { orgId: string; factoryProjectId: string }): Promise<ProjectSourceControlConnection[]>;
+    /**
+     * This integration's connections to any of the projects, oldest first, each with its installation and its links
+     * (oldest first, with their repositories). It takes four queries however many projects, connections or links
+     * there are, plus one when a repository sits under an installation no connection uses. A connection whose
+     * installation is gone, such as after the GitHub App was uninstalled, is left out,
+     * so one orphaned row cannot fail the read. Only installations of `orgId` are returned, so the result stays
+     * inside the organization even when a project id from another one is passed.
+     */
+    listWithRepositories(args: {
+      orgId: string;
+      factoryProjectIds: string[];
+    }): Promise<ProjectConnectionWithRepositories[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection | null>;
     create(args: CreateProjectSourceControlConnectionInput): Promise<ProjectSourceControlConnection>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
@@ -525,6 +550,8 @@ export interface SourceControlStorageHandle {
       factoryProjectId: string;
       viewerUserId: string;
     }): Promise<SourceControlSession[]>;
+    /** Every visibility, frozen and shared: filter per viewer before any of it reaches one. */
+    listSharedByProject(args: { orgId: string; factoryProjectId: string }): Promise<readonly SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
     /**
      * Sessions started as side sessions by `originSessionId`. System-level (no
@@ -620,17 +647,13 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
   id: string;
   connection_id: string;
   repository_id: string;
-  created_by_user_id: string;
   branch: string | null;
-  sandbox_provider: string;
-  sandbox_workdir: string;
   setup_command: string | null;
   teardown_command: string | null;
   position: number | null;
   in_environment: boolean | null;
   last_build_status: string | null;
   last_build_error: string | null;
-  last_built_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -709,17 +732,13 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
     id: row.id,
     connectionId: row.connection_id,
     repositoryId: row.repository_id,
-    createdByUserId: row.created_by_user_id,
     branch: row.branch,
-    sandboxProvider: row.sandbox_provider,
-    sandboxWorkdir: row.sandbox_workdir,
     setupCommand: row.setup_command,
     teardownCommand: row.teardown_command,
     position: row.position ?? 0,
     inEnvironment: row.in_environment ?? true,
     lastBuildStatus: toBuildStatus(row.last_build_status),
     lastBuildError: row.last_build_error,
-    lastBuiltAt: row.last_built_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -727,6 +746,10 @@ function toProjectRepository(row: ProjectRepositoryDbRow): ProjectRepository {
 
 function toBuildStatus(value: string | null): ProjectRepositoryBuildStatus {
   return value === 'configured' || value === 'failed' ? value : 'unbuilt';
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 /** Oldest first; ties (same millisecond) break on id so re-runs see one order. */
@@ -788,8 +811,6 @@ function toSession(row: SessionDbRow): SourceControlSession {
 function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<string, unknown> {
   const patch: Record<string, unknown> = { updated_at: new Date() };
   if (input.branch !== undefined) patch.branch = input.branch;
-  if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
-  if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
   if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
   if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
   if (input.position !== undefined) patch.position = input.position;
@@ -798,8 +819,68 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 }
 
 export class SourceControlStorage extends FactoryStorageDomain {
+  readonly #linkedRepositoryListeners = new Set<(change: LinkedRepositoriesChange) => void>();
+  #linkedRepositoryChangesShared = false;
+  readonly projectSessions = new AnnouncedLists<SourceControlSession>();
+  readonly #linkedSessions = new WeakMap<
+    readonly SourceControlSession[],
+    Map<string, readonly SourceControlSession[]>
+  >();
+
   constructor() {
     super('source-control');
+  }
+
+  #linkedTo(sessions: readonly SourceControlSession[], linkIds: ReadonlySet<string>): readonly SourceControlSession[] {
+    const key = [...linkIds].toSorted().join('\u0000');
+    let byLinks = this.#linkedSessions.get(sessions);
+    if (!byLinks) this.#linkedSessions.set(sessions, (byLinks = new Map()));
+    let linked = byLinks.get(key);
+    if (!linked) {
+      linked = Object.freeze(
+        sessions.filter(session => session.projectRepositoryId !== null && linkIds.has(session.projectRepositoryId)),
+      );
+      byLinks.set(key, linked);
+    }
+    return linked;
+  }
+
+  /**
+   * Fires after a write that can change which repositories are linked to
+   * projects (connections, links, installation moves and removals), so a
+   * reader can keep that set in memory instead of re-reading it on a timer.
+   * Registering a repository does not fire: a provider sync upserts every
+   * repository of an installation, and only a link makes one of them count.
+   * Returns a function that removes the listener.
+   */
+  onLinkedRepositoriesChanged(listener: (change: LinkedRepositoriesChange) => void): () => void {
+    this.#linkedRepositoryListeners.add(listener);
+    return () => this.#linkedRepositoryListeners.delete(listener);
+  }
+
+  /**
+   * Whether changes made on other replicas reach this one's listeners. False
+   * until a subscription to them is in place, so readers re-read the set
+   * rather than keep one that may miss another replica's change.
+   */
+  get linkedRepositoryChangesShared(): boolean {
+    return this.#linkedRepositoryChangesShared;
+  }
+
+  /** Records whether other replicas' changes can be heard, so readers know whether to keep the set. */
+  setLinkedRepositoryChangesShared(shared: boolean): void {
+    this.#linkedRepositoryChangesShared = shared;
+  }
+
+  /** Runs the listeners; `local: false` reports a write another replica announced. */
+  linkedRepositoriesChanged(change: LinkedRepositoriesChange): void {
+    for (const listener of this.#linkedRepositoryListeners) {
+      try {
+        listener(change);
+      } catch (error) {
+        console.error('[factory] linked-repositories listener failed', error instanceof Error ? error.message : error);
+      }
+    }
   }
 
   /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
@@ -820,13 +901,37 @@ export class SourceControlStorage extends FactoryStorageDomain {
   /** Record that a session's visibility was checked, making it private when `makePrivate`. */
   async markVisibilityChecked(sessionId: string, { makePrivate }: { makePrivate: boolean }): Promise<void> {
     const now = new Date();
-    await this.ops.updateMany(
-      SESSIONS,
-      { session_id: sessionId },
+    const row = await this.ops.updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () =>
       makePrivate
         ? { visibility: 'private', visibility_checked_at: now, updated_at: now }
         : { visibility_checked_at: now },
     );
+    if (row && makePrivate) this.#announceSessions([row]);
+  }
+
+  #announceSessions(rows: Iterable<Pick<SessionDbRow, 'org_id' | 'factory_project_id'>>): void {
+    const scopes = new Map<string, ProjectListScope>();
+    for (const row of rows) {
+      if (!row.factory_project_id) continue;
+      scopes.set(`${row.org_id}\u0000${row.factory_project_id}`, {
+        orgId: row.org_id,
+        factoryProjectId: row.factory_project_id,
+      });
+    }
+    for (const scope of scopes.values()) this.projectSessions.announce(scope);
+  }
+
+  async #stampOnce(
+    key: { id: string } | { session_id: string },
+    column: 'materialized_at' | 'first_message_at' | 'first_meaningful_exec_at',
+  ): Promise<void> {
+    const now = new Date();
+    // `IS NULL` in the filter keeps the first stamp across processes; a resume or a later message changes nothing.
+    if ((await this.ops.updateMany(SESSIONS, { ...key, [column]: null }, { [column]: now, updated_at: now })) === 0) {
+      return;
+    }
+    const row = await this.ops.findOne<SessionDbRow>(SESSIONS, key);
+    if (row) this.#announceSessions([row]);
   }
 
   /** Record that a session's threads are on their memory resource, so later starts skip it. */
@@ -851,6 +956,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   async #backfillSessionFactory(): Promise<void> {
     let unresolved = 0;
     let collisions = 0;
+    const backfilled: Array<Pick<SessionDbRow, 'org_id' | 'factory_project_id'>> = [];
     try {
       const pending = await this.ops.findMany<SessionDbRow>(SESSIONS, { factory_project_id: null });
       if (pending.length === 0) return;
@@ -884,6 +990,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         }
         try {
           await this.ops.updateMany(SESSIONS, { id: row.id }, { factory_project_id: projectId });
+          backfilled.push({ org_id: row.org_id, factory_project_id: projectId });
           taken.add(key);
         } catch (error) {
           if (!(error instanceof UniqueViolationError)) throw error;
@@ -894,6 +1001,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
       // Rows written before the failure keep their factory; the next init() resumes from the rest.
       console.warn(`[factory] session backfill stopped early: ${error instanceof Error ? error.message : error}`);
       return;
+    } finally {
+      this.#announceSessions(backfilled);
     }
     if (unresolved > 0 || collisions > 0) {
       console.warn(
@@ -1036,6 +1145,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   forIntegration(integrationId: string): SourceControlStorageHandle {
     if (!integrationId.trim()) throw new Error('[SourceControlStorage] integrationId must not be empty.');
     const db = (): FactoryStorageOps => this.ops;
+    const linkedRepositoriesChanged = (): void => this.linkedRepositoriesChanged({ integrationId, local: true });
 
     const getInstallation = async (args: { orgId: string; id: string }): Promise<SourceControlInstallation | null> => {
       const row = await db().findOne<InstallationDbRow>(INSTALLATIONS, {
@@ -1079,6 +1189,32 @@ export class SourceControlStorage extends FactoryStorageDomain {
       return toConnection(row);
     };
 
+    const linkedProjectSessions = async ({
+      orgId,
+      factoryProjectId,
+    }: {
+      orgId: string;
+      factoryProjectId: string;
+    }): Promise<readonly SourceControlSession[]> => {
+      const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
+        factory_project_id: factoryProjectId,
+        integration_id: integrationId,
+      });
+      const linkIds = new Set<string>();
+      for (const connection of connections) {
+        for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+          connection_id: connection.id,
+        })) {
+          linkIds.add(link.id);
+        }
+      }
+      const where = { factory_project_id: factoryProjectId, org_id: orgId };
+      const sessions = await this.projectSessions.read({ orgId, factoryProjectId }, async () =>
+        (await db().findMany<SessionDbRow>(SESSIONS, where)).map(toSession),
+      );
+      return this.#linkedTo(sessions, linkIds);
+    };
+
     const requireConnection = async (args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection> => {
       const connection = await getConnection(args);
       if (!connection) throw new SourceControlConnectionNotFoundError();
@@ -1109,6 +1245,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
 
     return {
       integrationId,
+      onLinkedRepositoriesChanged: listener =>
+        this.onLinkedRepositoriesChanged(change => {
+          if (change.integrationId === integrationId) listener();
+        }),
+      linkedRepositoryChangesShared: () => this.linkedRepositoryChangesShared,
       installations: {
         list: async ({ orgId }) =>
           (
@@ -1147,6 +1288,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const installation = await getInstallation({ orgId, id });
           if (!installation) return false;
           await db().deleteMany(INSTALLATIONS, { id, integration_id: integrationId, org_id: orgId });
+          linkedRepositoriesChanged();
           return true;
         },
       },
@@ -1198,6 +1340,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               { installation_id: existing.installationId },
               { installation_id: newInstallationId },
             );
+            linkedRepositoriesChanged();
             // Return the updated repository
             const updated = await getRepository({ orgId, id });
             if (!updated) throw new Error('Repository disappeared after update');
@@ -1229,6 +1372,80 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toConnection);
         },
+        listWithRepositories: async ({ orgId, factoryProjectIds }) => {
+          if (factoryProjectIds.length === 0) return [];
+          const oldestFirst: CollectionListOptions = {
+            orderBy: [
+              ['created_at', 'asc'],
+              ['id', 'asc'],
+            ],
+          };
+          const orgInstallations = async (ids: string[]) =>
+            ids.length === 0
+              ? []
+              : (
+                  await db().findMany<InstallationDbRow>(INSTALLATIONS, {
+                    id: { in: ids },
+                    integration_id: integrationId,
+                    org_id: orgId,
+                  })
+                ).map(toInstallation);
+
+          const connectionRows = await db().findMany<ConnectionDbRow>(
+            CONNECTIONS,
+            { factory_project_id: { in: unique(factoryProjectIds) }, integration_id: integrationId },
+            oldestFirst,
+          );
+          if (connectionRows.length === 0) return [];
+          const [installationList, linkRows] = await Promise.all([
+            orgInstallations(unique(connectionRows.map(row => row.installation_id))),
+            db().findMany<ProjectRepositoryDbRow>(
+              PROJECT_REPOSITORIES,
+              { connection_id: { in: connectionRows.map(row => row.id) } },
+              oldestFirst,
+            ),
+          ]);
+          const installations = new Map(installationList.map(installation => [installation.id, installation]));
+          const repositoryRows =
+            linkRows.length === 0
+              ? []
+              : await db().findMany<RepositoryDbRow>(REPOSITORIES, {
+                  id: { in: unique(linkRows.map(row => row.repository_id)) },
+                });
+          // Like `getRepository`, a repository only counts when its installation is in the organization. That is
+          // nearly always the connection's own installation, already loaded; look up any other.
+          const orgInstallationIds = new Set(installations.keys());
+          const otherInstallations = await orgInstallations(
+            unique(repositoryRows.map(row => row.installation_id)).filter(id => !orgInstallationIds.has(id)),
+          );
+          for (const installation of otherInstallations) orgInstallationIds.add(installation.id);
+          const repositories = new Map(
+            repositoryRows
+              .filter(row => orgInstallationIds.has(row.installation_id))
+              .map(row => [row.id, toRepository(row)]),
+          );
+          const linksByConnection = new Map<string, ProjectRepositoryDbRow[]>();
+          for (const row of linkRows) {
+            const links = linksByConnection.get(row.connection_id) ?? [];
+            links.push(row);
+            linksByConnection.set(row.connection_id, links);
+          }
+
+          return connectionRows.flatMap(row => {
+            const installation = installations.get(row.installation_id);
+            if (!installation) return [];
+            return [
+              {
+                ...toConnection(row),
+                installation,
+                repositories: (linksByConnection.get(row.id) ?? []).map(link => ({
+                  ...toProjectRepository(link),
+                  repository: repositories.get(link.repository_id) ?? null,
+                })),
+              },
+            ];
+          });
+        },
         get: getConnection,
         create: async input => {
           const project = await db().findOne<Record<string, unknown>>(FACTORY_PROJECTS, {
@@ -1245,6 +1462,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               created_by_user_id: input.createdByUserId,
               created_at: new Date(),
             });
+            linkedRepositoriesChanged();
             return toConnection(row);
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
@@ -1263,18 +1481,23 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const projectRepositories = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
             connection_id: id,
           });
+          const deleted: SessionDbRow[] = [];
           // Same cleanup as `projectRepositories.unlink`, for every link of the connection.
           for (const projectRepository of projectRepositories) {
-            for (const session of await db().findMany<SessionDbRow>(SESSIONS, {
+            const sessions = await db().findMany<SessionDbRow>(SESSIONS, {
               project_repository_id: projectRepository.id,
-            })) {
+            });
+            for (const session of sessions) {
               await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
             }
             await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: projectRepository.id });
             await db().deleteMany(SESSIONS, { project_repository_id: projectRepository.id });
+            deleted.push(...sessions);
           }
           await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
           await db().deleteMany(CONNECTIONS, { id, integration_id: integrationId });
+          this.#announceSessions(deleted);
+          linkedRepositoriesChanged();
           return true;
         },
       },
@@ -1396,20 +1619,17 @@ export class SourceControlStorage extends FactoryStorageDomain {
             const row = await db().insertOne<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
               connection_id: input.connectionId,
               repository_id: input.repositoryId,
-              created_by_user_id: input.createdByUserId,
               branch: input.branch ?? null,
-              sandbox_provider: input.sandboxProvider,
-              sandbox_workdir: input.sandboxWorkdir,
               setup_command: input.setupCommand ?? null,
               teardown_command: input.teardownCommand ?? null,
               position,
               in_environment: inEnvironment,
               last_build_status: 'unbuilt',
               last_build_error: null,
-              last_built_at: null,
               created_at: now,
               updated_at: now,
             });
+            linkedRepositoriesChanged();
             return toProjectRepository(row);
           } catch (error) {
             // Match the in-memory handle: return the existing row unchanged on
@@ -1429,7 +1649,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           await db().updateMany(PROJECT_REPOSITORIES, { id }, projectRepositoryPatch(input));
           return getProjectRepository({ orgId, id });
         },
-        setBuildStatus: async ({ orgId, id, status, error, builtAt }) => {
+        setBuildStatus: async ({ orgId, id, status, error }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return null;
           await db().updateMany(
@@ -1438,7 +1658,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
             {
               last_build_status: status,
               last_build_error: error ?? null,
-              last_built_at: builtAt ?? null,
               updated_at: new Date(),
             },
           );
@@ -1447,12 +1666,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
         unlink: async ({ orgId, id }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return false;
-          for (const session of await db().findMany<SessionDbRow>(SESSIONS, { project_repository_id: id })) {
+          const sessions = await db().findMany<SessionDbRow>(SESSIONS, { project_repository_id: id });
+          for (const session of sessions) {
             await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
           }
           await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: id });
           await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
+          this.#announceSessions(sessions);
+          linkedRepositoriesChanged();
           return true;
         },
       },
@@ -1473,29 +1695,9 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toSession);
         },
-        listByProject: async ({ orgId, factoryProjectId, viewerUserId }) => {
-          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, {
-            factory_project_id: factoryProjectId,
-            integration_id: integrationId,
-          });
-          if (connections.length === 0) return [];
-          const linkIds = new Set<string>();
-          for (const connection of connections) {
-            for (const link of await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
-              connection_id: connection.id,
-            })) {
-              linkIds.add(link.id);
-            }
-          }
-          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
-            factory_project_id: factoryProjectId,
-            org_id: orgId,
-          });
-          return rows
-            .filter(row => linkIds.has(row.project_repository_id))
-            .filter(row => row.visibility !== 'private' || row.user_id === viewerUserId)
-            .map(toSession);
-        },
+        listSharedByProject: linkedProjectSessions,
+        listByProject: async ({ viewerUserId, ...project }) =>
+          (await linkedProjectSessions(project)).filter(session => isSeenBy(session, viewerUserId)),
         getBySessionId: async sessionId => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
@@ -1509,16 +1711,18 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return rows.filter((_, index) => linked[index]).map(toSession);
         },
         rename: async ({ sessionId, title }) => {
-          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
             title,
             updated_at: new Date(),
           }));
+          if (row) this.#announceSessions([row]);
         },
         setOriginMuted: async ({ sessionId, muted }) => {
-          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
             origin_muted_at: muted ? new Date() : null,
             updated_at: new Date(),
           }));
+          if (row) this.#announceSessions([row]);
         },
         setVisibility: async ({ sessionId, visibility, expectedUserId }) => {
           const row = await db().updateAtomic<SessionDbRow>(
@@ -1526,6 +1730,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             { session_id: sessionId, user_id: expectedUserId },
             () => ({ visibility, updated_at: new Date() }),
           );
+          if (row) this.#announceSessions([row]);
           return row ? toSession(row) : null;
         },
         getForBranch: async args => {
@@ -1594,6 +1799,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               created_at: now,
               updated_at: now,
             });
+            this.#announceSessions([row]);
             return toSession(row);
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
@@ -1612,6 +1818,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         },
         transferOwner: async ({ sessionId, expectedUserId, toUserId }) => {
           let refusedPrivate = false;
+          let moved = false;
           try {
             const updated = await db().updateAtomic<SessionDbRow>(
               SESSIONS,
@@ -1622,10 +1829,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
                   refusedPrivate = true;
                   return null;
                 }
-                return current.user_id === toUserId ? null : { user_id: toUserId, updated_at: new Date() };
+                if (current.user_id === toUserId) return null;
+                moved = true;
+                return { user_id: toUserId, updated_at: new Date() };
               },
             );
             if (updated) {
+              if (moved) this.#announceSessions([updated]);
               return refusedPrivate
                 ? { status: 'conflict', reason: 'stale_owner', session: toSession(updated) }
                 : { status: 'updated', session: toSession(updated) };
@@ -1639,47 +1849,22 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return { status: 'conflict', reason: 'stale_owner', session: session ? toSession(session) : null };
         },
         setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
-          await db().updateMany(
-            SESSIONS,
-            { id },
-            { sandbox_id: sandboxId, sandbox_workdir: sandboxWorkdir, updated_at: new Date() },
-          );
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { id }, () => ({
+            sandbox_id: sandboxId,
+            sandbox_workdir: sandboxWorkdir,
+            updated_at: new Date(),
+          }));
+          if (row) this.#announceSessions([row]);
         },
-        markMaterialized: async ({ id }) => {
-          // `materialized_at: null` in the filter compiles to `IS NULL`, making
-          // this a write-once update: session resumes (idle-reap, checkpoint
-          // restore, sandbox recreate) match zero rows and cannot overwrite the
-          // initial-materialize timestamp that `materialize_s` is derived from.
-          await db().updateMany(
-            SESSIONS,
-            { id, materialized_at: null },
-            { materialized_at: new Date(), updated_at: new Date() },
-          );
-        },
-        markFirstMessage: async ({ sessionId }) => {
-          // `first_message_at: null` in the filter compiles to `IS NULL`, making
-          // this an atomic one-shot: concurrent callers and later messages
-          // match zero rows. Sessions without a source-control row (chat-only
-          // channels) are a zero-row no-op too.
-          await db().updateMany(
-            SESSIONS,
-            { session_id: sessionId, first_message_at: null },
-            { first_message_at: new Date(), updated_at: new Date() },
-          );
-        },
-        markFirstMeaningfulExec: async ({ sessionId }) => {
-          // Same atomic one-shot shape as markFirstMessage: the NULL filter
-          // makes concurrent callers and later execs zero-row no-ops.
-          await db().updateMany(
-            SESSIONS,
-            { session_id: sessionId, first_meaningful_exec_at: null },
-            { first_meaningful_exec_at: new Date(), updated_at: new Date() },
-          );
-        },
+        markMaterialized: ({ id }) => this.#stampOnce({ id }, 'materialized_at'),
+        markFirstMessage: ({ sessionId }) => this.#stampOnce({ session_id: sessionId }, 'first_message_at'),
+        markFirstMeaningfulExec: ({ sessionId }) =>
+          this.#stampOnce({ session_id: sessionId }, 'first_meaningful_exec_at'),
         delete: async id => {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { id });
-          if (row) await db().deleteMany(SESSION_REPOSITORIES, { session_id: row.session_id });
-          await db().deleteMany(SESSIONS, { id });
+          if (!row) return;
+          await db().deleteMany(SESSION_REPOSITORIES, { session_id: row.session_id });
+          if ((await db().deleteMany(SESSIONS, { id })) > 0) this.#announceSessions([row]);
         },
       },
       sessionRepositories: {

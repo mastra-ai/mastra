@@ -1,12 +1,13 @@
 {
   "name": "@mastra/claude",
-  "version": "0.3.4-alpha.0",
+  "version": "0.3.5-alpha.0",
   "description": "Claude SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

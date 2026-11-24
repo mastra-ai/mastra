@@ -7,6 +7,7 @@
 import { fuzzyFilter, getKeybindings, Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import type { Component, SelectItem } from '@earendil-works/pi-tui';
 
+import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
 import { menuCursor, menuSelected, theme } from '../theme.js';
 import { ListWindow } from './list-window.js';
 import type { Filterable, MenuChrome } from './menu-chrome.js';
@@ -42,7 +43,7 @@ export function menuNote(text: string, color: 'dim' | 'warning' | 'error' = 'dim
   return new Text(theme.fg(color, text), 2, 0);
 }
 
-export class MenuList implements Component, Filterable, MenuChrome {
+export class MenuList implements Component, Filterable, MenuChrome, MouseAware {
   private items: SelectItem[];
   private filteredItems: SelectItem[];
   private selectedIndex = 0;
@@ -62,6 +63,10 @@ export class MenuList implements Component, Filterable, MenuChrome {
 
   menuFilterTarget(): Filterable {
     return this;
+  }
+
+  menuWindow(): ListWindow {
+    return this.window;
   }
 
   /** Keeps the items whose label fuzzy-matches `query`, best match first, and selects the first. */
@@ -88,7 +93,7 @@ export class MenuList implements Component, Filterable, MenuChrome {
 
     const column = labelColumnWidth(this.items.filter(item => item.description).map(item => item.label || item.value));
     const labelWidth = column - COLUMN_GAP;
-    const { startIndex, endIndex } = this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
+    const { startIndex, endIndex } = this.visibleRange();
     const lines: string[] = [];
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i]!;
@@ -97,10 +102,33 @@ export class MenuList implements Component, Filterable, MenuChrome {
       const details = item.description ? theme.fg('muted', item.description) : '';
       lines.push(truncateToWidth(menuRow(i === this.selectedIndex, label, details, column), width));
     }
-    if (this.filteredItems.length > this.maxVisible) {
+    if (endIndex - startIndex < this.filteredItems.length) {
       lines.push(theme.fg('dim', `  (${this.selectedIndex + 1}/${this.filteredItems.length})`));
     }
     return lines;
+  }
+
+  /** One row per visible item; a click does what Enter would. */
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    const { startIndex, endIndex } = this.visibleRange();
+    const index = startIndex + point.row;
+    const item = this.filteredItems[index];
+    if (!item || index >= endIndex) return undefined;
+    return {
+      top: point.row,
+      height: 1,
+      activate: () => {
+        if (this.selectedIndex !== index) {
+          this.selectedIndex = index;
+          this.notifySelectionChange();
+        }
+        this.onSelect?.(item);
+      },
+    };
+  }
+
+  private visibleRange(): { startIndex: number; endIndex: number } {
+    return this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
   }
 
   handleInput(keyData: string): void {

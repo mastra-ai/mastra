@@ -68,26 +68,30 @@ Never edit generated `vercel.json` directly. Commit it only when the task includ
 
 ## 5. Verify the change
 
-Run the narrowest checks that cover the change.
+Start with `pnpm check` from `docs/`. It runs formatting, frontmatter, sidebar, structure, link, remark, Vale, and redirect checks in one pass and reports each finding with a stable `mastra/` rule ID. Pass changed MDX files to scope file-level checks, and `--fix` to apply safe fixes. Rule IDs, the JSON schema, and inline `lint` comments for disabling rules are documented in `CHECKS.md` next to this file.
 
-| Change                            | Minimum checks                                                          |
-| --------------------------------- | ----------------------------------------------------------------------- |
-| Prose-only MDX                    | Focused MDX formatting, Remark, Vale                                    |
-| Frontmatter                       | Formatting and `pnpm validate`                                          |
-| Sidebar                           | Formatting, `pnpm validate`, and build when routes or navigation change |
-| Move or deletion                  | Focused script tests, redirects, validation, and build                  |
-| Redirect                          | Redirect generator tests, generation, validation, and build             |
-| MDX component or llms-txt handler | Focused Vitest tests, formatting, validation, and build                 |
-| Theme or navigation behavior      | Focused unit or Playwright test and build                               |
+```bash
+pnpm check src/content/en/docs/agents/overview.mdx
+pnpm check --fix
+```
+
+Then run the narrowest additional checks that cover the change.
+
+| Change                            | Minimum checks                                              |
+| --------------------------------- | ----------------------------------------------------------- |
+| Prose-only MDX                    | `pnpm check <files>`                                        |
+| Frontmatter                       | `pnpm check <files>`                                        |
+| Sidebar                           | `pnpm check`, and build when routes or navigation change    |
+| Move or deletion                  | Focused script tests, redirects, validation, and build      |
+| Redirect                          | Redirect generator tests, generation, validation, and build |
+| MDX component or llms-txt handler | Focused Vitest tests, formatting, validation, and build     |
+| Theme or navigation behavior      | Focused unit or Playwright test and build                   |
 
 Common commands from `docs/`:
 
 ```bash
-pnpm format:mdx:check
-pnpm format:check
-pnpm lint:remark
+pnpm check
 pnpm lint:vale:ai
-pnpm validate
 pnpm test
 pnpm build
 ```
@@ -103,3 +107,12 @@ Before handing off:
 - Check for stale route names, temporary text, debug output, and generated artifacts.
 - Compare the final page against the task and source findings.
 - State any unrelated failures separately rather than weakening or skipping checks.
+
+## 7. Externally synced docs
+
+- Each directory in `../.github/docs-sync.json` (for example `src/mastra-code`) is pushed to another docs site's repo whenever it changes on `main`. Edit those pages here; edits in the target repo are overwritten.
+- Links in those pages use the target site's routes (for example `/reference#…`), not this site's.
+- Each synced directory owns its `sidebars.js`. Add every new page there.
+- Validate them with the unscoped `pnpm check` or `pnpm check --rule 'mastra/external-*'`. File-scoped `pnpm check <file>` only accepts `src/content/en` pages, and inline `lint` comments don't apply to synced pages.
+- Deleting or renaming a synced page breaks inbound links to it, because synced directories have no redirects.
+- To add a site, add a manifest entry whose `source` is under `docs/src/`, install the Dane GitHub App on its repo, and remove any build-time docs fetching there.

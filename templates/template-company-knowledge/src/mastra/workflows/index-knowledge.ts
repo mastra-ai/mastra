@@ -1,7 +1,9 @@
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { embedMany } from 'ai';
 import { z } from 'zod';
+import { connectTools } from '../connect';
 import { GATEWAY_EMBEDDING_MODEL, KNOWLEDGE_INDEX } from '../tools/knowledge-search';
 
 const EMBEDDING_DIM = 1536;
@@ -14,123 +16,115 @@ const docSchema = z.object({
   text: z.string(),
 });
 
-/**
- * Fetch recent Linear issues and Notion pages via their REST/GraphQL APIs.
- * Uses plain fetch — no SDK deps needed.
- */
+type ConnectTool = { execute?: (input: unknown, context: { requestContext: RequestContext }) => Promise<unknown> };
+
+async function callTool<T>(tools: Record<string, ConnectTool>, id: string, input: unknown): Promise<T | undefined> {
+  const tool = tools[id];
+  if (!tool?.execute) return undefined;
+  try {
+    const result = (await tool.execute(input, { requestContext: new RequestContext() })) as
+      | (T & { error?: undefined })
+      | { error: true; message?: string };
+    if (result?.error === true) throw new Error(result.message ?? 'unknown error');
+    return result as T;
+  } catch (error) {
+    console.warn(`${id} failed while indexing company knowledge`, error);
+    return undefined;
+  }
+}
+
+async function connectionNames(
+  tools: Record<string, ConnectTool>,
+  integrationId: string,
+): Promise<Array<{ connection_name?: string }>> {
+  const listTool = `${integrationId}__list_connections`;
+  if (!tools[listTool]) return [{}];
+  const list = await callTool<{ connections: Array<{ name: string }> }>(tools, listTool, {});
+  return (list?.connections ?? []).map(({ name }) => ({ connection_name: name }));
+}
+
 const fetchStep = createStep({
   id: 'fetch-sources',
-  description: 'Pull recent Linear issues and Notion pages.',
+  description: 'Pull recent Linear issues and Notion pages through Mastra Connect.',
   inputSchema: z.object({
     linearLimit: z.number().int().min(1).max(250).default(100).optional(),
     notionQuery: z.string().default('').optional(),
   }),
   outputSchema: z.object({ docs: z.array(docSchema) }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, mastra }) => {
     const docs: Array<z.infer<typeof docSchema>> = [];
+    if (!connectTools) {
+      console.warn(
+        'Mastra Connect is not configured, so there is nothing to index. Set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID.',
+      );
+      return { docs };
+    }
+    const tools = (await connectTools({ mastra })) as Record<string, ConnectTool>;
 
-    // --- Linear (GraphQL API) ---
-    if (process.env.LINEAR_API_KEY) {
-      const limit = inputData.linearLimit ?? 100;
-      const res = await fetch('https://api.linear.app/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: process.env.LINEAR_API_KEY,
-        },
-        body: JSON.stringify({
-          query: `query($first: Int!) {
-            issues(first: $first, orderBy: updatedAt) {
-              nodes { id identifier title description url }
-            }
-          }`,
-          variables: { first: limit },
-        }),
-      });
-      if (!res.ok) {
-        console.warn(`Linear fetch failed while indexing company knowledge: ${res.status} ${res.statusText}`.trim());
-      } else {
-        const json = (await res.json()) as any;
-        for (const issue of json?.data?.issues?.nodes ?? []) {
+    for (const connection of await connectionNames(tools, 'linear')) {
+      let remaining = inputData.linearLimit ?? 100;
+      let after: string | undefined;
+      while (remaining > 0) {
+        const page = await callTool<{
+          issues: Array<{
+            id: string;
+            identifier: string;
+            title: string;
+            description?: string | null;
+            url?: string | null;
+          }>;
+          nextCursor?: string;
+        }>(tools, 'linear_list_issues', {
+          ...connection,
+          first: Math.min(remaining, 100),
+          after,
+          orderBy: 'updatedAt',
+        });
+        if (!page) break;
+        for (const issue of page.issues) {
           docs.push({
             id: `linear:${issue.id}`,
             source: 'linear',
             title: `${issue.identifier} ${issue.title}`,
-            url: issue.url,
+            url: issue.url ?? '',
             text: `${issue.title}\n\n${issue.description ?? ''}`.trim(),
           });
         }
+        remaining -= page.issues.length;
+        after = page.nextCursor;
+        if (!after || page.issues.length === 0) break;
       }
     }
 
-    // --- Notion (REST API) ---
-    if (process.env.NOTION_API_KEY) {
-      const searchRes = await fetch('https://api.notion.com/v1/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
-          'Notion-Version': '2022-06-28',
-        },
-        body: JSON.stringify({
-          query: inputData.notionQuery ?? '',
-          page_size: 50,
-          filter: { value: 'page', property: 'object' },
-        }),
-      });
-      if (!searchRes.ok) {
-        console.warn(
-          `Notion search failed while indexing company knowledge: ${searchRes.status} ${searchRes.statusText}`.trim(),
-        );
-      } else {
-        const searchJson = (await searchRes.json()) as any;
-
-        for (const page of searchJson?.results ?? []) {
-          let title = '(untitled)';
-          const props = page.properties ?? {};
-          for (const key of Object.keys(props)) {
-            const prop = props[key];
-            if (prop?.type === 'title' && Array.isArray(prop.title)) {
-              title =
-                prop.title
-                  .map((t: any) => t?.plain_text ?? '')
-                  .join('')
-                  .trim() || title;
-              break;
-            }
+    for (const connection of await connectionNames(tools, 'notion')) {
+      const search = await callTool<{ results: Array<{ id: string; url?: string; properties?: Record<string, any> }> }>(
+        tools,
+        'notion_search_pages',
+        { ...connection, query: inputData.notionQuery || undefined, page_size: 50 },
+      );
+      for (const page of search?.results ?? []) {
+        let title = '(untitled)';
+        for (const prop of Object.values(page.properties ?? {})) {
+          if (prop?.type === 'title' && Array.isArray(prop.title)) {
+            title =
+              prop.title
+                .map((t: any) => t?.plain_text ?? '')
+                .join('')
+                .trim() || title;
+            break;
           }
-
-          // Best-effort: fetch block children for page content
-          let text = title;
-          try {
-            const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children?page_size=50`, {
-              headers: {
-                Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
-                'Notion-Version': '2022-06-28',
-              },
-            });
-            const blocksJson = (await blocksRes.json()) as any;
-            text =
-              (blocksJson?.results ?? [])
-                .map((b: any) => {
-                  const rich = b[b.type]?.rich_text;
-                  if (!Array.isArray(rich)) return '';
-                  return rich.map((t: any) => t.plain_text ?? '').join('');
-                })
-                .filter(Boolean)
-                .join('\n\n') || title;
-          } catch {
-            // keep title only
-          }
-
-          docs.push({
-            id: `notion:${page.id}`,
-            source: 'notion',
-            title,
-            url: page.url ?? '',
-            text,
-          });
         }
+        const content = await callTool<{ markdown?: string }>(tools, 'notion_get_page_as_markdown', {
+          ...connection,
+          page_id: page.id,
+        });
+        docs.push({
+          id: `notion:${page.id}`,
+          source: 'notion',
+          title,
+          url: page.url ?? '',
+          text: content?.markdown?.trim() || title,
+        });
       }
     }
 

@@ -3,13 +3,14 @@
  * Uses pi-tui overlay pattern with search and navigation.
  */
 
-import { Container, fuzzyFilter, getKeybindings, matchesKey, Text } from '@earendil-works/pi-tui';
+import { Container, fuzzyFilter, getKeybindings, matchesKey } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import { theme } from '../theme.js';
 import { ListWindow } from './list-window.js';
 import type { Filterable, MenuChrome, MenuHint } from './menu-chrome.js';
 import { labelColumnWidth, menuRow } from './menu-list.js';
+import { PickerList } from './picker-list.js';
 
 // =============================================================================
 // Types
@@ -47,7 +48,8 @@ const FOLLOW_UP_PREVIEW_LOAD_DELAY_MS = 50;
 
 export class ThreadSelectorComponent extends Container implements Focusable, Filterable, MenuChrome {
   focused = false;
-  private listContainer!: Container;
+  private list!: PickerList<AgentControllerThread>;
+  private labelColumn = 0;
   private readonly window = new ListWindow();
   private allThreads: AgentControllerThread[];
   private filteredThreads: AgentControllerThread[];
@@ -193,8 +195,18 @@ export class ThreadSelectorComponent extends Container implements Focusable, Fil
   }
 
   private buildUI(): void {
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
+    this.labelColumn = labelColumnWidth(this.allThreads.map(thread => this.displayId(thread)));
+    this.list = new PickerList({
+      maxVisible: MAX_VISIBLE_THREADS,
+      window: this.window,
+      renderItem: (thread, selected) => this.renderThread(thread, selected),
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
+      emptyText: () => '  no matching threads',
+    });
+    this.addChild(this.list);
 
     this.updateList();
   }
@@ -254,49 +266,31 @@ export class ThreadSelectorComponent extends Container implements Focusable, Fil
   }
 
   private updateList(): void {
-    this.listContainer.clear();
+    this.list.setItems(this.filteredThreads, this.selectedIndex);
+  }
 
-    const { startIndex, endIndex } = this.getVisibleRange();
-    const column = labelColumnWidth(this.allThreads.map(thread => `${thread.resourceId}/${thread.id.slice(-6)}`));
+  private displayId(thread: AgentControllerThread): string {
+    return `${thread.resourceId}/${thread.id.slice(-6)}`;
+  }
 
-    for (let i = startIndex; i < endIndex; i++) {
-      const thread = this.filteredThreads[i];
-      if (!thread) continue;
+  private renderThread(thread: AgentControllerThread, isSelected: boolean): string[] {
+    const isCurrent = thread.id === this.currentThreadId;
+    const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
+    const threadPath = thread.metadata?.projectPath as string | undefined;
+    const pathTag = threadPath ? theme.fg('dim', `[${threadPath.split('/').pop()}] `) : '';
+    const timeAgo = theme.fg('muted', `(${this.formatTimeAgo(thread.updatedAt)})`);
 
-      const isSelected = i === this.selectedIndex;
-      const isCurrent = thread.id === this.currentThreadId;
-      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-      const shortId = thread.id.slice(-6);
-      const threadPath = thread.metadata?.projectPath as string | undefined;
-      const pathTag = threadPath ? theme.fg('dim', `[${threadPath.split('/').pop()}] `) : '';
-      const displayId = `${thread.resourceId}/${shortId}`;
-      const timeAgo = theme.fg('muted', `(${this.formatTimeAgo(thread.updatedAt)})`);
+    // Show thread title when available, except the default placeholder title.
+    const displayTitle = thread.title && thread.title !== 'New Thread' ? thread.title : null;
 
-      // Show thread title when available, except the default placeholder title.
-      const displayTitle = thread.title && thread.title !== 'New Thread' ? thread.title : null;
-
-      this.listContainer.addChild(
-        new Text(menuRow(isSelected, displayId, pathTag + timeAgo + checkmark, column), 0, 0),
-      );
-
-      if (displayTitle) {
-        this.listContainer.addChild(new Text(`    ${theme.fg('muted', displayTitle)}`, 0, 0));
-      } else {
-        const preview = this.messagePreviews.get(thread.id);
-        if (preview) {
-          this.listContainer.addChild(new Text(`    ${theme.fg('dim', `"${preview}"`)}`, 0, 0));
-        }
-      }
+    const lines = [menuRow(isSelected, this.displayId(thread), pathTag + timeAgo + checkmark, this.labelColumn)];
+    if (displayTitle) {
+      lines.push(`    ${theme.fg('muted', displayTitle)}`);
+    } else {
+      const preview = this.messagePreviews.get(thread.id);
+      if (preview) lines.push(`    ${theme.fg('dim', `"${preview}"`)}`);
     }
-
-    if (this.filteredThreads.length > MAX_VISIBLE_THREADS) {
-      const scrollInfo = theme.fg('dim', `  (${this.selectedIndex + 1}/${this.filteredThreads.length})`);
-      this.listContainer.addChild(new Text(scrollInfo, 0, 0));
-    }
-
-    if (this.filteredThreads.length === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', '  no matching threads'), 0, 0));
-    }
+    return lines;
   }
 
   handleInput(keyData: string): void {

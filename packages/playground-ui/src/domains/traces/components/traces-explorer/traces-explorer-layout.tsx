@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { TracesExplorerBody } from './traces-explorer-body';
 import type { TracesExplorerBodyProps } from './traces-explorer-body';
-import { useTracesBodyLoading } from './use-traces-discovery';
+import { useTracesBodyLoading } from './use-traces-body-loading';
 import { PageLayout } from '@/ds/components/PageLayout';
 
 export type { TracesExplorerErrorRenderArgs } from './traces-explorer-body';
@@ -20,6 +20,7 @@ export function TracesExplorerLayout({
   tabs,
   actionRow,
   toolbar,
+  chart,
   children,
   renderError,
 }: TracesExplorerLayoutProps) {
@@ -36,8 +37,8 @@ export function TracesExplorerLayout({
     ) : undefined;
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={pinned}>
-      <TracesExplorerBody toolbar={toolbar} renderError={renderError}>
+    <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={pinned}>
+      <TracesExplorerBody toolbar={toolbar} chart={chart} renderError={renderError}>
         {children}
       </TracesExplorerBody>
     </PageLayout>

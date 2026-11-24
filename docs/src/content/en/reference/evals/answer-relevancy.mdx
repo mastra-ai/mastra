@@ -2,7 +2,6 @@
 title: "Reference: Answer relevancy scorer | Evals"
 description: "Use createAnswerRelevancyScorer() to evaluate how directly an LLM response addresses the input query, with configurable model and scoring options."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -104,7 +103,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 
 The scorer evaluates relevancy through query-answer alignment, considering completeness and detail level, but not factual correctness.
 
-### Scoring Process
+### Scoring process
 
 1. **Statement Preprocess:**
    - Breaks output into useful statements while preserving context.
@@ -116,7 +115,7 @@ The scorer evaluates relevancy through query-answer alignment, considering compl
 1. **Score Calculation:**
    - `((direct + uncertainty * partial) / total_statements) * scale`
 
-### Score Interpretation
+### Score interpretation
 
 A relevancy score between 0 and `scale` (0 to 1 with the default scale). The ranges below assume the default scale:
 

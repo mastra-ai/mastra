@@ -7,18 +7,26 @@
  * Every menu still opens with `showModalOverlay` and closes with `tui.hideOverlay()`; `MastraTUI` routes
  * both to the slot.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { CURSOR_MARKER, decodeKittyPrintable, matchesKey, TUI, truncateToWidth } from '@earendil-works/pi-tui';
 import type { Component, Container, Focusable, OverlayHandle } from '@earendil-works/pi-tui';
 
-import { findFilterTarget, lowerFirst } from './components/menu-chrome.js';
+import type { ListWindow } from './components/list-window.js';
+import { findFilterTarget, findMenuWindow, lowerFirst } from './components/menu-chrome.js';
 import type { Filterable, MenuChrome, MenuHint } from './components/menu-chrome.js';
 import { fadePanel, keyHint } from './components/surface.js';
-import { theme } from './theme.js';
+import { locate } from './mouse/hit-test.js';
+import type { MouseAware, MousePoint, MouseTarget } from './mouse/hit-test.js';
+import { tuiInternals } from './mouse/pi-tui-internals.js';
+import { menuCursor, theme } from './theme.js';
 
 /** How long a menu command may take before the slot shows "loading <menu>…". */
 const LOADING_DELAY_MS = 120;
 /** The slot's panel shade, the same as the prompt's. */
 const PANEL_STEP = 1.5;
+/** The panel's ▄ and ▀ edges. */
+const PANEL_EDGES = 2;
 
 export interface PromptSlotChrome {
   /** Shown as the search row's placeholder (first letter lowercased), e.g. "select thread". */
@@ -71,16 +79,30 @@ function typedText(data: string): string | undefined {
 const isBlank = (line: string) => !line.replace(/\x1b\[[0-9;:]*m/g, '').trim();
 
 /** One open menu: in the slot, or in a pop-up while a full-screen view (setup) is open. */
-export class MenuFrame implements Component, Focusable {
+export class MenuFrame implements Component, Focusable, MouseAware {
   private query = '';
   private target: Filterable | undefined;
   /** Each list keeps its own search, so a list you return to (from a submenu) shows its filter again. */
   private readonly queries = new WeakMap<Filterable, string>();
+  /** Rows at the last render, and the size it was drawn for. */
+  private height = 0;
+  private drawnFor = '';
+  /** The list scroll window shrunk to fit. */
+  private fitted: ListWindow | undefined;
+  /** Where the component's rows ended up: the frame row of the first one, and how many were cut above it. */
+  private body = { top: 0, cut: 0, rows: 0 };
 
   constructor(
     readonly component: Component,
     private readonly chrome: PromptSlotChrome = {},
+    /** The rows the terminal has for this menu. */
+    private readonly maxRows: () => number = () => Number.POSITIVE_INFINITY,
   ) {}
+
+  /** Rows drawn by the last render. */
+  get renderedRows(): number {
+    return this.height;
+  }
 
   get focused(): boolean {
     return (this.component as Partial<Focusable>).focused ?? false;
@@ -152,18 +174,36 @@ export class MenuFrame implements Component, Focusable {
       head.push(` ${theme.fg('text', title)}`, '');
     }
 
-    const body = this.component.render(Math.max(1, width - 1));
-    while (body.length && isBlank(body[0]!)) body.shift();
-    while (body.length && isBlank(body[body.length - 1]!)) body.pop();
-
     const hints = chrome.menuHints?.() ?? this.chrome.hints ?? [];
     const foot = hints.length ? ['', ` ${hints.map(hint => keyHint(hint.key, hint.label)).join('  ')}`] : [];
+
+    const maxRows = Math.max(1, this.maxRows());
+    const size = `${width}x${maxRows}`;
+    if (size !== this.drawnFor) {
+      this.drawnFor = size;
+      this.height = 0;
+      this.fitted?.setLimit(undefined);
+      this.fitted = undefined;
+    }
+    // Too short for everything: the hints go first, then the blank row under the search.
+    let available = maxRows - PANEL_EDGES - head.length - foot.length;
+    if (available < 3 && foot.length) available += foot.splice(0).length;
+    if (available < 2 && head.length) available += head.splice(1).length;
+
+    const body = this.renderBody(Math.max(1, width - 1), Math.max(1, available));
+    this.body = { top: 1 + head.length, cut: body.cut, rows: body.lines.length };
+
+    // The menu keeps its tallest height while it is open, so filtering doesn't move the search row.
+    const rowsWithoutFill = PANEL_EDGES + head.length + body.lines.length + foot.length;
+    this.height = Math.max(this.height, rowsWithoutFill);
+    const fill = Array.from({ length: this.height - rowsWithoutFill }, () => '');
 
     // Text without a color of its own uses the secondary grey, like the rest of the menu.
     const secondary = theme.fg('secondary', 'x').split('x')[0]!;
     const rows = [
       ...head,
-      ...body.map(line => ` ${secondary}${line.replace(/\x1b\[(?:0|39)?m/g, m => m + secondary)}`),
+      ...body.lines.map(line => ` ${secondary}${line.replace(/\x1b\[(?:0|39)?m/g, m => m + secondary)}`),
+      ...fill,
       ...foot,
     ];
     return fadePanel(
@@ -171,6 +211,55 @@ export class MenuFrame implements Component, Focusable {
       width,
       PANEL_STEP,
     );
+  }
+
+  /**
+   * The component's rows without blank rows around them, in at most `available` rows: its list shows fewer
+   * items, and whatever still doesn't fit (a long question) is cut around the row in use.
+   */
+  private renderBody(width: number, available: number): { lines: string[]; cut: number } {
+    let cut = 0;
+    const draw = () => {
+      // A copy: a Box returns its cached rows.
+      const lines = [...this.component.render(width)];
+      cut = 0;
+      for (; lines.length && isBlank(lines[0]!); cut++) lines.shift();
+      while (lines.length && isBlank(lines[lines.length - 1]!)) lines.pop();
+      return lines;
+    };
+
+    let lines = draw();
+    const window = findMenuWindow(this.component);
+    if (this.fitted && this.fitted !== window) {
+      // A submenu opened or closed: its list is fitted on its own.
+      this.fitted.setLimit(undefined);
+      this.fitted = undefined;
+      lines = draw();
+    }
+    while (window && lines.length > available && window.shownItems > 1) {
+      const items = Math.max(1, window.shownItems - Math.max(1, Math.floor((lines.length - available) / 2)));
+      this.fitted = window;
+      window.setLimit(items);
+      lines = draw();
+    }
+
+    if (lines.length > available) {
+      const cursor = menuCursor();
+      const marker = lines.findIndex(line => line.includes(CURSOR_MARKER) || line.includes('\x1b[7m'));
+      const active = marker >= 0 ? marker : lines.findIndex(line => line.includes(cursor));
+      const start = Math.max(0, Math.min(active - available + 1, lines.length - available));
+      lines = lines.slice(start, start + available);
+      cut += start;
+    }
+    return { lines, cut };
+  }
+
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    const { top, cut, rows } = this.body;
+    const row = point.row - top;
+    if (row < 0 || row >= rows) return undefined;
+    const target = locate(this.component, { row: row + cut, col: point.col - 1, width: Math.max(1, point.width - 1) });
+    return target && { ...target, top: target.top - cut + top };
   }
 }
 
@@ -197,11 +286,20 @@ class LoadingFrame implements Component {
   }
 }
 
+/** A menu command that is running: what its loading row collected, for the menu it opens. */
+interface MenuCommand {
+  /** Esc dismissed the loading row: the menu this command opens is cancelled right away. */
+  cancelled: boolean;
+  /** Whether its menu opened, so it no longer needs a loading row. */
+  opened: boolean;
+  loading?: LoadingFrame;
+}
+
+/** The command a menu opens from; a menu another command opens is never cancelled or typed into by mistake. */
+const runningCommand = new AsyncLocalStorage<MenuCommand>();
+
 export class PromptSlot {
   private readonly stack: Component[] = [];
-  private loading: LoadingFrame | undefined;
-  /** Set when Esc dismissed the loading row: the menu that command opens next is cancelled right away. */
-  private cancelPendingMenu = false;
 
   constructor(
     private readonly ui: TUI,
@@ -213,22 +311,29 @@ export class PromptSlot {
     return this.stack.length > 0;
   }
 
+  /** The menu on screen (or its loading row), or undefined when the prompt is. */
+  mountedMenu(): Component | undefined {
+    return this.stack[this.stack.length - 1];
+  }
+
   /** Opens a menu in the slot, on top of any menu already there. */
   open(component: Component, chrome: PromptSlotChrome = {}): OverlayHandle {
-    const typedAhead = this.loading?.typedAhead ?? [];
-    if (this.loading) this.remove(this.loading);
-    const frame = new MenuFrame(component, chrome);
+    const command = runningCommand.getStore();
+    const typedAhead = command?.loading?.typedAhead ?? [];
+    if (command?.loading) this.remove(command.loading);
+    const frame = new MenuFrame(component, chrome, () => this.maxMenuRows());
     const before = this.mounted();
     this.stack.push(frame);
     this.swap(before, frame);
-    if (this.cancelPendingMenu) {
-      // The user pressed Esc while this menu was loading: cancel it like Esc, once the caller has
-      // finished setting it up.
-      this.cancelPendingMenu = false;
-      queueMicrotask(() => frame.handleInput('\x1b'));
-    } else if (typedAhead.length) {
-      // Keys typed while it loaded (a search, Enter) apply to the menu, once the caller has set it up.
-      queueMicrotask(() => typedAhead.forEach(data => frame.handleInput(data)));
+    if (command) {
+      const { cancelled } = command;
+      command.opened = true;
+      command.cancelled = false;
+      command.loading = undefined;
+      // Esc while it loaded cancels the menu, once the caller has finished setting it up. Keys typed while
+      // it loaded (a search, Enter) apply to it then.
+      if (cancelled) queueMicrotask(() => frame.handleInput('\x1b'));
+      else if (typedAhead.length) queueMicrotask(() => typedAhead.forEach(data => frame.handleInput(data)));
     }
     let hidden = false;
     return {
@@ -255,30 +360,67 @@ export class PromptSlot {
   }
 
   /**
-   * Shows "loading <name>…" in the slot when a menu command is still preparing its menu after a moment
-   * (e.g. /models fetching the model list); the menu replaces it when it opens.
+   * Runs a command that opens a menu, showing "loading <name>…" in the slot when it is still preparing
+   * the menu after a moment (e.g. /models fetching the model list); the menu replaces it when it opens.
    */
-  showLoadingWhile(name: string, pending: Promise<unknown>): void {
-    if (this.isOpen()) return;
-    let frame: LoadingFrame | undefined;
+  runMenuCommand<T>(name: string, run: () => Promise<T>): Promise<T> {
+    const command: MenuCommand = { cancelled: false, opened: false };
+    const pending = runningCommand.run(command, run);
+    if (this.isOpen()) return pending;
     const timer = setTimeout(() => {
-      if (this.isOpen()) return;
-      frame = new LoadingFrame(name, data => {
-        if (frame) this.remove(frame);
-        this.cancelPendingMenu = true;
+      if (command.opened || this.isOpen()) return;
+      const frame = new LoadingFrame(name, data => {
+        this.remove(frame);
+        command.loading = undefined;
+        command.cancelled = true;
         if (matchesKey(data, 'ctrl+c')) this.editor.handleInput?.(data);
       });
-      this.loading = frame;
+      command.loading = frame;
       this.stack.push(frame);
       this.swap(this.editor, frame);
     }, LOADING_DELAY_MS);
     // The command reports its own errors; here a failure only ends the wait.
     const done = () => {
       clearTimeout(timer);
-      if (frame) this.remove(frame);
-      this.cancelPendingMenu = false;
+      if (command.loading) this.remove(command.loading);
     };
     pending.then(done, done);
+    return pending;
+  }
+
+  /** The rows a menu may take: the terminal minus what stays on screen under it (the status lines). */
+  private maxMenuRows(): number {
+    return this.ui.terminal.rows - this.rowsBelow(this.ui.terminal.columns);
+  }
+
+  private rowsBelow(width: number): number {
+    const inSlot = this.container.children.slice(this.container.children.indexOf(this.mounted()) + 1);
+    const { children } = this.ui;
+    const at = children.indexOf(this.container);
+    const underSlot = at < 0 ? [] : children.slice(at + 1);
+    return [...inSlot, ...underSlot].reduce((rows, child) => rows + child.render(width).length, 0);
+  }
+
+  /**
+   * Takes the chat rows the open menu pushes off screen out of `lines` (a rendered frame), and returns the
+   * row where the menu starts. The frame keeps the length it has with the prompt, so opening a menu scrolls
+   * nothing into the terminal's scrollback and closing it leaves no blank rows: the rows at the top of the
+   * screen make room for it and come back when it closes.
+   */
+  fit(lines: string[], width: number): number | undefined {
+    const menu = this.mountedMenu();
+    if (!menu || !this.ui.children.includes(this.container)) return undefined;
+    const height = menu instanceof MenuFrame ? menu.renderedRows : menu.render(width).length;
+    const { rows } = this.ui.terminal;
+    const { previousViewportTop, previousWidth, previousHeight } = tuiInternals(this.ui);
+    const resized = previousWidth !== width || previousHeight !== rows;
+    const withPrompt = lines.length - height + this.editor.render(width).length;
+    const total = Math.max(withPrompt, rows + (resized ? 0 : previousViewportTop));
+    const screenTop = total - rows;
+    const below = this.rowsBelow(width);
+    const hidden = Math.min(lines.length - total, lines.length - below - height - screenTop);
+    if (hidden > 0) lines.splice(screenTop, hidden);
+    return lines.length - below - height;
   }
 
   private mounted(): Component {
@@ -288,7 +430,6 @@ export class PromptSlot {
   private remove(frame: Component): void {
     const at = this.stack.indexOf(frame);
     if (at < 0) return;
-    if (frame === this.loading) this.loading = undefined;
     const wasMounted = this.mounted() === frame;
     this.stack.splice(at, 1);
     if (wasMounted) this.swap(frame, this.mounted());
@@ -307,6 +448,14 @@ export class PromptSlot {
 /** The TUI with a prompt slot: `hideOverlay` and `hasOverlay` include the menus open in the slot. */
 export class MastraTUI extends TUI {
   promptSlot?: PromptSlot;
+  /** Row of the last rendered frame where the menu in the slot starts. */
+  promptSlotTop: number | undefined;
+
+  override render(width: number): string[] {
+    const lines = super.render(width);
+    this.promptSlotTop = this.promptSlot?.fit(lines, width);
+    return lines;
+  }
 
   override hideOverlay(): void {
     if (!super.hasOverlay() && this.promptSlot?.closeTop()) return;

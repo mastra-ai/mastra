@@ -28,7 +28,11 @@ const isSubagent = (req: ChatCompletionRequest) => toolNames(req).includes('find
 
 const USER = { name: 'Dero Israel', email: 'dero@mail.com' };
 
-function makeWorkflow(mode: 'plain' | 'suspend-name' | 'suspend-age', runs: Array<Record<string, unknown>>) {
+function makeWorkflow(
+  mode: 'plain' | 'suspend-name' | 'suspend-age',
+  runs: Array<Record<string, unknown>>,
+  storageVersion: 1 | 2 = 1,
+) {
   const step = createStep({
     id: 'find-user-step',
     inputSchema: z.object({ name: z.string() }),
@@ -57,6 +61,7 @@ function makeWorkflow(mode: 'plain' | 'suspend-name' | 'suspend-age', runs: Arra
     description: 'Returns the name and email of a user',
     inputSchema: z.object({ name: z.string() }),
     outputSchema: z.object({ name: z.string(), email: z.string(), age: z.number().optional() }),
+    options: { storageVersion },
   })
     .then(step)
     .commit();
@@ -113,35 +118,40 @@ describeForAllEngines('AIMock loop scenario: approval and suspension through wor
     expect(await resumed.text).toBe('Found Dero Israel.');
   });
 
-  it('resumes a workflow step that suspended mid-run via resumeStream()', async () => {
-    const runs: Array<Record<string, unknown>> = [];
-    const shared = await createSharedAgent(getMock(), {
-      workflows: { findUserWorkflow: makeWorkflow('suspend-name', runs) },
-      memory: new MockMemory(),
-      engine,
-    });
+  it.each([1, 2] as const)(
+    'resumes a workflow step that suspended mid-run via resumeStream() (storage v%s)',
+    async storageVersion => {
+      const runs: Array<Record<string, unknown>> = [];
+      const shared = await createSharedAgent(getMock(), {
+        workflows: { findUserWorkflow: makeWorkflow('suspend-name', runs, storageVersion) },
+        memory: new MockMemory(),
+        engine,
+      });
 
-    const { output, chunks } = await runLoopScenario({
-      engine,
-      llm: getMock(),
-      sharedAgent: shared,
-      prompt: 'Find a user',
-      collectChunks: true,
-      fixtures: llm => workflowCallThenText(llm, { inputData: { name: 'unknown' } }),
-    });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Find a user',
+        collectChunks: true,
+        fixtures: llm => workflowCallThenText(llm, { inputData: { name: 'unknown' } }),
+      });
 
-    const suspended = chunks!.find(c => c.type === 'tool-call-suspended');
-    expect(suspended?.payload.toolName).toBe('workflow-findUserWorkflow');
-    expect(suspended?.payload.suspendPayload).toEqual({ message: 'Please provide the name of the user' });
-    expect(runs).toHaveLength(0);
+      const suspended = chunks!.find(c => c.type === 'tool-call-suspended');
+      expect(suspended?.payload.toolName).toBe('workflow-findUserWorkflow');
+      expect(suspended?.payload.suspendPayload).toEqual({ message: 'Please provide the name of the user' });
+      expect(runs).toHaveLength(0);
 
-    const resumed = await shared.agent.resumeStream({ name: USER.name }, { runId: output.runId });
-    await drain(resumed);
+      const resumed = await shared.agent.resumeStream({ name: USER.name }, { runId: output.runId });
+      await drain(resumed);
 
-    const toolResult = (await resumed.toolResults).find((r: any) => r.payload.toolName === 'workflow-findUserWorkflow');
-    expect((toolResult?.payload.result as any)?.result).toEqual(USER);
-    expect(runs).toEqual([USER]);
-  });
+      const toolResult = (await resumed.toolResults).find(
+        (r: any) => r.payload.toolName === 'workflow-findUserWorkflow',
+      );
+      expect((toolResult?.payload.result as any)?.result).toEqual(USER);
+      expect(runs).toEqual([USER]);
+    },
+  );
 
   it('auto-resumes a suspended workflow step from the next message on the same thread', async () => {
     const runs: Array<Record<string, unknown>> = [];

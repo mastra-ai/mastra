@@ -4,6 +4,8 @@
  */
 import type { Component } from '@earendil-works/pi-tui';
 
+import type { ListWindow } from './list-window.js';
+
 /** A menu-specific key shown under the menu as a keycap, e.g. tab to clone a thread. */
 export interface MenuHint {
   key: string;
@@ -22,6 +24,8 @@ export interface MenuChrome {
   menuHints?(): readonly MenuHint[];
   /** The list typing filters right now (a submenu's list while it is open), or undefined for none. */
   menuFilterTarget?(): Filterable | undefined;
+  /** The scroll window of the list on screen, which the frame shrinks to fit a short terminal. */
+  menuWindow?(): ListWindow | undefined;
   /**
    * Backspace on an empty search goes back (closes the menu) unless this is true; the menu then gets
    * it itself (e.g. /api-keys removes a key with the Mac delete key, a question is not skipped).
@@ -38,6 +42,17 @@ export function findFilterTarget(component: Component): Filterable | undefined {
   for (const child of (component as { children?: Component[] }).children ?? []) {
     const target = findFilterTarget(child);
     if (target) return target;
+  }
+  return undefined;
+}
+
+/** The scroll window of the list on screen: the first one a component in the tree names. */
+export function findMenuWindow(component: Component): ListWindow | undefined {
+  const chrome = component as MenuChrome;
+  if (typeof chrome.menuWindow === 'function') return chrome.menuWindow();
+  for (const child of (component as { children?: Component[] }).children ?? []) {
+    const window = findMenuWindow(child);
+    if (window) return window;
   }
   return undefined;
 }

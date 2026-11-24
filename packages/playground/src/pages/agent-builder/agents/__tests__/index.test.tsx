@@ -144,7 +144,6 @@ describe('AgentBuilderAgentsPage', () => {
     expect(capturedSearches[0].get('status')).toBeNull();
     expect(capturedSearches[0].get('authorId')).toBe('user-1');
     expect(capturedSearches[0].get('visibility')).toBeNull();
-    expect(screen.queryByText('All agents')).toBeNull();
   });
 
   it('waits for the current user query before fetching agents', async () => {

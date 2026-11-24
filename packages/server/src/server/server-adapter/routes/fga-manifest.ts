@@ -105,6 +105,10 @@ export function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | n
     return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
   }
 
+  if (path.startsWith('/knowledge/:knowledgeKey')) {
+    return { resourceType: 'knowledge', resourceIdParam: 'knowledgeKey', permission };
+  }
+
   if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
     return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
   }
@@ -129,6 +133,19 @@ export function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | n
           message => message && typeof message === 'object' && 'threadId' in message,
         )?.threadId;
         return typeof threadId === 'string' ? threadId : undefined;
+      },
+      permission,
+    };
+  }
+
+  // Same identity the handler checks: the caller's context resource wins over a requested resourceId.
+  if (path === '/memory/working-memory') {
+    return {
+      resourceType: 'resource',
+      resourceId: ({ resourceId }, { requestContext }) => {
+        const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+        if (typeof contextResourceId === 'string' && contextResourceId) return contextResourceId;
+        return typeof resourceId === 'string' ? resourceId : undefined;
       },
       permission,
     };

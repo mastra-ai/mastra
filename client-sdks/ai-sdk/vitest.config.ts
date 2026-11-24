@@ -8,6 +8,14 @@ export default defineConfig({
           name: 'unit:client-sdks/ai-sdk',
           environment: 'node',
           include: ['src/**/*.test.ts'],
+          exclude: ['src/**/*.e2e.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'e2e:client-sdks/ai-sdk',
+          environment: 'node',
+          include: ['src/**/*.e2e.test.ts'],
         },
       },
       {

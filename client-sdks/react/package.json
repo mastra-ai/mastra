@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.13.0-alpha.4",
+  "version": "1.16.0-alpha.7",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -72,7 +72,8 @@
     "build-storybook": "storybook build"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
@@ -114,7 +115,7 @@
     "typescript": "catalog:",
     "vite": "^8.3.5",
     "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "engines": {
     "node": ">=22.13.0"

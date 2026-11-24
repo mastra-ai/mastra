@@ -98,7 +98,7 @@ describe('WorkOSAuditIntegration', () => {
 
   it('creates an audit-log portal link for the request organization', async () => {
     const integration = new WorkOSAuditIntegration({
-      client: { auditLogs: { createEvent }, portal: { generateLink } } as any,
+      client: { auditLogs: { createEvent }, adminPortal: { generateLink } } as any,
       returnUrl: 'https://app.test/factory/audit',
     });
     const response = await makeApp(integration, { workosId: 'user-1', organizationId: 'org-1' }).request(
@@ -118,7 +118,7 @@ describe('WorkOSAuditIntegration', () => {
 
   it('requires an authenticated organization for portal links', async () => {
     const integration = new WorkOSAuditIntegration({
-      client: { auditLogs: { createEvent }, portal: { generateLink } } as any,
+      client: { auditLogs: { createEvent }, adminPortal: { generateLink } } as any,
       returnUrl: '/factory/audit',
     });
 
@@ -130,7 +130,7 @@ describe('WorkOSAuditIntegration', () => {
   it('returns 502 when portal-link generation fails', async () => {
     generateLink.mockRejectedValueOnce(new Error('portal down'));
     const integration = new WorkOSAuditIntegration({
-      client: { auditLogs: { createEvent }, portal: { generateLink } } as any,
+      client: { auditLogs: { createEvent }, adminPortal: { generateLink } } as any,
       returnUrl: '/factory/audit',
     });
     const response = await makeApp(integration, { workosId: 'user-1', organizationId: 'org-1' }).request(
@@ -139,5 +139,6 @@ describe('WorkOSAuditIntegration', () => {
 
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: 'portal_link_failed' });
+    expect(generateLink).toHaveBeenCalledTimes(1);
   });
 });

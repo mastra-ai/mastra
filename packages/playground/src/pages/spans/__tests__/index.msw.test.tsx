@@ -1,5 +1,5 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { TRACES_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
+import { OBSERVABILITY_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/observability/list-polling';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -226,19 +226,6 @@ describe('Spans page', () => {
   });
 
   describe('when the observability store supports span queries', () => {
-    it('keeps the Traces breadcrumb in the header, with the Traces/Spans switch below it', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
-      expect(within(breadcrumb).getByText('Traces')).toBeTruthy();
-      expect(breadcrumb.closest('header')).not.toBeNull();
-      expect(views.closest('header')).toBeNull();
-      expect(views.closest('main')).toBeNull();
-    });
-
     it('leaves Spans out of the breadcrumb, since the switch already shows it', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
 
@@ -254,19 +241,8 @@ describe('Spans page', () => {
 
       renderPage();
 
-      const filterInput = await screen.findByPlaceholderText('Filter spans…');
+      const filterInput = await screen.findByPlaceholderText('Filter spans');
       expect(filterInput.closest('main')).not.toBeNull();
-    });
-
-    it('shows each view with its icon', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      for (const tab of within(views).getAllByRole('tab')) {
-        expect(tab.querySelector('svg')).not.toBeNull();
-      }
     });
 
     it('marks Spans as the current view', async () => {
@@ -303,29 +279,6 @@ describe('Spans page', () => {
     });
   });
 
-  describe('when the store does not return thread rows', () => {
-    it('does not offer the Threads view', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      expect(views.queryByRole('tab', { name: 'Threads' })).toBeNull();
-    });
-  });
-
-  describe('when Threads is clicked in the view switch', () => {
-    it('navigates to the threads page', async () => {
-      setSpansHandlers(spanAndThreadRowsCapabilities, { first: spansFirstPage });
-
-      renderPage();
-      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
-
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/threads'));
-    });
-  });
-
   describe('when the view switch moves from Spans to Threads', () => {
     it('keeps the same header mounted', async () => {
       setSpansHandlers(spanAndThreadRowsCapabilities, { first: spansFirstPage });
@@ -354,7 +307,7 @@ describe('Spans page', () => {
       const header = screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header');
       fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
 
-      await screen.findByPlaceholderText('Filter threads…');
+      await screen.findByPlaceholderText('Filter threads');
       expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).toBe(header);
     });
   });
@@ -389,7 +342,8 @@ describe('Spans page', () => {
       renderPage('/spans?traceId=trace-1&spanId=span-2');
 
       const panel = within(getSidePanel());
-      expect(await panel.findByRole('region', { name: 'Span details' })).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
+      fireEvent.click(panel.getByRole('tab', { name: /^Output/ }));
       expect(await panel.findByText('Weather API timed out')).toBeTruthy();
     });
   });
@@ -400,7 +354,7 @@ describe('Spans page', () => {
 
       renderPage('/spans?traceId=trace-1&spanId=span-2');
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(screen.getByRole('link', { name: 'Open bare spans page' }));
 
       await waitFor(() => expect(panel.queryByRole('region', { name: 'Span details' })).toBeNull());
@@ -415,7 +369,7 @@ describe('Spans page', () => {
       renderPage();
       fireEvent.click(await screen.findByText('tool: get-weather'));
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(panel.getByRole('button', { name: 'Go to trace' }));
 
       expect(screen.getByTestId('location').textContent).toBe('/traces?traceId=trace-1&spanId=span-2');
@@ -472,7 +426,7 @@ describe('Spans page', () => {
       fireEvent.click(panel.getByRole('button', { name: 'Go to next span' }));
 
       await waitFor(() => expect(panel.queryByText('session-weather-42')).toBeNull());
-      expect(await panel.findByText('Weather API timed out')).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
     });
 
     it('moves the URL to the next span', async () => {
@@ -526,7 +480,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       serverDown = false;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS));
 
       expect(await screen.findByText('agent run: weather')).toBeTruthy();
     });
@@ -546,7 +500,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       const requestsAfterFailure = requests.length;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3));
 
       expect(requests).toHaveLength(requestsAfterFailure);
     });
@@ -577,7 +531,7 @@ describe('Spans page', () => {
 
       expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
       expect(
-        screen.getByText('Pick a wider time range — older spans may fall outside the current window.'),
+        screen.getByText('Pick a wider time range. Older spans may fall outside the current window.'),
       ).toBeTruthy();
     });
 
@@ -596,7 +550,7 @@ describe('Spans page', () => {
       renderPage();
 
       await screen.findByRole('heading', { name: 'No spans for the last 7 days' });
-      expect(screen.getByPlaceholderText('Filter spans…')).toBeTruthy();
+      expect(screen.getByPlaceholderText('Filter spans')).toBeTruthy();
     });
   });
 

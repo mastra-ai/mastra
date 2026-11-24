@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectProject } from '@mastra/code-sdk/utils/project';
+import { enableMouseSettings } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
 const PACK_NAME = 'Thread Resume E2E';
@@ -68,6 +69,7 @@ values
   ('msg-mc-e2e-seeded-assistant', ${quoteSql(threadId)}, ${quoteSql(assistantContent)}, 'assistant', 'v2', ${quoteSql(new Date(nowMs + 1000).toISOString())}, ${quoteSql(resourceId)});
 `;
     execFileSync('sqlite3', [dbPath], { input: sql });
+    enableMouseSettings(appDataDir, { dialogs: true, input: false });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -111,9 +113,14 @@ values
     await runtime.waitForScreenText(/Thread renamed to: Cloned demo thread/i, terminal);
     terminal.submit('/rename Renamed demo thread');
     await runtime.waitForScreenText(/Thread renamed to: Renamed demo thread/i, terminal);
+    runtime.printScreen('after /clone and renames', terminal);
+
+    // Each thread takes two rows (id, then title); clicking the title row switches like Enter.
     terminal.submit('/threads');
     await runtime.waitForScreenText(/Renamed demo thread/i, terminal);
-    terminal.write('\x1b');
-    runtime.printScreen('after /clone and renames', terminal);
+    await terminal.clickText?.('E2E seeded history fixture');
+    await runtime.waitForScreenTextAbsent(/Select Thread/i, terminal);
+    await runtime.waitForScreenTextAbsent(/Thread renamed to: Renamed demo thread/i, terminal);
+    await runtime.waitForScreenText(/Recovered assistant answer from sanitized history/i, terminal);
   },
 };

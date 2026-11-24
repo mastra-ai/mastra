@@ -53,6 +53,45 @@ describe('record-builders', () => {
       expect(buildCreateSpanRecord({ ...inherited, entityVersionId: 'tool-v2' }).entityVersionId).toBe('tool-v2');
     });
 
+    it('stores native span fields as supplied, null when the span has none, and off updates when unset', () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'span-0',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      const absent = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
+
+      expect(buildCreateSpanRecord({ ...span(), ...fields })).toMatchObject(fields);
+      expect(buildUpdateSpanRecord({ ...span(), ...fields })).toMatchObject(fields);
+      expect(buildCreateSpanRecord(span())).toMatchObject(absent);
+
+      // An ended span that only learned its outcome must not clear the model written at start.
+      const update = buildUpdateSpanRecord({ ...span(), outcome: 'error' });
+      expect(update.outcome).toBe('error');
+      for (const key of Object.keys(fields).filter(key => key !== 'outcome')) {
+        expect(update).not.toHaveProperty(key);
+      }
+    });
+
+    it('fills the time to first token column from the attribute and drops it from the attributes JSON', () => {
+      const streamed: AnyExportedSpan = {
+        ...span(),
+        type: SpanType.MODEL_INFERENCE,
+        attributes: { model: 'gpt-6.1-sol', timeToFirstTokenMs: 210 },
+      };
+      for (const record of [buildCreateSpanRecord(streamed), buildUpdateSpanRecord(streamed)]) {
+        expect(record.timeToFirstTokenMs).toBe(210);
+        expect(record.attributes).toEqual({ model: 'gpt-6.1-sol' });
+      }
+      expect(buildCreateSpanRecord({ ...span(), attributes: { model: 'gpt-6.1-sol' } }).timeToFirstTokenMs).toBeNull();
+    });
+
     it('stores the parent and root entity carried on the exported span, null when absent', () => {
       const nested: AnyExportedSpan = {
         ...span(),
@@ -501,6 +540,25 @@ describe('record-builders', () => {
           kept: true,
         },
       });
+    });
+
+    it('preserves an explicitly absent feedback author and supplied review status', () => {
+      expect(
+        buildFeedbackRecord({
+          type: 'feedback',
+          feedback: {
+            feedbackId: 'anonymous-feedback',
+            timestamp: new Date(),
+            feedbackType: 'comment',
+            value: 'useful',
+            feedbackUserId: null,
+            userId: 'legacy-user',
+            metadata: { userId: 'metadata-user' },
+            correlationContext: { userId: 'span-user' },
+            reviewStatus: 'reviewed',
+          },
+        }),
+      ).toMatchObject({ feedbackUserId: null, userId: 'span-user', reviewStatus: 'reviewed' });
     });
 
     it('keeps deprecated feedback source alias support', () => {

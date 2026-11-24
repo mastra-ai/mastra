@@ -1,6 +1,8 @@
 import type { Component, OverlayHandle, OverlayOptions, SizeValue, TUI } from '@earendil-works/pi-tui';
 import { visibleWidth } from '@earendil-works/pi-tui';
 
+import { locate } from './mouse/hit-test.js';
+import type { MouseAware, MousePoint, MouseTarget } from './mouse/hit-test.js';
 import { MenuFrame } from './prompt-slot.js';
 import type { MastraTUI, PromptSlotChrome } from './prompt-slot.js';
 import { theme } from './theme.js';
@@ -21,15 +23,21 @@ function parseSizeValue(value: SizeValue | undefined, total: number): number | u
   return match?.[1] ? Math.floor((parseFloat(match[1]) / 100) * total) : undefined;
 }
 
+function modalMaxHeight(tui: TUI, options: ModalOverlayOptions): number {
+  const termHeight = tui.terminal?.rows ?? 40;
+  return parseSizeValue(options.maxHeight ?? '80%', termHeight) ?? termHeight;
+}
+
 function modalMinHeight(tui: TUI, options: ModalOverlayOptions): number {
   const termHeight = tui.terminal?.rows ?? 40;
   const minHeight = Math.floor(termHeight * (options.minHeightPercent ?? 0.7));
-  const maxHeight = parseSizeValue(options.maxHeight ?? '80%', termHeight) ?? termHeight;
 
-  return Math.max(1, Math.min(minHeight, maxHeight));
+  return Math.max(1, Math.min(minHeight, modalMaxHeight(tui, options)));
 }
 
-class MinHeightOverlay implements Component {
+class MinHeightOverlay implements Component, MouseAware {
+  private lastTopPadding = 0;
+
   constructor(
     private component: Component,
     private tui: TUI,
@@ -58,14 +66,21 @@ class MinHeightOverlay implements Component {
     this.component.invalidate?.();
   }
 
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    const target = locate(this.component, { ...point, row: point.row - this.lastTopPadding });
+    return target && { ...target, top: target.top + this.lastTopPadding };
+  }
+
   render(width: number): string[] {
     const lines = this.component.render(width);
     const minHeight = modalMinHeight(this.tui, this.options);
+    this.lastTopPadding = 0;
     if (lines.length >= minHeight) return lines;
 
     const blank = theme.bg('overlayBg', ' '.repeat(width));
     const missingLines = minHeight - lines.length;
     const topPadding = Math.min(Math.floor(missingLines / 2), this.options.maxTopPadding ?? 4);
+    this.lastTopPadding = topPadding;
     const padded = [
       ...Array.from({ length: topPadding }, () => blank),
       ...lines,
@@ -106,7 +121,7 @@ export function showModalOverlay(tui: TUI, component: Component, options: ModalO
   const app = tui as Partial<MastraTUI>;
   if (app.promptSlot && !app.hasPopup?.()) return app.promptSlot.open(component, chrome);
   return tui.showOverlay(
-    new MinHeightOverlay(new MenuFrame(component, chrome), tui, options),
+    new MinHeightOverlay(new MenuFrame(component, chrome, () => modalMaxHeight(tui, options)), tui, options),
     modalOverlayOptions(tui, options),
   );
 }

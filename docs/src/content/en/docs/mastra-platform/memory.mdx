@@ -1,0 +1,112 @@
+---
+title: "Memory | Mastra platform"
+description: "Store agent threads, messages, working memory, and observational memory in a hosted Mastra platform Memory instance with PlatformMemory."
+packages:
+  - "@mastra/platform"
+draft: true
+---
+
+# Memory
+
+Mastra platform Memory is a hosted store for your agents' [memory](/docs/memory/overview). It keeps threads, messages, and working memory, and runs [observational memory](/docs/memory/observational-memory) on the server. Your agent connects to it with `PlatformMemory` from `@mastra/platform`, so you don't run or configure a memory database yourself.
+
+:::note
+Memory isn't enabled for every organization yet. If **Memory** doesn't appear in your project's sidebar, contact Mastra support.
+:::
+
+## Create a Memory instance
+
+A Memory instance holds the memory for one project. Only organization admins can create instances. Other members can view them.
+
+1. Open your project in the [Mastra platform](https://projects.mastra.ai) and select **Memory**.
+1. Select **Create instance**.
+1. Enter a name, such as `customer-memory`. Use lowercase letters, numbers, and dashes, up to 63 characters.
+
+The instance is ready when provisioning finishes. If provisioning fails, create another instance or contact support.
+
+## Connect an agent
+
+Install the package:
+
+```bash npm2yarn
+npm install @mastra/platform
+```
+
+`PlatformMemory` needs the instance ID and an access token, and throws when either is missing. To run locally, copy the instance ID from the Memory page, [create an access token](/docs/mastra-platform/access-tokens#create-an-access-token), and add both to your `.env` file:
+
+```bash title=".env"
+MASTRA_MEMORY_INSTANCE_ID=your-instance-id
+MASTRA_PLATFORM_ACCESS_TOKEN=your-access-token
+```
+
+When you deploy to Mastra platform, the platform can set these values for you. See [When you deploy to Mastra platform](#when-you-deploy-to-mastra-platform).
+
+Pass a `PlatformMemory` instance to your agent:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { PlatformMemory } from '@mastra/platform'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'You help customers with their orders.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new PlatformMemory(),
+})
+```
+
+Call the agent with a thread and resource, as with any other memory:
+
+```typescript
+const response = await supportAgent.generate('Where is my order?', {
+  memory: {
+    thread: 'order-thread-123',
+    resource: 'customer-456',
+  },
+})
+```
+
+## Working memory
+
+The `workingMemory` option controls how the agent uses [working memory](/docs/memory/working-memory) stored for the resource:
+
+| Value | Behavior |
+| - | - |
+| `readonly` | Default. Adds the stored working memory to each run's prompt. The agent can't change it. |
+| `tool` | Adds the stored working memory to the prompt and gives the agent an `updateWorkingMemory` tool to change it. |
+| `off` | Leaves working memory out of the prompt. |
+
+```typescript
+memory: new PlatformMemory({ workingMemory: 'tool' })
+```
+
+The `updateWorkingMemory` tool isn't added to read-only runs.
+
+## Environment variables
+
+| Variable | Description |
+| - | - |
+| `MASTRA_MEMORY_INSTANCE_ID` | Required. The ID of the Memory instance. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | A Mastra platform [access token](/docs/mastra-platform/access-tokens). |
+| `MASTRA_PLATFORM_SECRET_KEY` | An access token, used when `MASTRA_PLATFORM_ACCESS_TOKEN` isn't set. |
+| `MASTRA_MEMORY_API_URL` | Optional. The Memory API URL. Defaults to `https://memory-api.mastra.ai`. |
+
+An access token is required. Set one of the two token variables, or pass the token as the `accessToken` option. You can also pass the instance ID and API URL as the `instanceId` and `apiUrl` options.
+
+### When you deploy to Mastra platform
+
+When you deploy a server, the platform sets `MASTRA_MEMORY_INSTANCE_ID` if exactly one ready Memory instance is available to the environment. With more than one instance, set `MASTRA_MEMORY_INSTANCE_ID` in the [environment variables](/docs/mastra-platform/deploy/environments#environment-variables) to choose which one the deploy uses.
+
+The platform sets `MASTRA_PLATFORM_ACCESS_TOKEN` only when [observability](/docs/mastra-platform/observability/overview) is on for the project. If you turn observability off, add an access token to the environment as `MASTRA_PLATFORM_SECRET_KEY`. A `MASTRA_PLATFORM_ACCESS_TOKEN` you store on the environment never reaches the runtime, because the name is reserved.
+
+## Browse threads and messages
+
+The Memory page lists the threads in the selected instance. A thread is listed after an agent saves a conversation to it. Select a thread to read its messages, or filter the list with **Search by resource ID**.
+
+## Related
+
+- [Memory overview](/docs/memory/overview)
+- [Observational memory](/docs/memory/observational-memory)
+- [Working memory](/docs/memory/working-memory)
+- [Access tokens](/docs/mastra-platform/access-tokens)

@@ -27,6 +27,23 @@ function list(labels: string[], onCancel = vi.fn()) {
   return menu;
 }
 
+/** A menu command whose menu opens once `load()` is called, like /models waiting on its list. */
+function slowMenuCommand(slot: PromptSlot, name: string, menu: Component, chrome?: { title?: string }) {
+  let loaded!: () => void;
+  const data = new Promise<void>(resolve => (loaded = resolve));
+  void slot.runMenuCommand(name, async () => {
+    await data;
+    slot.open(menu, chrome);
+    await new Promise(() => {});
+  });
+  return {
+    load: async () => {
+      loaded();
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    },
+  };
+}
+
 afterEach(() => vi.useRealTimers());
 
 describe('PromptSlot', () => {
@@ -108,19 +125,16 @@ describe('PromptSlot', () => {
   it('hands keys typed while a menu loads to the menu once it opens', async () => {
     vi.useFakeTimers();
     const { slot, mounted } = setup();
-    let finish!: () => void;
-    slot.showLoadingWhile('think', new Promise<void>(resolve => (finish = resolve)));
-    vi.advanceTimersByTime(150);
-    for (const ch of 'xh') mounted().handleInput!(ch);
     const onSelect = vi.fn();
     const menu = list(['Low', 'High', 'Extra high']);
     menu.onSelect = onSelect;
-    slot.open(menu, { title: 'Thinking level' });
-    await Promise.resolve();
+    const command = slowMenuCommand(slot, 'think', menu, { title: 'Thinking level' });
+    vi.advanceTimersByTime(150);
+    for (const ch of 'xh') mounted().handleInput!(ch);
+    await command.load();
     expect(plain(mounted().render(60)).some(row => row.includes('→ Extra high'))).toBe(true);
     mounted().handleInput!('\r');
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ value: 'Extra high' }));
-    finish();
   });
 
   it('Ctrl+C on the loading row stops waiting and goes to the prompt', async () => {
@@ -128,7 +142,7 @@ describe('PromptSlot', () => {
     const { slot, mounted, editor } = setup();
     const typed = vi.fn();
     editor.handleInput = typed;
-    slot.showLoadingWhile('models', new Promise(() => {}));
+    void slot.runMenuCommand('models', () => new Promise(() => {}));
     vi.advanceTimersByTime(150);
     mounted().handleInput!('\x03');
     expect(mounted()).toBe(editor);
@@ -236,17 +250,13 @@ describe('PromptSlot', () => {
   it('shows a loading row while a slow menu command prepares, and the menu replaces it', async () => {
     vi.useFakeTimers();
     const { slot, mounted, editor } = setup();
-    let finish!: () => void;
-    const pending = new Promise<void>(resolve => (finish = resolve));
-
-    slot.showLoadingWhile('models', pending);
+    const command = slowMenuCommand(slot, 'models', list(['Custom']), { title: 'Switch model pack' });
     expect(mounted()).toBe(editor);
     vi.advanceTimersByTime(150);
     expect(plain(mounted().render(60)).some(row => row.includes('loading models…'))).toBe(true);
 
-    slot.open(list(['Custom']), { title: 'Switch model pack' });
+    await command.load();
     expect(plain(mounted().render(60)).some(row => row.includes('switch model pack'))).toBe(true);
-    finish();
     await vi.runAllTimersAsync();
     expect(plain(mounted().render(60)).some(row => row.includes('switch model pack'))).toBe(true);
   });
@@ -254,24 +264,63 @@ describe('PromptSlot', () => {
   it('cancels a menu that opens after Esc dismissed its loading row', async () => {
     vi.useFakeTimers();
     const { slot, mounted, editor } = setup();
-    let finish!: () => void;
-    const pending = new Promise<void>(resolve => (finish = resolve));
-    slot.showLoadingWhile('om', pending);
-    vi.advanceTimersByTime(150);
-    mounted().handleInput!('\x1b');
-    expect(mounted()).toBe(editor);
-
     const onCancel = vi.fn();
-    const menu = list(['Observer model'], onCancel);
+    const menu = list(['Observer model']);
     menu.onCancel = () => {
       onCancel();
       slot.closeTop();
     };
-    slot.open(menu, { title: 'Observational memory settings' });
-    await Promise.resolve();
+    const command = slowMenuCommand(slot, 'om', menu, { title: 'Observational memory settings' });
+    vi.advanceTimersByTime(150);
+    mounted().handleInput!('\x1b');
+    expect(mounted()).toBe(editor);
+
+    await command.load();
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(mounted()).toBe(editor);
-    finish();
+  });
+
+  it('cancels only the menu of the command whose loading row Esc dismissed, not the next one opened', async () => {
+    vi.useFakeTimers();
+    const { slot, mounted } = setup();
+    const packs = list(['Custom']);
+    packs.onCancel = vi.fn(() => void slot.closeTop());
+    const models = slowMenuCommand(slot, 'models', packs);
+    vi.advanceTimersByTime(150);
+    mounted().handleInput!('\x1b');
+
+    const onSettingsCancel = vi.fn();
+    await slot.runMenuCommand('settings', async () => {
+      slot.open(list(['Notifications'], onSettingsCancel), { title: 'Settings' });
+    });
+    const settings = mounted();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(onSettingsCancel).not.toHaveBeenCalled();
+    expect(mounted()).toBe(settings);
+
+    // The models list arrives later: its menu is cancelled and settings stays open.
+    await models.load();
+    expect(packs.onCancel).toHaveBeenCalledTimes(1);
+    expect(onSettingsCancel).not.toHaveBeenCalled();
+    expect(mounted()).toBe(settings);
+  });
+
+  it('keeps keys typed on a loading row away from a menu something else opens', async () => {
+    vi.useFakeTimers();
+    const { slot, mounted } = setup();
+    const command = slowMenuCommand(slot, 'models', list(['Custom', 'OpenAI']));
+    vi.advanceTimersByTime(150);
+    mounted().handleInput!('\r');
+
+    const approve = vi.fn();
+    const question = list(['Yes', 'No']);
+    question.onSelect = approve;
+    slot.open(question, { title: 'Allow this?' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(approve).not.toHaveBeenCalled();
+    slot.closeTop();
+    await command.load();
+    expect(plain(mounted().render(60)).some(row => row.includes('→ Custom'))).toBe(true);
   });
 
   it('removes the loading row when the command fails, without an unhandled rejection', async () => {
@@ -282,8 +331,7 @@ describe('PromptSlot', () => {
     try {
       let fail!: (error: Error) => void;
       const pending = new Promise<void>((_, reject) => (fail = reject));
-      pending.catch(() => {});
-      slot.showLoadingWhile('models', pending);
+      slot.runMenuCommand('models', () => pending).catch(() => {});
       vi.advanceTimersByTime(150);
       expect(mounted()).not.toBe(editor);
       fail(new Error('offline'));
@@ -312,7 +360,7 @@ describe('PromptSlot', () => {
   it('shows no loading row when the menu opens quickly', async () => {
     vi.useFakeTimers();
     const { slot, mounted, editor } = setup();
-    slot.showLoadingWhile('think', Promise.resolve());
+    void slot.runMenuCommand('think', () => Promise.resolve());
     await vi.runAllTimersAsync();
     expect(mounted()).toBe(editor);
   });

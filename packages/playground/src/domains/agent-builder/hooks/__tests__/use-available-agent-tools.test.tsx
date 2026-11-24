@@ -139,29 +139,6 @@ describe('useAvailableAgentTools', () => {
       await waitFor(() => expect(result.current).toHaveLength(1));
       expect(result.current[0].id).toBe('agent-other');
     });
-
-    it('returns an equal list when inputs are unchanged across renders', async () => {
-      // Under the real React Query stack `useQueries` hands back a fresh array
-      // each render, so the memoized output is value-stable rather than
-      // reference-identical. Equal inputs must still yield an equal list.
-      const toolsData = { 'tool-a': { description: 'Tool A' } };
-      const agentsData = { 'agent-x': { name: 'Agent X' } };
-      const selectedTools = { 'tool-a': true };
-      const selectedAgents = {};
-
-      const { result, rerender } = renderAvailableTools({
-        toolsData,
-        agentsData,
-        selectedTools,
-        selectedAgents,
-      });
-
-      await waitFor(() => expect(result.current).toHaveLength(2));
-      const first = result.current;
-      rerender();
-
-      expect(result.current).toStrictEqual(first);
-    });
   });
 
   describe('when the picker restricts the tools allowlist', () => {

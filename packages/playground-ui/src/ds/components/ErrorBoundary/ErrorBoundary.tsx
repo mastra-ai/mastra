@@ -1,6 +1,9 @@
-import { AlertTriangle, Bug, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '../Button';
+import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
+import { IconBug } from '@/ds/icons/central/IconBug';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -151,11 +154,11 @@ function DefaultErrorFallback({
           className={cn(
             'flex items-center justify-center rounded-full bg-destructive-subtle text-destructive-subtle-foreground',
             isInline
-              ? 'size-10 [&>svg]:size-5'
+              ? 'size-10 [&>svg]:size-icon-lg'
               : 'size-14 @md:size-16 @lg:size-20 [&>svg]:size-7 @md:[&>svg]:size-8 @lg:[&>svg]:size-10',
           )}
         >
-          <AlertTriangle />
+          <IconExclamationTriangle />
         </div>
         <h3
           className={cn(
@@ -177,11 +180,16 @@ function DefaultErrorFallback({
           {error.message}
         </p>
         <div className={cn('flex flex-wrap items-center justify-center gap-2', isInline ? 'mt-1' : 'mt-2')}>
-          <Button icon={<RotateCcw />} variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
+          <Button
+            icon={<IconArrowRotateCounterClockwise />}
+            variant="primary"
+            size={isInline ? 'sm' : 'lg'}
+            onClick={reset}
+          >
             Try again
           </Button>
           <Button
-            icon={<RefreshCw />}
+            icon={<IconArrowRotateClockwise />}
             variant="default"
             size={isInline ? 'sm' : 'lg'}
             onClick={() => window.location.reload()}
@@ -189,7 +197,7 @@ function DefaultErrorFallback({
             Reload page
           </Button>
           <Button
-            icon={<Bug />}
+            icon={<IconBug />}
             render={<a href="https://github.com/mastra-ai/mastra/issues" target="_blank" rel="noopener noreferrer" />}
             variant="default"
             size={isInline ? 'sm' : 'lg'}

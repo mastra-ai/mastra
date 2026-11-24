@@ -50,19 +50,21 @@ describe('Composer working ring during connection drops', () => {
     const advance = (milliseconds: number) => act(() => vi.advanceTimersByTime(milliseconds));
 
     view.rerender(<ComposerOnConnection status="reconnecting" />);
-    advance(250);
+    advance(1_999);
     expect(ring()).toHaveAttribute('data-busy', 'true');
+    expect(screen.queryByText('Reconnecting…')).toBeNull();
     view.rerender(<ComposerOnConnection status="ready" />);
     advance(3_000);
     expect(ring()).toHaveAttribute('data-busy', 'true');
 
     view.rerender(<ComposerOnConnection status="reconnecting" />);
-    advance(300);
+    advance(2_000);
     expect(screen.getByText('Reconnecting…')).toBeVisible();
     expect(ring()).toHaveAttribute('data-busy', 'false');
 
     view.rerender(<ComposerOnConnection status="ready" />);
-    expect(screen.getByText('Reconnected')).toBeVisible();
+    expect(screen.queryByText('Reconnecting…')).toBeNull();
+    expect(screen.queryByText('Reconnected')).toBeNull();
     expect(ring()).toHaveAttribute('data-busy', 'true');
   });
 });

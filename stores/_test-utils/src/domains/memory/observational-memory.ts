@@ -1957,6 +1957,9 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         });
 
         expect(next.id).toBe(newRecordId);
+        // The swap checked the snapshot's buffer in the same atomic step and says so.
+        expect(next.bufferedReflectionVerified).toBe(true);
+        expect((await head(input)).bufferedReflectionVerified).toBeUndefined();
         expect(next.activeObservations).toContain('- condensed');
         expect(next.activeObservations).toContain('- activated');
         expect(next.activeObservations).not.toContain('- L1');
@@ -1966,7 +1969,65 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
 
         const again = await memoryStorage.swapBufferedReflectionToActive({ currentRecord: stale, tokenCount: 7 });
         expect(again.id).toBe(newRecordId);
+        expect(again.bufferedReflectionVerified).toBeUndefined();
         expect(await rows(input)).toHaveLength(2);
+      });
+
+      // Another process extends the buffered reflection after this caller read it. The extension
+      // repeats the unreflected tail and moves the reflected line count past it, so the activated
+      // text would be the same either way; only the stored buffer tells them apart. (#27262)
+      it('C5b: buffered reflection swap activates nothing when the buffer was extended after the snapshot', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.commitActiveObservations({
+          id: record.id,
+          observations: '- L1\n- L2',
+          tokenCount: 10,
+          lastObservedAt: at(0),
+        });
+        await memoryStorage.updateBufferedReflection({
+          id: record.id,
+          reflection: '- condensed',
+          tokenCount: 3,
+          inputTokenCount: 5,
+          reflectedObservationLineCount: 1,
+        });
+        const stale = await snapshot(input);
+        await memoryStorage.updateBufferedReflection({
+          id: record.id,
+          reflection: '- L2',
+          tokenCount: 2,
+          inputTokenCount: 5,
+          reflectedObservationLineCount: 2,
+        });
+
+        const newRecordId = randomUUID();
+        const returned = await memoryStorage.swapBufferedReflectionToActive({
+          currentRecord: stale,
+          tokenCount: 7,
+          newRecordId,
+        });
+
+        expect(returned.id).toBe(record.id);
+        expect(returned.bufferedReflectionVerified).toBeUndefined();
+        expect(await rows(input)).toHaveLength(1);
+        expect(await head(input)).toMatchObject({
+          id: record.id,
+          activeObservations: '- L1\n- L2',
+          bufferedReflection: '- condensed\n\n- L2',
+          reflectedObservationLineCount: 2,
+        });
+
+        // A caller that read the extended buffer activates it.
+        const current = await snapshot(input);
+        const next = await memoryStorage.swapBufferedReflectionToActive({
+          currentRecord: current,
+          tokenCount: 7,
+          newRecordId,
+        });
+        expect(next.id).toBe(newRecordId);
+        expect(next.bufferedReflectionVerified).toBe(true);
+        expect(next.activeObservations).toBe('- condensed\n\n- L2');
       });
 
       it('C6: appends land on the head, dedupe by cycleId, skip covered retries, and never move lastBufferedAtTime back', async () => {

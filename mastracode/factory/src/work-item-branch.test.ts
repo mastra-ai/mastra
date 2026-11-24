@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { externalSourceForWorkItem, factoryRuleSourceForWorkItem, workItemSource } from './rules/types.js';
 import {
   mergeRequestNumberFromBranch,
   pullRequestNumberFromBranch,
+  workItemBoardSource,
   workItemBranch,
   workItemBranchSource,
 } from './work-item-branch.js';
@@ -16,6 +18,40 @@ describe('workItemBranchSource', () => {
     expect(workItemBranchSource({ integrationId: 'jira', type: 'issue', externalId: '4' })).toBe('jira-issue');
     expect(workItemBranchSource({ integrationId: 'gitlab', type: 'issue', externalId: '4' })).toBe('gitlab-issue');
     expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '5' })).toBe('manual');
+  });
+
+  it('preserves Detail finding provenance through storage, rules, and branches', () => {
+    const source = externalSourceForWorkItem('detail-finding', 'repo-1:finding-2', 'https://example.com/finding');
+    expect(source).toEqual({
+      integrationId: 'detail',
+      type: 'finding',
+      externalId: 'repo-1:finding-2',
+      url: 'https://example.com/finding',
+    });
+    expect(workItemSource(source)).toBe('detail-finding');
+    expect(factoryRuleSourceForWorkItem('detail-finding')).toBe('detailFinding');
+    expect(workItemBranchSource(source)).toBe('detail-finding');
+  });
+});
+
+describe('workItemBoardSource', () => {
+  it('shows a Slack thread as its own source, though its branch is a plain work item', () => {
+    const thread = { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:C1:1700.42' };
+    expect(workItemBoardSource(thread)).toBe('slack-thread');
+    expect(workItemBranchSource(thread)).toBe('manual');
+  });
+
+  it('shows security findings under the integration that filed them, not as cards filed by hand', () => {
+    expect(workItemBoardSource({ integrationId: 'vanta', type: 'vulnerability', externalId: 'CVE-2026-1' })).toBe(
+      'vanta-vulnerability',
+    );
+    expect(workItemBoardSource({ integrationId: 'github', type: 'dependabot-alert', externalId: '3543' })).toBe(
+      'github-dependabot-alert',
+    );
+    expect(workItemBoardSource({ integrationId: 'detail', type: 'finding', externalId: 'repo:1' })).toBe(
+      'detail-finding',
+    );
+    expect(workItemBoardSource(null)).toBe('manual');
   });
 });
 

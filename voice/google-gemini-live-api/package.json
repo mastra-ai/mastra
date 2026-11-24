@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-google-gemini-live",
-  "version": "0.14.18-alpha.0",
+  "version": "0.14.20-alpha.1",
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -35,7 +36,7 @@
     "@google/genai": "^1.52.0",
     "@mastra/schema-compat": "workspace:*",
     "google-auth-library": "^10.9.1",
-    "ws": "^8.22.0"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

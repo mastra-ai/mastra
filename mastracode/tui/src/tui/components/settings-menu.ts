@@ -7,13 +7,15 @@
 import { fuzzyFilter, getKeybindings, truncateToWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, SettingItem } from '@earendil-works/pi-tui';
 
+import { locate } from '../mouse/hit-test.js';
+import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
 import { theme } from '../theme.js';
 import { ListWindow } from './list-window.js';
-import { findFilterTarget } from './menu-chrome.js';
+import { findFilterTarget, findMenuWindow } from './menu-chrome.js';
 import type { Filterable, MenuChrome } from './menu-chrome.js';
 import { labelColumnWidth, menuRow } from './menu-list.js';
 
-export class SettingsMenu implements Component, Filterable, MenuChrome {
+export class SettingsMenu implements Component, Filterable, MenuChrome, MouseAware {
   private filteredItems: SettingItem[];
   private selectedIndex = 0;
   private readonly window = new ListWindow();
@@ -42,6 +44,10 @@ export class SettingsMenu implements Component, Filterable, MenuChrome {
     return this.submenu ? findFilterTarget(this.submenu.component) : this;
   }
 
+  menuWindow(): ListWindow | undefined {
+    return this.submenu ? findMenuWindow(this.submenu.component) : this.window;
+  }
+
   setFilter(query: string): void {
     this.filteredItems = query.trim() ? fuzzyFilter(this.items, query, item => item.label) : this.items;
     this.selectedIndex = 0;
@@ -56,7 +62,7 @@ export class SettingsMenu implements Component, Filterable, MenuChrome {
     if (this.filteredItems.length === 0) return [theme.fg('muted', '  no matches')];
 
     const column = labelColumnWidth(this.items.map(item => item.label));
-    const { startIndex, endIndex } = this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
+    const { startIndex, endIndex } = this.visibleRange();
     const lines: string[] = [];
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i]!;
@@ -64,7 +70,7 @@ export class SettingsMenu implements Component, Filterable, MenuChrome {
       const value = theme.fg(selected ? 'text' : 'muted', item.currentValue);
       lines.push(truncateToWidth(menuRow(selected, item.label, value, column), width));
     }
-    if (this.filteredItems.length > this.maxVisible) {
+    if (endIndex - startIndex < this.filteredItems.length) {
       lines.push(theme.fg('dim', `  (${this.selectedIndex + 1}/${this.filteredItems.length})`));
     }
     const description = this.filteredItems[this.selectedIndex]?.description;
@@ -75,6 +81,26 @@ export class SettingsMenu implements Component, Filterable, MenuChrome {
       }
     }
     return lines;
+  }
+
+  /** One row per visible setting, or the open submenu's rows; a click does what Enter would. */
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    if (this.submenu) return locate(this.submenu.component, point);
+    const { startIndex, endIndex } = this.visibleRange();
+    const index = startIndex + point.row;
+    if (index >= endIndex) return undefined;
+    return {
+      top: point.row,
+      height: 1,
+      activate: () => {
+        this.selectedIndex = index;
+        this.activate();
+      },
+    };
+  }
+
+  private visibleRange(): { startIndex: number; endIndex: number } {
+    return this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
   }
 
   handleInput(data: string): void {

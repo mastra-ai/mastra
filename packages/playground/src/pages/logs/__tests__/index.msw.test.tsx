@@ -170,7 +170,7 @@ describe('LogsPage log drawer', () => {
       const traceDialog = await screen.findByRole('dialog', { name: /trace-a/ });
       expect(await within(traceDialog).findByText('llm call')).toBeTruthy();
 
-      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans...'), {
+      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans'), {
         target: { value: 'zanzibar-payload-term' },
       });
 

@@ -89,7 +89,7 @@ The exporter outputs different formats based on event type:
 
 ### SPAN_STARTED
 
-```
+```text
 🚀 SPAN_STARTED
    Type: [span type]
    Name: [span name]
@@ -102,7 +102,7 @@ The exporter outputs different formats based on event type:
 
 ### SPAN_ENDED
 
-```
+```text
 ✅ SPAN_ENDED
    Type: [span type]
    Name: [span name]
@@ -118,7 +118,7 @@ The exporter outputs different formats based on event type:
 
 ### SPAN_UPDATED
 
-```
+```text
 📝 SPAN_UPDATED
    Type: [span type]
    Name: [span name]
@@ -166,7 +166,7 @@ const exporterWithLogger = new ConsoleExporter({
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
 
-### Other Exporters
+### Other exporters
 
 - [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter): Storage persistence
 - [MastraPlatformExporter](/reference/observability/tracing/exporters/mastra-platform-exporter): Mastra platform

@@ -60,7 +60,7 @@ export function setAuthStorage(storage: AuthStorage | undefined): void {
  * Required for Claude Max OAuth authentication
  */
 export const claudeCodeMiddleware: LanguageModelMiddleware = {
-  specificationVersion: 'v3',
+  specificationVersion: 'v4',
   transformParams: async ({ params }) => {
     // Prepend the Claude Code identity as the first system message
     const systemMessage = {
@@ -91,7 +91,7 @@ export const claudeCodeMiddleware: LanguageModelMiddleware = {
  * - Conversation history up to the last message
  */
 export const createPromptCacheMiddleware = (scope: AnthropicPromptCacheScope): LanguageModelMiddleware => ({
-  specificationVersion: 'v3',
+  specificationVersion: 'v4',
   transformParams: async ({ params }) => {
     const prompt = [...params.prompt];
 
@@ -178,7 +178,7 @@ export function createAnthropicThinkingMiddleware(
   if (level === 'off') return undefined;
 
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       const anthropicOptions = (params.providerOptions?.anthropic ?? {}) as Record<string, unknown>;
       // Don't override explicit per-request thinking configuration.

@@ -4,12 +4,17 @@ import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
+import { mergeProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
+import { isObservationalMemoryEnabled } from '../../memory/types';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import type {
   InputProcessorOrWorkflow,
   LLMRequestProcessorOrWorkflow,
@@ -17,17 +22,9 @@ import type {
   ErrorProcessorOrWorkflow,
 } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import {
-  RequestContext,
-  MASTRA_AUTH_TOKEN_KEY,
-  MASTRA_INHERITED_MEMORY_KEY,
-  MASTRA_SCOPES_KEY,
-  MASTRA_VERSIONS_KEY,
-  mergeVersionOverrides,
-} from '../../request-context';
+import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
-import { toStandardSchema } from '../../schema';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -35,14 +32,18 @@ import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
+import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import { modelSpanAttributes } from '../model-span-attributes';
+import { snapshotRequestContextEntries } from '../request-context-snapshot';
+import { throwAgentRequestContextValidationError } from '../request-context-validation';
 import { SaveQueueManager } from '../save-queue';
-import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
-import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
-import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
+import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
+import { signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
@@ -57,10 +58,10 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
-import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
 import { recordRunSavedMessages } from './run-message-refs';
 import { setRunScorerInstances } from './run-registry';
+import { needsNullToUndefined, toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import {
   createWorkflowInput,
@@ -71,83 +72,10 @@ import {
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
-/**
- * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
- * is-task-complete scorers) can see the same `customContext` the non-durable
- * path passes. Best-effort: entries that fail a JSON round-trip are skipped
- * so a single non-serializable value can't break the workflow input.
- */
-function snapshotRequestContextEntries(
-  requestContext: RequestContext | undefined,
-): Record<string, unknown> | undefined {
-  if (!requestContext) return undefined;
-  const out: Record<string, unknown> = {};
-  let any = false;
-  for (const [key, value] of requestContext.entries()) {
-    // Holds a live MastraMemory instance, which stringifies into a large, method-less
-    // husk of the memory and its storage adapter. Persisting that would bloat the
-    // workflow input and hand the resumed run an object whose methods are gone; the
-    // resumed agent resolves memory from its own config instead.
-    if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
-    // Framework-managed per-run memory context is rebuilt from persisted run
-    // state. A caller may carry a parent run's serializable value here.
-    if (key === 'MastraMemory') continue;
-    // Never persist the framework-managed bearer token in durable workflow
-    // input; a resumed authenticated request supplies its own fresh token.
-    if (key === MASTRA_AUTH_TOKEN_KEY) continue;
-    // The merged version overrides (Mastra defaults < requestContext <
-    // call-site) are framework state written during prep (step 3). Persisting
-    // the merged value would freeze the preparing process's defaults over the
-    // executing worker's. The caller's own versions entry is re-added at the
-    // call site.
-    if (key === MASTRA_VERSIONS_KEY) continue;
-    // Execution ids are claimed per execution. A persisted id would be restored
-    // over a later execution's id (e.g. the recovered one) and fence it out.
-    if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
-    // Serialize each entry exactly once with a bounded pass: a shared-reference
-    // graph would otherwise make JSON.stringify expand exponentially and wedge
-    // the event loop on every durable step, and reading the value twice (probe
-    // then clone) could disagree if a getter/toJSON is stateful. Entries that
-    // produce no JSON (non-serializable, or too large to serialize within
-    // budget) are skipped — they wouldn't survive the wire on cross-process
-    // engines anyway.
-    const json = boundedStringify(value);
-    if (json === undefined) continue;
-    out[key as string] = JSON.parse(json);
-    any = true;
-  }
-  return any ? out : undefined;
-}
-
-/**
- * Mirror of Agent#convertInstructionsToString — used for the AGENT_RUN span
- * `attributes.instructions` field so durable runs publish the same shape as
- * non-durable runs. Kept local to avoid promoting the private method.
- */
-function convertInstructionsToString(instructions: AgentInstructions | undefined): string {
-  if (!instructions) return '';
-  if (typeof instructions === 'string') return instructions;
-  if (Array.isArray(instructions)) {
-    return instructions
-      .map(msg => (typeof msg === 'string' ? msg : typeof msg.content === 'string' ? msg.content : ''))
-      .filter(Boolean)
-      .join('\n\n');
-  }
-  return typeof instructions.content === 'string' ? instructions.content : '';
-}
-
-/**
- * Extract signal messages already present in the messageList at run start
- * (from persisted history) so they can be echoed as data-signal stream parts
- * on the first LLM step. Mirrors `prepare-memory-step.ts#getInitialSignalEchoes`.
- */
-function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] {
-  const inputMessageIds = messageList.makeMessageSourceChecker().input;
-  return messageList.get.all
-    .db()
-    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
-    .map(mastraDBMessageToSignal);
-}
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
+export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -159,7 +87,7 @@ interface DurablePreparationAgent {
   maxRetries?: number;
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
-  getScopes?(opts: { requestContext: RequestContext }): Promise<string[] | undefined>;
+  getScopes?(opts: { requestContext: RequestContext; scopes?: string[] }): Promise<string[]>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   __getModelAndModelList(opts: { requestContext: RequestContext; model?: unknown }): Promise<{
     model: MastraLanguageModel;
@@ -186,6 +114,7 @@ interface DurablePreparationAgent {
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel;
+    resolvedDefaultOptions?: AgentExecutionOptionsBase<any>;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -196,7 +125,7 @@ interface DurablePreparationAgent {
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
-  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void;
+  __getSubscribePendingSignals(): (runId: string, listener: PendingSignalListener) => () => void;
   __getEnqueuePendingSignal(): (
     target: { runId: string; resourceId?: string; threadId?: string },
     signalInput: AgentSignalInput,
@@ -244,10 +173,21 @@ export interface PreparationOptions<OUTPUT = undefined> {
   /** Whether execution options already include the agent defaults. */
   optionsAreResolved?: boolean;
   /**
+   * The agent defaults `options` were resolved from. Function-based defaults can build new
+   * scorers on every call, so recording whether the completion policy came from the defaults
+   * must compare against this resolution rather than a fresh one.
+   */
+  resolvedDefaultOptions?: AgentExecutionOptions<OUTPUT>;
+  /**
    * Whether agent scopes were already applied to `options` (DurableAgent does this itself).
    * When false, preparation resolves scopes so wrappers that call it directly honor them.
    */
   scopesResolved?: boolean;
+  /**
+   * The AGENT_RUN and MODEL_GENERATION spans a suspended run persisted when it started. A cold
+   * resume passes them so the run keeps its own trace instead of opening a new one.
+   */
+  resumedSpanData?: { agentSpanData?: unknown; modelSpanData?: unknown };
   /**
    * Scopes the caller passed. When the property is absent, `options.scopes`; set it (even to
    * undefined) when `options` already include the agent defaults, so the Agent's own
@@ -301,7 +241,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messages,
     options: rawExecOptions,
     optionsAreResolved = false,
+    resolvedDefaultOptions,
     scopesResolved = false,
+    resumedSpanData,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -332,23 +274,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   if (typedAgent.requestContextSchema) {
     const contextValues = getRequestContextInputValues(requestContext);
     const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
-
     if (validation.issues) {
-      const errorMessages = validation.issues
-        .map(e => {
-          const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
-          return `- ${pathStr}: ${e.message}`;
-        })
-        .join('\n');
-      throw new MastraError({
-        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Request context validation failed for agent '${publicAgentId}':\n${errorMessages}`,
-        details: {
-          agentId: publicAgentId,
-          agentName: publicAgentName,
-        },
+      throwAgentRequestContextValidationError({
+        issues: validation.issues,
+        agentId: publicAgentId,
+        agentName: publicAgentName,
       });
     }
   }
@@ -357,14 +287,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined;
+  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined = resolvedDefaultOptions;
   const loadDefaultOptions = async () =>
     (defaultOptions ??= ((await typedAgent.getDefaultOptions({ requestContext })) ??
       {}) as AgentExecutionOptions<OUTPUT>);
   let execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (deepMerge(
-        (await loadDefaultOptions()) as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(await loadDefaultOptions(), rawExecOptions) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
@@ -374,13 +304,16 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2b. Resolve agent scopes for callers that did not (DurableAgent resolves its own).
   // Durable runs read identity from `memory` only, so nothing changes without scopes.
   if (!scopesResolved) {
-    const configuredScopes = (await typedAgent.getScopes?.({ requestContext })) ?? [];
     const defaultScopes = (await loadDefaultOptions()).scopes ?? [];
-    const agentScopes = [...configuredScopes, ...defaultScopes];
+    const incoming = incomingAgentScopes({ requestContext, callScopes, defaultScopes, mastra });
+    const agentScopes = typedAgent.getScopes
+      ? await typedAgent.getScopes({ requestContext, scopes: incoming })
+      : incoming;
     if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
       const resolved = resolveAgentScopes({
         requestContext,
         agentScopes,
+        incomingScopes: incoming,
         callScopes,
         memory: execOptions.memory,
         mastra,
@@ -398,13 +331,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-  let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);
-  if ((execOptions as any)?.versions) {
-    mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
-  }
-  if (mergedVersions) {
-    requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-  }
+  resolveVersionContext(
+    requestContext,
+    requestVersions,
+    mastra?.getVersionOverrides?.(),
+    execOptions,
+    // Durable preparation normalizes sole overrides; plain calls preserve their identity.
+    mergeVersionOverrides,
+  );
 
   // Resolve and validate the complete model selection before durable preparation
   // can persist a thread or run user-defined processors, tools, or hooks.
@@ -584,33 +518,63 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const agentTracingPolicy =
     typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
   const startingSignal = signalSpanAttributes(messages);
-  const agentSpan = getOrCreateSpan({
-    type: SpanType.AGENT_RUN,
-    name: `agent run: '${publicAgentId}'`,
-    entityType: EntityType.AGENT,
-    entityId: publicAgentId,
-    entityName: publicAgentName,
-    input: messages,
-    attributes: {
-      conversationId: threadId,
-      instructions: convertInstructionsToString(instructions),
-      ...(startingSignal ? { signal: startingSignal } : {}),
-      // @deprecated — use entityVersionId (top-level span context field) instead.
-      // Kept for backward compatibility during migration.
-      ...(resolvedVersionId ? { resolvedVersionId } : {}),
-    },
-    metadata: {
-      runId,
-      resourceId,
-      threadId,
-      ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
-    },
-    tracingPolicy: agentTracingPolicy,
-    tracingContext: execOptions?.tracingContext,
-    tracingOptions: execOptions?.tracingOptions,
-    requestContext,
-    mastra,
-  });
+  // A cold resume reattaches to the spans the run opened when it started (ended as `suspended`)
+  // instead of opening a second root in a new trace. The resume then opens its own spans under them.
+  // A run that recorded no span stays unrecorded. An unsampled run saved a no-op span (id `no-op`),
+  // and rebuilding it would record spans the run never sampled.
+  const { agentSpanData, modelSpanData } = resumedSpanData ?? {};
+  const agentSpanId = (agentSpanData as { id?: unknown } | undefined)?.id;
+  const resumedObservability =
+    typeof agentSpanId === 'string' && agentSpanId !== 'no-op'
+      ? mastra?.observability?.getSelectedInstance({ requestContext })
+      : undefined;
+  let resumedSpans: { agentSpan?: Span<SpanType.AGENT_RUN>; modelSpan?: AIModelGenerationSpan } | undefined;
+  if (resumedSpanData) {
+    resumedSpans = {};
+    try {
+      resumedSpans.agentSpan = resumedObservability?.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+      if (modelSpanData) {
+        resumedSpans.modelSpan = resumedObservability?.rebuildSpan(
+          modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
+        ) as AIModelGenerationSpan | undefined;
+      }
+    } catch (error) {
+      // Span bookkeeping must never block a resume, so a run whose spans cannot be rebuilt continues unrecorded.
+      resumedSpans = {};
+      (logger ?? mastra?.getLogger?.())?.warn?.(`[DurableAgent] Failed to rebuild the spans of run ${runId}: ${error}`);
+    }
+  }
+  const agentSpan = resumedSpans
+    ? resumedSpans.agentSpan
+    : getOrCreateSpan({
+        type: SpanType.AGENT_RUN,
+        outcome: null,
+        name: `agent run: '${publicAgentId}'`,
+        entityType: EntityType.AGENT,
+        entityId: publicAgentId,
+        entityName: publicAgentName,
+        input: messages,
+        attributes: {
+          conversationId: threadId,
+          instructions: instructions ? convertInstructionsToString(instructions) : '',
+          ...modelSpanAttributes(model),
+          ...(startingSignal ? { signal: startingSignal } : {}),
+          // @deprecated — use entityVersionId (top-level span context field) instead.
+          // Kept for backward compatibility during migration.
+          ...(resolvedVersionId ? { resolvedVersionId } : {}),
+        },
+        metadata: {
+          runId,
+          resourceId,
+          threadId,
+          ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
+        },
+        tracingPolicy: agentTracingPolicy,
+        tracingContext: execOptions?.tracingContext,
+        tracingOptions: execOptions?.tracingOptions,
+        requestContext,
+        mastra,
+      });
   // Run processInput (once, before execution) if we have any processors.
   // The MastraMemory context (thread + memoryConfig) was already established
   // above, before processor resolution, so processors that need it (working
@@ -658,7 +622,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           },
           error,
         );
-        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        // A rebuilt span ended when the run suspended. Ending it again would rewrite that record.
+        if (!resumedSpans)
+          agentSpan?.error({
+            error: inputProcessorError,
+            ...executionFailureTermination(inputProcessorError),
+            endTree: true,
+          });
         throw inputProcessorError;
       }
     }
@@ -703,6 +673,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
+      resolvedDefaultOptions: await loadDefaultOptions(),
       toolsets: execOptions?.toolsets,
       clientTools: execOptions?.clientTools,
       threadId,
@@ -781,8 +752,21 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
+  // Same strict-mode null → undefined handling as Agent.#execute, enabled when the main model or
+  // any fallback model uses strict mode (the flag is persisted once per run); skipped when a separate
+  // structuring model runs (its own agent call applies the transform).
+  const nullToUndefined =
+    Boolean(execOptions?.structuredOutput?.schema) &&
+    !(execOptions?.structuredOutput as any)?.model &&
+    // The model list already contains the enabled model, so the bare model is only used without a list.
+    (modelList ?? [{ model, providerOptions: undefined }]).some(candidate =>
+      needsNullToUndefined(
+        candidate.model as any,
+        mergeProviderOptions(execOptions?.providerOptions, candidate.providerOptions),
+      ),
+    );
   const structuredOutputSchema = execOptions?.structuredOutput?.schema
-    ? toStandardSchema(execOptions.structuredOutput.schema)
+    ? toLiveStructuredOutputSchema<{}>(execOptions.structuredOutput.schema, nullToUndefined)
     : undefined;
   if (execOptions?.structuredOutput) {
     const so = execOptions.structuredOutput as any;
@@ -794,6 +778,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         instructions: so.instructions,
         useAgent: so.useAgent,
         hasStructuringModel: so.model ? true : undefined,
+        nullToUndefined: nullToUndefined ? true : undefined,
         // Workers without the live config (remote/recovered runs) resolve the structuring
         // model from this. Model instances persist as `provider/modelId`, like the main model.
         structuringModelConfig:
@@ -826,26 +811,30 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 12. Resolve memory persistence flags
   const savePerStep = execOptions?.savePerStep;
-  const observationalMemory = !!memoryConfig?.observationalMemory;
+  const observationalMemory = isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
+  if (execOptions.isTaskComplete) await loadDefaultOptions();
 
   // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
   // into the workflow input so each durable step can rebuild them. No-ops when
   // observability is off.
-  const modelSpan = agentSpan?.createChildSpan({
-    type: SpanType.MODEL_GENERATION,
-    name: `llm: '${model.modelId}'`,
-    attributes: {
-      model: model.modelId,
-      provider: model.provider,
-      streaming: true,
-    },
-    metadata: {
-      runId,
-      threadId,
-      resourceId,
-    },
-    requestContext,
-  });
+  const modelSpan = resumedSpans
+    ? resumedSpans.modelSpan
+    : agentSpan?.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        outcome: null,
+        name: `llm: '${model.modelId}'`,
+        attributes: {
+          model: model.modelId,
+          provider: model.provider,
+          streaming: true,
+        },
+        metadata: {
+          runId,
+          threadId,
+          resourceId,
+        },
+        requestContext,
+      });
 
   // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
@@ -904,6 +893,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       transform: toolPayloadTransform?.targets ? { targets: toolPayloadTransform.targets } : undefined,
       isTaskComplete: execOptions?.isTaskComplete
         ? {
+            fromAgentDefaults: (() => {
+              const configured = defaultOptions?.isTaskComplete;
+              const active = execOptions.isTaskComplete;
+              return (
+                !!configured &&
+                !!active.scorers &&
+                !!configured.scorers &&
+                active.scorers.length === configured.scorers.length &&
+                active.scorers.every((scorer, index) => scorer === configured.scorers?.[index]) &&
+                active.onComplete === configured.onComplete
+              );
+            })(),
+            scorerIds: execOptions.isTaskComplete.scorers?.map(s => s.id),
             scorerNames: execOptions.isTaskComplete.scorers?.map(s => s.name).filter((n): n is string => !!n),
             strategy: execOptions.isTaskComplete.strategy,
             timeout: execOptions.isTaskComplete.timeout,
@@ -933,6 +935,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     mastra,
     tools,
     requestTools: tools,
+    methodType,
     saveQueueManager,
     memory,
     memoryAuthorizationChecks,

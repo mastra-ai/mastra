@@ -201,7 +201,7 @@ The path is `/inngest/api`, not `/api/inngest`. Mastra reserves the `/api` prefi
 
 ### Running in production
 
-Before you begin, make sure you have:
+Before you begin, ensure you have:
 
 - Vercel account and Vercel CLI installed (`npm i -g vercel`)
 - Inngest account
@@ -223,8 +223,8 @@ Before you begin, make sure you have:
      deployer: new VercelDeployer({
        teamSlug: 'your_team_slug',
        projectName: 'your_project_name',
-       // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
-       // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
+       // you can get your vercel token from the vercel dashboard by selecting on the user icon in the top right corner
+       // and then selecting on "Account Settings" and then selecting on "Tokens" on the left sidebar.
        token: process.env.VERCEL_TOKEN,
      }),
    })
@@ -339,7 +339,7 @@ When you include custom functions:
 1. Custom functions retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
 1. All functions are served together on the same `/inngest/api` endpoint
 
-This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
+You can combine Mastra's workflow orchestration with your existing Inngest functions.
 
 ## Using with other frameworks
 
@@ -817,6 +817,6 @@ When you configure a workflow with a `cron` property:
 1. Each scheduled execution creates a new workflow run with the provided `inputData` and `initialState`
 1. The cron function and the main workflow function are both served together when you call `serve()`
 
-You can monitor scheduled executions in the Inngest dashboard under **Functions** and **Runs** sections. The cron function will appear as a separate function alongside your main workflow function.
+You can monitor scheduled executions in the Inngest dashboard under **Functions** and **Runs** sections. The cron function will show up as a separate function alongside your main workflow function.
 
 For more information on cron scheduling, see the [Inngest cron documentation](https://www.inngest.com/docs/guides/scheduled-functions).

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowRightIcon, CopyIcon, RefreshCwIcon, TrophyIcon } from 'lucide-react';
 import { useState } from 'react';
 import { expect } from 'storybook/test';
 import { Button } from '../Button/Button';
@@ -7,6 +6,10 @@ import { CodeBlock } from '../CodeBlock/code-block';
 import { TooltipProvider } from '../Tooltip/tooltip';
 import { Txt } from '../Txt/Txt';
 import { Notice } from './Notice';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
+import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
+import { IconTrophy } from '@/ds/icons/central/IconTrophy';
 
 const previewClassName = 'mx-auto w-full max-w-200 rounded-lg bg-background p-6';
 
@@ -43,7 +46,7 @@ export const Warning: Story = {
       title="Viewing previous version"
       action={
         <Notice.Button>
-          Return to latest <ArrowRightIcon />
+          Return to latest <IconArrowRight />
         </Notice.Button>
       }
     >
@@ -59,7 +62,7 @@ export const Destructive: Story = {
       title="Failed to load"
       action={
         <Notice.Button>
-          Retry <RefreshCwIcon />
+          Retry <IconArrowRotateClockwise />
         </Notice.Button>
       }
     >
@@ -75,7 +78,7 @@ export const Success: Story = {
       title="Tip"
       action={
         <Notice.Button>
-          View items <ArrowRightIcon />
+          View items <IconArrowRight />
         </Notice.Button>
       }
     >
@@ -91,7 +94,7 @@ export const Info: Story = {
       title="Read-only dataset"
       action={
         <Notice.Button>
-          Clone dataset <CopyIcon />
+          Clone dataset <IconSquareBehindSquare1 />
         </Notice.Button>
       }
     >
@@ -122,7 +125,7 @@ export const MessageOnlyWithAction: Story = {
       variant="destructive"
       action={
         <Notice.Button>
-          Retry <RefreshCwIcon />
+          Retry <IconArrowRotateClockwise />
         </Notice.Button>
       }
     >
@@ -137,7 +140,7 @@ export const MessageOnlyWithActionLong: Story = {
       variant="destructive"
       action={
         <Notice.Button>
-          Retry <RefreshCwIcon />
+          Retry <IconArrowRotateClockwise />
         </Notice.Button>
       }
     >
@@ -157,7 +160,7 @@ export const MessageWithUnbreakableToken: Story = {
       title="We couldn't prepare the workspace"
       action={
         <Notice.Button>
-          Retry <RefreshCwIcon />
+          Retry <IconArrowRotateClockwise />
         </Notice.Button>
       }
     >
@@ -177,7 +180,7 @@ export const TitledWithUnbreakableToken: Story = {
 
 export const CustomIcon: Story = {
   render: () => (
-    <Notice variant="success" title="Achievement unlocked" icon={<TrophyIcon />}>
+    <Notice variant="success" title="Achievement unlocked" icon={<IconTrophy />}>
       <Notice.Message>You've completed all onboarding steps.</Notice.Message>
     </Notice>
   ),
@@ -191,7 +194,7 @@ export const AllVariants: Story = {
         title="Tip"
         action={
           <Notice.Button>
-            View items <ArrowRightIcon />
+            View items <IconArrowRight />
           </Notice.Button>
         }
       >
@@ -205,7 +208,7 @@ export const AllVariants: Story = {
         title="Caution"
         action={
           <Notice.Button>
-            Return to latest <ArrowRightIcon />
+            Return to latest <IconArrowRight />
           </Notice.Button>
         }
       >
@@ -216,7 +219,7 @@ export const AllVariants: Story = {
         title="Danger"
         action={
           <Notice.Button>
-            Retry <RefreshCwIcon />
+            Retry <IconArrowRotateClockwise />
           </Notice.Button>
         }
       >
@@ -237,7 +240,7 @@ export const Narrow: Story = {
         title="Viewing previous version"
         action={
           <Notice.Button>
-            Return to latest <ArrowRightIcon />
+            Return to latest <IconArrowRight />
           </Notice.Button>
         }
       >
@@ -247,7 +250,7 @@ export const Narrow: Story = {
         variant="destructive"
         action={
           <Notice.Button>
-            Retry <RefreshCwIcon />
+            Retry <IconArrowRotateClockwise />
           </Notice.Button>
         }
       >
@@ -260,7 +263,7 @@ export const Narrow: Story = {
         title="Tip"
         action={
           <Notice.Button>
-            View items <ArrowRightIcon />
+            View items <IconArrowRight />
           </Notice.Button>
         }
       >

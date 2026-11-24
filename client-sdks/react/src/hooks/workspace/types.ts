@@ -4,6 +4,7 @@
 
 export interface WorkspaceCapabilities {
   hasFilesystem: boolean;
+  hasDynamicFilesystem?: boolean;
   hasSandbox: boolean;
   canBM25: boolean;
   canVector: boolean;

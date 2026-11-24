@@ -3,8 +3,15 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateEndpoint, validatePrefix, validateRegion, validateS3BucketName } from './types';
-import type { MountContext } from './types';
+import {
+  LOG_PREFIX,
+  validateEndpoint,
+  validateOwner,
+  validatePrefix,
+  validateRegion,
+  validateS3BucketName,
+} from './types';
+import type { MountContext, MountOwner } from './types';
 
 /**
  * S3 mount config for E2B (mounted via s3fs-fuse).
@@ -35,6 +42,11 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
   prefix?: string;
   /** Mount as read-only (even if credentials have write access) */
   readOnly?: boolean;
+  /**
+   * Owner of the files inside the mount, as numeric uid/gid.
+   * Defaults to the sandbox user's uid/gid (probed with `id -u && id -g`).
+   */
+  owner?: MountOwner;
 }
 
 /**
@@ -48,6 +60,9 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   validateRegion(config.region);
   if (config.endpoint) {
     validateEndpoint(config.endpoint);
+  }
+  if (config.owner) {
+    validateOwner(config.owner);
   }
 
   // Check if s3fs is installed
@@ -79,9 +94,17 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     }
   }
 
-  // Get user's uid/gid for proper file ownership
-  const idResult = await sandbox.commands.run('id -u && id -g');
-  const [uid, gid] = idResult.stdout.trim().split('\n');
+  // Resolve file ownership: an explicit `owner` wins; otherwise probe the default
+  // user's uid/gid so mounted files are owned by that user, not root.
+  let uid: string | undefined;
+  let gid: string | undefined;
+  if (config.owner) {
+    uid = String(config.owner.uid);
+    gid = String(config.owner.gid);
+  } else {
+    const idResult = await sandbox.commands.run('id -u && id -g');
+    [uid, gid] = idResult.stdout.trim().split('\n');
+  }
 
   // Validate credentials before any network calls — this gives the user a clear,
   // immediate error instead of a confusing connectivity failure.

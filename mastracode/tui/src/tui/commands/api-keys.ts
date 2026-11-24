@@ -142,11 +142,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
           const selected = list.getSelectedItem();
           const info = selected ? providers.find(p => p.provider === selected.value) : undefined;
           if (info?.source === 'stored' && ctx.authStorage) {
-            const storedKey = ctx.authStorage.getStoredApiKey(info.provider);
-            ctx.authStorage.remove(`apikey:${info.provider}`);
-            if (info.envVar && process.env[info.envVar] === storedKey) {
-              delete process.env[info.envVar];
-            }
+            ctx.authStorage.removeStoredApiKey(info.provider);
             ctx.state.controller.invalidateAvailableModelsCache();
             models = await ctx.state.controller.listAvailableModels();
             providers = getProviderList(ctx, models);

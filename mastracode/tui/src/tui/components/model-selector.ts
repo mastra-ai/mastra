@@ -2,12 +2,15 @@
  * Model selector menu for switching between available models, filtered as you type (fuzzy).
  */
 
-import { decodeKittyPrintable, fuzzyFilter, getKeybindings, matchesKey, truncateToWidth } from '@earendil-works/pi-tui';
+import { decodeKittyPrintable, fuzzyFilter, getKeybindings, matchesKey } from '@earendil-works/pi-tui';
 import type { Component, Focusable, TUI } from '@earendil-works/pi-tui';
+import { parseCodexModelSelection } from '@mastra/code-sdk/providers/model-ids';
+import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
 import { theme } from '../theme.js';
-import { ListWindow } from './list-window.js';
+import type { ListWindow } from './list-window.js';
 import type { Filterable, MenuChrome } from './menu-chrome.js';
 import { labelColumnWidth, menuRow } from './menu-list.js';
+import { PickerList } from './picker-list.js';
 
 // =============================================================================
 // Types
@@ -75,6 +78,7 @@ export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem 
 }
 
 const MASTRACODE_GATEWAY_PREFIX = 'mastracode/';
+const FAST_SUFFIX = ':fast';
 
 /**
  * The shared catalog namespaces the MastraCode gateway's providers (the user's
@@ -106,7 +110,7 @@ export function toCanonicalModelItems(models: ModelItem[]): ModelItem[] {
 
 const MAX_VISIBLE = 12;
 
-export class ModelSelectorComponent implements Component, Focusable, Filterable, MenuChrome {
+export class ModelSelectorComponent implements Component, Focusable, Filterable, MenuChrome, MouseAware {
   focused = false;
   private readonly allModels: ModelItem[];
   private filteredModels: ModelItem[];
@@ -114,7 +118,8 @@ export class ModelSelectorComponent implements Component, Focusable, Filterable,
   private query = '';
   /** Whether the custom "Use: ..." item is showing at the top */
   private hasCustomItem = false;
-  private readonly window = new ListWindow();
+  private readonly list: PickerList<ModelItem | null>;
+  private readonly labelColumn: number;
   private readonly currentModelId?: string;
   private readonly onSelectCallback: (model: ModelItem) => void;
   private readonly onCancelCallback: () => void;
@@ -124,11 +129,37 @@ export class ModelSelectorComponent implements Component, Focusable, Filterable,
   constructor(options: ModelSelectorOptions) {
     this.tui = options.tui;
     this.title = options.title ?? 'Select model';
-    this.allModels = this.sortModels(toCanonicalModelItems(options.models), options.currentModelId);
-    this.currentModelId = options.currentModelId;
+    const models = toCanonicalModelItems(options.models);
+    // A Fast selection marks its own row when the picker offers one, else its standard model's row.
+    this.currentModelId =
+      options.currentModelId && !models.some(model => model.id === options.currentModelId)
+        ? parseCodexModelSelection(options.currentModelId).modelId
+        : options.currentModelId;
+    this.allModels = this.sortModels(models, this.currentModelId);
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.filteredModels = this.allModels;
+    this.labelColumn = labelColumnWidth(this.allModels.map(item => item.displayName ?? item.id));
+    this.list = new PickerList<ModelItem | null>({
+      maxVisible: MAX_VISIBLE,
+      truncate: true,
+      renderItem: (item, selected) => [this.renderRow(item, selected)],
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.updateList();
+        this.handleInput('\r');
+      },
+      emptyText: () => '  no matching models',
+    });
+    this.updateList();
+  }
+
+  menuWindow(): ListWindow {
+    return this.list.menuWindow();
+  }
+
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    return this.list.mouseTarget(point);
   }
 
   menuTitle(): string {
@@ -157,6 +188,7 @@ export class ModelSelectorComponent implements Component, Focusable, Filterable,
 
     const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
     this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, totalItems - 1));
+    this.updateList();
     this.tui.requestRender();
   }
 
@@ -188,42 +220,61 @@ export class ModelSelectorComponent implements Component, Focusable, Filterable,
       return a.modelName.localeCompare(b.modelName);
     });
 
-    return sorted;
+    return this.keepFastEntriesNextToStandard(sorted, currentModelId);
   }
 
-  invalidate(): void {}
+  /**
+   * Puts each Codex Fast entry directly under its standard model. A Fast entry that is the current model stays first,
+   * with its standard model right below it. `:fast` on any other provider is part of the model name and stays put.
+   */
+  private keepFastEntriesNextToStandard(sorted: ModelItem[], currentModelId?: string): ModelItem[] {
+    const byId = new Map(sorted.map(model => [model.id, model]));
+    const isFastEntry = (model: ModelItem | undefined) =>
+      model !== undefined && parseCodexModelSelection(model.id).codexServiceTier === 'fast';
+    const standardOf = (model: ModelItem) =>
+      isFastEntry(model) ? byId.get(parseCodexModelSelection(model.id).modelId) : undefined;
+    const placed = new Set<string>();
+    const result: ModelItem[] = [];
+    for (const model of sorted) {
+      if (placed.has(model.id)) continue;
+      const standard = standardOf(model);
+      if (standard && model.id !== currentModelId) continue;
+      result.push(model);
+      placed.add(model.id);
+      const fastEntry = byId.get(`${model.id}${FAST_SUFFIX}`);
+      const partner = standard ?? (isFastEntry(fastEntry) ? fastEntry : undefined);
+      if (partner && !placed.has(partner.id)) {
+        result.push(partner);
+        placed.add(partner.id);
+      }
+    }
+    return result;
+  }
+
+  invalidate(): void {
+    this.list.invalidate();
+  }
 
   render(width: number): string[] {
-    const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
-    if (totalItems === 0) return [theme.fg('muted', '  no matching models')];
+    return this.list.render(width);
+  }
 
-    const { startIndex, endIndex } = this.window.range(this.selectedIndex, totalItems, MAX_VISIBLE);
-    const column = labelColumnWidth(this.allModels.map(item => item.displayName ?? item.id));
-    const lines: string[] = [];
-    for (let i = startIndex; i < endIndex; i++) {
-      const isSelected = i === this.selectedIndex;
-      // First item is the custom "Use: ..." entry when active
-      if (this.hasCustomItem && i === 0) {
-        lines.push(menuRow(isSelected, `Use: ${this.query.trim()}`));
-        continue;
-      }
+  private updateList(): void {
+    // `null` stands for the custom "Use: <query>" row shown first when active.
+    const rows: (ModelItem | null)[] = this.hasCustomItem ? [null, ...this.filteredModels] : this.filteredModels;
+    this.list.setItems(rows, this.selectedIndex);
+  }
 
-      // Offset into filteredModels (subtract 1 when custom item is present)
-      const item = this.filteredModels[this.hasCustomItem ? i - 1 : i];
-      if (!item) continue;
-      const label = item.displayName ?? item.id;
-      const status = [
-        item.id === this.currentModelId ? theme.fg('success', '✓') : '',
-        item.hasApiKey ? '' : theme.fg('error', '✗') + theme.fg('muted', ` ${item.apiKeyEnvVar ?? 'no key'}`),
-      ]
-        .filter(Boolean)
-        .join(' ');
-      lines.push(menuRow(isSelected, item.hasApiKey ? label : theme.fg('muted', label), status, column));
-    }
-    if (totalItems > MAX_VISIBLE) {
-      lines.push(theme.fg('dim', `  (${this.selectedIndex + 1}/${totalItems})`));
-    }
-    return lines.map(line => truncateToWidth(line, width));
+  private renderRow(item: ModelItem | null, isSelected: boolean): string {
+    if (!item) return menuRow(isSelected, `Use: ${this.query.trim()}`);
+    const label = item.displayName ?? item.id;
+    const status = [
+      item.id === this.currentModelId ? theme.fg('success', '✓') : '',
+      item.hasApiKey ? '' : theme.fg('error', '✗') + theme.fg('muted', ` ${item.apiKeyEnvVar ?? 'no key'}`),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return menuRow(isSelected, item.hasApiKey ? label : theme.fg('muted', label), status, this.labelColumn);
   }
 
   handleInput(keyData: string): void {
@@ -233,10 +284,12 @@ export class ModelSelectorComponent implements Component, Focusable, Filterable,
     if (kb.matches(keyData, 'tui.select.up')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === 0 ? totalItems - 1 : this.selectedIndex - 1;
+      this.updateList();
       this.tui.requestRender();
     } else if (kb.matches(keyData, 'tui.select.down')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === totalItems - 1 ? 0 : this.selectedIndex + 1;
+      this.updateList();
       this.tui.requestRender();
     } else if (kb.matches(keyData, 'tui.select.confirm')) {
       if (this.hasCustomItem && this.selectedIndex === 0) {

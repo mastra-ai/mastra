@@ -1,16 +1,16 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute, IUserProvider } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import { z } from 'zod';
 
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
@@ -23,7 +23,6 @@ import {
 import { normalizeSessionTitle } from '../session/session-title.js';
 import { SESSION_OWNER_SIGNAL_TAG } from '../session-owner-signal.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
@@ -32,49 +31,42 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { answerParkedCall } from '../tools/approval-tools.js';
+import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
+import { createSessionOwnerProfileResolver, withOwnerProfile } from './project-sessions.js';
+import type {
+  ProjectSessionsReader,
+  SessionOwnerProfileResolver,
+  SessionOwnerUserProvider,
+} from './project-sessions.js';
+import { loose } from './route.js';
 import type { RouteAuth } from './route.js';
 import { canReadSessionResource, canSwitchSessionModel, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
-
-export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
-// Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
-const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const MAX_SESSION_OWNER_PROFILES = 100;
-const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
-const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
-
-interface SessionOwnerProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
-
-type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
 
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
   projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
+  projectSessions: ProjectSessionsReader;
   controller?: MountedMastraCode['controller'];
   audit?: AuditRecorder;
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
-  /** Turn-end file listings, cleared on recreate so the panel stops showing the old sandbox's files. */
-  filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
+    Partial<Pick<WorkItemsStorage, 'listWorkItemSubscribers' | 'findActiveRunBindingForSession' | 'get'>>;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** Stores a title a person typed on a thread, pinned so automatic naming leaves it alone. */
+  renameThread?: (input: { threadId: string; title: string }) => Promise<unknown>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -98,6 +90,34 @@ async function sessionManagePermission(
   if (session.visibility === 'private' && !isOwner) return 'not-found';
   if (isOwner) return 'allowed';
   return (await auth.isOrganizationAdmin(c, session.orgId)) ? 'allowed' : 'forbidden';
+}
+
+const parkedApprovalAnswerSchema = z
+  .object({
+    decision: z.enum(['approve', 'decline']),
+    reason: z.string().trim().min(1).max(1000).optional(),
+    toolCallId: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+
+/** Whether the viewer asked for the card's work: they filed it, or a session of theirs follows it. */
+async function followsCard(
+  options: SourceControlSessionRoutesOptions,
+  workItemId: string | undefined,
+  tenant: { orgId: string; userId: string },
+): Promise<boolean> {
+  const workItems = options.workItems;
+  if (!workItemId || !workItems?.get || !workItems.listWorkItemSubscribers) return false;
+  const item = await workItems.get({ orgId: tenant.orgId, id: workItemId });
+  if (!item) return false;
+  if (item.createdBy === tenant.userId) return true;
+  // A follow belongs to its session, and a session can change hands: ask who owns it now.
+  const followers = await workItems.listWorkItemSubscribers({ orgId: tenant.orgId, workItemId });
+  for (const sessionId of new Set(followers.map(follower => follower.sessionId))) {
+    const following = (await resolveSession(options.sourceControls, sessionId))?.session;
+    if (following?.orgId === tenant.orgId && following.userId === tenant.userId) return true;
+  }
+  return false;
 }
 
 function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean {
@@ -308,14 +328,41 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Title writes for one session, one at a time and in the order they were asked
+ * for. A title touches the conversation and the session row, so two writers
+ * interleaving would leave the two disagreeing, and a regeneration still
+ * waiting on its model would replace a title typed after it started.
+ */
 function createSessionNaming() {
   const inFlight = new Map<string, Promise<string | null>>();
-  return (sessionId: string, run: () => Promise<string | null>) => {
-    const pending = inFlight.get(sessionId);
-    if (pending) return pending;
-    const started = run().finally(() => inFlight.delete(sessionId));
-    inFlight.set(sessionId, started);
-    return started;
+  const tails = new Map<string, Promise<unknown>>();
+  const inTurn = <T>(sessionId: string, run: () => Promise<T>): Promise<T> => {
+    const turn = (tails.get(sessionId) ?? Promise.resolve()).then(run, run);
+    const tail = turn.catch(() => {});
+    tails.set(sessionId, tail);
+    void tail.then(() => {
+      if (tails.get(sessionId) === tail) tails.delete(sessionId);
+    });
+    return turn;
+  };
+  return {
+    /** Ask the model for a title. A second ask while one is pending shares its answer. */
+    generate(sessionId: string, run: () => Promise<string | null>) {
+      const pending = inFlight.get(sessionId);
+      if (pending) return pending;
+      const started: Promise<string | null> = inTurn(sessionId, run).finally(() => {
+        if (inFlight.get(sessionId) === started) inFlight.delete(sessionId);
+      });
+      inFlight.set(sessionId, started);
+      return started;
+    },
+    /** Store a typed title after every title write asked for before it. */
+    rename<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
+      // A regeneration asked for after this must run after it, not share the answer of one before it.
+      inFlight.delete(sessionId);
+      return inTurn(sessionId, run);
+    },
   };
 }
 
@@ -329,78 +376,10 @@ function titleModel(modelId: string) {
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
 }
 
-function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
-  const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
-  const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
-    cache.delete(userId);
-    cache.set(userId, { profile, expiresAt });
-    if (cache.size > MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES) {
-      const oldestUserId = cache.keys().next().value;
-      if (oldestUserId !== undefined) cache.delete(oldestUserId);
-    }
-  };
-
-  return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    if (!users) return new Map();
-    const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
-    const profiles = new Map<string, SessionOwnerProfile>();
-    const unresolvedUserIds: string[] = [];
-    const now = Date.now();
-
-    for (const userId of requestedUserIds) {
-      const cached = cache.get(userId);
-      if (!cached || cached.expiresAt <= now) {
-        cache.delete(userId);
-        unresolvedUserIds.push(userId);
-      } else if (cached.profile) {
-        profiles.set(userId, cached.profile);
-      }
-    }
-    if (unresolvedUserIds.length === 0) return profiles;
-
-    let resolvedUsers: Array<Awaited<ReturnType<SessionOwnerUserProvider['getUser']>>>;
-    if (users.getUsers) {
-      try {
-        resolvedUsers = await users.getUsers(unresolvedUserIds);
-      } catch (error) {
-        console.warn('[Factory Sessions] Bulk owner profile lookup failed; falling back to individual lookups', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-        resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
-          .filter(result => result.status === 'fulfilled')
-          .map(result => result.value);
-      }
-    } else {
-      resolvedUsers = (await Promise.allSettled(unresolvedUserIds.map(userId => users.getUser(userId))))
-        .filter(result => result.status === 'fulfilled')
-        .map(result => result.value);
-    }
-
-    for (const user of resolvedUsers) {
-      if (!user) continue;
-      const name = user.name?.trim() || user.email?.trim();
-      if (!name) continue;
-      profiles.set(user.id, {
-        id: user.id,
-        name,
-        ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
-      });
-    }
-    const expiresAt = now + SESSION_OWNER_PROFILE_TTL_MS;
-    for (const userId of unresolvedUserIds) cacheProfile(userId, profiles.get(userId), expiresAt);
-    return profiles;
-  };
-}
-
-function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
-  const owner = owners.get(session.userId);
-  return owner ? { ...session, owner } : session;
-}
-
 function projectSessionRoutes(
   path: '/web/source-control/projects/:id/sessions' | '/web/github/projects/:id/sessions',
   options: SourceControlSessionRoutesOptions,
-  resolveOwnerProfiles: ReturnType<typeof createSessionOwnerProfileResolver>,
+  resolveOwnerProfiles: SessionOwnerProfileResolver,
 ): ApiRoute[] {
   return [
     registerApiRoute(path, {
@@ -548,16 +527,76 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const factoryProjectId = c.req.param('id');
         const project = factoryProjectId ? await options.projects.get({ orgId, id: factoryProjectId }) : null;
         if (!project) return c.json({ error: 'Factory not found' }, 404);
-        // Storage is partitioned per provider; a Factory's sessions can live in any of them.
-        const sessions = (
-          await Promise.all(
-            options.sourceControls.map(sourceControl =>
-              sourceControl.sessions.listByProject({ orgId, factoryProjectId: project.id, viewerUserId: userId }),
-            ),
-          )
-        ).flat();
-        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
+        const sessions = await options.projectSessions({ orgId, factoryProjectId: project.id });
+        return c.json({ sessions: sessions.seenBy(userId).sessions });
+      },
+    }),
+    // Approve or decline the tool call a card's phase session waits on, from the card or a
+    // session following it. The session's owner and org admins may; so may the person who
+    // filed the card and anyone whose session follows it. The run carries on as its owner.
+    registerApiRoute('/web/user-sessions/:sessionId/parked-approval', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body = parkedApprovalAnswerSchema.safeParse(await c.req.json().catch(() => null));
+        if (!body.success) {
+          return c.json(
+            { error: 'Send a decision of "approve" or "decline", and optionally a reason and toolCallId.' },
+            400,
+          );
+        }
+        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
+        const session = match?.session;
+        if (!session) return c.json({ error: 'Session not found' }, 404);
+        const permission = await sessionManagePermission(loose(c), options.auth, resolved.tenant, session);
+        if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
+        const binding =
+          session.factoryProjectId && options.workItems?.findActiveRunBindingForSession
+            ? await options.workItems.findActiveRunBindingForSession({
+                orgId: session.orgId,
+                factoryProjectId: session.factoryProjectId,
+                sessionId: session.sessionId,
+              })
+            : null;
+        if (permission !== 'allowed' && !(await followsCard(options, binding?.workItemId, resolved.tenant))) {
+          return c.json(
+            { error: "Only the session's owner, an organization admin, or someone following its card can answer." },
+            403,
+          );
+        }
+        const controller = options.controller;
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+        const { decision, reason } = body.data;
+        let answered: { toolCallId: string; toolName: string };
+        try {
+          answered = await answerParkedCall(
+            { messaging: async () => ({ controller }) as never },
+            {
+              session,
+              ...(body.data.toolCallId ? { toolCallId: body.data.toolCallId } : {}),
+              decision,
+              declineReason: reason ?? 'Declined from the card.',
+            },
+          );
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 409);
+        }
+        const { toolCallId, toolName } = answered;
+        await options.audit?.record({
+          orgId: session.orgId,
+          actorId: resolved.tenant.userId,
+          actorType: 'human',
+          action: decision === 'approve' ? 'factory.run.approved' : 'factory.run.dismissed',
+          ...(session.factoryProjectId ? { factoryProjectId: session.factoryProjectId } : {}),
+          targets: [
+            { type: 'session', id: session.sessionId },
+            ...(binding ? [{ type: 'work_item' as const, id: binding.workItemId }] : []),
+          ],
+          metadata: { toolCallId, toolName, sessionId: session.sessionId, decision, cause: 'web' },
+        });
+        return c.json({ answered: decision, sessionId: session.sessionId, toolCallId, toolName });
       },
     }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
@@ -653,12 +692,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           session.sessionId,
           options.abortSettleTimeoutMs ?? ABORT_SETTLE_TIMEOUT_MS,
         );
-        await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
-          console.warn('[Factory Sessions] Failed to drain filesystem capture before sandbox recreate', {
-            sessionId: session.sessionId,
-            error,
-          });
-        });
         try {
           const outcome = await sessionRetirement.recreateSessionSandbox({
             sourceControl: match.sourceControl,
@@ -666,13 +699,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             sessionId: session.sessionId,
           });
           if (outcome === 'not-found') return c.json({ error: 'Session not found' }, 404);
-          // The captured listings describe the destroyed sandbox; the next turn re-captures.
-          await options.filesystem?.deleteResourceFiles({ resourceId: session.sessionId }).catch(error => {
-            console.warn('[Factory Sessions] Failed to clear file listings after sandbox recreate', {
-              sessionId: session.sessionId,
-              error,
-            });
-          });
           return c.json({ recreated: true, aborted });
         } catch (error) {
           console.error('[Factory Sessions] Failed to recreate session sandbox', {
@@ -776,14 +802,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
-          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
-          // A failed drain only costs the snapshot; it must not block teardown.
-          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
-            console.warn('[Factory Sessions] Failed to drain filesystem capture before delete', {
-              sessionId: session.sessionId,
-              error,
-            });
-          });
           await options.controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[Factory Sessions] Failed to tear down live controller session', {
@@ -893,6 +911,48 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body: { title?: unknown } | null = await c.req.json().catch(() => null);
+        const title = typeof body?.title === 'string' ? normalizeSessionTitle(body.title) : null;
+        if (!title) return c.json({ error: 'Enter a title for the session.' }, 400);
+        const sessionId = c.req.param('sessionId');
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const row = match?.session;
+        // Only the owner may rename; everyone else gets the same 404 as a missing session.
+        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (!options.controller || !options.renameThread) {
+          return c.json({ error: 'Renaming sessions is not available on this server.' }, 503);
+        }
+        // A session id is chosen by its creator, so threads found only because their resource
+        // matches it may be someone else's. Only the session's own thread, or one stamped with
+        // its id, takes a typed title.
+        const threads = (await listFactorySessionThreads(options.controller, row, options.workItems)).filter(
+          candidate => candidate.id === sessionId || candidate.metadata?.factorySessionId === sessionId,
+        );
+        const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+        // The first reply names a new conversation, which would replace a title set before it.
+        if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
+        const renameThread = options.renameThread;
+        const renamed = await nameSession.rename(sessionId, async () => {
+          // Waiting behind an earlier title write can outlast the owner check above.
+          const current = await match.sourceControl.sessions.getBySessionId(sessionId);
+          if (current?.userId !== resolved.tenant.userId) return false;
+          // The thread goes first: its pin is what keeps the next automatic title off the row.
+          await renameThread({ threadId: thread.id, title });
+          await match.sourceControl.sessions.rename({ sessionId, title });
+          return true;
+        });
+        if (!renamed) return c.json({ error: 'Session not found' }, 404);
+        return c.json({ title });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/title', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
@@ -912,7 +972,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
         try {
-          const title = await nameSession(sessionId, async () => {
+          const title = await nameSession.generate(sessionId, async () => {
             const generated = await options.controller!.generateThreadTitle({
               threadId: thread.id,
               sessionId,

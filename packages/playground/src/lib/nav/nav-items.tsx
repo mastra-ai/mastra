@@ -1,4 +1,8 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
+import { IconLayoutGrid1 } from '@mastra/playground-ui/icons/central/IconLayoutGrid1';
+import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
@@ -12,7 +16,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, CableIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
+import { CableIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -40,7 +44,7 @@ const signalsNavItem: NavItem = {
   name: 'Intelligence',
   url: '/intelligence',
   activePaths: ['/intelligence'],
-  Icon: LayoutGrid,
+  Icon: IconLayoutGrid1,
   isOnMastraPlatform: true,
   hidden: !isSignalsEnabled,
 };
@@ -103,6 +107,12 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
         foldable: true,
       },
+      {
+        name: 'Knowledge',
+        url: '/knowledge',
+        Icon: IconLibrary,
+        isOnMastraPlatform: false,
+      },
     ],
   },
   {
@@ -130,7 +140,7 @@ export const mainNav: NavSection[] = [
       {
         name: 'Review Queue',
         url: '/experiments/review-queue',
-        Icon: ClipboardCheck,
+        Icon: IconClipboard2,
         isOnMastraPlatform: true,
       },
     ],
@@ -166,7 +176,7 @@ export const mainNav: NavSection[] = [
 
 export const bottomNav: NavItem[] = [
   { name: 'Settings', url: '/settings', Icon: SettingsIcon, isOnMastraPlatform: false },
-  { name: 'Resources', url: '/resources', Icon: BookIcon, isOnMastraPlatform: true },
+  { name: 'Resources', url: '/resources', Icon: IconBook, isOnMastraPlatform: true },
 ];
 
 const allItems: NavItem[] = [...mainNav.flatMap(s => s.items), ...bottomNav];

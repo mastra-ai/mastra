@@ -102,7 +102,14 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
   }
 
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
-    const items: SelectItem[] = opts.map(opt => ({ value: opt.label, label: opt.label, description: opt.description }));
+    // Each option renders as one row; a newline in a label or description (e.g. a
+    // multi-line schedule prompt) would spill the row out of the menu.
+    const singleLine = (text: string) => text.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+    const items: SelectItem[] = opts.map(opt => ({
+      value: opt.label,
+      label: singleLine(opt.label),
+      description: opt.description ? singleLine(opt.description) : undefined,
+    }));
 
     // "Custom response..." only applies to single-select: it switches to free-text.
     if (this.allowCustomResponse && !this.multiSelect) {

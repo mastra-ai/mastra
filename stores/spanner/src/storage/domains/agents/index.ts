@@ -36,6 +36,7 @@ const VERSION_CONFIG_KEYS = [
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -74,6 +75,11 @@ export class AgentsSpanner extends AgentsStorage {
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
     await this.db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
+    await this.db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: AGENT_VERSIONS_SCHEMA,
+      ifNotExists: ['modelList'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
     await this.cleanupStaleDrafts();
@@ -194,6 +200,7 @@ export class AgentsSpanner extends AgentsStorage {
       description: transformed.description ?? undefined,
       instructions: this.deserializeInstructions(transformed.instructions),
       model: transformed.model,
+      modelList: transformed.modelList ?? undefined,
       tools: transformed.tools ?? undefined,
       defaultOptions: transformed.defaultOptions ?? undefined,
       workflows: transformed.workflows ?? undefined,
