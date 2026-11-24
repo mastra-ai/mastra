@@ -30,8 +30,8 @@ import * as coreStorage from '@mastra/core/storage';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
-import { LIBSQL_KNOWLEDGE_TIMELINE_TABLES } from './timelines';
 import { LibSQLStore } from '../../index';
+import { LIBSQL_KNOWLEDGE_TIMELINE_TABLES } from './timelines';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL, libsqlKnowledgeTransaction } from '.';
 
 const COMPAT_CONSTANTS = [
