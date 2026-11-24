@@ -498,6 +498,86 @@ describe('Datasets Handlers', () => {
         await expect(push(stepRun)).resolves.toMatchObject({ ok: true });
       });
 
+      async function victimAndOwnRun() {
+        const victim = await trigger({ durable: true });
+        const own = await trigger({ durable: true });
+        await vi.waitFor(() => expect(events.length).toBe(2));
+        const ownStart = events.find(event => event.runId === own.triggered.experimentId)!;
+        const victimStart = events.find(event => event.runId === victim.triggered.experimentId)!;
+        const victimInput = (victimStart.data as any).prevResult.output;
+        const victimExperiment = async () =>
+          (await GET_EXPERIMENT_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: victim.dataset.id,
+            experimentId: victim.triggered.experimentId,
+          } as any)) as any;
+        return { ownStart, victimInput, victimExperiment };
+      }
+
+      it.each([
+        [
+          'a resume that carries another experiment as its input',
+          (start: Event, victimInput: unknown) => ({
+            ...start,
+            type: 'workflow.resume',
+            data: { ...(start.data as any), prevResult: { status: 'success', output: victimInput } },
+          }),
+        ],
+        ['a suspend', (start: Event) => ({ ...start, type: 'workflow.suspend' })],
+        ['an event type an experiment never sends', (start: Event) => ({ ...start, type: 'workflow.whatever' })],
+        [
+          'a time travel to another experiment',
+          (start: Event, victimInput: unknown) => ({
+            ...start,
+            data: {
+              ...(start.data as any),
+              timeTravel: {
+                executionPath: [0],
+                steps: ['prepare'],
+                inputData: victimInput,
+                stepResults: { input: victimInput },
+              },
+            },
+          }),
+        ],
+        [
+          'a restart that carries another experiment as its input',
+          (start: Event, victimInput: unknown) => ({
+            ...start,
+            data: {
+              ...(start.data as any),
+              restart: { activePaths: [0], activeStepsPath: {}, stepResults: { input: victimInput } },
+            },
+          }),
+        ],
+      ])('refuses %s on an existing experiment run', async (_, forge) => {
+        const { ownStart, victimInput, victimExperiment } = await victimAndOwnRun();
+
+        await expect(push({ ...forge(ownStart, victimInput), id: 'forged' } as Event)).rejects.toMatchObject({
+          status: 400,
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(events).toHaveLength(2);
+        expect(generate).not.toHaveBeenCalled();
+        expect(await victimExperiment()).toMatchObject({ status: 'pending' });
+      });
+
+      it("never lets a step event's previous result choose the experiment the first step prepares", async () => {
+        const { ownStart, victimInput, victimExperiment } = await victimAndOwnRun();
+        await expect(push(ownStart)).resolves.toMatchObject({ ok: true });
+        await vi.waitFor(() => expect(events.some(event => event.type === 'workflow.step.run')).toBe(true));
+        const stepRun = events.find(event => event.type === 'workflow.step.run')!;
+        const data = stepRun.data as any;
+
+        await push({
+          ...stepRun,
+          id: 'forged',
+          data: { ...data, prevResult: { status: 'success', output: victimInput } },
+        }).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(await victimExperiment()).toMatchObject({ status: 'pending', startedAt: null });
+      });
+
       it('returns 400 for a config a durable run cannot store', async () => {
         const requestContext = new RequestContext();
         requestContext.set('callback', () => 1);

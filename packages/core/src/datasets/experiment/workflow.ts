@@ -86,8 +86,10 @@ const prepareStep = createStep({
   id: 'prepare',
   inputSchema: experimentWorkflowInputSchema,
   outputSchema: z.array(itemRefSchema),
-  execute: async ({ inputData, mastra }) =>
-    failExperimentOnError(mastra, inputData, async () => {
+  // Reads the run input, not `inputData`: a step event's previous result must not choose the experiment.
+  execute: async ({ getInitData, mastra }) => {
+    const inputData = getInitData<ExperimentWorkflowInput>();
+    return failExperimentOnError(mastra, inputData, async () => {
       const experimentsStore = await mastra.getStorage()?.getStore('experiments');
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
       if (!experimentsStore || !datasetsStore) {
@@ -144,7 +146,8 @@ const prepareStep = createStep({
       }
 
       return items.map(item => ({ itemId: item.id }));
-    }),
+    });
+  },
 });
 
 const runItemStep = createStep({
