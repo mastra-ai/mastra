@@ -247,6 +247,19 @@ export class PgKnowledgeTimelines implements KnowledgeTimelinesStorage {
     });
   }
 
+  async getEntry(input: {
+    timelineId: string;
+    id: string;
+    read: KnowledgeReadScope;
+  }): Promise<KnowledgeTimelineEntryRecord | null> {
+    const row = await this.#client.oneOrNone(
+      `SELECT e.* FROM ${this.#t.entries} e JOIN ${this.#t.timelines} t ON t."pageId" = e."timelineId" WHERE e."timelineId" = $1 AND e."id" = $2`,
+      [input.timelineId, input.id],
+    );
+    if (!row || !(await this.#readable(input.timelineId, input.read))) return null;
+    return toEntry(row);
+  }
+
   async listEntries(input: ListKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntriesPage> {
     const { checkKnowledgeTimelineReadLimit, decodeKnowledgeTimelineCursor, encodeKnowledgeTimelineCursor } =
       await loadCore();

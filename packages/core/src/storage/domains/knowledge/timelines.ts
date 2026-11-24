@@ -159,6 +159,15 @@ export abstract class KnowledgeTimelinesStorage {
     writtenBy: string;
     deletedAt?: Date;
   }): Promise<KnowledgeTimelineEntryRemoveResult>;
+  /**
+   * One entry by its store `id`, deleted ones included (body cleared), or null when the timeline
+   * isn't a live timeline page readable under `read` or has no such entry.
+   */
+  abstract getEntry(input: {
+    timelineId: string;
+    id: string;
+    read: KnowledgeReadScope;
+  }): Promise<KnowledgeTimelineEntryRecord | null>;
   abstract listEntries(input: ListKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntriesPage>;
   /**
    * Keyword search over entry bodies. Ranked by how many query words match, then newest

@@ -246,6 +246,28 @@ export function createKnowledgeTimelineTests(createStore: () => Promise<Knowledg
       await expect(entry('2', 1)).rejects.toBeInstanceOf(KnowledgeTimelineNotFoundError);
     });
 
+    it('gets one entry by store id through its readable timeline, deleted ones included', async () => {
+      const { store, entry, timelines, page, scope } = await setup();
+      const { entry: one } = await entry('1', 0);
+      const get = (
+        read: Parameters<KnowledgeTimelinesStorage['getEntry']>[0]['read'],
+        id = one.id,
+        timelineId = page.id,
+      ) => timelines.getEntry({ timelineId, id, read });
+      expect(await get(acme)).toEqual(one);
+      expect(await get({ addresses: ['org:other'], prefixes: [], children: [] })).toBeNull();
+      expect(await get(acme, 'no-such-entry')).toBeNull();
+      const plain = await store.createPage({ parentId: scope.id, name: 'Plain', provenance: host });
+      expect(await get(acme, one.id, plain.id)).toBeNull();
+
+      await timelines.removeEntry({ timelineId: page.id, externalId: '1', writtenBy: importer });
+      expect(await get(acme)).toMatchObject({ id: one.id, body: '', deletedAt: expect.any(Date) });
+
+      const live = await store.getPage({ id: page.id, read: 'all' });
+      await store.deletePage({ id: page.id, expectedVersion: live!.version, deletedBy: 'host' });
+      expect(await get('all')).toBeNull();
+    });
+
     it('purges a deleted timeline in bounded batches, and refuses a live one or one deleted after the cutoff', async () => {
       const { store, entry, timelines, page } = await setup();
       for (let minute = 0; minute < 5; minute++) await entry(`m${minute}`, minute);
@@ -316,6 +338,12 @@ export function createKnowledgeTimelineTests(createStore: () => Promise<Knowledg
       expect(
         ids(await timelines.searchEntries({ query: 'postgres', read: 'all', since: at(5), until: at(9), limit: 10 })),
       ).toEqual(['new-one']);
+      expect(ids(await timelines.searchEntries({ query: 'postgres', read: acme, since: at(5), limit: 10 }))).toEqual([
+        'new-one',
+      ]);
+      expect(ids(await timelines.searchEntries({ query: 'postgres', read: acme, until: at(5), limit: 10 }))).toEqual([
+        'old-both',
+      ]);
       expect(
         ids(await timelines.searchEntries({ query: 'postgres', read: 'all', timelineIds: [hidden.id], limit: 10 })),
       ).toEqual(['h1']);

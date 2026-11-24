@@ -239,6 +239,19 @@ export class LibSQLKnowledgeTimelines implements KnowledgeTimelinesStorage {
     });
   }
 
+  async getEntry(input: {
+    timelineId: string;
+    id: string;
+    read: KnowledgeReadScope;
+  }): Promise<KnowledgeTimelineEntryRecord | null> {
+    const { rows } = await this.#read.execute({
+      sql: `SELECT e.* FROM "${T.entries}" e JOIN "${T.timelines}" t ON t.pageId = e.timelineId WHERE e.timelineId = ? AND e.id = ?`,
+      args: [input.timelineId, input.id],
+    });
+    if (!rows[0] || !(await this.#readable(input.timelineId, input.read))) return null;
+    return toEntry(rows[0]);
+  }
+
   async listEntries(input: ListKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntriesPage> {
     const { checkKnowledgeTimelineReadLimit, decodeKnowledgeTimelineCursor, encodeKnowledgeTimelineCursor } =
       await loadCore();

@@ -143,6 +143,16 @@ export class InMemoryKnowledgeTimelinesStorage extends KnowledgeTimelinesStorage
     return { status: 'removed', entry: copy(entry) };
   }
 
+  async getEntry(input: {
+    timelineId: string;
+    id: string;
+    read: KnowledgeReadScope;
+  }): Promise<KnowledgeTimelineEntryRecord | null> {
+    if (!this.#s.timelines.has(input.timelineId) || !this.lookup(input.timelineId, input.read)?.readable) return null;
+    const entry = [...this.#s.entries.values()].find(e => e.id === input.id && e.timelineId === input.timelineId);
+    return entry ? copy(entry) : null;
+  }
+
   async listEntries(input: ListKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntriesPage> {
     checkKnowledgeTimelineReadLimit(input.limit);
     const after = input.cursor ? decodeKnowledgeTimelineCursor(input.cursor) : undefined;
