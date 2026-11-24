@@ -36,8 +36,10 @@ import type {
 /** The body a page keeps when its item is gone at the source but pages are still nested under it. */
 export const REMOVED_PARENT_BODY = 'Removed from the source. Kept because pages are still nested under it.';
 export const REMOVED_ADOPTED_BODY = 'Removed from the source. Kept because the page was here before the import.';
-/** Heads the note that keeps a taken-over page's hand-written body. */
-export const ORIGINAL_BODY_NOTE = 'Written by hand before an importer took over this page:\n\n';
+/** Heads the note that keeps the body a page had before an importer took it over. */
+export const ORIGINAL_BODY_NOTE = 'The body this page had before an importer took it over:\n\n';
+/** Every heading a kept-body note has been written with, newest first; removal recognizes them all. */
+const ORIGINAL_BODY_NOTE_HEADINGS = [ORIGINAL_BODY_NOTE, 'Written by hand before an importer took over this page:\n\n'];
 /** One per page, so the removal that gives the body back can find it. */
 const originalBodyNoteId = (pageId: string) => `knowledge-import-original:${pageId}`;
 
@@ -259,28 +261,25 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const sameKeys = (a: string[], b: string[]) => a.length === b.length && a.every((key, i) => key === b[i]);
 
   /**
-   * Stops whichever binding tracks a page from tracking it, so this one can take it over: an item's
-   * node is dropped and that binding's links to it are marked for repair; an anchor is cleared, and
-   * that binding makes a new one at its target on its next import. Says whether it was an item.
+   * Stops another binding tracking a page as its item, so this one can take it over: its node is
+   * dropped and that binding's links to it are marked for repair. Says whether it was an item. A
+   * page that is another binding's folder stays its folder: folders are shared, so taking one over
+   * never stops that binding writing or removing under it.
    */
   const release = async (pageId: string) => {
     const node = await importers.getNodeByPage(pageId);
-    if (node) {
-      await importers.markLinkingNodesUnsettled(node.bindingId, [node.sourceId]);
-      await importers.deleteNode(node.bindingId, node.sourceId);
-      return true;
-    }
-    for (const other of await importers.listBindings()) {
-      if (other.id !== binding.id && other.anchorPageId === pageId) {
-        await importers.setBindingAnchor({ bindingId: other.id, expected: pageId, pageId: null });
-      }
-    }
-    return false;
+    if (!node) return false;
+    await importers.markLinkingNodesUnsettled(node.bindingId, [node.sourceId]);
+    await importers.deleteNode(node.bindingId, node.sourceId);
+    return true;
   };
 
   // The anchor: pinned by id. A person may move it, and the binding keeps writing under it where
-  // they put it. Gone (deleted, or moved into another scope), it is made again at the configured path.
-  const anchor = await (async (): Promise<{ page: KnowledgePage; keys: string[] } | KnowledgeImportRefusalReason> => {
+  // they put it. Gone (deleted, or moved into another scope), it is made again at the configured path
+  // by the next flush that writes. Removals don't need it: they find their pages through the nodes.
+  const anchor = await (async (): Promise<
+    { page: KnowledgePage; keys: string[] } | KnowledgeImportRefusalReason | null
+  > => {
     if (binding.anchorPageId) {
       const page = await storage.getPage({ id: binding.anchorPageId, read: 'all' });
       const path = live(page) ? await keyPath(page) : null;
@@ -296,7 +295,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         throw new KnowledgeImportRefusalError('conflict');
       }
     }
-    if (ops.every(op => op.op === 'remove')) return 'conflict';
+    if (ops.every(op => op.op === 'remove')) return null;
     return storage.transaction(async tx => {
       // The pages that already exist along the configured path, from the scope down.
       const chain = async () => {
@@ -317,9 +316,15 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         const locked = await chain();
         if (locked.length !== before.length || locked.some((page, i) => page.id !== before[i]!.id)) continue;
         let parent: KnowledgePage = locked.at(-1) ?? scope;
-        // A page already at the target, whoever wrote it, becomes the binding's folder, its body
-        // and children kept. An imported page there stops being an item of its binding.
-        if (locked.length === target.path.length) await release(parent.id);
+        // A page already at the target, whoever wrote it, becomes the binding's folder too, its
+        // body and children kept. It stays whatever it was to other bindings: their folder, or an
+        // item they keep updating.
+        // One of this binding's own items left there by a rebind stops being an item: a page can't
+        // be both the folder and an item under it.
+        if (locked.length === target.path.length) {
+          const own = await importers.getNodeByPage(parent.id);
+          if (own?.bindingId === binding.id) await importers.deleteNode(binding.id, own.sourceId);
+        }
         // Containers along the way are ordinary pages; only the last key is the binding's own.
         for (let depth = locked.length + 1; depth <= target.path.length; depth++) {
           const key = target.path[depth - 1]!;
@@ -345,7 +350,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       result.refused.push({ sourceId: op.op === 'remove' ? op.sourceId : op.item.sourceId, reason: anchor });
     return result;
   }
-  const anchorPath = anchor.keys;
+  const anchorPath = anchor?.keys ?? [];
 
   /**
    * A page this binding owns, checked after locking: live, in the target's scope, mapped back to the
@@ -366,10 +371,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     await storage.lockPages(before.path.ids);
     const after = await read();
     if (!after) throw new KnowledgeImportRefusalError('conflict');
-    const outside = !(
-      sameKeys(after.path.keys.slice(0, anchorPath.length), anchorPath) && after.path.ids.includes(anchor.page.id)
-    );
-    if (after.page.id !== anchor.page.id) {
+    const outside =
+      !anchor ||
+      !(sameKeys(after.path.keys.slice(0, anchorPath.length), anchorPath) && after.path.ids.includes(anchor.page.id));
+    if (after.page.id !== anchor?.page.id) {
       const node = await importers.getNodeByPage(after.page.id);
       if (!node || node.bindingId !== binding.id || (sourceId !== undefined && node.sourceId !== sourceId)) {
         throw new KnowledgeImportRefusalError('conflict');
@@ -464,8 +469,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
    * Moves an owned page, `self`'s, under `parentId`, then rewrites the links sections of this
    * binding's pages that link to it or to an imported page in its subtree. Generated links are
    * paths, so without this a linking page that isn't sent again would keep pointing at where they
-   * were. The node map indexes links by target, so only this binding's linking pages are looked at.
-   * All of them are marked unsettled in one statement; up to
+   * were. Other bindings' pages can move with the subtree too: their linking pages are marked
+   * unsettled, one statement per binding, and each binding's next settle slice rewrites them. Of
+   * this binding's, all are marked unsettled in one statement; up to
    * {@link MAX_KNOWLEDGE_LINK_REFRESH_SOURCES} are rewritten here and the rest by the settle slices
    * that follow. `self` is left to the caller, which writes its body anyway. Returns the moved page
    * and the pages it rewrote; the caller counts them once its op lands.
@@ -479,11 +485,14 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     parent: { page: KnowledgePage; keys: string[] },
   ): Promise<{ page: KnowledgePage; keys: string[]; relinked: Relinked[] }> => {
     const targets: string[] = [];
+    const othersTargets = new Map<string, string[]>();
     // Locked first, so the subtree read here is the one `movePage` carries.
     await storage.lockSubtree(page.id);
     for (const p of await knowledgeSubtree(storage, page)) {
       const node = await importers.getNodeByPage(p.id);
-      if (node?.bindingId === binding.id) targets.push(node.sourceId);
+      if (!node) continue;
+      if (node.bindingId === binding.id) targets.push(node.sourceId);
+      else othersTargets.set(node.bindingId, [...(othersTargets.get(node.bindingId) ?? []), node.sourceId]);
     }
     const moved = await storage.movePage({
       id: page.id,
@@ -494,6 +503,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const keys = [...parent.keys, moved.key!];
 
     const relinked: Relinked[] = [];
+    for (const [other, theirs] of othersTargets) await importers.markLinkingNodesUnsettled(other, theirs);
     await importers.markLinkingNodesUnsettled(binding.id, targets);
     const linking = await importers.listLinkingNodes(binding.id, targets, {
       limit: MAX_KNOWLEDGE_LINK_REFRESH_SOURCES + 1,
@@ -547,7 +557,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const sourceParent = await liveNodeOf(item.parent);
     const misplaced = !!item.parent && !sourceParent;
     const parentNode = sourceParent ?? (await liveNodeOf(item.fallbackParent));
-    const destination = parentNode ? await owned(parentNode.pageId, parentNode.sourceId) : anchor;
+    // A flush with writes always has an anchor.
+    const destination = parentNode ? await owned(parentNode.pageId, parentNode.sourceId) : anchor!;
     if (existing && destination.page.id === existing.pageId) throw new KnowledgeImportRefusalError('invalid');
 
     let rendered: (Pick<Rendered, 'links' | 'section' | 'unresolved'> & { body?: string }) | undefined = hasBody
@@ -714,9 +725,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
             const note = node.adopted
               ? await storage.getNote({ id: originalBodyNoteId(current.page.id), read: 'all' })
               : null;
-            const original = note?.text.startsWith(ORIGINAL_BODY_NOTE)
-              ? note.text.slice(ORIGINAL_BODY_NOTE.length)
-              : note?.text;
+            const heading = ORIGINAL_BODY_NOTE_HEADINGS.find(h => note?.text.startsWith(h));
+            const original = heading ? note!.text.slice(heading.length) : note?.text;
             const page = await storage.updatePage({
               id: current.page.id,
               expectedVersion: current.page.version,
@@ -780,8 +790,14 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     }
   }
   if (input.settle) {
-    input.settle.onStart?.();
-    result.settle = await settle(input.settle);
+    // Without its folder a binding can't tell which pages wait to move under a parent, so settling
+    // waits for the next flush that writes and makes the folder again.
+    if (anchor) {
+      input.settle.onStart?.();
+      result.settle = await settle(input.settle);
+    } else {
+      result.settle = { pending: false, cursor: null, settled: 0 };
+    }
   }
   return result;
 
