@@ -45,6 +45,7 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `notifications` | Notification records. |
 | `threadState` | Durable per-thread state, such as task lists and goals. |
 | `knowledge` | Knowledge graph nodes and records (experimental). |
+| `agentSignals` | Signals sent to a running agent run that are still waiting to be read. |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
 
