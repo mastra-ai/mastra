@@ -97,7 +97,7 @@ These searches also return `more`:
 
 ## `knowledge_list`
 
-Lists the page tree under a starting point, so an agent can see how a scope or section is organized before it searches or reads. Without `from`, it lists the scopes the run can read. Scopes the run can't read are left out.
+Lists the page tree under a starting point, so an agent can see how a scope or section is organized before it searches or reads. Without `from`, it lists every scope the run holds, with its `role` when present and `can` capability (`write`, `read` or `none`), including scopes with no page the run can read yet (`empty: true`). A held scope the run can't read shows only its address, not its stored name or description.
 
 <PropertiesTable
   content={[
@@ -127,13 +127,13 @@ Lists the page tree under a starting point, so an agent can see how a scope or s
 ]}
 />
 
-Returns `{ from?, entries, nextCursor?, more? }`. `from` is `{ ref, name }`. Each entry is `{ ref, name, depth, children, scope? }`, plus `description` when `descriptions` is `true`: `depth` is 1 for the starting point's children, `children` counts the readable child pages (and child scopes, for a scope), and `scope` is `true` for a scope.
+Returns `{ from?, entries, nextCursor?, more? }`. `from` is `{ ref, name }`. Each entry is `{ ref, name, depth, children, scope? }`, plus `description` when `descriptions` is `true`: `depth` is 1 for the starting point's children, `children` counts the readable child pages (and child scopes, for a scope), and `scope` is `true` for a scope. Held-scope entries also include `role?`, `can?` (`write`, `read` or `none`) and `empty?`. An `empty: true` entry has no page the run can read yet, and its `name` is the scope address.
 
 A result stops at `limit` entries or at the read cap (about 1,000 tokens of entries by default), whichever comes first, and always holds at least one entry. When it stops early, `more` says how many entries were left out and gives the cursor that continues where it stopped.
 
 ## `knowledge_read`
 
-Reads a page: its body, notes, child pages, and the notes on other pages that mention it. A scope address reads that scope's page, which lists its pages and child scopes. Without `page`, it lists the scopes the run holds.
+Reads a page: its body, notes, child pages, and the notes on other pages that mention it. A scope address reads that scope's page, which lists its pages and child scopes. Without `page`, it lists every scope the run holds with its `role` when present, `can` capability (`write`, `read` or `none`) and `empty: true` when there is no page the run can read yet. This includes scopes before any pages exist. A held scope the run can't read shows only its address, not its stored name or description.
 
 <PropertiesTable
   content={[

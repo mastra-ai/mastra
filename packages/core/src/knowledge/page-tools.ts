@@ -568,7 +568,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
   return createTool({
     id: 'knowledge_read',
     description:
-      'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists every scope this run holds, with its role and whether it can read or write there, including scopes with no pages yet (`empty`; the first write creates them). ' +
+      'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists every scope this run holds, with its role and whether it can read or write there, including scopes with no page this run can read yet (`empty`). ' +
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
       `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read of a long page shows every heading with its line number and the first lines under it, so you can pick the part to read. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
@@ -851,7 +851,7 @@ export interface ListEntry {
   role?: KnowledgeRole;
   /** Held scopes only: what the run can do there. */
   can?: HeldScopeAccess;
-  /** Held scopes only: no page there this run can read yet; the first write creates it. */
+  /** Held scopes only: no page there this run can read yet. */
   empty?: true;
 }
 
@@ -1040,7 +1040,7 @@ function listTool(host: KnowledgePageToolHost) {
     id: 'knowledge_list',
     description:
       'List the page tree under a starting point: each child with its ref (pass it to knowledge_read or knowledge_list), name and how many children it has. Pass `descriptions: true` to include page descriptions too. ' +
-      'Without `from`, lists every scope this run holds, with its role and whether it can read or write there, including scopes with no pages yet (`empty`; the first write creates them). Use it to find your way around a scope before searching or reading. ' +
+      'Without `from`, lists every scope this run holds, with its role and whether it can read or write there, including scopes with no page this run can read yet (`empty`). Use it to find your way around a scope before searching or reading. ' +
       `One result holds at most \`limit\` entries and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` says how many entries were left out and gives the \`cursor\` to list the rest (pass the same \`from\`).`,
     inputSchema: {
       type: 'object',
