@@ -2265,8 +2265,12 @@ export class ObservationalMemory {
   private async persistTokenEstimatesOntoStored(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
     type Part = MastraDBMessage['content']['parts'][number] & { providerMetadata?: Record<string, any> };
-    const contentOf = (part: Part) =>
-      JSON.stringify({ ...part, providerMetadata: undefined, metadata: undefined, createdAt: undefined });
+    // Everything but the count itself is compared: `providerMetadata.mastra.modelOutput` changes what the model
+    // sees, so two parts with the same raw result but different model outputs must not share a count.
+    const contentOf = (part: Part) => {
+      const { tokenEstimate: _tokenEstimate, ...mastra } = part.providerMetadata?.mastra ?? {};
+      return JSON.stringify({ ...part, providerMetadata: { ...part.providerMetadata, mastra } });
+    };
     const live = new Map(messages.map(message => [message.id, message]));
     const { messages: stored } = await this.storage.listMessagesById({ messageIds: [...live.keys()] });
     const updates: { id: string; content: MastraDBMessage['content'] }[] = [];

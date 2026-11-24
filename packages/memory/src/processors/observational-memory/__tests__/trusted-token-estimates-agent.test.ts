@@ -296,6 +296,63 @@ describe('trusted token counts across requests', () => {
     expect(trustedEntries(parts[0]!)).toHaveLength(1);
   });
 
+  it('a sealed tool result whose model output differs in storage does not get the loaded copy count', async () => {
+    mock.on({ endpoint: 'chat', userMessage: 'Model output follow-up' }, { content: 'Ok.' });
+    const store = new InMemoryStore();
+    const toolPart = (modelOutput: string) => ({
+      type: 'tool-invocation' as const,
+      toolInvocation: {
+        state: 'result' as const,
+        toolCallId: 'call-1',
+        toolName: 'lookup',
+        args: { q: 'x' },
+        result: { ok: true },
+      },
+      providerMetadata: { mastra: { modelOutput } },
+    });
+    const storedOutput = 'Large stored model output. '.repeat(400);
+    const memoryStore = (await store.getStore('memory'))!;
+    await memoryStore.saveThread({
+      thread: { id: THREAD, resourceId: RESOURCE, title: '', createdAt: new Date(), updatedAt: new Date() },
+    });
+    await memoryStore.saveMessages({
+      messages: [
+        {
+          id: 'sealed-tool',
+          threadId: THREAD,
+          resourceId: RESOURCE,
+          role: 'assistant',
+          createdAt: new Date(Date.UTC(2026, 10, 1)),
+          content: { format: 2, parts: [toolPart(storedOutput)], metadata: { mastra: { sealed: true } } },
+        },
+      ],
+    });
+    // The loaded copy has the same raw result but a short model output.
+    const listMessages = memoryStore.listMessages.bind(memoryStore);
+    vi.spyOn(memoryStore, 'listMessages').mockImplementation(async args => {
+      const result = await listMessages(args);
+      return {
+        ...result,
+        messages: result.messages.map(message =>
+          message.id === 'sealed-tool'
+            ? { ...message, content: { ...message.content, parts: [toolPart('short')] } }
+            : message,
+        ),
+      };
+    });
+
+    await createAgent(store).agent.generate('Model output follow-up', {
+      memory: { thread: THREAD, resource: RESOURCE },
+    });
+
+    const {
+      messages: [stored],
+    } = await memoryStore.listMessagesById({ messageIds: ['sealed-tool'] });
+    const [part] = stored!.content.parts as StoredPart[];
+    expect(part!.providerMetadata?.mastra?.modelOutput).toBe(storedOutput);
+    expect(trustedEntries(part!)).toEqual([]);
+  });
+
   it('a failed token-count write does not lose the turn messages', async () => {
     mock.on({ endpoint: 'chat', userMessage: 'Failing follow-up' }, { content: 'Saved anyway.' });
     const store = new InMemoryStore();
