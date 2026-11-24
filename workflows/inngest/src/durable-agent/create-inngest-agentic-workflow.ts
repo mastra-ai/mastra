@@ -753,23 +753,29 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
           }
 
           const tripwire = finishResult.tripwire;
+          const finishMessageId = state.lastStepResult?.messageId ?? state.messageId;
           if (pubsub && !tripwire) {
             for (const chunk of finishResult.structuredOutputChunks ?? []) {
-              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any, finishMessageId);
             }
           }
           if (pubsub) {
             for (const chunk of finishResult.outputResultChunks ?? []) {
-              await emitChunkEvent(pubsub, state.runId, chunk, true);
+              await emitChunkEvent(pubsub, state.runId, chunk, finishMessageId, true);
             }
           }
           if (tripwire && pubsub) {
-            await emitChunkEvent(pubsub, state.runId, {
-              type: 'tripwire',
-              runId: state.runId,
-              from: ChunkFrom.AGENT,
-              payload: tripwire,
-            });
+            await emitChunkEvent(
+              pubsub,
+              state.runId,
+              {
+                type: 'tripwire',
+                runId: state.runId,
+                from: ChunkFrom.AGENT,
+                payload: tripwire,
+              },
+              finishMessageId,
+            );
           }
 
           // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
