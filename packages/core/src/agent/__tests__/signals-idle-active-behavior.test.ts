@@ -16,6 +16,7 @@ import {
   ControlledLeasePubSub,
   readNextRunWithParts,
   waitForCondition,
+  withStallTimeout,
   withTimeout,
 } from './signals-test-utils';
 
@@ -79,18 +80,19 @@ describe('Agent signals: idle and active behaviors', () => {
 
     try {
       for (let runIndex = 1; runIndex <= runCount; runIndex += 1) {
-        const nextRuns = iterators.map(iterator => readNextRunWithParts(iterator));
         const contents = `Hello from signal ${runIndex}`;
+        let signalResult!: Awaited<ReturnType<typeof agent.sendSignal>>;
 
-        const signalResult = await agent.sendSignal(
-          { type: 'user-message', contents },
-          { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
-        );
-
-        const runs = await withTimeout(
-          Promise.all(nextRuns),
-          `Timed out waiting for ${subscriberCount} subscribers to receive idle signal run ${runIndex}`,
-        );
+        // The budget restarts whenever any subscriber receives a part: a busy CI runner can
+        // take longer than 500ms in total to reach 100 subscribers, but a hang still fails.
+        const runs = await withStallTimeout(async progress => {
+          const nextRuns = iterators.map(iterator => readNextRunWithParts(iterator, progress));
+          signalResult = await agent.sendSignal(
+            { type: 'user-message', contents },
+            { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+          );
+          return Promise.all(nextRuns);
+        }, `Stalled waiting for ${subscriberCount} subscribers to receive idle signal run ${runIndex}`);
         const [firstRun] = runs;
 
         await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: firstRun.value.runId });
