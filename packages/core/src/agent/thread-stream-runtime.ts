@@ -48,6 +48,7 @@ import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
+import { hasDurableExecution } from './streams/execution-capability';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
 import { AGENT_THREAD_KEY_SEPARATOR, agentThreadStreamKey, agentThreadStreamTopicForKey } from './thread-stream-topic';
@@ -913,7 +914,10 @@ type AgentThreadStreamRuntimeEvent =
       runId: string;
       streamId?: string;
       persisted?: boolean;
-      /** The run's final status; `success` means storage holds all of it and nothing is left to act on. */
+      /**
+       * The run's final status; `success` means storage holds all of it and nothing is left to act on. A shutdown
+       * hand-back of a durable run sends `interrupted`, which isn't final: recovery can continue the run.
+       */
       status?: string;
       /** Remains non-authoritative even if retention evicts the recovery registration. */
       superseded?: boolean;
@@ -1475,7 +1479,11 @@ export class AgentThreadStreamRuntime {
       state.shutdownStreams.set(streamId, 'ended');
       const event: AgentThreadStreamRuntimeEvent = this.#isParkedRun(state, runId)
         ? { type: 'run-suspended', runId, streamId }
-        : { type: 'run-completed', runId, streamId, persisted: false };
+        : hasDurableExecution(record.agent)
+          ? // Not final: durable recovery can continue the run under the same runId. Older subscribers read it as failed.
+            { type: 'run-completed', runId, streamId, persisted: false, status: 'interrupted' }
+          : // Nothing recovers a regular agent's run, so the hand-back ends it.
+            { type: 'run-completed', runId, streamId, persisted: false };
       // Release even if the publish failed: holding the lease past this process only delays every observer by a TTL.
       await this.#publishAndWait(resolved, key, event).catch(() => {});
       this.#stopLeaseRenewal(resolved, runId);
@@ -6551,6 +6559,7 @@ export class AgentThreadStreamRuntime {
     const statuses: Array<{ chunk: ThreadRunStatusChunk; streamId: string }> = [];
     const settledRunIds = new Map<string, string>();
     const reportedSuspensions = new Set<string>();
+    const reportedInterruptions = new Set<string>();
     const presentations: Array<UserMessagePendingChunk | UserMessageCancelledChunk> = [];
     const presentedSignalIds = new Set<string>();
     const settledSignalIds = new Set<string>();
@@ -6587,6 +6596,9 @@ export class AgentThreadStreamRuntime {
       if (status === 'suspended') {
         if (reportedSuspensions.has(streamId)) return;
         reportedSuspensions.add(streamId);
+      } else if (status === 'interrupted') {
+        if (reportedInterruptions.has(streamId)) return;
+        reportedInterruptions.add(streamId);
       } else {
         settledRunIds.set(runId, streamId);
       }
@@ -7302,9 +7314,11 @@ export class AgentThreadStreamRuntime {
                 ? 'suspended'
                 : data.status === 'canceled'
                   ? 'aborted'
-                  : data.status === 'success' || (data.status === undefined && data.persisted !== false)
-                    ? 'success'
-                    : 'failed';
+                  : data.status === 'interrupted'
+                    ? 'interrupted'
+                    : data.status === 'success' || (data.status === undefined && data.persisted !== false)
+                      ? 'success'
+                      : 'failed';
           enqueueStatus(data.runId, eventStreamId, status);
         }
         wake();
