@@ -304,7 +304,7 @@ describe("a teammate's Factory session", () => {
           });
         }),
       );
-      openWardSessionAs('user-admin', {
+      const client = openWardSessionAs('user-admin', {
         session: { ...wardSession, capabilities: { recreateSandbox: false, takeOwnership: true, switchModel: true } },
       });
       const modelSwitches: unknown[] = [];
@@ -322,6 +322,7 @@ describe("a teammate's Factory session", () => {
       await user.click(await screen.findByRole('option', { name: /GPT-5/ }));
 
       await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5' }]));
+      await waitForMutationsIdle(client);
     });
   });
 
