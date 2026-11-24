@@ -188,6 +188,18 @@ export const MAX_KNOWLEDGE_LINK_REFRESH_SOURCES = 100;
 export const MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES = MAX_KNOWLEDGE_PAGE_LIST_LIMIT - 1;
 
 /**
+ * A link refresh that landed but stopped at {@link MAX_KNOWLEDGE_LINK_REFRESH_SOURCES} linking pages
+ * or {@link MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES} namesakes: the rest keep their links until they're
+ * next written or `knowledge.reindexLinks()` runs.
+ */
+export class KnowledgeLinkRefreshIncompleteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'KnowledgeLinkRefreshIncompleteError';
+  }
+}
+
+/**
  * Re-resolves the pages whose body links one of `pages` or names a ref one of them answers to now,
  * after they were created, renamed, moved, merged or deleted, in page id order up to
  * {@link MAX_KNOWLEDGE_LINK_REFRESH_SOURCES}. With `withDescendants`, the pages' subtrees count too
@@ -229,7 +241,7 @@ export async function refreshKnowledgeLinksTo(
     })
   ).sort();
   const crowdedError = () =>
-    new Error(
+    new KnowledgeLinkRefreshIncompleteError(
       `More than ${MAX_KNOWLEDGE_LINK_REFRESH_NAMESAKES} pages are named ${crowded.join(', ')}; links to the rest were left as they were`,
     );
   if (!sources.length) {
@@ -251,7 +263,9 @@ export async function refreshKnowledgeLinksTo(
   const left = sources.length - done;
   if (left > 0) {
     const names = pages.map(page => `"${page.name}"`).join(', ');
-    throw new Error(`${left} more pages link to ${names}; their links were left as they were`);
+    throw new KnowledgeLinkRefreshIncompleteError(
+      `${left} more pages link to ${names}; their links were left as they were`,
+    );
   }
   if (crowded.length) throw crowdedError();
 }
