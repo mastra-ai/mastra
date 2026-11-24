@@ -164,6 +164,16 @@ describe('isPersistedCopy', () => {
     expect(isPersistedCopy(live, stored)).toBe(true);
   });
 
+  it('matches when only the live copy holds the marker', () => {
+    const live = assistant([
+      { type: 'text', text: 'hello' },
+      { type: 'data-om-status', data: { windows: {} } },
+    ] as MastraMessagePart[]);
+    const stored = assistant([{ type: 'text', text: 'hello' }]);
+
+    expect(isPersistedCopy(live, stored)).toBe(true);
+  });
+
   it('does not treat other data parts as markers', () => {
     const live = assistant([{ type: 'text', text: 'hello' }]);
     const stored = assistant([
