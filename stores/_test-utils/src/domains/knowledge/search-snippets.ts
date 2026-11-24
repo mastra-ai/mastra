@@ -65,6 +65,35 @@ export function createKnowledgeSearchSnippetTests(
       expect(JSON.stringify(result)).not.toContain('OTHER-SECRET');
     });
 
+    it('shows where the matches are: the heading above the excerpt, the first line, the line count and a read-on hint', async () => {
+      const { mine, me } = await run();
+      const body = [
+        '# Finance handbook',
+        '',
+        '## Payments',
+        'Invoices are paid on the first of the month. '.repeat(12),
+        '',
+        '## Expenses',
+        'Receipts are due within 30 days.',
+        'Parking is free. '.repeat(40),
+        'Any reimbursement over $500 needs a manager.',
+        'Lunch is at noon. '.repeat(40),
+        '## Travel',
+        'Book flights early. '.repeat(40),
+        'A travel reimbursement needs the receipt.',
+      ].join('\n');
+      await mine('knowledge_page', { op: 'write', scope: me, name: 'Finance handbook', body });
+      const result = await mine('knowledge_search', { query: 'reimbursement' });
+      const page = result.results[0].page;
+      expect(page.line).toBe(9);
+      expect(page.matchingLines).toBe(2);
+      expect(page.snippet.startsWith('6│## Expenses\n')).toBe(true);
+      expect(page.snippet).toContain('reimbursement over $500 needs a manager');
+      expect(result.more).toHaveLength(1);
+      expect(result.more[0]).toContain('knowledge_read { page, from: { line } }');
+      expect(result.more[0]).toContain('knowledge_read { page, match: ["reimbursement"] }');
+    });
+
     it('omits the snippet when only the name or description matches', async () => {
       const { mine, me } = await run();
       await mine('knowledge_page', {
@@ -77,6 +106,8 @@ export function createKnowledgeSearchSnippetTests(
       const result = await mine('knowledge_search', { query: 'escalation' });
       expect(result.results[0].page.name).toBe('Escalation');
       expect(result.results[0].page.snippet).toBeUndefined();
+      expect(result.results[0].page.line).toBeUndefined();
+      expect(result.more).toBeUndefined();
     });
   });
 }

@@ -1,11 +1,20 @@
 import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import { estimateTokenCount, sliceByTokens } from 'tokenx';
+import { KnowledgeBodyLines, knowledgeBodySections } from './page-body';
 
-/** Longest body excerpt a search hit shows, before the `…` markers. */
-export const KNOWLEDGE_SNIPPET_MAX_CHARS = 240;
+/**
+ * Most estimated tokens of body text a search hit's excerpt shows, before the `…` markers and the
+ * heading line. Counted with the same estimator as `knowledge_read`'s budget.
+ */
+export const KNOWLEDGE_SNIPPET_TOKENS = 60;
+/** Longest heading line a hit shows ahead of its excerpt; a longer one is cut with `…`. */
+const HEADING_CHARS = 120;
+/** Characters of body looked at past a window's start when fitting it to the token budget. */
+const WINDOW_SCAN_CHARS = KNOWLEDGE_SNIPPET_TOKENS * 12;
 /** Occurrences of each query word sampled as window anchors. */
 const OCCURRENCES_PER_WORD = 32;
-/** Characters of context kept before the anchoring match. */
-const LEAD_CHARS = 60;
+/** Estimated tokens of context kept before the anchoring match. */
+const LEAD_TOKENS = 15;
 /** How far a window edge may move to land on whitespace. */
 const SNAP_CHARS = 20;
 
@@ -27,7 +36,10 @@ const MAP_CHUNK = 4096;
  * `i̇`) only the chunks a match lands in are walked code point by code point to map offsets back. A
  * body with no match returns before any mapping.
  */
-function lowercaseHits(body: string, words: string[]): Array<{ word: number; start: number; end: number }> {
+function lowercaseHits(
+  body: string,
+  words: string[],
+): { hits: Array<{ word: number; start: number; end: number }>; text: string } {
   const sourceStarts: number[] = [];
   const loweredStarts: number[] = [];
   const pieces: string[] = [];
@@ -59,7 +71,7 @@ function lowercaseHits(body: string, words: string[]): Array<{ word: number; sta
     }
   });
   if (!found.length || loweredLength === body.length) {
-    return found.map(({ word, at, length }) => ({ word, start: at, end: at + length }));
+    return { hits: found.map(({ word, at, length }) => ({ word, start: at, end: at + length })), text };
   }
 
   const walked = new Map<number, Array<{ lowered: number; source: number; width: number; lowerWidth: number }>>();
@@ -112,7 +124,10 @@ function lowercaseHits(body: string, words: string[]): Array<{ word: number; sta
     if (into < change.lowerWidth) return edge === 'start' ? change.source : change.source + change.width;
     return Math.min(body.length, change.source + change.width + (into - change.lowerWidth));
   };
-  return found.map(({ word, at, length }) => ({ word, start: source(at, 'start'), end: source(at + length, 'end') }));
+  return {
+    hits: found.map(({ word, at, length }) => ({ word, start: source(at, 'start'), end: source(at + length, 'end') })),
+    text,
+  };
 }
 
 /**
@@ -142,39 +157,95 @@ const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
 const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
 const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char);
 
+/** The first line a search hit's body has with a matched word, and how many lines have one. */
+function matchingLines(body: string, words: string[], lowered: string | undefined) {
+  // Lowercasing never adds or removes a `\n`, so line numbers are the same in the lowered copy.
+  const pattern = lowered
+    ? undefined
+    : new RegExp(words.map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'iu');
+  let first = 0;
+  let count = 0;
+  (lowered ?? body).split('\n').forEach((line, i) => {
+    if (!(pattern ? pattern.test(line) : words.some(word => line.includes(word)))) return;
+    if (!first) first = i + 1;
+    count++;
+  });
+  return { first, count };
+}
+
 /**
- * A bounded excerpt of `body` around the query words, or `undefined` when the body contains none of
- * them. Uses the same words as keyword search (case-insensitive substrings). Each word's first
- * {@link OCCURRENCES_PER_WORD} occurrences anchor candidate windows; the window holding the most
- * distinct words wins, earliest on ties. A body matches exactly when `body.toLowerCase()` contains
- * the word, as in keyword search. Cost: a scan per word, plus one lowercase copy of the body unless
- * the words are ASCII and the body has no `İ` or `ſ`; offsets are mapped only for actual matches.
+ * The nearest markdown heading above body offset `at`, as `12│## Heading` with its `knowledge_read`
+ * line number, unless the heading starts inside the excerpt that begins at `windowStart`.
  */
-export function knowledgeBodySnippet(body: string | undefined, query: string): string | undefined {
+function headingAbove(body: string, at: number, windowStart: number): string | undefined {
+  let nearest: { start: number } | undefined;
+  for (const section of knowledgeBodySections(body)) {
+    if (section.start > at) break;
+    nearest = section;
+  }
+  if (!nearest || nearest.start >= windowStart) return undefined;
+  const lines = new KnowledgeBodyLines(body);
+  const line = lines.lineAt(nearest.start);
+  const text = body.slice(nearest.start, lines.lineEnd(line));
+  return `${line}│${text.length > HEADING_CHARS ? `${text.slice(0, HEADING_CHARS - 1)}…` : text}`;
+}
+
+/** A search hit's view of a page body: an excerpt around the matched words, and where the matches are. */
+export interface KnowledgeBodyHit {
+  /** An excerpt of {@link KNOWLEDGE_SNIPPET_TOKENS} tokens, with the heading it sits under first when that is out of view. */
+  snippet: string;
+  /** The first line (as `knowledge_read` numbers lines) that contains a matched word. */
+  line: number;
+  /** How many lines contain a matched word. */
+  matchingLines: number;
+}
+
+/**
+ * Where `body` matches the query words, or `undefined` when it contains none of them. Uses the same
+ * words and the same rule as keyword search (case-insensitive substrings: a body matches exactly
+ * when `body.toLowerCase()` contains the word). Each word's first {@link OCCURRENCES_PER_WORD}
+ * occurrences anchor candidate windows of {@link KNOWLEDGE_SNIPPET_TOKENS} tokens; the window
+ * holding the most distinct words wins, earliest on ties. Lines are counted over the whole body.
+ * Cost: a scan per word and one lowercase copy of the body, except for ASCII words in a body with
+ * no `İ` or `ſ`, which are matched without lowercasing; offsets are mapped only for actual matches.
+ */
+export function knowledgeBodyHit(body: string | undefined, query: string): KnowledgeBodyHit | undefined {
   if (!body) return undefined;
   const words = knowledgeSearchWords(knowledgeSearchQuery(query));
   if (!words.length) return undefined;
 
-  const hits = foldedAsciiHits(body, words) ?? lowercaseHits(body, words);
+  const folded = foldedAsciiHits(body, words);
+  const lowercase = folded ? undefined : lowercaseHits(body, words);
+  const hits = folded ?? lowercase!.hits;
   if (!hits.length) return undefined;
 
-  let best: { start: number; anchor: number; score: number } | undefined;
+  const windowEnd = (start: number) => {
+    const rest = body.slice(start, start + WINDOW_SCAN_CHARS);
+    return (
+      start +
+      (estimateTokenCount(rest) <= KNOWLEDGE_SNIPPET_TOKENS
+        ? rest.length
+        : sliceByTokens(rest, 0, KNOWLEDGE_SNIPPET_TOKENS).length)
+    );
+  };
+  let best: { start: number; end: number; anchor: number; score: number } | undefined;
   for (const hit of hits) {
-    const start = Math.max(0, hit.start - LEAD_CHARS);
-    const end = start + KNOWLEDGE_SNIPPET_MAX_CHARS;
+    const before = body.slice(Math.max(0, hit.start - LEAD_TOKENS * 12), hit.start);
+    const start = hit.start - sliceByTokens(before, -LEAD_TOKENS).length;
+    const end = Math.max(windowEnd(start), hit.end);
     const seen = new Set<number>();
     for (const other of hits) if (other.start >= start && other.end <= end) seen.add(other.word);
     const score = seen.size;
     if (!best || score > best.score || (score === best.score && start < best.start)) {
-      best = { start, anchor: hit.start, score };
+      best = { start, end, anchor: hit.start, score };
     }
   }
 
-  let start = best!.start;
-  let end = Math.min(body.length, start + KNOWLEDGE_SNIPPET_MAX_CHARS);
+  let { start, end } = best!;
+  const { anchor } = best!;
   if (start > 0) {
     // Start on a word, without moving past the match.
-    for (let i = start; i < Math.min(best!.anchor, start + SNAP_CHARS); i++) {
+    for (let i = start; i < Math.min(anchor, start + SNAP_CHARS); i++) {
       if (isSpace(body[i])) {
         start = i + 1;
         break;
@@ -182,7 +253,7 @@ export function knowledgeBodySnippet(body: string | undefined, query: string): s
     }
   }
   if (end < body.length) {
-    for (let i = end; i > Math.max(best!.anchor, end - SNAP_CHARS); i--) {
+    for (let i = end; i > Math.max(anchor, end - SNAP_CHARS); i--) {
       if (isSpace(body[i - 1])) {
         end = i - 1;
         break;
@@ -192,5 +263,8 @@ export function knowledgeBodySnippet(body: string | undefined, query: string): s
   if (start < body.length && isLowSurrogate(body.charCodeAt(start))) start++;
   if (end > start && isHighSurrogate(body.charCodeAt(end - 1))) end--;
 
-  return `${start > 0 ? '…' : ''}${body.slice(start, end)}${end < body.length ? '…' : ''}`;
+  const heading = headingAbove(body, anchor, start);
+  const excerpt = `${start > 0 ? '…' : ''}${body.slice(start, end)}${end < body.length ? '…' : ''}`;
+  const lines = matchingLines(body, words, lowercase?.text);
+  return { snippet: heading ? `${heading}\n${excerpt}` : excerpt, line: lines.first, matchingLines: lines.count };
 }

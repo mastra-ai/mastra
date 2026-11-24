@@ -1,3 +1,4 @@
+import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
 import type {
@@ -38,7 +39,7 @@ import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
-import { knowledgeBodySnippet, knowledgeSearchQuery } from './search-snippet';
+import { knowledgeBodyHit, knowledgeSearchQuery } from './search-snippet';
 import { knowledgeEmbedFailedWarning } from './semantic';
 import type { KnowledgeSemanticIndex } from './semantic';
 
@@ -143,10 +144,13 @@ function pageSummary(page: KnowledgePage, { refs, scopes }: KnowledgePageRefs) {
   };
 }
 
-/** A page search hit: its summary, plus a bounded excerpt of the body around the matched words. */
+/**
+ * A page search hit: its summary, plus, when the body contains a matched word, a short excerpt around
+ * it, the first line that has one, and how many lines do.
+ */
 function searchPageSummary(page: KnowledgePage, refs: KnowledgePageRefs, words: string) {
-  const snippet = knowledgeBodySnippet(page.body, words);
-  return { ...pageSummary(page, refs), ...(snippet ? { snippet } : {}) };
+  const hit = knowledgeBodyHit(page.body, words);
+  return { ...pageSummary(page, refs), ...(hit ?? {}) };
 }
 
 function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
@@ -265,7 +269,7 @@ function searchTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_search',
     description:
-      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit carries a `snippet` of its body around the matched words when the body contains them; read the page before relying on it. Optional `scope` narrows to pages in those scopes.',
+      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit whose body contains a matched word carries a short `snippet` around it (with the heading it sits under, numbered, when that is out of view), the `line` of the first match and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -326,34 +330,38 @@ function searchTool(host: KnowledgePageToolHost) {
         hits.map(hit => hit.page),
       );
       const mentionCache: MentionCache = new Map();
-      return {
-        results: await Promise.all(
-          hits.map(async hit =>
-            hit.type === 'page'
-              ? { type: 'page' as const, page: searchPageSummary(hit.page, addresses, words) }
-              : {
-                  type: 'note' as const,
-                  page: pageSummary(hit.page, addresses),
-                  note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
-                },
-          ),
+      const results = await Promise.all(
+        hits.map(async hit =>
+          hit.type === 'page'
+            ? { type: 'page' as const, page: searchPageSummary(hit.page, addresses, words) }
+            : {
+                type: 'note' as const,
+                page: pageSummary(hit.page, addresses),
+                note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
+              },
         ),
+      );
+      const matched = results.some(result => result.type === 'page' && 'line' in result.page);
+      const readOn = matched
+        ? [
+            `snippet: each page hit's \`line\` is the first line of its body with a matched word, and \`matchingLines\` how many lines have one. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${JSON.stringify(knowledgeSearchWords(words))} }.`,
+          ]
+        : [];
+      const more = [
         ...(hits.length === 0
-          ? {
-              more: [
-                `results: no page or note contains any word of ${JSON.stringify(words || query)}. Search again with different key words, or browse with knowledge_list.`,
-              ],
-            }
+          ? [
+              `results: no page or note contains any word of ${JSON.stringify(words || query)}. Search again with different key words, or browse with knowledge_list.`,
+            ]
           : hits.length === max
-            ? {
-                more: [
-                  max < MAX_LIMIT
-                    ? `results: showing the top ${max}. If none of these is what you need, narrow the query, raise the limit (up to ${MAX_LIMIT}), or browse with knowledge_list.`
-                    : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
-                ],
-              }
-            : {}),
-      };
+            ? [
+                max < MAX_LIMIT
+                  ? `results: showing the top ${max}. If none of these is what you need, narrow the query, raise the limit (up to ${MAX_LIMIT}), or browse with knowledge_list.`
+                  : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
+              ]
+            : []),
+        ...readOn,
+      ];
+      return { results, ...(more.length ? { more } : {}) };
     },
   });
 }

@@ -1,6 +1,9 @@
 import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import { estimateTokenCount } from 'tokenx';
 import { describe, expect, it } from 'vitest';
-import { KNOWLEDGE_SNIPPET_MAX_CHARS, knowledgeBodySnippet, knowledgeSearchQuery } from '../search-snippet';
+import { KNOWLEDGE_SNIPPET_TOKENS, knowledgeBodyHit, knowledgeSearchQuery } from '../search-snippet';
+
+const knowledgeBodySnippet = (body: string | undefined, query: string) => knowledgeBodyHit(body, query)?.snippet;
 
 const filler = (words: number, word = 'lorem') => Array.from({ length: words }, () => word).join(' ');
 const text = (snippet: string | undefined) => snippet!.replace(/^…|…$/g, '');
@@ -12,7 +15,7 @@ describe('knowledgeBodySnippet', () => {
     expect(snippet).toContain("manager's approval");
     expect(snippet!.startsWith('…')).toBe(true);
     expect(snippet!.endsWith('…')).toBe(true);
-    expect(text(snippet).length).toBeLessThanOrEqual(KNOWLEDGE_SNIPPET_MAX_CHARS);
+    expect(estimateTokenCount(text(snippet))).toBeLessThanOrEqual(KNOWLEDGE_SNIPPET_TOKENS);
     expect(body).toContain(text(snippet));
   });
 
@@ -122,7 +125,7 @@ describe('knowledgeBodySnippet', () => {
     const snippet = knowledgeBodySnippet(late, 'needle');
     const lateMs = performance.now() - started;
     expect(snippet).toContain('needle');
-    expect(text(snippet).length).toBeLessThanOrEqual(KNOWLEDGE_SNIPPET_MAX_CHARS);
+    expect(estimateTokenCount(text(snippet))).toBeLessThanOrEqual(KNOWLEDGE_SNIPPET_TOKENS);
     expect(noMatchMs).toBeLessThan(500);
     expect(lateMs).toBeLessThan(500);
   });
@@ -131,6 +134,6 @@ describe('knowledgeBodySnippet', () => {
     const body = filler(200_000, 'refund');
     const snippet = knowledgeBodySnippet(body, 'refund');
     expect(snippet).toContain('refund');
-    expect(text(snippet).length).toBeLessThanOrEqual(KNOWLEDGE_SNIPPET_MAX_CHARS);
+    expect(estimateTokenCount(text(snippet))).toBeLessThanOrEqual(KNOWLEDGE_SNIPPET_TOKENS);
   });
 });
