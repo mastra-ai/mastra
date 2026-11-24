@@ -128,6 +128,25 @@ describe('Knowledge change events', () => {
     expect(events).toHaveLength(1);
     expect(innerId).not.toBe('');
     expect(await store.getPage({ id: innerId, read: 'all' })).toBeNull();
+
+    // The importer sink opens savepoints but keeps writing through the outer view.
+    events.length = 0;
+    let undoneId = '';
+    let keptId = '';
+    const outerAgain = await store.transaction(async tx => {
+      await tx
+        .transaction(async () => {
+          undoneId = (await create(tx, 'Undone through outer')).id;
+          throw new Error('undo savepoint');
+        })
+        .catch(() => {});
+      await tx.transaction(async () => {
+        keptId = (await create(tx, 'Kept through outer')).id;
+      });
+      return create(tx, 'Outer again');
+    });
+    expect(await store.getPage({ id: undoneId, read: 'all' })).toBeNull();
+    expect(events.map(event => event.kind === 'page' && event.pageId)).toEqual([keptId, outerAgain.id]);
   });
 
   it('reports only the attempt that committed when the store retries a transaction', async () => {
