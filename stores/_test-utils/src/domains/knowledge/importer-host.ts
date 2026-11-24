@@ -1063,6 +1063,27 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await page('notion/p2')).toBeTruthy();
     });
 
+    it('runs two bindings at the same target: whichever runs last takes the page over', async () => {
+      const { run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#notion' },
+      ]);
+      expect(await run([upsert({ sourceId: 'p1', body: 'from b1' })])).toMatchObject({
+        counts: { created: 1, refused: 0 },
+      });
+      const first = await page('notion/p1');
+      expect(await run([upsert({ sourceId: 'p1', body: 'from b2' })], 'b2')).toMatchObject({
+        counts: { created: 0, updated: 1, refused: 0 },
+      });
+      expect(await page('notion/p1')).toMatchObject({ id: first!.id, body: 'from b2' });
+      // b1 no longer tracks it, so its next run takes it back rather than making a second page.
+      expect(await run([upsert({ sourceId: 'p1', body: 'from b1' })])).toMatchObject({
+        counts: { created: 0, updated: 1, refused: 0 },
+      });
+      expect(await page('notion/p1')).toMatchObject({ id: first!.id, body: 'from b1' });
+      expect(await page('notion')).toBeTruthy();
+    });
+
     it('runs bindings whose targets nest, each writing where it is configured', async () => {
       const { run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
