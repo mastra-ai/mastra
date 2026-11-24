@@ -7,7 +7,7 @@ import * as LogViewStories from './log-view.stories';
 
 `LogView` is a log panel for plain log output: a sandbox's processes, a deploy's build, a worker's stdout. Each line has a time, a level, a message and optional fields. Use it wherever a page shows those lines.
 
-Use `LogsListView` instead for Observe logs, where each row also has an entity, a trace and a span and the page is a full-width table.
+Use `LogsListView` instead for Observe logs, where each row also has an entity, a trace and a span and the page is a full-width table. To build your own log list, the lines, header and frame are `LogStream` in `@mastra/playground-ui/components/LogStream`; `LogView.List` is `LogStream` with virtualization and paging added.
 
 ```tsx
 import {

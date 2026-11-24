@@ -175,9 +175,31 @@ export function formatDateRange(start: DateInput, end: DateInput, options: Omit<
     .replace(/\u2009/g, ' ');
 }
 
-export function formatLogLineTimestamp(value: DateInput, { locale }: { locale?: string } = {}) {
+export interface LogLineTimestampParts {
+  day: string;
+  time: string;
+  fraction: string;
+}
+
+export function formatLogLineTimestamp(
+  value: DateInput,
+  { locale, timeZone }: { locale?: string; timeZone?: string } = {},
+): LogLineTimestampParts | undefined {
   const date = toDate(value);
-  return date ? getFormatter('logLine', locale).format(date) : undefined;
+  if (!date) return undefined;
+  const parts = getFormatter('logLine', locale, timeZone).formatToParts(date);
+  const timeStart = parts.findIndex(part => part.type === 'hour');
+  const fractionStart = parts.findIndex(part => part.type === 'fractionalSecond');
+  const join = (from: number, to: number) =>
+    parts
+      .slice(from, to)
+      .map(part => part.value)
+      .join('');
+  return {
+    day: join(0, timeStart).trim().replace(/,$/, ''),
+    time: join(timeStart, fractionStart - 1),
+    fraction: join(fractionStart - 1, parts.length),
+  };
 }
 
 /** Date and time down to milliseconds, for trace debugging. `withDate: false` keeps only the time. */

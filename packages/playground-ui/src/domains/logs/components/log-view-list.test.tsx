@@ -18,7 +18,6 @@ vi.mock('@tanstack/react-virtual', () => ({
         start: index * 36,
         end: (index + 1) * 36,
       })),
-    measurementsCache: Array.from({ length: count }, (_, index) => ({ index, start: index * 36 })),
     getTotalSize: () => count * 36,
     measureElement: () => {},
     scrollToIndex,
@@ -120,18 +119,6 @@ describe('LogViewList', () => {
     ]);
   });
 
-  it('tints error lines so they stand out from the rest', () => {
-    const lines: LogRecord[] = [
-      { timestamp: '2026-11-24T09:35:58.956Z', level: 'error', message: 'Command failed: node server.js' },
-      { timestamp: '2026-11-24T09:36:00.000Z', level: 'warn', message: 'Memory usage above 80% of limit' },
-    ];
-    const ids = new Map(lines.map((log, i) => [log, `tint-${i}`]));
-    render(<LogViewList logs={lines} logIdMap={ids} onLogClick={vi.fn()} />);
-
-    expect(screen.getByRole('button', { name: /Command failed/ }).dataset.variant).toBe('error');
-    expect(screen.getByRole('button', { name: /Memory usage/ }).dataset.variant).toBe('default');
-  });
-
   it('shows a JSON message as key and value fields', () => {
     const lines: LogRecord[] = [
       {
@@ -181,34 +168,23 @@ describe('LogViewList', () => {
       hasNextPage: true,
     } as const;
 
-    it('scrolls to the newest line even when it is already rendered, and loads older logs only after that', async () => {
-      vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000);
-      vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(200);
+    it('loads older logs once the top scrolls into view', () => {
       const onFetchNextPage = vi.fn();
       render(<LogViewList {...props} onFetchNextPage={onFetchNextPage} />);
-
-      scrollOlderEdgeIntoView();
-      expect(onFetchNextPage).not.toHaveBeenCalled();
-
-      await waitFor(() => expect(scrollToIndex).toHaveBeenCalledWith(1, { align: 'end' }));
       expect(onFetchNextPage).not.toHaveBeenCalled();
 
       scrollOlderEdgeIntoView();
+
       expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
 
-    it('loads older logs on its own when the lines fit without scrolling', async () => {
-      const onFetchNextPage = vi.fn();
-      render(<LogViewList {...props} onFetchNextPage={onFetchNextPage} />);
-
-      await waitFor(() => expect(onFetchNextPage).toHaveBeenCalledOnce());
-    });
-
-    it('keeps loading older pages when filters leave the loaded page empty', async () => {
+    it('keeps loading older pages when filters leave the loaded page empty', () => {
       const onFetchNextPage = vi.fn();
       render(<LogViewList {...props} logs={[]} onFetchNextPage={onFetchNextPage} />);
 
-      await waitFor(() => expect(onFetchNextPage).toHaveBeenCalledOnce());
+      scrollOlderEdgeIntoView();
+
+      expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
 
     it('shows that older logs are loading above the lines', () => {

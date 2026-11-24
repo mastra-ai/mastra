@@ -1,23 +1,17 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogRecord } from '../types';
 import { LogsListView } from './logs-list-view';
 
 const scrollToIndex = vi.fn();
-let visibleCount: number | undefined;
 
 // jsdom has no layout, so the real virtualizer would render zero rows.
 // Render every row instead and spy on scrollToIndex.
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getVirtualItems: () =>
-      Array.from({ length: Math.min(count, visibleCount ?? count) }, (_, index) => ({
-        index,
-        key: index,
-        start: index * 36,
-        end: (index + 1) * 36,
-      })),
+      Array.from({ length: count }, (_, index) => ({ index, key: index, start: index * 36, end: (index + 1) * 36 })),
     getTotalSize: () => count * 36,
     measureElement: () => {},
     scrollToIndex,
@@ -42,7 +36,6 @@ const row = (i: number) => screen.getByRole('button', { name: new RegExp(`log me
 afterEach(() => {
   cleanup();
   scrollToIndex.mockClear();
-  visibleCount = undefined;
 });
 
 describe('LogsListView keyboard navigation', () => {

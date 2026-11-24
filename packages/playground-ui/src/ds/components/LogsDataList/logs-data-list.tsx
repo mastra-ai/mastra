@@ -4,7 +4,6 @@ import { DataListNoMatch } from '../DataList/data-list-no-match';
 import { DataListRoot } from '../DataList/data-list-root';
 import { DataListRowButton } from '../DataList/data-list-row-button';
 import { DataListRowLink } from '../DataList/data-list-row-link';
-import { DataListRowStatic } from '../DataList/data-list-row-static';
 import { DataListRowWrapper } from '../DataList/data-list-row-wrapper';
 import { DataListSortableTopCell } from '../DataList/data-list-sortable-top-cell';
 import { DataListSpacer } from '../DataList/data-list-spacer';
@@ -15,7 +14,6 @@ import {
   LogsDataListEntityCell,
   LogsDataListMessageCell,
   LogsDataListDataCell,
-  LogsDataListLineCell,
 } from './logs-data-list-cells';
 
 export const LogsDataList = Object.assign(DataListRoot, {
@@ -27,7 +25,6 @@ export const LogsDataList = Object.assign(DataListRoot, {
   RowWrapper: DataListRowWrapper,
   RowButton: DataListRowButton,
   RowLink: DataListRowLink,
-  RowStatic: DataListRowStatic,
   Spacer: DataListSpacer,
   NoMatch: DataListNoMatch,
   DateCell: DataListDateCell,
@@ -36,6 +33,5 @@ export const LogsDataList = Object.assign(DataListRoot, {
   EntityCell: LogsDataListEntityCell,
   MessageCell: LogsDataListMessageCell,
   DataCell: LogsDataListDataCell,
-  LineCell: LogsDataListLineCell,
   NextPageLoading: DataListNextPageLoading,
 });

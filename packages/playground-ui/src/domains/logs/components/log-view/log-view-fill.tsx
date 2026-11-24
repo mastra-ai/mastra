@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
-import { dataListWellSurfaceStyle } from '@/ds/components/DataList/shared';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { cn } from '@/lib/utils';
+import { LogStream } from '@/ds/components/LogStream';
 
 export function LogViewFill({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col px-1 pb-1">
-      <div className={cn('min-h-0 flex-1 rounded-lg', dataListWellSurfaceStyle)}>{children}</div>
+      <LogStream.Frame className="flex-1">{children}</LogStream.Frame>
     </div>
   );
 }

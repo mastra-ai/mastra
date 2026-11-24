@@ -4,7 +4,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import type { ButtonsGroupProps } from '@/ds/components/ButtonsGroup';
 import { ShortcutHint } from '@/ds/components/Kbd/shortcut-hint';
-import { logLevelDotClass } from '@/ds/components/LogsDataList';
+import { logLevelDotClass } from '@/ds/components/LogStream';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 

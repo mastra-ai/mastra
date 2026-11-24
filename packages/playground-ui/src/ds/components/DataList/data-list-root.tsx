@@ -14,7 +14,6 @@ import {
 } from './data-list-column-order';
 import { DataListReorderContext } from './data-list-reorder-context';
 import type { DataListReorderContextValue } from './data-list-reorder-context';
-import { dataListWellSurfaceStyle } from './shared';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -39,9 +38,7 @@ export type DataListFit = 'content' | 'container';
  *   and elevation as a card, a popover or a settings container.
  * - `light`: no panel behind the rows; rows sit directly on the page.
  */
-export type DataListVariant = 'default' | 'light' | 'well';
-
-export type DataListDensity = 'default' | 'compact';
+export type DataListVariant = 'default' | 'light';
 
 export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask'> & {
   children: ReactNode;
@@ -50,7 +47,6 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   fit?: DataListFit;
   /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
-  density?: DataListDensity;
   /** Disable the internal scroll area when a parent owns scrolling, allowing row effects to extend outside the list. */
   scrollable?: boolean;
   /**
@@ -183,17 +179,6 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
   default: raisedSurfaceStyle,
   // No panel, so rows rest on the page and only show on hover.
   light: '[--row:var(--background)]',
-  well: cn(
-    dataListWellSurfaceStyle,
-    '[&_.data-list-top]:border-b [&_.data-list-top]:border-border',
-    '[&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
-  ),
-};
-
-const dataListInsetClasses: Record<DataListVariant, string> = {
-  default: 'rounded-xl p-1',
-  light: 'rounded-xl p-1',
-  well: 'rounded-lg',
 };
 
 // The sticky header reads this so it stays opaque while scrolling: the panel
@@ -201,12 +186,6 @@ const dataListInsetClasses: Record<DataListVariant, string> = {
 const dataListVariantBackground: Record<DataListVariant, string> = {
   default: 'var(--card)',
   light: 'var(--background)',
-  well: 'var(--row)',
-};
-
-const dataListDensityClasses: Record<DataListDensity, string | undefined> = {
-  default: undefined,
-  compact: '[&_.data-list-row]:min-h-6 [&_.data-list-row]:gap-y-1 [&_.data-list-row]:py-0.5',
 };
 
 const dataListFitClasses: Record<DataListFit, string> = {
@@ -301,7 +280,6 @@ function DataListBase({
   className,
   fit = 'content',
   variant = 'default',
-  density = 'default',
   scrollable = true,
   mask,
   scrollRef,
@@ -338,8 +316,6 @@ function DataListBase({
         ...dataListGridStyles,
         scrollable && fades.top && dataListTopFadeStyles,
         dataListFitClasses[fit],
-        dataListDensityClasses[density],
-        variant === 'well' && 'gap-y-0',
       )}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
@@ -354,7 +330,7 @@ function DataListBase({
       // Preserve Base UI's render/style/ref contract without adding a clipping viewport.
       <ScrollAreaPrimitive.Root
         {...props}
-        className={cn('w-full', dataListInsetClasses[variant], dataListVariantClasses[variant], className)}
+        className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}
       >
         <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
       </ScrollAreaPrimitive.Root>
@@ -378,8 +354,7 @@ function DataListBase({
       // compact and long ones shrink the viewport and scroll. `self-start` stops
       // a grid/flex parent from stretching the root to the full row height.
       className={cn(
-        'flex max-h-full w-full flex-col self-start',
-        dataListInsetClasses[variant],
+        'flex max-h-full w-full flex-col self-start rounded-xl p-1',
         dataListVariantClasses[variant],
         variant === 'default' && dataListWellStyles,
         dataListScrollbarStyles,

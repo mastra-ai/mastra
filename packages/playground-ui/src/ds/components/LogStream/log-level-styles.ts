@@ -15,3 +15,11 @@ export const logLevelDotClass: Record<LogLevel, string> = {
   error: 'bg-destructive-indicator',
   fatal: 'bg-destructive-indicator',
 };
+
+export const logLevelBarClass: Record<LogLevel, string> = {
+  debug: 'before:bg-muted-foreground',
+  info: 'before:bg-info-indicator',
+  warn: 'before:bg-warning-indicator',
+  error: 'before:bg-destructive-indicator',
+  fatal: 'before:bg-destructive-indicator',
+};

@@ -6,7 +6,7 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CardInset } from '@/ds/components/Card';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanel } from '@/ds/components/DataPanel';
-import { logLevelTextClass } from '@/ds/components/LogsDataList';
+import { logLevelTextClass } from '@/ds/components/LogStream';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
 import { cn } from '@/lib/utils';
