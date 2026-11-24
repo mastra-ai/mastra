@@ -2353,6 +2353,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/alerts",
+      "destination": "/docs/mastra-platform/observability/alerts",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
       "destination": "/docs/mastra-platform/connect/llms.txt",
       "permanent": false
@@ -4370,6 +4375,11 @@
     {
       "source": "/docs/mastra-platform/regions/llms.txt",
       "destination": "/docs/mastra-platform/deploy/regions/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/alerts/llms.txt",
+      "destination": "/docs/mastra-platform/observability/alerts/llms.txt",
       "permanent": true
     },
     {
