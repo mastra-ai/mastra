@@ -16,7 +16,7 @@ export function ModelFallbackActivity({ fallback }: { fallback: ModelFallbackPar
       title={`${fallback.from.label} → ${fallback.to.label}`}
     >
       <Txt as="p" variant="caption" tone="muted">
-        Your next message starts on the session model again.
+        Your messages go back to {formatModelName(fallback.from.label)} as soon as it's available again.
       </Txt>
     </ActivityItem>
   );

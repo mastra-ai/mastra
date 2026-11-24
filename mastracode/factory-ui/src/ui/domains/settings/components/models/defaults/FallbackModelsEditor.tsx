@@ -112,28 +112,32 @@ export function FallbackModelsEditor({
                   className="min-w-0 flex-1"
                   disabled={disabled}
                 />
-                <Button
-                  id={`${rowId(id)}-up`}
-                  variant="ghost"
-                  size="icon-sm"
-                  tooltip={`Move fallback ${index + 1} up`}
-                  aria-disabled={index === 0 || undefined}
-                  disabled={disabled}
-                  onClick={() => move(index, index - 1)}
-                >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  id={`${rowId(id)}-down`}
-                  variant="ghost"
-                  size="icon-sm"
-                  tooltip={`Move fallback ${index + 1} down`}
-                  aria-disabled={index === value.length - 1 || undefined}
-                  disabled={disabled}
-                  onClick={() => move(index, index + 1)}
-                >
-                  <ArrowDown />
-                </Button>
+                {value.length > 1 && (
+                  <>
+                    <Button
+                      id={`${rowId(id)}-up`}
+                      variant="ghost"
+                      size="icon-sm"
+                      tooltip={`Move fallback ${index + 1} up`}
+                      aria-disabled={index === 0 || undefined}
+                      disabled={disabled}
+                      onClick={() => move(index, index - 1)}
+                    >
+                      <ArrowUp />
+                    </Button>
+                    <Button
+                      id={`${rowId(id)}-down`}
+                      variant="ghost"
+                      size="icon-sm"
+                      tooltip={`Move fallback ${index + 1} down`}
+                      aria-disabled={index === value.length - 1 || undefined}
+                      disabled={disabled}
+                      onClick={() => move(index, index + 1)}
+                    >
+                      <ArrowDown />
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant="ghost"
                   size="icon-sm"

@@ -5,7 +5,7 @@
 Added fallback models to the Factory UI. Under Settings → Models, a project or a person can list up to 3 fallback models after their default model, and reorder or remove them.
 
 Before: a rate-limited run failed and its card showed a generic failure.
-After: the run finishes on a fallback, and the reply shows one muted line with the cause, for example `Claude Opus 5.5 is rate-limited, switched to GPT-5.6 Sol`. Expand it to see that the next message starts on the session model again. The chat model picker marks the session's fallback models with a `Fallback` badge next to `Default`, and updates as soon as the fallbacks change in settings.
+After: the run finishes on a fallback, and the reply shows one muted line with the cause and the provider's wait, for example `Claude Opus 5.5 is rate-limited for 5 min, switched to GPT-5.6 Sol`. Expand it to see that your messages go back to Claude Opus 5.5 as soon as it's available again. The chat model picker marks the session's fallback models with a `Fallback` badge next to `Default`, and updates as soon as the fallbacks change in settings.
 
 When every model is limited, the card says why:
 

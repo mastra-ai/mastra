@@ -26,6 +26,7 @@ describe('Personal fallback models', () => {
 
     expect(putBodies).toEqual(ORDERED_EDITS);
     expectFallbackOrder([GPT]);
+    expect(screen.queryByRole('button', { name: /^Move fallback/ })).not.toBeInTheDocument();
   });
 
   it('keeps the newest order on screen when an older save answers after a newer edit', async () => {
