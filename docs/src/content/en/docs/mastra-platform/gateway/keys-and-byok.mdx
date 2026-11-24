@@ -43,16 +43,16 @@ Gateway runs in two regions, US and EU. Each key belongs to one region, chosen w
 | Region | Key prefix | Base URL |
 | - | - | - |
 | US | `msk-gateway-` | `https://gateway-api.mastra.ai/v1` |
-| EU | `msk-gateway-eu_` | `https://gateway-api.mastra.ai/v1` |
+| EU | `msk-gateway-eu_` | `https://gateway-api.eu.mastra.ai/v1` |
 
-Both regions use the same base URL. Gateway reads the region from the key and sends the request to the Gateway instance in that region, which routes it only to provider endpoints in the same region. To run inference in the EU, create an EU key and use it with your existing client. Nothing else changes.
+To run inference in the EU, create an EU key and point your client at the EU base URL. The EU instance routes requests only to provider endpoints in the EU, and it rejects US keys with a `401 key_wrong_region` error.
 
 ```typescript
 import OpenAI from 'openai'
 
 const client = new OpenAI({
   apiKey: process.env.MASTRA_GATEWAY_API_KEY, // msk-gateway-eu_...
-  baseURL: 'https://gateway-api.mastra.ai/v1',
+  baseURL: 'https://gateway-api.eu.mastra.ai/v1',
 })
 ```
 
