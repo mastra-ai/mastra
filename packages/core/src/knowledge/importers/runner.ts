@@ -40,8 +40,8 @@ export interface RunKnowledgeImportOptions {
   bufferSize?: number;
   /**
    * How long the oldest buffered op may wait before it is sent without waiting for a full buffer.
-   * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. A positive,
-   * finite number of milliseconds. Default 30 seconds.
+   * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. A positive
+   * number of milliseconds, at most 2147483647. Default 30 seconds.
    */
   flushAfterMs?: number;
   /** Default 30 seconds. */
@@ -135,8 +135,9 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     hostCallTimeoutMs = 60_000,
     retryDelayMs = (attempt: number) => Math.min(250 * 2 ** attempt, 10_000),
   } = options;
-  if (!Number.isFinite(flushAfterMs) || flushAfterMs <= 0) {
-    throw new TypeError(`flushAfterMs must be a positive number of milliseconds, got ${flushAfterMs}`);
+  // setTimeout treats a delay above 2^31 - 1 ms (about 24.8 days) as 1 ms.
+  if (!Number.isFinite(flushAfterMs) || flushAfterMs <= 0 || flushAfterMs > 2 ** 31 - 1) {
+    throw new TypeError(`flushAfterMs must be a positive number of milliseconds up to 2147483647, got ${flushAfterMs}`);
   }
 
   // Bounded but never resent: a start that timed out may have opened a run, which the host's

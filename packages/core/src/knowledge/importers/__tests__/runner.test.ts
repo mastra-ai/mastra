@@ -941,7 +941,7 @@ describe('runKnowledgeImport', () => {
       expect(result).toMatchObject({ outcome: 'failed', error: { code: 'importer_error' }, lastSeq: 0 });
     });
 
-    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31])(
       'rejects flushAfterMs %s before starting a run',
       async ms => {
         const host = new RecordingHost();
