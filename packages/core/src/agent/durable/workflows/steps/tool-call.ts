@@ -494,6 +494,7 @@ export function createDurableToolCallStep() {
       const initData = getInitData<{
         runId: string;
         agentId: string;
+        agentVersionId?: string;
         options: SerializableDurableOptions;
         state: {
           threadId?: string;
@@ -686,6 +687,7 @@ export function createDurableToolCallStep() {
           mastra: mastra as Mastra,
           runId,
           agentId: initData.agentId,
+          agentVersionId: initData.agentVersionId,
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,

@@ -203,6 +203,7 @@ const durableAgenticInputSchema = z.object({
  * Extends base schema with model list for fallback support.
  */
 const iterationStateSchema = baseIterationStateSchema.extend({
+  agentVersionId: z.string().optional(),
   // Model list for fallback support
   modelList: z.array(z.any()).optional(),
 });
@@ -527,6 +528,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
         return params.bail<IterationState>({
           ...update,
           ...(await storeAccumulatedSteps(params, accumulatedSteps)),
+          agentVersionId: initData.agentVersionId,
           modelList: initData.modelList,
         });
       }
@@ -596,6 +598,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             return {
               runId: state.runId,
               agentId: state.agentId,
+              agentVersionId: state.agentVersionId,
               agentName: state.agentName,
               messageListState: state.messageListState,
               initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
@@ -698,6 +701,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             const newIterationState: IterationState = {
               ...baseUpdate,
               ...(await storeAccumulatedSteps(params, accumulatedSteps)),
+              agentVersionId: initData.agentVersionId,
               modelList: initData.modelList,
             };
 
