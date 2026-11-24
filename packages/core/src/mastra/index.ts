@@ -18,6 +18,7 @@ import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
 import type { ChannelProvider, ChannelsResolver } from '../channels';
 import type { Classifier, ClassifierQuestions } from '../classifier';
+import { EXPERIMENT_WORKFLOW_ID } from '../datasets/experiment/workflow-id.js';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { IDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -4352,6 +4353,24 @@ export class Mastra<
     return !!orchestration?.isRunning;
   }
 
+  /**
+   * Register the durable experiment workflow (`__mastra-experiment`) once.
+   * Registered `distributed` because every process registers it identically,
+   * so whichever process receives a run's events can execute them.
+   *
+   * @internal
+   */
+  async __ensureExperimentWorkflow(): Promise<void> {
+    if (this.__hasInternalWorkflow(EXPERIMENT_WORKFLOW_ID)) return;
+    // Dynamic import: the workflow module pulls in the evented engine, which
+    // would create a static import cycle through `mastra`.
+    const { buildExperimentWorkflow } = await import('../datasets/experiment/workflow.js');
+    if (this.__hasInternalWorkflow(EXPERIMENT_WORKFLOW_ID)) return;
+    this.__registerInternalWorkflow(buildExperimentWorkflow() as unknown as AnyWorkflow, undefined, {
+      distributed: true,
+    });
+  }
+
   __hasInternalWorkflow(id: string, runId?: string): boolean {
     if (runId) {
       // Only the exact run-scoped entry or the genuinely-unscoped slot — never
@@ -7996,6 +8015,11 @@ export class Mastra<
       this.#logger.error('Failed to initialize durable agents for workflow event', { error });
       return { ok: false, retry: true };
     }
+    // A process that never started the experiment (e.g. one handling a pushed
+    // event per request) still has to resolve the experiment workflow.
+    if (event.data?.workflowId === EXPERIMENT_WORKFLOW_ID) {
+      await this.__ensureExperimentWorkflow();
+    }
     if (!this.#workflowEventProcessor) {
       this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
     }
@@ -8029,6 +8053,9 @@ export class Mastra<
     }
 
     this.#initializeDurableAgents();
+    // Workers can pick up a durable experiment started by another process, so
+    // register its workflow before they consume events.
+    await this.__ensureExperimentWorkflow();
 
     // Skip the boot probe when it cannot affect startup. Besides avoiding an
     // unnecessary query, this preserves request-scoped storage behavior from
