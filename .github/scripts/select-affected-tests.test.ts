@@ -330,4 +330,25 @@ describe('Grouped container store tests', () => {
     const total = job.steps.reduce((sum, step) => sum + (step['timeout-minutes'] ?? 0), 0);
     expect(job['timeout-minutes']).toBeGreaterThanOrEqual(total);
   });
+
+  // The DuckDB vector tests run `INSTALL vss`, which downloads the extension when DuckDB's extension
+  // directory is empty. A stalled download takes DuckDB about 120 s to give up, past the tests' 60 s
+  // hook timeout, so the light-store tests must find the extension already installed.
+  test('test-combined-stores.yml test-light restores the DuckDB extension directory before the store tests', () => {
+    type Step = { name?: string; uses?: string; if?: string; with?: Record<string, string> };
+    const workflow = parse(readFileSync(new URL('../workflows/test-combined-stores.yml', import.meta.url), 'utf8'));
+    const steps = (workflow.jobs['test-light'] as { steps: Step[] }).steps;
+    const cacheIndex = steps.findIndex(
+      step => step.uses?.startsWith('actions/cache@') && step.with?.path === '~/.duckdb/extensions',
+    );
+    const testsIndex = steps.findIndex(step => step.name === 'Run light store tests');
+    expect(cacheIndex).toBeGreaterThan(-1);
+    expect(testsIndex).toBeGreaterThan(cacheIndex);
+    const cache = steps[cacheIndex]!;
+    // Keyed on the installed DuckDB version, so a DuckDB upgrade fetches the matching extension.
+    expect(cache.with?.key).toContain('steps.duckdb.outputs.version');
+    const versionIndex = steps.findIndex(step => (step as { id?: string }).id === 'duckdb');
+    expect(versionIndex).toBeGreaterThan(-1);
+    expect(versionIndex).toBeLessThan(cacheIndex);
+  });
 });
