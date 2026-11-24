@@ -39,7 +39,11 @@ function experimentalAgentRuntimeScenario(selection: ExperimentalAgent): McE2eSc
     async run({ terminal, runtime }) {
       runtime.startLiveOutput(terminal);
       await runtime.waitForScreenText(/Mastra Code|Build|Plan|Fast|Type|Press|>/i, terminal);
-      expect(startupDiagnostics).toContain(`Experimental agent: ${selection} (workflow engine: ${expectedEngine})`);
+      expect(startupDiagnostics).toContain(
+        selection === 'evented'
+          ? 'Experimental agent: native evented (workflow engine policy: evented)'
+          : 'Experimental agent: durable (workflow engine: default)',
+      );
 
       terminal.submit('Return the configured Mastra Code e2e smoke phrase.');
       await runtime.waitForScreenText(/MC automated chat smoke response/i, terminal, 20_000);
