@@ -81,8 +81,6 @@ Before you start, ensure that you have a Mastra platform account and belong to t
 
 When you authenticate, your browser opens the Mastra sign-in page. Sign in and select an organization. The connection then acts as you in that organization and can read only the data you can read. If you leave the organization or someone removes you from it, the connection loses access on its next request.
 
-To check the connection, ask the assistant "Which Mastra organization does this connection use?" It calls `whoami` and replies with your organization and user.
-
 ## Ask questions
 
 Ask in plain language. The assistant picks the tools and fills in their parameters. For example:
@@ -127,11 +125,10 @@ The tools only read data. They can't change anything in your organization.
 | `analyze_feedback` | Aggregate user feedback as a single value, a breakdown, a time series, or percentiles. |
 | `list_metric_names` | List metric names, a metric's label keys, or a label's values. |
 
-### Account
+### Projects
 
 | Tool | Description |
 | - | - |
-| `whoami` | Show the organization and user the connection acts as. |
 | `list_projects` | List the organization's projects. |
 
 ## Related
