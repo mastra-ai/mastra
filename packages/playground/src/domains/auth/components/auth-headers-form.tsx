@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Form } from '@mastra/playground-ui/components/Form';
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
@@ -47,14 +46,12 @@ export const AuthHeadersForm = () => {
   };
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <Form onSubmit={handleSubmit} className="w-full max-w-md gap-6 text-left">
-        <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
+    <Form onSubmit={handleSubmit} className="w-full max-w-md gap-6 text-left">
+      <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <Button icon={<IconFloppyDisk1 />} type="submit" className="ml-auto">
-          Save headers
-        </Button>
-      </Form>
-    </TooltipProvider>
+      <Button icon={<IconFloppyDisk1 />} type="submit" className="ml-auto">
+        Save headers
+      </Button>
+    </Form>
   );
 };

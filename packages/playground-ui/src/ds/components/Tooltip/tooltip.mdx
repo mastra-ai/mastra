@@ -25,6 +25,24 @@ Do one or two sentences explain the term?                              -> InfoTo
 Does the point only land when two outcomes sit side by side?           -> InfoTooltip variant="illustrated".
 ```
 
+## Delay
+
+`TooltipTrigger` takes `delay="default" | "instant"`. Leave it out: the default waits 300ms after the pointer comes to rest, so passing over a control stays quiet and pausing on it explains it. The times live in `ds/primitives/hover-delay.ts`, and `HoverCardTrigger` and `PopoverTrigger` (with `openOnHover`) take the same two options.
+
+```text
+Is the target there only to be hovered (an info icon, a chart point, a meter)?  -> delay="instant"
+Anything else: a button, a link, a row, a badge, truncated text                  -> no delay prop
+```
+
+`InfoTooltip` is always instant. Two cases need nothing either: keyboard focus opens every tooltip at once, and so does moving to a neighbor while a tooltip is open or within 400ms of it closing.
+
+```tsx
+<TooltipTrigger render={<Button size="icon-md" aria-label="Save" />}>…</TooltipTrigger>
+<TooltipTrigger delay="instant" aria-label="42 runs on May 3" />
+```
+
+Render one `TooltipProvider` at the app root. It groups neighbors and sets no delay, so a second one inside a page only splits the group. Milliseconds (`delay={200}`, `delayDuration`, `skipDelayDuration`, `timeout`) are deprecated, and the `playground-ui/no-hover-delay-numbers` lint rule flags them.
+
 ## Illustrated tooltips
 
 <Canvas of={TooltipStories.InfoTooltipIllustrated} />
@@ -114,7 +132,7 @@ Work in this order. Each step decides the next, and starting from the marks inst
 
 ## Behavior
 
-- A mouse opens it on hover, and the pointer can move into the popup without closing it. The keyboard opens it on focus.
+- A mouse opens it on hover, and the pointer can move into the popup without closing it. The keyboard opens it on focus, with no delay. A disabled button's tooltip also has none.
 - A tap opens `InfoTooltip`. Tapping the icon again, tapping elsewhere, or pressing Escape closes it. A plain `Tooltip` does not open on touch.
 - The popup stays mounted while closed, so screen readers always get the text as the icon's description.
 - Nothing inside either tooltip can take focus. Content with a link or a button goes in a `Popover`.

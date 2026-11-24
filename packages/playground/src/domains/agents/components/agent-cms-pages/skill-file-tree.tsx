@@ -1,6 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { IconFileBend } from '@mastra/playground-ui/icons/central/IconFileBend';
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
@@ -343,7 +342,7 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
   const assetsFolder = root.children.find(n => n.id === 'assets');
 
   return (
-    <TooltipProvider>
+    <>
       <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImagePicked} />
 
       <Tree selectedId={selectedFileId ?? undefined} onSelect={onSelectFile}>
@@ -470,6 +469,6 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
           </Tree.FolderContent>
         </Tree.Folder>
       </Tree>
-    </TooltipProvider>
+    </>
   );
 }

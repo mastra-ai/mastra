@@ -2,7 +2,7 @@ import type { DropResult, DroppableProvided } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -171,18 +171,16 @@ const AgentMetadataModelListItem = ({
           />
         </div>
         {isLastEnabled ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="shrink-0">
-                  <Switch checked={modelConfig.enabled} disabled className="pointer-events-none" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>At least one model must be enabled</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="shrink-0">
+                <Switch checked={modelConfig.enabled} disabled className="pointer-events-none" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>At least one model must be enabled</p>
+            </TooltipContent>
+          </Tooltip>
         ) : (
           <Switch
             checked={modelConfig.enabled}

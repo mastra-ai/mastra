@@ -162,8 +162,8 @@ function Mosaic({
   return (
     <Tooltip trackCursorAxis="x">
       <TooltipTrigger
-        delay={0}
-        closeDelay={0}
+        // Each tile is a data mark: the tooltip follows the pointer across them.
+        delay="instant"
         render={
           <span
             ref={measure}

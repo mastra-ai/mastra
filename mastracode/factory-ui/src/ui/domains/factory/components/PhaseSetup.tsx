@@ -50,8 +50,6 @@ export function PhaseSetup({
     <HoverCardTrigger
       handle={handle}
       payload={phase.id}
-      delay={0}
-      closeDelay={150}
       render={<Link to={boardConfigPath(factoryId, boardId, phase.id)} aria-label={summary} />}
       className={cn(
         focusRing,

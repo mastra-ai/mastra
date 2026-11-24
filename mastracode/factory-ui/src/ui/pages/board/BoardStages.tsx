@@ -5,7 +5,6 @@ import { useState } from 'react';
 import type { DragPayload } from '../../domains/factory/boardDrag';
 import type { BoardLayout } from '../../domains/factory/boardLayout';
 import { BOARD_SCROLL_SURFACE_CLASS } from '../../domains/factory/boardLayout';
-import { BoardTooltipDelay } from '../../domains/factory/components/BoardCardParts';
 import { BoardColumn, BoardColumnHeader } from '../../domains/factory/components/BoardColumn';
 import { BoardList, BoardListGroup } from '../../domains/factory/components/BoardList';
 import { BoardStageCreateButton } from '../../domains/factory/components/BoardStageCreateButton';
@@ -89,59 +88,53 @@ export function BoardStages({
               </div>
             )}
           </div>
-          <BoardTooltipDelay>
-            {layout === 'board' ? (
-              <div
-                role="group"
-                aria-label="Board columns"
-                className="flex flex-1 items-stretch gap-2 px-4 pb-4 lg:gap-3"
-              >
+          {layout === 'board' ? (
+            <div role="group" aria-label="Board columns" className="flex flex-1 items-stretch gap-2 px-4 pb-4 lg:gap-3">
+              {stageViews.map(stageView => (
+                <BoardColumn
+                  key={stageView.stage.id}
+                  stage={stageView.stage.id}
+                  label={stageView.stage.label}
+                  collapsed={stageView.collapsed}
+                  hovered={hoveredStage === stageView.stage.id}
+                  action={
+                    stageView.create && (
+                      <BoardStageCreateButton stage={stageView.stage} shape="row" {...stageView.create} />
+                    )
+                  }
+                  onDrop={onDrop}
+                >
+                  {stageView.cards}
+                </BoardColumn>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col px-4 pb-4">
+              <BoardList>
                 {stageViews.map(stageView => (
-                  <BoardColumn
+                  <BoardListGroup
                     key={stageView.stage.id}
                     stage={stageView.stage.id}
                     label={stageView.stage.label}
-                    collapsed={stageView.collapsed}
-                    hovered={hoveredStage === stageView.stage.id}
+                    phaseKind={stageView.phaseKind}
+                    count={stageView.taskCount}
+                    loading={stageView.loading}
+                    open={stageView.groupOpen}
+                    onOpenChange={stageView.onGroupOpenChange}
                     action={
                       stageView.create && (
-                        <BoardStageCreateButton stage={stageView.stage} shape="row" {...stageView.create} />
+                        <BoardStageCreateButton stage={stageView.stage} shape="icon" {...stageView.create} />
                       )
                     }
+                    extras={stageView.setup}
                     onDrop={onDrop}
                   >
                     {stageView.cards}
-                  </BoardColumn>
+                  </BoardListGroup>
                 ))}
-              </div>
-            ) : (
-              <div className="flex flex-1 flex-col px-4 pb-4">
-                <BoardList>
-                  {stageViews.map(stageView => (
-                    <BoardListGroup
-                      key={stageView.stage.id}
-                      stage={stageView.stage.id}
-                      label={stageView.stage.label}
-                      phaseKind={stageView.phaseKind}
-                      count={stageView.taskCount}
-                      loading={stageView.loading}
-                      open={stageView.groupOpen}
-                      onOpenChange={stageView.onGroupOpenChange}
-                      action={
-                        stageView.create && (
-                          <BoardStageCreateButton stage={stageView.stage} shape="icon" {...stageView.create} />
-                        )
-                      }
-                      extras={stageView.setup}
-                      onDrop={onDrop}
-                    >
-                      {stageView.cards}
-                    </BoardListGroup>
-                  ))}
-                </BoardList>
-              </div>
-            )}
-          </BoardTooltipDelay>
+              </BoardList>
+            </div>
+          )}
         </div>
       </div>
     </BoardScrollContext>

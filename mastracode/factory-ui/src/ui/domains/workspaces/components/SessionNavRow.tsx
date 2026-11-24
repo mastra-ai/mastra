@@ -257,8 +257,8 @@ export function SessionNavRow({
             link={{ name, url }}
             isActive={active}
             level={level}
-            // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
-            render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={link} /> : link}
+            // Each row owns its card, so a close delay would leave the previous one up while the next opens.
+            render={preview ? <HoverCardTrigger delay="instant" render={link} /> : link}
             action={action}
             subItems={subItems}
           />

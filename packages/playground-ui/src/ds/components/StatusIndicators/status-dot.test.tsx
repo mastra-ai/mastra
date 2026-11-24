@@ -18,7 +18,7 @@ function presentation(): StatusPresentation {
 describe('StatusDot', () => {
   it('renders a named status trigger', () => {
     const html = renderToStaticMarkup(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <StatusDot status="running" presentation={presentation} variant="static" />
       </TooltipProvider>,
     );

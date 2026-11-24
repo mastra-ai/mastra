@@ -8,7 +8,7 @@ import { useEntityRequestContext } from '@/domains/request-context/hooks/use-ent
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Skeleton } from '@/ds/components/Skeleton';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
@@ -194,43 +194,39 @@ export function AgentThreadSidebar({
       </span>
 
       {!showMemory && showConfigBadges ? (
-        <TooltipProvider delay={150} timeout={400}>
-          <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <ConfigBadge
-              icon={IconChatBubble7}
-              tooltip={recentMessages.description}
-              enabled={recentMessages.enabled}
-              value={recentMessages.maxMessages}
-            />
-            <ConfigBadge
-              icon={IconMagnifyingGlass}
-              tooltip={
-                semanticRecallOn
-                  ? 'Semantic recall is on and retrieves relevant past messages'
-                  : 'Semantic recall is off'
-              }
-              enabled={semanticRecallOn}
-            />
-            <ConfigBadge
-              icon={IconWrite}
-              tooltip={
-                workingMemoryOn
-                  ? 'Working memory is on and persists notes across the conversation'
-                  : 'Working memory is off'
-              }
-              enabled={workingMemoryOn}
-            />
-            <ConfigBadge
-              icon={IconEyeOpen}
-              tooltip={
-                observationalOn
-                  ? 'Observational memory is on and learns from the conversation'
-                  : 'Observational memory is off'
-              }
-              enabled={observationalOn}
-            />
-          </span>
-        </TooltipProvider>
+        <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <ConfigBadge
+            icon={IconChatBubble7}
+            tooltip={recentMessages.description}
+            enabled={recentMessages.enabled}
+            value={recentMessages.maxMessages}
+          />
+          <ConfigBadge
+            icon={IconMagnifyingGlass}
+            tooltip={
+              semanticRecallOn ? 'Semantic recall is on and retrieves relevant past messages' : 'Semantic recall is off'
+            }
+            enabled={semanticRecallOn}
+          />
+          <ConfigBadge
+            icon={IconWrite}
+            tooltip={
+              workingMemoryOn
+                ? 'Working memory is on and persists notes across the conversation'
+                : 'Working memory is off'
+            }
+            enabled={workingMemoryOn}
+          />
+          <ConfigBadge
+            icon={IconEyeOpen}
+            tooltip={
+              observationalOn
+                ? 'Observational memory is on and learns from the conversation'
+                : 'Observational memory is off'
+            }
+            enabled={observationalOn}
+          />
+        </span>
       ) : undefined}
 
       {observationPercent !== undefined ? (

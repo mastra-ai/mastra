@@ -31,7 +31,7 @@ describe('LogDataPanel', () => {
 
     it('makes the full timestamp available to keyboard users through a tooltip', async () => {
       render(
-        <TooltipProvider delay={0}>
+        <TooltipProvider>
           <LogDataPanel log={log} onClose={vi.fn()} />
         </TooltipProvider>,
       );

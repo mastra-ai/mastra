@@ -38,6 +38,8 @@ function InfoTooltipRoot({ children, side, align, variant = 'text', contentClass
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
+        // The icon exists only to be hovered.
+        delay="instant"
         ref={triggerRef}
         onPointerDown={event => {
           tap.current = event.pointerType === 'touch' ? { wasOpen: open } : undefined;

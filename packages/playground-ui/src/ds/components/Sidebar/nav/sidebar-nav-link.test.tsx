@@ -50,7 +50,7 @@ describe('SidebarNavLink (collapsed) — tooltip regression', () => {
   it('renders the trigger as a real <a> so Floating UI can anchor to it', () => {
     render(
       <SidebarProvider defaultState="collapsed">
-        <TooltipProvider delay={0}>
+        <TooltipProvider>
           <ul>
             <SidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents' }} />
           </ul>
@@ -65,7 +65,7 @@ describe('SidebarNavLink (collapsed) — tooltip regression', () => {
 
   it('keeps the interactive row mounted when its collapsed tooltip toggles', () => {
     const { rerender } = render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <ul>
           <SidebarNavLink state="collapsed" link={{ name: 'Agents', url: '/agents' }} />
         </ul>
@@ -74,7 +74,7 @@ describe('SidebarNavLink (collapsed) — tooltip regression', () => {
     const trigger = screen.getByRole('link', { name: 'Agents' });
 
     rerender(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <ul>
           <SidebarNavLink state="default" link={{ name: 'Agents', url: '/agents' }} />
         </ul>
@@ -115,7 +115,7 @@ describe('SidebarNavLink (collapsed) — tooltip regression', () => {
 
   it('does not apply CSS margin utilities on TooltipContent that would dislocate the arrow', async () => {
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <TooltipPrimitive.Root open>
           <TooltipTrigger render={<a href="/agents">Agents</a>} />
           <TooltipContent side="right" align="center" sideOffset={16}>

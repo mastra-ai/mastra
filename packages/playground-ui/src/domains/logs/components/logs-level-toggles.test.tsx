@@ -37,7 +37,7 @@ describe('toggleLogLevel', () => {
 function Harness() {
   const [value, setValue] = useState<LogLevel[]>(LEVELS);
   return (
-    <TooltipProvider delay={0}>
+    <TooltipProvider>
       <LogsLevelToggles levels={LEVELS} value={value} onValueChange={setValue} />
     </TooltipProvider>
   );

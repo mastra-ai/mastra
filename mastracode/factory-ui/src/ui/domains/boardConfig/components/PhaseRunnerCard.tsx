@@ -46,8 +46,6 @@ export function PhaseRunnerCard({
   return (
     <HoverCard>
       <HoverCardTrigger
-        delay={0}
-        closeDelay={100}
         render={<Link to={to} />}
         className={cn(
           focusRing,

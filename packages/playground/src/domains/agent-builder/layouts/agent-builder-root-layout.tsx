@@ -2,7 +2,6 @@ import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
 import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
@@ -75,12 +74,10 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
   }
 
   return (
-    <TooltipProvider>
-      <LinkComponentProvider Link={Link} navigate={navigate} paths={paths}>
-        <Outlet />
-        <Toaster position="bottom-right" />
-      </LinkComponentProvider>
-    </TooltipProvider>
+    <LinkComponentProvider Link={Link} navigate={navigate} paths={paths}>
+      <Outlet />
+      <Toaster position="bottom-right" />
+    </LinkComponentProvider>
   );
 };
 

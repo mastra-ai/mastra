@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { Button } from '../Button';
 import { InfoTooltip } from './info-tooltip';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
 
@@ -24,6 +25,105 @@ describe('Tooltip', () => {
     const popup = screen.getByRole('tooltip', { name: 'Fixed tooltip' });
     expect(popup.parentElement?.style.position).toBe('fixed');
   });
+
+  it('stays quiet as the pointer passes over, and opens once it rests', async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip>
+        <TooltipTrigger>Save</TooltipTrigger>
+        <TooltipContent>Save changes</TooltipContent>
+      </Tooltip>,
+    );
+
+    await user.hover(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Save changes');
+  });
+
+  it('opens at once on keyboard focus', async () => {
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>Save</TooltipTrigger>
+          <TooltipContent>Save changes</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+
+    await user.tab();
+
+    expect(screen.getByRole('tooltip').textContent).toBe('Save changes');
+  });
+
+  it('opens at once on a neighbor of the tooltip that is open', async () => {
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>Bold</TooltipTrigger>
+          <TooltipContent>Make it bold</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger>Italic</TooltipTrigger>
+          <TooltipContent>Make it italic</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+    await user.hover(screen.getByRole('button', { name: 'Bold' }));
+    await screen.findByText('Make it bold');
+
+    await user.hover(screen.getByRole('button', { name: 'Italic' }));
+
+    expect(screen.getByText('Make it italic')).toBeTruthy();
+  });
+
+  it('opens at once with delay="instant"', async () => {
+    const user = userEvent.setup();
+    render(
+      <Tooltip>
+        <TooltipTrigger delay="instant">42%</TooltipTrigger>
+        <TooltipContent>42 of 100 runs</TooltipContent>
+      </Tooltip>,
+    );
+
+    await user.hover(screen.getByRole('button', { name: '42%' }));
+
+    expect(screen.getByRole('tooltip').textContent).toBe('42 of 100 runs');
+  });
+
+  it('explains a disabled button, which gets no mousemove to start a wait', async () => {
+    const user = userEvent.setup();
+    render(
+      <Button disabled tooltip="Save the agent first">
+        Run
+      </Button>,
+    );
+
+    await user.hover(screen.getByRole('button', { name: 'Run' }));
+
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Save the agent first');
+  });
+
+  it('still takes the deprecated delay of a published app’s provider, through a bare provider inside it', async () => {
+    const user = userEvent.setup();
+    render(
+      // oxlint-disable-next-line playground-ui/no-hover-delay-numbers -- the deprecated form is what this covers
+      <TooltipProvider delayDuration={0}>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>Save</TooltipTrigger>
+            <TooltipContent>Save changes</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </TooltipProvider>,
+    );
+
+    await user.hover(screen.getByRole('button', { name: 'Save' }));
+
+    expect(screen.getByRole('tooltip').textContent).toBe('Save changes');
+  });
 });
 
 describe('InfoTooltip', () => {
@@ -43,7 +143,7 @@ describe('InfoTooltip', () => {
   it('opens the tooltip on keyboard focus and keeps rich content', async () => {
     const user = userEvent.setup();
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <InfoTooltip aria-label="What is trace intelligence?">
           <p>Traces are clustered into themes.</p>
           <ul>
@@ -69,10 +169,19 @@ describe('InfoTooltip', () => {
     ).toBeTruthy();
   });
 
+  it('opens as soon as the pointer reaches the icon', async () => {
+    const user = userEvent.setup();
+    render(<InfoTooltip aria-label="Version information">Each save creates a version.</InfoTooltip>);
+
+    await user.hover(screen.getByRole('button', { name: 'Version information' }));
+
+    expect(screen.getByRole('tooltip').textContent).toContain('Each save creates a version.');
+  });
+
   it('opens on a tap and closes on the next tap or Escape, since touch has no hover', async () => {
     const user = userEvent.setup();
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <InfoTooltip aria-label="Version information">Each save creates a version.</InfoTooltip>
       </TooltipProvider>,
     );
@@ -93,7 +202,7 @@ describe('InfoTooltip', () => {
   it('does not open on a mouse click, which keeps hover as the only pointer trigger', async () => {
     const user = userEvent.setup({ skipHover: true });
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <InfoTooltip aria-label="Version information">Each save creates a version.</InfoTooltip>
       </TooltipProvider>,
     );
@@ -106,7 +215,7 @@ describe('InfoTooltip', () => {
   it('describes an illustrated tooltip by its titles and captions, never its drawings', async () => {
     const user = userEvent.setup();
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <InfoTooltip aria-label="About alerting for each" variant="illustrated">
           <InfoTooltip.Panel title="All traffic" caption="One failing agent can be hidden by healthy ones.">
             <span data-testid="drawing" />

@@ -14,7 +14,7 @@ import { Tabs } from '@/ds/components/Tabs/tabs-root';
 import type { TabsRootProps } from '@/ds/components/Tabs/tabs-root';
 import { Tab } from '@/ds/components/Tabs/tabs-tab';
 import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { cn } from '@/lib/utils';
@@ -84,28 +84,26 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
             </div>
           ) : null}
           {filter ? (
-            <TooltipProvider delay={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
-                    <IconFilter2 aria-hidden="true" />
-                    {filterCount > 0 ? (
-                      <Txt as="span" variant="meta" aria-hidden="true" data-slot="tabbed-container-filter-count">
-                        {filterCount}
-                      </Txt>
-                    ) : null}
-                    {filter.multiple ? (
-                      <Combobox {...filter} clearLabel="Clear" size="md" variant="default" />
-                    ) : (
-                      <Combobox {...filter} size="md" variant="default" />
-                    )}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {filterCount > 0 ? `Filter, ${filterCount} selected` : 'Filter'}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
+                  <IconFilter2 aria-hidden="true" />
+                  {filterCount > 0 ? (
+                    <Txt as="span" variant="meta" aria-hidden="true" data-slot="tabbed-container-filter-count">
+                      {filterCount}
+                    </Txt>
+                  ) : null}
+                  {filter.multiple ? (
+                    <Combobox {...filter} clearLabel="Clear" size="md" variant="default" />
+                  ) : (
+                    <Combobox {...filter} size="md" variant="default" />
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {filterCount > 0 ? `Filter, ${filterCount} selected` : 'Filter'}
+              </TooltipContent>
+            </Tooltip>
           ) : null}
         </div>
       </div>

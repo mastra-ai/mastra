@@ -125,7 +125,8 @@ function SourcesMeter({
   return (
     <Tooltip>
       <TooltipTrigger
-        delay={0}
+        // A data mark.
+        delay="instant"
         render={
           <span
             {...meterProps}

@@ -3,6 +3,8 @@ import type { PopoverPopupProps, PopoverPositionerProps } from '@base-ui/react/p
 import * as React from 'react';
 
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { resolveHoverDelay } from '@/ds/primitives/hover-delay';
+import type { HoverDelay } from '@/ds/primitives/hover-delay';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
@@ -11,7 +13,15 @@ import { cn } from '@/lib/utils';
 
 const Popover = PopoverPrimitive.Root;
 
-export type PopoverTriggerProps = Omit<PopoverPrimitive.Trigger.Props, 'className'> & TriggerButtonProps;
+export type PopoverTriggerProps = Omit<PopoverPrimitive.Trigger.Props, 'className' | 'delay'> &
+  TriggerButtonProps & {
+    /**
+     * With `openOnHover`, how long the pointer rests before the popover opens. `instant` is for a target that exists to
+     * be hovered, such as an info icon. Numbers are deprecated.
+     * @default 'default'
+     */
+    delay?: HoverDelay | number;
+  };
 
 /**
  * The button that opens the popover. Renders a design-system `<Button>` by
@@ -19,11 +29,17 @@ export type PopoverTriggerProps = Omit<PopoverPrimitive.Trigger.Props, 'classNam
  * to project the behavior onto your own element (then the look is yours).
  */
 const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
-  ({ className, asChild, render, children, variant, size, tooltip, ...props }, ref) => {
+  ({ className, asChild, render, children, variant, size, tooltip, delay = 'default', ...props }, ref) => {
     const resolved = resolveTriggerRender({ render, asChild, children, variant, size, tooltip, className });
 
     return (
-      <PopoverPrimitive.Trigger ref={ref} className={resolved.className} render={resolved.render} {...props}>
+      <PopoverPrimitive.Trigger
+        ref={ref}
+        className={resolved.className}
+        render={resolved.render}
+        delay={resolveHoverDelay(delay)}
+        {...props}
+      >
         {resolved.children}
       </PopoverPrimitive.Trigger>
     );

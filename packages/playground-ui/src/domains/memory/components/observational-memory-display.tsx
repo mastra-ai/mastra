@@ -1,6 +1,6 @@
 import { Button } from '../../../ds/components/Button';
 import { Skeleton } from '../../../ds/components/Skeleton';
-import { InfoTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../ds/components/Tooltip';
+import { InfoTooltip, Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip';
 import { Txt } from '../../../ds/components/Txt';
 import { IconBrain } from '../../../ds/icons/central/IconBrain';
 import { IconSquareArrowTopRight } from '../../../ds/icons/central/IconSquareArrowTopRight';
@@ -260,30 +260,28 @@ function ObservationalMemoryProgressBars({
   reflectionModelRouting?: ModelRouting;
 }) {
   return (
-    <TooltipProvider delayDuration={0}>
-      <div className="mb-3 flex gap-3">
-        <ProgressBar
-          value={pendingMessageTokens}
-          max={messageTokensThreshold}
-          label="Messages"
-          isActive={isObserving}
-          model={observationModel}
-          modelRouting={observationModelRouting}
-          baseThreshold={baseMessageTokens}
-          totalBudget={totalBudget}
-        />
-        <ProgressBar
-          value={observationTokenCount}
-          max={observationTokensThreshold}
-          label="Observations"
-          isActive={isReflecting}
-          baseThreshold={baseObservationTokens}
-          model={reflectionModel}
-          modelRouting={reflectionModelRouting}
-          totalBudget={totalBudget}
-        />
-      </div>
-    </TooltipProvider>
+    <div className="mb-3 flex gap-3">
+      <ProgressBar
+        value={pendingMessageTokens}
+        max={messageTokensThreshold}
+        label="Messages"
+        isActive={isObserving}
+        model={observationModel}
+        modelRouting={observationModelRouting}
+        baseThreshold={baseMessageTokens}
+        totalBudget={totalBudget}
+      />
+      <ProgressBar
+        value={observationTokenCount}
+        max={observationTokensThreshold}
+        label="Observations"
+        isActive={isReflecting}
+        baseThreshold={baseObservationTokens}
+        model={reflectionModel}
+        modelRouting={reflectionModelRouting}
+        totalBudget={totalBudget}
+      />
+    </div>
   );
 }
 

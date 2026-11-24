@@ -226,7 +226,6 @@ function SavedViewTab<TSettings>({
           <ContextMenu.Trigger
             render={
               <HoverCardTrigger
-                delay={400}
                 render={
                   <DropdownMenu.Trigger
                     render={

@@ -1,6 +1,5 @@
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { Outlet } from 'react-router';
 
@@ -10,13 +9,11 @@ export function AuthLayout() {
     <div className="h-screen bg-sidebar">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
-        <TooltipProvider delayDuration={0}>
-          <AppShell>
-            <MainCard className="flex items-center justify-center overflow-y-auto">
-              <Outlet />
-            </MainCard>
-          </AppShell>
-        </TooltipProvider>
+        <AppShell>
+          <MainCard className="flex items-center justify-center overflow-y-auto">
+            <Outlet />
+          </MainCard>
+        </AppShell>
       </ThemeProvider>
     </div>
   );

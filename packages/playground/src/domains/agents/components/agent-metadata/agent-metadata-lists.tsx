@@ -1,6 +1,6 @@
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentMetadataExpandableList } from '@mastra/playground-ui/domains/agents/config/agent-metadata-expandable-list';
 import {
   AgentMetadataList,
@@ -169,20 +169,18 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
         );
 
         return isActivated ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)}
-                  data-testid="skill-badge"
-                  className={metadataLinkClassName}
-                >
-                  {badge}
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent>Active</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)}
+                data-testid="skill-badge"
+                className={metadataLinkClassName}
+              >
+                {badge}
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent>Active</TooltipContent>
+          </Tooltip>
         ) : (
           <Link
             href={paths.agentSkillLink(agentId, skill.name, skill.path, workspaceId)}

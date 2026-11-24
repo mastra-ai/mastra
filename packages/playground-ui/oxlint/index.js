@@ -19,6 +19,7 @@
 //   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
 //   playground-ui/no-page-width      a page takes its width from PageLayout, not a centred max-w-* column
 //   playground-ui/page-layout-props  every PageLayout names a variant and passes only the props that variant takes
+//   playground-ui/no-hover-delay-numbers  tooltips, hover cards and hover popovers take a named delay, not milliseconds
 
 import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
@@ -598,6 +599,25 @@ const pageLayoutProps = selectorRule(() => [
   { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
 ]);
 
+// --- no-hover-delay-numbers ------------------------------------------------------------------------------
+// The times live in Playground UI. A call site either takes the default or names the other option.
+const HOVER_TRIGGER = '/^(TooltipTrigger|HoverCardTrigger|PopoverTrigger)$/';
+const HOVER_DELAY_MESSAGE =
+  'Drop this to use the default delay, or pass delay="instant" when the target exists to be hovered.';
+const PROVIDER_DELAY_MESSAGE =
+  'TooltipProvider sets no delay. Drop this, and pass delay="instant" to a TooltipTrigger that exists to be hovered.';
+const noHoverDelayNumbers = selectorRule(() => [
+  {
+    selector: `JSXOpeningElement[name.name=${HOVER_TRIGGER}] > JSXAttribute[name.name=/^(delay|closeDelay)$/] Literal[value=type(number)]`,
+    message: HOVER_DELAY_MESSAGE,
+  },
+  {
+    selector:
+      "JSXOpeningElement[name.name='TooltipProvider'] > JSXAttribute[name.name=/^(delay|delayDuration|closeDelay|timeout|skipDelayDuration)$/]",
+    message: PROVIDER_DELAY_MESSAGE,
+  },
+]);
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -614,6 +634,7 @@ const plugin = {
     'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
     'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
     'no-page-spacing': { meta: { type: 'suggestion', schema: false }, create: noPageSpacing },
+    'no-hover-delay-numbers': { meta: { type: 'suggestion', schema: false }, create: noHoverDelayNumbers },
   },
 };
 
@@ -644,6 +665,7 @@ export const recommended = {
   'playground-ui/placeholder-text': 'error',
   'playground-ui/page-layout-props': 'error',
   'playground-ui/no-page-spacing': 'error',
+  'playground-ui/no-hover-delay-numbers': 'error',
   ...copyRules,
 };
 

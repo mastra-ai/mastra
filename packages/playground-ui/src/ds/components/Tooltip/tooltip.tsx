@@ -5,45 +5,64 @@ import type { TooltipPopupProps, TooltipPositionerProps } from '@base-ui/react/t
 import * as React from 'react';
 
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { resolveHoverDelay, tooltipGroupTimeout } from '@/ds/primitives/hover-delay';
+import type { HoverDelay } from '@/ds/primitives/hover-delay';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
+// The app's deprecated provider delay, when it sets one.
+const TooltipDelayContext = React.createContext<number | undefined>(undefined);
+
 type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay' | 'timeout'> & {
+  /** @deprecated Tooltips have a default delay. Pass `delay="instant"` to the `TooltipTrigger`s that differ. */
   delay?: number;
+  /** @deprecated Every tooltip shares one grouping window. */
   timeout?: number;
-  /** Radix API compatibility alias for `delay`. */
+  /** @deprecated Tooltips have a default delay. Pass `delay="instant"` to the `TooltipTrigger`s that differ. */
   delayDuration?: number;
-  /** Radix API compatibility alias for `timeout`. */
+  /** @deprecated Every tooltip shares one grouping window. */
   skipDelayDuration?: number;
 };
 
+/** Groups the tooltips inside it, so moving between neighbors skips the delay. Render one at the app root. */
 function TooltipProvider({ delay, delayDuration, timeout, skipDelayDuration, ...props }: TooltipProviderProps) {
-  const resolvedDelay = delay ?? delayDuration;
-  const resolvedTimeout = timeout ?? skipDelayDuration;
+  const inheritedDelay = React.useContext(TooltipDelayContext);
   return (
-    <TooltipPrimitive.Provider
-      {...(resolvedDelay !== undefined ? { delay: resolvedDelay } : {})}
-      {...(resolvedTimeout !== undefined ? { timeout: resolvedTimeout } : {})}
-      {...props}
-    />
+    <TooltipDelayContext.Provider value={delay ?? delayDuration ?? inheritedDelay}>
+      <TooltipPrimitive.Provider timeout={timeout ?? skipDelayDuration ?? tooltipGroupTimeout} {...props} />
+    </TooltipDelayContext.Provider>
   );
 }
 
 const Tooltip = TooltipPrimitive.Root;
 
-type TooltipTriggerProps = TooltipPrimitive.Trigger.Props & {
+type TooltipTriggerProps = Omit<TooltipPrimitive.Trigger.Props, 'delay'> & {
+  /**
+   * How long the pointer rests before the tooltip opens. `instant` is for a target that exists to be hovered, such as
+   * an info icon or a chart point. Keyboard focus always opens it at once. Numbers are deprecated.
+   * @default 'default'
+   */
+  delay?: HoverDelay | number;
   /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
 const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipTriggerProps>(
-  ({ asChild, render, children, ...props }, ref) => {
-    if (asChild && React.isValidElement(children)) {
-      return <TooltipPrimitive.Trigger ref={ref} render={children} {...props} />;
-    }
+  ({ asChild, render, children, delay, ...props }, ref) => {
+    const providerDelay = React.useContext(TooltipDelayContext);
+    const child = asChild && React.isValidElement(children) ? children : undefined;
+    const element = child ?? render;
+    // A wait starts on mousemove, which React withholds from a disabled button, so that tooltip opens on mouseenter.
+    const defaultDelay =
+      React.isValidElement<{ disabled?: boolean }>(element) && element.props.disabled ? 'instant' : 'default';
     return (
-      <TooltipPrimitive.Trigger ref={ref} render={render} {...props}>
-        {children}
+      <TooltipPrimitive.Trigger
+        ref={ref}
+        render={element}
+        delay={resolveHoverDelay(delay ?? providerDelay ?? defaultDelay)}
+        {...props}
+      >
+        {child ? undefined : children}
       </TooltipPrimitive.Trigger>
     );
   },

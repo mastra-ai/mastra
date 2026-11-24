@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/compon
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Notice } from '@/ds/components/Notice';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
@@ -280,39 +280,56 @@ export const WorkflowTimeTravelForm = ({
   };
 
   return (
-    <TooltipProvider>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Txt as="p" variant="heading" tone="muted">
-            Input data
-          </Txt>
-          <Txt variant="meta" tone="muted">
-            Step: {stepKey}
-          </Txt>
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Txt as="p" variant="heading" tone="muted">
+          Input data
+        </Txt>
+        <Txt variant="meta" tone="muted">
+          Step: {stepKey}
+        </Txt>
+      </div>
 
-        <WorkflowInputData
-          schema={stepSchema}
-          defaultValues={stepResult?.payload}
-          isSubmitLoading={isSubmitting}
-          submitButtonLabel={buttonText}
-          onSubmit={handleSubmit}
-        >
-          <div className="space-y-4 pb-4">
-            {isPerStepRun || isContinueRun ? null : (
-              <>
-                <JsonField
-                  label="Resume Data (JSON)"
-                  value={resumeData}
-                  onChange={setResumeData}
-                  helperText="Provide any resume payloads that should be passed to the step."
-                />
-                <JsonField
-                  label="Context (JSON)"
-                  value={contextValue}
-                  onChange={setContextValue}
-                  helperText="Only include top level steps (no nested workflow steps) that are required in the time travel execution."
-                  exampleCode={prettyJson({
+      <WorkflowInputData
+        schema={stepSchema}
+        defaultValues={stepResult?.payload}
+        isSubmitLoading={isSubmitting}
+        submitButtonLabel={buttonText}
+        onSubmit={handleSubmit}
+      >
+        <div className="space-y-4 pb-4">
+          {isPerStepRun || isContinueRun ? null : (
+            <>
+              <JsonField
+                label="Resume Data (JSON)"
+                value={resumeData}
+                onChange={setResumeData}
+                helperText="Provide any resume payloads that should be passed to the step."
+              />
+              <JsonField
+                label="Context (JSON)"
+                value={contextValue}
+                onChange={setContextValue}
+                helperText="Only include top level steps (no nested workflow steps) that are required in the time travel execution."
+                exampleCode={prettyJson({
+                  stepId: {
+                    status: 'success',
+                    payload: {
+                      value: 'test value',
+                    },
+                    output: {
+                      value: 'test output',
+                    },
+                  },
+                })}
+              />
+              <JsonField
+                label="Nested Step Context (JSON)"
+                value={nestedContextValue}
+                onChange={setNestedContextValue}
+                helperText="Includes nested workflow steps that are required in the time travel execution."
+                exampleCode={prettyJson({
+                  nestedWorkflowId: {
                     stepId: {
                       status: 'success',
                       payload: {
@@ -322,37 +339,18 @@ export const WorkflowTimeTravelForm = ({
                         value: 'test output',
                       },
                     },
-                  })}
-                />
-                <JsonField
-                  label="Nested Step Context (JSON)"
-                  value={nestedContextValue}
-                  onChange={setNestedContextValue}
-                  helperText="Includes nested workflow steps that are required in the time travel execution."
-                  exampleCode={prettyJson({
-                    nestedWorkflowId: {
-                      stepId: {
-                        status: 'success',
-                        payload: {
-                          value: 'test value',
-                        },
-                        output: {
-                          value: 'test output',
-                        },
-                      },
-                    },
-                  })}
-                />
-              </>
-            )}
-            {formError && (
-              <div role="alert">
-                <Notice variant="destructive">{formError}</Notice>
-              </div>
-            )}
-          </div>
-        </WorkflowInputData>
-      </div>
-    </TooltipProvider>
+                  },
+                })}
+              />
+            </>
+          )}
+          {formError && (
+            <div role="alert">
+              <Notice variant="destructive">{formError}</Notice>
+            </div>
+          )}
+        </div>
+      </WorkflowInputData>
+    </div>
   );
 };

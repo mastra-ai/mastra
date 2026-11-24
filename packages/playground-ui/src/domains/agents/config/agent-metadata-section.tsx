@@ -1,4 +1,4 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../ds/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip';
 import { Txt } from '../../../ds/components/Txt';
 import { IconCircleInfo } from '../../../ds/icons/central/IconCircleInfo';
 import { Icon } from '../../../ds/icons/Icon';
@@ -59,24 +59,22 @@ export const AgentMetadataSection = ({
             </span>
           </h3>
           {hint && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <a
-                    href={hint.link}
-                    aria-label={hint.title}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="opacity-0 group-focus-within/metadata:opacity-100 group-hover/metadata:opacity-100 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:opacity-100"
-                  >
-                    <Icon className="text-muted-foreground" size="xs">
-                      {hint.icon || <IconCircleInfo />}
-                    </Icon>
-                  </a>
-                </TooltipTrigger>
-                <TooltipContent>{hint.title}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={hint.link}
+                  aria-label={hint.title}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="opacity-0 group-focus-within/metadata:opacity-100 group-hover/metadata:opacity-100 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center pointer-coarse:opacity-100"
+                >
+                  <Icon className="text-muted-foreground" size="xs">
+                    {hint.icon || <IconCircleInfo />}
+                  </Icon>
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>{hint.title}</TooltipContent>
+            </Tooltip>
           )}
         </div>
         {actions && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}

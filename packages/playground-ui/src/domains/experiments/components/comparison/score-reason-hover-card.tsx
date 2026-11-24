@@ -19,8 +19,8 @@ export function ScoreReasonHoverCard({ scorerId, reason, nested = false }: Score
   return (
     <HoverCard>
       <HoverCardTrigger
-        delay={0}
-        closeDelay={100}
+        // An info icon.
+        delay="instant"
         render={
           nested ? (
             <span aria-hidden data-testid={`score-reason-${scorerId}`} className={`flex ${iconClassName}`} />

@@ -89,8 +89,8 @@ function TraceScoreLine({ score, onSelect }: { score: ClientScoreRowData; onSele
         {reason && (
           <HoverCard>
             <HoverCardTrigger
-              delay={0}
-              closeDelay={100}
+              // An info icon.
+              delay="instant"
               render={
                 <button
                   type="button"

@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
@@ -142,77 +142,75 @@ export const JsonObjectEditor = ({
   };
 
   return (
-    <TooltipProvider>
-      <div>
-        <Field>
-          <div className="flex items-center justify-between">
-            <FieldLabel info={labelTooltip}>{label} (JSON)</FieldLabel>
+    <div>
+      <Field>
+        <div className="flex items-center justify-between">
+          <FieldLabel info={labelTooltip}>{label} (JSON)</FieldLabel>
 
-            <div className="flex items-center gap-2">
-              {headerActions}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={handleFormat} className={buttonClass}>
-                    <Icon>
-                      <IconCodeBrackets />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Format the {label} JSON</TooltipContent>
-              </Tooltip>
+          <div className="flex items-center gap-2">
+            {headerActions}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={handleFormat} className={buttonClass}>
+                  <Icon>
+                    <IconCodeBrackets />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Format the {label} JSON</TooltipContent>
+            </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass}>
-                    <Icon>
-                      <IconSquareBehindSquare1 />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy {label}</TooltipContent>
-              </Tooltip>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={handleCopy} className={buttonClass}>
+                  <Icon>
+                    <IconSquareBehindSquare1 />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Copy {label}</TooltipContent>
+            </Tooltip>
           </div>
-
-          {presets && Object.keys(presets).length > 0 && (
-            <Field>
-              <FieldLabel className="sr-only">{label} preset</FieldLabel>
-              <Select value={selectedPreset} onValueChange={handlePresetChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a preset" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__custom__">Custom</SelectItem>
-                  {Object.keys(presets).map(key => (
-                    <SelectItem key={key} value={key}>
-                      {key}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-
-          <CodeEditor value={draft} onChange={handleEditorChange} showCopyButton={false} className={editorClassName} />
-        </Field>
-
-        <div className="flex justify-end gap-2 pt-2">
-          {isDirty && (
-            <Button
-              variant="default"
-              size="icon-md"
-              type="button"
-              tooltip={`Revert ${label} changes`}
-              onClick={handleRevert}
-            >
-              <IconCrossMedium />
-            </Button>
-          )}
-          <Button icon={<IconCheckmark2Medium />} type="button" onClick={handleSave}>
-            Save
-          </Button>
         </div>
+
+        {presets && Object.keys(presets).length > 0 && (
+          <Field>
+            <FieldLabel className="sr-only">{label} preset</FieldLabel>
+            <Select value={selectedPreset} onValueChange={handlePresetChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a preset" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__custom__">Custom</SelectItem>
+                {Object.keys(presets).map(key => (
+                  <SelectItem key={key} value={key}>
+                    {key}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
+
+        <CodeEditor value={draft} onChange={handleEditorChange} showCopyButton={false} className={editorClassName} />
+      </Field>
+
+      <div className="flex justify-end gap-2 pt-2">
+        {isDirty && (
+          <Button
+            variant="default"
+            size="icon-md"
+            type="button"
+            tooltip={`Revert ${label} changes`}
+            onClick={handleRevert}
+          >
+            <IconCrossMedium />
+          </Button>
+        )}
+        <Button icon={<IconCheckmark2Medium />} type="button" onClick={handleSave}>
+          Save
+        </Button>
       </div>
-    </TooltipProvider>
+    </div>
   );
 };

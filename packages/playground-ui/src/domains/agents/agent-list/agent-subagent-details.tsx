@@ -26,8 +26,8 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
   return (
     <HoverCard>
       <HoverCardTrigger
-        delay={0}
-        closeDelay={0}
+        // Hovering is all this does, and its neighbors in the row have cards of their own.
+        delay="instant"
         render={
           <Button
             type="button"

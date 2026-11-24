@@ -381,7 +381,7 @@ describe.each([
 describe('FieldLabel with info', () => {
   const renderWithInfo = (label: ReactNode = 'Display name') =>
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <Field>
           <FieldLabel info="Shown to people who pick this agent.">{label}</FieldLabel>
           <Input />

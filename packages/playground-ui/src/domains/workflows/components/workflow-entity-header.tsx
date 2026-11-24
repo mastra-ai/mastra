@@ -1,7 +1,7 @@
 import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { IconChip } from '@/ds/icons/central/IconChip';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
@@ -27,46 +27,44 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
 
   return (
-    <TooltipProvider>
-      <EntityHeader icon={<WorkflowIcon />} title={workflowName} isLoading={isLoading}>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={handleCopy} className="h-badge-default shrink-0">
-                <Badge icon={<IconSquareBehindSquare1 />}>{workflowId}</Badge>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy workflow ID for use in code</TooltipContent>
-          </Tooltip>
+    <EntityHeader icon={<WorkflowIcon />} title={workflowName} isLoading={isLoading}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" onClick={handleCopy} className="h-badge-default shrink-0">
+              <Badge icon={<IconSquareBehindSquare1 />}>{workflowId}</Badge>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy workflow ID for use in code</TooltipContent>
+        </Tooltip>
 
-          <Badge>
-            {stepsCount} step{stepsCount === 1 ? '' : 's'}
+        <Badge>
+          {stepsCount} step{stepsCount === 1 ? '' : 's'}
+        </Badge>
+
+        {workflow?.isProcessorWorkflow && (
+          <Badge icon={<IconChip />} variant="purple">
+            Processor
           </Badge>
+        )}
 
-          {workflow?.isProcessorWorkflow && (
-            <Badge icon={<IconChip />} variant="purple">
-              Processor
-            </Badge>
-          )}
-
-          {workflow?.origin === 'dynamic' && (
-            <Tooltip>
-              <TooltipTrigger
-                render={<span />}
-                role="note"
-                tabIndex={0}
-                aria-label="Dynamic workflow"
-                className={cn('rounded-[7px]', focusRing)}
-              >
-                <Badge icon={<IconServer1 />} variant="blue">
-                  Dynamic
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>Registered via the dynamic-workflows API and saved in storage</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </EntityHeader>
-    </TooltipProvider>
+        {workflow?.origin === 'dynamic' && (
+          <Tooltip>
+            <TooltipTrigger
+              render={<span />}
+              role="note"
+              tabIndex={0}
+              aria-label="Dynamic workflow"
+              className={cn('rounded-[7px]', focusRing)}
+            >
+              <Badge icon={<IconServer1 />} variant="blue">
+                Dynamic
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>Registered via the dynamic-workflows API and saved in storage</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </EntityHeader>
   );
 };

@@ -37,7 +37,7 @@ afterEach(() => cleanup());
 describe('SidebarTrigger tooltip', () => {
   it('advertises the [ shortcut next to the label', async () => {
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <SidebarProvider>
           <SidebarTrigger />
         </SidebarProvider>
@@ -55,7 +55,7 @@ describe('SidebarTrigger tooltip', () => {
 describe('SidebarSearchTrigger tooltip', () => {
   it('shows the shortcut in the tooltip instead of beside the icon', async () => {
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <SidebarSearchTrigger shortcut="⌘ K" />
       </TooltipProvider>,
     );

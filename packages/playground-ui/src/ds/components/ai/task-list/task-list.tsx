@@ -5,7 +5,7 @@ import { TaskGraphLines } from './task-graph';
 import { TASK_ROW_HEIGHT, taskGraphLaneShift, taskGraphMotion, taskGraphNodeClass } from './task-graph-node';
 import { taskWindowHeight, useFocusedRowScroll } from './use-focused-row-scroll';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -31,37 +31,37 @@ export interface TaskListProgressProps extends Omit<ComponentProps<'span'>, 'chi
 export const TaskListProgress = ({ tasks, className, ...props }: TaskListProgressProps) => {
   const completed = tasks.filter(task => task.status === 'completed').length;
   return (
-    <TooltipProvider delayDuration={0}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              role="progressbar"
-              aria-label="Task completion"
-              aria-valuemin={0}
-              aria-valuemax={tasks.length}
-              aria-valuenow={completed}
-              className={cn('ml-auto flex h-4 w-fit max-w-40 shrink-0 items-center gap-1 overflow-hidden', className)}
-              {...props}
-            >
-              {tasks.map(task => (
-                <span
-                  key={task.id}
-                  className={cn(
-                    'h-full w-0.5 min-w-px shrink rounded-full transition-colors',
-                    taskGraphMotion,
-                    barColors[task.status],
-                  )}
-                />
-              ))}
-            </span>
-          }
-        />
-        <TooltipContent>
-          {completed}/{tasks.length} completed
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger
+        // A data mark.
+        delay="instant"
+        render={
+          <span
+            role="progressbar"
+            aria-label="Task completion"
+            aria-valuemin={0}
+            aria-valuemax={tasks.length}
+            aria-valuenow={completed}
+            className={cn('ml-auto flex h-4 w-fit max-w-40 shrink-0 items-center gap-1 overflow-hidden', className)}
+            {...props}
+          >
+            {tasks.map(task => (
+              <span
+                key={task.id}
+                className={cn(
+                  'h-full w-0.5 min-w-px shrink rounded-full transition-colors',
+                  taskGraphMotion,
+                  barColors[task.status],
+                )}
+              />
+            ))}
+          </span>
+        }
+      />
+      <TooltipContent>
+        {completed}/{tasks.length} completed
+      </TooltipContent>
+    </Tooltip>
   );
 };
 

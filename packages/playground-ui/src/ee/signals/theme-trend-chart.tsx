@@ -52,6 +52,8 @@ export function ThemeTrendChart({ points, signalName }: { points: ThemeHistoryPo
           return (
             <Tooltip key={point.snapshotId}>
               <TooltipTrigger
+                // A chart point.
+                delay="instant"
                 aria-label={label}
                 className="absolute size-2 -translate-1/2 cursor-default rounded-full transition-transform hover:scale-150"
                 style={{

@@ -29,7 +29,7 @@ function makeQueryClient(): QueryClient {
 function Wrapper({ client, children }: { client: QueryClient; children: ReactNode }) {
   return (
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
-      <TooltipProvider delayDuration={0}>
+      <TooltipProvider>
         <QueryClientProvider client={client}>
           <ApiConfigProvider config={TEST_API}>{children}</ApiConfigProvider>
         </QueryClientProvider>

@@ -156,8 +156,6 @@ export function WorkItemActivity({
   return (
     <HoverCard>
       <HoverCardTrigger
-        delay={150}
-        closeDelay={100}
         render={
           <button
             type="button"

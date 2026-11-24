@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useRef, useState } from 'react';
@@ -71,22 +70,20 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
   ];
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <Form onSubmit={handleSubmit} className="gap-6">
-        {connectionFields.map(({ label, ...field }) => (
-          <Field key={field.name}>
-            <FieldLabel required={field.required}>{label}</FieldLabel>
-            <Input {...field} />
-            <FieldError />
-          </Field>
-        ))}
-        <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
+    <Form onSubmit={handleSubmit} className="gap-6">
+      {connectionFields.map(({ label, ...field }) => (
+        <Field key={field.name}>
+          <FieldLabel required={field.required}>{label}</FieldLabel>
+          <Input {...field} />
+          <FieldError />
+        </Field>
+      ))}
+      <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <Button type="submit" className="mt-4 ml-auto" icon={<IconFloppyDisk1 />}>
-          Save configuration
-        </Button>
-      </Form>
-    </TooltipProvider>
+      <Button type="submit" className="mt-4 ml-auto" icon={<IconFloppyDisk1 />}>
+        Save configuration
+      </Button>
+    </Form>
   );
 };
 

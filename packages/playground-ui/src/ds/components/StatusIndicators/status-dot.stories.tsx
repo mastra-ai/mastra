@@ -33,7 +33,7 @@ const meta: Meta<typeof StatusDot<DeployState>> = {
       },
     },
   },
-  decorators: [Story => <TooltipProvider delay={0}>{Story()}</TooltipProvider>],
+  decorators: [Story => <TooltipProvider>{Story()}</TooltipProvider>],
   args: {
     status: 'ready',
     presentation,

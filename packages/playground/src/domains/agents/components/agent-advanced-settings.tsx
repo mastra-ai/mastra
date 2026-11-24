@@ -1,7 +1,7 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
@@ -78,202 +78,200 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
   const buttonClass = cn(quietTextHover, controlStateColorTransition);
 
   return (
-    <TooltipProvider>
-      <div className="@container/advanced">
-        <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
-          <Field>
-            <FieldLabel>Frequency Penalty</FieldLabel>
-            <Input
-              type="number"
-              step="0.1"
-              min="-1"
-              max="1"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.frequencyPenalty ?? ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </Field>
+    <div className="@container/advanced">
+      <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
+        <Field>
+          <FieldLabel>Frequency Penalty</FieldLabel>
+          <Input
+            type="number"
+            step="0.1"
+            min="-1"
+            max="1"
+            readOnly={!canEdit}
+            value={settings?.modelSettings?.frequencyPenalty ?? ''}
+            onChange={e =>
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
+            }
+          />
+        </Field>
 
-          <Field>
-            <FieldLabel>Presence Penalty</FieldLabel>
-            <Input
-              type="number"
-              step="0.1"
-              min="-1"
-              max="1"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.presencePenalty ?? ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    presencePenalty: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </Field>
+        <Field>
+          <FieldLabel>Presence Penalty</FieldLabel>
+          <Input
+            type="number"
+            step="0.1"
+            min="-1"
+            max="1"
+            readOnly={!canEdit}
+            value={settings?.modelSettings?.presencePenalty ?? ''}
+            onChange={e =>
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
+            }
+          />
+        </Field>
 
-          <Field>
-            <FieldLabel>Top K</FieldLabel>
-            <Input
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.topK || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    topK: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </Field>
+        <Field>
+          <FieldLabel>Top K</FieldLabel>
+          <Input
+            type="number"
+            readOnly={!canEdit}
+            value={settings?.modelSettings?.topK || ''}
+            onChange={e =>
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  topK: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
+            }
+          />
+        </Field>
 
-          <Field>
-            <FieldLabel>Max Tokens</FieldLabel>
-            <Input
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.maxTokens || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxTokens: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </Field>
+        <Field>
+          <FieldLabel>Max Tokens</FieldLabel>
+          <Input
+            type="number"
+            readOnly={!canEdit}
+            value={settings?.modelSettings?.maxTokens || ''}
+            onChange={e =>
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  maxTokens: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
+            }
+          />
+        </Field>
 
-          <Field>
-            <FieldLabel>Max Steps</FieldLabel>
-            <Input
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.maxSteps || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxSteps: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </Field>
+        <Field>
+          <FieldLabel>Max Steps</FieldLabel>
+          <Input
+            type="number"
+            readOnly={!canEdit}
+            value={settings?.modelSettings?.maxSteps || ''}
+            onChange={e =>
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  maxSteps: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
+            }
+          />
+        </Field>
 
-          <Field>
-            <FieldLabel>Max Retries</FieldLabel>
-            <Input
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.maxRetries || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    maxRetries: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </Field>
+        <Field>
+          <FieldLabel>Max Retries</FieldLabel>
+          <Input
+            type="number"
+            readOnly={!canEdit}
+            value={settings?.modelSettings?.maxRetries || ''}
+            onChange={e =>
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
+            }
+          />
+        </Field>
 
-          <Field>
-            <FieldLabel>Seed</FieldLabel>
-            <Input
-              type="number"
-              readOnly={!canEdit}
-              value={settings?.modelSettings?.seed || ''}
-              onChange={e =>
-                setSettings({
-                  ...settings,
-                  modelSettings: {
-                    ...settings?.modelSettings,
-                    seed: e.target.value ? Number(e.target.value) : undefined,
-                  },
-                })
-              }
-            />
-          </Field>
-        </div>
+        <Field>
+          <FieldLabel>Seed</FieldLabel>
+          <Input
+            type="number"
+            readOnly={!canEdit}
+            value={settings?.modelSettings?.seed || ''}
+            onChange={e =>
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  seed: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
+            }
+          />
+        </Field>
+      </div>
 
-        <Field invalid={Boolean(error)} className="gap-1">
-          <div className="flex items-center justify-between">
-            <FieldLabel>Provider Options</FieldLabel>
+      <Field invalid={Boolean(error)} className="gap-1">
+        <div className="flex items-center justify-between">
+          <FieldLabel>Provider Options</FieldLabel>
 
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={formatProviderOptions}
+                  className={buttonClass}
+                  aria-label="Format provider options"
+                >
+                  <Icon>
+                    <IconCodeBrackets />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Format the provider options JSON</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
+                  <Icon>
+                    <IconSquareBehindSquare1 />
+                  </Icon>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Copy provider options</TooltipContent>
+            </Tooltip>
+
+            {canEdit && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    onClick={formatProviderOptions}
+                    onClick={saveProviderOptions}
                     className={buttonClass}
-                    aria-label="Format provider options"
+                    aria-label="Save provider options"
                   >
-                    <Icon>
-                      <IconCodeBrackets />
-                    </Icon>
+                    <Icon>{saved ? <IconCheckmark2Medium /> : <IconFloppyDisk1 />}</Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Format the provider options JSON</TooltipContent>
+                <TooltipContent>{saved ? 'Saved' : 'Save provider options'}</TooltipContent>
               </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
-                    <Icon>
-                      <IconSquareBehindSquare1 />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy provider options</TooltipContent>
-              </Tooltip>
-
-              {canEdit && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={saveProviderOptions}
-                      className={buttonClass}
-                      aria-label="Save provider options"
-                    >
-                      <Icon>{saved ? <IconCheckmark2Medium /> : <IconFloppyDisk1 />}</Icon>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{saved ? 'Saved' : 'Save provider options'}</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
+            )}
           </div>
-          <CodeEditor
-            value={providerOptionsValue}
-            onChange={setProviderOptionsValue}
-            language="json"
-            editable={canEdit}
-            showCopyButton={false}
-            className="h-75"
-          />
-          <FieldError>{error}</FieldError>
-        </Field>
-      </div>
-    </TooltipProvider>
+        </div>
+        <CodeEditor
+          value={providerOptionsValue}
+          onChange={setProviderOptionsValue}
+          language="json"
+          editable={canEdit}
+          showCopyButton={false}
+          className="h-75"
+        />
+        <FieldError>{error}</FieldError>
+      </Field>
+    </div>
   );
 };

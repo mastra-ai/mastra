@@ -54,7 +54,7 @@ describe('ProductAvatar', () => {
 
   it('opens a tooltip on hover inside a group', async () => {
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <Avatar.Group size="md">
           <Tooltip>
             <TooltipTrigger render={<ProductAvatar product="studio" />} />

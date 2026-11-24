@@ -4,7 +4,6 @@ import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
@@ -158,16 +157,14 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="h-screen bg-sidebar">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
-        <TooltipProvider delayDuration={0}>
-          <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
-            <Sidebar.Provider LinkComponent={Link}>
-              <SidebarShortcuts />
-              <RouteSidePanelProvider>
-                <LayoutContent>{children}</LayoutContent>
-              </RouteSidePanelProvider>
-            </Sidebar.Provider>
-          </ExperimentalUIProvider>
-        </TooltipProvider>
+        <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
+          <Sidebar.Provider LinkComponent={Link}>
+            <SidebarShortcuts />
+            <RouteSidePanelProvider>
+              <LayoutContent>{children}</LayoutContent>
+            </RouteSidePanelProvider>
+          </Sidebar.Provider>
+        </ExperimentalUIProvider>
       </ThemeProvider>
     </div>
   );

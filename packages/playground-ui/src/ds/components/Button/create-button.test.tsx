@@ -88,7 +88,7 @@ describe('CreateButton', () => {
 
   it('shows the tooltip text followed by a C kbd hint', async () => {
     render(
-      <TooltipProvider delay={0}>
+      <TooltipProvider>
         <CreateButton tooltip="Create a new item">New item</CreateButton>
       </TooltipProvider>,
     );

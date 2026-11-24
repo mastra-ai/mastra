@@ -3,18 +3,42 @@ import type { PreviewCardPopupProps, PreviewCardPositionerProps } from '@base-ui
 import * as React from 'react';
 
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { hoverCardCloseDelay, resolveHoverDelay } from '@/ds/primitives/hover-delay';
+import type { HoverDelay } from '@/ds/primitives/hover-delay';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 const HoverCard = PreviewCardPrimitive.Root;
 
-export type HoverCardTriggerProps = Omit<PreviewCardPrimitive.Trigger.Props, 'className'> & {
+export type HoverCardTriggerProps = Omit<PreviewCardPrimitive.Trigger.Props, 'className' | 'delay' | 'closeDelay'> & {
   className?: string;
+  /**
+   * How long hovering waits before the card opens. `instant` is for a target that exists to be hovered, such as an info
+   * icon, and also closes at once. Numbers are deprecated.
+   * @default 'default'
+   */
+  delay?: HoverDelay | number;
+  /** @deprecated `delay` sets both. */
+  closeDelay?: number;
 };
 
 const HoverCardTrigger = React.forwardRef<HTMLAnchorElement, HoverCardTriggerProps>(
-  ({ className, delay = 250, ...props }, ref) => (
-    <PreviewCardPrimitive.Trigger ref={ref} delay={delay} className={className} {...props} />
+  (
+    {
+      className,
+      delay = 'default',
+      closeDelay = hoverCardCloseDelay[typeof delay === 'number' ? 'default' : delay],
+      ...props
+    },
+    ref,
+  ) => (
+    <PreviewCardPrimitive.Trigger
+      ref={ref}
+      delay={resolveHoverDelay(delay)}
+      closeDelay={closeDelay}
+      className={className}
+      {...props}
+    />
   ),
 );
 HoverCardTrigger.displayName = 'HoverCardTrigger';

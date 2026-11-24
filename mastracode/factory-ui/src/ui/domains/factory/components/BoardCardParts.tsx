@@ -3,7 +3,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -51,11 +51,6 @@ export function WorkItemSourceIcon({
       {status}
     </span>
   );
-}
-
-// The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
-export function BoardTooltipDelay({ children }: { children: ReactNode }) {
-  return <TooltipProvider delay={400}>{children}</TooltipProvider>;
 }
 
 /**

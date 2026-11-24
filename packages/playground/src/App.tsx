@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -569,7 +570,9 @@ export default function AppWrapper() {
   return (
     <PlaygroundQueryClient>
       <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
-        <App />
+        <TooltipProvider>
+          <App />
+        </TooltipProvider>
       </StudioConfigProvider>
     </PlaygroundQueryClient>
   );

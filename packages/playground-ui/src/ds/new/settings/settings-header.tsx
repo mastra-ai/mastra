@@ -75,6 +75,8 @@ function SettingsTitleInfo({ info, children }: { info: ReactNode; children: Reac
   return (
     <Tooltip>
       <TooltipTrigger
+        // The title stands in for an info icon.
+        delay="instant"
         render={
           <span
             tabIndex={0}

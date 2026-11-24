@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from './hover-card';
@@ -29,6 +30,29 @@ describe('HoverCard', () => {
     );
 
     expect(screen.getByText('Card content')).toBeTruthy();
+  });
+
+  it('waits for the pointer by default, and opens at once with delay="instant"', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <HoverCard>
+          <HoverCardTrigger>Commit</HoverCardTrigger>
+          <HoverCardContent>Commit details</HoverCardContent>
+        </HoverCard>
+        <HoverCard>
+          <HoverCardTrigger delay="instant">Reason</HoverCardTrigger>
+          <HoverCardContent>Score reason</HoverCardContent>
+        </HoverCard>
+      </>,
+    );
+
+    await user.hover(screen.getByText('Commit'));
+    expect(screen.queryByText('Commit details')).toBeNull();
+    await screen.findByText('Commit details');
+
+    await user.hover(screen.getByText('Reason'));
+    expect(screen.getByText('Score reason')).toBeTruthy();
   });
 
   it('forwards className to the content popup', () => {

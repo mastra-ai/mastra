@@ -15,6 +15,7 @@ export default defineConfig({
     'playground-ui/icon-size-from-parent': 'error',
     'playground-ui/page-layout-props': 'error',
     'playground-ui/no-page-spacing': 'error',
+    'playground-ui/no-hover-delay-numbers': 'error',
     'mastra/import-order': 'off',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',

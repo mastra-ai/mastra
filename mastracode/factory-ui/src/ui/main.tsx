@@ -34,7 +34,7 @@ if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
-      <TooltipProvider delayDuration={0}>
+      <TooltipProvider>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider config={api}>
             <RouterProvider router={router} />

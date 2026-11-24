@@ -28,8 +28,8 @@ export function CompareCrumbSwitcher() {
   return (
     <HoverCard>
       <HoverCardTrigger
-        delay={0}
-        closeDelay={100}
+        // Hovering is all this does, so it opens like a menu.
+        delay="instant"
         render={
           <Button type="button" variant="ghost" size="icon-sm" aria-label="Show compared experiments">
             <IconChevronDownMedium />

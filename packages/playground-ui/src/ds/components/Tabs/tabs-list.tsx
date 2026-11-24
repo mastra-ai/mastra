@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { Fragment, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
@@ -190,135 +190,133 @@ export const TabList = ({
 
   return (
     <TabListContext.Provider value={listContext}>
-      <TooltipProvider delay={200}>
-        <div
-          ref={scrollRef}
-          data-slot="tabs-list-scroll"
+      <div
+        ref={scrollRef}
+        data-slot="tabs-list-scroll"
+        className={cn(
+          'relative w-full',
+          // Outside contained tabs, the "+N" menu follows the list in the row.
+          folds && !contained ? 'flex items-center gap-1' : 'overflow-x-auto',
+          sticky && 'sticky top-0 z-10 bg-background',
+        )}
+      >
+        <BaseTabs.List
+          data-slot="tabs-list"
+          data-overflow={hiddenTabs.length > 0 || undefined}
+          data-variant={resolvedVariant}
+          data-size={size}
           className={cn(
-            'relative w-full',
-            // Outside contained tabs, the "+N" menu follows the list in the row.
-            folds && !contained ? 'flex items-center gap-1' : 'overflow-x-auto',
-            sticky && 'sticky top-0 z-10 bg-background',
+            'group/tabs-list',
+            tabListVariants({ variant: resolvedVariant }),
+            // A filled pill track is the control: its outer box takes the rung (like SegmentedControl),
+            // and the tabs fill it inside the 2px inset.
+            pillTrack && cn(controlHeight[size], 'items-stretch p-0.5'),
+            className,
           )}
+          style={style}
         >
-          <BaseTabs.List
-            data-slot="tabs-list"
-            data-overflow={hiddenTabs.length > 0 || undefined}
-            data-variant={resolvedVariant}
-            data-size={size}
+          {children}
+          <BaseTabs.Indicator
             className={cn(
-              'group/tabs-list',
-              tabListVariants({ variant: resolvedVariant }),
-              // A filled pill track is the control: its outer box takes the rung (like SegmentedControl),
-              // and the tabs fill it inside the 2px inset.
-              pillTrack && cn(controlHeight[size], 'items-stretch p-0.5'),
-              className,
+              'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--fill-hover))]',
+              indicatorHeight,
+              'w-[var(--active-tab-width)]',
+              'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
             )}
-            style={style}
-          >
-            {children}
-            <BaseTabs.Indicator
-              className={cn(
-                'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--fill-hover))]',
-                indicatorHeight,
-                'w-[var(--active-tab-width)]',
-                'transition-[width,transform] duration-200 ease-in-out motion-reduce:transition-none',
-              )}
-              data-slot="tabs-indicator"
-              style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
-            />
-          </BaseTabs.List>
-          <div data-slot="tabs-close-actions">
-            {visibleClosableTabs.map(tab => (
-              <div
-                key={tab.value}
-                ref={element => {
-                  if (element) closeRefs.current.set(tab.value, element);
-                  else closeRefs.current.delete(tab.value);
-                }}
-                data-slot="tab-close-item"
-                data-visible={tabs?.value === tab.value || undefined}
-              >
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        tabIndex={tabs?.value === tab.value ? 0 : -1}
-                        data-slot="tab-close"
-                        onClick={tab.onClose}
-                        className={cn(
-                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-foreground',
-                          transitions.colors,
-                        )}
-                      />
-                    }
-                  >
-                    <span className="sr-only">Close {tab.label}</span>
-                    <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
-                  </TooltipTrigger>
-                  <TooltipContent>Close {tab.label}</TooltipContent>
-                </Tooltip>
-              </div>
-            ))}
-          </div>
-          {hiddenTabs.length > 0 && (
+            data-slot="tabs-indicator"
+            style={{ transform: 'translateY(var(--tabs-indicator-y, -50%)) translateX(var(--active-tab-left))' }}
+          />
+        </BaseTabs.List>
+        <div data-slot="tabs-close-actions">
+          {visibleClosableTabs.map(tab => (
             <div
-              data-slot="tabs-overflow"
-              style={contained ? { transform: `translateX(${overflowX}px)` } : undefined}
-              className={contained ? 'tabs-overflow' : undefined}
+              key={tab.value}
+              ref={element => {
+                if (element) closeRefs.current.set(tab.value, element);
+                else closeRefs.current.delete(tab.value);
+              }}
+              data-slot="tab-close-item"
+              data-visible={tabs?.value === tab.value || undefined}
             >
-              <DropdownMenu>
-                <DropdownMenu.Trigger
-                  aria-label={`${hiddenTabs.length} more tabs`}
-                  variant="ghost"
-                  size="sm"
-                  className="tabular-nums"
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      tabIndex={tabs?.value === tab.value ? 0 : -1}
+                      data-slot="tab-close"
+                      onClick={tab.onClose}
+                      className={cn(
+                        'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-foreground',
+                        transitions.colors,
+                      )}
+                    />
+                  }
                 >
-                  +{hiddenTabs.length}
-                  <IconChevronDownMedium aria-hidden="true" className="size-icon-xs" />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content>
-                  {hiddenTabs.map((tab, index) => (
-                    <Fragment key={tab.value}>
-                      <DropdownMenu.Item
-                        data-slot="tabs-overflow-tab"
-                        disabled={tab.disabled}
-                        className={tab.onClose ? 'pr-9' : undefined}
-                        style={{ gridArea: `${index + 1} / 1` }}
-                        onClick={() => {
-                          tabs?.select(tab.value);
-                          tab.onClick?.();
-                        }}
-                      >
-                        {tab.label}
-                      </DropdownMenu.Item>
-                      {tab.onClose ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <DropdownMenu.Item
-                                data-slot="tabs-overflow-close"
-                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-foreground data-[highlighted]:text-destructive-foreground"
-                                style={{ gridArea: `${index + 1} / 1` }}
-                                onClick={tab.onClose}
-                              />
-                            }
-                          >
-                            <span className="sr-only">Close {tab.label}</span>
-                            <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
-                          </TooltipTrigger>
-                          <TooltipContent side="right">Close {tab.label}</TooltipContent>
-                        </Tooltip>
-                      ) : null}
-                    </Fragment>
-                  ))}
-                </DropdownMenu.Content>
-              </DropdownMenu>
+                  <span className="sr-only">Close {tab.label}</span>
+                  <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
+                </TooltipTrigger>
+                <TooltipContent>Close {tab.label}</TooltipContent>
+              </Tooltip>
             </div>
-          )}
+          ))}
         </div>
-      </TooltipProvider>
+        {hiddenTabs.length > 0 && (
+          <div
+            data-slot="tabs-overflow"
+            style={contained ? { transform: `translateX(${overflowX}px)` } : undefined}
+            className={contained ? 'tabs-overflow' : undefined}
+          >
+            <DropdownMenu>
+              <DropdownMenu.Trigger
+                aria-label={`${hiddenTabs.length} more tabs`}
+                variant="ghost"
+                size="sm"
+                className="tabular-nums"
+              >
+                +{hiddenTabs.length}
+                <IconChevronDownMedium aria-hidden="true" className="size-icon-xs" />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content>
+                {hiddenTabs.map((tab, index) => (
+                  <Fragment key={tab.value}>
+                    <DropdownMenu.Item
+                      data-slot="tabs-overflow-tab"
+                      disabled={tab.disabled}
+                      className={tab.onClose ? 'pr-9' : undefined}
+                      style={{ gridArea: `${index + 1} / 1` }}
+                      onClick={() => {
+                        tabs?.select(tab.value);
+                        tab.onClick?.();
+                      }}
+                    >
+                      {tab.label}
+                    </DropdownMenu.Item>
+                    {tab.onClose ? (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <DropdownMenu.Item
+                              data-slot="tabs-overflow-close"
+                              className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-foreground data-[highlighted]:text-destructive-foreground"
+                              style={{ gridArea: `${index + 1} / 1` }}
+                              onClick={tab.onClose}
+                            />
+                          }
+                        >
+                          <span className="sr-only">Close {tab.label}</span>
+                          <IconCrossMedium aria-hidden="true" className="size-icon-xs" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right">Close {tab.label}</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </div>
+        )}
+      </div>
     </TabListContext.Provider>
   );
 };

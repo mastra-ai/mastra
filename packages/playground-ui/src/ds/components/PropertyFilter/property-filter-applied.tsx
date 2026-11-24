@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
 import { ButtonsGroup, ButtonsGroupText } from '../ButtonsGroup';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
@@ -61,26 +61,24 @@ function LockedTokenPill({ field, value, tooltipContent }: LockedTokenPillProps)
   const lockA11yLabel = `${field.label} filter is locked by context`;
 
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <ButtonsGroup
-            data-locked-field-id={field.id}
-            data-property-filter-pill="locked"
-            tabIndex={0}
-            aria-label={lockA11yLabel}
-          >
-            <ButtonsGroupText>{field.label}</ButtonsGroupText>
-            <ButtonsGroupText>is</ButtonsGroupText>
-            <ButtonsGroupText>{display}</ButtonsGroupText>
-            <ButtonsGroupText>
-              <IconLock />
-            </ButtonsGroupText>
-          </ButtonsGroup>
-        </TooltipTrigger>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <ButtonsGroup
+          data-locked-field-id={field.id}
+          data-property-filter-pill="locked"
+          tabIndex={0}
+          aria-label={lockA11yLabel}
+        >
+          <ButtonsGroupText>{field.label}</ButtonsGroupText>
+          <ButtonsGroupText>is</ButtonsGroupText>
+          <ButtonsGroupText>{display}</ButtonsGroupText>
+          <ButtonsGroupText>
+            <IconLock />
+          </ButtonsGroupText>
+        </ButtonsGroup>
+      </TooltipTrigger>
+      <TooltipContent>{tooltipContent}</TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -29,8 +29,6 @@ export function RuleCountCard({
   return (
     <HoverCard>
       <HoverCardTrigger
-        delay={0}
-        closeDelay={100}
         render={<Link to={to} />}
         className={cn(focusRing, 'w-fit rounded-sm underline decoration-dotted underline-offset-2')}
       >
