@@ -230,7 +230,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       await activeTurn.end(terminalList);
     } catch (error) {
       if (unsavedMessages.length > 0) {
-        await this.engine.persistMessages(unsavedMessages, activeTurn.threadId, activeTurn.resourceId).catch(() => {});
+        await this.engine
+          .persistMessages(
+            unsavedMessages,
+            activeTurn.threadId,
+            activeTurn.resourceId,
+            new Set(terminalList.getPersisted.remembered.db().map(message => message.id)),
+          )
+          .catch(() => {});
       }
       throw error;
     }
@@ -616,7 +623,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           const newInput = persistenceMessageList.get.input.db();
           const messagesToSave = [...newInput, ...newOutput];
           if (messagesToSave.length > 0 && context.threadId) {
-            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+            await this.engine.persistMessages(
+              messagesToSave,
+              context.threadId,
+              context.resourceId,
+              new Set(persistenceMessageList.getPersisted.remembered.db().map(message => message.id)),
+            );
           }
         }
 

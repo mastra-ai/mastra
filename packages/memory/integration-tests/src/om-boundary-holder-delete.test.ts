@@ -127,8 +127,10 @@ describe('Observational Memory saving a sealed message that holds a completed bo
     await memory.deleteMessages([id]);
     await om.persistMessages([live!], threadId, RESOURCE, list.getRememberedAndInputMessageIds());
 
-    const rows = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
-    expect(rows).toEqual([]);
+    expect((await memoryStore.listMessagesById({ messageIds: [id] })).messages).toEqual([]);
+    expect(list.getPersisted.remembered.db().map(m => m.id)).toContain(id);
+    await om.beginTurn({ threadId, resourceId: RESOURCE, messageList: list }).end();
+    expect((await memoryStore.listMessagesById({ messageIds: [id] })).messages).toEqual([]);
   });
 
   it('still saves the end marker onto a remembered message that is still stored', async () => {
@@ -151,6 +153,23 @@ describe('Observational Memory saving a sealed message that holds a completed bo
 
     const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
     expect(saved!.content.parts.some(part => part.type === 'data-om-observation-end')).toBe(true);
+    const list = new MessageList({ threadId, resourceId: RESOURCE });
+    list.add(holder, 'memory');
+    list.add(holder, 'response');
+    await om.beginTurn({ threadId, resourceId: RESOURCE, messageList: list }).end();
+    const rows = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.content.parts.some(part => part.type === 'data-om-observation-end')).toBe(true);
+  });
+
+  it.each(['input', 'response'] as const)('saves a new sealed %s boundary holder at turn end', async source => {
+    const { memoryStore, threadId, om } = await setup(`new-${source}`);
+    const id = `${threadId}-new-holder`;
+    const list = new MessageList({ threadId, resourceId: RESOURCE });
+    list.add(sealedBoundaryHolder(threadId, id, new Date(0)), source);
+    await om.beginTurn({ threadId, resourceId: RESOURCE, messageList: list }).end();
+    const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+    expect(saved?.content.parts.some(part => part.type === 'data-om-observation-end')).toBe(true);
   });
 
   it("still saves this turn's own sealed message that has no stored row yet", async () => {

@@ -2215,10 +2215,10 @@ export class ObservationalMemory {
    * Messages with observation markers are always saved (upserted) even if sealed,
    * because the markers need to be persisted to storage.
    *
-   * `rememberedIds` are the ids of messages that were loaded from storage at the start
-   * of the turn (including ones later promoted to the response bucket). A sealed one holding a completed boundary is upserted onto its stored
-   * row, so if that row is gone the message was deleted during the turn and is not saved
-   * back. A boundary holder that is not remembered is this turn's own and has no row yet.
+   * `rememberedIds` identifies memory-source candidates, including messages promoted to
+   * the response bucket. It excludes new input and output messages. A sealed boundary
+   * holder in this set is only resaved if its row still exists in storage; a missing row
+   * is not recreated. The existence check and save are not atomic.
    */
   async persistMessages(
     messagesToSave: MastraDBMessage[],
@@ -3002,7 +3002,7 @@ ${formattedMessages}
             messagesToSave,
             threadId,
             resourceId,
-            messageList.getRememberedAndInputMessageIds(),
+            new Set(messageList.getPersisted.remembered.db().map(message => message.id)),
           );
         }
 

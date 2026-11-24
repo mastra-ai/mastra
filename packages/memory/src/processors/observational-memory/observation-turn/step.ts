@@ -280,6 +280,7 @@ export class ObservationStep {
      */
     let inFlightIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
+      const rememberedIds = new Set(messageList.getPersisted.remembered.db().map(message => message.id));
       if (this.stepNumber > 0) {
         // Save messages from previous step. Drain the buckets synchronously so nothing that lands
         // in the run's MessageList during the save (e.g. a background tool result) is cleared with
@@ -310,7 +311,7 @@ export class ObservationStep {
             messageList.add(msg, 'memory');
           }
           try {
-            await om.persistMessages(messagesToSave, threadId, resourceId);
+            await om.persistMessages(messagesToSave, threadId, resourceId, rememberedIds);
           } catch (error) {
             restoreDrainedMessages(messageList, newInput, 'input');
             restoreDrainedMessages(messageList, newOutput, 'response');
@@ -332,7 +333,7 @@ export class ObservationStep {
         // these messages later is harmless.
         const pending = [...messageList.get.input.db(), ...messageList.get.response.db()];
         if (pending.length > 0) {
-          await om.persistMessages(pending, threadId, resourceId);
+          await om.persistMessages(pending, threadId, resourceId, rememberedIds);
         }
         // The in-flight prompt was just observed, but the model still needs it to answer —
         // protect it (and everything else pending) from cleanup by identity rather than
@@ -712,7 +713,7 @@ export class ObservationStep {
           messagesToSeal,
           threadId,
           resourceId,
-          this.turn.messageList.getRememberedAndInputMessageIds(),
+          new Set(this.turn.messageList.getPersisted.remembered.db().map(message => message.id)),
         );
       }
     }
