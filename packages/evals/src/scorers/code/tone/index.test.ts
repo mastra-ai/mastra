@@ -169,7 +169,7 @@ describe('ToneConsistencyMetric', () => {
 
     it('should score the last sentence when the response ends without punctuation', async () => {
       const scorer = createToneScorer();
-      const text = 'Thank you for reaching out. I am happy to help. This is terrible garbage and I hate it';
+      const text = 'Thank you for reaching out. I am happy to help. I hate it';
       const scoreFor = async (content: string) => {
         const output = [createTestMessage({ content, role: 'assistant', id: 'test-output' })];
         return (await scorer.run(createAgentTestRun({ output }))).score;
@@ -178,9 +178,13 @@ describe('ToneConsistencyMetric', () => {
       const withPeriod = await scoreFor(`${text}.`);
       expect(withPeriod).toBeLessThan(0.5);
       expect(await scoreFor(text)).toBe(withPeriod);
-      expect(await scoreFor(`${text}. [1, 2]`)).toBe(withPeriod);
-      expect(await scoreFor(text.replace('This is terrible garbage and I hate it', '**$&**'))).toBe(withPeriod);
-      expect(await scoreFor('Great news, you saved $3.50 today')).toBe(1);
+      expect(await scoreFor(text.replace('I hate it', '**$&**'))).toBe(withPeriod);
+      expect(await scoreFor(`${text}. [1, 2, 3]`)).toBe(withPeriod);
+      expect(await scoreFor(`${text}.\n\nBest wishes,\nAnna`)).toBe(withPeriod);
+      expect(await scoreFor('I am happy to help. Это очень плохо')).toBe(
+        await scoreFor('I am happy to help. Это очень плохо.'),
+      );
+      expect(await scoreFor('Great news, you saved $3.50 on your order today')).toBe(1);
     });
   });
 });
