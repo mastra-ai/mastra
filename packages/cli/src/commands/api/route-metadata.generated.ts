@@ -4582,7 +4582,8 @@ export const API_ROUTE_METADATA = {
       "storedPromptBlockId"
     ],
     "queryParams": [
-      "status"
+      "status",
+      "tag"
     ],
     "bodyParams": [],
     "hasQuery": true,

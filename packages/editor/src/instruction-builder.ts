@@ -20,8 +20,28 @@ export interface InstructionBuilderDeps {
   promptBlocksStorage: PromptBlocksStorage;
   /** When true, include draft (unpublished) prompt block refs. Used for preview mode. */
   includeDrafts?: boolean;
+  /**
+   * Version tag to resolve each prompt block reference with, e.g. "production". A referenced block that
+   * has this tag in its `metadata.versionTags` renders the tagged version; a block without it renders
+   * its published version as usual. A block that isn't published is still skipped. Ignored when
+   * `includeDrafts` is set.
+   */
+  versionTag?: string;
   /** Include the name and ID of each rendered prompt block reference in agent instructions. */
   includePromptBlockLabels?: boolean;
+}
+
+/** Request context key that selects a version tag for every prompt block an agent references. */
+export const PROMPT_VERSION_TAG_KEY = 'promptVersionTag';
+
+/** "published" and "draft" select a status, not a tag, so they can't name a prompt version here. */
+const RESERVED_VERSION_TAGS = new Set(['published', 'draft']);
+
+function getTaggedVersionId(block: StorageResolvedPromptBlockType, tag: string): string | undefined {
+  const tags = block.metadata?.versionTags;
+  if (!tags || typeof tags !== 'object' || Array.isArray(tags)) return undefined;
+  const versionId = (tags as Record<string, unknown>)[tag];
+  return typeof versionId === 'string' && versionId ? versionId : undefined;
 }
 
 /**
@@ -49,6 +69,8 @@ export async function resolveInstructionBlocks(
     ),
   );
 
+  const versionTag =
+    !deps.includeDrafts && deps.versionTag && !RESERVED_VERSION_TAGS.has(deps.versionTag) ? deps.versionTag : undefined;
   const resolvedBlocksMap = new Map<string, StorageResolvedPromptBlockType>();
   if (blockIds.length > 0) {
     // When includeDrafts is set, resolve the latest version (draft) instead of the published one
@@ -62,6 +84,18 @@ export async function resolveInstructionBlocks(
       if (result) {
         resolvedBlocksMap.set(blockIds[i]!, result);
       }
+    }
+
+    // Swap in the tagged version of each block that has the requested tag.
+    if (versionTag) {
+      await Promise.all(
+        Array.from(resolvedBlocksMap, async ([id, block]) => {
+          const versionId = getTaggedVersionId(block, versionTag);
+          if (!versionId) return;
+          const tagged = await deps.promptBlocksStorage.getByIdResolved(id, { versionId });
+          if (tagged) resolvedBlocksMap.set(id, tagged);
+        }),
+      );
     }
   }
 

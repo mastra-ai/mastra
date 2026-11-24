@@ -27,7 +27,7 @@ export const versionTagNameSchema = z
 export const versionTagsSchema = z.record(z.string(), z.unknown()).superRefine((tags, ctx) => {
   const names = Object.keys(tags);
   if (names.length > MAX_VERSION_TAGS) {
-    ctx.addIssue({ code: 'custom', message: `An agent can have at most ${MAX_VERSION_TAGS} version tags` });
+    ctx.addIssue({ code: 'custom', message: `At most ${MAX_VERSION_TAGS} version tags can be set` });
   }
   // Names are checked one by one (rather than as a record key schema) so the error says what is wrong with the name.
   for (const name of names) {

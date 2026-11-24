@@ -1,7 +1,7 @@
 import { HTTPException } from '../http-exception';
 import {
   storedPromptBlockIdPathParams,
-  statusQuerySchema,
+  promptBlockVersionQuerySchema,
   listStoredPromptBlocksQuerySchema,
   createStoredPromptBlockBodySchema,
   updateStoredPromptBlockBodySchema,
@@ -17,6 +17,7 @@ import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceM
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+import { assertVersionTagTargetsExist, getVersionTags, isReservedVersionTag } from './version-tags';
 
 const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = [
   'name',
@@ -99,14 +100,14 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
   path: '/stored/prompt-blocks/:storedPromptBlockId',
   responseType: 'json',
   pathParamSchema: storedPromptBlockIdPathParams,
-  queryParamSchema: statusQuerySchema,
+  queryParamSchema: promptBlockVersionQuerySchema,
   responseSchema: getStoredPromptBlockResponseSchema,
   summary: 'Get stored prompt block by ID',
   description:
-    'Returns a specific prompt block from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
+    'Returns a specific prompt block from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version, or ?tag=<name> for the version a tag in `metadata.versionTags` points at.',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
-  handler: async ({ mastra, storedPromptBlockId, status, requestContext }) => {
+  handler: async ({ mastra, storedPromptBlockId, status, tag, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -119,12 +120,30 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
       }
 
-      const promptBlock = await promptBlockStore.getByIdResolved(storedPromptBlockId, { status });
+      // "published" and "draft" are reserved tag names that select the matching status.
+      const namedTag = tag && !isReservedVersionTag(tag) ? tag : undefined;
+      const resolvedStatus = tag && isReservedVersionTag(tag) ? tag : status;
+
+      let promptBlock = await promptBlockStore.getByIdResolved(storedPromptBlockId, { status: resolvedStatus });
 
       if (!promptBlock) {
         throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
       }
+      // Scope is checked before the tag is looked up, so a caller outside the scope can't probe for tag names.
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
+
+      if (namedTag) {
+        const taggedVersionId = getVersionTags(promptBlock)[namedTag];
+        const tagged = taggedVersionId
+          ? await promptBlockStore.getByIdResolved(storedPromptBlockId, { versionId: taggedVersionId })
+          : null;
+        if (!tagged) {
+          throw new HTTPException(404, {
+            message: `Version tag "${namedTag}" not found for prompt block ${storedPromptBlockId}`,
+          });
+        }
+        promptBlock = tagged;
+      }
 
       const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
 
@@ -185,6 +204,13 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       const existing = await promptBlockStore.getById(id);
       if (existing) {
         throw new HTTPException(409, { message: `Prompt block with id ${id} already exists` });
+      }
+
+      // Tags point at existing versions, and a new prompt block has none yet.
+      if (Object.keys(getVersionTags({ metadata })).length > 0) {
+        throw new HTTPException(400, {
+          message: 'Version tags cannot be set when creating a prompt block. Create it, then tag one of its versions.',
+        });
       }
 
       await promptBlockStore.create({
@@ -267,6 +293,13 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
+      await assertVersionTagTargetsExist({
+        metadata,
+        existing,
+        entityId: storedPromptBlockId,
+        parentIdField: 'blockId',
+        getVersion: versionId => promptBlockStore.getVersion(versionId),
+      });
       const scopedMetadata =
         metadata !== undefined
           ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)

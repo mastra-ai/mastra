@@ -23,8 +23,10 @@ import {
   computeVersionDiffs,
   createVersionWithRetry,
   enforceRetentionLimit,
+  DEFAULT_MAX_VERSIONS,
 } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+import { getTaggedVersionIds, getTagsForVersion } from './version-tags';
 
 const SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'content', 'rules'] as const;
 
@@ -153,6 +155,8 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         promptBlockId,
         'blockId',
         promptBlock.activeVersionId,
+        DEFAULT_MAX_VERSIONS,
+        getTaggedVersionIds(promptBlock),
       );
 
       return version;
@@ -351,6 +355,8 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         promptBlockId,
         'blockId',
         promptBlock.activeVersionId,
+        DEFAULT_MAX_VERSIONS,
+        getTaggedVersionIds(promptBlock),
       );
 
       // Clear the editor cache so subsequent requests see the updated config
@@ -408,6 +414,14 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       if (promptBlock.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+        });
+      }
+
+      // A tag is a promise that the name keeps resolving, so a tagged version can't be deleted either.
+      const tags = getTagsForVersion(promptBlock, versionId);
+      if (tags.length > 0) {
+        throw new HTTPException(400, {
+          message: `Cannot delete a tagged version. Remove or move ${tags.map(tag => `"${tag}"`).join(', ')} first.`,
         });
       }
 

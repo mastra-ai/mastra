@@ -31,16 +31,20 @@ export class StoredPromptBlock extends BaseResource {
   /**
    * Retrieves details about the stored prompt block
    * @param requestContext - Optional request context to pass as query parameter
-   * @param options - Optional options like status filter
+   * @param options - Which version to return: a `status`, or a `tag` set in the prompt block's `metadata.versionTags`
    * @returns Promise containing stored prompt block details
    */
   details(
     requestContext?: RequestContext | Record<string, any>,
-    options?: { status?: 'draft' | 'published' | 'archived' },
+    options?: { status?: 'draft' | 'published' | 'archived'; tag?: string },
   ): Promise<StoredPromptBlockResponse> {
     const contextString = requestContextQueryString(requestContext);
-    const statusParam = options?.status ? `status=${options.status}` : '';
-    const url = `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}${contextString}${statusParam ? `${contextString ? '&' : '?'}${statusParam}` : ''}`;
+    const versionParam = options?.tag
+      ? `tag=${encodeURIComponent(options.tag)}`
+      : options?.status
+        ? `status=${options.status}`
+        : '';
+    const url = `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}${contextString}${versionParam ? `${contextString ? '&' : '?'}${versionParam}` : ''}`;
     return this.request(url);
   }
 

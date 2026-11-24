@@ -61,9 +61,9 @@ See the [Client SDK agents reference](/reference/client-js/agents#version-manage
 
 ## Version tags
 
-A version tag is a name, such as `production` or `staging`, that points at one version of a stored agent. Callers select the tag instead of a version ID, so moving the tag changes which version they get without changing their code.
+A version tag is a name, such as `production` or `staging`, that points at one version of a stored agent or prompt block. Callers select the tag instead of a version ID, so moving the tag changes which version they get without changing their code.
 
-The agent record stores tags in `metadata.versionTags`, a map of tag name to version ID, so setting a tag doesn't create a version or change the published version.
+The agent or prompt block record stores tags in `metadata.versionTags`, a map of tag name to version ID, so setting a tag doesn't create a version or change the published version.
 
 ### Set a tag
 
@@ -93,6 +93,8 @@ The update is rejected with a `400` response when:
 
 Tags can't be set in the request that creates an agent, because the agent has no versions yet.
 
+Prompt blocks take the same tag map, with the same rules, through `PATCH /api/stored/prompt-blocks/:storedPromptBlockId`.
+
 ### Select a version by tag
 
 Pass `tag` as a query parameter to read the tagged version:
@@ -113,6 +115,27 @@ curl -X POST http://localhost:4111/api/agents/support-agent/generate \
 ```
 
 When several selectors are sent, `versionId` wins over `tag`, and `tag` wins over `status`. A tag the agent doesn't have returns a `404` response. Sub-agents of a tagged agent resolve to their published versions unless the request sets [sub-agent versions](#sub-agent-versioning).
+
+### Select a prompt block version by tag
+
+Pass `tag` as a query parameter to read the tagged version of a prompt block. A tag the prompt block doesn't have returns a `404` response.
+
+```bash title="Read a tagged prompt block"
+curl http://localhost:4111/api/stored/prompt-blocks/tone-of-voice?tag=production
+```
+
+To run an agent with tagged prompt blocks, pass `promptVersionTag` in the request context. Every prompt block the agent references that has the tag renders its tagged version. A referenced prompt block without the tag renders its published version.
+
+```bash title="Run an agent with tagged prompt blocks"
+curl -X POST http://localhost:4111/api/agents/support-agent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{ "role": "user", "content": "Where is my order?" }],
+    "requestContext": { "promptVersionTag": "production" }
+  }'
+```
+
+`promptVersionTag` and `agentVersionTag` are independent, so one request can send both. The agent tag selects the agent version, and the prompt tag selects the versions of the prompt blocks that agent version references. The reserved names `published` and `draft` are ignored in `promptVersionTag`, so a run can't use it to load draft prompt blocks.
 
 ### Retention
 

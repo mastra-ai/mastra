@@ -236,12 +236,12 @@ type InputShared_Auxiliary_740 =
       arg: InputShared_Auxiliary_740;
     };
 
-type InputShared_Auxiliary_814 = {
+type InputShared_Auxiliary_815 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_814[] | undefined;
+  children?: InputShared_Auxiliary_815[] | undefined;
 };
 
 type Shared_Auxiliary_799 = {
@@ -18509,7 +18509,12 @@ export type GetStoredPromptBlocksStoredPromptBlockId_PathParams = {
   storedPromptBlockId: string;
 };
 
-export type GetStoredPromptBlocksStoredPromptBlockId_QueryParams = GetStoredAgentsStoredAgentId_QueryParams;
+export type GetStoredPromptBlocksStoredPromptBlockId_QueryParams = {
+  /** Which version to resolve: published (active version) or draft (latest version) */
+  status?: ('draft' | 'published' | 'archived') | undefined;
+  /** Version tag to resolve, e.g. "production". Tags are set on the prompt block's `metadata.versionTags`. "published" and "draft" are reserved and select the matching status. */
+  tag?: string | undefined;
+};
 
 export type GetStoredPromptBlocksStoredPromptBlockId_Response = Shared_Type_81;
 
@@ -19970,7 +19975,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_814[] | undefined;
+  files?: InputShared_Auxiliary_815[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -20028,7 +20033,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_814[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_815[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 
 import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
 import { ruleGroupSchema } from './rule-group';
+import { metadataWithVersionTagsSchema } from './version-tags';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -21,6 +22,19 @@ const storageOrderBySchema = z.object({
 });
 
 export { statusQuerySchema };
+
+/**
+ * Which version of a prompt block to return. `tag` wins over `status` when both are sent.
+ */
+export const promptBlockVersionQuerySchema = statusQuerySchema.extend({
+  tag: z
+    .string()
+    .optional()
+    .describe(
+      'Version tag to resolve, e.g. "production". Tags are set on the prompt block\'s `metadata.versionTags`. ' +
+        '"published" and "draft" are reserved and select the matching status.',
+    ),
+});
 
 export const listStoredPromptBlocksQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
@@ -58,7 +72,7 @@ export const createStoredPromptBlockBodySchema = z
 export const updateStoredPromptBlockBodySchema = z
   .object({
     authorId: z.string().optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
+    metadata: metadataWithVersionTagsSchema.optional(),
   })
   .merge(snapshotConfigSchema.partial());
 

@@ -41,7 +41,7 @@ import { resolveStoredToolProviders } from '@mastra/core/tool-provider';
 import type { ToolProviders } from '@mastra/core/tool-provider';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
-import { resolveInstructionBlocks } from '../instruction-builder';
+import { PROMPT_VERSION_TAG_KEY, resolveInstructionBlocks } from '../instruction-builder';
 import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-graph-hydrator';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
@@ -1298,9 +1298,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const promptBlocksStore = await storage.getStore('promptBlocks');
       if (!promptBlocksStore) throw new Error('Prompt blocks storage domain is not available');
       const context = requestContext.toJSON();
+      const versionTag = requestContext.get(PROMPT_VERSION_TAG_KEY);
       return resolveInstructionBlocks(blocks, context, {
         promptBlocksStorage: promptBlocksStore,
         includePromptBlockLabels: true,
+        ...(typeof versionTag === 'string' && versionTag ? { versionTag } : {}),
       });
     };
   }
