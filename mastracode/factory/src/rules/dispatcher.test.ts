@@ -3390,7 +3390,7 @@ describe('FactoryDecisionDispatcher', () => {
         leaseExpiresAt: new Date(lostAt.getTime() + 1_000),
         limit: 1,
       });
-      const { controller, session } = createSession(undefined, {
+      const { controller, session, emitAgentEnd } = createSession(undefined, {
         signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
         emitAgentEndDuringSignal: true,
         agentEndReason: 'complete',
@@ -3430,7 +3430,7 @@ describe('FactoryDecisionDispatcher', () => {
           primeCredentials: vi.fn(async () => {}),
         });
       const dispatcher = dispatcherAs('worker-2');
-      return { seed, storage, session, dispatcher, dispatcherAs, binding, lost: lost!, lostAt };
+      return { seed, storage, session, emitAgentEnd, dispatcher, dispatcherAs, binding, lost: lost!, lostAt };
     }
 
     const endedRecords = async (seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>) =>
@@ -3483,7 +3483,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
 
     it('does not send the continuation when the run is stopped while this worker takes it over', async () => {
-      const { seed, session, storage, dispatcher, binding, lost, lostAt } = await lostBuild(
+      const { seed, session, emitAgentEnd, storage, dispatcher, binding, lost, lostAt } = await lostBuild(
         'lost-stopped-during-takeover',
         Date.now() - 60_000,
       );
@@ -3498,8 +3498,41 @@ describe('FactoryDecisionDispatcher', () => {
 
       expect(session.sendSignal).not.toHaveBeenCalled();
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).not.toBe('succeeded');
-      const resume = await seed.openRuns.get(`${lost.id}:resume:2`);
-      expect(isOpenRunLiveElsewhere(resume!.run, 'worker-3')).toBe(false);
+      const resumeId = `${lost.id}:resume:2`;
+      await expect(seed.openRuns.get(resumeId)).resolves.toMatchObject({ end: { reason: 'aborted' } });
+
+      // The session's next run end (a person's turn, say) is not the stopped resume completing.
+      emitAgentEnd('complete');
+      await waitForSessionRunAudit(session);
+      const ended = await endedRecords(seed);
+      expect(ended).not.toContainEqual([resumeId, 'complete']);
+      expect(ended).toContainEqual([resumeId, 'aborted']);
+    });
+
+    it('ends the resume it reserved as aborted when the resume fails for good', async () => {
+      const { seed, session, storage, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-resume-failed-for-good',
+        Date.now() - 60_000,
+      );
+      const [claimed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      session.sendSignal.mockImplementation(() => ({
+        accepted: Promise.reject(new Error('session gone')),
+      }));
+      // The final attempt: its failure is terminal.
+      for (let attempt = claimed!.attempts; attempt < 5; attempt++) {
+        await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000 + attempt * 3_600_000));
+        if ((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status === 'failed') break;
+      }
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
+      const resumes = (await seed.openRuns.listByThread(session.thread.getId())).filter(run =>
+        run.kickoffId.includes(':resume:'),
+      );
+      // Each attempt took the previous one's reservation over; the last one's is what remains.
+      expect(resumes).toHaveLength(1);
+      for (const resume of resumes) {
+        await expect(seed.openRuns.get(resume.kickoffId)).resolves.toMatchObject({ end: { reason: 'aborted' } });
+      }
     });
 
     it('postpones, without spending an attempt or recording anything, a takeover the lost run won back', async () => {

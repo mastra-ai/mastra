@@ -839,6 +839,8 @@ export class FactoryDecisionDispatcher {
   readonly #reviewReplayed = new WeakSet<FactoryDeferredDecisionRecord>();
   /** The session a review run was delivered to, so every later status step can link it. */
   readonly #reviewSessions = new WeakMap<FactoryDeferredDecisionRecord, { sessionId: string; threadId: string }>();
+  /** The resume reserved for a lost run, until its continuation runs. */
+  readonly #reservedResumes = new WeakMap<FactoryDeferredDecisionRecord, string>();
   /** Last pending status-comment write per run, so writes stay ordered. */
   /**
    * Per review run: the write chain, the newest step issued, and how many
@@ -1288,6 +1290,16 @@ export class FactoryDecisionDispatcher {
         });
       }
     } catch (error) {
+      const terminal =
+        !(error instanceof FactoryDecisionPostponed) &&
+        (error instanceof FactoryDecisionSuperseded ||
+          isTerminalFailure(record.attempts, factoryDispatchFailureCode(error)) ||
+          (error instanceof FactoryRuleRejectedError && error.settled));
+      // A resume reserved for a lost run that will not be retried ends there, aborted: a run end
+      // the session reports later then cannot record it as the run that completed.
+      const resume = this.#reservedResumes.get(record);
+      this.#reservedResumes.delete(record);
+      if (resume && terminal) await this.#endReservedResume(resume);
       if (error instanceof FactoryDecisionSuperseded) {
         await this.#storage.supersedeLeasedDecision(leaseIdentity(record, this.#ownerId), new Date());
         await this.#reviewStatus(record, record.decision, { phase: 'cancelled', endedAt: new Date() });
@@ -1302,8 +1314,6 @@ export class FactoryDecisionDispatcher {
         return;
       }
       const failureCode = factoryDispatchFailureCode(error);
-      const terminal =
-        isTerminalFailure(record.attempts, failureCode) || (error instanceof FactoryRuleRejectedError && error.settled);
       const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
@@ -1333,6 +1343,14 @@ export class FactoryDecisionDispatcher {
    * wait covers runs in the ledger; a run that landed but died before
    * registering there can still be live in this process, so wait it out too.
    */
+  async #endReservedResume(kickoffId: string): Promise<void> {
+    try {
+      await this.#openRuns?.end(kickoffId, { reason: 'aborted', endedAt: Date.now() });
+    } catch (error) {
+      console.warn(`[factory] could not end the abandoned resume ${kickoffId}:`, error);
+    }
+  }
+
   async #replayLanded(
     record: FactoryDeferredDecisionRecord,
     decision: unknown,
@@ -1762,6 +1780,7 @@ export class FactoryDecisionDispatcher {
             // The next claim reads the ledger again and waits on, replays or resumes it.
             if (!tookOver) throw new FactoryDecisionPostponed();
             deliveryId = resumeId;
+            this.#reservedResumes.set(record, resumeId);
           } else {
             // A continuation that landed stands for the kickoff it resumed; nothing interrupted it,
             // so its run ended and it is what a replay settles from.
@@ -1887,10 +1906,7 @@ export class FactoryDecisionDispatcher {
           };
           const sendKickoff = async () => {
             // A stop asked for while this worker took the lost run over is not undone by the resume.
-            if (resuming && (await stopRequested())) {
-              await releaseResume();
-              throw new FactoryRunStopped();
-            }
+            if (resuming && (await stopRequested())) throw new FactoryRunStopped();
             await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
             const result = session.sendSignal(
               {
@@ -1951,6 +1967,7 @@ export class FactoryDecisionDispatcher {
               run.arm();
               settled = await sendKickoff();
             }
+            this.#reservedResumes.delete(record);
             if (goal) await this.#remindPhaseGoal(record, goal, session, binding, requestContext);
             await this.#recordRunStart(
               session,
