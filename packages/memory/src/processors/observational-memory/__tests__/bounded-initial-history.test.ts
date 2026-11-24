@@ -82,6 +82,70 @@ async function finishCatchUp(om: NonNullable<Awaited<Memory['omEngine']>>) {
 }
 
 describe('bounded initial observation history', () => {
+  it.each([false, true])(
+    'does not re-observe retained activated history after cloning (partial: %s)',
+    async partial => {
+      const { om, rows, store, open, model } = await setup('thread', true, true, 100_000);
+      rows[0]!.createdAt = new Date(timestamp.getTime() - 1000);
+      await store.saveMessages({ messages: [rows[0]!] });
+      const buffered = await om.buffer({
+        threadId,
+        resourceId,
+        messages: [rows[0]!],
+        skipMinimumTokenCheck: true,
+      });
+      expect(buffered.buffered).toBe(true);
+      const activated = await om.activate({ threadId, resourceId, pendingTokens: 100_000 });
+      expect(activated.activatedMessageIds).toEqual([rows[0]!.id]);
+      if (partial) {
+        await store.saveMessages({
+          messages: [
+            {
+              ...rows[0]!,
+              content: {
+                format: 2,
+                parts: [
+                  ...rows[0]!.content.parts,
+                  {
+                    type: 'data-om-observation-start',
+                    data: { cycleId: 'covered-prefix', operationType: 'observation' },
+                  },
+                  {
+                    type: 'data-om-observation-end',
+                    data: { cycleId: 'covered-prefix', operationType: 'observation' },
+                  },
+                  { type: 'text', text: 'Appended after activation.' },
+                ],
+              },
+            },
+          ],
+        });
+      }
+      const memory = open();
+      const { thread, messageIdMap } = await memory.cloneThread({ sourceThreadId: threadId });
+      const clonedMessage = (await store.listMessagesById({ messageIds: [messageIdMap![rows[0]!.id]!] })).messages[0]!;
+      await store.saveMessages({
+        messages: [
+          {
+            ...clonedMessage,
+            content: {
+              ...clonedMessage.content,
+              parts: [...clonedMessage.content.parts, { type: 'text', text: 'Appended to clone.' }],
+            },
+          },
+        ],
+      });
+      const cloned = (await memory.omEngine)!;
+      const observer = vi.spyOn(model, 'doStream');
+      await cloned.observe({ threadId: thread.id, resourceId, force: true });
+      const prompt = JSON.stringify(observer.mock.calls.map(call => call[0].prompt));
+      expect(prompt).toContain('Fact 1.');
+      expect(prompt).not.toContain('Fact 0.');
+      expect(prompt).toContain('Appended to clone.');
+      if (partial) expect(prompt).toContain('Appended after activation.');
+    },
+  );
+
   it('observes an unread timestamp tie in a clone without re-observing the source prefix', async () => {
     const { om, rows, store, open, model } = await setup('thread', false, true, 100_000);
     const record = (await om.getRecord(threadId, resourceId))!;

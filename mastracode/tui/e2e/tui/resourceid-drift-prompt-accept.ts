@@ -184,10 +184,8 @@ export const resourceidDriftPromptAcceptScenario: McE2eScenario = {
         `generation/origin: expected ${SOURCE_GENERATION}/${SOURCE_ORIGIN}, got ${clonedGeneration || '<missing>'}/${clonedOrigin || '<missing>'}`,
       );
     }
-    if (clonedLastObservedAt !== SOURCE_LAST_OBSERVED_AT) {
-      mismatches.push(
-        `lastObservedAt: expected ${SOURCE_LAST_OBSERVED_AT}, got ${clonedLastObservedAt || '<missing>'}`,
-      );
+    if (clonedLastObservedAt !== '') {
+      mismatches.push(`lastObservedAt: expected cleared clone timestamp, got ${clonedLastObservedAt}`);
     }
     if (
       JSON.stringify(clonedObservedMessageIds) !== JSON.stringify(clonedMessageIds) ||

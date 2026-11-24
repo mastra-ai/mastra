@@ -2299,7 +2299,7 @@ export class ObservationalMemory {
     // Preserve that record's existing per-thread strategy instead of inventing a cursor.
     if (resourceScope && record.lastObservedAt && !history) return undefined;
     const coverage = new Map<string, Promise<Date | undefined>>();
-    return loadObservationHistory({
+    const window = await loadObservationHistory({
       storage: this.storage,
       threadId: resourceScope && resourceId ? undefined : threadId,
       resourceId,
@@ -2324,6 +2324,14 @@ export class ObservationalMemory {
         return !lastObservedAt || new Date(message.createdAt) > lastObservedAt;
       },
     });
+    return {
+      ...window,
+      messages: window.messages.flatMap(message => {
+        if (this.hasInProgressObservation(message)) return [message];
+        const unobserved = this.createUnobservedMessage(message);
+        return unobserved ? [unobserved] : [];
+      }),
+    };
   }
 
   private async loadMessagesFromStorage(

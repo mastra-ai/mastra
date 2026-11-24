@@ -6,6 +6,105 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { expect, it, vi } from 'vitest';
 
+it.each([false, true])('preserves activated LibSQL coverage and later parts (partial boundary: %s)', async partial => {
+  const directory = await mkdtemp(join(tmpdir(), 'om-clone-activated-'));
+  const storage = new LibSQLStore({ id: 'clone-activated', url: `file:${join(directory, 'history.db')}` });
+  const prompts: string[] = [];
+  const model = new MockLanguageModelV2({
+    doStream: async options => {
+      prompts.push(JSON.stringify(options.prompt));
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 'obs' },
+          { type: 'text-delta', id: 'obs', delta: '<observations>- Activated fact preserved.</observations>' },
+          { type: 'text-end', id: 'obs' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+      };
+    },
+  });
+  try {
+    const memory = new Memory({
+      storage,
+      options: {
+        semanticRecall: false,
+        generateTitle: false,
+        workingMemory: { enabled: false },
+        observationalMemory: {
+          scope: 'thread',
+          observation: { model, messageTokens: 100_000, bufferTokens: 0.2 },
+          reflection: { model, observationTokens: 100_000 },
+        },
+      },
+    });
+    const threadId = 'clone-activated';
+    const resourceId = 'clone-resource';
+    await memory.createThread({ threadId, resourceId, title: 'Activated history' });
+    const rows = ['Activated source fact.', 'Unread source fact.'].map((text, index) => ({
+      id: `clone-fact-${index}`,
+      threadId,
+      resourceId,
+      role: 'user' as const,
+      createdAt: new Date(Date.UTC(2026, 0, 1) + index * 1000),
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
+    }));
+    await memory.saveMessages({ messages: rows });
+    const om = (await memory.omEngine)!;
+    expect(
+      (await om.buffer({ threadId, resourceId, messages: [rows[0]!], skipMinimumTokenCheck: true })).buffered,
+    ).toBe(true);
+    const activated = await om.activate({ threadId, resourceId, pendingTokens: 100_000 });
+    expect(activated.activatedMessageIds).toEqual([rows[0]!.id]);
+    expect(activated.record.bufferedObservationChunks ?? []).toHaveLength(0);
+    if (partial) {
+      await memory.saveMessages({
+        messages: [
+          {
+            ...rows[0]!,
+            content: {
+              format: 2,
+              parts: [
+                ...rows[0]!.content.parts,
+                {
+                  type: 'data-om-observation-start',
+                  data: { cycleId: 'covered-prefix', operationType: 'observation' },
+                },
+                { type: 'data-om-observation-end', data: { cycleId: 'covered-prefix', operationType: 'observation' } },
+                { type: 'text', text: 'New content appended to the activated message.' },
+              ],
+            },
+          },
+        ],
+      });
+    }
+    prompts.length = 0;
+    const { thread, messageIdMap } = await memory.cloneThread({ sourceThreadId: threadId });
+    const store = (await storage.getStore('memory'))!;
+    const clonedMessage = (await store.listMessagesById({ messageIds: [messageIdMap![rows[0]!.id]!] })).messages[0]!;
+    await memory.saveMessages({
+      messages: [
+        {
+          ...clonedMessage,
+          content: {
+            ...clonedMessage.content,
+            parts: [...clonedMessage.content.parts, { type: 'text', text: 'Appended after cloning.' }],
+          },
+        },
+      ],
+    });
+    const result = await om.observe({ threadId: thread.id, resourceId, force: true });
+    expect(result.observed).toBe(true);
+    expect(prompts.join('\n')).toContain('Unread source fact.');
+    expect(prompts.join('\n')).not.toContain('Activated source fact.');
+    expect(prompts.join('\n')).toContain('Appended after cloning.');
+    if (partial) expect(prompts.join('\n')).toContain('New content appended to the activated message.');
+  } finally {
+    await storage.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 it('bootstraps and observes more than one reverse page of LibSQL history', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'om-bootstrap-pages-'));
   const storage = new LibSQLStore({ id: 'bootstrap-pages', url: `file:${join(directory, 'history.db')}` });
