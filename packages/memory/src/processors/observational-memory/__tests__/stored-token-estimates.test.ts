@@ -99,6 +99,44 @@ describe('hash-checked per-part token counts', () => {
     expect(new TokenCounter().countMessage(forged)).toBe(expected);
   });
 
+  it.each([
+    ['an object', () => ({ toJSON: () => ({ report: text }) })],
+    ['a string', () => ({ toJSON: () => text })],
+    ['a Date', () => ({ when: new Date(0), note: text })],
+  ])('a tool result whose toJSON() returns %s is reused after a save and reload without recounting', (_n, make) => {
+    const live = message([
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'lookup', args: {}, result: make() },
+      } as Part,
+    ]);
+    new TokenCounter().countMessage(live);
+    // Storage serializes toJSON(), so the first read of the stored form is what gets saved back.
+    const stored = JSON.parse(JSON.stringify(live)) as MastraDBMessage;
+    const first = new TokenCounter().countMessage(stored);
+    const reloaded = JSON.parse(JSON.stringify(stored)) as MastraDBMessage;
+    expect(Object.keys(estimateOf(reloaded.content.parts[0]!)).length).toBeGreaterThan(0);
+    countSpy.mockClear();
+    expect(new TokenCounter().countMessage(reloaded)).toBe(first);
+    expect(countSpy.mock.calls.map(call => call[0])).toEqual(['assistant']);
+  });
+
+  it('upgrade from the trusted-count format: legacy v9 entries are ignored and messages without counts are counted', () => {
+    const msg = message([{ type: 'text', text }]);
+    const expected = new TokenCounter().countMessage(msg);
+    const legacy = message([
+      {
+        type: 'text',
+        text,
+        providerMetadata: {
+          mastra: { tokenEstimate: { 'text:legacy': { v: 9, source: 'trusted', key: 'text:legacy', tokens: 1 } } },
+        },
+      } as Part,
+    ]);
+    expect(new TokenCounter().countMessage(legacy)).toBe(expected);
+    expect(new TokenCounter().countMessage(message([{ type: 'text', text }], 'bare'))).toBe(expected);
+  });
+
   it('a custom estimator never reads counts made by the stock one', () => {
     const msg = message([{ type: 'text', text }]);
     new TokenCounter().countMessage(msg);
