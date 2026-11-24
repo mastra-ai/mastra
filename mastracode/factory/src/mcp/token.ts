@@ -25,40 +25,45 @@ export type McpTokenVerifier = (token: string) => Promise<McpCaller | null>;
  * Returns `null` for a token that isn't valid here; throws when the signing
  * keys or the caller can't be fetched, so an outage isn't mistaken for a bad
  * sign-in. Fetching metadata or keys gives up after `timeoutMs` (default 5s).
+ * Metadata is read again after `metadataMaxAgeMs` (default 10 minutes), so a
+ * server that moves its keys to a new URL is followed without a restart.
  */
 export function createMcpTokenVerifier(options: {
   authorizationServers: string[];
   resource: string;
   resolveCaller?: McpCallerResolver;
   timeoutMs?: number;
+  metadataMaxAgeMs?: number;
 }): McpTokenVerifier {
   const timeoutMs = options.timeoutMs ?? 5_000;
+  const metadataMaxAgeMs = options.metadataMaxAgeMs ?? 10 * 60_000;
   const issuers = new Set(options.authorizationServers.map(trimSlash));
-  const keySets = new Map<string, Promise<JWTVerifyGetKey>>();
+  const keySets = new Map<string, { keys: Promise<JWTVerifyGetKey>; readAt: number }>();
 
   const keysFor = (issuer: string) => {
-    let keys = keySets.get(issuer);
-    if (!keys) {
-      keys = (async () => {
-        const discover = (url: string) => fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-        // RFC 8414 puts the well-known segment before the issuer's path; OpenID
-        // Connect discovery appends it.
-        const { origin, pathname } = new URL(issuer);
-        let response = await discover(`${origin}/.well-known/oauth-authorization-server${trimSlash(pathname)}`);
-        if (response.status === 404) response = await discover(`${issuer}/.well-known/openid-configuration`);
-        if (!response.ok) throw new Error(`authorization server metadata answered ${response.status}`);
-        const metadata = (await response.json()) as { issuer?: unknown; jwks_uri?: unknown };
-        if (typeof metadata.issuer !== 'string' || trimSlash(metadata.issuer) !== issuer) {
-          throw new Error('authorization server metadata names another issuer');
-        }
-        const { jwks_uri } = metadata;
-        if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');
-        return createRemoteJWKSet(new URL(jwks_uri), { timeoutDuration: timeoutMs });
-      })();
-      keySets.set(issuer, keys);
-      // Retry a failed lookup on the next request instead of caching the failure.
-      keys.catch(() => keySets.delete(issuer));
-    }
+    const cached = keySets.get(issuer);
+    if (cached && Date.now() - cached.readAt < metadataMaxAgeMs) return cached.keys;
+    // Concurrent requests share one lookup: it's cached before it settles.
+    const keys = (async () => {
+      const discover = (url: string) => fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      // RFC 8414 puts the well-known segment before the issuer's path; OpenID
+      // Connect discovery appends it.
+      const { origin, pathname } = new URL(issuer);
+      let response = await discover(`${origin}/.well-known/oauth-authorization-server${trimSlash(pathname)}`);
+      if (response.status === 404) response = await discover(`${issuer}/.well-known/openid-configuration`);
+      if (!response.ok) throw new Error(`authorization server metadata answered ${response.status}`);
+      const metadata = (await response.json()) as { issuer?: unknown; jwks_uri?: unknown };
+      if (typeof metadata.issuer !== 'string' || trimSlash(metadata.issuer) !== issuer) {
+        throw new Error('authorization server metadata names another issuer');
+      }
+      const { jwks_uri } = metadata;
+      if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');
+      return createRemoteJWKSet(new URL(jwks_uri), { timeoutDuration: timeoutMs });
+    })();
+    const entry = { keys, readAt: Date.now() };
+    keySets.set(issuer, entry);
+    // Retry a failed lookup on the next request instead of caching the failure.
+    keys.catch(() => keySets.get(issuer) === entry && keySets.delete(issuer));
     return keys;
   };
 

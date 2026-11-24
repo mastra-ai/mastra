@@ -82,8 +82,12 @@ const USERS: Record<string, { orgId?: string; userId: string }> = {
  * at `<path>/.well-known/openid-configuration`.
  */
 async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
-  const { publicKey, privateKey } = await generateKeyPair('RS256');
-  const jwk = { ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
+  const signingKey = async (kid: string) => {
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    return { kid, privateKey, jwk: { ...(await exportJWK(publicKey)), kid, alg: 'RS256', use: 'sig' } };
+  };
+  let key = await signingKey('key-1');
+  let jwksPath = `${path}/oauth2/jwks`;
   let issuer = '';
   const outage: Record<'metadata' | 'jwks', false | 'down' | 'hang'> = { metadata: false, jwks: false };
   const hanging: Array<() => void> = [];
@@ -98,23 +102,29 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
     if (req.url === document) {
       if (outage.metadata === 'hang') hanging.push(() => res.end());
       else if (outage.metadata) res.writeHead(503).end('{}');
-      else res.end(JSON.stringify({ issuer: discovery.issuer ?? issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
-    } else if (req.url === `${path}/oauth2/jwks`) {
+      else res.end(JSON.stringify({ issuer: discovery.issuer ?? issuer, jwks_uri: `${origin}${jwksPath}` }));
+    } else if (req.url === jwksPath) {
       if (outage.jwks === 'hang') hanging.push(() => res.end());
       else if (outage.jwks) res.writeHead(503).end('{}');
-      else res.end(JSON.stringify({ keys: [jwk] }));
+      else res.end(JSON.stringify({ keys: [key.jwk] }));
     } else {
       res.writeHead(404).end('{}');
     }
   });
   servers.push(server);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}${path}`;
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  issuer = `${origin}${path}`;
   return {
     issuer,
     outage,
     discovery,
-    sign: (claims: JWTPayload, options: SignOptions = {}) => sign(privateKey, issuer, claims, options),
+    /** Sign with a new key published at a new JWKS URL, retiring the old URL. */
+    rotateKeys: async (newJwksPath: string) => {
+      key = await signingKey(`key-${Date.now()}`);
+      jwksPath = newJwksPath;
+    },
+    sign: (claims: JWTPayload, options: SignOptions = {}) => sign(key.privateKey, key.kid, issuer, claims, options),
   };
 }
 
@@ -124,9 +134,9 @@ interface SignOptions {
   expiresIn?: string;
 }
 
-function sign(key: CryptoKey, issuer: string, claims: JWTPayload, options: SignOptions): Promise<string> {
+function sign(key: CryptoKey, kid: string, issuer: string, claims: JWTPayload, options: SignOptions): Promise<string> {
   const jwt = new SignJWT(claims)
-    .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+    .setProtectedHeader({ alg: 'RS256', kid })
     .setIssuer(options.issuer ?? issuer)
     .setIssuedAt()
     .setExpirationTime(options.expiresIn ?? '1h');
@@ -139,7 +149,14 @@ function sign(key: CryptoKey, issuer: string, claims: JWTPayload, options: SignO
 const signedTokens = new Map<string, string>();
 const bearer = (token: string) => signedTokens.get(token) ?? token;
 
-async function setup(options: { resolveCaller?: McpCallerResolver; timeoutMs?: number; issuerPath?: string } = {}) {
+async function setup(
+  options: {
+    resolveCaller?: McpCallerResolver;
+    timeoutMs?: number;
+    issuerPath?: string;
+    metadataMaxAgeMs?: number;
+  } = {},
+) {
   const seed = await createFactoryStorageForTests();
   const authServer = await startAuthorizationServer({ path: options.issuerPath });
   for (const [name, user] of Object.entries(USERS)) {
@@ -193,6 +210,7 @@ async function setup(options: { resolveCaller?: McpCallerResolver; timeoutMs?: n
       resource: RESOURCE,
       ...(options.resolveCaller ? { resolveCaller: options.resolveCaller } : {}),
       ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.metadataMaxAgeMs ? { metadataMaxAgeMs: options.metadataMaxAgeMs } : {}),
     }),
     publicOrigin: PUBLIC_ORIGIN,
     authorizationServers: [authServer.issuer],
@@ -471,6 +489,17 @@ describe('Factory MCP server', () => {
     authServer.discovery.issuer = 'https://attacker.example.com';
 
     expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
+  });
+
+  it('follows an authorization server that moves its signing keys to a new URL', async () => {
+    const { url, authServer } = await setup({ metadataMaxAgeMs: 100 });
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+
+    await authServer.rotateKeys('/oauth2/jwks-2026');
+    const token = await authServer.sign({ sub: 'alice', org_id: 'org-1' });
+    // Once the metadata is read again, the Factory finds the new key at the new URL.
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect((await claudeRequest(url, 'server/discover', {}, token)).status).toBe(200);
   });
 
   it('accepts tokens from an authorization server that only publishes OpenID Connect discovery', async () => {
