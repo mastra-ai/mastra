@@ -65,6 +65,12 @@ jobs:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 2
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
@@ -125,6 +131,12 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 2
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -192,6 +204,12 @@ jobs:
         with:
           fetch-depth: 2
           ref: ${{ inputs.head_sha }}
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -275,6 +293,8 @@ jobs:
     uses: ./.github/workflows/test-durable-streams.yml
     permissions:
       contents: read
+      # Mounts the StarSling Disks pnpm store (setup-pnpm-node).
+      id-token: write
     with:
       head_sha: ${{ inputs.head_sha }}
     secrets:
@@ -287,8 +307,12 @@ jobs:
     needs: [unit-test, affected-unit-test, e2e-test]
     # Required check: stays always() so a run cancelled mid-tests still reaches the
     # "Require every test job to finish" step and fails. A skipped required job counts
-    # as a pass. The heavy steps below keep the implicit success() guard, which is
-    # false once the run is cancelled, so a superseded run spends seconds here.
+    # as a pass. The implicit success() guard does not skip the heavy steps below once the
+    # run is cancelled (this job starts after the cancel and its own steps all succeed), so
+    # they skip when a test job ended cancelled: a superseded run then frees its runner in
+    # seconds instead of checking out, installing and merging reports nobody reads. A shard
+    # that hit its timeout also ends cancelled, which skips the merged report too; each
+    # shard's own log still lists its failures.
     if: always()
     permissions:
       actions: read
@@ -301,7 +325,7 @@ jobs:
         run: echo "No unit or E2E tests selected; skipping report merge."
 
       - name: Checkout repo
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
@@ -309,11 +333,11 @@ jobs:
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download test results
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: vitest-blob-*
@@ -321,7 +345,7 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
         run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
 
       # A test job that failed or was cancelled before uploading its blob would otherwise

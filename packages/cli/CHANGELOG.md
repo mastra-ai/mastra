@@ -1,5 +1,31 @@
 # mastra
 
+## 1.40.2-alpha.8
+
+### Patch Changes
+
+- Fixed button icons in Studio and Factory that were a different size or sat at a different distance from the edge than in other buttons, and the second plus icon on the "Add variable" buttons. ([#31282](https://github.com/mastra-ai/mastra/pull/31282))
+
+- `mastra api` now accepts `durable`, `itemTimeout` and `maxRetries` when it triggers a dataset experiment. ([#31204](https://github.com/mastra-ai/mastra/pull/31204))
+
+- Changed CLI analytics to only send a fixed list of known options. `mastra init` and `mastra start` no longer report other options, and URLs in reported errors no longer include credentials or query strings. ([#31292](https://github.com/mastra-ai/mastra/pull/31292))
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+  - @mastra/deployer@1.86.0-alpha.8
+
+## 1.40.2-alpha.7
+
+### Patch Changes
+
+- Added `mastra env vars set` to set an environment's variables and choose whether they're stored as secrets or config. For example, `mastra env vars set staging LOG_LEVEL=debug --config` stores `LOG_LEVEL` as readable config, `--secret` stores every variable in the command as a write-only secret, and `mastra env vars set staging DATABASE_URL --secret` changes only how an existing variable is stored. ([#30622](https://github.com/mastra-ai/mastra/pull/30622))
+
+- `mastra connect` now authorizes against the Nango host returned with the connect session, so it works with a self-hosted Nango. The host must use HTTPS (plain HTTP is allowed for localhost). `MASTRA_NANGO_HOST` still overrides it when set. ([#31187](https://github.com/mastra-ai/mastra/pull/31187))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/deployer@1.86.0-alpha.7
+
 ## 1.40.2-alpha.6
 
 ### Patch Changes

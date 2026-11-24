@@ -22,26 +22,29 @@ jobs:
     runs-on: starsling-ubuntu-26.04-2
     permissions:
       contents: read
+      pull-requests: read
     outputs:
-      has_code: ${{ steps.filter.outputs.has_code }}
+      # Fail closed: no decision from either step runs the affected tests.
+      has_code: ${{ steps.git.outputs.has_code || steps.filter.outputs.has_code || 'true' }}
       head_sha: ${{ steps.filter.outputs.head_sha }}
-      base_sha: ${{ steps.filter.outputs.base_sha }}
+      base_sha: ${{ steps.git.outputs.base_sha || steps.filter.outputs.base_sha }}
       full_suite: ${{ steps.filter.outputs.full_suite }}
     steps:
-      - name: Checkout repo
-        if: github.event_name == 'pull_request'
+      # The PR files list decides most PRs without cloning history; the script is all it needs.
+      - name: Checkout the detection script
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
           persist-credentials: false
-          fetch-depth: 0
-          # Partial clone: name-only diffs need trees, not blob contents.
-          filter: blob:none
+          sparse-checkout: .github/scripts/detect-code-changes.mjs
+          sparse-checkout-cone-mode: false
 
       - name: Check for code changes
         id: filter
         env:
+          GH_TOKEN: ${{ github.token }}
           BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           # A workflow_call (e.g. the alpha cron) and the Changesets release PR run the full
@@ -51,7 +54,32 @@ jobs:
         run: |
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "full_suite=$FULL_SUITE" >> "$GITHUB_OUTPUT"
+          # Stacked PRs are rediffed against main in the git step below; it overwrites this.
+          echo "base_sha=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
+          if ! node .github/scripts/detect-code-changes.mjs; then
+            echo "need_git=true" >> "$GITHUB_OUTPUT"
+          fi
 
+      # Fallback when the PR files list can't decide: stacked PRs (merge-base with main),
+      # PRs at the API's 3,000-file limit, and API errors.
+      - name: Checkout repo
+        if: steps.filter.outputs.need_git == 'true'
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
+
+      - name: Check for code changes with git
+        id: git
+        if: steps.filter.outputs.need_git == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
           # A stacked PR merges into another PR's branch, but its code ends up on main, so
           # diff it against main to select the same tests the stack will need there.
           BASE_SHA=$PR_BASE_SHA
@@ -60,12 +88,6 @@ jobs:
             echo "Stacked on $BASE_REF; diffing against main at $BASE_SHA."
           fi
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-
-          if [ "$FULL_SUITE" = "true" ]; then
-            echo "Full suite requested; running Prebuild."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
 
           if ! changed_files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA"); then
             echo "Could not diff the PR; running affected tests fail-closed."
@@ -133,12 +155,14 @@ jobs:
           echo "::error file=${deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications; add or update a monorepo E2E test. See packages/deployer/AGENTS.md."
           exit 1
 
+  # Starts with Detect code changes instead of after it, and makes the same docs-only decision
+  # itself from the PR files list. Jobs that need the build also need `changes`, so they still
+  # see its decision.
   prebuild:
     name: Build
-    needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
-    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
+    if: github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -147,20 +171,44 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      pull-requests: read
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
-          ref: ${{ needs.changes.outputs.head_sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 2
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
+      # Same decision as Detect code changes. When only git could decide (stacked PRs, very
+      # large PRs, API errors), build anyway: a wasted build beats a missing one.
+      - name: Check for code changes
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
+        run: |
+          if ! node .github/scripts/detect-code-changes.mjs; then
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup pnpm and Node.js
+        if: steps.filter.outputs.has_code != 'false'
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Cache turbo build setup
-        if: ${{ env.TURBO_TOKEN == '' }}
+        if: ${{ steps.filter.outputs.has_code != 'false' && env.TURBO_TOKEN == '' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .turbo/cache
@@ -169,6 +217,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Build
+        if: steps.filter.outputs.has_code != 'false'
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
   affected-tests:
@@ -394,6 +443,12 @@ jobs:
         timeout-minutes: 20
         with:
           ref: ${{ needs.changes.outputs.head_sha }}
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

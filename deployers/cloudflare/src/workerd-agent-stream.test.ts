@@ -8,6 +8,14 @@ import { z } from 'zod';
 import { CloudflareDeployer } from './index.js';
 
 const worker = `import { Agent } from '@mastra/core/agent';
+import { MastraError } from '@mastra/core/error';
+
+// Minification renames locals, so this reveals whether wrangler minified the bundle.
+function minifyProbe() {
+  const unminifiedLocalName = 1;
+  return unminifiedLocalName;
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -20,7 +28,17 @@ export default {
       const stream = await agent.stream('Say hi');
       let text = '';
       for await (const delta of stream.textStream) text += delta;
-      return Response.json({ text });
+      const error = new MastraError({ id: 'WORKERD_TEST', domain: 'AGENT', category: 'USER', text: 'x' });
+      return Response.json({
+        text,
+        minified: !String(minifyProbe).includes('unminifiedLocalName'),
+        names: {
+          function: minifyProbe.name,
+          agentClass: agent.constructor.name,
+          errorClass: error.constructor.name,
+          errorIsMastraError: error instanceof MastraError,
+        },
+      });
     } catch (error) {
       return Response.json({ error: String(error) });
     }
@@ -28,8 +46,14 @@ export default {
 };
 `;
 
-const responseSchema = z.object({ text: z.string().optional(), error: z.string().optional() });
+const responseSchema = z.object({
+  text: z.string().optional(),
+  minified: z.boolean().optional(),
+  names: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
+  error: z.string().optional(),
+});
 const configSchema = z.object({ compatibility_date: z.string(), compatibility_flags: z.array(z.string()) });
+const buildConfigSchema = z.object({ minify: z.boolean(), upload_source_maps: z.boolean().optional() });
 
 describe('CloudflareDeployer default config in workerd', () => {
   const llm = new LLMock({ port: 0 });
@@ -52,36 +76,54 @@ describe('CloudflareDeployer default config in workerd', () => {
   });
 
   // #27899: the default date must expose WeakRef for stream registration.
-  it('agent.stream() completes with the generated default configuration', async () => {
-    const deployer = new CloudflareDeployer({ name: 'workerd-agent-stream' });
-    await deployer.writeFiles(mastraDir);
+  // The deployer minifies by default because the Worker's source text sits in the V8 heap. Mastra and its
+  // dependencies compare class and function names, so the minified Worker must keep them.
+  it.each([
+    { label: 'the generated default configuration (minified)', options: {}, minified: true },
+    { label: 'minify: false', options: { minify: false }, minified: false },
+  ])(
+    'agent.stream() completes with $label',
+    async ({ options, minified }) => {
+      const deployer = new CloudflareDeployer({ name: 'workerd-agent-stream', ...options });
+      await deployer.writeFiles(mastraDir);
 
-    const outputDir = join(mastraDir, 'output');
+      const outputDir = join(mastraDir, 'output');
 
-    await writeFile(join(outputDir, 'index.mjs'), worker);
-    // wrangler resolves the config's aliases from the working directory; users run it from the project root.
-    const cwd = process.cwd();
-    process.chdir(projectDir);
-    try {
-      const dev = await unstable_dev(join(outputDir, 'index.mjs'), {
-        // The config users deploy with: <project>/wrangler.jsonc.
-        config: join(projectDir, 'wrangler.jsonc'),
-        ip: '127.0.0.1',
-        port: 0,
-        vars: { MODEL_URL: `${llm.url.replace(/\/+$/, '')}/v1` },
-        logLevel: 'error',
-        experimental: { disableExperimentalWarning: true, testMode: true },
-      });
+      await writeFile(join(outputDir, 'index.mjs'), worker);
+      // wrangler resolves the config's aliases from the working directory; users run it from the project root.
+      const cwd = process.cwd();
+      process.chdir(projectDir);
       try {
-        const response = await dev.fetch('/');
-        expect(responseSchema.parse(await response.json())).toEqual({ text: 'hi from aimock' });
+        const dev = await unstable_dev(join(outputDir, 'index.mjs'), {
+          // The config users deploy with: <project>/wrangler.jsonc.
+          config: join(projectDir, 'wrangler.jsonc'),
+          ip: '127.0.0.1',
+          port: 0,
+          vars: { MODEL_URL: `${llm.url.replace(/\/+$/, '')}/v1` },
+          logLevel: 'error',
+          experimental: { disableExperimentalWarning: true, testMode: true },
+        });
+        try {
+          const response = await dev.fetch('/');
+          expect(responseSchema.parse(await response.json())).toEqual({
+            text: 'hi from aimock',
+            minified,
+            names: {
+              function: 'minifyProbe',
+              agentClass: 'Agent',
+              errorClass: 'MastraError',
+              errorIsMastraError: true,
+            },
+          });
+        } finally {
+          await dev.stop();
+        }
       } finally {
-        await dev.stop();
+        process.chdir(cwd);
       }
-    } finally {
-      process.chdir(cwd);
-    }
-  }, 120_000);
+    },
+    120_000,
+  );
 
   it('preserves a user-specified compatibility date in both generated configurations', async () => {
     const deployer = new CloudflareDeployer({ name: 'custom-date', compatibility_date: '2025-04-01' });
@@ -89,6 +131,24 @@ describe('CloudflareDeployer default config in workerd', () => {
     for (const configPath of [join(mastraDir, 'output', 'wrangler.json'), join(projectDir, 'wrangler.jsonc')]) {
       const json = (await readFile(configPath, 'utf8')).replace(/\/\*.*?\*\//, '');
       expect(configSchema.parse(JSON.parse(json)).compatibility_date).toBe('2025-04-01');
+    }
+  });
+
+  // Leaving upload_source_maps unset keeps Wrangler's lenient default: it uploads the maps it can resolve.
+  // Setting it to true would make Wrangler fail the deploy on any map it can't resolve.
+  it('minifies by default, leaves source map uploads to Wrangler, and passes user overrides through in both generated configurations', async () => {
+    const configs = [join(mastraDir, 'output', 'wrangler.json'), join(projectDir, 'wrangler.jsonc')];
+    const read = async (configPath: string) =>
+      buildConfigSchema.parse(JSON.parse((await readFile(configPath, 'utf8')).replace(/\/\*.*?\*\//, '')));
+
+    await new CloudflareDeployer({ name: 'defaults' }).writeFiles(mastraDir);
+    for (const configPath of configs) {
+      expect(await read(configPath)).toEqual({ minify: true });
+    }
+
+    await new CloudflareDeployer({ name: 'opt-out', minify: false, upload_source_maps: false }).writeFiles(mastraDir);
+    for (const configPath of configs) {
+      expect(await read(configPath)).toEqual({ minify: false, upload_source_maps: false });
     }
   });
 });

@@ -18,7 +18,7 @@ function formatBytes(size: number) {
 
 /** CSS counters, so copying the code never copies the numbers. */
 const numberedLineClass =
-  '[counter-increment:line] before:mr-4 before:inline-block before:w-[calc(var(--line-digits)*1ch)] before:text-right before:text-placeholder before:content-[counter(line)]';
+  '[counter-increment:line] before:mr-4 before:inline-block before:w-[calc(var(--line-digits)*1ch)] before:text-right before:text-subtle-foreground before:content-[counter(line)]';
 const numberedLine = () => numberedLineClass;
 
 type GutterStyle = CSSProperties & { '--line-digits': number };

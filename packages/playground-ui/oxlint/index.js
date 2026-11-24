@@ -9,6 +9,7 @@
 //
 // Rules (plugin name `playground-ui`):
 //   playground-ui/icon-button-size   a <Button> holding only an icon uses an `icon-*` size
+//   playground-ui/button-icon-prop   an icon beside a <Button>'s label is its `icon` / `iconEnd`, not a child
 //   playground-ui/text-role          typography comes from a DS text role, not Tailwind's text-sm / text-[13px]
 //   playground-ui/txt-tone           ink on <Txt> is its `tone` prop, not a text-* colour class
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
@@ -121,6 +122,131 @@ function iconButtonSize(context) {
         node: openingElement,
         message: `This ${openingElement.name.name} holds only an icon: use size="icon-${size}" so it renders as a circle, not a pill.`,
       });
+    },
+  };
+}
+
+// --- button-icon-prop ----------------------------------------------------------------------------------
+// An icon beside a button's label goes through `icon` (before the label) or `iconEnd` (after it). The slot
+// sizes and spaces it, and the button knows which child is its icon. An icon between two parts of a label
+// stays a child, and so does anything that isn't an icon: an avatar, a badge, a key hint.
+// Options: { components: { Button: ['icon', 'iconEnd'] } }, the components to check and the props each takes.
+const BUTTON_ICON_PROPS = {
+  Button: ['icon', 'iconEnd'],
+  DialogAction: ['icon', 'iconEnd'],
+  'Notice.Button': ['icon'],
+  'JSONSchemaForm.AddField': ['icon', 'iconEnd'],
+};
+
+const jsxName = name =>
+  name.type === 'JSXMemberExpression' ? `${jsxName(name.object)}.${name.property.name}` : (name.name ?? '');
+
+const isBlank = node =>
+  (node.type === 'JSXText' && !node.value.trim()) ||
+  (node.type === 'JSXExpressionContainer' && node.expression.type === 'JSXEmptyExpression') ||
+  (node.type === 'JSXExpressionContainer' &&
+    node.expression.type === 'Literal' &&
+    typeof node.expression.value === 'string' &&
+    !node.expression.value.trim());
+
+const isNothing = node =>
+  (node.type === 'Literal' && (node.value === null || node.value === false || node.value === '')) ||
+  (node.type === 'Identifier' && node.name === 'undefined');
+
+// What a child can turn into: the branches of a condition, without the ones that render nothing.
+function branches(node) {
+  switch (node.type) {
+    case 'JSXExpressionContainer':
+    case 'TSAsExpression':
+    case 'TSNonNullExpression':
+    case 'ParenthesizedExpression':
+      return branches(node.expression);
+    case 'ConditionalExpression':
+      return [...branches(node.consequent), ...branches(node.alternate)];
+    case 'LogicalExpression':
+      return node.operator === '&&' ? branches(node.right) : [...branches(node.left), ...branches(node.right)];
+    default:
+      return isNothing(node) ? [] : [node];
+  }
+}
+
+const contentOf = node => node.children.filter(child => !isBlank(child) && branches(child).length > 0);
+
+// `<Icon>` and a bare `<span>` around an icon are the icon.
+function isIcon(node, iconImports) {
+  switch (node.type) {
+    case 'JSXElement': {
+      const name = jsxName(node.openingElement.name);
+      if (name === 'svg' || isIconName(name, iconImports) || /(^|\.)icon$/i.test(name)) return true;
+      const content = contentOf(node);
+      return name === 'span' && content.length > 0 && content.every(child => isIconChild(child, iconImports));
+    }
+    case 'JSXFragment': {
+      const content = contentOf(node);
+      return content.length > 0 && content.every(child => isIconChild(child, iconImports));
+    }
+    case 'Identifier':
+      return /^icon$|Icon$/.test(node.name);
+    case 'MemberExpression':
+      return !node.computed && /^icon$|Icon$/.test(node.property.name);
+    case 'ChainExpression':
+      return isIcon(node.expression, iconImports);
+    default:
+      return false;
+  }
+}
+
+function isIconChild(child, iconImports) {
+  const options = branches(child);
+  return options.length > 0 && options.every(option => isIcon(option, iconImports));
+}
+
+// The icons at one end of a label, looking inside fragments and the branches of a condition.
+function iconsAtEdge(content, side, iconImports) {
+  if (content.length === 0 || content.every(child => isIconChild(child, iconImports))) return [];
+  const edge = side === 'icon' ? content[0] : content.at(-1);
+  if (isIconChild(edge, iconImports)) return [edge];
+  return branches(edge).flatMap(option =>
+    option.type === 'JSXFragment' ? iconsAtEdge(contentOf(option), side, iconImports) : [],
+  );
+}
+
+// Every value the attribute can take is a literal text size (`size={compact ? 'sm' : 'md'}` counts).
+const isTextSize = value =>
+  value !== null &&
+  (value.type === 'Literal' ? [value] : branches(value)).every(
+    option => option.type === 'Literal' && typeof option.value === 'string' && !option.value.startsWith('icon-'),
+  );
+
+const setsSize = attribute => attribute.type === 'JSXSpreadAttribute' || attribute.name.name === 'size';
+
+function buttonIconProp(context) {
+  const { components = BUTTON_ICON_PROPS } = context.options[0] ?? {};
+  const iconImports = new Set();
+  return {
+    ImportDeclaration(node) {
+      if (!iconModulePattern.test(node.source.value)) return;
+      for (const specifier of node.specifiers) iconImports.add(specifier.local.name);
+    },
+    JSXElement(node) {
+      const { openingElement } = node;
+      const name = jsxName(openingElement.name);
+      if (!Object.hasOwn(components, name)) return;
+      const attributes = new Map();
+      for (const attribute of openingElement.attributes)
+        if (attribute.type === 'JSXAttribute') attributes.set(attribute.name.name, attribute.value);
+      // An icon size ignores the props: its child is the glyph. A forwarded or spread size may be one.
+      if (attributes.has('size') && !isTextSize(attributes.get('size'))) return;
+      if (openingElement.attributes.findLast(setsSize)?.type === 'JSXSpreadAttribute') return;
+      const content = contentOf(node);
+      for (const prop of components[name]) {
+        if (attributes.has(prop)) continue;
+        for (const icon of iconsAtEdge(content, prop, iconImports))
+          context.report({
+            node: icon,
+            message: `Pass this icon through <${name}>'s \`${prop}\` prop, not as a child beside the label.`,
+          });
+      }
     },
   };
 }
@@ -369,6 +495,7 @@ const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
     'icon-button-size': { meta: { type: 'suggestion', schema: false }, create: iconButtonSize },
+    'button-icon-prop': { meta: { type: 'suggestion', schema: false }, create: buttonIconProp },
     'icon-size-from-parent': { meta: { type: 'suggestion', schema: false }, create: iconSizeFromParent },
     'text-role': { meta: { type: 'suggestion', schema: false }, create: textRole },
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
@@ -400,6 +527,7 @@ export const copyRuleExclusions = {
 // (tests and stories, for example).
 export const recommended = {
   'playground-ui/icon-button-size': 'error',
+  'playground-ui/button-icon-prop': 'error',
   'playground-ui/icon-size-from-parent': 'error',
   'playground-ui/text-role': 'error',
   'playground-ui/txt-tone': 'error',

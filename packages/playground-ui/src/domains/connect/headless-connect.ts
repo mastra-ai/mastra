@@ -241,15 +241,6 @@ export class HeadlessAuthError extends Error {
   }
 }
 
-/**
- * Starts a headless Nango auth flow keyed by the session token the launch
- * gate released. For OAuth this opens the provider's consent popup and
- * reports the outcome Nango echoes back over its websocket channel. When
- * `credentials` are provided (API key / Basic / OAuth client credentials /
- * two-step) no popup opens — the SDK submits the credentials to Nango, which
- * validates them with the provider. Unauthenticated providers are created
- * directly.
- */
 function isSecureNangoHost(value: string): boolean {
   let url: URL;
   try {
@@ -261,6 +252,15 @@ function isSecureNangoHost(value: string): boolean {
   return url.protocol === 'https:' || (url.protocol === 'http:' && loopback);
 }
 
+/**
+ * Starts a headless Nango auth flow keyed by the session token the launch
+ * gate released. For OAuth this opens the provider's consent popup and
+ * reports the outcome Nango echoes back over its websocket channel. When
+ * `credentials` are provided (API key / Basic / OAuth client credentials /
+ * two-step) no popup opens — the SDK submits the credentials to Nango, which
+ * validates them with the provider. Unauthenticated providers are created
+ * directly.
+ */
 export function startHeadlessAuth(input: {
   sessionToken: string;
   /** Nango API host from the connect session; omitted means Nango Cloud. */

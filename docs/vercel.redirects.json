@@ -1,6 +1,96 @@
 {
   "redirects": [
     {
+      "source": "/learn",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/learn/what-is-an-agent",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/run-your-first-agent",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/learn/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/learn/create-an-agent",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/create-a-tool",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/build-with-ai",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/learn/fetch-live-data",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/connect-to-mcp",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/learn/build-a-workflow",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/agents-vs-workflows",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/agents-in-workflows",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/how-memory-works",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/observational-memory",
+      "destination": "/docs/memory/observational-memory",
+      "permanent": true
+    },
+    {
+      "source": "/learn/guardrails-with-processors",
+      "destination": "/docs/agents/guardrails",
+      "permanent": true
+    },
+    {
+      "source": "/learn/deploy-to-mastra-platform",
+      "destination": "/docs/mastra-platform/deploy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/chat-with-agent-in-slack",
+      "destination": "/integrations/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/learn/:path*",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections",
       "destination": "/docs/mastra-platform/connect",
       "permanent": false
@@ -2408,6 +2498,66 @@
     {
       "source": "/docs/mastra-platform/regions",
       "destination": "/docs/mastra-platform/deploy/regions",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/workspace",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/workspaces",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-workspace",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/reference/scorers/create-scorer",
+      "destination": "/reference/evals/create-scorer",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/Memory",
+      "destination": "/reference/memory/memory-class",
+      "permanent": true
+    },
+    {
+      "source": "/models/openai",
+      "destination": "/models/providers/openai",
+      "permanent": true
+    },
+    {
+      "source": "/models/openai/gpt-5-mini",
+      "destination": "/models/providers/openai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/tools/overview",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/reference/cli/dev",
+      "destination": "/reference/cli/mastra#mastra-dev",
+      "permanent": true
+    },
+    {
+      "source": "/docs/use-cases/software-factories",
+      "destination": "https://factory.mastra.ai/",
       "permanent": true
     }
   ]

@@ -19,6 +19,7 @@ import {
 } from '../../rules/event-rules.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
+import { CLOSES_WORK_ITEM_IDS_KEY } from '../../work-items/change-requests.js';
 import { isRepositoryPullRequest } from './pull-request-source.js';
 import { isFactoryApproveVerdict } from './stale-reviews.js';
 
@@ -211,6 +212,7 @@ function materializePullRequestIntake(
       ...(context.pullRequest.createdAt ? { sourceCreatedAt: context.pullRequest.createdAt } : {}),
       factoryAuthored: context.pullRequest.factoryAuthored,
       authorTrusted: trustedGithubActor(context),
+      ...(home?.alsoCloses ? { [CLOSES_WORK_ITEM_IDS_KEY]: home.alsoCloses } : {}),
       autoStartCandidate,
       state: context.pullRequest.state,
       draft: context.pullRequest.draft,

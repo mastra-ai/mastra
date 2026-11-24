@@ -150,7 +150,7 @@ const RUNS_ON_WRAPPER = new Set([
   'streamUntilIdle',
   'stripParentToolParts',
   'subscribeThreadEvents',
-  'subscribeToDurableRunStream',
+  '__subscribeToRunStream',
   'subscribeToThread',
   'updateObjectiveOptions',
   'updateThreadPeerAdvertisement',

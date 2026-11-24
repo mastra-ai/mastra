@@ -9,7 +9,6 @@ import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCh
 
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { MCPServerCombobox } from '../mcp-server-combobox';
@@ -233,43 +232,34 @@ export function MCPClientFormSidebar({
                     : undefined;
 
               return tooltipContent ? (
-                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full" tooltip={tooltipContent}>
-                  {isTryingConnect ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Connecting...
-                    </>
-                  ) : (
-                    'Try to connect'
-                  )}
+                <Button
+                  icon={isTryingConnect ? <Spinner /> : undefined}
+                  onClick={onTryConnect}
+                  disabled={isDisabled}
+                  className="w-full"
+                  tooltip={tooltipContent}
+                >
+                  {isTryingConnect ? 'Connecting...' : 'Try to connect'}
                 </Button>
               ) : (
-                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full">
-                  {isTryingConnect ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Connecting...
-                    </>
-                  ) : (
-                    'Try to connect'
-                  )}
+                <Button
+                  icon={isTryingConnect ? <Spinner /> : undefined}
+                  onClick={onTryConnect}
+                  disabled={isDisabled}
+                  className="w-full"
+                >
+                  {isTryingConnect ? 'Connecting...' : 'Try to connect'}
                 </Button>
               );
             })()}
-          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <IconCheckmark2Medium />
-                </Icon>
-                {submitLabel}
-              </>
-            )}
+          <Button
+            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
+            variant="primary"
+            onClick={onPublish}
+            disabled={isSubmitting}
+            className="w-full"
+          >
+            {isSubmitting ? 'Creating...' : submitLabel}
           </Button>
         </div>
       )}

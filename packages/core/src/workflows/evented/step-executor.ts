@@ -8,8 +8,8 @@ import type { RequestContext } from '../../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { CachingPubSub } from '../../events/caching-pubsub';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import { reachesOtherProcesses } from '../../events/reach';
 import { isRunLocalTopic } from '../../events/topics';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -91,8 +91,7 @@ export class StepExecutor extends MastraBase {
     if (inner instanceof CachingPubSub) {
       this.#stepPubsub = inner;
     } else if (cache) {
-      const processLocalLogs =
-        cache instanceof InMemoryServerCache && !(inner.__rawBus() instanceof EventEmitterPubSub);
+      const processLocalLogs = cache instanceof InMemoryServerCache && reachesOtherProcesses(inner);
       this.#stepPubsub = new CachingPubSub(inner, cache, {
         // Run-local watch events are per-process fan-out (often megabytes of
         // cumulative step results) and must never land in a shared cache.
@@ -505,11 +504,7 @@ export class StepExecutor extends MastraBase {
         },
       });
 
-      if (
-        isExecutionFenceError(error) &&
-        this.mastra &&
-        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
-      ) {
+      if (isExecutionFenceError(error) && this.mastra && reachesOtherProcesses(this.mastra.pubsub)) {
         if (isStorageFencedExecution(requestContext, runId, params.parentWorkflow)) throw error;
       }
 

@@ -110,7 +110,7 @@ export function WorkflowGraphCanvas<NodeType extends Node, EdgeType extends Edge
             position="top-right"
             className="m-2!"
             compact={hasCompactZoom}
-            onFitView={() => fitView({ ...workflowFitOptions(leftInset), duration: workflowCameraDuration() })}
+            onFitView={duration => fitView({ ...workflowFitOptions(leftInset), duration })}
           />
         )}
         {groups && <WorkflowGraphGroups nodes={nodes ?? []} groups={groups} />}
