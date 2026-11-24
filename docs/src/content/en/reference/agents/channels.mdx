@@ -585,6 +585,23 @@ const agent = new Agent({
 })
 ```
 
+With [Mastra Connect](/integrations/channels/slack#agent-chat), pass the function in the Slack provider options:
+
+```typescript title="src/mastra/index.ts"
+import type { TypingStatusFn } from '@mastra/core/channels'
+
+const typingStatus: TypingStatusFn = (chunk, ctx) => {
+  // ...
+}
+
+export const mastra = new Mastra({
+  // ...
+  channels: await channels({
+    providers: { slack: { providerOptions: { typingStatus } } },
+  }),
+})
+```
+
 ## Handlers
 
 Override built-in event handlers. Each handler can be:
@@ -615,6 +632,23 @@ const agent = new Agent({
       onDirectMessage: false,
     },
   },
+})
+```
+
+With [Mastra Connect](/integrations/channels/slack#agent-chat), pass `handlers` in the Slack provider options instead. They apply to every agent connected to Slack:
+
+```typescript title="src/mastra/index.ts"
+import type { ChannelHandlers } from '@mastra/core/channels'
+
+const handlers: ChannelHandlers = {
+  // ...
+}
+
+export const mastra = new Mastra({
+  // ...
+  channels: await channels({
+    providers: { slack: { providerOptions: { handlers } } },
+  }),
 })
 ```
 
