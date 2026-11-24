@@ -22,12 +22,7 @@
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 const REPLY = 'Here is a long answer that the user cancels before it finishes streaming.';
 // Slow the reply down so the abort lands while text is still arriving.
@@ -46,7 +41,7 @@ describeForAllEngines('AIMock loop scenario: abort callbacks', engine => {
       abortSignal: controller.signal,
       ...callbacks,
     });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     const chunks: any[] = [];
     const deltas: string[] = [];
     try {
@@ -183,7 +178,7 @@ describeForAllEngines('AIMock loop scenario: abort callbacks', engine => {
     const onFinish = vi.fn();
 
     const result = await agent.stream('Go', { maxSteps: 5, onError, onFinish });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     await output.consumeStream().catch(() => undefined);
     result.cleanup?.();
 

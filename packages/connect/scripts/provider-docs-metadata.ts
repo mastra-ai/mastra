@@ -64,7 +64,13 @@ export interface ChannelConnectionDocs {
 }
 
 /** Providers present in src/providers but not part of the documented release. */
-export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set(['confluence', 'stripe', 'twitter-v2', 'zendesk']);
+export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
+  'confluence',
+  'figma',
+  'stripe',
+  'twitter-v2',
+  'zendesk',
+]);
 
 /** Shared Connect setup that every generated page links to as its prerequisite. */
 export const CONNECT_GUIDE_PATH = '/docs/mastra-platform/connect';

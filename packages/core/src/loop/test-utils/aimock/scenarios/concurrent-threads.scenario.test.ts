@@ -4,12 +4,7 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 function gate() {
   let release!: () => void;
@@ -96,7 +91,7 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
         }
         const result = await agent.stream(`run ${run}`, options);
         runs[run] = result;
-        const output = isDurableEngineVariant(engine) ? result.output : result;
+        const output = result.output ?? result;
         const drain = (async () => {
           const types: string[] = [];
           let text = '';

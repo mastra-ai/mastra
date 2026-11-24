@@ -87,8 +87,8 @@ describe('LogDataPanel sections', () => {
   it('keeps nested data as formatted JSON', () => {
     render(<LogDataPanel log={{ ...plainLine, data: { request: { path: '/api' } } }} onClose={vi.fn()} />);
 
-    expect(screen.getByText('Data')).toBeTruthy();
-    expect(screen.queryByText('Fields')).toBeNull();
+    expect(screen.getByText('Fields')).toBeTruthy();
+    expect(screen.getByRole('dialog').textContent).toContain('"path": "/api"');
   });
 
   it('pretty-prints a JSON message', () => {

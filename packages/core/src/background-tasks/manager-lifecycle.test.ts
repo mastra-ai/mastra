@@ -1169,6 +1169,51 @@ describe('BackgroundTaskManager lifecycle', () => {
     await pubsub.close();
   });
 
+  it('keeps the stored retry count when a redelivered dispatch finds the task running', async () => {
+    const pubsub = new CapturingPubSub();
+    const manager = new BackgroundTaskManager({ enabled: true });
+    await manager.init(pubsub);
+
+    // Startup recovery already spent two retries on crashes, so the stored
+    // count is ahead of this message's delivery count. Taking the delivery
+    // count would hand back retries and allow more crashes than `maxRetries`.
+    const crashedTask = makeRunningTask({ retryCount: 2, maxRetries: 3 });
+    const updateTask = vi.fn(async () => true);
+    const workflowRun = { start: vi.fn(async () => ({ status: 'success' })) };
+    manager.__registerMastra({
+      getStorage: () => ({
+        getStore: async () => ({
+          getTask: async () => crashedTask,
+          updateTask,
+          listTasks: async () => ({ tasks: [] }),
+        }),
+      }),
+      __getInternalWorkflow: () => ({
+        createRun: async () => workflowRun,
+        deleteWorkflowRunById: async () => {},
+      }),
+    } as unknown as Mastra);
+    const ack = vi.fn(async () => {});
+    const event: Event = {
+      type: 'task.dispatch',
+      id: 'event-1',
+      data: { taskId: 'task-1' },
+      runId: 'task-1',
+      createdAt: new Date(),
+      deliveryAttempt: 2,
+    };
+
+    await pubsub.dispatchCallback!(event, ack);
+
+    expect(updateTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ status: 'running', retryCount: 2 }),
+      expect.objectContaining({ expectedStatus: 'running' }),
+    );
+    await manager.shutdown();
+    await pubsub.close();
+  });
+
   it("leaves a redelivered dispatch unacked while another worker's lease is still live", async () => {
     const pubsub = new CapturingPubSub();
     const manager = new BackgroundTaskManager({ enabled: true });

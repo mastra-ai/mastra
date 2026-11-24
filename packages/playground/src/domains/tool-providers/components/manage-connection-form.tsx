@@ -159,10 +159,11 @@ export const ManageConnectionForm = ({
               type="button"
               variant="primary"
               onClick={disconnect}
-              disabled={disabled || disconnectConnection.isPending}
+              disabled={disabled}
               data-testid={`${testIdPrefix}-disconnect-confirm`}
+              loading={disconnectConnection.isPending}
             >
-              {disconnectConnection.isPending ? 'Disconnecting…' : 'Disconnect'}
+              Disconnect
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

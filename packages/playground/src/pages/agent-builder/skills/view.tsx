@@ -1,6 +1,6 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
@@ -38,11 +38,7 @@ export default function AgentBuilderSkillsView() {
   return <AgentBuilderSkillViewPage skill={storedSkill} />;
 }
 
-const AgentBuilderSkillViewSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderSkillViewSkeleton = () => <BrandLoader fill />;
 
 interface PageProps {
   skill: NonNullable<ReturnType<typeof useStoredSkill>['data']>;

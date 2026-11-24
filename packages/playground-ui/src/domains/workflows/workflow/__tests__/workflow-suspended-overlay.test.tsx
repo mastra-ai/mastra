@@ -176,7 +176,8 @@ describe('WorkflowSuspendedOverlay', () => {
       renderOverlay();
       fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
       await waitFor(() => expect(createRequests).toBe(1));
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: /Resume/ }).disabled).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: /Resume/, busy: true }));
+      expect(createRequests).toBe(1);
       releaseCreation();
       await waitFor(() => expect(screen.getByLabelText('Streaming state').textContent).toBe('true'));
       expect(screen.queryByTestId('workflow-suspended-overlay')).toBeNull();

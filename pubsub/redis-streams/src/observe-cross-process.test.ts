@@ -112,7 +112,7 @@ class Node {
 
 const skipRedis = !process.env.REDIS_URL && !process.env.CI && process.env.SKIP_REDIS_TESTS === '1';
 
-for (const engine of ['durable', 'evented'] as const) {
+for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] as const) {
   describe.skipIf(skipRedis)(`observe() across two Mastra processes (${engine}, LibSQL file + Redis)`, () => {
     let llm: LLMock;
     let producer: Node;
@@ -203,30 +203,43 @@ for (const engine of ['durable', 'evented'] as const) {
       expect(observer.observed('live').at(-1)).toBe('finish');
     });
 
-    it('stays attached across an approval suspend and follows the resume to its finish', async () => {
-      llm.on(
-        { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },
-        { toolCalls: [{ id: 'call_approve', name: 'lookup_status', arguments: JSON.stringify({ query: 'alpha' }) }] },
-      );
-      llm.on(
-        { endpoint: 'chat', predicate: (req: any) => req.messages.some((m: any) => m.role === 'tool') },
-        { content: 'Approved: OK:alpha.' },
-      );
-      producer.send({ cmd: 'stream', prompt: 'Look up alpha', requireToolApproval: true });
-      const { runId, toolCallId } = await producer.next(e => e.type === 'approval');
+    it.each(engine === 'native-evented' ? [false, true] : [false])(
+      'stays attached across approval suspend and resume (producer killed: %s)',
+      async killProducer => {
+        llm.on(
+          { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },
+          { toolCalls: [{ id: 'call_approve', name: 'lookup_status', arguments: JSON.stringify({ query: 'alpha' }) }] },
+        );
+        llm.on(
+          { endpoint: 'chat', predicate: (req: any) => req.messages.some((m: any) => m.role === 'tool') },
+          { content: 'Approved: OK:alpha.' },
+        );
+        producer.send({ cmd: 'stream', prompt: 'Look up alpha', requireToolApproval: true });
+        const { runId, toolCallId } = await producer.next(e => e.type === 'approval');
 
-      observer.send({ cmd: 'observe', id: 'suspended', runId });
-      await observer.next(e => e.id === 'suspended' && e.type === 'chunk' && e.chunk === 'tool-call-approval');
-      expect(observer.isClosed('suspended')).toBe(false);
+        observer.send({ cmd: 'observe', id: 'suspended', runId });
+        await observer.next(e => e.id === 'suspended' && e.type === 'chunk' && e.chunk === 'tool-call-approval');
+        expect(observer.isClosed('suspended')).toBe(false);
 
-      producer.send({ cmd: 'approve', runId, toolCallId });
-      await producer.next(e => e.type === 'resume-done');
-      await observer.next(e => e.id === 'suspended' && e.type === 'closed', CLOSE_WITHIN_MS);
+        const approver = engine.startsWith('native-') ? observer : producer;
+        if (killProducer) {
+          observer.send({ cmd: 'waitForSuspension', runId });
+          await observer.next(e => e.type === 'suspension-persisted' && e.runId === runId);
+          const exited = new Promise(resolve => producer.proc.once('exit', resolve));
+          producer.proc.kill('SIGKILL');
+          await exited;
+        }
+        approver.send({ cmd: 'approve', runId, toolCallId });
+        await approver.next(e => e.type === 'resume-done' && e.runId === runId);
+        await observer.next(e => e.id === 'suspended' && e.type === 'closed', CLOSE_WITHIN_MS);
 
-      expect(producer.events.filter(e => e.type === 'tool-executed')).toHaveLength(1);
-      expect(observer.textOf('suspended')).toBe('Approved: OK:alpha.');
-      expect(observer.observed('suspended').at(-1)).toBe('finish');
-    });
+        expect([...producer.events, ...observer.events].filter(e => e.type === 'tool-executed')).toEqual([
+          expect.objectContaining({ query: 'alpha' }),
+        ]);
+        expect(observer.textOf('suspended')).toBe('Approved: OK:alpha.');
+        expect(observer.observed('suspended').at(-1)).toBe('finish');
+      },
+    );
   });
 }
 

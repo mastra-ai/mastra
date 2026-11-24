@@ -171,12 +171,18 @@ export function BoardConfigHeader({
         {(resettable || deletable) && (
           <PageHeader.Action className="gap-1">
             {resettable && (
-              <BoardResetButton name={board.name} pending={locked} onReset={() => reset.mutate(board.revision ?? 0)} />
+              <BoardResetButton
+                name={board.name}
+                disabled={locked}
+                loading={reset.isPending}
+                onReset={() => reset.mutate(board.revision ?? 0)}
+              />
             )}
             {deletable && (
               <BoardDeleteButton
                 name={board.name}
-                pending={locked}
+                disabled={locked}
+                loading={remove.isPending}
                 onDelete={() => remove.mutate(board.revision ?? 0)}
               />
             )}

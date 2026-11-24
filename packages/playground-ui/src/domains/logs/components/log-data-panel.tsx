@@ -1,66 +1,15 @@
-import { useId } from 'react';
 import type { ReactNode } from 'react';
 import type { LogRecord } from '../types';
+import { LogDetailsSection } from './log-data-panel-sections/log-details-section';
+import { LogMessageSection } from './log-data-panel-sections/log-message-section';
+import { LogValuesSection } from './log-data-panel-sections/log-values-section';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { CardInset } from '@/ds/components/Card';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanel } from '@/ds/components/DataPanel';
-import { logLevelTextClass } from '@/ds/components/LogsDataList';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
-import { cn } from '@/lib/utils';
 import { formatTimestampPrecise } from '@/utils/date-format';
-
-type InsetRow = { label: string; value: ReactNode; mono?: boolean };
-
-function InsetSection({ title, rows }: { title: string; rows: InsetRow[] }) {
-  const titleId = useId();
-  if (rows.length === 0) return null;
-
-  return (
-    <section className="grid gap-2" aria-labelledby={titleId}>
-      <DataPanel.SectionHeading>
-        <span id={titleId}>{title}</span>
-      </DataPanel.SectionHeading>
-      <CardInset as="dl">
-        {rows.map(row => (
-          <div key={row.label} className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <dt className="shrink-0">
-              <Txt as="span" variant="body-sm" tone="muted">
-                {row.label}
-              </Txt>
-            </dt>
-            <dd className="ml-auto min-w-0 text-right wrap-anywhere">
-              <Txt as="span" variant="body-sm" tone="ink" font={row.mono ? 'mono' : undefined}>
-                {row.value}
-              </Txt>
-            </dd>
-          </div>
-        ))}
-      </CardInset>
-    </section>
-  );
-}
-
-function isPrimitive(value: unknown): value is string | number | boolean | null {
-  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
-}
-
-function prettyJsonObject(message: string): string | undefined {
-  if (!message.trim().startsWith('{')) return undefined;
-  try {
-    return JSON.stringify(JSON.parse(message), null, 2);
-  } catch {
-    return undefined;
-  }
-}
-
-function textRows(entries: Array<[string, unknown]>, mono?: boolean): InsetRow[] {
-  return entries
-    .filter(([, value]) => value !== undefined && value !== null && value !== '')
-    .map(([label, value]) => ({ label, value: String(value), mono }));
-}
 
 export interface LogDataPanelProps {
   /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
@@ -86,11 +35,6 @@ export function LogDataPanel({
   actions,
 }: LogDataPanelProps) {
   const formattedDate = log ? (formatTimestampPrecise(log.timestamp) ?? '') : '';
-  const dataEntries = Object.entries(log?.data ?? {});
-  const dataIsFlat = dataEntries.every(([, value]) => isPrimitive(value));
-  const metadataEntries = Object.entries(log?.metadata ?? {});
-  const metadataIsFlat = metadataEntries.every(([, value]) => isPrimitive(value));
-  const jsonMessage = log ? prettyJsonObject(log.message) : undefined;
 
   return (
     <DataPanel open={!!log} onClose={onClose} title={log ? `Log ${formattedDate}` : 'Log'} depth={depth}>
@@ -115,40 +59,10 @@ export function LogDataPanel({
 
           <DataPanel.Content>
             <div className="grid gap-6 p-2">
-              <InsetSection
-                title="Details"
-                rows={[
-                  {
-                    label: 'Level',
-                    value: <span className={cn('capitalize', logLevelTextClass[log.level])}>{log.level}</span>,
-                  },
-                  ...textRows([
-                    ['Entity type', log.entityType],
-                    ['Entity name', log.entityName],
-                    ['Service', log.serviceName],
-                    ['Environment', log.environment],
-                    ['Source', log.source],
-                  ]),
-                ]}
-              />
-
-              {jsonMessage === undefined ? (
-                <DataPanel.CodeSection title="Message" codeStr={log.message} simplified />
-              ) : (
-                <DataPanel.CodeSection title="Message" codeStr={jsonMessage} />
-              )}
-
-              {dataIsFlat ? (
-                <InsetSection title="Fields" rows={textRows(dataEntries, true)} />
-              ) : (
-                <DataPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} />
-              )}
-
-              {metadataIsFlat ? (
-                <InsetSection title="Metadata" rows={textRows(metadataEntries, true)} />
-              ) : (
-                <DataPanel.CodeSection title="Metadata" codeStr={JSON.stringify(log.metadata, null, 2)} />
-              )}
+              <LogDetailsSection log={log} />
+              <LogMessageSection message={log.message} />
+              <LogValuesSection title="Fields" values={log.data} />
+              <LogValuesSection title="Metadata" values={log.metadata} />
 
               {(log.traceId || log.spanId) && (
                 <div className="grid gap-2">

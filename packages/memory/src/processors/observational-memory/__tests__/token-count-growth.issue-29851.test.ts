@@ -113,7 +113,7 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     expect(await new TokenCounter().countMessageAsync(fresh)).toBe(asyncCount);
   });
 
-  it('still recounts nested result, args, and modelOutput edits on the same objects', async () => {
+  it('recounts nested result, args, and modelOutput edits once the edit changes the content hash', async () => {
     const counter = new TokenCounter();
     const part = toolPart(1);
     const message = assistant([part]);
@@ -302,6 +302,56 @@ describe('OM token counting work in long tool runs (#29851)', () => {
 
     expect(context.buffered).toBe(true);
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  // From #30768: history reloaded from storage arrives as new objects. A count stored with it is
+  // read back instead of recounting, and an edit that replaces the content is counted again.
+  it('does not re-estimate unchanged history reloaded from storage, and recounts edited history', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: 't', resourceId: 'r', createdAt: new Date(), updatedAt: new Date(), metadata: {} },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: 'test-model', messageTokens: 1_000_000_000, bufferTokens: false, bufferOnIdle: false },
+      reflection: { model: 'test-model', observationTokens: 1_000_000_000 },
+    });
+    const history = (payload: string) => ({
+      ...assistant([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'history-call',
+            toolName: 'git_diff',
+            args: {},
+            result: { diff: payload },
+          },
+        },
+      ]),
+      id: 'history',
+    });
+    const original = `unique diff line ${Date.now()} `.repeat(4_000);
+    // Counted before it's saved, as the Agent does.
+    const saved = history(original);
+    new TokenCounter().countMessage(saved);
+    await storage.saveMessages({ messages: [saved] });
+
+    const estimates = vi.spyOn(TokenCounter.prototype, 'countString');
+    const largeEstimates = () => estimates.mock.calls.filter(([text]) => text.length > 10_000).length;
+
+    const first = await om.getStatus({ threadId: 't', resourceId: 'r' });
+    const reloaded = await om.getStatus({ threadId: 't', resourceId: 'r' });
+    expect(reloaded.pendingTokens).toBe(first.pendingTokens);
+    expect(largeEstimates()).toBe(0);
+
+    await storage.updateMessages({
+      messages: [{ id: 'history', content: history(`${original} and an edited tail`).content }],
+    });
+    const edited = await om.getStatus({ threadId: 't', resourceId: 'r' });
+    expect(largeEstimates()).toBe(1);
+    expect(edited.pendingTokens).toBeGreaterThan(first.pendingTokens);
   });
 
   it('serializes each prior tool result at most twice per step as a long tool run grows', async () => {

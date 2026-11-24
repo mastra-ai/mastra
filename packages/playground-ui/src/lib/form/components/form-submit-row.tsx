@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
-import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { cn } from '@/utils/cn';
 
 export type FormSubmitRowProps = {
@@ -35,11 +34,11 @@ export const FormSubmitRow = ({
     <div className={cn('flex items-center gap-1', submitButtonFullWidth && 'w-full')}>
       {submitActions}
       <Button
-        icon={isSubmitLoading ? <IconLoadingCircle className="animate-spin" /> : submitButtonIcon}
         type={onSubmit ? 'button' : 'submit'}
         variant={submitButtonVariant}
         onClick={onSubmit}
-        disabled={isSubmitLoading}
+        icon={submitButtonIcon}
+        loading={isSubmitLoading}
         className={cn(submitButtonFullWidth && 'w-full justify-center')}
       >
         {submitButtonLabel || children}

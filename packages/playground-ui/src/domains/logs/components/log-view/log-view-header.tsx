@@ -1,15 +1,10 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
-import { CardContent } from '@/ds/components/Card';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
 
 export function LogViewHeader({ children }: { children: ReactNode }) {
-  return (
-    <CardContent density="compact" className="flex flex-wrap items-center gap-2">
-      {children}
-    </CardContent>
-  );
+  return <div className="flex flex-wrap items-center gap-2 px-4 py-2">{children}</div>;
 }
 
 export function LogViewTitle({ children = 'Logs' }: { children?: ReactNode }) {

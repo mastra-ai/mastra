@@ -1,11 +1,6 @@
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: structured output wrapped in a ```json code fence.
@@ -32,7 +27,7 @@ describeForAllEngines('AIMock loop scenario: structured output in a json code fe
   async function stream(prompt: string, schema: z.ZodType) {
     const { agent } = await createSharedAgent(getMock(), { engine, instructions: 'You are a helpful assistant.' });
     const result: any = await agent.stream(prompt, { structuredOutput: { schema } });
-    return { result, output: isDurableEngineVariant(engine) ? result.output : result };
+    return { result, output: result.output ?? result };
   }
 
   it('unwraps a fenced object and streams partials while the fence is still open', async () => {
