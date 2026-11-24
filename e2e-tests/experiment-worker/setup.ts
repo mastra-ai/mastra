@@ -13,6 +13,7 @@ import {
   setupPublishedRegistryFromEnv,
   startRegistry,
   stopRegistry,
+  resolveVerdaccioPathFrom,
 } from '../_local-registry-setup/index.js';
 import { E2E_TAG, getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 import { computeRegistryArtifactDigest } from './helpers/registry-digest.js';
@@ -102,8 +103,7 @@ export default async function setup(project: TestProject) {
   try {
     execFileSync('pnpm', ['build:cli'], { cwd: rootDir, stdio: 'inherit' });
     const require = createRequire(import.meta.url);
-    const verdaccioPackagePath = require.resolve('verdaccio/package.json');
-    const verdaccioPath = join(dirname(verdaccioPackagePath), 'bin', 'verdaccio');
+    const verdaccioPath = resolveVerdaccioPathFrom(require);
     await copyFile(
       join(rootDir, 'e2e-tests/_local-registry-setup/verdaccio.yaml'),
       join(registryRoot, 'verdaccio.yaml'),

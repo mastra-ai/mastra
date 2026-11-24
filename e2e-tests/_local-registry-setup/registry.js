@@ -1,5 +1,5 @@
 import { fork, execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
@@ -15,9 +15,15 @@ if (typeof require === 'undefined') {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// verdaccio 7 exports only ".", so `verdaccio/package.json` and `verdaccio/bin/verdaccio` can't be
+// resolved; walk the resolver's node_modules lookup paths to find the package directory instead.
 export function resolveVerdaccioPathFrom(requireFrom) {
-  const manifestPath = requireFrom.resolve('verdaccio/package.json');
-  const manifest = requireFrom(manifestPath);
+  const lookupPaths = requireFrom.resolve.paths('verdaccio') ?? [];
+  const manifestPath = lookupPaths.map(dir => join(dir, 'verdaccio', 'package.json')).find(path => existsSync(path));
+  if (!manifestPath) {
+    throw new Error(`Unable to find verdaccio/package.json in ${lookupPaths.join(', ')}`);
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const binPath = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.verdaccio;
   if (!binPath) {
     throw new Error(`Verdaccio package at ${manifestPath} does not declare a verdaccio binary`);
@@ -45,6 +51,12 @@ export function resolveVerdaccioPath() {
  * @returns {Promise<import('child_process').ChildProcess>}
  */
 export function runRegistry(verdaccioPath, args = [], childOptions) {
+  const nodeMajor = Number(process.versions.node.split('.')[0]);
+  if (nodeMajor < 24) {
+    return Promise.reject(
+      new Error(`E2E tests run verdaccio 7, which requires Node.js 24 or newer (current: ${process.version}).`),
+    );
+  }
   return new Promise((resolve, reject) => {
     const childFork = fork(verdaccioPath, args, {
       stdio: ['ignore', 'ignore', 'inherit', 'ipc'],

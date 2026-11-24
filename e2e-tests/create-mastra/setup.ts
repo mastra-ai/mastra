@@ -9,6 +9,7 @@ import {
   startPublishedRegistryFromEnv,
   startRegistry,
   stopRegistry,
+  resolveVerdaccioPathFrom,
 } from '../_local-registry-setup/index.js';
 import { E2E_TAG, getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 
@@ -86,7 +87,7 @@ export default async function setup({ provide }: TestProject) {
     const { default: getPort } = await import('get-port');
     const port = await getPort();
     const require = createRequire(import.meta.url);
-    const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
+    const verdaccioPath = resolveVerdaccioPathFrom(require);
     const registryLocation = fileURLToPath(new URL('../_local-registry-setup/', import.meta.url));
     registry = await startRegistry(verdaccioPath, port, registryLocation);
     const registryUrl = registry.toString();

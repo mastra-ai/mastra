@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type { TestProject } from 'vitest/node';
 import { prepareMonorepo } from '../_local-registry-setup/prepare.js';
 import { glob as globby } from 'tinyglobby';
@@ -6,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup';
+import { setupPublishedRegistryFromEnv, startRegistry, resolveVerdaccioPathFrom } from '../_local-registry-setup';
 import { publishPackages } from '../_local-registry-setup/publish';
 import { E2E_TAG, getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 
@@ -21,7 +22,7 @@ export default async function setup(project: TestProject) {
   const tag = E2E_TAG;
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
-  const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
+  const verdaccioPath = resolveVerdaccioPathFrom(createRequire(import.meta.url));
   const port = await getPort();
   const registryLocation = await mkdtemp(join(tmpdir(), 'commonjs-test-registry'));
   console.log('registryLocation', registryLocation);
