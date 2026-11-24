@@ -21,18 +21,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ExperimentResultsList } from '@mastra/playground-ui/domains/experiments/components/experiment-results-list';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
 import { useDatasetMutations, useDataset, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
-import { useReviewItems, useCompletedItems } from '@mastra/react/hooks/review';
-import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
+import { useInfiniteCompletedItems, useInfiniteReviewItems } from '@mastra/react/hooks/review';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ProposalTag } from './proposal-tag';
-import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
-import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
+import { StudioExperimentResultDetail } from '@/domains/experiments/components/studio-experiment-result-detail';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
@@ -66,8 +71,6 @@ export interface ReviewListFilters {
 }
 
 export interface DatasetReviewProps {
-  /** Trace drawer's full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
-  withQueryTrace: boolean;
   /** Shows the Feedback tabs on the result and trace drawers. */
   withFeedback: boolean;
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
@@ -115,26 +118,27 @@ export function DatasetReview({
   toolbarEnd,
   onCreateScorer,
   breadcrumbs,
-  withQueryTrace,
   withFeedback,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
   const { data: dataset } = useDataset({ datasetId: datasetId ?? '', queryOptions: { enabled: Boolean(datasetId) } });
-  const { data: reviewItems, isLoading: isLoadingReview } = useReviewItems({
+  const reviewQuery = useInfiniteReviewItems({
     experimentId,
     targetType,
     targetId,
     experiments,
     isLoadingExperiments,
   });
-  const { data: completedItems, isLoading: isLoadingCompleted } = useCompletedItems({
+  const completedQuery = useInfiniteCompletedItems({
     experimentId,
     targetType,
     targetId,
     experiments,
     isLoadingExperiments,
   });
+  const { data: reviewItems, isLoading: isLoadingReview } = reviewQuery;
+  const { data: completedItems, isLoading: isLoadingCompleted } = completedQuery;
   const { updateExperimentResult } = useDatasetMutations();
 
   const [featuredItemId, setFeaturedItemId] = useState<string | null>(featuredItemIdRequest ?? null);
@@ -400,6 +404,15 @@ export function DatasetReview({
     queryOptions: { enabled: Boolean(featuredItem?.experimentId) },
   });
 
+  const displayQuery = showCompleted ? completedQuery : reviewQuery;
+  // Tag filters and deep links only see loaded pages, so keep loading until something shows.
+  const needsMoreItems = displayItems.length === 0 || Boolean(featuredItemId && !featuredItem);
+  useEffect(() => {
+    if (needsMoreItems && displayQuery.hasNextPage && !displayQuery.isFetching) {
+      void displayQuery.fetchNextPage({ cancelRefetch: false });
+    }
+  }, [needsMoreItems, displayQuery]);
+
   const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
   const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;
   const toNextItem =
@@ -466,7 +479,7 @@ export function DatasetReview({
               </Select>
             )}
             {hasActiveFilters && (
-              <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+              <Button onClick={resetFilters} size="sm" variant="default" icon={<IconCrossMedium />}>
                 Reset
               </Button>
             )}
@@ -483,9 +496,9 @@ export function DatasetReview({
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
               <Icon size="xs">
-                <GaugeIcon />
+                <IconGauge />
               </Icon>
-              Create Scorer
+              Create scorer
             </Button>
           )}
           {hasSelection && (
@@ -498,26 +511,26 @@ export function DatasetReview({
                 onRemoveTag={handleBulkRemoveTag}
                 onNewTag={tag => handleBulkTag(tag)}
               />
-              <Button variant="primary" onClick={handleBulkComplete} icon={<CheckCircle />}>
+              <Button variant="primary" onClick={handleBulkComplete} icon={<IconCircleCheck />}>
                 Mark as reviewed
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button disabled={isAnalyzing} aria-label="More actions">
-                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
+                  <Button size="icon-md" disabled={isAnalyzing} aria-label="More actions">
+                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <IconDotGrid1x3Horizontal />}
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={openAnalyzeDialog}>
                     <Icon size="xs">
-                      <Sparkles />
+                      <IconSparklesTwo />
                     </Icon>
                     Analyze
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={handleBulkRemove}>
                     <Icon size="xs">
-                      <Trash2 />
+                      <TrashIcon />
                     </Icon>
                     Remove from queue
                   </DropdownMenu.Item>
@@ -532,7 +545,7 @@ export function DatasetReview({
 
   if (isLoadingReview) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={toolbar}>
         <h1 className="sr-only">Review Queue</h1>
         <Spinner fill />
       </PageLayout>
@@ -540,8 +553,7 @@ export function DatasetReview({
   }
 
   const detailPanel = (
-    <ExperimentResultDetail
-      withQueryTrace={withQueryTrace}
+    <StudioExperimentResultDetail
       withFeedback={withFeedback}
       result={featuredItem ?? undefined}
       title={`Review item ${featuredItem?.id ?? ''}`}
@@ -559,7 +571,7 @@ export function DatasetReview({
   );
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+    <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={toolbar}>
       <h1 className="sr-only">Review Queue</h1>
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -587,7 +599,7 @@ export function DatasetReview({
                 className="text-caption"
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
-                placeholder="E.g., Focus on safety issues and factual errors..."
+                placeholder="E.g., Focus on safety issues and factual errors"
                 rows={3}
               />
             </Field>
@@ -676,7 +688,7 @@ export function DatasetReview({
 
       <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
-          {isLoadingDisplay ? (
+          {isLoadingDisplay || (displayItems.length === 0 && displayQuery.hasNextPage) ? (
             <Spinner fill />
           ) : displayItems.length === 0 ? (
             <EmptyState
@@ -698,6 +710,9 @@ export function DatasetReview({
               selectedIds={showCompleted ? undefined : selectedItemIds}
               onToggleSelect={showCompleted ? undefined : toggleSelect}
               onToggleSelectAll={showCompleted ? undefined : toggleSelectAll}
+              setEndOfListElement={displayQuery.setEndOfListElement}
+              hasNextPage={displayQuery.hasNextPage}
+              isFetchingNextPage={displayQuery.isFetchingNextPage}
             />
           )}
         </div>

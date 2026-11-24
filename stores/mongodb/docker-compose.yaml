@@ -3,14 +3,15 @@ services:
     # Pinned to 7.x: MongoDB 8.x fatally refuses to start on Linux kernel 6.19+
     # (TCMalloc rseq incompatibility, SERVER-121912), which is what the CI runner
     # fleet runs. Do not bump back to 8.x until MongoDB ships a patched TCMalloc.
-    image: mongo:7.0.37
+    image: mongo:7.0.45
     container_name: 'mongodb-storage-test-db'
     ports:
       - '27017:27017'
     volumes:
-      # v7 suffix: mongod 7.x cannot open a data dir created by 8.x, so reusing
-      # the old `mongodbdata` volume would fail on machines that ran 8.3.4.
-      - mongodbdata-v7:/data/db
+      # mongod 7.x cannot open a data dir created by a newer major ("Wrong mongod
+      # version"). `mongodbdata` held 8.3.4 data and `mongodbdata-v7` may hold
+      # 9.0.8 data from when this image was briefly bumped, so use a fresh name.
+      - mongodbdata-mongo7:/data/db
     healthcheck:
       test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
       interval: 2s
@@ -18,11 +19,15 @@ services:
       retries: 15
       start_period: 3s
   mongodb-fidelity:
-    image: mongo:7.0.37
+    image: mongo:7.0.45
     profiles: ['fidelity']
     command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27019']
     ports:
       - '127.0.0.1:27019:27019'
+    volumes:
+      # Named for the same reason as mongodbdata-mongo7: an earlier 9.0.8
+      # container's anonymous /data/db would be reused and 7.x can't open it.
+      - mongodbfidelity-mongo7:/data/db
     healthcheck:
       test:
         - CMD
@@ -62,4 +67,5 @@ services:
       retries: 15
       start_period: 3s
 volumes:
-  mongodbdata-v7:
+  mongodbdata-mongo7:
+  mongodbfidelity-mongo7:

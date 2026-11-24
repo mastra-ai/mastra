@@ -1,10 +1,12 @@
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { DEFAULT_BOARD_ID } from './default-board.js';
+import { holdsLegacyPlanner } from './legacy-plan-role.js';
 import type { BoardRegistry } from './registry.js';
 
-/** Rows that predate persisted boards used source-type routing. */
-export function effectiveBoard(item: WorkItemRow): string {
-  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
+/** Rows that predate persisted boards sit on Work. */
+export function effectiveBoard(item: Card): string {
+  return item.board ?? DEFAULT_BOARD_ID;
 }
 
 /**
@@ -24,7 +26,7 @@ export async function moveCardToBoard({
   workItems: Pick<WorkItemsStorage, 'update' | 'supersedeDecisionsForWorkItem'>;
   boardRegistry: BoardRegistry;
   userId: string;
-  item: WorkItemRow;
+  item: Card;
   targetBoard: string;
   /** Phase to file the card on; defaults to the target board's initial phase. */
   targetStage?: string;
@@ -48,10 +50,12 @@ export async function moveCardToBoard({
   const current = boardRegistry.get(currentBoard);
   // Without the board definition we can't tell terminal phases or attached sessions apart, so leave the card alone.
   if (!current) return 'skipped';
-  // Sessions are keyed by the phase's role, not the phase id.
+  // Sessions are keyed by the phase's context, not the phase id. Cards planned before
+  // Planning moved to the `work` context still hold their planner under `plan`.
   const movable = item.stages.every(currentStage => {
     if (current.phases[currentStage]?.kind === 'terminal') return false;
     const role = current.roleForPhase(currentStage);
+    if (holdsLegacyPlanner(currentBoard, currentStage, item.sessions)) return false;
     return role === undefined || item.sessions[role] === undefined;
   });
   if (!movable) return 'skipped';
@@ -79,7 +83,7 @@ export async function moveCardToBoard({
   }
 }
 
-export function cardLabels(item: WorkItemRow): string[] {
-  const labels = item.metadata?.labels;
+export function cardLabels(item: Card): string[] {
+  const labels = item.workItem.labels;
   return Array.isArray(labels) ? labels.filter((label): label is string => typeof label === 'string') : [];
 }

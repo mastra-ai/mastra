@@ -20,7 +20,7 @@ const baseWorkflow: GetWorkflowResponse = {
   inputSchema: '',
   outputSchema: '',
   stateSchema: '',
-} as GetWorkflowResponse;
+};
 
 function renderHeader(workflowId = 'demo-workflow') {
   const queryClient = new QueryClient({

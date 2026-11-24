@@ -29,7 +29,7 @@ export function DataListCell({ children, className, as, sticky, ...rest }: DataL
   return (
     <Component
       className={cn(
-        'relative grid max-w-full min-w-0 items-center overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground empty:before:text-placeholder empty:before:content-["—"]',
+        'relative grid max-w-full min-w-0 items-center overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground empty:before:text-subtle-foreground empty:before:content-["—"]',
         sticky === 'start' && dataListStickyStartStyles,
         className,
       )}
@@ -60,7 +60,7 @@ export function DataListActionsCell({ children, className, ...rest }: DataListCe
 }
 
 const dataListTruncateContentStyles =
-  'block min-w-0 max-w-full truncate empty:before:content-["—"] empty:before:text-placeholder [&>*]:min-w-0 [&>*]:max-w-full [&>*]:overflow-hidden [&>*]:text-ellipsis [&>*]:whitespace-nowrap';
+  'block min-w-0 max-w-full truncate empty:before:content-["—"] empty:before:text-subtle-foreground [&>*]:min-w-0 [&>*]:max-w-full [&>*]:overflow-hidden [&>*]:text-ellipsis [&>*]:whitespace-nowrap';
 const dataListInlineTextTruncateStyles = 'min-w-0 flex-1 truncate';
 
 function DataListInlineText({ children }: { children: string | number }) {
@@ -135,7 +135,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mx-3 w-auto max-w-none px-3 text-left text-label text-foreground',
+        'data-list-row-header -ml-3 w-auto max-w-none px-3 text-left text-label text-foreground',
         className,
       )}
       {...rest}

@@ -1,4 +1,4 @@
-import { EventEmitter } from 'node:events';
+import type { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { OpenAIRealtimeVoice } from './index';

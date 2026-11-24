@@ -1,49 +1,37 @@
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
-import { FACTORY_RULE_STAGES } from '@mastra/factory/rules/types';
+
+/**
+ * The default board's phases, in column order: its columns' labels and colours when no catalog
+ * names them. `review` is the self-review phase Work held before it dropped it; projects stored
+ * then still have it.
+ */
+const WORK_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'pr-review', 'done', 'canceled'] as const;
 
 const BOARD_STAGE_LABELS = {
   intake: 'Intake',
   triage: 'Triage',
   planning: 'Planning',
   execute: 'Building',
-  review: 'Review',
+  review: 'Self-review',
+  'pr-review': 'Review',
   done: 'Done',
   canceled: 'Canceled',
-} satisfies Record<FactoryRuleStage, string>;
+} satisfies Record<(typeof WORK_STAGES)[number], string>;
 
 export type BoardStageId = FactoryRuleStage;
 
-export type BuiltinStageId = (typeof FACTORY_RULE_STAGES)[number];
+export type BuiltinStageId = (typeof WORK_STAGES)[number];
 
 export interface BoardStage {
   id: BoardStageId;
   label: string;
 }
 
-export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(id => ({
+export const BOARD_STAGES: ReadonlyArray<BoardStage> = WORK_STAGES.map(id => ({
   id,
   label: BOARD_STAGE_LABELS[id],
 }));
-
-/**
- * Stages that hold work in the pipeline, in column order — the board minus its
- * terminal columns and minus `intake`.
- *
- * Intake is left out because the Board's Intake column merges persisted cards
- * with live GitHub/Linear candidates that have no `work_items` row yet, so any
- * aggregation over persisted rows undercounts it. Charting it means merging the
- * live candidates in first, which needs its own age semantics (upstream open
- * date vs. time in stage).
- */
-export const PIPELINE_STAGES: BoardStageId[] = FACTORY_RULE_STAGES.filter(
-  id => id !== 'intake' && !isTerminalStage(id),
-);
-
-/** Stages where the work has stopped for good. */
-export function isTerminalStage(stage: string): boolean {
-  return stage === 'done' || stage === 'canceled';
-}
 
 /** UI label for a stage, falling back to the raw id for unknown stages. */
 export function stageLabel(stage: string): string {
@@ -52,7 +40,7 @@ export function stageLabel(stage: string): string {
 
 /** The board column a raw stage id names, when it names one. */
 export function boardStage(stage: string): BuiltinStageId | undefined {
-  return FACTORY_RULE_STAGES.find(builtin => builtin === stage);
+  return WORK_STAGES.find(builtin => builtin === stage);
 }
 
 /** Position of a stage in the board's column order; unknown stages sort last. */
@@ -67,6 +55,7 @@ const STAGE_TONES = {
   planning: 'cyan',
   execute: 'info',
   review: 'green',
+  'pr-review': 'green',
   done: 'purple',
   canceled: 'destructive',
 } as const satisfies Record<BuiltinStageId, BadgeVariant>;

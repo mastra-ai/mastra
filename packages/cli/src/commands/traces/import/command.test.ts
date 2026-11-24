@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { describe, expect, it, vi } from 'vitest';
-import { configureTraceImportCommand, type TraceImportCommandOptions } from './command.js';
+import { configureTraceImportCommand } from './command.js';
+import type { TraceImportCommandOptions } from './command.js';
 
 function createProgram(action: (provider: string, options: TraceImportCommandOptions) => void): Command {
   const program = new Command()

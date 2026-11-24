@@ -29,7 +29,7 @@ export function createIdentityInvestigator(model: MastraModelConfig) {
   });
 }
 
-export const identityInvestigator = createIdentityInvestigator(process.env.MASTRA_MODEL ?? 'openai/gpt-4o-mini');
+export const identityInvestigator = createIdentityInvestigator(process.env.MASTRA_MODEL ?? 'openai/gpt-6-luna');
 
 export const invokeIdentityInvestigator: InvestigatorInvoker = async (input, _attempt, signal) =>
   (

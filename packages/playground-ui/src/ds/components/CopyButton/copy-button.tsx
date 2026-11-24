@@ -1,7 +1,7 @@
-import { CopyIcon, CheckIcon } from 'lucide-react';
-
-import type { ButtonProps } from '../Button';
+import type { ButtonProps, IconButtonSize } from '../Button';
 import { Button } from '../Button';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 export type CopyButtonProps = {
@@ -10,8 +10,9 @@ export type CopyButtonProps = {
   showToast?: boolean;
   tooltip?: string;
   className?: string;
-  size?: ButtonProps['size'];
+  size?: IconButtonSize;
   variant?: ButtonProps['variant'];
+  disabled?: boolean;
 };
 
 export function CopyButton({
@@ -19,9 +20,10 @@ export function CopyButton({
   copyMessage,
   showToast,
   tooltip = 'Copy to clipboard',
-  size = 'sm',
+  size = 'icon-sm',
   variant,
   className,
+  disabled,
 }: CopyButtonProps) {
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: content,
@@ -36,10 +38,11 @@ export function CopyButton({
       size={size}
       variant={variant}
       className={className}
+      disabled={disabled}
       tooltip={isCopied ? 'Copied!' : tooltip}
       aria-label={isCopied ? 'Copied!' : tooltip}
     >
-      {isCopied ? <CheckIcon /> : <CopyIcon />}
+      {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
     </Button>
   );
 }

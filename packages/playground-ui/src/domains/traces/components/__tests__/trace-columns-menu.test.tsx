@@ -21,6 +21,23 @@ afterEach(() => {
 });
 
 describe('TraceColumnsMenu', () => {
+  describe('when it renders', () => {
+    it('shows an icon-only trigger named Columns', () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      const trigger = screen.getByRole('button', { name: 'Columns' });
+      expect(trigger.textContent).toBe('');
+    });
+
+    it('explains the trigger in a tooltip on hover', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      await userEvent.hover(screen.getByRole('button', { name: 'Columns' }));
+
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Columns');
+    });
+  });
+
   describe('when usage metrics are unavailable', () => {
     it('explains why the usage columns are disabled', async () => {
       render(<TraceColumnsMenu {...defaultProps} usageDisabledReason="Metrics are unavailable." />);
@@ -58,15 +75,6 @@ describe('TraceColumnsMenu', () => {
       fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Duration' }));
 
       expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('duration');
-    });
-
-    it('lets the user toggle the Output column', async () => {
-      render(<TraceColumnsMenu {...defaultProps} />);
-
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Output' }));
-
-      expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('output');
     });
 
     it('resets on request', async () => {

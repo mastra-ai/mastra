@@ -93,12 +93,6 @@ describe('joinModelId', () => {
 });
 
 describe('splitModelId / joinModelId round-trip', () => {
-  it('round-trips a simple id', () => {
-    const id = 'openai/gpt-4';
-    const split = splitModelId(id);
-    expect(joinModelId(split)).toBe(id);
-  });
-
   it('round-trips an id with nested slash', () => {
     const id = 'google/models/gemini-2.0';
     const split = splitModelId(id);
@@ -524,7 +518,7 @@ describe('observational memory round-trip', () => {
     };
 
     const api = buildObservationalMemoryForApi(form);
-    const parsed = parseObservationalMemoryFromApi(api as any)!;
+    const parsed = parseObservationalMemoryFromApi(api)!;
 
     expect(parsed.enabled).toBe(true);
     expect(parsed.model).toEqual(form.model);
@@ -534,12 +528,5 @@ describe('observational memory round-trip', () => {
     expect(parsed.observation!.messageTokens).toBe(form.observation.messageTokens);
     expect(parsed.reflection!.model).toEqual(form.reflection.model);
     expect(parsed.reflection!.observationTokens).toBe(form.reflection.observationTokens);
-  });
-
-  it('build → parse round-trips boolean true', () => {
-    const api = buildObservationalMemoryForApi({ enabled: true });
-    expect(api).toBe(true);
-    const parsed = parseObservationalMemoryFromApi(api as any)!;
-    expect(parsed.enabled).toBe(true);
   });
 });

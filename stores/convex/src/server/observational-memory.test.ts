@@ -1,6 +1,7 @@
 import {
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
 } from '@mastra/core/storage';
@@ -12,6 +13,7 @@ import {
   deepMergeOMConfig,
   handleObservationalMemoryOperation,
   isAppendOnly,
+  isBufferedReflectionUnchanged,
   isChunkCoveredByCursor,
   maxCursor,
   mergeReflectionWithUnreflected,
@@ -731,6 +733,24 @@ describe('lifecycle rule parity with @mastra/core', () => {
       expect(isAppendOnly(stored, snapshot)).toBe(isAppendOnlySince(stored, snapshot));
     }
   });
+
+  it('isBufferedReflectionUnchanged matches the core rule', () => {
+    const states = [
+      {},
+      { bufferedReflection: null, reflectedObservationLineCount: null },
+      { bufferedReflection: 'R', reflectedObservationLineCount: 2 },
+      { bufferedReflection: 'R', reflectedObservationLineCount: 3 },
+      { bufferedReflection: 'R\n\nextended', reflectedObservationLineCount: 3 },
+      { bufferedReflection: 'R' },
+    ];
+    for (const stored of states) {
+      for (const snapshot of states) {
+        expect(isBufferedReflectionUnchanged(stored, snapshot)).toBe(
+          isBufferedReflectionUnchangedSince(stored, snapshot),
+        );
+      }
+    }
+  });
 });
 
 describe('observational memory lifecycle (supersededBy)', () => {
@@ -1031,6 +1051,45 @@ describe('observational memory lifecycle (supersededBy)', () => {
       bufferedObservationChunks: null,
       bufferedReflection: null,
     });
+  });
+
+  // The processor publishes values staged for a buffered reflection only when the swap proves it
+  // consumed the buffer the processor read. (#27262)
+  it('omSwapBufferedReflection marks only a generation built from the buffer the caller read', async () => {
+    const stored = storedOMDoc({
+      id: 'g0',
+      activeObservations: 'l1\nl2\nl3',
+      bufferedReflection: 'R',
+      reflectedObservationLineCount: 2,
+    });
+    const swap = async (doc: Record<string, any>, snapshot: Record<string, unknown>) => {
+      const { ctx, docs } = createFakeOMDb([{ ...doc }]);
+      const result = await run(ctx, {
+        op: 'omSwapBufferedReflection',
+        currentRecord: { ...snapshotOf(stored), ...snapshot },
+        newId: 'g1',
+        tokenCount: 5,
+        now: NOW,
+      });
+      return { result: result.result, docs };
+    };
+
+    const verified = await swap(stored, { bufferedReflection: 'R', reflectedObservationLineCount: 2 });
+    expect(verified.result).toMatchObject({ id: 'g1', bufferedReflectionVerified: true });
+    expect(byId(verified.docs, 'g1')).not.toHaveProperty('bufferedReflectionVerified');
+
+    // Another writer extended the buffer after the caller read it: nothing is created.
+    const extended = await swap(
+      { ...stored, bufferedReflection: 'R\n\nl3', reflectedObservationLineCount: 3 },
+      { bufferedReflection: 'R', reflectedObservationLineCount: 2 },
+    );
+    expect(extended.result.id).toBe('g0');
+    expect(extended.result).not.toHaveProperty('bufferedReflectionVerified');
+
+    // A caller that sent no buffer was not checked, so its generation is not marked.
+    const unchecked = await swap(stored, {});
+    expect(unchecked.result.id).toBe('g1');
+    expect(unchecked.result).not.toHaveProperty('bufferedReflectionVerified');
   });
 
   describe('omAppendBufferedChunk', () => {

@@ -1,32 +1,34 @@
 {
   "temperature": [
+    "deepseek-v4.1-flash-1017-tl5",
     "deepseek-v4.1-flash-552b",
     "gemma4-26b",
     "glm5.3-754b",
     "gpt-oss-120b",
+    "kolibri-1-tl5",
     "mistral4-119b",
-    "qwen3.6-35b",
     "qwen3.8-27b"
   ],
   "structuredOutput": [
+    "deepseek-v4.1-flash-1017-tl5",
     "deepseek-v4.1-flash-552b",
     "gemma4-26b",
     "glm5.3-754b",
     "gpt-oss-120b",
-    "qwen3.6-35b",
+    "kolibri-1-tl5",
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "qwen3.8-27b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.6-35b": [
+    "deepseek-v4.1-flash-1017-tl5": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "glm5.3-754b": [
@@ -41,16 +43,22 @@
         "values": ["none", "high"]
       }
     ],
+    "kolibri-1-tl5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "deepseek-v4.1-flash-552b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
+    "qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "gemma4-26b": [

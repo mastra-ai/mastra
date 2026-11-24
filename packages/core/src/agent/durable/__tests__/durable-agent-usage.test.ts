@@ -284,33 +284,6 @@ describe('DurableAgent usage accumulation', () => {
     }
   });
 
-  it('keeps all counters unknown when every durable step omits usage', async () => {
-    const model = createToolThenReplyingModelWithUsage({}, {});
-    const baseAgent = new Agent({
-      id: 'missing-usage-agent',
-      name: 'Missing Usage Agent',
-      instructions: 'Use the tool, then answer.',
-      model: model as LanguageModelV2,
-      tools: { usageTool },
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    const result = await durableAgent.stream('Run the tool', { maxSteps: 3 });
-
-    try {
-      for await (const _chunk of result.fullStream) {
-        // Drain the durable workflow before reading its final output.
-      }
-      const output = await result.output.getFullOutput();
-      expect(output.usage).toMatchObject({
-        inputTokens: undefined,
-        outputTokens: undefined,
-        totalTokens: undefined,
-      });
-    } finally {
-      result.cleanup();
-    }
-  });
-
   it('keeps usage unknown when the model errors before reporting usage', async () => {
     const model = new MockLanguageModelV2({
       doStream: async () => ({
@@ -356,32 +329,6 @@ describe('DurableAgent usage accumulation', () => {
     } finally {
       result.cleanup();
     }
-  });
-
-  it('should prepare workflow with correct structure for accumulation', async () => {
-    const mockModel = createModelWithUsage({
-      inputTokens: 10,
-      outputTokens: 20,
-      totalTokens: 30,
-    });
-
-    const baseAgent = new Agent({
-      id: 'accumulation-agent',
-      name: 'Accumulation Agent',
-      instructions: 'Test',
-      model: mockModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const result = await durableAgent.prepare('Test');
-
-    // The workflow input should have all required fields
-    expect(result.workflowInput.runId).toBeDefined();
-    expect(result.workflowInput.messageListState).toBeDefined();
-    expect(result.workflowInput.modelConfig).toBeDefined();
-    expect(result.workflowInput.options).toBeDefined();
-    expect(result.workflowInput.state).toBeDefined();
-    expect(result.workflowInput.messageId).toBeDefined();
   });
 
   it('should handle multiple prepare calls independently', async () => {

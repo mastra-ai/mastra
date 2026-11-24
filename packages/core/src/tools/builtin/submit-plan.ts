@@ -67,9 +67,13 @@ const resumeSchema = z.object({
 export const submitPlanTool = createTool({
   id: SUBMIT_PLAN_TOOL_ID,
   description:
-    'Submit a plan you wrote to a markdown file for review. Pass the `path` to that file (e.g. `.mastracode/plans/add-dark-mode.md`). Write/edit the file first — do not paste the plan contents here. Reuse the same file across revisions; only create a new file for a genuinely new plan. The user can approve, reject, or request changes. On approval, the system automatically switches to the default mode so you can implement.',
+    'Submit a plan you wrote to a markdown file for review. Pass the `path` to that file (e.g. `<plans directory>/add-dark-mode.md`, using the plans directory your instructions name). Write/edit the file first — do not paste the plan contents here. Reuse the same file across revisions; only create a new file for a genuinely new plan. The user can approve, reject, or request changes. On approval, the system automatically switches to the default mode so you can implement.',
   inputSchema: z.object({
-    path: z.string().describe('Path to the plan markdown file on disk (e.g. `.mastracode/plans/add-dark-mode.md`).'),
+    path: z
+      .string()
+      .describe(
+        'Path to the plan markdown file on disk, inside the plans directory your instructions name (e.g. `<plans directory>/add-dark-mode.md`).',
+      ),
   }),
   suspendSchema: z.object({
     toolId: z.literal(SUBMIT_PLAN_TOOL_ID).optional(),

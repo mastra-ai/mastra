@@ -1,8 +1,8 @@
+import { useComposerAutofocus } from '@mastra/playground-ui/domains/agents/chat/use-composer-autofocus';
 import { render, screen } from '@testing-library/react';
 import { useRef } from 'react';
-import { describe, expect, it } from 'vitest';
 
-import { useComposerAutofocus } from '../use-composer-autofocus';
+import { describe, expect, it } from 'vitest';
 
 const Harness = ({ threadId, disabled }: { threadId?: string; disabled?: boolean }) => {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -32,7 +32,13 @@ describe('useComposerAutofocus', () => {
 
   describe('when disabled', () => {
     it('does not focus the textarea', () => {
-      render(<Harness threadId="t1" disabled />);
+      const HookDisabledHarness = () => {
+        const ref = useRef<HTMLTextAreaElement>(null);
+        useComposerAutofocus(ref, { threadId: 't1', disabled: true });
+        // The textarea itself stays focusable, so only the hook's own guard keeps focus away.
+        return <textarea ref={ref} aria-label="composer" defaultValue="draft" />;
+      };
+      render(<HookDisabledHarness />);
       expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'composer' }));
     });
   });

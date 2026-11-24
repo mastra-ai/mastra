@@ -1,10 +1,12 @@
-import { X } from 'lucide-react';
-import { createElement, type ElementType, type MouseEvent, type ReactNode } from 'react';
+import { createElement } from 'react';
+import type { ElementType, MouseEvent, ReactNode } from 'react';
 
 import { cn } from '../../../lib/utils';
 import { raisedSurfaceStyle } from '../../primitives/raised-surface';
-import { Button, type ButtonProps } from '../Button';
+import { Button } from '../Button';
+import type { ButtonProps } from '../Button';
 import { Txt } from '../Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 export interface ThreadListProps {
   children: ReactNode;
@@ -109,7 +111,7 @@ export const ThreadListItem = ({
           onClick={onDelete}
           aria-label={deleteLabel}
         >
-          <X />
+          <IconCrossMedium />
         </Button>
       )}
 

@@ -202,6 +202,53 @@ describe('init catalog snapshot', () => {
     }
   }, 90000);
 
+  it('reconciles timing columns when an older process creates the schedules table after the snapshot', async () => {
+    const schema = uniqueSchema('snapshot_schedule_race');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const original = Client.prototype.query;
+    let raced = false;
+    (Client.prototype as any).query = async function (this: any, ...args: any[]) {
+      const first = args[0];
+      const text = typeof first === 'string' ? first : first?.text;
+      if (
+        !raced &&
+        typeof text === 'string' &&
+        text.includes(`CREATE TABLE IF NOT EXISTS "${schema}"."mastra_schedules"`)
+      ) {
+        raced = true;
+        await admin(`CREATE TABLE "${schema}"."mastra_schedules" (
+          "id" TEXT PRIMARY KEY,
+          "target" JSONB NOT NULL,
+          "cron" TEXT NOT NULL,
+          "timezone" TEXT,
+          "status" TEXT NOT NULL,
+          "next_fire_at" BIGINT NOT NULL,
+          "last_fire_at" BIGINT,
+          "last_run_id" TEXT,
+          "created_at" BIGINT NOT NULL,
+          "updated_at" BIGINT NOT NULL,
+          "metadata" JSONB,
+          "owner_type" TEXT,
+          "owner_id" TEXT
+        )`);
+      }
+      return (original as any).apply(this, args);
+    };
+
+    try {
+      const store = await newStore(schema);
+      await store.init();
+    } finally {
+      (Client.prototype as any).query = original;
+    }
+
+    expect(raced).toBe(true);
+    const columns = await columnsIn(schema, 'mastra_schedules');
+    expect(columns.has('run_at')).toBe(true);
+    expect(columns.has('end_at')).toBe(true);
+  }, 90000);
+
   it('heals a dropped column and a dropped table on the next init', async () => {
     const schema = uniqueSchema('snapshot_drift');
     await admin(`CREATE SCHEMA "${schema}"`);
@@ -337,7 +384,50 @@ describe('init catalog snapshot', () => {
     await admin(`ALTER TABLE "${schema}".mastra_threads DROP COLUMN "createdAtZ"`);
 
     // A snapshot that outlived init() would still report the column present.
-    expect(await db.hasColumn('mastra_threads', 'createdAtZ')).toBe(false);
+    // A fresh PgDB keeps the per-instance column cache out of the picture.
+    const freshDb = new PgDB({ client: store.db, schemaName: schema });
+    expect(await freshDb.hasColumn('mastra_threads', 'createdAtZ')).toBe(false);
+  }, 60000);
+
+  it('answers repeated hasColumn checks outside init from the column cache', async () => {
+    const schema = uniqueSchema('has_column_cache');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const store = await newStore(schema);
+    await store.init();
+    const workflows = (await store.getStore('workflows'))!;
+    const list = () =>
+      workflows.listWorkflowRuns({ workflowName: 'wf', status: 'running', resourceId: 'res-1', perPage: 0, page: 0 });
+
+    await list();
+    const statements = await captureStatements(async () => {
+      for (let i = 0; i < 10; i++) await list();
+    });
+
+    expect(count(statements, /COUNT\(\*\)/i)).toBe(10);
+    expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
+
+    // A cached positive is dropped when the store's own DDL removes the table.
+    const db = new PgDB({ client: store.db, schemaName: schema });
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(true);
+    await db.dropTable({ tableName: 'mastra_threads' as TABLE_NAMES });
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(false);
+  }, 60000);
+
+  it('resolves case-variant columns to the exact-case match outside init', async () => {
+    const schema = uniqueSchema('case_variant');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    await admin(`CREATE TABLE "${schema}".case_variant (resourceid TEXT, "resourceId" JSONB, other TEXT)`);
+
+    const store = await newStore(schema);
+    await store.init();
+    const db = new PgDB({ client: store.db, schemaName: schema });
+
+    expect(await db.hasColumn('case_variant', 'resourceId')).toBe(true);
+    expect(await db.getColumnType('case_variant', 'resourceId')).toBe('jsonb');
+    expect(await db.getColumnType('case_variant', 'resourceid')).toBe('text');
+    // Lowercase fallback still applies when only the folded name exists.
+    expect(await db.getColumnType('case_variant', 'Other')).toBe('text');
   }, 60000);
 
   it('migrates a legacy flat agents schema with the snapshot live', async () => {
@@ -389,6 +479,23 @@ describe('init catalog snapshot', () => {
     expect(versions).toHaveLength(1);
     expect(versions[0].agentId).toBe('legacy-agent-1');
     expect(versions[0].name).toBe('Legacy Agent');
+  }, 60000);
+
+  it('adds modelList to existing agent version tables', async () => {
+    const schema = uniqueSchema('agent_versions_model_list');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const first = await newStore(schema);
+    await first.init();
+    await first.close();
+
+    await admin(`ALTER TABLE "${schema}".mastra_agent_versions DROP COLUMN "modelList"`);
+
+    const second = await newStore(schema);
+    await second.init();
+
+    const versionColumns = await columnsIn(schema, 'mastra_agent_versions');
+    expect(versionColumns.has('modelList')).toBe(true);
   }, 60000);
 
   it('migrates a snapshot-column agent_versions schema with the snapshot live', async () => {

@@ -1,5 +1,47 @@
 # @mastra/voice-google
 
+## 0.14.6-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 0.14.5
+
+### Patch Changes
+
+- dependencies updates: ([#29117](https://github.com/mastra-ai/mastra/pull/29117))
+  - Updated dependency [`@google-cloud/text-to-speech@^7.2.0` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/7.2.0) (from `^6.4.1`, in `dependencies`)
+
+## 0.14.5-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#29117](https://github.com/mastra-ai/mastra/pull/29117))
+  - Updated dependency [`@google-cloud/text-to-speech@^7.2.0` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/7.2.0) (from `^6.4.1`, in `dependencies`)
+
+## 0.14.4
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.14.4-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.14.3
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.14.3-alpha.0
 
 ### Patch Changes

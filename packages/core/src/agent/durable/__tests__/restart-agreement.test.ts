@@ -269,7 +269,7 @@ describe('T26 request-context / durable-recover / tools', () => {
           const marker = context?.requestContext?.get?.('marker') ?? null;
           log.push({ tool: 'echoContext', event: 'start', n: input.n, marker, generation });
           await park.park(input.n, generation);
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, 20));
           log.push({ tool: 'echoContext', event: 'commit', n: input.n, marker, generation });
           return { n: input.n, marker };
         },
@@ -986,7 +986,7 @@ async function t55Run(engine: 'durable' | 'evented') {
       execute: async ({ inputData, actor }: any) => {
         log.push({ step: id, event: 'start', input: inputData, actor: actor ?? null, generation });
         if (blockWhen && generation === 1) await gate.wait();
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 10));
         log.push({ step: id, event: 'commit', n: inputData.n + 1, generation });
         return { n: inputData.n + 1 };
       },

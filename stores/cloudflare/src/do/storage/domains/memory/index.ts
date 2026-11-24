@@ -43,7 +43,7 @@ import type { DODomainConfig } from '../../db';
 import { DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
 import type { RunFenceCheck } from '../../db/run-fencing';
 import { createSqlBuilder } from '../../sql-builder';
-import { deserializeValue, isArrayOfRecords } from '../utils';
+import { deserializeValue, inJsonArray, isArrayOfRecords } from '../utils';
 
 function addSqliteMetadataFilter(
   conditions: string[],
@@ -809,15 +809,37 @@ export class MemoryStorageDO extends MemoryStorage {
   private async _getIncludedMessages(include: StorageListMessagesInput['include'], resourceId?: string) {
     if (!include || include.length === 0) return null;
 
-    const unionQueries: string[] = [];
-    const params: unknown[] = [];
-    let paramIdx = 1;
     const tableName = this.#db.getTableName(TABLE_MESSAGES);
     const resourceCondition = resourceId ? ` AND resourceId = ?` : '';
+
+    // Every include term binds a handful of parameters, so a statement pinning more than ~20
+    // messages runs out of bound parameters ("too many SQL variables"). Run the terms in small
+    // batches instead, the same way the D1 memory domain does, and merge the rows afterwards.
+    const MAX_UNION_TERMS = 5;
+    const unionQueries: string[] = [];
+    const unionParams: unknown[] = [];
+    const messages: Record<string, unknown>[] = [];
+    let paramIdx = 1;
+
+    const flushBatch = async () => {
+      if (unionQueries.length === 0) return;
+
+      const query = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
+      const rows = await this.#db.executeQuery({
+        sql: query,
+        params: unionParams as (string | number | boolean | null | undefined)[],
+      });
+      if (Array.isArray(rows)) messages.push(...(rows as Record<string, unknown>[]));
+
+      unionQueries.length = 0;
+      unionParams.length = 0;
+    };
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
       // Query by message ID directly - get the threadId from the message itself via subquery
+
+      if (unionQueries.length >= MAX_UNION_TERMS) await flushBatch();
 
       unionQueries.push(`
                 SELECT * FROM (
@@ -853,21 +875,20 @@ export class MemoryStorageDO extends MemoryStorage {
                 ) AS query_${paramIdx}
             `);
 
-      params.push(id);
-      if (resourceId) params.push(resourceId, resourceId);
-      params.push(id, id, withNextMessages, withPreviousMessages);
+      unionParams.push(id);
+      if (resourceId) unionParams.push(resourceId, resourceId);
+      unionParams.push(id, id, withNextMessages, withPreviousMessages);
       paramIdx++;
     }
 
-    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
-    const messages = await this.#db.executeQuery({
-      sql: finalQuery,
-      params: params as (string | number | boolean | null | undefined)[],
-    });
+    await flushBatch();
 
-    if (!Array.isArray(messages)) {
+    if (messages.length === 0) {
       return [];
     }
+
+    // Each batch was ordered on its own, so restore the single-statement ordering.
+    messages.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 
     // Parse message content
     const processedMessages = messages.map((message: Record<string, unknown>) => {
@@ -893,7 +914,7 @@ export class MemoryStorageDO extends MemoryStorage {
       const query = createSqlBuilder()
         .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId', 'resourceId'])
         .from(fullTableName)
-        .where(`id in (${messageIds.map(() => '?').join(',')})`, ...messageIds);
+        .where(inJsonArray('id'), JSON.stringify(messageIds));
 
       query.orderBy('createdAt', 'DESC');
 
@@ -972,13 +993,12 @@ export class MemoryStorageDO extends MemoryStorage {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread(s) first (without excluding included ones)
-      const placeholders = threadIds.map(() => '?').join(', ');
       let query = `
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${fullTableName}
-        WHERE thread_id IN (${placeholders})
+        WHERE ${inJsonArray('thread_id')}
       `;
-      const queryParams: unknown[] = [...threadIds];
+      const queryParams: unknown[] = [JSON.stringify(threadIds)];
 
       if (resourceId) {
         query += ` AND resourceId = ?`;
@@ -1037,8 +1057,8 @@ export class MemoryStorageDO extends MemoryStorage {
       const paginatedCount = paginatedMessages.length;
 
       // Get total count
-      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id = ?`;
-      const countParams: unknown[] = [threadId];
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE ${inJsonArray('thread_id')}`;
+      const countParams: unknown[] = [JSON.stringify(threadIds)];
 
       if (resourceId) {
         countQuery += ` AND resourceId = ?`;
@@ -1137,10 +1157,16 @@ export class MemoryStorageDO extends MemoryStorage {
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const threadIdSet = new Set(threadIds);
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
+      // Includes are fetched by id and ignore `filter.dateRange`, so a pinned message from outside
+      // the range must not count as coverage for messages the count query still reports as unread.
+      // A date range is therefore treated like a metadata filter: rely on the pagination window.
       const hasMore =
         perPageInput !== false &&
-        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        (metadataFilter || dateRange?.start || dateRange?.end || returnedThreadMessageIds.size < total) &&
         offset + paginatedCount < total;
 
       return {
@@ -1203,9 +1229,11 @@ export class MemoryStorageDO extends MemoryStorage {
 
     try {
       // Get existing messages
-      const placeholders = messageIds.map(() => '?').join(',');
-      const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      const existingMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE ${inJsonArray('id')}`;
+      const existingMessages = (await this.#db.executeQuery({
+        sql: selectQuery,
+        params: [JSON.stringify(messageIds)],
+      })) as any[];
 
       if (existingMessages.length === 0) {
         return [];
@@ -1304,10 +1332,7 @@ export class MemoryStorageDO extends MemoryStorage {
     const check = this.#runFenceCheck(options?.fence, 'deleteMessages');
 
     try {
-      const placeholders = messageIds.map(() => '?').join(',');
-      const query = createSqlBuilder()
-        .delete(fullTableName)
-        .where(`id IN (${placeholders})`, ...messageIds);
+      const query = createSqlBuilder().delete(fullTableName).where(inJsonArray('id'), JSON.stringify(messageIds));
       const guard = runFenceGuard(check);
       if (guard) query.andWhere(guard.sql, ...guard.params);
       await executeFenced(this.#db, check, query.build());

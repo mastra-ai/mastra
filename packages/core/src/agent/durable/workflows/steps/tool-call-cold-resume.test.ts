@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
+import { MessageList } from '../../../message-list';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import * as resolveRuntime from '../../utils/resolve-runtime';
@@ -55,6 +56,7 @@ describe('cold durable tool-call resume (#25978)', () => {
     });
     vi.mocked(resolveRuntime.toolRequiresApproval).mockResolvedValue(true);
     const result = await (createDurableToolCallStep() as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-1', toolName: 'save', args, requireApproval: true },
       resumeData: { approved: false },
       suspendData: { type: 'approval' },
@@ -139,6 +141,7 @@ describe('cold durable tool-call resume (#25978)', () => {
       const transform = { targets: ['display', 'transcript'], transformToolPayload: () => '[redacted]' };
       const step = createDurableToolCallStep();
       const result = await (step as any).execute({
+        getState: async () => ({}),
         inputData: { toolCallId: 'call-1', toolName: 'save', args, requireApproval: kind === 'approval' },
         resumeData: { approved: true },
         suspendData:
@@ -197,4 +200,77 @@ describe('cold durable tool-call resume (#25978)', () => {
       );
     },
   );
+
+  it('persists only the invocation and new questions when a cold worker suspends', async () => {
+    const context = new MessageList({ threadId: 'thread-1', resourceId: 'user-1' });
+    context.add(
+      [
+        {
+          id: 'old-context',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'earlier' }] },
+          createdAt: new Date(),
+        },
+        {
+          id: 'invocation',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'ask', args: {} },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ] as any,
+      'response',
+    );
+    const snapshots: any[][] = [];
+    const flushMessages = vi.fn(async (list: MessageList) => {
+      snapshots.push(structuredClone(list.get.all.db()));
+    });
+    const nested = (id: string) => ({
+      type: 'tool-output',
+      payload: { output: { type: 'data-question', id, data: { question: 'Continue?' } } },
+    });
+    const execute = vi.fn(async (_args: unknown, options: any) => {
+      await options.outputWriter(nested('q-1'));
+      await options.outputWriter(nested('q-2'));
+      await options.suspend({ question: 'Continue?' });
+    });
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
+      tools: { ask: { id: 'ask', execute } as any },
+      memory: { recall: vi.fn() } as any,
+      saveQueueManager: { flushMessages } as any,
+    });
+
+    await (createDurableToolCallStep() as any).execute({
+      inputData: { toolCallId: 'call-1', toolName: 'ask', args: {} },
+      requestContext: new Map(),
+      suspend: vi.fn(),
+      getState: async () => ({}),
+      getStepResultAsync: async () => ({ messageListState: context.serialize() }),
+      getInitData: () => ({
+        runId,
+        agentId: 'saver',
+        options: {},
+        state: { threadId: 'thread-1', resourceId: 'user-1', threadExists: true },
+      }),
+      mastra: { getLogger: () => undefined, getServer: () => undefined, listTools: () => ({}) },
+      [PUBSUB_SYMBOL]: { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), flush: vi.fn() },
+    });
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(flushMessages).toHaveBeenCalled();
+    expect(snapshots[0]?.map(message => message.id)).not.toContain('old-context');
+    expect(
+      snapshots[0]?.flatMap(message => message.content.parts).filter(part => part.type === 'data-question'),
+    ).toEqual([
+      expect.objectContaining({ id: 'q-1', data: { question: 'Continue?' } }),
+      expect.objectContaining({ id: 'q-2', data: { question: 'Continue?' } }),
+    ]);
+  });
 });

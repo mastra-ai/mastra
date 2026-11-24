@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 type MutableSettingsFixture = Record<string, unknown> & {
   onboarding: Record<string, unknown>;
@@ -17,4 +18,13 @@ export function readMutableSettingsFixture(path: string): MutableSettingsFixture
   const onboarding = isRecord(value.onboarding) ? value.onboarding : {};
   const models = isRecord(value.models) ? value.models : {};
   return { ...value, onboarding, models };
+}
+
+/** Opts the TUI in to mouse support (off by default) through the `/settings` Mouse preferences. */
+export function enableMouseSettings(appDataDir: string, mouse: { dialogs: boolean; input: boolean }): void {
+  const path = join(appDataDir, 'settings.json');
+  const settings = readMutableSettingsFixture(path);
+  const preferences = isRecord(settings.preferences) ? settings.preferences : {};
+  settings.preferences = { ...preferences, mouseDialogs: mouse.dialogs, mouseInput: mouse.input };
+  writeFileSync(path, JSON.stringify(settings, null, 2));
 }

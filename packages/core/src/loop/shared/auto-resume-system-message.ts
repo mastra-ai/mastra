@@ -71,19 +71,16 @@ export function extractSuspendedToolsFromMessages(
   if (!suspendedToolObj) {
     suspendedToolObj = suspendedToolsMessage.content.parts
       ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
-      ?.reduce(
-        (acc, part, index) => {
-          if (
-            (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-            !(part.data as { resumed?: boolean }).resumed
-          ) {
-            const data = part.data as { toolCallId?: string; toolName?: string };
-            if (data.toolName) acc[data.toolCallId ?? `${data.toolName}-${index}`] = data;
-          }
-          return acc;
-        },
-        {} as Record<string, unknown>,
-      );
+      ?.reduce<Record<string, unknown>>((acc, part, index) => {
+        if (
+          (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+          !(part.data as { resumed?: boolean }).resumed
+        ) {
+          const data = part.data as { toolCallId?: string; toolName?: string };
+          if (data.toolName) acc[data.toolCallId ?? `${data.toolName}-${index}`] = data;
+        }
+        return acc;
+      }, {});
   }
 
   if (!suspendedToolObj) return [];

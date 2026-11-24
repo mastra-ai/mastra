@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,6 +64,31 @@ describe('mastracode workspace LSP configuration', () => {
       workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
 
       expect(Reflect.get(workspace.lsp!, 'config')).toMatchObject({ maxOpenClients: 2 });
+    } finally {
+      try {
+        await workspace?.destroy();
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+    }
+  });
+});
+
+describe('mastracode workspace reuse', () => {
+  it('builds on a lookup miss and reuses a registered workspace without logging errors', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-reuse-'));
+    const mastra = new Mastra({});
+    const trackException = vi.spyOn(mastra.getLogger(), 'trackException');
+    let workspace: Awaited<ReturnType<typeof import('./workspace.js').getDynamicWorkspace>> | undefined;
+
+    try {
+      const { getDynamicWorkspace } = await import('./workspace.js');
+      const requestContext = createRequestContext(tempDir) as any;
+      workspace = await getDynamicWorkspace({ requestContext, mastra });
+      mastra.addWorkspace(workspace);
+
+      expect(await getDynamicWorkspace({ requestContext, mastra })).toBe(workspace);
+      expect(trackException).not.toHaveBeenCalled();
     } finally {
       try {
         await workspace?.destroy();

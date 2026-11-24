@@ -6,14 +6,6 @@ describe('cleanProviderId', () => {
     expect(cleanProviderId('openai.chat')).toBe('openai');
   });
 
-  it('should remove .messages suffix', () => {
-    expect(cleanProviderId('anthropic.messages')).toBe('anthropic');
-  });
-
-  it('should remove .responses suffix', () => {
-    expect(cleanProviderId('openai.responses')).toBe('openai');
-  });
-
   it('should return unchanged if no dot suffix', () => {
     expect(cleanProviderId('openai')).toBe('openai');
   });

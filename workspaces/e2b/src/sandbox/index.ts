@@ -40,6 +40,7 @@ import type {
 } from 'e2b';
 import { createDefaultMountableTemplate, isDeferredNamedTemplateSpec, isNamedTemplateSpec } from '../utils/template';
 import type { DeferredNamedTemplateSpec, NamedTemplateSpec, TemplateResources, TemplateSpec } from '../utils/template';
+import { E2BSandboxFilesystem } from './filesystem';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
 import type {
   E2BMountConfig,
@@ -123,6 +124,17 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   timeout?: number;
   /** Environment variables to set in the sandbox */
   env?: Record<string, string>;
+  /**
+   * OS user to run commands as, by name.
+   *
+   * Defaults to the template's own default user. Set this to run agent
+   * commands as a second, unprivileged user — mounting still runs as the
+   * default user, which needs `sudo` to mount FUSE filesystems.
+   *
+   * The user must exist in the sandbox template; E2B starts the command as
+   * that user without creating it.
+   */
+  user?: string;
   /** Custom metadata */
   metadata?: Record<string, unknown>;
   /** Network configuration to use when creating the E2B sandbox */
@@ -239,6 +251,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   protected _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
   private _isRetrying = false;
+  private _filesystem?: E2BSandboxFilesystem;
   private readonly timeout: number;
   protected readonly templateSpec?: TemplateSpec;
   private readonly metadata: Record<string, unknown>;
@@ -272,6 +285,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       name: 'E2BSandbox',
       processes: new E2BProcessManager({
         defaultTimeout: options.timeout ?? 300_000,
+        user: options.user,
       }),
     });
 
@@ -616,6 +630,16 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
   // ---------------------------------------------------------------------------
   // File Upload
   // ---------------------------------------------------------------------------
+
+  /**
+   * The sandbox's disk through E2B's files API: one request per operation
+   * instead of a shell command. Paths are absolute inside the sandbox and are
+   * not confined to any root.
+   */
+  get filesystem(): E2BSandboxFilesystem {
+    this._filesystem ??= new E2BSandboxFilesystem(this);
+    return this._filesystem;
+  }
 
   /**
    * Bulk-write files into the sandbox filesystem via the SDK's native upload.

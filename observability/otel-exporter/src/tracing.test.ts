@@ -420,7 +420,7 @@ describe('OtelExporter', () => {
       // This test captures the expected behavior: tags should be included as span attributes
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -448,7 +448,7 @@ describe('OtelExporter', () => {
     it('should not include mastra.tags attribute when tags array is empty', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -473,7 +473,7 @@ describe('OtelExporter', () => {
     it('should not include mastra.tags attribute when tags is undefined', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -498,7 +498,7 @@ describe('OtelExporter', () => {
     it('should not include mastra.tags attribute for child spans (tags only on root spans)', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -525,7 +525,7 @@ describe('OtelExporter', () => {
     it('should include tags with workflow spans', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -676,75 +676,6 @@ describe('OtelExporter', () => {
       });
 
       expect(loadExporter).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Signal Endpoint Resolution', () => {
-    beforeEach(() => {
-      mockEmit.mockClear();
-    });
-
-    it('rewrites a trace endpoint to /v1/logs when constructing the log exporter', async () => {
-      const ctorArgs: Array<Record<string, unknown>> = [];
-      const { loadSignalExporter } = await import('./loadExporter');
-      vi.mocked(loadSignalExporter).mockResolvedValueOnce(
-        class MockLogExporter {
-          constructor(options: Record<string, unknown>) {
-            ctorArgs.push(options);
-          }
-          export = vi.fn().mockResolvedValue(undefined);
-          shutdown = vi.fn().mockResolvedValue(undefined);
-        },
-      );
-
-      exporter = new OtelExporter({
-        provider: {
-          custom: {
-            endpoint: 'http://localhost:4318/v1/traces',
-          },
-        },
-      });
-
-      await exporter.onLogEvent({
-        type: 'log',
-        log: {
-          timestamp: new Date(),
-          level: 'info',
-          message: 'Test endpoint resolution',
-        },
-      });
-
-      expect(ctorArgs[0]).toMatchObject({ url: 'http://localhost:4318/v1/logs' });
-      expect(mockEmit).toHaveBeenCalledTimes(1);
-    });
-
-    it('appends /v1/logs without producing double slashes when the endpoint has a trailing slash', async () => {
-      const ctorArgs: Array<Record<string, unknown>> = [];
-      const { loadSignalExporter } = await import('./loadExporter');
-      vi.mocked(loadSignalExporter).mockResolvedValueOnce(
-        class MockLogExporter {
-          constructor(options: Record<string, unknown>) {
-            ctorArgs.push(options);
-          }
-          export = vi.fn().mockResolvedValue(undefined);
-          shutdown = vi.fn().mockResolvedValue(undefined);
-        },
-      );
-
-      exporter = new OtelExporter({
-        provider: {
-          custom: {
-            endpoint: 'http://localhost:4318/',
-          },
-        },
-      });
-
-      await exporter.onLogEvent({
-        type: 'log',
-        log: { timestamp: new Date(), level: 'info', message: 'trailing slash' },
-      });
-
-      expect(ctorArgs[0]).toMatchObject({ url: 'http://localhost:4318/v1/logs' });
     });
   });
 

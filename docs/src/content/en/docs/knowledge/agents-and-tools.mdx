@@ -1,0 +1,129 @@
+---
+title: "Agents and tools"
+description: "Turn on the Knowledge tools for an agent, and what agents can do with them."
+packages:
+  - "@mastra/core"
+---
+
+# Agents and tools
+
+Agents use Knowledge in two ways. With tools, an agent searches, reads and writes pages when it decides to. With [pinned context](/docs/knowledge/pinned-context), chosen pages are in the agent's context on every turn, without a tool call. This page covers the tools. You choose which tools an agent gets. Your [scope declarations](/docs/knowledge/scopes-and-access) decide what each tool call is allowed to do.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+## Turn on the tools
+
+The read tools let an agent browse, search and read pages. The write tools let it create and change pages and notes. Each tool is described in the [Knowledge tools reference](/reference/knowledge/knowledge-tools).
+
+Tools are off by default. Set `tools: true` to turn on the read and write tools:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  scopes: knowledgeMemoryScopes(),
+  tools: true,
+})
+```
+
+An agent that only answers from Knowledge, such as a docs agent, needs only the read tools:
+
+```typescript
+const knowledge = new Knowledge({
+  id: 'docs',
+  scopes: knowledgeMemoryScopes(),
+  tools: { read: true },
+})
+```
+
+The pin tool comes with pinned context. To turn it on, set `pinnedContext: true`, as described in [Pinned context](/docs/knowledge/pinned-context).
+
+## Attach the tools to an agent
+
+Pass the Knowledge instance in the agent's `knowledge` option. The agent gets the tools you turned on. It also gets short instructions on how to use them, so you don't need to describe the tools in your own instructions:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { knowledge } from '../knowledge'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Help customers with their orders.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+})
+```
+
+To change these instructions, see [Tool instructions](/reference/knowledge/tool-instructions).
+
+### Add the tools yourself
+
+You can also add the tools to the agent's `tools`, next to its other tools. Use [`createTools()`](/reference/knowledge/knowledge-class#createtools) for the tools and [`getInstructions()`](/reference/knowledge/knowledge-class#getinstructions) for their instructions. Pass the same options to both:
+
+```typescript title="src/mastra/agents/docs-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { knowledge } from '../knowledge'
+
+export const docsAgent = new Agent({
+  id: 'docs-agent',
+  name: 'Docs agent',
+  instructions: `Answer from the company docs.\n\n${knowledge.getInstructions({ write: false, pinnedContext: false })}`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    ...knowledge.createTools({ write: false, pinnedContext: false }),
+  },
+})
+```
+
+The options override the instance's settings for this agent. Here, `{ write: false, pinnedContext: false }` gives the agent only the read tools. Without `pinnedContext: false`, it would also get `knowledge_pin` when the instance has pinned context on. Access checks work the same either way.
+
+## Read pages
+
+With the read tools, an agent can:
+
+- Browse how a scope is organized.
+- Search pages and notes by keyword, or by meaning when you [add semantic search](/docs/knowledge/search#add-search-by-meaning).
+- Read a page, including its notes and the notes on other pages that mention it.
+
+A long page comes back in parts. The first read shows the page's headings. The agent then reads the section it needs, continues from a line, or reads only the lines that match a term.
+
+When nothing matches, the result says so. The agent can then tell the user it doesn't know instead of guessing.
+
+One read returns at most 1,000 tokens of a page by default. Raise this cap for models with large context windows, or lower it for small models:
+
+```typescript
+const knowledge = new Knowledge({
+  id: 'docs',
+  scopes: knowledgeMemoryScopes(),
+  tools: { read: { maxTokens: 3000 }, write: true },
+})
+```
+
+## Write pages
+
+With the write tools, an agent can:
+
+- Create and edit pages, and move, merge or delete them.
+- Add and remove notes. A note is a short fact on a page, attributed to its author. It can link to other pages, and its [stamps](/docs/knowledge/scopes-and-access#note-visibility) decide who sees it.
+
+The agent puts each page in the scope that matches its audience. A fact for the whole team goes in the team's scope. A fact for one user goes in that user's `resource:` scope.
+
+On a long page, the agent edits only the lines it read, so it can't overwrite parts it hasn't seen. If someone changed the page after the agent read those lines, the edit is refused.
+
+## Access checks
+
+Turning on a tool doesn't give access. An agent can only use the scopes its run holds and the scopes that rules give it a role in. Everything else is invisible to it.
+
+Knowledge checks each tool call against the run's role in the scopes it touches. The [roles table](/docs/knowledge/scopes-and-access#access-rules-and-roles) lists what each role can do.
+
+A refused call doesn't throw an error in your code. The model gets the refusal as the tool result and can respond to it.
+
+## Next steps
+
+Next, [pin the pages](/docs/knowledge/pinned-context) an agent should see on every turn. Size caps for reads and writes are in [Limits](/reference/knowledge/limits).

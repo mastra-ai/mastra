@@ -238,7 +238,7 @@ describe('concurrent resume', () => {
     } as any;
   }
 
-  function createUnclaimableWorkflow(options: { allowUnclaimedResumes?: boolean }) {
+  function createUnclaimableWorkflow(options: { allowUnclaimedResumes?: boolean; persistResumeClaim?: boolean }) {
     const approvalStep = createStep({
       id: 'approval',
       inputSchema: z.object({ item: z.string() }),
@@ -306,6 +306,33 @@ describe('concurrent resume', () => {
     const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
     expect(result.status).toBe('success');
 
+    const warnings = logger.warn.mock.calls.map((c: any[]) => String(c[0]));
+    expect(warnings.filter((m: string) => m.includes('cannot be de-duplicated'))).toHaveLength(0);
+  });
+
+  it('does not warn when an acknowledged persistResumeClaim resume meets a store that cannot claim', async () => {
+    // The durable agent loop sets both options. On a store without concurrent-update support the
+    // forced claim is skipped, and the warning would otherwise fire on every approval.
+    const harness = createUnclaimableWorkflow({ allowUnclaimedResumes: true, persistResumeClaim: true });
+    const logger = fakeLogger();
+    const storage = new MockStore();
+    const workflowsStore = storage.stores.workflows as any;
+    vi.spyOn(workflowsStore, 'supportsConcurrentUpdates').mockReturnValue(false);
+    const updateSpy = vi.spyOn(workflowsStore, 'updateWorkflowState');
+    new Mastra({
+      storage,
+      workflows: { 'unclaimable-resume-wf': harness.workflow },
+      logger,
+    });
+
+    const run = await harness.workflow.createRun();
+    const started = await run.start({ inputData: { item: 'widget' } });
+    expect(started.status).toBe('suspended');
+
+    const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
+    expect(result.status).toBe('success');
+
+    expect(updateSpy).not.toHaveBeenCalled();
     const warnings = logger.warn.mock.calls.map((c: any[]) => String(c[0]));
     expect(warnings.filter((m: string) => m.includes('cannot be de-duplicated'))).toHaveLength(0);
   });

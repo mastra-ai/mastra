@@ -84,6 +84,10 @@ function ThreadPreferencesState({
         model,
         modelOverride,
         modelWarning,
+        agentModel: defaultProvider && defaultModel ? { provider: defaultProvider, model: defaultModel } : undefined,
+        resetModel: savedSelection
+          ? () => setPreferences(previous => ({ ...previous, selection: undefined }))
+          : undefined,
         setProvider: provider => setPreferences(previous => ({ ...previous, selection: { provider, model: '' } })),
         setModel: (provider, model) => setPreferences(previous => ({ ...previous, selection: { provider, model } })),
       }}

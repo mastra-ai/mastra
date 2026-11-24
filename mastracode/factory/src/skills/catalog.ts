@@ -1,35 +1,83 @@
 /**
  * Read-only catalog of the Factory skills.
  *
- * These are the built-in skills the Factory pipeline invokes at each stage
- * (triage, plan, review, …). The catalog reads each `SKILL.md` (repo-local
- * override first, then bundled) so the settings UI can show users exactly what
- * each skill instructs the agent to do — and whether the runtime can load it.
+ * Lists every skill the Factory skill mount serves — the built-in skills the
+ * pipeline invokes at each stage (triage, plan, review, …) and the app's own
+ * skills from `MastraFactory({ skills })` or its `factory-skills/` folder. It
+ * reads them through the same `FactorySkillSource` sessions use, so the
+ * settings UI shows exactly what each skill instructs the agent to do — and
+ * whether the runtime can load it.
  */
-import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { InlineSkill } from '@mastra/core/skills';
 import { validateSkillContent } from '@mastra/core/skills';
+import type { SkillSource } from '@mastra/core/workspace';
 
-import { BUNDLED_FACTORY_SKILLS_PATH, FACTORY_SKILL_NAMES, resolveLocalFactorySkillsPath } from '../workspace.js';
+import type { ProjectSkillNames } from '../boards/project-boards.js';
+import type { StoredBoardScope } from '../storage/domains/boards/base.js';
+import type { SkillOverrideRecord, SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
+import {
+  FACTORY_SKILL_NAMES,
+  FACTORY_SKILLS_MOUNT,
+  FactorySkillSource,
+  resolveLocalFactorySkillsPath,
+} from '../workspace.js';
+
+/** Where a skill comes from: shipped with Factory, the app's `factory-skills/` folder, or `MastraFactory({ skills })`. */
+export type FactorySkillOrigin = 'bundled' | 'folder' | 'code';
+
+/** Where a listed skill comes from: an original's origin, or `project` for a skill the project created. */
+export type FactorySkillCatalogOrigin = FactorySkillOrigin | 'project';
 
 export interface FactorySkillInfo {
   name: string;
   description: string;
   /** SKILL.md body with the frontmatter block removed. */
   content: string;
+  /** Frontmatter fields besides `name` and `description` (license, user-invocable, …), so an editor can keep them. */
+  frontmatter?: Record<string, unknown>;
+  origin: FactorySkillCatalogOrigin;
+  /** True for the skills Factory ships, including when the app overrides one. */
+  builtIn: boolean;
   /** Set when the SKILL.md fails the runtime's parsing/validation, so the agent will not be able to load it. */
   error?: string;
+  /** Set when the project has an edited copy; `description` and `content` then come from the edit. */
+  edited?: { updatedBy: string; updatedAt: string };
+  /** Set for a skill the project created (`origin: 'project'`): who saved it last, and when. */
+  created?: { updatedBy: string; updatedAt: string };
+  /** True when the code, folder, or bundled SKILL.md changed since the project's edit was made. */
+  originalChanged?: boolean;
 }
 
-function parseSkillMarkdown(name: string, raw: string): FactorySkillInfo {
+/** The SKILL.md a skill resolves to without any project edit, and where it came from. */
+export interface FactorySkillOriginal {
+  raw: string;
+  origin: FactorySkillOrigin;
+}
+
+/** Fingerprint of an original SKILL.md, stored with an edit so the catalog can tell when the original moved on. */
+export function hashSkillContent(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+function parseSkillMarkdown(
+  name: string,
+  raw: string,
+): Pick<FactorySkillInfo, 'description' | 'content' | 'frontmatter' | 'error'> {
   // Use the same parser and validation the runtime applies when loading skills,
   // so the catalog never shows a skill as healthy that the agent will drop.
   const result = validateSkillContent({ content: raw, directoryName: name });
   const description = typeof result.metadata?.description === 'string' ? result.metadata.description : '';
   const content = result.instructions ?? stripFrontmatter(raw);
-  if (!result.valid) return { name, description, content, error: result.errors.join('\n') };
-  return { name, description, content };
+  const extra = Object.entries(result.metadata ?? {}).filter(
+    ([key, value]) => key !== 'name' && key !== 'description' && value !== undefined,
+  );
+  const frontmatter = extra.length > 0 ? { frontmatter: Object.fromEntries(extra) } : {};
+  if (!result.valid) return { description, content, ...frontmatter, error: result.errors.join('\n') };
+  return { description, content, ...frontmatter };
 }
 
 /** Best-effort body extraction when the frontmatter cannot be parsed, so users can still read the file they need to fix. */
@@ -38,27 +86,114 @@ function stripFrontmatter(raw: string): string {
   return (match ? raw.slice(match[0].length) : raw).trim();
 }
 
+const NO_REPOSITORY_SKILLS: SkillSource = {
+  exists: async () => false,
+  stat: async path => {
+    throw new Error(`ENOENT: no such file or directory, '${path}'`);
+  },
+  readFile: async path => {
+    throw new Error(`ENOENT: no such file or directory, '${path}'`);
+  },
+  readdir: async () => [],
+};
+
 /**
- * List the Factory skills, preferring repo-local versions over bundled ones and
- * skipping any skill missing from both roots.
+ * Read the original SKILL.md of every skill the Factory skill mount serves,
+ * keyed by name. Code skills win over folder skills, which win over bundled
+ * skills of the same name.
  */
-export async function listFactorySkills(): Promise<FactorySkillInfo[]> {
-  const skills: FactorySkillInfo[] = [];
+export async function readFactorySkillOriginals(
+  codeSkills: readonly InlineSkill[] = [],
+): Promise<Map<string, FactorySkillOriginal>> {
   const localRoot = resolveLocalFactorySkillsPath();
-  const roots = localRoot ? [localRoot, BUNDLED_FACTORY_SKILLS_PATH] : [BUNDLED_FACTORY_SKILLS_PATH];
-  for (const name of [...FACTORY_SKILL_NAMES].sort()) {
-    let raw: string | undefined;
-    // Repo-local skills override the bundled versions, matching runtime resolution.
-    for (const root of roots) {
-      try {
-        raw = await readFile(join(root, name, 'SKILL.md'), 'utf8');
-        break;
-      } catch {
-        continue;
-      }
+  const source = new FactorySkillSource(NO_REPOSITORY_SKILLS, [], localRoot, async () => true, codeSkills);
+  const codeNames = new Set(codeSkills.map(skill => skill.name));
+  const entries = (await source.readdir(FACTORY_SKILLS_MOUNT)).filter(entry => entry.type === 'directory');
+  const originals = new Map<string, FactorySkillOriginal>();
+  for (const name of entries.map(entry => entry.name).sort()) {
+    let raw: string;
+    try {
+      raw = String(await source.readFile(join(FACTORY_SKILLS_MOUNT, name, 'SKILL.md')));
+    } catch {
+      continue;
     }
-    if (raw === undefined) continue;
-    skills.push(parseSkillMarkdown(name, raw));
+    const origin: FactorySkillOrigin = codeNames.has(name)
+      ? 'code'
+      : localRoot && existsSync(join(localRoot, name, 'SKILL.md'))
+        ? 'folder'
+        : 'bundled';
+    originals.set(name, { raw, origin });
   }
-  return skills;
+  return originals;
+}
+
+/** The catalog entry of a skill the project created, from its stored row. */
+export function createdSkillInfo(created: SkillOverrideRecord): FactorySkillInfo {
+  return {
+    name: created.skillName,
+    ...parseSkillMarkdown(created.skillName, created.content),
+    origin: 'project',
+    builtIn: false,
+    created: { updatedBy: created.updatedBy, updatedAt: created.updatedAt.toISOString() },
+  };
+}
+
+/** The catalog entry of a code, folder, or bundled skill, showing the project's `edit` of it when it has one. */
+export function originalSkillInfo(
+  name: string,
+  { raw, origin }: FactorySkillOriginal,
+  edit?: SkillOverrideRecord,
+): FactorySkillInfo {
+  const builtIn = FACTORY_SKILL_NAMES.has(name);
+  if (!edit) return { name, ...parseSkillMarkdown(name, raw), origin, builtIn };
+  return {
+    name,
+    ...parseSkillMarkdown(name, edit.content),
+    origin,
+    builtIn,
+    edited: { updatedBy: edit.updatedBy, updatedAt: edit.updatedAt.toISOString() },
+    originalChanged: hashSkillContent(raw) !== edit.baseHash,
+  };
+}
+
+/**
+ * List the skills the Factory skill mount serves, sorted by name. With a
+ * project's `overrides`, edited skills show the edited text, who edited them,
+ * and whether the original changed since, and the project's created skills
+ * are listed with origin `project`. Edits of skills that no longer exist are
+ * not listed, matching what sessions load. A created skill whose name an app
+ * skill later takes is listed as that skill's edit.
+ */
+export async function listFactorySkills(
+  codeSkills: readonly InlineSkill[] = [],
+  overrides: readonly SkillOverrideRecord[] = [],
+): Promise<FactorySkillInfo[]> {
+  const edits = new Map(overrides.map(override => [override.skillName, override]));
+  const originals = await readFactorySkillOriginals(codeSkills);
+  const created = overrides.filter(override => override.kind === 'created' && !originals.has(override.skillName));
+  return [
+    ...created.map(createdSkillInfo),
+    ...[...originals].map(([name, original]) => originalSkillInfo(name, original, edits.get(name))),
+  ].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/**
+ * Reads the skills each project created, for its boards' runners. A created skill an app skill later
+ * shadows still counts: a runner naming it finds the app's skill.
+ */
+export function projectSkillNamesOf(
+  storage: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'list'>,
+): ProjectSkillNames {
+  const projectScope = (scope: StoredBoardScope) => ({ orgId: scope.orgId, projectId: scope.factoryProjectId });
+  return {
+    revision: async scope => {
+      await storage.ensureReady();
+      return storage.revision(projectScope(scope));
+    },
+    names: async scope => {
+      await storage.ensureReady();
+      const overrides = await storage.list(projectScope(scope));
+      return new Set(overrides.filter(override => override.kind === 'created').map(override => override.skillName));
+    },
+  };
 }

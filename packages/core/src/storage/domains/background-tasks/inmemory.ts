@@ -9,6 +9,7 @@ import type { InMemoryDB } from '../inmemory-db';
 import { BackgroundTasksStorage } from './base';
 
 export class BackgroundTasksInMemory extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -36,6 +37,12 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
     if (
       options?.expectedLeaseExpiresAt !== undefined &&
       (existing.leaseExpiresAt?.getTime() ?? null) !== (options.expectedLeaseExpiresAt?.getTime() ?? null)
+    ) {
+      return false;
+    }
+    if (
+      options?.expectedSuspendedAt !== undefined &&
+      (existing.suspendedAt?.getTime() ?? null) !== (options.expectedSuspendedAt?.getTime() ?? null)
     ) {
       return false;
     }
@@ -73,6 +80,9 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
     }
     if (filter.runId) {
       tasks = tasks.filter(t => t.runId === filter.runId);
+    }
+    if (filter.hasExpiresAt !== undefined) {
+      tasks = tasks.filter(t => (t.expiresAt != null) === filter.hasExpiresAt);
     }
 
     // Date range filtering

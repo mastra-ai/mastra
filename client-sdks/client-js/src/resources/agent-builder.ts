@@ -93,7 +93,7 @@ export class AgentBuilder extends BaseResource {
   ): Promise<SerializedRouteResponse<'POST /agent-builder/:actionId/create-run'>> {
     const searchParams = new URLSearchParams();
 
-    if (!!params?.runId) {
+    if (params?.runId) {
       searchParams.set('runId', params.runId);
     }
 

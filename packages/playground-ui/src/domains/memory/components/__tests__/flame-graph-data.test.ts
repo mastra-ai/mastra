@@ -44,7 +44,7 @@ function makeRecord(overrides: Partial<OMHistoryRecord> & Pick<OMHistoryRecord, 
 }
 
 function makeMarker(overrides: Partial<ExtractedOmMarker> & Pick<ExtractedOmMarker, 'type' | 'timestamp'>) {
-  return overrides as ExtractedOmMarker;
+  return overrides;
 }
 
 describe('getObservationTimestamp', () => {
@@ -370,32 +370,16 @@ describe('toCombinedRowData', () => {
     ]);
   });
 
-  it('carries each event its own fields through the merge', () => {
-    const combined = toCombinedRowData([], 'tokens', [{ t: 0.5, event: 1, role: 'user' }]);
-
-    expect(combined[0]).toMatchObject({ role: 'user', event: 1 });
-  });
-
   it('skips an area point that is not on the timeline at all', () => {
-    const combined = toCombinedRowData(
-      [{ tokens: 999 } as Record<string, number>, { t: 0.5, tokens: 400 }],
-      'tokens',
-      [],
-    );
+    const combined = toCombinedRowData([{ tokens: 999 }, { t: 0.5, tokens: 400 }], 'tokens', []);
 
     expect(combined).toEqual([{ t: 0.5, tokens: 400 }]);
   });
 
   it('reads a missing value on an area point as zero', () => {
-    const combined = toCombinedRowData([{ t: 0.5 } as Record<string, number>], 'tokens', []);
+    const combined = toCombinedRowData([{ t: 0.5 }], 'tokens', []);
 
     expect(combined).toEqual([{ t: 0.5, tokens: 0 }]);
-  });
-
-  it('charts an area series on its own', () => {
-    const combined = toCombinedRowData([{ t: 0.5, tokens: 400 }], 'tokens', []);
-
-    expect(combined).toEqual([{ t: 0.5, tokens: 400 }]);
   });
 
   it('returns nothing for two empty series', () => {

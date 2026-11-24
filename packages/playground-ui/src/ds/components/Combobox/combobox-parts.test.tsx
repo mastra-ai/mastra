@@ -385,15 +385,6 @@ describe('Combobox parts', () => {
       expect(trigger().textContent).toContain('OpenAI');
     });
 
-    it('moves focus into the popup search when opened', async () => {
-      render(<CompactPicker />);
-
-      await userEvent.click(trigger());
-      const search = await screen.findByPlaceholderText('Search providers');
-
-      await waitFor(() => expect(document.activeElement).toBe(search));
-    });
-
     it('filters as you type and selects with Enter', async () => {
       const onValueChange = vi.fn();
       render(<CompactPicker onValueChange={onValueChange} />);

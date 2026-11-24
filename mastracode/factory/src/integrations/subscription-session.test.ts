@@ -27,7 +27,6 @@ function row(overrides: Partial<SubscriptionSessionRow['data']> = {}, orgId = 'o
     sessionId: 'session-1',
     resourceId: 'factory-1',
     threadId: 'thread-1',
-    sessionScope: '',
     status: 'open',
     data: { projectRepositoryId: 'repo-1', subscribedByUserId: 'user-1', ...overrides },
     createdAt: new Date('2026-09-21T00:00:00Z'),
@@ -68,9 +67,9 @@ describe('resolveSubscriptionSession', () => {
       threadId: 'thread-1',
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: 'session-1' });
+      await controller.deleteSession({ sessionId: 'session-1' });
     });
-    if (cold) await controller.deleteSession({ resourceId: 'session-1' });
+    if (cold) await controller.deleteSession({ sessionId: 'session-1' });
     else {
       await original.thread.create();
       expect(original.thread.getId()).not.toBe('thread-1');

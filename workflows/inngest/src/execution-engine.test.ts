@@ -175,9 +175,20 @@ function createNestedResumeFixture(
     invokeImpl?: (id: string, opts: any) => Promise<any>;
     /** Registers a spy logger on the engine via __registerMastra. */
     withLoggerSpy?: boolean;
+    /** Resume labels stored on the nested snapshot, and the label the parent resumes with. */
+    resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+    label?: string;
   } = {},
 ) {
-  const { stepResultShape = 'legacy', foreachIndex, mode = 'resume', invokeImpl, withLoggerSpy } = options;
+  const {
+    stepResultShape = 'legacy',
+    foreachIndex,
+    mode = 'resume',
+    invokeImpl,
+    withLoggerSpy,
+    resumeLabels,
+    label,
+  } = options;
   const inngest = new Inngest({ id: 'nested-resume-test' });
   const { createWorkflow, createStep } = init(inngest);
   const suspendedStep = createStep({
@@ -204,6 +215,7 @@ function createNestedResumeFixture(
     value: { count: 1 },
     context: nestedStepResults,
     suspendedPaths,
+    resumeLabels,
   });
   const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
   const mastra = {
@@ -246,7 +258,7 @@ function createNestedResumeFixture(
         state: {},
         ...(foreachIndex !== undefined ? { foreachIndex } : {}),
       } as any,
-      ...(mode === 'resume' ? { resume: { steps: [nestedWorkflow.id], resumePayload } } : {}),
+      ...(mode === 'resume' ? { resume: { steps: [nestedWorkflow.id], resumePayload, label } } : {}),
       prevOutput: {},
       inputData: { value: 'start' },
       pubsub: { publish: vi.fn().mockResolvedValue(undefined) } as any,
@@ -407,6 +419,25 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
       resumePayload,
       resumePath: [1, 0],
     });
+  });
+
+  // Technical: without the iteration index the child's foreach hands the payload to every parked
+  // iteration, so approving one agent tool call ran the others too (#27925).
+  it('resumes only the parked tool call the approval names', async () => {
+    const { execute, invoke } = createNestedResumeFixture(
+      { 'suspended-child-step': [1, 0] },
+      {
+        label: 'call-b',
+        resumeLabels: {
+          'call-a': { stepId: 'suspended-child-step', foreachIndex: 0 },
+          'call-b': { stepId: 'suspended-child-step', foreachIndex: 1 },
+        },
+      },
+    );
+
+    await execute();
+
+    expect(invoke.mock.calls[0]?.[1].data.resume).toMatchObject({ label: 'call-b', forEachIndex: 1 });
   });
 
   it('replays the memoized invoke on the delivery pass when the child is no longer suspended', async () => {

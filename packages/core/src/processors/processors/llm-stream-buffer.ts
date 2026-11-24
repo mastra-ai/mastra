@@ -1,6 +1,7 @@
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
-import { REPROCESS_PART_KEY } from '../stream-reprocess';
+import { FLUSH_HELD_PARTS_KEY, REPROCESS_PART_KEY } from '../stream-reprocess';
+import type { FlushHeldParts } from '../stream-reprocess';
 
 /** Default character threshold before buffered stream text is sent to an LLM-backed check. */
 export const DEFAULT_LLM_STREAM_BUFFER_SIZE = 200;
@@ -47,6 +48,16 @@ export async function processBufferedTextStream({
   if (!writer) return part.type === 'text-delta' ? check(part as TextDeltaPart) : part;
 
   const buffer: LLMStreamBufferState = (state[STATE_KEY] ??= { text: '' });
+  state[FLUSH_HELD_PARTS_KEY] = (async options => {
+    if (options?.discard) {
+      buffer.text = '';
+      buffer.id = undefined;
+      buffer.runId = undefined;
+      return [];
+    }
+    const flushed = await flush(buffer, check);
+    return flushed ? [flushed] : [];
+  }) satisfies FlushHeldParts;
 
   if (part.type !== 'text-delta') {
     const flushed = await flush(buffer, check);

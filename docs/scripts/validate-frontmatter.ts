@@ -6,15 +6,17 @@ import {
   extractFrontMatterBounds,
   parseFrontMatterYAML,
 } from '../src/utils/frontmatter'
+import { isDirectRun } from './is-direct-run'
 
-interface ValidationConfig {
+export interface ValidationConfig {
   sourceDir: string
   skipPaths: string[]
   packagePattern: RegExp
+  maxPackages: number
   concurrency: number
 }
 
-const DEFAULT_CONFIG: ValidationConfig = {
+export const DEFAULT_CONFIG: ValidationConfig = {
   sourceDir: 'src/content/en',
   skipPaths: [
     'guides/',
@@ -25,22 +27,27 @@ const DEFAULT_CONFIG: ValidationConfig = {
     'docs/index.mdx',
     'models/',
     'docs/studio/cloud.mdx',
+    // Migration guides aren't embedded in package docs; they stay on the site and in the MCP docs server.
+    'reference/migrations/',
   ],
   // Allow for @mastra/* packages + mastra + create-mastra + mastracode
   packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra|mastracode)$/,
+  // Each listed package embeds a full copy of the page, so long lists bloat package docs.
+  maxPackages: 4,
   concurrency: 50,
 }
 
-interface ValidationError {
+export interface ValidationError {
   type: 'missing_frontmatter' | 'missing_packages' | 'invalid_packages' | 'parse_error'
   message: string
   lineNumber?: number
 }
 
-interface FileValidationResult {
+export interface FileValidationResult {
   file: string
   passed: boolean
   errors: ValidationError[]
+  warnings: string[]
 }
 
 interface ValidationSummary {
@@ -48,9 +55,10 @@ interface ValidationSummary {
   passed: number
   failed: number
   results: FileValidationResult[]
+  warnings: string[]
 }
 
-function shouldSkipPath(relativePath: string, skipPaths: string[]): boolean {
+export function shouldSkipPath(relativePath: string, skipPaths: string[]): boolean {
   return skipPaths.some(skipPath => relativePath.startsWith(skipPath) || relativePath === skipPath)
 }
 
@@ -93,7 +101,11 @@ function validatePackagesField(
   return errors
 }
 
-function validateFileContent(content: string, relativePath: string, config: ValidationConfig): FileValidationResult {
+export function validateFileContent(
+  content: string,
+  relativePath: string,
+  config: ValidationConfig,
+): FileValidationResult {
   const normalized = normalizeContent(content)
   const bounds = extractFrontMatterBounds(normalized)
 
@@ -108,16 +120,26 @@ function validateFileContent(content: string, relativePath: string, config: Vali
           lineNumber: 1,
         },
       ],
+      warnings: [],
     }
   }
 
   const parsed = parseFrontMatterYAML(bounds.rawContent, bounds.contentStartLine)
   const errors = validatePackagesField(parsed.packages, parsed.packagesFieldLine, config)
+  const warnings: string[] = []
+
+  if (parsed.packages && parsed.packages.length > config.maxPackages) {
+    const location = parsed.packagesFieldLine ? `${relativePath}:${parsed.packagesFieldLine}` : relativePath
+    warnings.push(
+      `  ${location}: lists ${parsed.packages.length} packages (max ${config.maxPackages}); keep only packages whose users need this page`,
+    )
+  }
 
   return {
     file: relativePath,
     passed: errors.length === 0,
     errors,
+    warnings,
   }
 }
 
@@ -176,6 +198,7 @@ async function validateAllFiles(sourceDir: string, config: ValidationConfig): Pr
                 message: `failed to read file: ${error instanceof Error ? error.message : String(error)}`,
               },
             ],
+            warnings: [],
           }
         }
       }),
@@ -191,6 +214,7 @@ async function validateAllFiles(sourceDir: string, config: ValidationConfig): Pr
     passed: results.length - failed.length,
     failed: failed.length,
     results: failed,
+    warnings: results.flatMap(r => r.warnings),
   }
 }
 
@@ -239,6 +263,12 @@ function printResults(summary: ValidationSummary): void {
     console.log()
   }
 
+  if (summary.warnings.length > 0) {
+    console.log('Warning: too many packages (each package embeds its own copy of the page):')
+    console.log(summary.warnings.join('\n'))
+    console.log()
+  }
+
   if (summary.failed === 0) {
     console.log(`All ${summary.total} files passed validation`)
   } else {
@@ -269,7 +299,9 @@ async function main(): Promise<void> {
   process.exit(summary.failed > 0 ? 1 : 0)
 }
 
-main().catch(error => {
-  console.error('Unhandled error:', error instanceof Error ? error.message : error)
-  process.exit(1)
-})
+if (isDirectRun(import.meta.url)) {
+  main().catch(error => {
+    console.error('Unhandled error:', error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}

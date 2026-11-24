@@ -3,25 +3,33 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
+import { TakeOwnershipDialog } from './TakeOwnershipDialog';
 
 export function TeammateSessionLine() {
-  const { sessionId, threadId } = useParams<{ sessionId?: string; threadId?: string }>();
-  const session = useUserSessionQuery(sessionId ?? threadId).data;
+  const { factoryId } = useParams<{ factoryId?: string }>();
+  const session = useUserSessionQuery(useRouteSessionId()).data;
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   if (!session || !viewerUserId || session.userId === viewerUserId) return null;
 
   const owner = session.owner;
+  const canTakeOwnership = session.capabilities?.takeOwnership === true && factoryId !== undefined;
+
   return (
-    <div className="flex min-w-0 items-center gap-2 px-3">
+    <div className="flex min-w-0 items-center gap-1.5">
       {owner && (
         <div aria-hidden="true">
           <Avatar name={owner.name} src={owner.avatarUrl} size="xs" />
         </div>
       )}
       <Txt as="p" variant="caption" tone="muted" className="truncate">
-        You’re steering {owner ? `${owner.name}’s` : 'a teammate’s'} session
+        {isFactoryOwnedSession(session)
+          ? 'You’re steering the Factory’s session'
+          : `You’re steering ${owner?.name ?? 'a teammate'}’s session`}
       </Txt>
+      {canTakeOwnership && <TakeOwnershipDialog factoryId={factoryId} session={session} />}
     </div>
   );
 }

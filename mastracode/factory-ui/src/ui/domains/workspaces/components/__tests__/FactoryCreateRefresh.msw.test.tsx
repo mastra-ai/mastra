@@ -28,8 +28,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/hello',
 };
 
 let projectCreated = false;
@@ -43,7 +41,9 @@ beforeEach(() => {
   sessionStorage.setItem('mastracode.factory-create.repository', JSON.stringify(repo));
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: projectCreated ? [{ id: 'fp-new', name: 'Fresh Factory' }] : [] }),
+      HttpResponse.json({
+        projects: projectCreated ? [{ id: 'fp-new', name: 'Fresh Factory', repositories: [] }] : [],
+      }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
       projectCreated = true;
@@ -66,7 +66,6 @@ beforeEach(() => {
         projectRepository: {
           id: 'ghp_1',
           branch: 'main',
-          sandboxWorkdir: '/workspace/hello',
           repository: { slug: 'octo/hello', defaultBranch: 'main' },
         },
       }),

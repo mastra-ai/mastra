@@ -18,6 +18,7 @@ import {
 import { WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { ResumeStepParams } from './workflow-suspended-steps';
 import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
+import { asObjectProperty } from '@/lib/form/zod-provider/compat';
 
 export interface SuspendedStep {
   stepId: string;
@@ -44,7 +45,7 @@ export function useWorkflowSchemas(workflow?: GetWorkflowResponse) {
     return {
       zodSchemaToUse: zodStateSchema
         ? z.object({
-            inputData: zodInputSchema ?? z.any(),
+            inputData: asObjectProperty(zodInputSchema ?? z.any()),
             initialState: zodStateSchema.optional(),
           })
         : zodInputSchema,

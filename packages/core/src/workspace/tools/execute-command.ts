@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { z } from 'zod/v4';
 import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
@@ -7,6 +8,7 @@ import {
   DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
   RetainedOutputBuffer,
 } from '../sandbox/process-manager/process-handle';
+import type { Workspace } from '../workspace';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
@@ -64,27 +66,20 @@ export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
   ...executeCommandWithBackgroundSchema.shape,
 });
 
+/** A command whose final pipeline stage is `tail`, e.g. `make test 2>&1 | tail -20`. */
+const TRAILING_TAIL_PIPE = /(?:^|[^|])\|\s*tail(?:\s[^|;&]*)?$/;
+
 /**
- * Extract `| tail -N` or `| tail -n N` from the end of a command.
- * LLMs are trained to pipe to tail for long outputs, but this prevents streaming —
- * the user sees nothing until the command finishes. By stripping the tail pipe and
- * applying it programmatically afterward, all output streams in real time while
- * the final result sent to the model is still truncated.
- *
- * Returns the cleaned command and extracted tail line count (if any).
+ * POSIX shells report a pipeline's status from its last command, so `cmd | tail -N` exits 0 even
+ * when `cmd` fails. Enable `pipefail` (where the shell supports it) for pipelines ending in `tail`
+ * so the upstream failure is reported. `tail` reads all of its input, so upstream commands are
+ * not cut off by SIGPIPE. LocalSandbox on Windows runs commands through cmd.exe, which has no
+ * `set -o`.
  */
-function extractTailPipe(command: string): { command: string; tail?: number } {
-  const match = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
-  if (match) {
-    const lines = Math.abs(parseInt(match[1]!, 10));
-    if (lines > 0) {
-      return {
-        command: command.replace(/\|\s*tail\s+(?:-n\s+)?-?\d+\s*$/, '').trim(),
-        tail: lines,
-      };
-    }
-  }
-  return { command };
+function reportUpstreamPipelineFailure(command: string, sandboxProvider: string): string {
+  if (sandboxProvider === 'local' && process.platform === 'win32') return command;
+  if (!TRAILING_TAIL_PIPE.test(command.trim())) return command;
+  return `(set -o pipefail) 2>/dev/null && set -o pipefail; ${command}`;
 }
 
 const ABORTED_COMMAND_NOTE =
@@ -115,22 +110,45 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
   return `${output}${separator}${terminalLine}`;
 }
 
+/**
+ * The directory the workspace's file tools resolve relative paths against, when its
+ * filesystem is sandbox-backed and reports one. Only the configured filesystem is
+ * consulted: a dynamic filesystem resolver is not invoked just to learn a default cwd, so
+ * a sandbox-only tool call still resolves nothing it did not resolve before. Every absent
+ * case — no filesystem, no capability — falls back to `undefined`, which keeps the
+ * sandbox's own default cwd exactly as before.
+ */
+async function resolveDefaultCwd(workspace: Workspace): Promise<string | undefined> {
+  try {
+    const root = await workspace.filesystem?.getCommandCwd?.();
+    return root?.startsWith('/') ? root : undefined;
+  } catch {
+    // A filesystem that cannot answer must not fail the command: run it with today's default.
+    return undefined;
+  }
+}
+
+/**
+ * The cwd a command actually runs in. An explicit absolute `cwd` wins, a relative one is
+ * resolved under the default root so it means the same thing as a relative path passed to
+ * the file tools, and an omitted `cwd` becomes the default root.
+ */
+function resolveCommandCwd(cwd: string | undefined, defaultCwd: string | undefined): string | undefined {
+  if (!cwd) return defaultCwd;
+  if (cwd.startsWith('/')) return cwd;
+  return defaultCwd ? path.posix.join(defaultCwd, cwd) : cwd;
+}
+
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
-  let { command, cwd, tail } = input;
+  let { command } = input;
+  const { cwd, tail } = input;
   const timeout = input.timeout != null ? (input.timeout as number) * 1000 : undefined;
   const background = input.background as boolean | undefined;
   const { workspace, sandbox } = requireSandbox(context);
-
-  // Extract tail pipe from command so output can stream in real time
-  if (!background) {
-    const extracted = extractTailPipe(command);
-    command = extracted.command;
-    // Extracted tail overrides schema tail param (explicit pipe intent takes priority)
-    if (extracted.tail != null) {
-      tail = extracted.tail;
-    }
-  }
+  // Commands and file tools must resolve relative paths against the same directory, or a
+  // file written by a shell command is invisible to the file tools (and to the plan card).
+  const effectiveCwd = resolveCommandCwd(cwd, await resolveDefaultCwd(workspace));
 
   // Lazy browser launch and CDP URL injection for browser CLI commands
   const browser = workspace.browser;
@@ -187,7 +205,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
   const span = startWorkspaceSpan(context, workspace, {
     category: 'sandbox',
     operation: background ? 'spawnProcess' : 'executeCommand',
-    input: { command, cwd, timeout: input.timeout, background },
+    input: { command, cwd: effectiveCwd, timeout: input.timeout, background },
     attributes: { sandboxProvider: sandbox.provider },
   });
 
@@ -205,11 +223,22 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const bgAbortSignal =
       bgConfig?.abortSignal === undefined ? context?.abortSignal : bgConfig.abortSignal || undefined;
 
+    // Lets hosts route exit notices to the run and thread that started the process.
+    // Empty ids count as missing: the tool builder passes `agentId: ''` when
+    // there is no agent id. Direct `execute()` calls pass the thread and
+    // resource at the top level instead of under `agent`.
+    const owner = {
+      agentId: context?.agent?.agentId || undefined,
+      threadId: context?.agent?.threadId || context?.threadId || undefined,
+      resourceId: context?.agent?.resourceId || context?.resourceId || undefined,
+      runId: context?.runId || undefined,
+    };
+
     // Use `let` so callbacks can reference handle.pid via closure.
     // spawn() resolves before any data events fire (Node event loop guarantees this).
     let handle: Awaited<ReturnType<typeof sandbox.processes.spawn>>;
     handle = await sandbox.processes.spawn(command, {
-      cwd: cwd ?? undefined,
+      cwd: effectiveCwd,
       timeout: timeout ?? undefined,
       abortSignal: bgAbortSignal,
       // A background process collects output rather than being driven over stdin,
@@ -217,10 +246,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
       // reads stdin and never exits.
       stdinMode: 'ignore',
       onStdout: bgConfig?.onStdout
-        ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId })
+        ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId, ...owner })
         : undefined,
       onStderr: bgConfig?.onStderr
-        ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId })
+        ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId, ...owner })
         : undefined,
     });
 
@@ -245,7 +274,9 @@ async function executeCommand(input: Record<string, any>, context: any) {
               stderrTruncated: result.stderrTruncated,
               stdoutDroppedBytes: result.stdoutDroppedBytes,
               stderrDroppedBytes: result.stderrDroppedBytes,
+              killedByAbort: handle.killedByAbort,
               toolCallId,
+              ...owner,
             });
           } catch (callbackError) {
             workspace.logger?.error('Background process onExit callback threw', {
@@ -285,9 +316,9 @@ async function executeCommand(input: Record<string, any>, context: any) {
   let abortedWhenSettled = false;
   try {
     const result = await sandbox
-      .executeCommand(command, [], {
+      .executeCommand(reportUpstreamPipelineFailure(command, sandbox.provider), [], {
         timeout: timeout ?? undefined,
-        cwd: cwd ?? undefined,
+        cwd: effectiveCwd,
         abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
         onStdout: async (data: string) => {
           stdout.append(data);
@@ -350,12 +381,15 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     return formatCommandOutput(stdoutForModel, stderrForModel).join('\n') || '(no output)';
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
       data: {
         exitCode: -1,
         success: false,
         executionTimeMs: Date.now() - startedAt,
+        // -1 is no exit code: the command could not run or be observed, and this says why.
+        error: errorMessage,
         toolCallId,
       },
     });
@@ -364,8 +398,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       noteDroppedOutput(await truncateOutput(stdout.toString(), tail, tokenLimit, tokenFrom), stdout.dropped, 'stdout'),
       noteDroppedOutput(await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom), stderr.dropped, 'stderr'),
     );
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorLine = `Error: ${errorMessage}`;
+    const errorLine = `Error: ${errorMessage}\nExit code: -1`;
     return appendTerminalLine(parts, abortedWhenSettled ? `${CANCELLED_RUN_NOTE}\n${errorLine}` : errorLine);
   }
 }
@@ -382,7 +415,7 @@ Usage:
 - Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
 - Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox's configured workingDirectory (or the provider default) if omitted.`;
+- Optionally use cwd to override the working directory. Commands run from the workspace directory if omitted, the same root relative file paths resolve against; a relative cwd is resolved against that directory.`;
 
 /** Foreground-only tool (no background param in schema). */
 export const executeCommandTool = createTool({
@@ -396,7 +429,7 @@ export const executeCommandTool = createTool({
 
 const backgroundDescription = `${baseDescription}
 
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`;
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running.`;
 
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({

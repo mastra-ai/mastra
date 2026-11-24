@@ -1,8 +1,8 @@
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
-import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
+import { resolveEnvironmentRepositories } from './environment-repositories.js';
 
 export type WorkItemRepositoryResolution =
   | { status: 'resolved'; projectRepositoryId: string; slug: string }
@@ -53,19 +53,22 @@ async function listLinkedRepositories(args: {
   return linked;
 }
 
+const PROVIDER_REPOSITORY_IDS = new Map([
+  ['github', { key: 'githubRepositoryId', label: 'GitHub' }],
+  ['gitlab', { key: 'gitlabProjectId', label: 'GitLab' }],
+]);
+
 function getExternalRepositoryId(integrationId: string, metadata: Record<string, unknown>): string | undefined {
-  let id: unknown;
-  switch (integrationId) {
-    case 'github':
-      id = metadata.githubRepositoryId;
-      break;
-    case 'gitlab':
-      id = metadata.gitlabProjectId;
-      break;
-    default:
-      return undefined;
-  }
+  const provider = PROVIDER_REPOSITORY_IDS.get(integrationId);
+  const id = provider ? metadata[provider.key] : undefined;
   return id == null ? undefined : String(id);
+}
+
+function otherProviderLabel(integrationId: string, metadata: Record<string, unknown>): string | undefined {
+  for (const [id, provider] of PROVIDER_REPOSITORY_IDS) {
+    if (id !== integrationId && metadata[provider.key] != null) return provider.label;
+  }
+  return undefined;
 }
 
 /**
@@ -89,17 +92,23 @@ function resolvedRepository(repository: LinkedRepository): WorkItemRepositoryRes
   return { status: 'resolved', projectRepositoryId: repository.projectRepositoryId, slug: repository.slug };
 }
 
+const PROVIDER_ITEM_URL = /^https?:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:issues|pull|merge_requests)\/\d+(?:[/?#]|$)/;
+
+function repositoryNameFromUrl(url: string | null | undefined): string | undefined {
+  return url ? PROVIDER_ITEM_URL.exec(url)?.[1] : undefined;
+}
+
 export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  item: Pick<WorkItemRow, 'metadata'>;
+  item: Pick<Card, 'metadata'> & { workItem: Pick<Card['workItem'], 'metadata'> & { url?: string | null } };
   linearRepositoryMap?: Record<string, string>;
 }): Promise<WorkItemRepositoryResolution> {
   const { sourceControl, item, linearRepositoryMap } = args;
-  const metadata = item.metadata ?? {};
+  const metadata = item.workItem.metadata ?? {};
   const linked = await listLinkedRepositories(args);
-  const repositorySignal = typeof metadata.repository === 'string' ? metadata.repository : undefined;
+  const repositorySignal = typeof item.metadata?.repository === 'string' ? item.metadata.repository : undefined;
   const externalRepositorySignal = getExternalRepositoryId(sourceControl.integrationId, metadata);
   const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
   const mappedRepository = linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined;
@@ -110,6 +119,15 @@ export async function resolveWorkItemRepository(args: {
     if (match) return resolvedRepository(match);
   }
 
+  const otherProvider =
+    externalRepositorySignal === undefined ? otherProviderLabel(sourceControl.integrationId, metadata) : undefined;
+  if (otherProvider !== undefined) {
+    return {
+      status: 'unlinked',
+      hint: `This card comes from ${otherProvider}, and no ${otherProvider} repository is linked to this Factory.`,
+    };
+  }
+
   if (repositorySignal) {
     const match = findRepositoryBySlug(linked, repositorySignal);
     return match
@@ -118,9 +136,12 @@ export async function resolveWorkItemRepository(args: {
   }
 
   if (externalRepositorySignal !== undefined) {
+    const name = repositoryNameFromUrl(item.workItem.url);
     return {
       status: 'unlinked',
-      hint: `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
+      hint: name
+        ? `Repository ${name} is not linked to this Factory.`
+        : `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,
     };
   }
 
@@ -139,4 +160,100 @@ export async function resolveWorkItemRepository(args: {
   const onlyRepository = candidates.length === 1 ? (pickLink(linked) ?? linked[0]) : undefined;
   if (onlyRepository) return resolvedRepository(onlyRepository);
   return { status: 'ambiguous', candidates };
+}
+
+export type RunRepositoryResolution =
+  | {
+      status: 'resolved';
+      projectRepositoryId: string;
+      slug: string;
+      /**
+       * Set when the card names no repository: the sandbox repositories its
+       * agent chooses among. The run is filed under `slug` until it does.
+       */
+      unnamed?: { repositories: string[] };
+    }
+  | { status: 'unlinked'; hint: string };
+
+/**
+ * Where a run on `item` is filed. A card that names its repository resolves
+ * exactly as {@link resolveWorkItemRepository} does. A card that names none
+ * among several repositories is not refused: the sandbox holds every
+ * environment repository, so the run stays in `boundProjectRepositoryId` (the
+ * session already working on the card) or else in the environment's first
+ * repository, and its agent determines which repository the card belongs to.
+ */
+export async function resolveRunRepository(
+  args: Parameters<typeof resolveWorkItemRepository>[0] & { boundProjectRepositoryId?: string },
+): Promise<RunRepositoryResolution> {
+  const resolution = await resolveWorkItemRepository(args);
+  if (resolution.status !== 'ambiguous') return resolution;
+  const { sourceControl, orgId, factoryProjectId, boundProjectRepositoryId } = args;
+  const environment = await resolveEnvironmentRepositories({ sourceControl, orgId, factoryProjectId });
+  const unnamed = { repositories: environment.map(entry => entry.repository.slug) };
+  if (boundProjectRepositoryId !== undefined) {
+    const link = await sourceControl.projectRepositories.get({ orgId, id: boundProjectRepositoryId });
+    const linked = link && (await sourceControl.repositories.get({ orgId, id: link.repositoryId }));
+    const currentLinks = link
+      ? await sourceControl.projectRepositories.list({ orgId, connectionId: link.connectionId })
+      : [];
+    if (
+      !linked ||
+      !resolution.candidates.includes(linked.slug) ||
+      !currentLinks.some(candidate => candidate.id === boundProjectRepositoryId)
+    ) {
+      return { status: 'unlinked', hint: 'The existing session repository is not linked to this Factory.' };
+    }
+    return { status: 'resolved', projectRepositoryId: boundProjectRepositoryId, slug: linked.slug, unnamed };
+  }
+  const primary = environment[0];
+  if (!primary) {
+    return { status: 'unlinked', hint: 'None of the repositories linked to this Factory is in its environment.' };
+  }
+  return { status: 'resolved', projectRepositoryId: primary.link.id, slug: primary.repository.slug, unnamed };
+}
+
+export async function resolveRunRepositoryFromIntake(
+  intake: Pick<IntakeStorage, 'getConfig'> | undefined,
+  args: Omit<Parameters<typeof resolveRunRepository>[0], 'linearRepositoryMap'>,
+): Promise<RunRepositoryResolution> {
+  const intakeConfig = await intake?.getConfig({ orgId: args.orgId, integrationIds: ['linear'] });
+  return resolveRunRepository({ ...args, linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject });
+}
+
+/** Card metadata recording the `repository` a run chose for a card that named none. */
+export const REPOSITORY_CHOICE_KEY = 'repositoryChoice';
+
+/**
+ * Whether a run recorded `slug` as the card's repository. Every role session
+ * on the card was filed before it named a repository, so under another one;
+ * they may keep working on the card, in `slug`. A repository set any other
+ * way (intake, a person) no longer matches the recorded choice and still
+ * refuses a session filed elsewhere.
+ */
+export function repositoryChosenByRun(item: Pick<Card, 'metadata'>, slug: string): boolean {
+  const choice = item.metadata?.[REPOSITORY_CHOICE_KEY];
+  if (typeof choice !== 'object' || choice === null) return false;
+  return item.metadata?.repository === slug && (choice as Record<string, unknown>).slug === slug;
+}
+
+const UNNAMED_REPOSITORY_INSTRUCTION = 'This card names no repository.';
+
+/** The plugin instruction telling a run's agent which repository it works in. */
+export function runRepositoryInstruction(
+  repository: { slug: string; unnamed?: { repositories: string[] } },
+  ownSlug: string,
+): string {
+  if (repository.unnamed) {
+    return `${UNNAMED_REPOSITORY_INSTRUCTION} This session's sandbox holds ${repository.unnamed.repositories.join(', ')}. Before editing files, determine from the card which of them it belongs to and work in that repository's checkout; pass it as \`repository\` to the source_control_* tools (they default to ${ownSlug}). The first push or change request records it on the card. If the card belongs to none of them, stop and say so.`;
+  }
+  const elsewhere =
+    repository.slug === ownSlug
+      ? ''
+      : ` This session is filed under ${ownSlug}, so pass \`repository: ${repository.slug}\` to the source_control_* tools.`;
+  return `Target repository: ${repository.slug}. Before editing files or creating a pull request, verify this session's checkout matches the target repository.${elsewhere}`;
+}
+
+export function isRunRepositoryInstruction(instruction: string): boolean {
+  return instruction.startsWith('Target repository: ') || instruction.startsWith(UNNAMED_REPOSITORY_INSTRUCTION);
 }

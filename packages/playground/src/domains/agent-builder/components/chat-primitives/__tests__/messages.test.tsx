@@ -16,7 +16,6 @@ import {
   SET_AGENT_MODEL_TOOL_NAME,
   SET_AGENT_NAME_TOOL_NAME,
   SET_AGENT_SKILLS_TOOL_NAME,
-  SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { server } from '@/test/msw-server';
@@ -226,7 +225,7 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('renders assistant text through the shared MarkdownRenderer', () => {
-    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' } as ToolPart]));
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' }]));
 
     expect(container.querySelector('strong')?.textContent).toBe('bold');
   });
@@ -270,7 +269,7 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('routes assistant text through the shared MessageText error-prefix handling', () => {
-    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' } as ToolPart]));
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' }]));
 
     // The shared MessageText turns an `Error:`-prefixed body into a destructive notice.
     expect(container.textContent).toContain('it broke');
@@ -352,7 +351,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           contents: [{ type: 'text', text: 'github: 2' }],
           attributes: { pending: 2, priority: 'high' },
         },
-      } as ToolPart,
+      },
     ]);
 
     expect(container.textContent).toContain('Notification summary');
@@ -366,22 +365,6 @@ describe('MessageRow dynamic-tool rendering', () => {
       [
         builderToolPart({
           toolCallId: 'call-name',
-          toolName: SET_AGENT_NAME_TOOL_NAME,
-          input: { name: 'Acme Bot' },
-          output: { success: true },
-        }),
-      ],
-      { name: 'Acme Bot' },
-    );
-    expect(container.textContent).toContain('Setting the agent name:');
-    expect(container.textContent).toContain('Acme Bot');
-  });
-
-  it('renders MessageSetAgentName for persisted tool part', () => {
-    const { container } = renderRow(
-      [
-        builderToolPart({
-          toolCallId: 'call-name-r',
           toolName: SET_AGENT_NAME_TOOL_NAME,
           input: { name: 'Acme Bot' },
           output: { success: true },
@@ -409,43 +392,11 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('A helpful research assistant.');
   });
 
-  it('renders MessageSetAgentDescription for persisted tool part', () => {
-    const { container } = renderRow(
-      [
-        builderToolPart({
-          toolCallId: 'call-desc-r',
-          toolName: SET_AGENT_DESCRIPTION_TOOL_NAME,
-          input: { description: 'A helpful research assistant.' },
-          output: { success: true },
-        }),
-      ],
-      { description: 'A helpful research assistant.' },
-    );
-    expect(container.textContent).toContain('Setting the agent description:');
-    expect(container.textContent).toContain('A helpful research assistant.');
-  });
-
   it('renders MessageSetAgentInstructions for streaming dynamic-tool', () => {
     const { container } = renderRow(
       [
         builderToolPart({
           toolCallId: 'call-instr',
-          toolName: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
-          input: { instructions: 'Always answer in French.' },
-          output: { success: true },
-        }),
-      ],
-      { instructions: 'Always answer in French.' },
-    );
-    expect(container.textContent).toContain('Setting the agent instructions:');
-    expect(container.textContent).toContain('Always answer in French.');
-  });
-
-  it('renders MessageSetAgentInstructions for persisted tool part', () => {
-    const { container } = renderRow(
-      [
-        builderToolPart({
-          toolCallId: 'call-instr-r',
           toolName: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
           input: { instructions: 'Always answer in French.' },
           output: { success: true },
@@ -482,7 +433,7 @@ describe('MessageRow dynamic-tool rendering', () => {
         tools: {},
         agents: { 'my-agent': true },
         workflows: { 'my-workflow': true },
-      } as Partial<AgentBuilderEditFormValues>,
+      },
     );
 
     const text = container.textContent ?? '';
@@ -508,7 +459,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { tools: {}, agents: {}, workflows: {} } as Partial<AgentBuilderEditFormValues>,
+      { tools: {}, agents: {}, workflows: {} },
     );
 
     expect(container.textContent).toContain('Enabling tools: none');
@@ -532,7 +483,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { skills: { 'sk-1': true, 'sk-2': true } } as Partial<AgentBuilderEditFormValues>,
+      { skills: { 'sk-1': true, 'sk-2': true } },
     );
 
     expect(container.textContent).toContain('Enabling skills:');
@@ -555,7 +506,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { skills: {} } as Partial<AgentBuilderEditFormValues>,
+      { skills: {} },
     );
 
     expect(container.textContent).toContain('Enabling skills: none');
@@ -566,22 +517,6 @@ describe('MessageRow dynamic-tool rendering', () => {
       [
         builderToolPart({
           toolCallId: 'call-model',
-          toolName: SET_AGENT_MODEL_TOOL_NAME,
-          input: { model: { provider: 'openai', name: 'gpt-4o' } },
-          output: { success: true },
-        }),
-      ],
-      { model: { provider: 'openai', name: 'gpt-4o' } },
-    );
-    expect(container.textContent).toContain('Setting agent model to');
-    expect(container.textContent).toContain('openai/gpt-4o');
-  });
-
-  it('renders MessageSetAgentModel for persisted tool part', () => {
-    const { container } = renderRow(
-      [
-        builderToolPart({
-          toolCallId: 'call-model-r',
           toolName: SET_AGENT_MODEL_TOOL_NAME,
           input: { model: { provider: 'openai', name: 'gpt-4o' } },
           output: { success: true },
@@ -630,21 +565,6 @@ describe('MessageRow dynamic-tool rendering', () => {
       [
         builderToolPart({
           toolCallId: 'call-ws',
-          toolName: SET_AGENT_WORKSPACE_ID_TOOL_NAME,
-          input: { workspaceId: 'ws-123' },
-          output: { success: true },
-        }),
-      ],
-      { workspaceId: 'ws-123' },
-    );
-    expect(container.textContent).toContain('ws-123');
-  });
-
-  it('renders MessageSetAgentWorkspaceId for persisted tool part', () => {
-    const { container } = renderRow(
-      [
-        builderToolPart({
-          toolCallId: 'call-ws-r',
           toolName: SET_AGENT_WORKSPACE_ID_TOOL_NAME,
           input: { workspaceId: 'ws-123' },
           output: { success: true },
