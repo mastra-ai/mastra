@@ -1436,20 +1436,26 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const mentionTake = params.add(input.maxMentionsPerNote + 1);
     const rows = await this.#rows(
       this.#client,
-      `SELECT picked."pageId",
-         ARRAY(SELECT mn."pageId" FROM ${this.#mentions} mn WHERE mn."noteId" = picked."id" ORDER BY mn."pageId" LIMIT ${mentionTake}) AS mentions
-       FROM (
-         SELECT n."id", n."pageId", n."createdAt", requested.position
-         FROM unnest(${ids}::text[]) WITH ORDINALITY requested(id, position)
-         JOIN LATERAL (
-           SELECT n."id", n."pageId", n."createdAt" FROM ${this.#visibleNotes(filter)}
-             AND n."deletedAt" IS NULL AND n."pageId" = requested.id
-           ORDER BY n."createdAt", n."id" LIMIT ${take}
-         ) n ON true
-         -- Let PostgreSQL skip pages without live notes before evaluating note visibility for each page.
-         WHERE EXISTS (SELECT 1 FROM ${this.#notes} candidate WHERE candidate."pageId" = requested.id AND candidate."deletedAt" IS NULL)
-         ORDER BY requested.position, n."createdAt", n."id" LIMIT ${take}
-       ) picked ORDER BY picked.position, picked."createdAt", picked."id"`,
+      `WITH RECURSIVE walk(position, remaining, "noteIds") AS (
+         SELECT 0, ${take}::int, ARRAY[]::text[]
+         UNION ALL
+         SELECT w.position + 1, w.remaining - cardinality(page."noteIds"), page."noteIds"
+         FROM walk w
+         CROSS JOIN LATERAL (
+           SELECT ARRAY(
+             SELECT n."id" FROM ${this.#visibleNotes(filter)}
+               AND n."deletedAt" IS NULL AND n."pageId" = (${ids}::text[])[w.position + 1]
+             ORDER BY n."createdAt", n."id" LIMIT w.remaining
+           ) AS "noteIds"
+           -- OFFSET 0 stops PostgreSQL from rerunning the note scan for each use of "noteIds".
+           OFFSET 0
+         ) page
+         WHERE w.remaining > 0 AND w.position < cardinality(${ids}::text[])
+       )
+       SELECT (${ids}::text[])[walk.position] AS "pageId",
+         ARRAY(SELECT mn."pageId" FROM ${this.#mentions} mn WHERE mn."noteId" = picked.id ORDER BY mn."pageId" LIMIT ${mentionTake}) AS mentions
+       FROM walk CROSS JOIN LATERAL unnest(walk."noteIds") WITH ORDINALITY picked(id, ordinal)
+       ORDER BY walk.position, picked.ordinal`,
       params.values,
     );
     let truncated = rows.length > input.limit;
