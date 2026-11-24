@@ -425,7 +425,7 @@ describe('dispatchGitLabWebhook', () => {
     await expect(
       dispatchGitLabWebhook(mergeRequest('close'), {
         controller: controllerStub({ getSession: async () => undefined, createSession }),
-        gitlab: gitlabStub({ userId: 'owner-1', orgId: 'org-1' }),
+        gitlab: gitlabStub({ userId: 'owner-1', orgId: 'org-1', projectRepositoryId: 'project-repository-1' }),
         listSubscriptions: async () => [subscription('a', 'thread-a')],
         retireSubscription: async () => undefined,
       }),
