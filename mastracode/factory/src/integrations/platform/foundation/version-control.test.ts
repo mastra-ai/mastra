@@ -65,40 +65,6 @@ describe('PlatformVersionControlCapability', () => {
     expect(rows[0]).toMatchObject({ id: repository!.id, slug: 'acme/api-renamed', defaultBranch: 'trunk' });
   });
 
-  it('re-points an installation in place so its repositories stay attached and resolve by repository id', async () => {
-    const { versionControl } = await setup();
-    const installation = await versionControl.registerInstallation({
-      orgId: 'org-1',
-      userId: 'user-1',
-      installation: { externalId: '100', accountName: 'acme', accountType: 'Organization' },
-    });
-    const [repository] = await versionControl.registerRepositories({
-      orgId: 'org-1',
-      installationId: installation.id,
-      repositories: [{ externalId: '42', slug: 'acme/api', defaultBranch: 'main' }],
-    });
-
-    const repointed = await versionControl.repointInstallation({
-      orgId: 'org-1',
-      fromExternalId: '100',
-      toExternalId: '300',
-      providerMetadata: { app: 'factory-github' },
-    });
-    expect(repointed).toMatchObject({
-      id: installation.id,
-      externalId: '300',
-      providerMetadata: { app: 'factory-github' },
-    });
-    expect(await versionControl.findRepository({ orgId: 'org-1', externalId: '42' })).toMatchObject({
-      id: repository!.id,
-      installationId: installation.id,
-    });
-    expect(await versionControl.findRepository({ orgId: 'org-2', externalId: '42' })).toBeNull();
-    expect(
-      await versionControl.repointInstallation({ orgId: 'org-1', fromExternalId: '100', toExternalId: '400' }),
-    ).toBeNull();
-  });
-
   it('reads the credential of the active connection a predicate picks, from the project listing', async () => {
     const platform = await startFakePlatform();
     platform.orgConnections.push(

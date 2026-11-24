@@ -47,6 +47,20 @@ describe('LegacyGithubTransport', () => {
     ]);
   });
 
+  it('reads a repository event page after an event id, or after a time for a repository not read before', async () => {
+    const page = { events: [{ id: '1700000000000-0' }], nextCursor: '1700000000000-0' };
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(page));
+    const github = transport(fetchImpl);
+
+    await expect(github.listRepositoryEvents(42, { afterEventId: '1699999999999-3' }, 50)).resolves.toEqual(page);
+    await expect(github.listRepositoryEvents(42, { afterTimestamp: 1_699_999_000_000 }, 50)).resolves.toEqual(page);
+
+    expect(calls(fetchImpl).map(({ method, url }) => `${method} ${url}`)).toEqual([
+      'GET https://platform.test/v1/server/github-app/repositories/42/events?limit=50&afterEventId=1699999999999-3',
+      'GET https://platform.test/v1/server/github-app/repositories/42/events?limit=50&afterTimestamp=1699999000000',
+    ]);
+  });
+
   it('sends the acting user on writes made for a user, and on nothing else', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ comments: [], id: 1 }));
     const github = transport(fetchImpl);

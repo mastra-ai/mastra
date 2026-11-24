@@ -95,35 +95,6 @@ export abstract class PlatformVersionControlCapability implements Pick<
   }
 
   /**
-   * Points the org's installation row for `fromExternalId` at the provider
-   * installation `toExternalId`, keeping the row, so its repositories and
-   * project links stay attached. Resolves null when the org has no such row.
-   */
-  async repointInstallation(input: {
-    orgId: string;
-    fromExternalId: string;
-    toExternalId: string;
-    providerMetadata?: SourceControlProviderMetadata;
-  }): Promise<SourceControlInstallation | null> {
-    const installation = await this.storage.installations.findByExternalId({
-      orgId: input.orgId,
-      externalId: input.fromExternalId,
-    });
-    if (!installation) return null;
-    return this.storage.installations.repoint({
-      orgId: input.orgId,
-      id: installation.id,
-      externalId: input.toExternalId,
-      ...(input.providerMetadata ? { providerMetadata: input.providerMetadata } : {}),
-    });
-  }
-
-  /** The org's repository with this provider repository id, whichever installation holds it. */
-  findRepository(input: { orgId: string; externalId: string }): Promise<SourceControlRepository | null> {
-    return this.storage.repositories.findByExternalId(input);
-  }
-
-  /**
    * The first active connection for `providerKey` that `predicate` accepts,
    * with the credential Connect issues for it, or null when none is active.
    */

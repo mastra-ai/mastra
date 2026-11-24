@@ -187,14 +187,3 @@ export interface GithubTransport {
   getCollaboratorPermission(call: GithubCall, username: string): Promise<GithubRepositoryPermission>;
   listDependabotAlerts(call: GithubCall, state: 'open' | 'closed'): Promise<GithubDependabotAlert[]>;
 }
-
-/** Thrown when an org's mode has no transport for an operation. */
-export class GithubTransportUnavailableError extends Error {
-  readonly orgId: string | undefined;
-
-  constructor(message: string, orgId?: string) {
-    super(message);
-    this.name = 'GithubTransportUnavailableError';
-    this.orgId = orgId;
-  }
-}
