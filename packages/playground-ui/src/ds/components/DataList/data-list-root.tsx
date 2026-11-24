@@ -182,8 +182,7 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
   default: raisedSurfaceStyle,
   // No panel, so rows rest on the page and only show on hover.
   light: '[--row:var(--background)]',
-  flush:
-    '[--row:transparent] [&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
+  flush: 'bg-row [&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
 };
 
 const dataListInsetClasses: Record<DataListVariant, string> = {
@@ -197,7 +196,7 @@ const dataListInsetClasses: Record<DataListVariant, string> = {
 const dataListVariantBackground: Record<DataListVariant, string> = {
   default: 'var(--card)',
   light: 'var(--background)',
-  flush: 'transparent',
+  flush: 'var(--card)',
 };
 
 const dataListDensityClasses: Record<DataListDensity, string | undefined> = {

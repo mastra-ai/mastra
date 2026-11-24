@@ -1,7 +1,7 @@
 import { Badge } from '../Badge';
 import type { BadgeVariant } from '../Badge';
 import { DataListCell, DataListTextCell } from '../DataList/data-list-cells';
-import { logLevelTextClass } from './log-level-styles';
+import { logLevelDotClass, logLevelTextClass } from './log-level-styles';
 import type { LogLevel } from './log-level-styles';
 import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -125,6 +125,8 @@ export interface LogsDataListLineCellProps {
   fields?: Record<string, unknown> | null;
 }
 
+const COLLAPSED_LINE_COUNT = 3;
+
 function formatFieldValue(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
@@ -134,25 +136,68 @@ function formatFieldValue(value: unknown): string {
   }
 }
 
+function parseJsonObject(message: string): Record<string, unknown> | undefined {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith('{')) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? Object.fromEntries(Object.entries(parsed))
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function LogFields({ entries }: { entries: Array<[string, unknown]> }) {
+  return entries.map(([key, value]) => (
+    <span key={key} className="ml-3 first:ml-0">
+      <span className="text-muted-foreground">{key}:</span> {formatFieldValue(value)}
+    </span>
+  ));
+}
+
+function LogMessage({ message }: { message: string }) {
+  const json = parseJsonObject(message);
+  if (json) return <LogFields entries={Object.entries(json)} />;
+
+  const lines = message.split('\n');
+  const hidden = lines.length - COLLAPSED_LINE_COUNT;
+  if (hidden < 2) return <>{message}</>;
+
+  return (
+    <>
+      {lines.slice(0, COLLAPSED_LINE_COUNT).join('\n')}
+      {'\n'}
+      <span className="text-muted-foreground">
+        +{hidden} more {hidden === 1 ? 'line' : 'lines'}
+      </span>
+    </>
+  );
+}
+
 export function LogsDataListLineCell({ timestamp, level, message, fields }: LogsDataListLineCellProps) {
   const fieldEntries = fields ? Object.entries(fields) : [];
 
   return (
-    <DataListCell className="block py-0.5 font-mono whitespace-normal">
-      <span className="flex flex-wrap items-baseline gap-x-4">
-        <time dateTime={toDate(timestamp)?.toISOString()} className="shrink-0 tabular-nums">
+    <>
+      <span aria-hidden className={cn('absolute inset-y-1 left-1 w-0.5 rounded-full', logLevelDotClass[level])} />
+      <DataListCell className="content-start py-0.5 font-mono tabular-nums">
+        <time dateTime={toDate(timestamp)?.toISOString()}>
           {formatLogLineTimestamp(timestamp) ?? String(timestamp)}
         </time>
-        <span className={cn('w-12 shrink-0 uppercase', logLevelTextClass[level])}>{level}</span>
-        <span className="min-w-0 grow basis-60 wrap-anywhere whitespace-pre-wrap text-foreground">
-          {message}
-          {fieldEntries.map(([key, value]) => (
-            <span key={key} className="ml-3">
-              <span className="text-muted-foreground">{key}:</span> {formatFieldValue(value)}
-            </span>
-          ))}
-        </span>
-      </span>
-    </DataListCell>
+      </DataListCell>
+      <DataListCell className={cn('content-start py-0.5 font-mono uppercase', logLevelTextClass[level])}>
+        {level}
+      </DataListCell>
+      <DataListCell className="block py-0.5 font-mono wrap-anywhere whitespace-pre-wrap text-foreground @max-md:col-span-full @max-md:-mt-3">
+        <LogMessage message={message} />
+        {fieldEntries.length > 0 && (
+          <span className="ml-3">
+            <LogFields entries={fieldEntries} />
+          </span>
+        )}
+      </DataListCell>
+    </>
   );
 }

@@ -90,4 +90,10 @@ describe('LogDataPanel sections', () => {
     expect(screen.getByText('Data')).toBeTruthy();
     expect(screen.queryByText('Fields')).toBeNull();
   });
+
+  it('pretty-prints a JSON message', () => {
+    render(<LogDataPanel log={{ ...plainLine, message: '{"msg":"request done","status":200}' }} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('dialog').textContent).toContain('"msg": "request done"');
+  });
 });

@@ -47,6 +47,15 @@ function isPrimitive(value: unknown): value is string | number | boolean | null 
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
+function prettyJsonObject(message: string): string | undefined {
+  if (!message.trim().startsWith('{')) return undefined;
+  try {
+    return JSON.stringify(JSON.parse(message), null, 2);
+  } catch {
+    return undefined;
+  }
+}
+
 function textRows(entries: Array<[string, unknown]>, mono?: boolean): InsetRow[] {
   return entries
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -79,6 +88,7 @@ export function LogDataPanel({
   const formattedDate = log ? (formatTimestampPrecise(log.timestamp) ?? '') : '';
   const dataEntries = Object.entries(log?.data ?? {});
   const dataIsFlat = dataEntries.every(([, value]) => isPrimitive(value));
+  const jsonMessage = log ? prettyJsonObject(log.message) : undefined;
 
   return (
     <DataPanel open={!!log} onClose={onClose} title={log ? `Log ${formattedDate}` : 'Log'} depth={depth}>
@@ -120,7 +130,11 @@ export function LogDataPanel({
                 ]}
               />
 
-              <DataPanel.CodeSection title="Message" codeStr={log.message} simplified />
+              {jsonMessage === undefined ? (
+                <DataPanel.CodeSection title="Message" codeStr={log.message} simplified />
+              ) : (
+                <DataPanel.CodeSection title="Message" codeStr={jsonMessage} />
+              )}
 
               {dataIsFlat ? (
                 <InsetSection title="Fields" rows={textRows(dataEntries, true)} />

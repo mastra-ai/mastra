@@ -10,7 +10,7 @@ import { Txt } from '@/ds/components/Txt';
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
 const COLUMNS = '6rem 9rem 5rem 10rem minmax(8rem,1fr) minmax(8rem,1fr)';
 
-const STREAM_COLUMNS = 'minmax(0,1fr)';
+const STREAM_COLUMNS = 'auto auto minmax(0,1fr)';
 
 const ROW_HEIGHT = 36;
 const STREAM_ROW_HEIGHT = 24;
@@ -184,7 +184,7 @@ export function LogsListView({
             {...getRowProps(vi.index)}
             onClick={() => onLogClick(log)}
             featured={isFeatured}
-            variant={isError && !isStream ? 'error' : 'default'}
+            variant={isError ? 'error' : 'default'}
           >
             {isStream ? (
               <LogsDataList.LineCell
@@ -217,7 +217,7 @@ export function LogsListView({
       </Txt>
     );
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
         {isOldestFirst && loadingOlder}
         <LogsDataList
           columns={STREAM_COLUMNS}
@@ -227,6 +227,11 @@ export function LogsListView({
           variant="flush"
           density="compact"
         >
+          <LogsDataList.Top className="border-b border-border @max-md:hidden">
+            <LogsDataList.TopCell>Time</LogsDataList.TopCell>
+            <LogsDataList.TopCell>Level</LogsDataList.TopCell>
+            <LogsDataList.TopCell>Message</LogsDataList.TopCell>
+          </LogsDataList.Top>
           {logs.length === 0 ? <LogsDataList.NoMatch message="No logs match your search" /> : rows}
         </LogsDataList>
         {!isOldestFirst && loadingOlder}

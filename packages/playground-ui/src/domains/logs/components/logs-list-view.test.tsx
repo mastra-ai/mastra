@@ -93,7 +93,7 @@ describe('LogsListView stream density', () => {
   ];
   const idMap = new Map(sandboxLines.map((log, i) => [log, `line-${i}`]));
 
-  it('renders plain log lines in the given order without a column header, with fields after the message', () => {
+  it('renders plain log lines in the given order under Time, Level and Message, with fields after the message', () => {
     render(<LogsListView density="stream" logs={sandboxLines} logIdMap={idMap} onLogClick={vi.fn()} />);
 
     const rows = screen.getAllByRole('button');
@@ -102,7 +102,84 @@ describe('LogsListView stream density', () => {
       expect.stringContaining('Process.Start stream ended'),
     ]);
     expect(rows[0]?.textContent).toContain('warn');
-    expect(screen.queryByText('Message')).toBeNull();
+    expect(['Time', 'Level', 'Message'].map(label => screen.getByText(label).textContent)).toEqual([
+      'Time',
+      'Level',
+      'Message',
+    ]);
+  });
+
+  it('tints error lines so they stand out from the rest', () => {
+    const lines: LogRecord[] = [
+      { timestamp: '2026-11-24T09:35:58.956Z', level: 'error', message: 'Command failed: node server.js' },
+      { timestamp: '2026-11-24T09:36:00.000Z', level: 'warn', message: 'Memory usage above 80% of limit' },
+    ];
+    const ids = new Map(lines.map((log, i) => [log, `tint-${i}`]));
+    render(<LogsListView density="stream" logs={lines} logIdMap={ids} onLogClick={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /Command failed/ }).dataset.variant).toBe('error');
+    expect(screen.getByRole('button', { name: /Memory usage/ }).dataset.variant).toBe('default');
+  });
+
+  it('shows a JSON message as key and value fields', () => {
+    const lines: LogRecord[] = [
+      {
+        timestamp: '2026-11-24T09:35:58.956Z',
+        level: 'info',
+        message: '{"msg":"request done","status":200,"route":{"path":"/api"}}',
+      },
+    ];
+    render(
+      <LogsListView
+        density="stream"
+        logs={lines}
+        logIdMap={new Map(lines.map(log => [log, 'json']))}
+        onLogClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button').textContent).toContain('msg: request donestatus: 200route: {"path":"/api"}');
+  });
+
+  it('shows the first three lines of a stack trace and counts the rest', () => {
+    const trace = [
+      'Error: boom',
+      '    at a (a.js:1:1)',
+      '    at b (b.js:2:2)',
+      '    at c (c.js:3:3)',
+      '    at d (d.js:4:4)',
+    ];
+    const lines: LogRecord[] = [{ timestamp: '2026-11-24T09:35:58.956Z', level: 'error', message: trace.join('\n') }];
+    render(
+      <LogsListView
+        density="stream"
+        logs={lines}
+        logIdMap={new Map(lines.map(log => [log, 'trace']))}
+        onLogClick={vi.fn()}
+      />,
+    );
+
+    const row = screen.getByRole('button');
+    expect(row.textContent).toContain('at b (b.js:2:2)');
+    expect(row.textContent).not.toContain('at c (c.js:3:3)');
+    expect(row.textContent).toContain('+2 more lines');
+  });
+
+  it('shows a four-line message in full instead of hiding one line', () => {
+    const message = ['Error: boom', '    at a (a.js:1:1)', '    at b (b.js:2:2)', '    at c (c.js:3:3)'].join('\n');
+    const lines: LogRecord[] = [{ timestamp: '2026-11-24T09:35:58.956Z', level: 'error', message }];
+    render(
+      <LogsListView
+        density="stream"
+        logs={lines}
+        logIdMap={new Map(lines.map(log => [log, 'four']))}
+        onLogClick={vi.fn()}
+      />,
+    );
+
+    const row = screen.getByRole('button');
+    expect(row.textContent).toContain('at c (c.js:3:3)');
+    expect(row.textContent).not.toContain('more line');
   });
 
   describe('oldest first, like a terminal', () => {
