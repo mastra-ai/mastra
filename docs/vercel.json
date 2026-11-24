@@ -2438,6 +2438,76 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/workspace",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/workspaces",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-workspace",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace",
+      "destination": "/docs/sandbox/overview",
+      "permanent": true
+    },
+    {
+      "source": "/reference/scorers/create-scorer",
+      "destination": "/reference/evals/create-scorer",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/Memory",
+      "destination": "/reference/memory/memory-class",
+      "permanent": true
+    },
+    {
+      "source": "/models/openai",
+      "destination": "/models/providers/openai",
+      "permanent": true
+    },
+    {
+      "source": "/models/openai/gpt-5-mini",
+      "destination": "/models/providers/openai",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/tools/overview",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started.md",
+      "destination": "/docs.md",
+      "permanent": true
+    },
+    {
+      "source": "/reference/cli/dev",
+      "destination": "/reference/cli/mastra#mastra-dev",
+      "permanent": true
+    },
+    {
+      "source": "/reference/cli/dev.md",
+      "destination": "/reference/cli/mastra.md",
+      "permanent": true
+    },
+    {
+      "source": "/docs/use-cases/software-factories",
+      "destination": "https://factory.mastra.ai/",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
       "destination": "/docs/mastra-platform/connect/llms.txt",
       "permanent": false
@@ -4455,6 +4525,61 @@
     {
       "source": "/docs/mastra-platform/regions/llms.txt",
       "destination": "/docs/mastra-platform/deploy/regions/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/workspace/llms.txt",
+      "destination": "/docs/sandbox/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/workspaces/llms.txt",
+      "destination": "/docs/sandbox/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-workspace/llms.txt",
+      "destination": "/docs/sandbox/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/llms.txt",
+      "destination": "/docs/sandbox/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/scorers/create-scorer/llms.txt",
+      "destination": "/reference/evals/create-scorer/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/Memory/llms.txt",
+      "destination": "/reference/memory/memory-class/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/openai/llms.txt",
+      "destination": "/models/providers/openai/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/openai/gpt-5-mini/llms.txt",
+      "destination": "/models/providers/openai/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/tools/overview/llms.txt",
+      "destination": "/docs/agents/tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/cli/dev/llms.txt",
+      "destination": "/reference/cli/mastra/llms.txt",
       "permanent": true
     },
     {
