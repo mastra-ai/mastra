@@ -42,7 +42,7 @@ tester.run('date-locale', plugin.rules['date-locale'], {
     },
     {
       name: 'ignores a clock setting that formats nothing',
-      code: "save({ theme: 'dark', hour12: true });",
+      code: "save({ theme: 'dark', hour12: true }); save({ year: 2026, month: 11, hour: 14, hour12: false });",
     },
     {
       name: 'allows date-fns patterns that are data',

@@ -634,7 +634,9 @@ function dateLocale(context) {
             type === 'Property' && !(computed && key.type === 'Identifier') && keys.has(keyOf(key)),
         )
       : [];
-  const hasDateOptions = object => optionsIn(object, DATE_OPTIONS).length > 0;
+  // `{ year: 2026, hour: 14 }` is a date, not how to format one: formatter options aren't numbers.
+  const hasDateOptions = object =>
+    optionsIn(object, DATE_OPTIONS).some(({ value }) => !(value.type === 'Literal' && typeof value.value === 'number'));
   const forcedClocks = object => optionsIn(object, CLOCK_OPTIONS).filter(({ value }) => value.type === 'Literal');
   const isDateTimeFormat = callee =>
     callee.type === 'MemberExpression' &&
