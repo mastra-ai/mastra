@@ -144,7 +144,7 @@ Preflight validates the built output before the deploy uploads and only flags is
   })
   ```
 
-- **Missing environment variables**: A warning for variables your code reads but no source provides. Variables referenced only by library code are excluded.
+- **Missing environment variables**: A warning for variables your code reads but no source provides. When the build includes preflight metadata, variables referenced only by library code are excluded. Builds without that metadata, such as stale builds, scan the whole bundle and can warn about library references.
 
 The recommended response to a preflight block is to fix the cause, usually by attaching a hosted database or storing the variable on the platform. `--skip-preflight` exists as an escape hatch but skips the checks that prevent broken deploys.
 
@@ -162,7 +162,7 @@ Deploys resolve environment variables from three sources:
 
 - **Managed variables**: Injected by platform resources like hosted databases (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
 - **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
-- **Local env files**: Deployments layer an explicit `--env-file` or the ambient `.env` and `.env.local` files on top.
+- **Local env files**: Deployments layer one local env file on top: the `--env-file` you pass, `.env.<environment>` when you deploy with `--env`, or the only `.env*` file in the project. Ambient files like `.env` and `.env.local` aren't combined.
 
 ```bash
 mastra deploy --env staging --env-file .env.staging

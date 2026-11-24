@@ -36,7 +36,7 @@ The residency selector offers four Railway regions across two zones. The `us` an
 Pass a Railway code directly when you need to pin an environment to a specific data center. Passing `us` selects `pdx`, and passing `eu` selects `ams`.
 
 :::note
-Additional Railway regions exist in the deploy pipeline (for example Singapore, `sin`) but aren't offered in the residency selector yet, because hosted databases and observability don't have local placement outside the US and EU. Passing an unrecognized region falls back to the US default rather than pinning to it.
+Additional Railway regions exist in the deploy pipeline (for example Singapore, `sin`) but aren't offered in the residency selector yet, because hosted databases and observability don't have local placement outside the US and EU. An unrecognized region isn't pinned at all: the environment gets Railway's default placement.
 :::
 
 ## Hosted database placement
