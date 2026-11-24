@@ -106,7 +106,9 @@ export interface KnowledgeImporterServiceHost extends KnowledgeImporterHost {
   expireRuns(): Promise<{ expired: string[] }>;
   /**
    * A run's status and, once it ended, the receipt its finish stored (the app's, or the host's for a
-   * run it ended), with the chaining decision schedulers act on. Null for an unknown run.
+   * run it ended), with the chaining decision schedulers act on. Null for an unknown run. An ended run
+   * with no stored finish reads as `receipt: null`; this host always stores one, so that is for a host
+   * that ends runs itself.
    */
   readRun(
     runId: string,

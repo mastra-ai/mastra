@@ -218,6 +218,15 @@ export function createKnowledgeHostedImporterHostTests(
         receipt: { outcome: 'canceled', backlog: false, chain: false },
       });
     });
+
+    it('reads no receipt for a run that ended without a stored finish', async () => {
+      // The local host always stores one; a host that ends runs itself may not.
+      const { host, knowledge } = setup();
+      const run = await start(host);
+      const storage = await knowledge.getStorage();
+      await storage.transaction(tx => tx.importers!.abandonRun({ runId: run.runId, finish: null, status: 'failed' }));
+      expect(await host.readRun(run.runId)).toEqual({ status: 'failed', receipt: null });
+    });
   });
 
   describe('service importer host: admission at start (S4)', () => {
