@@ -17,9 +17,16 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "nvidia/nemotron-3.5-lightning-30b-a3b": [
+    "z-ai/glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "nvidia/nemotron-3.5-super-vl-120b-a12b": [
@@ -33,16 +40,9 @@
         "values": ["none", "medium", "high"]
       }
     ],
-    "z-ai/glm-5.3": [
+    "nvidia/nemotron-3.5-lightning-30b-a3b": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "openai/gpt-oss-20b": [

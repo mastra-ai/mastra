@@ -51,7 +51,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
           <IconLibrary />
         </Icon>
         {isInLibrary ? (
-          <p className="flex items-center gap-2 text-placeholder" data-testid="agent-builder-library-added">
+          <p className="flex items-center gap-2 text-subtle-foreground" data-testid="agent-builder-library-added">
             <Icon>
               <IconCheckmark2Medium />
             </Icon>

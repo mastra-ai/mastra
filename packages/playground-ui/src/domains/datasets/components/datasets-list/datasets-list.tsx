@@ -71,7 +71,7 @@ function TagsCell({ tags: rawTags }: { tags: DatasetRecord['tags'] }) {
           )}
         </div>
       ) : (
-        <span className="text-placeholder">—</span>
+        <span className="text-subtle-foreground">—</span>
       )}
     </DataList.Cell>
   );
@@ -110,7 +110,11 @@ function SelectableDatasetRow({
       <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
       <DataList.Cell>
         {trailingCell ??
-          (ds.experimentCount > 0 ? <ExperimentsBadge dataset={ds} /> : <span className="text-placeholder">—</span>)}
+          (ds.experimentCount > 0 ? (
+            <ExperimentsBadge dataset={ds} />
+          ) : (
+            <span className="text-subtle-foreground">—</span>
+          ))}
       </DataList.Cell>
     </DataList.RowButton>
   );

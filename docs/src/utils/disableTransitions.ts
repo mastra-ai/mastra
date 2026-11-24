@@ -16,8 +16,8 @@ export function disableTransitions(): () => void {
   document.head.appendChild(css)
 
   return () => {
-    // @ts-expect-error
-    const _ = window.getComputedStyle(css).opacity
+    // Reading a computed style forces a reflow so the stylesheet is applied before it is removed.
+    void window.getComputedStyle(css).opacity
     document.head.removeChild(css)
   }
 }

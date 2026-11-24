@@ -1,0 +1,332 @@
+import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { useStoredAgents } from '@mastra/react/hooks/agents';
+import { useStoredPromptBlock, useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
+import { DisplayConditionsDialog } from './display-conditions-dialog';
+import type { InstructionBlock, RefInstructionBlock } from './types';
+import { Badge } from '@/ds/components/Badge';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { ContentBlock } from '@/ds/components/ContentBlocks';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { Spinner } from '@/ds/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
+
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
+import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
+import type { JsonSchema } from '@/utils/json-schema';
+import type { RuleGroup } from '@/utils/rule-engine';
+
+export interface AgentCMSRefBlockProps {
+  index: number;
+  block: RefInstructionBlock;
+  onBlockChange?: (block: InstructionBlock) => void;
+  onDelete?: (index: number) => void;
+  onDereference?: (index: number, content: string) => void;
+  className?: string;
+  schema?: JsonSchema;
+  readOnly?: boolean;
+}
+
+interface RefBlockContentProps {
+  index: number;
+  block: RefInstructionBlock;
+  onRulesChange?: (rules: RuleGroup | undefined) => void;
+  dragHandleProps?: DraggableProvidedDragHandleProps | null;
+  onDelete?: () => void;
+  onDereference?: (content: string) => void;
+  schema?: JsonSchema;
+  readOnly?: boolean;
+}
+
+const RefBlockContent = ({
+  index,
+  block,
+  onRulesChange,
+  dragHandleProps,
+  onDelete,
+  onDereference,
+  schema,
+  readOnly = false,
+}: RefBlockContentProps) => {
+  const { data: promptBlock, isLoading } = useStoredPromptBlock({
+    blockId: block.promptBlockId,
+    queryOptions: { enabled: Boolean(block.promptBlockId) },
+  });
+  const isDraft = promptBlock && !promptBlock.activeVersionId;
+  const hasUnpublishedEdits = promptBlock && !!promptBlock.activeVersionId && !!promptBlock.hasDraft;
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: block.promptBlockId });
+  const { navigate, paths } = useLinkComponent();
+  // Local state for the editor so edits aren't lost on query refetch
+  const [localContent, setLocalContent] = useState('');
+  const hasInitialized = useRef(false);
+  const hasUserEdited = useRef(false);
+
+  // Reset sync flags when the referenced block changes
+  useEffect(() => {
+    hasInitialized.current = false;
+    hasUserEdited.current = false;
+  }, [block.promptBlockId]);
+
+  // Sync from server on first load (or when promptBlockId changes)
+  useEffect(() => {
+    if (promptBlock?.content != null && !hasInitialized.current && !hasUserEdited.current) {
+      setLocalContent(promptBlock.content);
+      hasInitialized.current = true;
+    }
+  }, [promptBlock?.content]);
+
+  // Debounce persisting to the server (500ms after last keystroke)
+  const debouncedSave = useDebouncedCallback((content: string) => {
+    updateStoredPromptBlock.mutate({ content });
+  }, 500);
+
+  // Flush pending save on unmount so the last edit isn't lost
+  useEffect(() => () => debouncedSave.flush(), [debouncedSave]);
+
+  const handleContentChange = useCallback(
+    (content: string) => {
+      hasUserEdited.current = true;
+      setLocalContent(content);
+      debouncedSave(content);
+    },
+    [debouncedSave],
+  );
+
+  // "Used by" — find agents that reference this prompt block
+  const { data: storedAgentsData } = useStoredAgents();
+  const usedByAgents = useMemo(() => {
+    if (!storedAgentsData?.agents) return [];
+    return storedAgentsData.agents.filter(agent => {
+      const instructions = agent.instructions;
+      if (!Array.isArray(instructions)) return false;
+      return instructions.some((instr: any) => instr.type === 'prompt_block_ref' && instr.id === block.promptBlockId);
+    });
+  }, [storedAgentsData?.agents, block.promptBlockId]);
+
+  return (
+    <div className="group relative rounded-md hover:bg-fill-subtle">
+      {/* Left gutter — drag handle (visible on hover/focus-within) */}
+      {!readOnly && (
+        <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+          <div
+            {...dragHandleProps}
+            className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Icon>
+                  <IconDotGrid2x3 />
+                </Icon>
+              </TooltipTrigger>
+              <TooltipContent side="left">Drag to reorder</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      )}
+
+      {/* Content area with left accent border */}
+      <div className="border-l-2 border-info-edge pl-3">
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-3 text-muted-foreground">
+            <Spinner className="size-4" />
+            <Txt variant="caption">Loading prompt block...</Txt>
+          </div>
+        ) : promptBlock ? (
+          <>
+            {/* Sync-block header — always visible, with Popover on caret */}
+            <div className="-ml-1 flex items-center gap-1.5 p-1">
+              <Txt variant="meta" tone="muted" className="truncate">
+                {promptBlock.name}
+              </Txt>
+              {isDraft && (
+                <Badge size="xs" variant="warning" aria-label="Draft prompt block">
+                  Draft
+                </Badge>
+              )}
+              {hasUnpublishedEdits && (
+                <Badge size="xs" variant="warning" aria-label="Unpublished prompt block edits">
+                  Unpublished edits
+                </Badge>
+              )}
+              {onRulesChange && (
+                <div className="ml-auto">
+                  <DisplayConditionsDialog
+                    entityName={`Block ${index + 1}`}
+                    schema={schema}
+                    rules={block.rules}
+                    onRulesChange={onRulesChange}
+                  />
+                </div>
+              )}
+              {!readOnly && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Open actions for ${promptBlock.name}`}
+                      className={cn(
+                        'rounded p-0.5 hover:bg-fill-subtle',
+                        !onRulesChange && 'ml-auto',
+                        quietTextHover,
+                        controlStateColorTransition,
+                      )}
+                    >
+                      <Icon className="size-3!">
+                        <IconChevronDownMedium />
+                      </Icon>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[280px] p-0">
+                    <div className="border-b border-border p-3">
+                      <Txt variant="column" tone="ink">
+                        {promptBlock.name}
+                      </Txt>
+                      {promptBlock.description && (
+                        <Txt variant="meta" tone="muted" className="mt-0.5 line-clamp-2">
+                          {promptBlock.description}
+                        </Txt>
+                      )}
+                    </div>
+                    <div className="p-1">
+                      <button
+                        type="button"
+                        onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
+                        className={cn(
+                          'text-foreground',
+                          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
+                        )}
+                      >
+                        <Icon className="size-3.5! text-muted-foreground">
+                          <IconSquareArrowTopRight />
+                        </Icon>
+                        <Txt as="span" variant="meta" className="block">
+                          Open original
+                        </Txt>
+                      </button>
+                      {onDereference && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            debouncedSave.flush();
+                            onDereference(localContent);
+                          }}
+                          className={cn(
+                            'text-foreground',
+                            'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
+                          )}
+                        >
+                          <Icon className="size-3.5! text-muted-foreground">
+                            <IconCrossMedium />
+                          </Icon>
+                          <Txt as="span" variant="meta" className="block">
+                            De-reference block
+                          </Txt>
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive-foreground hover:bg-fill-subtle"
+                          onClick={onDelete}
+                        >
+                          <Icon className="size-3.5!">
+                            <IconCrossMedium />
+                          </Icon>
+                          <Txt as="span" variant="meta" className="block">
+                            Remove block
+                          </Txt>
+                        </button>
+                      )}
+                    </div>
+                    {usedByAgents.length > 0 && (
+                      <div className="border-t border-border p-3">
+                        <Txt variant="meta" tone="muted" className="mb-1.5">
+                          Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
+                        </Txt>
+                        <div className="flex flex-col gap-1">
+                          {usedByAgents.map(agent => (
+                            <Txt key={agent.id} variant="meta" tone="ink" className="truncate">
+                              {agent.name}
+                            </Txt>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+
+            {(isDraft || hasUnpublishedEdits) && (
+              <div className="flex items-start gap-1.5 px-1 pb-1 text-warning-foreground">
+                <IconExclamationTriangle className="mt-0.5 size-icon-sm shrink-0" aria-hidden="true" />
+                <Txt as="span" variant="meta">
+                  {isDraft
+                    ? 'This block is skipped at runtime until it is published.'
+                    : 'Runtime uses the last published version until these edits are published.'}
+                </Txt>
+              </div>
+            )}
+
+            {/* Editable content */}
+            <CodeEditor
+              value={localContent}
+              onChange={handleContentChange}
+              placeholder="Referenced block is empty"
+              variant="embedded"
+              className="min-h-12"
+              language="markdown"
+              highlightVariables
+              showCopyButton={false}
+              schema={schema}
+              lineNumbers={false}
+              editable={!readOnly}
+            />
+          </>
+        ) : (
+          <div className="flex items-center gap-2 py-3 text-warning-foreground">
+            <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const AgentCMSRefBlock = ({
+  index,
+  block,
+  onBlockChange,
+  onDelete,
+  onDereference,
+  className,
+  schema,
+  readOnly = false,
+}: AgentCMSRefBlockProps) => {
+  return (
+    <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
+      {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
+        <RefBlockContent
+          index={index}
+          block={block}
+          onRulesChange={readOnly || !onBlockChange ? undefined : rules => onBlockChange({ ...block, rules })}
+          dragHandleProps={dragHandleProps}
+          onDelete={readOnly || !onDelete ? undefined : () => onDelete(index)}
+          onDereference={readOnly || !onDereference ? undefined : (content: string) => onDereference(index, content)}
+          schema={schema}
+          readOnly={readOnly}
+        />
+      )}
+    </ContentBlock>
+  );
+};

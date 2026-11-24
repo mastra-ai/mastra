@@ -646,7 +646,7 @@ export async function createSourceControlTools({
     }),
     source_control_review_change_request: createTool({
       id: 'source_control_review_change_request',
-      description: `Submit an approve, request-changes, or comment review to a change request. Provider limitations are returned explicitly. ${repositoryArgument}`,
+      description: `Submit an approve, request-changes, or comment review to a change request. Provider limitations are returned explicitly. Submit only findings you checked yourself against the change request's current diff: a side session's report is not a check. ${repositoryArgument}`,
       inputSchema: changeRequestSchema
         .extend({
           event: z.enum(['approve', 'request-changes', 'comment']),

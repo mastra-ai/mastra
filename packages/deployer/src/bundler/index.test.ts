@@ -457,6 +457,22 @@ describe('applySourceDependencyRange', () => {
     ).toEqual({ version: '^4.3.6' });
   });
 
+  it.each(['^4.3.6 ||   *', '^4.3.6   || >=  0.0', '^4.3.6\t\tx'])(
+    'keeps the resolved version when whitespace pads an unbounded alternative in %j',
+    declared => {
+      expect(
+        applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: declared } })),
+      ).toEqual({ version: '3.25.76' });
+    },
+  );
+
+  it('checks a declared range with a long whitespace run in linear time', () => {
+    const declared = `1${' '.repeat(200_000)}a`;
+    const started = performance.now();
+    applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: declared } }));
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it('keeps the resolved alias when the declared value is a bare range for a differently named package', () => {
     const result = applySourceDependencyRange(
       'ai-v5',

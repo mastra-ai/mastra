@@ -50,6 +50,17 @@
       "enabled": false
     },
     {
+      "description": "The zod-v3 aliases and the client-js zod-v3 fixture exist to test real Zod 3. Zod 3.x has no fix for GHSA-mrhx-c7xc-m3w5, so security updates must not move them to Zod 4 (see #28075)",
+      "matchDepNames": ["zod-v3", "client-js-e2e-tests-zod-v3>zod"],
+      "allowedVersions": "<4"
+    },
+    {
+      "description": "The client-js zod-v3 e2e fixture must stay on Zod 3",
+      "matchFileNames": ["e2e-tests/client-js/zod-v3/package.json"],
+      "matchPackageNames": ["zod"],
+      "allowedVersions": "<4"
+    },
+    {
       "description": "Disable all dependency updates in examples (Renovate previously ignored these via ignorePaths)",
       "matchFileNames": ["examples/**/package.json"],
       "enabled": false

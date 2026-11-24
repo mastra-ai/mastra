@@ -179,7 +179,7 @@ export function SpanPayloadJsonSection({ title, icon, raw, layout = 'panel' }: S
     <Collapsible data-slot="span-payload-section" data-view="raw" className="group/payload flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <CollapsibleTrigger className="flex items-center gap-1 rounded-sm">
-          <DisclosureChevron direction="right" className="size-3 text-placeholder" />
+          <DisclosureChevron direction="right" className="size-3 text-subtle-foreground" />
           <DataPanelSectionHeading icon={icon} className={cn(layout === 'details' && 'text-meta')}>
             {title}
           </DataPanelSectionHeading>
