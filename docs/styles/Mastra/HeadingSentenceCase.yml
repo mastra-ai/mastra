@@ -131,6 +131,7 @@ exceptions:
   - 'OpenAI'
   - 'OpenAPI'
   - 'OpenAI Realtime'
+  - 'OpenAI Live'
   - 'OpenSearch'
   - 'OpenTelemetry'
   - 'OS'

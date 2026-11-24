@@ -214,7 +214,7 @@ describe('OpenAILiveVoice', () => {
       id: 'getWeather',
       description: 'Get weather',
       inputSchema: z.object({ city: z.string() }),
-      execute: vi.fn(async ({ context }: { context: { city: string } }) => ({ city: context.city, temp: 20 })),
+      execute: vi.fn(async (input: { city: string }) => ({ city: input.city, temp: 20 })),
     });
 
     it('answers a function call with response.item.create and continues with response.create', async () => {
@@ -235,7 +235,7 @@ describe('OpenAILiveVoice', () => {
       await tick();
       await tick();
 
-      expect(tool.execute).toHaveBeenCalledWith({ context: { city: 'Paris' } }, expect.anything());
+      expect(tool.execute).toHaveBeenCalledWith({ city: 'Paris' }, expect.anything());
       expect(ws.sent.slice(1)).toEqual([
         {
           type: 'response.item.create',

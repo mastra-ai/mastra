@@ -9432,7 +9432,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/schema-compat
       ws:
-        specifier: 8.23.0
+        specifier: ^8.23.0
         version: 8.23.0(bufferutil@4.1.0)
     devDependencies:
       '@internal/lint':
@@ -9448,7 +9448,7 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       '@types/ws':
-        specifier: ^8.18.1
+        specifier: ^8.18.2
         version: 8.18.2
       '@vitest/coverage-v8':
         specifier: 'catalog:'
@@ -9456,12 +9456,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
-      eslint:
-        specifier: ^10.7.0
-        version: 10.14.0(jiti@2.7.0)(supports-color@10.2.2)
       tsdown:
-        specifier: 0.22.9
-        version: 0.22.9(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
+        specifier: 0.23.1
+        version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
       tsx:
         specifier: 'catalog:'
         version: 4.23.15

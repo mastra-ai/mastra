@@ -47,7 +47,7 @@ agent.voice.on('writing', ({ text, role }) => console.log(role, text));
 await agent.voice.send(getMicrophoneStream());
 ```
 
-## Configuration
+### Configuration
 
 | Option             | Description                                                 |
 | ------------------ | ----------------------------------------------------------- |
@@ -62,7 +62,7 @@ await agent.voice.send(getMicrophoneStream());
 | `sessionConfig`    | Extra fields merged into the session config.                |
 | `connectTimeoutMs` | Handshake timeout in ms (default `15000`).                  |
 
-## Events
+### Events
 
 - `speaker` — a readable stream of output audio.
 - `speaking` — `{ audio }` chunks of output audio.
@@ -71,8 +71,20 @@ await agent.voice.send(getMicrophoneStream());
   delegation reply with `sendDelegationResult(delegationId, text)`.
 - `error` — connection or protocol errors.
 
-## Notes
+### Notes
 
 Wire names follow OpenAI's GPT-Live WebSocket reference and live in
 `src/protocol.ts`. The client sends `session.start` first and waits for
 `session.started`; after that only the delegation can be updated.
+
+## Documentation
+
+- [@mastra/voice-openai-live documentation](https://mastra.ai/integrations/voice/openai-live)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/openai-live/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

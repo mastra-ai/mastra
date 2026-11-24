@@ -10,11 +10,11 @@ packages:
 
 The `OpenAILiveVoice` class provides real-time speech-to-speech capabilities backed by OpenAI's [Live API](https://developers.openai.com/api/docs/guides/live) (`gpt-live-1`). It opens a full-duplex WebSocket to the Live endpoint (`wss://api.openai.com/v1/live/sessions`) and emits events for assistant audio, transcribed text, and tool calls.
 
-This is a separate provider from [`@mastra/voice-openai-realtime`](/integrations/voice/openai). The Live API is a distinct, **server-driven** protocol — a different endpoint with its own event vocabulary. The model listens and speaks at the same time and decides when each turn starts and ends; there is no client event to create, cancel, or truncate a response. Reasoning and tools are delegated to a backend model while the voice layer handles the acoustic loop. It is not a model-id swap on the Realtime provider.
+This is a separate provider from [`@mastra/voice-openai-realtime`](/integrations/voice/openai). The Live API is a distinct, **server-driven** protocol with its own endpoint and event vocabulary. The model listens and speaks simultaneously and decides when each turn starts and ends, so the client has no event to create, cancel, or truncate a response. Reasoning and tools are delegated to a backend model while the voice layer handles the acoustic loop. It's not a model-id swap on the Realtime provider.
 
-> **Note:** The Live API is transported over a server WebSocket only. WebRTC and SIP are not yet supported by this provider.
+> **Transport:** This provider connects to the Live API over a server WebSocket, without WebRTC or SIP support for now.
 
-> **Server-driven turns:** GPT-Live controls its own turns. `connect()` sends `session.start` and resolves once the server replies with `session.started`. `speak()` sends the text with `session.commentary.append`; the model decides when to say it (useful for a greeting after connecting). Instructions, model and voice are fixed once the session starts; only the delegation (for example the tool list) can change afterwards.
+> **Server-driven turns:** GPT-Live controls its own turns. `connect()` sends `session.start` and resolves once the server replies with `session.started`. `speak()` sends the text with `session.commentary.append`, and the model decides when to say it (useful for a greeting after connecting). Instructions, model and voice are fixed once the session starts. Only the delegation (for example the tool list) can change afterwards.
 
 ## Usage example
 
@@ -64,10 +64,10 @@ voice.close()
 | `speaker` | `string` | `marin` | Voice id. |
 | `url` | `string` | Live endpoint | Override the Live WebSocket URL. |
 | `userAgent` | `string` | `mastra-voice-openai-live` | `User-Agent` header identifying your app. |
-| `instructions` | `string` | — | System instructions for the session. |
-| `tools` | `ToolsInput` | — | Mastra tools advertised to the session. |
-| `delegation` | `object` | — | Backend delegation config forwarded to the Live session. |
-| `sessionConfig` | `object` | — | Extra fields merged into the session config. |
+| `instructions` | `string` | none | System instructions for the session. |
+| `tools` | `ToolsInput` | none | Mastra tools advertised to the session. |
+| `delegation` | `object` | none | Backend delegation config forwarded to the Live session. |
+| `sessionConfig` | `object` | none | Extra fields merged into the session config. |
 | `connectTimeoutMs` | `number` | `15000` | Connection handshake timeout in ms. |
 
 ## Delegation
@@ -90,12 +90,12 @@ const voice = new OpenAILiveVoice({
 
 `OpenAILiveVoice` emits the following events:
 
-- `speaker` — a Node.js readable stream of output audio for playback.
-- `speaking` — `{ audio }` buffers of output audio as they arrive.
-- `writing` — `{ text, role }` transcript deltas, `role` is `user` or `assistant`.
-- `delegation` — `{ delegationId, target }` when GPT-Live creates delegated work.
-- `session.started`, `session.updated`, `session.closed` — session lifecycle.
-- `error` — connection or protocol errors.
+- `speaker`: A Node.js readable stream of output audio for playback.
+- `speaking`: `{ audio }` buffers of output audio as they arrive.
+- `writing`: `{ text, role }` transcript deltas, `role` is `user` or `assistant`.
+- `delegation`: `{ delegationId, target }` when GPT-Live creates delegated work.
+- `session.started`, `session.updated`, `session.closed`: Session lifecycle.
+- `error`: Connection or protocol errors.
 
 Under `client` delegation, handle the `delegation` event in your application and report the outcome with `voice.sendDelegationResult(delegationId, text)`.
 
@@ -108,7 +108,7 @@ voice.addTools({
   getWeather: {
     description: 'Get the current weather for a city',
     inputSchema: z.object({ city: z.string() }),
-    execute: async ({ context }) => getWeather(context.city),
+    execute: async ({ city }) => getWeather(city),
   },
 })
 ```
