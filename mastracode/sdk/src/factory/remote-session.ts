@@ -159,7 +159,8 @@ export class RemoteSession {
    */
   #adoptLocalUserId(e: Record<string, any>): void {
     const message = e.message as
-      { id?: string; role?: string; content?: { metadata?: { signal?: { type?: string } } } } | undefined;
+      | { id?: string; role?: string; content?: { metadata?: { signal?: { type?: string } } } }
+      | undefined;
     const isUser =
       message?.role === 'user' || (message?.role === 'signal' && message.content?.metadata?.signal?.type === 'user');
     if (!message?.id || !isUser) return;

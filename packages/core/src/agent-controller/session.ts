@@ -737,7 +737,8 @@ export class SessionThread {
         type: 'model_changed',
         modelId,
         thinkingLevel: (session.state.get() as Record<string, unknown>).thinkingLevel as
-          AgentControllerThinkingLevel | undefined,
+          | AgentControllerThinkingLevel
+          | undefined,
       });
     }
   }
@@ -1681,7 +1682,8 @@ export class SessionThread {
           type: 'model_changed',
           modelId,
           thinkingLevel: (session.state.get() as Record<string, unknown>).thinkingLevel as
-            AgentControllerThinkingLevel | undefined,
+            | AgentControllerThinkingLevel
+            | undefined,
         });
       }
 
@@ -1931,7 +1933,8 @@ export class SessionStream {
   cleanup(): void {
     const { sessionId, runId } = this.getSessionRun();
     const origin = this.#subscription?.__getCurrentRunRequestContext?.()?.get('controller') as
-      AgentControllerRequestContext | undefined;
+      | AgentControllerRequestContext
+      | undefined;
     // The subscription exposes the original execution context, not this listener's
     // reconstructed context. Fence stale readers against a newer action on the thread.
     if (runId && this.#subscription?.activeRunId() === runId && origin?.session.id === sessionId) {
