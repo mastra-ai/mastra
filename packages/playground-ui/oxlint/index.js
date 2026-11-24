@@ -146,7 +146,8 @@ const isBlank = node =>
   (node.type === 'JSXExpressionContainer' && node.expression.type === 'JSXEmptyExpression') ||
   (node.type === 'JSXExpressionContainer' &&
     node.expression.type === 'Literal' &&
-    (node.expression.value === null || (typeof node.expression.value === 'string' && !node.expression.value.trim())));
+    typeof node.expression.value === 'string' &&
+    !node.expression.value.trim());
 
 const isNothing = node =>
   (node.type === 'Literal' && (node.value === null || node.value === false || node.value === '')) ||
@@ -169,7 +170,7 @@ function branches(node) {
   }
 }
 
-const contentOf = node => node.children.filter(child => !isBlank(child));
+const contentOf = node => node.children.filter(child => !isBlank(child) && branches(child).length > 0);
 
 // `<Icon>` and a bare `<span>` around an icon are the icon.
 function isIcon(node, iconImports) {
@@ -232,8 +233,10 @@ function buttonIconProp(context) {
       const attributes = new Map();
       for (const attribute of openingElement.attributes)
         if (attribute.type === 'JSXAttribute') attributes.set(attribute.name.name, attribute.value);
-      // An icon size ignores the props: its child is the glyph. A forwarded size may be one.
+      // An icon size ignores the props: its child is the glyph. A forwarded or spread size may be one.
       if (attributes.has('size') && !isTextSize(attributes.get('size'))) return;
+      const spread = openingElement.attributes.some(attribute => attribute.type === 'JSXSpreadAttribute');
+      if (spread && !attributes.has('size')) return;
       const content = contentOf(node);
       for (const prop of components[name]) {
         if (attributes.has(prop)) continue;

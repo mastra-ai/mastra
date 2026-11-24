@@ -19,6 +19,14 @@ const error = (prop: string, name = 'Button') => ({
 
 tester.run('button-icon-prop', plugin.rules['button-icon-prop'], {
   valid: [
+    {
+      name: 'allows an icon beside children that render nothing',
+      code: jsx('<Button><IconPlusMedium />{null}{false}{undefined}</Button>'),
+    },
+    {
+      name: 'allows a button whose spread may carry the size',
+      code: jsx('<Button {...props}><IconPlusMedium /> Add</Button>'),
+    },
     { name: 'allows the icon props', code: jsx('<Button icon={<IconPlusMedium />} iconEnd={<Trash2 />}>Add</Button>') },
     { name: 'allows a label alone', code: jsx('<Button>Add</Button>') },
     { name: 'allows an icon-only button', code: jsx('<Button size="icon-md"><IconPlusMedium /></Button>') },
@@ -165,6 +173,11 @@ tester.run('button-icon-prop', plugin.rules['button-icon-prop'], {
       name: 'flags a link rendered as a button',
       code: jsx('<Button render={<Link to="/" />}>Open <IconPlusMedium /></Button>'),
       errors: [error('iconEnd')],
+    },
+    {
+      name: 'flags a button with a spread and a text size',
+      code: jsx('<Button {...props} size="sm"><IconPlusMedium /> Add</Button>'),
+      errors: [error('icon')],
     },
     {
       name: 'flags the buttons that take the same props',
