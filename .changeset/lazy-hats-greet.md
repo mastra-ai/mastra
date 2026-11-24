@@ -2,7 +2,7 @@
 '@mastra/code-sdk': minor
 ---
 
-Added `resolveModelFallbacks` to `createMastraCode`. A host can now supply fallback model IDs per request. When the session model is rate-limited, out of credits, unauthorized or unavailable, the request continues on the next fallback. With a tenant credential store, fallbacks the tenant has no key for are skipped. When the provider sends a retry time, the following requests start on the fallback until then and try the session model last. Without one, the next request starts on the session model again. While the hook is set, its list replaces the session's model pack route on every request, even when it returns an empty list.
+Added `resolveModelFallbacks` to `createMastraCode`. A host can now supply fallback model IDs per request. When the session model is rate-limited, out of credits, unauthorized or unavailable, the request continues on the next fallback. With a tenant credential store, fallbacks the tenant has no key for are skipped. The next request starts on the session model again. While the hook is set, its list replaces the session's model pack route and sticky fallback on every request, even when it returns an empty list.
 
 ```ts
 const code = await createMastraCode({
@@ -14,11 +14,11 @@ An error that does not switch models, such as a prompt that is too long, now end
 
 Each model switch now records why it happened (rate limit, out of credits, missing or rejected credentials, provider unavailable or timeout), along with the provider's retry time when it sends one.
 
-The `info` event sent on a model switch now names the cause first, and how long the provider asks to wait when it says.
+The `info` event sent on a model switch now names the cause first.
 
 **Before:** `Switched model route: anthropic/claude-opus-5.5 → openai/gpt-5.6-sol (pool exhausted)`
 
-**After:** `anthropic/claude-opus-5.5 is rate-limited for 5 min, switched to openai/gpt-5.6-sol`
+**After:** `anthropic/claude-opus-5.5 is rate-limited, switched to openai/gpt-5.6-sol`
 
 Fallback helpers now live in `@mastra/code-sdk/model-fallback`, so hosts and browser clients read and word model switches the same way. Importing them from `@mastra/code-sdk/auth/account-rotation-processor` or `@mastra/code-sdk/schema` still works but is deprecated. `isModelFallbackReason` is deprecated too; `parseModelFallbackPart` validates the whole record:
 

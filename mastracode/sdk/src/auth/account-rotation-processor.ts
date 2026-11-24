@@ -31,7 +31,7 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
-import { requestModelRoute, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
+import { hostModelRoute, requestModelRoute, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import {
   MODEL_FALLBACK_PART_TYPE,
   MODEL_FALLBACK_STATE_KEY,
@@ -872,7 +872,8 @@ export class AccountRotationProcessor implements Processor {
       at,
       failure,
     } satisfies PendingModelFallback;
-    await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: pending });
+    const sticky = !hostModelRoute(args.requestContext);
+    if (sticky) await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: pending });
     const data: ModelFallbackPartData = {
       from: { entryId: from.id, label: from.label },
       to: { entryId: to.id, label: to.label },
@@ -883,7 +884,7 @@ export class AccountRotationProcessor implements Processor {
     try {
       await args.writer?.custom({ type: MODEL_FALLBACK_PART_TYPE, data });
     } catch (error) {
-      await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
+      if (sticky) await controller?.setThreadSetting?.({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
       throw error;
     }
     await controller?.setState?.({ [MODEL_FALLBACK_STATE_KEY]: pending });

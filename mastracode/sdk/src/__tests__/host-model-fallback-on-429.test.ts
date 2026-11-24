@@ -19,7 +19,7 @@ const FALLBACK = 'openai/gpt-5.6-sol';
 const ANTHROPIC_RATE_LIMIT = {
   error: { message: 'Rate limited', type: 'rate_limit_error' },
   status: 429,
-  retryAfter: 60,
+  retryAfter: 1,
 };
 
 const tenantStore = (keys: Record<string, string>): CredentialStore => ({
@@ -55,7 +55,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  vi.useRealTimers();
   setCredentialStoreProvider(undefined);
   for (const stop of stops.splice(0).reverse()) await stop();
   await mock.stop();
@@ -131,7 +130,7 @@ async function startSession(initialFallbackModelIds?: readonly string[]) {
 }
 
 describe('a Factory session whose model is rate-limited, with a host fallback configured', () => {
-  it('keeps the next turns on the fallback until the provider retry time, then goes back to the session model', async () => {
+  it('finishes the turn on the fallback, records why, and starts the next turn on the session model', async () => {
     mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
     const { send, savedHops, lastReply, errors, pendingFailures } = await startSession([FALLBACK]);
@@ -148,47 +147,20 @@ describe('a Factory session whose model is rate-limited, with a host fallback co
       failure: { kind: 'rate_limited' },
     });
     const retryAt = Date.parse(hop!.failure!.retryAt!);
-    expect(retryAt).toBeGreaterThanOrEqual(failedAt + 60_000);
-    expect(retryAt).toBeLessThan(Date.now() + 60_000);
+    expect(retryAt).toBeGreaterThanOrEqual(failedAt + 1_000);
+    expect(retryAt).toBeLessThan(Date.now() + 1_000);
     expect(pendingFailures).toEqual([hop!.failure]);
 
-    await send('Again.');
-
-    expect(errors).toEqual([]);
-    expect(await lastReply()).toBe('Reviewed on the fallback');
-    expect(await savedHops()).toHaveLength(1);
-
-    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true, now: retryAt + 1_000 });
     mock.clearFixtures();
     mock.clearRequests();
     mock.on({ model: /claude/ }, { content: 'Back on Opus' });
-    await send('Once more.');
+    await send('Again.');
 
     expect(errors).toEqual([]);
     expect(await lastReply()).toBe('Back on Opus');
     expect(new Set(mock.getRequests().map(request => `${request.path} ${request.response.status}`))).toEqual(
       new Set(['/v1/messages 200']),
     );
-  });
-
-  it('tries the session model last when the fallback fails before the retry time', async () => {
-    mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
-    mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, savedHops, lastReply, errors } = await startSession([FALLBACK]);
-    await send('Review the diff.');
-    expect(await lastReply()).toBe('Reviewed on the fallback');
-
-    mock.clearFixtures();
-    mock.on(
-      { model: /gpt/ },
-      { error: { message: 'Rate limit reached', type: 'requests' }, status: 429, retryAfter: 1 },
-    );
-    mock.on({ model: /claude/ }, { content: 'Back on Opus' });
-    await send('Again.');
-
-    expect(errors).toEqual([]);
-    expect(await lastReply()).toBe('Back on Opus');
-    expect((await savedHops()).at(-1)).toMatchObject({ from: { entryId: FALLBACK }, to: { entryId: PRIMARY } });
   });
 
   it('starts the next turn on the session model once the fallbacks are removed', async () => {

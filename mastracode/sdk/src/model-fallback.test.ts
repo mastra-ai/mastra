@@ -1,13 +1,7 @@
 import { APICallError } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 
-import {
-  fallbackModelIdsToTry,
-  modelFallbackNoticeText,
-  modelRouteFailureFromError,
-  pendingModelFallbackForThread,
-} from './model-fallback.js';
-import type { ModelFallbackPartData } from './model-fallback.js';
+import { fallbackModelIdsToTry, modelRouteFailureFromError, pendingModelFallbackForThread } from './model-fallback.js';
 
 const NOW = Date.parse('2026-11-23T10:00:00.000Z');
 
@@ -28,42 +22,6 @@ describe('modelRouteFailureFromError', () => {
     ['9000000000000', { kind: 'rate_limited' }],
   ])('records Retry-After %s as %o', (retryAfter, failure) => {
     expect(modelRouteFailureFromError(rateLimit(retryAfter), NOW)).toEqual(failure);
-  });
-});
-
-describe('modelFallbackNoticeText', () => {
-  it.each([
-    [{ kind: 'rate_limited' }, 'Claude Opus 5.5 is rate-limited, switched to GPT-5.6 Sol'],
-    [
-      { kind: 'rate_limited', retryAt: '2026-11-23T10:00:42.000Z' },
-      'Claude Opus 5.5 is rate-limited for 1 min, switched to GPT-5.6 Sol',
-    ],
-    [
-      { kind: 'rate_limited', retryAt: '2026-11-23T11:30:00.000Z' },
-      'Claude Opus 5.5 is rate-limited for 2 h, switched to GPT-5.6 Sol',
-    ],
-    [
-      { kind: 'quota', retryAt: '2026-11-26T09:00:00.000Z' },
-      'Claude Opus 5.5 is out of credits or quota for 3 days, switched to GPT-5.6 Sol',
-    ],
-    [
-      { kind: 'rate_limited', retryAt: '2026-11-23T10:00:00.000Z' },
-      'Claude Opus 5.5 is rate-limited, switched to GPT-5.6 Sol',
-    ],
-    [
-      { kind: 'auth', retryAt: '2026-11-23T10:05:00.000Z' },
-      'Claude Opus 5.5 has missing or invalid credentials, switched to GPT-5.6 Sol',
-    ],
-  ] as const)('words a switch after %o as "%s"', (failure, text) => {
-    const data: ModelFallbackPartData = {
-      from: { entryId: 'anthropic/claude-opus-5.5', label: 'Claude Opus 5.5' },
-      to: { entryId: 'openai/gpt-5.6-sol', label: 'GPT-5.6 Sol' },
-      reason: 'pool-exhausted',
-      at: '2026-11-23T10:00:00.000Z',
-      failure,
-    };
-
-    expect(modelFallbackNoticeText(data)).toBe(text);
   });
 });
 

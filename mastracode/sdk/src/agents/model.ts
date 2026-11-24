@@ -527,25 +527,14 @@ export function requestModelRoute(
   requestContext: RequestContextReader | undefined,
   controller: { getState?: () => Record<string, unknown> | undefined; threadId?: unknown } | undefined,
 ): { entries: ModelRouteEntry[] | undefined; pending: PendingModelFallback | null } {
-  const state = controller?.getState?.();
-  const pending = pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId);
   const hostRoute = hostModelRoute(requestContext);
-  if (hostRoute) return heldHostRoute(hostRoute, pending);
+  if (hostRoute) return { entries: hostRoute, pending: null };
+  const state = controller?.getState?.();
   const entries = (state?.modelRoute as ModelRoute | undefined)?.entries;
   return {
     entries: Array.isArray(entries) ? entries.slice(0, MODEL_ROUTE_MAX_ENTRIES) : undefined,
-    pending,
+    pending: pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId),
   };
-}
-
-function heldHostRoute(
-  route: ModelRouteEntry[],
-  pending: PendingModelFallback | null,
-): { entries: ModelRouteEntry[]; pending: PendingModelFallback | null } {
-  const from = route.findIndex(entry => entry.id === pending?.fromEntryId);
-  const to = route.findIndex(entry => entry.id === pending?.toEntryId);
-  const held = pending && from >= 0 && to > from && Date.parse(pending.failure?.retryAt ?? '') > Date.now();
-  return held ? { entries: [...route.slice(to), ...route.slice(0, to)], pending } : { entries: route, pending: null };
 }
 
 function canAuthenticateModel(modelId: string, requestContext: RequestContext): boolean {
