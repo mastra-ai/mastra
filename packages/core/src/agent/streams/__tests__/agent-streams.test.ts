@@ -193,7 +193,7 @@ describe('Agent durable resumable streams option', () => {
     await vi.waitFor(async () => expect(await agent.__getRunRecord(output.runId)).toBeUndefined(), { timeout: 2000 });
   });
 
-  it('expires a finished run even when the delayed cleanup never runs (COR-1534)', async () => {
+  it('expires a finished run even when the delayed cleanup never runs', async () => {
     // A process restart inside the cleanup grace period loses the in-process
     // deletion timer; `cleanupTimeoutMs: 0` models exactly that lost timer.
     // The run log's own idle retention must then bound it with no timer at

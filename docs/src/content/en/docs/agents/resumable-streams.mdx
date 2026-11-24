@@ -80,13 +80,13 @@ When a run finishes, the executing process schedules deletion of its events and 
 
 The retentions that apply:
 
-- A run's events are retained for one hour after the last append, in both the replay cache (`runLogTtlMs` on [`CachingPubSub`](/reference/pubsub/caching-pubsub)) and the transport that carries them. Thread stream logs use `threadStreamLogTtlMs`, also one hour. The run log is a delivery buffer and messages live in storage, so when a log expires a reconnecting observer re-fetches messages instead of replaying them.
+- A run's events are retained for one hour after the last append, in both the replay cache (`runLogTtlMs` on [`CachingPubSub`](/reference/pubsub/caching-pubsub)) and the transport that carries them. Thread stream logs use `threadStreamLogTtlMs`, also one hour. The run log is a delivery buffer and messages live in storage. When a log expires, `observe()` has nothing left to replay, and it doesn't read messages from storage. A client reconnecting after expiry must fetch the messages it missed itself.
 - A run's ownership record keeps a 24-hour lifetime, so a run parked overnight on an approval stays authorizable for observe and resume long after its replay log has gone.
 - Topics that don't belong to a single run or thread, such as work queues and application feeds, keep the transport's own idle TTL, seven days by default for [Redis Streams](/reference/pubsub/redis-streams) and [Valkey Streams](/reference/pubsub/valkey-streams). They need it: a grouped consumer that was offline must still find its backlog. Configure `streamIdleTtlMs` to change it, or set it to `0` to disable transport expiry. Lowering it also lowers the retention on run topics.
 - The in-memory cache holds 1,000 entries by default. Each run uses several entries (its event log, a counter and its ownership record), so heavy traffic evicts older runs sooner.
 - The server's observe and abort routes return 404 when a run's ownership record is evicted or expires. Evicted run events can't be replayed.
 
-Expiry and eviction are safe for live runs. A run log recreated after its retention lapsed numbers above the indices it issued before, and an attached observer that does see a restarted log resynchronizes from it rather than dropping frames. Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
+A run log recreated after its retention lapsed normally numbers above the indices it issued before. An attached observer then keeps receiving the new frames. Treat that as the common case rather than a guarantee: the numbering follows the cache's clock, and the fallback that detects a restarted log only recognizes one that restarts at zero. An observer attached across a log recreated below its cursor stops receiving frames until it reattaches. Storage remains the source of truth for a run's messages. Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
 
 ## Follow a run
 

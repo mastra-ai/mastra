@@ -149,7 +149,7 @@ describe('RedisServerCache Integration', () => {
     it('listPushIndexed seeds a fresh log from the server clock, then numbers atomically and stamps TTL on both keys', async () => {
       // Epoch-seeded on counter miss so a log recreated after expiry or
       // eviction does not reissue an index a subscriber already consumed
-      // (COR-1534). Seeded in epoch microseconds from the server clock;
+      // Seeded in epoch microseconds from the server clock;
       // generous bound for client/server clock skew.
       const before = (Date.now() - 60_000) * 1000;
       const first = await cache.listPushIndexed('events', 'events:counter', {});
@@ -202,7 +202,7 @@ describe('RedisServerCache Integration', () => {
       const noExpiry = new RedisServerCache({ client: redis }, { keyPrefix: 'test:', ttlSeconds: 0 });
       await noExpiry.listPushIndexed('events', 'events:counter', { type: 'a' }, 60_000);
 
-      // COR-1534: thread-stream keys accumulated with no TTL at all because a
+      // Thread-stream keys used to accumulate with no TTL at all because a
       // no-expiry default silently discarded the caller's retention bound.
       for (const key of ['test:events', 'test:events:counter']) {
         const ttl = await redis.ttl(key);

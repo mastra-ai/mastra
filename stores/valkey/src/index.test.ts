@@ -82,7 +82,7 @@ describe('ValkeyServerCache', () => {
     await noExpiry.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 60_000);
 
     // The caller stated a retention bound for this log; "no default expiry"
-    // must not override it (COR-1534: stream keys with no TTL at all).
+    // must not override it (stream keys used to be written with no TTL at all).
     expect((command.mock.calls[0]?.[0] as string[]).at(-1)).toBe('60');
   });
 });

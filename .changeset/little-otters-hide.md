@@ -16,3 +16,5 @@ new RedisStreamsPubSub({ url });
 // Lowering the backstop still lowers everything.
 new RedisStreamsPubSub({ url, streamIdleTtlMs: 30 * 60 * 1000 });
 ```
+
+Also raised the `@mastra/core` peer floor to 1.86.0, the first release that exports the per-topic retention helper these transports now read.

@@ -1600,7 +1600,7 @@ describe('CachingPubSub', () => {
     /**
      * Hand-write a legacy-format frame (0-based index, dense counter) into the
      * shared log and return it. This is the layout cores from before
-     * epoch-seeded counters produced (COR-1534); the read and reconcile paths
+     * epoch-seeded counters produced; the read and reconcile paths
      * must keep handling such logs unchanged, so these fixtures bypass
      * `listPushIndexed` (which would seed the counter from the clock).
      */
@@ -1845,6 +1845,56 @@ describe('CachingPubSub', () => {
       expect(received).toEqual([0, 1, 2, 0, 1]);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
+    });
+
+    it('misses a log reseeded below the cursor, so a reader must reattach to see it', async () => {
+      // The documented limit of restart detection. Clock seeding normally puts
+      // a recreated log *above* the old cursor, where the gap path picks it up.
+      // A cache whose clock moved backwards seeds below the cursor instead, and
+      // those indices are neither 0 nor above the cursor, so they are dropped
+      // as duplicates and the subscriber sees nothing more until it reattaches.
+      //
+      // Pinned so the limit is not mistaken for a guarantee. Widening the
+      // `seq !== 0` check is not enough on its own: the counter comparison it
+      // guards only holds while the cursor is log-derived, so a cursor that
+      // adopted a transport index above the log's counter would read every
+      // legitimate duplicate as a restart.
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        received.push(event.index!);
+      });
+
+      for (const frame of [await append(shared, 5_000), await append(shared, 5_001)]) {
+        await inner.publish(topic, frame);
+      }
+      await flush();
+      expect(received).toEqual([5_000, 5_001]);
+
+      // The log expires and is recreated with a seed behind the old one.
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      for (const frame of [await append(shared, 4_000), await append(shared, 4_001)]) {
+        await inner.publish(topic, frame);
+      }
+      await flush();
+
+      expect(received).toEqual([5_000, 5_001]);
+      expect(warn).not.toHaveBeenCalled();
+
+      // The frames are not lost, only undelivered on this subscription: a
+      // reader that reattaches reads the new segment back from the log.
+      const reattached: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        reattached.push(event.index!);
+      });
+      await flush();
+      expect(reattached).toContain(4_000);
+      expect(reattached).toContain(4_001);
     });
 
     it('still drops a late copy of frame 0 when the log did not restart', async () => {
@@ -2202,7 +2252,7 @@ describe('CachingPubSub', () => {
       expect(await shared.get(`pubsub:${runTopic}:counter`)).toBe(entries[0]!.index! + 1);
     });
 
-    it('keeps delivering to an attached observer after its log expired and was reseeded (COR-1534)', async () => {
+    it('keeps delivering to an attached observer after its log expired and was reseeded', async () => {
       // Production Redis evicts or expires a parked run's log while a client
       // stays attached. When the run resumes, its reborn log must not number
       // frames at or below the observer's cursor, or every resumed frame is

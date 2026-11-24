@@ -364,7 +364,7 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     }, 20_000);
   });
 
-  describe('per-topic idle retention (COR-1534)', () => {
+  describe('per-topic idle retention', () => {
     const ONE_HOUR = 60 * 60 * 1000;
     const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 

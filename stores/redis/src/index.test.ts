@@ -232,7 +232,7 @@ describe('RedisServerCache', () => {
       await noTtlCache.listPushIndexed('events', 'events:counter', { type: 'x' }, 24 * 60 * 60 * 1000);
 
       // The caller stated a retention bound for this log; "no default expiry"
-      // must not override it (COR-1534: stream keys with no TTL at all).
+      // must not override it (stream keys used to be written with no TTL at all).
       expect(mockClient.eval.mock.calls[0]![5]).toBe('86400');
     });
 
@@ -266,7 +266,7 @@ describe('RedisServerCache', () => {
       expect(mockClient.eval).toHaveBeenCalledTimes(1);
     });
 
-    it('seeds an absent counter with SET NX before incrementing, never after (COR-1534)', async () => {
+    it('seeds an absent counter with SET NX before incrementing, never after', async () => {
       // Incrementing first and overwriting an absent counter with the seed
       // afterwards would discard an index a concurrent writer had already
       // allocated and published; a subscriber past the seed would then drop

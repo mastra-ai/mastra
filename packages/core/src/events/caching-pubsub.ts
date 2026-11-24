@@ -511,20 +511,31 @@ export class CachingPubSub extends PubSub {
       // Already delivered (a retained transport copy of a frame the log
       // provided). Acknowledge it so it does not stay pending on the backend.
       if (seq < next) {
+        // Only index 0 is worth checking. A continuous log cannot re-deliver
+        // frame 0 from below the cursor, so seeing it means the log this
+        // subscriber was reading is gone: it expired (or was cleared) and the
+        // run resumed on a new one, restarting numbering at 0. Dropping it
+        // would swallow every frame of the new segment, since all of their
+        // indices sit below the stale cursor.
+        //
+        // Any other below-cursor index is ambiguous and is dropped. A log
+        // reseeded *below* this cursor — possible when the cache's clock moves
+        // backwards — therefore goes unnoticed, and the subscriber misses the
+        // new segment until it reattaches. Widening the check to every index
+        // is not a gate change: the counter comparison below only holds while
+        // the cursor is log-derived, and a cursor that adopted a transport
+        // index above the log's counter would read every legitimate duplicate
+        // as a restart. Detecting it needs frame 0's id captured for every
+        // subscriber, or cursor provenance tracked, both out of scope here.
         if (seq !== 0) return ack?.();
 
-        // Index 0 below the cursor can mean the log this subscriber was reading
-        // is gone: it expired (or was cleared) and the run resumed, restarting
-        // numbering at 0. Dropping it would swallow every frame of the new
-        // segment, since all of their indices sit below the stale cursor.
         // A clock-seeded cache usually renumbers *above* the cursor — a
-        // recreated counter is epoch-seeded past the indices it issued before
-        // (see MastraServerCache.listPushIndexed) — so its restarts normally
-        // land on the `seq > next` gap path instead. This path is what makes
-        // that a preference rather than a requirement: it also covers logs
-        // written by older cores, by caches that don't seed (Convex numbers
-        // densely), and the cases a clock seed can't rule out, such as a log
-        // recreated inside the seed's resolution or after a clock rollback.
+        // recreated counter is seeded past the indices it issued before (see
+        // MastraServerCache.listPushIndexed) — so its restarts normally land
+        // on the `seq > next` gap path instead. This path covers logs written
+        // by older cores and caches that number densely (Convex), plus a log
+        // recreated inside the clock's resolution.
+        //
         // Confirm by frame 0's id when one was captured on attach; otherwise by
         // the counter, which restarts with the log and so cannot sit below the
         // cursor in a continuous log.

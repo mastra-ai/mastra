@@ -285,7 +285,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           // Only the terminal entry's finish frame carries its log index: the
           // abort frame synthesized before it has none, so the last indexed
           // frame is always the finish, and resuming past the entry returns
-          // nothing and closes (COR-1506).
+          // nothing and closes.
           expect(expected.map(frame => (frame as { index?: number }).index)).toEqual(
             terminal === 'error' ? [terminalIndex] : [undefined, terminalIndex],
           );

@@ -23,7 +23,7 @@ it('publishes and consumes through Valkey GLIDE', async () => {
   }
 });
 
-it('bounds a run’s topics by the run-log retention, not the idle backstop (COR-1534)', async () => {
+it('bounds a run’s topics by the run-log retention, not the idle backstop', async () => {
   // A finished run whose process died before its delayed clearTopic used to
   // sit in Valkey for the full backstop. Its topics are fan-out, their replay
   // history is bounded in the server cache, and the record that authorizes
@@ -49,9 +49,13 @@ it('bounds a run’s topics by the run-log retention, not the idle backstop (COR
     expect(await pttlOf(`${keyPrefix}:${workQueue}`)).toBeGreaterThan(ONE_HOUR);
 
     // Subscription setup stamps the TTL because MKSTREAM may have just created
-    // the key; it must not promote a run topic to the backstop.
+    // the key; it must not promote a run topic to the backstop. A bare upper
+    // bound would also accept -1 (expiry removed) and -2 (key gone), which is
+    // exactly the regression this guards against.
     await pubsub.subscribe(runTopic, (_event, ack) => void ack?.());
-    expect(await pttlOf(`${keyPrefix}:${runTopic}`)).toBeLessThanOrEqual(ONE_HOUR);
+    const afterSubscribe = await pttlOf(`${keyPrefix}:${runTopic}`);
+    expect(afterSubscribe).toBeGreaterThan(0);
+    expect(afterSubscribe).toBeLessThanOrEqual(ONE_HOUR);
   } finally {
     for (const topic of [runTopic, controlTopic, workQueue]) await pubsub.clearTopic(topic);
     await pubsub.close();

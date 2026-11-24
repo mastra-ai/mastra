@@ -93,7 +93,7 @@ export function cachedLogTtlMs(topic: string, ttls?: CachedLogTtls): number | un
  * server cache, and the run record that authorizes reading them expires in a
  * day. So they only need to outlive the same quiet gap plus reconnect window
  * their cached log does, and holding them for the transport's backstop just
- * leaves finished runs in the store for days (COR-1534).
+ * leaves finished runs in the store for days.
  *
  * Run cleanup deletes these topics promptly when the owning process survives;
  * this retention is what bounds them when it does not.

@@ -607,7 +607,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * grouped consumers must still find their backlog after an outage. A topic
    * belonging to one agent run or thread has no such consumer, so it takes the
    * much shorter retention its cached replay log already uses — otherwise a
-   * finished run's stream sits in Redis for the full backstop (COR-1534).
+   * finished run's stream sits in Redis for the full backstop.
    *
    * A configured `streamIdleTtlMs` still caps every topic, so lowering it
    * lowers these too, and `0` disables expiry everywhere as documented.

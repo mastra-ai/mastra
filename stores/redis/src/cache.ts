@@ -325,7 +325,7 @@ export class RedisServerCache extends MastraServerCache {
    * the script applies. Not atomic as a whole: concurrent writers can
    * interleave, so a list position may not match its index, and an append that
    * fails after its allocation leaves a hole (Redis Cluster atomicity is
-   * tracked in COR-1491).
+   * tracked separately).
    *
    * The seed is written with `SET NX` *before* the increment rather than after
    * it. Incrementing first and then overwriting an absent counter with the seed

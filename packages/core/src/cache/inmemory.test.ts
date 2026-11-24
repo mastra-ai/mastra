@@ -203,7 +203,7 @@ describe('InMemoryServerCache', () => {
         const before = Date.now();
         const first = await cache.listPushIndexed('events', 'events:counter', { type: 'a' });
         // Epoch-microsecond-seeded so a log recreated after expiry does not
-        // reissue an index a subscriber already consumed (COR-1534).
+        // reissue an index a subscriber already consumed.
         expect(first).toBeGreaterThanOrEqual(before * 1000);
         expect(await cache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(first + 1);
         expect(await cache.listPushIndexed('events', 'events:counter', { type: 'c' })).toBe(first + 2);
@@ -233,7 +233,7 @@ describe('InMemoryServerCache', () => {
         await new Promise(resolve => setTimeout(resolve, 60));
 
         // The caller stated a retention bound for this log; "no default
-        // expiry" must not override it (COR-1534: thread-stream keys with no
+        // expiry" must not override it (thread-stream keys used to be written with no
         // TTL at all).
         expect(await noExpiry.listFromTo('events', 0)).toEqual([]);
       });

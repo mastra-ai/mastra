@@ -48,7 +48,7 @@ export abstract class MastraServerCache extends MastraBase {
    * contract callers rely on is that within one log's life indices strictly
    * increase, consecutive appends get consecutive indices, and a log recreated
    * after its predecessor expired or was evicted does not reissue an index a
-   * subscriber may still hold (COR-1534). Readers resume from `index + 1`, not
+   * subscriber may still hold. Readers resume from `index + 1`, not
    * from a frame count.
    *
    * How an implementation keeps that last part is up to it. The built-in

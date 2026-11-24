@@ -163,7 +163,7 @@ describe('ConvexServerCache', () => {
   it('falls back to increment + listPush when the deployed handler lacks listPushIndexed', async () => {
     // The base-class fallback reseeds an absent counter (INCR answered 1)
     // from the clock in epoch microseconds, so a log reborn after expiry
-    // cannot reissue an index a subscriber already consumed (COR-1534).
+    // cannot reissue an index a subscriber already consumed.
     const seed = Date.now() * 1000;
     client.rawResponses = [
       new Error('Unsupported operation listPushIndexed'),
