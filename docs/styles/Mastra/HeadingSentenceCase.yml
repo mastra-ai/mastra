@@ -199,6 +199,8 @@ exceptions:
   - 'Discord'
   - 'Drive'
   - 'Excel'
+  - 'Factory'
+  - 'Factory Server'
   - 'Firecrawl'
   - 'Helm'
   - 'Inworld'

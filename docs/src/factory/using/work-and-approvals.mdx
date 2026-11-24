@@ -39,7 +39,7 @@ The built-in Planning phase writes a plan in the session and submits it with `su
 
 How much Factory runs on its own is a setting on each phase. A working phase starts its run without asking when it has **Start on its own**, optionally limited by **Start only when**. Every other phase waits for a person to start the run.
 
-The Work board that Factory installs starts nothing on its own: a run begins when you start it or accept a task. Plans always wait for a person, and a waiting plan is listed in **Needs attention**. Rule effects that wait for a person appear under **Awaiting approval** on the Factory's [**Rules** page](/configure/boards-and-rules#rule-decisions). A custom board can approve a phase's plan automatically with the exit tool's **Approve on its own** setting.
+The Work board that Factory installs never starts a run on its own. A run begins when you start it or accept a task. Plans always wait for a person, and a waiting plan is listed in **Needs attention**. Rule effects that wait for a person appear under **Awaiting approval** on the Factory's [**Rules** page](/configure/boards-and-rules#rule-decisions). A custom board can approve a phase's plan automatically with the exit tool's **Approve on its own** setting.
 
 Projects created before these controls moved to phases keep their earlier setting as phase start rules. To change autonomy, edit the phase settings described in [Boards and rules](/configure/boards-and-rules#configure-a-working-phase).
 
