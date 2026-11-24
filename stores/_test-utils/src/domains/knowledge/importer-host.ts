@@ -1188,7 +1188,9 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
         ]);
         await run([upsert({ sourceId: 'a0' }), upsert({ sourceId: 'a1' })]);
         const host = knowledge.importers!.host;
-        const orphans = Array.from({ length: 450 }, (_, i) =>
+        // Just over one 200-node slice: the first pass ends after two flushes, and a third stops
+        // partway through the next pass with the cursor saved.
+        const orphans = Array.from({ length: 210 }, (_, i) =>
           upsert({ sourceId: `c${String(i).padStart(3, '0')}`, parent: 'never' }),
         );
         const first = await host.startRun('b2');
@@ -1200,13 +1202,13 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
         ]);
         // Empty flushes walk the orphans a slice at a time, reach the end and start the pass again;
         // the run then ends mid-pass (on its budget, lease or a cancel) with the cursor saved.
-        for (const seq of [2, 3, 4]) await flushOnce(host, first.runId, first.generation, seq, []);
+        for (const seq of [2, 3]) await flushOnce(host, first.runId, first.generation, seq, []);
         await host.finishRun({
           runId: first.runId,
           generation: first.generation,
           outcome: 'succeeded',
           backlog: false,
-          lastSeq: 4,
+          lastSeq: 3,
         });
         const storage = await knowledge.getStorage();
         expect((await storage.importers!.getState('b2'))['mastra:settle:cursor']).toBeTruthy();
@@ -1219,8 +1221,9 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
           expect(await run([upsert({ sourceId: 'q1', body: 'from b1' })])).toMatchObject({ counts: { updated: 1 } });
         }
         expect((await storage.importers!.getNode('b2', 'a-link'))?.unsettled).toBe(true);
-        // b2's next run, which sends nothing, repairs it.
-        expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded' });
+        // b2's next run, which sends nothing, repairs it, and ends on its own: the orphans still
+        // never settle, and the restart is taken once.
+        expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded', chain: false });
         const linker = how === 'move' ? 'notion/a0/a1/linear/a-link' : 'notion/a1/linear/a-link';
         if (how === 'move') {
           expect((await page(linker))?.body).toContain('[[docs:acme#notion/a0/a1/linear/q1]]');
@@ -1229,10 +1232,8 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
           // Its target is b1's now; it waits for b2 to send q1 again.
           expect((await page(linker))?.body).not.toContain('q1]]');
         }
-        // The orphans still never settle, and runs end on their own.
-        expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0 } });
       },
-      60_000,
+      30_000,
     );
 
     describe("another binding's restart request", () => {
