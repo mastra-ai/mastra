@@ -1,5 +1,76 @@
 # @mastra/pg
 
+## 1.38.0-alpha.4
+
+### Minor Changes
+
+- Added importer bookkeeping storage to Knowledge stores (experimental). `KnowledgeStorage.importers` keeps importer bindings, the source-to-page node map (with an `unsettled` flag and `listNodes({ unsettled: true })`, and each node's links indexed by target for `listLinkingNodes()`), cursor state, runs, flush receipts, per-run changes and a writer guard in the same database and namespace as the pages. On a `knowledge.transaction()` view, it writes in the same transaction as the page writes. In-memory, PostgreSQL and LibSQL stores provide it. Create the tables with `await knowledge.importers.init()`, or from `KnowledgePG.getImportersExportDDL()` / `KnowledgeLibSQL.getImportersExportDDL()` when storage init is disabled; the exported statements include the writer-guard row, so a store provisioned from them can run imports. `retireBinding(id)` deletes a binding with its nodes, cursor state, runs, flush receipts and changes, and leaves its pages alone. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  `dangerouslyReset()` now also empties the importer tables in the same namespace, in the same transaction as the pages, and moves the writer generation forward. Stop importer runs before calling it. A store whose importer tables were never created is reset without creating them.
+
+- Added `pgKnowledgeTransactionClient(tx)` (experimental). It returns the PostgreSQL transaction behind a Knowledge transaction view, so a host can write its own rows in the same transaction as Knowledge's. For example, an importer service host's `admit(tx)` can record its claim on the run it starts: the claim commits with the run, and rolls back with it when admission is refused or the start is skipped. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  ```ts
+  import { pgKnowledgeTransactionClient } from '@mastra/pg';
+
+  await host.startRun(bindingId, {
+    admit: async tx => {
+      await pgKnowledgeTransactionClient(tx).none('UPDATE my_claims SET claimed = true WHERE id = $1', [claimId]);
+    },
+  });
+  ```
+
+- Added an optional deadline to Knowledge storage transactions. `knowledge.storage.transaction(operation, { deadlineAt })` rolls back and throws `KnowledgeTransactionDeadlineError` once the deadline passes. On Postgres (`enforcesTransactionDeadline: true`), the wait for a connection, every statement and every lock wait count against the deadline, and no new work starts once it has passed. BEGIN, ROLLBACK and a COMMIT already sent aren't bounded, so leave a margin. Adapters without the capability ignore the option. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  ```ts
+  await storage.transaction(
+    async tx => {
+      // writes
+    },
+    { deadlineAt: Date.now() + 10_000 },
+  );
+  ```
+
+### Patch Changes
+
+- Knowledge can now run importers against its own storage (experimental). Pass importer instances as `importers: [...]` to `new Knowledge()`, then call `knowledge.importers.run(bindingId)`. Each instance places one source at a target (`<scope>#<path>`); targets of different instances may overlap or nest. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  `createKnowledgeImporterHost(knowledge, { bindings })` returns a host for a service that applies flushes from importers running elsewhere: it runs no importer code, and `bindings` can be a function that's read at each run start, so a host that keeps bindings in its own config needn't be rebuilt when they change. `host.retireBinding(id)` forgets a deleted binding's tracking, cursor and runs, leaving its pages as ordinary pages and its target free for any binding. It also takes `author`, `flushBudgetMs`, `settleBudgetMs` and `staleRunAfterMs`.
+
+  With `leaseMs`, that host enforces a strict run lease judged by the store's clock (the database's on Postgres): a heartbeat renews it, and once the lease or the run's deadline passes, heartbeats, new flushes and finishes are refused with `run_not_active` (a flush already waiting is cut off where the lease ends, and an exact resend of a committed flush still gets its receipt). `host.expireRuns()` ends lapsed runs, marked as ended by the host, so a later finish from the importer is refused. `host.requestCancel(runId)` asks a run to stop: its next heartbeat answers `{ cancel: true }` without renewing the lease, and a finish that arrives after the cancel is stored as canceled. `startRun(bindingId, { generation, admit })` refuses a run for an older writer generation, and runs `admit(tx)` inside the start transaction, together with creating the target scope and the run, so a dispatch claim written there commits or rolls back with them.
+
+  Each flush is applied in one storage transaction with its importer bookkeeping: items land under their parents (even when the parent arrives later in the same flush), links between items resolve to page links, a removed item that still has children is kept as a stub, and a rerun with unchanged content writes nothing. Importers write where they're configured. A page already at a binding's target becomes its folder, body and children kept; folders are shared, so it stays another binding's folder or item if it was one, and an item page that is another binding's folder is kept as a stub when the item is removed. A page already at an item's path is taken over by that item, whoever wrote it: another binding that imported it stops tracking it. Unless the page was another importer's item, the body it had at that takeover is kept in a note on the page, replacing an earlier takeover's, and comes back when the item is removed; otherwise, or when that body was empty, removal leaves a stub. A declare keeps the page's body; an upsert supplies or replaces it. An imported page someone moved elsewhere in the same scope stays where they put it and keeps being updated; one moved into another scope is left there and the item is written again at the target. When the source removes an item, its page is deleted, wherever someone moved it, unless it has pages under it, is another binding's folder, or was taken over: then it's kept as a stub, and a taken-over page with a saved body gets that body back. When a removed item's page is deleted, the binding's pages that link to it drop the link on a later settle slice. An imported page someone deleted by hand is written again the next time the importer sends its item, and the binding's pages that link to it are updated to wherever it lands. When a binding moves a subtree that holds other bindings' pages, those bindings' links to them are repaired by their next run. A flush of only removals works even when the binding's folder is gone. A flush resent with the same sequence number returns its stored receipt instead of applying twice.
+
+  `runKnowledgeImport` is exported for hosts that supply their own `KnowledgeImporterHost`. `importerHostConformance(factory)` returns the protocol cases such a host must pass (sequencing, digests, replay, generations, finish, heartbeat, state) as plain `{ name, run }` objects to register with any test runner. Before it moves or stubs an imported page, the importer locks the pages under it (`KnowledgeStorage.lockSubtree`) so nothing joins or leaves that subtree until commit, and every page under it moves along, whoever wrote it. On Postgres these locks hold until the flush commits, and each flush transaction stops at a deadline (45 seconds, or the run's deadline if sooner) and is resent.
+
+  Items that arrive before their parent, or that link to an item not imported yet, are placed under the target and marked unsettled. Later flushes move them under their parent and write their links once the other item exists, a bounded slice at a time (at most 200 items looked at and 50 moves per flush). A flush receipt says `pending: true` while settle work is left; the runner then sends empty flushes until it's done or the run's budget runs out. A run that flushes nothing still sends one empty flush, so settle work an earlier run left gets finished even when the source has nothing new. Settling resumes where the last slice stopped. When another binding's flush moves or takes over pages this binding links to, the next slice starts from the beginning, so linking pages before the saved position are repaired too. A pass that reaches the end stops, so pages that can never settle (their parent never arrives) don't keep a run settling. A run's receipt says `chain: true` when a host should start another run: the importer reported backlog, or settling made progress and still has work. After three settle slices in a row time out, the run stops settling. State keys starting with `mastra:` are reserved for the host.
+
+  ```ts
+  const knowledge = new Knowledge({
+    storage,
+    scopes: { 'docs:$orgId': {} },
+    importers: [
+      new HelpSpotImporter({
+        id: 'helpspot-main',
+        target: 'docs:acme#helpspot',
+        settings: { baseUrl: 'https://help.example.com' },
+        credentials: { apiKey: process.env.HELPSPOT_API_KEY! },
+      }),
+    ],
+  });
+
+  const result = await knowledge.importers!.run('helpspot-main');
+  ```
+
+- Fixed a Knowledge page move on Postgres leaving a page with its old scope and depth when that page was added under the moved subtree while the move was waiting for a lock. The move now locks the live pages in the subtree and re-reads them until no page has been added, then updates those pages and the deleted pages under them. A move larger than the page limit is refused before any page in it is locked. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+- Fixed a PostgreSQL transaction resolving as if its writes were saved when a statement in it had failed and the caller swallowed that failure through an explicit `drain()`. PostgreSQL answers COMMIT on such a transaction with a rollback; `tx()` now rejects with `TransactionRolledBackError`. A failed savepoint is also released after it is rolled back, so refused writes no longer leave savepoints open until the transaction ends. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+- Knowledge list calls now throw `KnowledgeInvalidCursorError` for a malformed cursor, so servers can answer 400 instead of 500. ([#30522](https://github.com/mastra-ai/mastra/pull/30522))
+
+- Updated dependencies [[`0b89469`](https://github.com/mastra-ai/mastra/commit/0b89469a5e4061b352b0408d2339966e8e38ffb8), [`fac783c`](https://github.com/mastra-ai/mastra/commit/fac783cfa8b3109b21acc970ea2015f826523993), [`a331da2`](https://github.com/mastra-ai/mastra/commit/a331da2b2354aa6fedc01651c39545fb7db82ebc), [`70947c4`](https://github.com/mastra-ai/mastra/commit/70947c4a6eaf470823a62fdd603e44a47ed000c7), [`5da059e`](https://github.com/mastra-ai/mastra/commit/5da059edbb8b9ec2ede0f3e9ca2227f87c650841), [`1ecb70b`](https://github.com/mastra-ai/mastra/commit/1ecb70b19d147189deab144108cd2fcc97b1dec8), [`6b862fb`](https://github.com/mastra-ai/mastra/commit/6b862fbb9513200c8607c35c1d2894ac75d3b6c8), [`a2ae8a2`](https://github.com/mastra-ai/mastra/commit/a2ae8a26a4928724afc7fccbe4a26e8c75c157b2), [`b758985`](https://github.com/mastra-ai/mastra/commit/b7589855bc3463bf57e6a79f0945d1bfe3135a0d), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`7fd3ce8`](https://github.com/mastra-ai/mastra/commit/7fd3ce86639e6e02a2c284c5715eed5db1a04f64), [`bff16da`](https://github.com/mastra-ai/mastra/commit/bff16dab4cea3236a9ef50b53286065d5a8d31cf), [`389f3cd`](https://github.com/mastra-ai/mastra/commit/389f3cdf5c8117a674c0ca14363a4f19f4abb769), [`537db2e`](https://github.com/mastra-ai/mastra/commit/537db2eb061006191283d0473a85472b87d201b3), [`827b54a`](https://github.com/mastra-ai/mastra/commit/827b54a6b566665bd283b88920436f59718e054a), [`dc2df74`](https://github.com/mastra-ai/mastra/commit/dc2df747b7274f8b96e132c3b121ec2707d5a895), [`fcf9c18`](https://github.com/mastra-ai/mastra/commit/fcf9c1897ad3eac3ceb66e43b97e60812712866a), [`464299b`](https://github.com/mastra-ai/mastra/commit/464299bcacd7c94203af3345bcbcd1614b207e38), [`fe0b7e0`](https://github.com/mastra-ai/mastra/commit/fe0b7e081ca4edee13d330da5b2749086f105154), [`16c44e8`](https://github.com/mastra-ai/mastra/commit/16c44e81c52768f4a82b6a400971361d84f1deb7)]:
+  - @mastra/core@1.86.0-alpha.9
+
 ## 1.38.0-alpha.3
 
 ### Minor Changes
