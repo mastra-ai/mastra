@@ -102,15 +102,19 @@ const olderWork = new Map([['work', selfReviewWorkBoard]]);
 
 describe('prepareFactoryRuleBinding', () => {
   it.each([
-    { modelScope: 'factory', approvedBy: 'approver-1', sandboxUserId: 'approver-1' },
-    { modelScope: 'factory', approvedBy: undefined, sandboxUserId: null },
-    { modelScope: 'factory', approvedBy: 'agent:session:requester-1', sandboxUserId: null },
-    { modelScope: 'user', approvedBy: 'approver-1', sandboxUserId: 'approver-1' },
-    { modelScope: 'user', approvedBy: undefined, sandboxUserId: null },
-    { modelScope: 'user', approvedBy: 'agent:session:requester-1', sandboxUserId: null },
+    { modelScope: 'factory', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-1' },
+    { modelScope: 'factory', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-2' },
+    { modelScope: 'factory', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: null },
+    { modelScope: 'factory', approvedBy: undefined, sandboxUserId: null, restartBy: null },
+    { modelScope: 'factory', approvedBy: 'agent:session:requester-1', sandboxUserId: null, restartBy: null },
+    { modelScope: 'user', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-1' },
+    { modelScope: 'user', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-2' },
+    { modelScope: 'user', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: null },
+    { modelScope: 'user', approvedBy: undefined, sandboxUserId: null, restartBy: null },
+    { modelScope: 'user', approvedBy: 'agent:session:requester-1', sandboxUserId: null, restartBy: null },
   ] as const)(
-    'persists the vault actor for a $modelScope card started by $approvedBy',
-    async ({ modelScope, approvedBy, sandboxUserId }) => {
+    'persists the vault actor for a $modelScope card started by $approvedBy then $restartBy',
+    async ({ modelScope, approvedBy, sandboxUserId, restartBy }) => {
       const { seeded, sourceControl, project } = await seedFactoryWithRepository({
         modelScope,
         defaultModelId: 'mastra/anthropic/claude-opus-5',
@@ -194,7 +198,7 @@ describe('prepareFactoryRuleBinding', () => {
           const path = new URL(String(url)).pathname;
           const actor = new Headers(init?.headers).get('x-acting-user-id');
           requests.push({ path, actor, body: String(init?.body ?? '') });
-          if (actor !== 'approver-1') {
+          if (actor !== 'approver-1' && actor !== 'approver-2') {
             return Response.json({ error: 'vault_user_not_member' }, { status: 403 });
           }
           if (path.endsWith('/exec-lease')) {
@@ -208,7 +212,7 @@ describe('prepareFactoryRuleBinding', () => {
               expiresAt: '2030-01-01T00:00:00.000Z',
             });
           }
-          return Response.json({ id: 'vault-vm', vault: true, createdAt: '2026-11-24T00:00:00.000Z' });
+          return Response.json({ id: `vault-vm-${actor}`, vault: true, createdAt: '2026-11-24T00:00:00.000Z' });
         },
         webSocketFactory: () => {
           const socket: ReturnType<NonNullable<PlatformFactorySandboxOptions['webSocketFactory']>> = {
@@ -288,6 +292,56 @@ describe('prepareFactoryRuleBinding', () => {
       await expect(invoke()).resolves.toMatchObject({ success: true, exitCode: 0 });
       expect(requests.filter(request => request.path.endsWith('/exec-lease'))).toHaveLength(2);
       expect(requests.every(request => request.actor === sandboxUserId)).toBe(true);
+
+      const restartInput = {
+        ...input,
+        record: { ...input.record, id: 'decision-2', approvedBy: restartBy },
+        item: (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))!,
+      };
+      const restart = () =>
+        prepareFactoryRuleBinding(sourceControl, coordinator, seeded.projects, boards, restartInput, undefined, {
+          workItems: seeded.workItems,
+          modelCredentials: seeded.credentials,
+          customProviders: seeded.customProviders,
+          deploymentModelProviders: resolveDeploymentModelProviders(undefined),
+        });
+      if (restartBy === null) {
+        await expect(restart()).rejects.toThrow('An automated card start cannot reuse a session');
+        expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.sessions.triage?.sessionId).toBe(
+          sessionId,
+        );
+      } else {
+        await restart();
+        const nextId = (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.sessions.triage?.sessionId;
+        assert(nextId);
+        if (restartBy === approvedBy) {
+          expect(nextId).toBe(sessionId);
+        } else {
+          expect(nextId).not.toBe(sessionId);
+          const nextSession = await sourceControl.sessions.getBySessionId(nextId);
+          assert(nextSession);
+          expect(nextSession.sandboxUserId).toBe(restartBy);
+          expect(nextSession.userId).toBe(modelScope === 'factory' ? storedSession.userId : restartBy);
+          requestContext.set('user', { organizationId: project.orgId, workosId: nextSession.userId });
+          requestContext.set('controller', { sessionId: nextId, getState: () => ({}), setState: async () => {} });
+          __clearSessionSandboxesForTests();
+          workspace = await resolveWorkspace();
+          const before = requests.length;
+          await expect(invoke()).resolves.toMatchObject({ success: true, exitCode: 0 });
+          expect(requests.slice(before).every(request => request.actor === restartBy)).toBe(true);
+          expect((await sourceControl.sessions.getBySessionId(nextId))?.sandboxId).not.toBe(reloaded.sandboxId);
+          restartInput.record.id = 'decision-3';
+          restartInput.item = (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))!;
+          await restart();
+          expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.sessions.triage?.sessionId).toBe(
+            nextId,
+          );
+        }
+      }
+      expect(await sourceControl.sessions.getBySessionId(sessionId)).toMatchObject({
+        sandboxUserId,
+        sandboxId: reloaded.sandboxId,
+      });
       __clearSessionSandboxesForTests();
       await destroyDetachedSessionSandbox({ session: reloaded, sandbox });
       expect(requests.at(-1)).toMatchObject({
