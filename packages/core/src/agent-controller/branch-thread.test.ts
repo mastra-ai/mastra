@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -28,16 +29,16 @@ function createController({ memory, storage }: { memory?: unknown; storage?: InM
   });
 }
 
-/** Memory mock with ordinary thread reads/writes delegated to the raw store. */
+/** Memory mock: a real MockMemory over the store, plus the branching surface each test needs. */
 async function mockMemory(storage: InMemoryStore, extra: Record<string, unknown>) {
-  const memoryStore = await storage.getStore('memory');
-  return {
-    getThreadById: ({ threadId }: { threadId: string }) => memoryStore.getThreadById({ threadId }),
-    saveThread: ({ thread }: { thread: any }) => memoryStore.saveThread({ thread }),
-    updateThread: ({ id, title, metadata }: { id: string; title?: string; metadata?: Record<string, unknown> }) =>
-      memoryStore.updateThread({ id, title, metadata }),
-    ...extra,
-  };
+  const memory = new MockMemory({ storage });
+  // supportsThreadBranching is a getter on MastraMemory, so a fake that claims
+  // support has to override the property rather than assign to it.
+  const { supportsThreadBranching, ...rest } = extra as { supportsThreadBranching?: boolean } & Record<string, unknown>;
+  if (supportsThreadBranching !== undefined) {
+    Object.defineProperty(memory, 'supportsThreadBranching', { value: supportsThreadBranching, configurable: true });
+  }
+  return Object.assign(memory, rest);
 }
 
 async function saveThread(storage: InMemoryStore, id: string, resourceId = 'controller-resource') {

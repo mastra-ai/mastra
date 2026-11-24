@@ -55,12 +55,7 @@ import {
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
 import { InfoMessageComponent } from './display.js';
-import {
-  formatToolResult,
-  getBackgroundToolTaskId,
-  isBackgroundToolPlaceholder,
-  isTaskMutationTool,
-} from './handlers/tool.js';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { clearPendingTools } from './state.js';
 import type { TUIState } from './state.js';

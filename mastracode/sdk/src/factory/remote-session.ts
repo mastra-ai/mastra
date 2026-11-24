@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { AgentControllerEvent as ClientEvent, AgentControllerModeInfo } from '@mastra/client-js';
 import type {
+  AgentControllerBranch,
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
@@ -11,6 +12,7 @@ import type {
   Session,
 } from '@mastra/core/agent-controller';
 import { defaultDisplayState } from '@mastra/core/agent-controller';
+import type { PaginationInfo } from '@mastra/core/storage';
 
 import type { FactoryAddress } from './client.js';
 import { createFactoryClient, FACTORY_CONTROLLER_ID } from './client.js';
@@ -259,6 +261,19 @@ export class RemoteSession {
       rename: async ({ title }: { title: string }) => {
         if (this.#threadId) await remote().renameThread(this.#threadId, title);
       },
+      // Thread branching exists only in local sessions; a Factory session has no branch endpoints.
+      branch: async (): Promise<never> => {
+        throw new Error('Thread branching is not available when connected to a Factory session');
+      },
+      getParent: async () => null,
+      getBranchInfo: async () => null,
+      listBranches: async (): Promise<PaginationInfo & { branches: AgentControllerBranch[] }> => ({
+        branches: [],
+        total: 0,
+        page: 1,
+        perPage: false,
+        hasMore: false,
+      }),
       delete: async ({ threadId }: { threadId: string }) => {
         await remote().deleteThread(threadId);
         if (this.#threadId === threadId) this.#threadId = null;
