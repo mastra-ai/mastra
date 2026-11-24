@@ -33,6 +33,8 @@ export interface LinearMigrationRunResult {
   /** Workspaces now served by a Connect connection linked to the project. */
   connections: LinearMigrateResponse['connections'];
   skipped: LinearMigrateResponse['skipped'];
+  /** Migrated connections this project had never had, linked to it now. */
+  linked: string[];
 }
 
 /** What status and diagnostics report about the migration. */
@@ -41,8 +43,8 @@ export interface LinearMigrationState {
   required: boolean;
   pending: string[];
   /**
-   * Workspaces already migrated whose connection isn't linked to this project and
-   * that nothing linked serves. They are never migrated again; an admin links them in the platform.
+   * Workspaces already migrated whose connection someone detached from this project (or
+   * that couldn't be linked), and that nothing linked serves. They are never migrated again.
    */
   notLinked: string[];
   skipped: LinearMigrateResponse['skipped'];
@@ -58,12 +60,14 @@ const RETRY_MAX_MS = 60 * 60_000;
  * run reads the platform's migration status and migrates only the workspaces
  * that have not been migrated yet, so each legacy workspace becomes exactly one
  * Connect connection. A workspace that is already migrated is never sent
- * again, even when its connection isn't linked to this project: someone may
- * have detached it on purpose, and a migrated workspace has nothing left to import.
+ * again. Its connection is linked to this project only if the project has
+ * never had it (it was migrated from another project); one the project had and
+ * no longer lists was detached on purpose and is left alone, across restarts.
  */
 export class PlatformLinearMigration {
   readonly #connect: () => ConnectClient;
   readonly #coveredWorkspaceIds: () => Promise<ReadonlySet<string>>;
+  readonly #linkMigrated: (connectionIds: ReadonlySet<string>) => Promise<{ linked: string[] }>;
   readonly #onMigrated: () => void;
   #state: LinearMigrationState = {
     required: false,
@@ -84,11 +88,17 @@ export class PlatformLinearMigration {
     connect: () => ConnectClient;
     /** Workspaces a project-linked Connect connection already serves; never migrated again. */
     coveredWorkspaceIds: () => Promise<ReadonlySet<string>>;
+    /**
+     * Links these migrated connections unless the project has had them before,
+     * and remembers the ones it has; returns those it linked now.
+     */
+    linkMigrated: (connectionIds: ReadonlySet<string>) => Promise<{ linked: string[] }>;
     /** Called after a run that linked at least one connection to the project. */
     onMigrated: () => void;
   }) {
     this.#connect = options.connect;
     this.#coveredWorkspaceIds = options.coveredWorkspaceIds;
+    this.#linkMigrated = options.linkMigrated;
     this.#onMigrated = options.onMigrated;
   }
 
@@ -160,16 +170,23 @@ export class PlatformLinearMigration {
   async #run(trigger: LinearMigrationTrigger): Promise<LinearMigrationRunResult> {
     const at = new Date().toISOString();
     try {
-      const { pending, notLinked } = await this.#needed();
-      if (pending.length === 0) {
-        this.#succeeded({ required: false, pending: [], notLinked, skipped: [], lastRunAt: at });
-        return { requested: [], connections: [], skipped: [] };
+      let needed = await this.#needed();
+      const { pending } = needed;
+      let response: LinearMigrateResponse & { alreadyMigrated?: true } = { connections: [], skipped: [] };
+      if (pending.length > 0) {
+        logPlatformInfo('Migrating Platform Linear workspaces to Mastra Connect', { trigger, workspaces: pending });
+        response = await this.#migrate(pending);
+        if (response.connections.length > 0 || response.alreadyMigrated) this.#onMigrated();
+        // Read back what is left rather than trusting the response alone.
+        needed = await this.#needed();
       }
-      logPlatformInfo('Migrating Platform Linear workspaces to Mastra Connect', { trigger, workspaces: pending });
-      const response = await this.#migrate(pending);
-      if (response.connections.length > 0 || response.alreadyMigrated) this.#onMigrated();
-      // Read back what is left rather than trusting the response alone.
-      const left = await this.#needed();
+      const { linked } = await this.#linkMigrated(needed.linkable);
+      if (linked.length > 0) {
+        logPlatformInfo('Linked migrated Linear connections to the Factory project', { trigger, linked });
+        this.#onMigrated();
+        needed = await this.#needed();
+      }
+      const left = needed;
       const state = {
         required: left.pending.length > 0,
         pending: left.pending,
@@ -189,7 +206,7 @@ export class PlatformLinearMigration {
       if (response.skipped.length > 0) {
         logPlatformWarn('Platform Linear workspaces were not migrated', { trigger, skipped: response.skipped });
       }
-      return { requested: pending, connections: response.connections, skipped: response.skipped };
+      return { requested: pending, connections: response.connections, skipped: response.skipped, linked };
     } catch (error) {
       this.#failures += 1;
       this.#state = { ...this.#state, lastRunAt: at, lastError: { message: errorMessage(error), at } };
@@ -203,9 +220,11 @@ export class PlatformLinearMigration {
 
   /**
    * Workspaces the platform still serves from legacy tokens (the only ones ever
-   * sent to migrate), and migrated workspaces nothing linked to this project serves.
+   * sent to migrate); migrated workspaces nothing linked to this project serves;
+   * and the migrated connections linking may consider: those already linked (so
+   * they are remembered) and those whose workspace nothing else linked serves.
    */
-  async #needed(): Promise<{ pending: string[]; notLinked: string[] }> {
+  async #needed(): Promise<{ pending: string[]; notLinked: string[]; linkable: ReadonlySet<string> }> {
     const [status, covered] = await Promise.all([
       this.#connect().request<LinearMigrationStatusResponse>('GET', '/v2/integrations/linear/migration-status'),
       this.#coveredWorkspaceIds(),
@@ -219,12 +238,16 @@ export class PlatformLinearMigration {
       status.migrated.map(workspace => [workspace.connectionId, workspace.linearWorkspaceId]),
     );
     const notLinked = new Set<string>();
+    const linkable = new Set<string>();
     for (const workspace of status.migrated) {
-      if (!workspace.linkedToProject && !covered.has(workspace.linearWorkspaceId)) {
+      if (workspace.linkedToProject) {
+        linkable.add(workspace.connectionId);
+      } else if (!covered.has(workspace.linearWorkspaceId)) {
         notLinked.add(workspace.linearWorkspaceId);
+        linkable.add(workspace.connectionId);
       }
     }
-    return { pending: [...pending].sort(), notLinked: [...notLinked].sort() };
+    return { pending: [...pending].sort(), notLinked: [...notLinked].sort(), linkable };
   }
 
   async #migrate(linearWorkspaceIds: string[]): Promise<LinearMigrateResponse & { alreadyMigrated?: true }> {

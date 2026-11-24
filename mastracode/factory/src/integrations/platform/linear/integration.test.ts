@@ -814,25 +814,66 @@ describe('PlatformLinearIntegration', () => {
     expect(fake.migrateRequests).toHaveLength(1);
   });
 
-  it('never migrates a workspace again once migrated, even when its connection was detached from the project', async () => {
+  it('never migrates a workspace again once migrated, nor relinks it after a detach, on a schedule or after a restart', async () => {
     fake.addLegacy(linearWorkspace());
-    const first = createIntegration();
-    await first.migration.run('admin');
-    expect(fake.platform.orgConnections.filter(c => c.integrationId === 'linear')).toHaveLength(1);
+    const first = await setup();
+    first.integration.workers(first.ctx);
+    await first.integration.migration.run('boot');
+    expect(fake.platform.linked.has('conn-migrated-workspace-1')).toBe(true);
     fake.detach('conn-migrated-workspace-1');
 
-    // The same deployment's schedule and admin retries, and another deployment's boot, all leave it alone.
-    first.invalidateConnections();
-    await expect(first.migration.run('schedule')).resolves.toMatchObject({ requested: [] });
-    await expect(first.migration.run('admin')).resolves.toMatchObject({ requested: [] });
-    const second = createIntegration();
-    await expect(second.migration.run('boot')).resolves.toMatchObject({ requested: [] });
+    first.integration.invalidateConnections();
+    await expect(first.integration.migration.run('schedule')).resolves.toMatchObject({ requested: [], linked: [] });
+    await expect(first.integration.migration.run('admin')).resolves.toMatchObject({ requested: [], linked: [] });
+    // A restart reads the same project's link history from storage.
+    const restarted = createIntegration();
+    restarted.workers(first.ctx);
+    await expect(restarted.migration.run('boot')).resolves.toMatchObject({ requested: [], linked: [] });
 
     expect(fake.migrateRequests).toEqual([{ linearWorkspaceIds: ['workspace-1'] }]);
     expect(fake.platform.linked.has('conn-migrated-workspace-1')).toBe(false);
     expect(fake.platform.orgConnections.filter(c => c.integrationId === 'linear')).toHaveLength(1);
-    expect(second.migration.state).toMatchObject({ required: false, pending: [], notLinked: ['workspace-1'] });
-    expect(second.diagnostics()).toMatchObject({ migration: { notLinked: ['workspace-1'] } });
+    expect(restarted.migration.state).toMatchObject({ required: false, pending: [], notLinked: ['workspace-1'] });
+    expect(restarted.diagnostics()).toMatchObject({ migration: { notLinked: ['workspace-1'] } });
+  });
+
+  it('links a workspace another project migrated, without migrating it again, once', async () => {
+    fake.addLegacy(linearWorkspace());
+    const other = await setup();
+    other.integration.workers(other.ctx);
+    await other.integration.migration.run('boot');
+    // This project has never had the connection: as if only the other project's migration linked it.
+    fake.detach('conn-migrated-workspace-1');
+
+    const { integration, ctx } = await setup();
+    integration.workers(ctx);
+    const reconcile = vi.spyOn(integration, 'requestReconcile');
+    await expect(integration.migration.run('boot')).resolves.toMatchObject({
+      requested: [],
+      linked: ['conn-migrated-workspace-1'],
+    });
+    expect(fake.migrateRequests).toHaveLength(1);
+    expect(integration.migration.state).toMatchObject({ required: false, notLinked: [] });
+    expect(reconcile).toHaveBeenCalled();
+    await expect(integration.listWorkspaces()).resolves.toEqual([
+      expect.objectContaining({ linearWorkspaceId: 'workspace-1' }),
+    ]);
+
+    // Once had, a later detach is respected.
+    fake.detach('conn-migrated-workspace-1');
+    integration.invalidateConnections();
+    await expect(integration.migration.run('schedule')).resolves.toMatchObject({ linked: [] });
+    expect(fake.platform.linked.has('conn-migrated-workspace-1')).toBe(false);
+  });
+
+  it('links no migrated connection when it has no link history to tell a detach from a first link', async () => {
+    fake.addLegacy(linearWorkspace());
+    const other = createIntegration();
+    await other.migration.run('admin');
+    fake.detach('conn-migrated-workspace-1');
+    const integration = createIntegration();
+    await expect(integration.migration.run('boot')).resolves.toMatchObject({ requested: [], linked: [] });
+    expect(fake.platform.linked.has('conn-migrated-workspace-1')).toBe(false);
   });
 
   it('stops counting a stale connection that needs a fresh connect once a newer one serves its workspace', async () => {

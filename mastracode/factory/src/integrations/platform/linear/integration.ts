@@ -53,7 +53,8 @@ export interface PlatformLinearIntegrationConfig {
  * Workspaces the platform still holds legacy OAuth tokens for are migrated
  * into Connect automatically: at boot and on every reconcile interval, under
  * a lease so only one replica migrates. A workspace is migrated once; one already
- * migrated is never sent again. Migration links each new connection
+ * migrated is never sent again, and its connection is linked only if this
+ * project has never had it. Migration links each new connection
  * to the Factory project, and the workspace's webhooks land in the
  * connection's platform event log from then on. Until a workspace is migrated, Platform
  * Linear reports `migration_required` for it; there is no legacy fallback.
@@ -90,6 +91,7 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
       connect: () => this.connect,
       coveredWorkspaceIds: async () =>
         new Set((await this.intake.listWorkspaces()).map(workspace => workspace.linearWorkspaceId)),
+      linkMigrated: connectionIds => this.linkOrgConnections({ only: connectionIds, requireHistory: true }),
       onMigrated: () => this.#connectionsChanged(),
     });
   }
