@@ -112,29 +112,70 @@ describe('Factory route contracts', () => {
     expect(updateProjectBodySchema.parse({ defaultModelId: ' anthropic/claude-opus-5.5 ' })).toEqual({
       defaultModelId: 'anthropic/claude-opus-5.5',
     });
-    expect(updateProjectBodySchema.parse({ fallbackModelIds: [' openai/gpt-5.6-sol '] })).toEqual({
-      fallbackModelIds: ['openai/gpt-5.6-sol'],
-    });
-    expect(updateProjectBodySchema.safeParse({ fallbackModelIds: ['  '] }).success).toBe(false);
     const tooLong = `openai/${'x'.repeat(250)}`;
-    expect(updateProjectBodySchema.safeParse({ fallbackModelIds: [tooLong] }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({ defaultModelId: tooLong }).success).toBe(false);
     for (const notAnId of ['sonnet 5.5', 'claude-opus-5.5', '/claude-opus-5.5', 'anthropic/']) {
-      expect(updateProjectBodySchema.safeParse({ fallbackModelIds: [notAnId] }).success, notAnId).toBe(false);
       expect(updateProjectBodySchema.safeParse({ defaultModelId: notAnId }).success, notAnId).toBe(false);
     }
-    expect(updateProjectBodySchema.parse({ fallbackModelIds: ['openrouter/anthropic/claude-opus-5.5'] })).toEqual({
-      fallbackModelIds: ['openrouter/anthropic/claude-opus-5.5'],
-    });
-    expect(
-      updateProjectBodySchema.parse({ defaultModelId: 'acme/Llama 3 70B', fallbackModelIds: ['acme/Qwen 3'] }),
-    ).toEqual({
+    expect(updateProjectBodySchema.parse({ defaultModelId: 'acme/Llama 3 70B' })).toEqual({
       defaultModelId: 'acme/Llama 3 70B',
-      fallbackModelIds: ['acme/Qwen 3'],
+    });
+    const pack = (models: string[], name = ' Build ', id = 'build') => ({
+      id,
+      name,
+      models: models.map(modelId => ({ modelId, thinkingLevel: 'medium' })),
     });
     expect(
-      updateProjectBodySchema.safeParse({ fallbackModelIds: ['openai/gpt-5.6-sol', ' openai/gpt-5.6-sol'] }).success,
-    ).toBe(false);
+      updateProjectBodySchema.parse({
+        modelPacks: [pack([' anthropic/claude-opus-5.5 ', 'openrouter/anthropic/claude-opus-5.5'])],
+        defaultModelPackId: 'build',
+      }),
+    ).toEqual({
+      modelPacks: [
+        {
+          id: 'build',
+          name: 'Build',
+          models: [
+            { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+            { modelId: 'openrouter/anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+          ],
+        },
+      ],
+      defaultModelPackId: 'build',
+    });
+    const rejectedPackSets = {
+      'a pack without a default id': { modelPacks: [pack(['openai/gpt-5.6-sol'])] },
+      'a default id without packs': { defaultModelPackId: 'build' },
+      'a default id that is not a pack': { modelPacks: [pack(['openai/gpt-5.6-sol'])], defaultModelPackId: 'other' },
+      'a default id with no packs': { modelPacks: [], defaultModelPackId: 'build' },
+      'a model listed twice': {
+        modelPacks: [pack(['openai/gpt-5.6-sol', ' openai/gpt-5.6-sol'])],
+        defaultModelPackId: 'build',
+      },
+      'a model that is not provider/model': { modelPacks: [pack(['claude-opus-5.5'])], defaultModelPackId: 'build' },
+      'an empty pack': { modelPacks: [pack([])], defaultModelPackId: 'build' },
+      'five models': {
+        modelPacks: [pack(['openai/m1', 'openai/m2', 'openai/m3', 'openai/m4', 'openai/m5'])],
+        defaultModelPackId: 'build',
+      },
+      'a blank name': { modelPacks: [pack(['openai/gpt-5.6-sol'], '  ')], defaultModelPackId: 'build' },
+      'a bad id': { modelPacks: [pack(['openai/gpt-5.6-sol'], 'Build', 'has space')], defaultModelPackId: 'has space' },
+      'two packs with one name': {
+        modelPacks: [pack(['openai/gpt-5.6-sol'], 'Build', 'a'), pack(['openai/gpt-5.6-sol'], 'build', 'b')],
+        defaultModelPackId: 'a',
+      },
+      'nine packs': {
+        modelPacks: Array.from({ length: 9 }, (_, index) => pack(['openai/gpt-5.6-sol'], `P${index}`, `p${index}`)),
+        defaultModelPackId: 'p0',
+      },
+    };
+    for (const [label, body] of Object.entries(rejectedPackSets)) {
+      expect(updateProjectBodySchema.safeParse(body).success, label).toBe(false);
+    }
+    expect(updateProjectBodySchema.parse({ modelPacks: [], defaultModelPackId: null })).toEqual({
+      modelPacks: [],
+      defaultModelPackId: null,
+    });
     expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
     expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);
     expect(createWorkItemBodySchema.parse({ title: ' Card ', stages: ['intake'], ignored: true })).toEqual({
@@ -300,7 +341,7 @@ describe('Factory route contracts', () => {
     const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'agent-waiting'];
     expect(
       FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({
-        projects: [{ id: projectId, fallbackModelIds: [], repositories: [] }],
+        projects: [{ id: projectId, modelPacks: [], defaultModelPackId: null, repositories: [] }],
       }).success,
     ).toBe(true);
     expect(

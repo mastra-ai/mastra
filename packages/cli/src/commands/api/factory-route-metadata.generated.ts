@@ -634,9 +634,10 @@ export const FACTORY_API_ROUTE_METADATA = {
       "autoApprovePlans",
       "autoRunEnabled",
       "defaultModelId",
+      "defaultModelPackId",
       "defaultThinkingLevel",
       "description",
-      "fallbackModelIds",
+      "modelPacks",
       "modelScope",
       "name",
       "reviewTestChecksEnabled",
@@ -1503,15 +1504,38 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               {
                 "type": "object",
                 "properties": {
-                  "fallbackModelIds": {
+                  "modelPacks": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "$ref": "#/$defs/__schema0"
+                        },
+                        "name": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "models": {
+                          "$ref": "#/$defs/__schema2"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "models"
+                      ]
                     }
+                  },
+                  "defaultModelPackId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
-                  "fallbackModelIds"
+                  "modelPacks",
+                  "defaultModelPackId"
                 ]
               },
               {
@@ -1582,7 +1606,51 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "projects"
-      ]
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "__schema2": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "__schema3": {
+          "type": "object",
+          "properties": {
+            "modelId": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
+            },
+            "thinkingLevel": {
+              "type": "string",
+              "enum": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "modelId",
+            "thinkingLevel"
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id": {
@@ -1615,15 +1683,38 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             {
               "type": "object",
               "properties": {
-                "fallbackModelIds": {
+                "modelPacks": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      "name": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "models": {
+                        "$ref": "#/$defs/__schema2"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "models"
+                    ]
                   }
+                },
+                "defaultModelPackId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
-                "fallbackModelIds"
+                "modelPacks",
+                "defaultModelPackId"
               ]
             }
           ]
@@ -1631,7 +1722,51 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
-      ]
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "__schema2": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "__schema3": {
+          "type": "object",
+          "properties": {
+            "modelId": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
+            },
+            "thinkingLevel": {
+              "type": "string",
+              "enum": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "modelId",
+            "thinkingLevel"
+          ]
+        }
+      }
     }
   },
   "GET /web/factory/projects/:id/attention": {
@@ -6003,20 +6138,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "defaultThinkingLevel": {
           "$ref": "#/$defs/__schema5"
         },
-        "fallbackModelIds": {
+        "modelPacks": {
           "$ref": "#/$defs/__schema6"
         },
+        "defaultModelPackId": {
+          "$ref": "#/$defs/__schema12"
+        },
         "autoRunEnabled": {
-          "$ref": "#/$defs/__schema7"
+          "$ref": "#/$defs/__schema13"
         },
         "autoApprovePlans": {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema14"
         },
         "reviewTestChecksEnabled": {
-          "$ref": "#/$defs/__schema9"
+          "$ref": "#/$defs/__schema15"
         },
         "selfReviewEnabled": {
-          "$ref": "#/$defs/__schema10"
+          "$ref": "#/$defs/__schema16"
         }
       },
       "$defs": {
@@ -6079,22 +6217,87 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema6": {
-          "maxItems": 3,
+          "maxItems": 8,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema3"
+            "$ref": "#/$defs/__schema7"
           }
         },
         "__schema7": {
-          "type": "boolean"
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema8"
+            },
+            "name": {
+              "$ref": "#/$defs/__schema9"
+            },
+            "models": {
+              "$ref": "#/$defs/__schema10"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "models"
+          ]
         },
         "__schema8": {
-          "type": "boolean"
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
         },
         "__schema9": {
-          "type": "boolean"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
         },
         "__schema10": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema11"
+          }
+        },
+        "__schema11": {
+          "type": "object",
+          "properties": {
+            "modelId": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "thinkingLevel": {
+              "type": "string",
+              "enum": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "modelId",
+            "thinkingLevel"
+          ]
+        },
+        "__schema12": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "__schema13": {
+          "type": "boolean"
+        },
+        "__schema14": {
+          "type": "boolean"
+        },
+        "__schema15": {
+          "type": "boolean"
+        },
+        "__schema16": {
           "type": "boolean"
         }
       }
@@ -6115,15 +6318,38 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             {
               "type": "object",
               "properties": {
-                "fallbackModelIds": {
+                "modelPacks": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      "name": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "models": {
+                        "$ref": "#/$defs/__schema2"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "models"
+                    ]
                   }
+                },
+                "defaultModelPackId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
-                "fallbackModelIds"
+                "modelPacks",
+                "defaultModelPackId"
               ]
             }
           ]
@@ -6131,7 +6357,51 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
-      ]
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "__schema2": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "__schema3": {
+          "type": "object",
+          "properties": {
+            "modelId": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
+            },
+            "thinkingLevel": {
+              "type": "string",
+              "enum": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "modelId",
+            "thinkingLevel"
+          ]
+        }
+      }
     }
   },
   "PATCH /web/factory/projects/:id/boards/:boardKey": {
@@ -8317,15 +8587,38 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             {
               "type": "object",
               "properties": {
-                "fallbackModelIds": {
+                "modelPacks": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      "name": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "models": {
+                        "$ref": "#/$defs/__schema2"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "models"
+                    ]
                   }
+                },
+                "defaultModelPackId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
-                "fallbackModelIds"
+                "modelPacks",
+                "defaultModelPackId"
               ]
             }
           ]
@@ -8333,7 +8626,51 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
-      ]
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "__schema2": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema3"
+          }
+        },
+        "__schema3": {
+          "type": "object",
+          "properties": {
+            "modelId": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
+            },
+            "thinkingLevel": {
+              "type": "string",
+              "enum": [
+                "off",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "modelId",
+            "thinkingLevel"
+          ]
+        }
+      }
     }
   },
   "POST /web/factory/projects/:id/apply-default-model": {

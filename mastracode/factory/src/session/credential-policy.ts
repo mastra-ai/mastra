@@ -3,6 +3,7 @@ import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolv
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import type { ModelPackSet } from '../model-packs.js';
 import { UUID_PATTERN } from '../routes/contracts.js';
 import { tenantOrgId } from '../routes/provider-credentials.js';
 import type { ModelDefaultRecord, ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
@@ -37,7 +38,7 @@ export async function resolveFactoryModelPolicy(
       tenant: CredentialTenant;
       factoryProjectId?: string;
       factoryDefaultModelId?: string | null;
-      factoryFallbackModelIds?: readonly string[];
+      factoryModelPackSet?: ModelPackSet;
     }
   | undefined
 > {
@@ -69,7 +70,10 @@ export async function resolveFactoryModelPolicy(
       return {
         factoryProjectId: factoryProject.id,
         factoryDefaultModelId: factoryProject.defaultModelId,
-        factoryFallbackModelIds: factoryProject.fallbackModelIds,
+        factoryModelPackSet: {
+          modelPacks: factoryProject.modelPacks,
+          defaultModelPackId: factoryProject.defaultModelPackId,
+        },
         tenant: { ...principal, credentialScope: effectiveModelScope(factoryProject.modelScope, 'session') },
       };
     }
@@ -89,7 +93,7 @@ export async function resolveFactoryModelPolicy(
   return {
     factoryProjectId: project.id,
     factoryDefaultModelId: project.defaultModelId,
-    factoryFallbackModelIds: project.fallbackModelIds,
+    factoryModelPackSet: { modelPacks: project.modelPacks, defaultModelPackId: project.defaultModelPackId },
     tenant: {
       orgId: project.orgId,
       userId: sourceSession.userId,

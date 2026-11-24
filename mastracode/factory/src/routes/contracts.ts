@@ -11,8 +11,9 @@ import {
   STATUS_EVENTS,
 } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
-import { FACTORY_MODEL_FALLBACKS_MAX } from '../model-fallbacks.js';
 import { MODEL_ID_PATTERN } from '../model-id.js';
+import { MODEL_PACK_MODELS_MAX, MODEL_PACKS_MAX } from '../model-packs.js';
+import type { ModelPackSet } from '../model-packs.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import {
@@ -590,12 +591,49 @@ export const modelIdSchema = z
   .trim()
   .max(256)
   .regex(MODEL_ID_PATTERN, 'Use a provider/model ID, e.g. "anthropic/claude-opus-5.5"');
-export const modelFallbackIdsSchema = z
-  .array(modelIdSchema)
-  .max(FACTORY_MODEL_FALLBACKS_MAX)
-  .refine(ids => new Set(ids).size === ids.length, { message: 'Fallback models must be unique' });
 
-const projectSchema = entitySchema.and(z.object({ fallbackModelIds: z.array(z.string()) }));
+const MODEL_PACK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+export const modelPackSchema = z
+  .object({
+    id: z.string().regex(MODEL_PACK_ID_PATTERN, 'A pack ID is 1 to 64 letters, digits, "-" or "_"'),
+    name: z.string().trim().min(1, 'A pack needs a name').max(40, 'A pack name is at most 40 characters'),
+    models: z
+      .array(z.object({ modelId: modelIdSchema, thinkingLevel: z.enum(THINKING_LEVELS) }))
+      .min(1, 'A pack needs at least one model')
+      .max(MODEL_PACK_MODELS_MAX, `A pack holds at most ${MODEL_PACK_MODELS_MAX} models`),
+  })
+  .refine(pack => new Set(pack.models.map(model => model.modelId)).size === pack.models.length, {
+    message: 'A pack cannot list the same model twice',
+    path: ['models'],
+  });
+
+const modelPacksSchema = z.array(modelPackSchema).max(MODEL_PACKS_MAX, `There can be at most ${MODEL_PACKS_MAX} packs`);
+const defaultModelPackIdSchema = z.string().nullable();
+
+function modelPackSetProblem({ modelPacks, defaultModelPackId }: ModelPackSet): string | undefined {
+  if (new Set(modelPacks.map(pack => pack.id)).size !== modelPacks.length) return 'Two packs cannot share an ID';
+  if (new Set(modelPacks.map(pack => pack.name.toLowerCase())).size !== modelPacks.length) {
+    return 'Two packs cannot share a name';
+  }
+  if (modelPacks.length === 0) {
+    return defaultModelPackId === null ? undefined : 'There is no default pack when there are no packs';
+  }
+  return modelPacks.some(pack => pack.id === defaultModelPackId)
+    ? undefined
+    : 'The default pack must be one of the packs';
+}
+
+export const modelPackSetSchema = z
+  .object({ modelPacks: modelPacksSchema, defaultModelPackId: defaultModelPackIdSchema })
+  .superRefine((set, ctx) => {
+    const problem = modelPackSetProblem(set);
+    if (problem) ctx.addIssue({ code: 'custom', message: problem });
+  });
+
+const projectSchema = entitySchema.and(
+  z.object({ modelPacks: z.array(modelPackSchema), defaultModelPackId: z.string().nullable() }),
+);
 const projectResponseSchema = z.object({ project: projectSchema });
 
 /**
@@ -703,7 +741,8 @@ export const updateProjectBodySchema = z
     defaultModelId: z.union([modelIdSchema, nullableTrimmed(0)]).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
-    fallbackModelIds: modelFallbackIdsSchema.optional(),
+    modelPacks: modelPacksSchema.optional(),
+    defaultModelPackId: defaultModelPackIdSchema.optional(),
     /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
     autoRunEnabled: z.boolean().optional(),
     /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
@@ -713,7 +752,15 @@ export const updateProjectBodySchema = z
     /** @deprecated Ignored. A card is self-reviewed when its board has a self-review phase. */
     selfReviewEnabled: z.boolean().optional(),
   })
-  .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
+  .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' })
+  .superRefine(({ modelPacks, defaultModelPackId }, ctx) => {
+    if (modelPacks === undefined && defaultModelPackId === undefined) return;
+    const problem =
+      modelPacks === undefined || defaultModelPackId === undefined
+        ? 'Send modelPacks and defaultModelPackId together'
+        : modelPackSetProblem({ modelPacks, defaultModelPackId });
+    if (problem) ctx.addIssue({ code: 'custom', message: problem });
+  });
 
 const environmentBuildStatusSchema = z.enum(['pending', 'building', 'ready', 'failed', 'unknown']);
 
