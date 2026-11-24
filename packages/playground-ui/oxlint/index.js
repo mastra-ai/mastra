@@ -601,22 +601,32 @@ const pageLayoutProps = selectorRule(() => [
 
 // --- no-hover-delay-numbers ------------------------------------------------------------------------------
 // The times live in Playground UI. A call site either takes the default or names the other option.
-const HOVER_TRIGGER = '/^(TooltipTrigger|HoverCardTrigger|PopoverTrigger)$/';
+const HOVER_TRIGGERS = new Set(['TooltipTrigger', 'HoverCardTrigger', 'PopoverTrigger']);
+const TRIGGER_DELAYS = new Set(['delay', 'closeDelay']);
+const PROVIDER_DELAYS = new Set(['delay', 'delayDuration', 'closeDelay', 'timeout', 'skipDelayDuration']);
 const HOVER_DELAY_MESSAGE =
   'Drop this to use the default delay, or pass delay="instant" when the target exists to be hovered.';
 const PROVIDER_DELAY_MESSAGE =
   'TooltipProvider sets no delay. Drop this, and pass delay="instant" to a TooltipTrigger that exists to be hovered.';
-const noHoverDelayNumbers = selectorRule(() => [
-  {
-    selector: `JSXOpeningElement[name.name=${HOVER_TRIGGER}] > JSXAttribute[name.name=/^(delay|closeDelay)$/] Literal[value=type(number)]`,
-    message: HOVER_DELAY_MESSAGE,
-  },
-  {
-    selector:
-      "JSXOpeningElement[name.name='TooltipProvider'] > JSXAttribute[name.name=/^(delay|delayDuration|closeDelay|timeout|skipDelayDuration)$/]",
-    message: PROVIDER_DELAY_MESSAGE,
-  },
-]);
+
+const canBeNumber = value =>
+  value !== null && branches(value).some(option => option.type === 'Literal' && typeof option.value === 'number');
+
+function noHoverDelayNumbers(context) {
+  return {
+    JSXOpeningElement(node) {
+      const name = jsxName(node.name);
+      for (const attribute of node.attributes) {
+        if (attribute.type !== 'JSXAttribute') continue;
+        const prop = attribute.name.name;
+        if (name === 'TooltipProvider' && PROVIDER_DELAYS.has(prop))
+          context.report({ node: attribute, message: PROVIDER_DELAY_MESSAGE });
+        if (HOVER_TRIGGERS.has(name) && TRIGGER_DELAYS.has(prop) && canBeNumber(attribute.value))
+          context.report({ node: attribute, message: HOVER_DELAY_MESSAGE });
+      }
+    },
+  };
+}
 
 const plugin = {
   meta: { name: 'playground-ui' },

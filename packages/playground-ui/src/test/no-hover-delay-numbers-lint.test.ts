@@ -27,6 +27,10 @@ tester.run('no-hover-delay-numbers', plugin.rules['no-hover-delay-numbers'], {
       name: 'allows a named delay that depends on state',
       code: "<HoverCardTrigger delay={dense ? 'instant' : 'default'} />;",
     },
+    {
+      name: 'allows a number in the condition that picks a named delay',
+      code: "<TooltipTrigger delay={items.length > 0 ? 'instant' : 'default'} />;",
+    },
     { name: 'allows a bare provider', code: '<TooltipProvider><App /></TooltipProvider>;' },
     { name: 'leaves other components alone', code: '<Toast delay={300} />;' },
   ],
