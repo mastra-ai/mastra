@@ -584,9 +584,11 @@ async function withThreadOwnershipMutex<T>(threadId: string, operation: () => Pr
  * shared-history branch (`assertRawControllerThreadAvailable` in
  * agent-controller.ts only understands ordinary rows). Such a row can still be
  * served by the caller's memory, so ownership reads treat this as "ask memory".
+ * Matched by id rather than `instanceof MastraError` so it holds when core is
+ * bundled more than once.
  */
-function isBranchingUnsupportedError(error: unknown): error is MastraError {
-  return error instanceof MastraError && error.id === 'BRANCHING_UNSUPPORTED';
+function isBranchingUnsupportedError(error: unknown): boolean {
+  return (error as { id?: unknown } | null)?.id === 'BRANCHING_UNSUPPORTED';
 }
 
 export class SessionThread {
