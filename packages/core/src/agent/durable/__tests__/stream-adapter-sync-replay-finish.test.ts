@@ -42,4 +42,43 @@ describe('durable stream adapter replay during subscribe', () => {
       await pubsub.close();
     }
   });
+
+  it('aborts a reader whose abort FINISH is replayed synchronously while it subscribes', async () => {
+    const runId = 'sync-replay-abort-run';
+    // A replay transport may deliver history inside the subscribe call, before the adapter builds its output.
+    class SyncReplayPubSub extends EventEmitterPubSub {
+      override async subscribeWithReplay(...args: Parameters<EventEmitterPubSub['subscribeWithReplay']>) {
+        const [, callback] = args;
+        void callback({
+          type: AgentStreamEventTypes.FINISH,
+          runId,
+          data: {
+            output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+            stepResult: { reason: 'abort', warnings: [], isContinued: false },
+          },
+        } as any);
+        await super.subscribeWithReplay(...args);
+      }
+    }
+    const pubsub = new SyncReplayPubSub();
+    const onAbort = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: `msg-${runId}`,
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onAbort,
+    });
+
+    try {
+      await ready;
+      const types: string[] = [];
+      for await (const chunk of output.fullStream) types.push(chunk.type);
+      expect(types).toContain('abort');
+      expect(onAbort).toHaveBeenCalledOnce();
+    } finally {
+      cleanup();
+      await pubsub.close();
+    }
+  });
 });
