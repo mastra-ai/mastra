@@ -191,20 +191,23 @@ describe('Knowledge guidance for an agent without read tools', () => {
     }
   });
 
-  it('renders host pinned context without naming read tools when the instance has no read tools', async () => {
+  it('renders host pinned context naming read tools only when the host has them', async () => {
     for (const pins of ['page', 'listing', 'overflow'] as const) {
       const storage = new InMemoryStore({ id: `host-${pins}` });
       await seedPins(storage, pins);
-      const host = (tools: { read?: boolean; write?: boolean }) =>
+      const host = (tools: { read?: boolean; write?: boolean }, read?: boolean) =>
         new Knowledge({
           storage,
           scopes: knowledgeMemoryScopes(),
           tools,
           pinnedContext: pins === 'overflow' ? { maxPins: 1 } : { maxTokens: 150 },
-        }).getPinnedContext({ principals: ['org:acme'] });
-      const without = JSON.stringify(await host({ write: true }));
-      expect(without).not.toMatch(/knowledge_read|knowledge_list/);
-      expect(JSON.stringify(await host({ read: true }))).toMatch(/knowledge_read|knowledge_list/);
+        }).getPinnedContext({ principals: ['org:acme'], read });
+      const readTools = /knowledge_read|knowledge_list/;
+      expect(JSON.stringify(await host({ write: true }))).not.toMatch(readTools);
+      expect(JSON.stringify(await host({ read: true }))).toMatch(readTools);
+      // A host overriding read in createTools passes the same read here.
+      expect(JSON.stringify(await host({ read: true }, false))).not.toMatch(readTools);
+      expect(JSON.stringify(await host({ write: true }, true))).toMatch(readTools);
     }
   });
 
