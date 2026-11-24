@@ -86,6 +86,31 @@ export async function runFencedStatement<T>(
 }
 
 /**
+ * The first locking read of a read-modify-write transaction, with the fence
+ * check folded in when there is a fence: `oneOrNone` of `sql`, but throws
+ * {@link RunFenceConflictError} when `fence` is not the run's current claim.
+ * The claim row stays share-locked until the transaction ends, as with
+ * {@link assertRunFence}.
+ */
+export function lockingReadFenced<T>(
+  t: Queryable,
+  claimsTable: string,
+  fence: RunFence | undefined,
+  operation: string,
+  sql: string,
+  values: unknown[],
+): Promise<T | null> {
+  if (!fence) return t.oneOrNone<T>(sql, values);
+  return runFencedStatement<T>(
+    t,
+    fence,
+    operation,
+    `WITH ${runFenceCte(claimsTable, values.length + 1)}, locked AS (${sql}) ${fencedResultSql('locked')}`,
+    [...values, ...runFenceParams(fence)],
+  );
+}
+
+/**
  * Runs `write` directly when it carries no fence, or in a transaction behind
  * the fence check when it does.
  */

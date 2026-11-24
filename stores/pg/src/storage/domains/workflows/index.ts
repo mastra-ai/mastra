@@ -64,9 +64,9 @@ import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../..
 import type { PgDomainConfig } from '../../db';
 import { buildConstraintName } from '../../db/constraint-utils';
 import {
-  assertRunFence,
   DB_NOW_MS,
   fencedResultSql,
+  lockingReadFenced,
   runFenceCte,
   runFencedStatement,
   runFenceParams,
@@ -1169,8 +1169,11 @@ export class WorkflowsPG extends WorkflowsStorage {
     const fence = resolveRunFence(this, explicitFence, runId);
     try {
       return await this.#db.client.tx(async t => {
-        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'updateWorkflowRunHeader');
-        const run = await t.oneOrNone<{ header: WorkflowRunHeader }>(
+        const run = await lockingReadFenced<{ header: WorkflowRunHeader }>(
+          t,
+          this.#runOwnersTable(),
+          fence,
+          'updateWorkflowRunHeader',
           `SELECT header FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
@@ -1264,7 +1267,6 @@ export class WorkflowsPG extends WorkflowsStorage {
     const expected = expectedStatus === undefined ? [] : [[expectedStatus].flat()];
     try {
       return await this.#db.client.tx(async t => {
-        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'writeWorkflowRunCheckpoint');
         const base = state === undefined ? stateBase : undefined;
         let baseLastSeq: number | undefined;
         if (base) {
@@ -1279,13 +1281,21 @@ export class WorkflowsPG extends WorkflowsStorage {
           );
           baseLastSeq = row?.lastSeq;
         }
-        const header = await t.oneOrNone<{ lastSeq: number; stateShared: boolean; runToken: string }>(
-          this.#upsertHeaderSql(true, expected.length ? '$17' : undefined),
-          [
-            ...this.#headerParams(run, entries.length, stateColumnsWrite({ state, stateBase, statePatch }, true)),
-            ...expected,
-          ],
-        );
+        const values = [
+          ...this.#headerParams(run, entries.length, stateColumnsWrite({ state, stateBase, statePatch }, true)),
+          ...expected,
+        ];
+        const upsert = this.#upsertHeaderSql(true, expected.length ? '$17' : undefined, !!fence);
+        // The fence check rides on the header upsert, the first statement that touches this run.
+        const header = fence
+          ? await runFencedStatement<{ lastSeq: number; stateShared: boolean; runToken: string }>(
+              t,
+              fence,
+              'writeWorkflowRunCheckpoint',
+              `WITH ${runFenceCte(this.#runOwnersTable(), values.length + 1)}, h AS (${upsert}) ${fencedResultSql('h')}`,
+              [...values, ...runFenceParams(fence)],
+            )
+          : await t.oneOrNone<{ lastSeq: number; stateShared: boolean; runToken: string }>(upsert, values);
         // `expectedStatus` rejected the write: the header is left as is, and so are the entries.
         if (!header) return null;
         if (base) {
@@ -1396,10 +1406,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         );
       }
       row = guarded
-        ? await this.#db.client.tx(async t => {
-            if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries');
-            return this.#appendGuarded(t, { ...args, expected });
-          })
+        ? await this.#db.client.tx(t => this.#appendGuarded(t, { ...args, expected, fence }))
         : await this.#appendWithoutHeader(this.#db.client, {
             workflowName,
             runId,
@@ -1439,6 +1446,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       expected,
       startGuard,
       completionGuard,
+      fence,
     }: {
       workflowName: string;
       runId: string;
@@ -1451,11 +1459,16 @@ export class WorkflowsPG extends WorkflowsStorage {
       expected?: WorkflowRunStatus[];
       startGuard?: WorkflowStepStartGuard;
       completionGuard?: WorkflowStepCompletionGuard;
+      fence?: RunFence;
     },
   ): Promise<AppendedRow | null> {
     const [stepId, ...others] = Object.keys(steps);
     if (!stepId || others.length) throw new Error('A guarded append writes exactly one step');
-    const run = await t.oneOrNone<{ header: WorkflowRunHeader }>(
+    const run = await lockingReadFenced<{ header: WorkflowRunHeader }>(
+      t,
+      this.#runOwnersTable(),
+      fence,
+      'appendWorkflowRunEntries',
       `SELECT header FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
       [workflowName, runId],
     );
@@ -1611,9 +1624,12 @@ export class WorkflowsPG extends WorkflowsStorage {
     let written: { row: AppendedRow; result: StepResult<any, any, any, any> } | null;
     try {
       written = await this.#db.client.tx(async t => {
-        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'mergeWorkflowRunStepResult');
         // Locks the run before reading the step, so a concurrent merge into it has committed first.
-        const run = await t.oneOrNone(
+        const run = await lockingReadFenced(
+          t,
+          this.#runOwnersTable(),
+          fence,
+          'mergeWorkflowRunStepResult',
           `SELECT 1 FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
@@ -1977,12 +1993,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
-        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'updateWorkflowResults');
         const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
 
         // Load existing snapshot within transaction with FOR UPDATE to lock the row
         // This prevents concurrent updates from reading stale data
-        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+        const existingSnapshotResult = await lockingReadFenced<{ snapshot: WorkflowRunState }>(
+          t,
+          this.#runOwnersTable(),
+          fence,
+          'updateWorkflowResults',
           `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
@@ -2074,10 +2093,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
-        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'updateWorkflowState');
-
+        // Both reads check the fence: a v1 run is read after the v2 read found nothing.
         if (storageVersion !== 1) {
-          const run = await t.oneOrNone<{ header: WorkflowRunHeader }>(
+          const run = await lockingReadFenced<{ header: WorkflowRunHeader }>(
+            t,
+            this.#runOwnersTable(),
+            fence,
+            'updateWorkflowState',
             `SELECT header FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
             [workflowName, runId],
           );
@@ -2105,7 +2127,11 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Load existing snapshot within transaction with FOR UPDATE to lock the row
         // This prevents concurrent updates from reading stale data
-        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+        const existingSnapshotResult = await lockingReadFenced<{ snapshot: WorkflowRunState }>(
+          t,
+          this.#runOwnersTable(),
+          fence,
+          'updateWorkflowState',
           `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
@@ -2393,11 +2419,14 @@ export class WorkflowsPG extends WorkflowsStorage {
         return;
       }
       await this.#db.client.tx(async t => {
-        if (resolvedFence) await assertRunFence(t, this.#runOwnersTable(), resolvedFence, 'deleteWorkflowRunById');
         // The storage v2 header is locked first: its row lock waits out an in-flight append, and the
         // entries delete, a later statement, then sees that append's entries. The runs built on
         // this one's state are detached while its entries can still be read.
-        const run = await t.oneOrNone<{ stateShared: boolean }>(
+        const run = await lockingReadFenced<{ stateShared: boolean }>(
+          t,
+          this.#runOwnersTable(),
+          resolvedFence,
+          'deleteWorkflowRunById',
           `SELECT "stateShared" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
