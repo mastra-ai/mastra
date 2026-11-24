@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'Target name from .github/docs-sync.json, or "all"'
+        description: 'Target name from .github/docs-sync.json (one section of a site), or "all"'
         required: false
         default: 'all'
         type: string

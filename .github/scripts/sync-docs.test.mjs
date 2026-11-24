@@ -184,6 +184,15 @@ describe('validateManifest', () => {
     for (const [second, error] of cases) {
       assert.throws(() => validateManifest({ targets: [target(), second] }, { rootDir: root }), error);
     }
+    writeFiles(path.join(root, 'docs/src/site-api'), { 'client.mdx': '# Client\n' });
+    const api = ref({ name: 'api', source: 'docs/src/site-api', dest: 'src/api', routeBasePath: '/reference/api' });
+    assert.throws(
+      () => validateManifest({ targets: [target(), ref(), api] }, { rootDir: root }),
+      /targets\[1\] and targets\[2\]: nested "routeBasePath"/,
+    );
+    assert.doesNotThrow(() =>
+      validateManifest({ targets: [target(), ref(), { ...api, routeBasePath: '/referenced' }] }, { rootDir: root }),
+    );
     // Different repos may reuse a routeBasePath, a branch, and even the same source.
     assert.doesNotThrow(() =>
       validateManifest(
@@ -424,6 +433,22 @@ describe('main', () => {
     assert.equal(code, 0);
     assert.deepEqual(lines, ['site: added 4, updated 0, deleted 0']);
     assert.deepEqual(readTree(path.join(into, 'src/docs')), SOURCE_FILES);
+  });
+
+  test('--into refuses a selection that spans more than one site', async () => {
+    const root = makeRoot();
+    const into = path.join(tmp, 'checkout');
+    const errors = [];
+    const code = await main({
+      argv: ['--target', 'all', '--into', into],
+      rootDir: root,
+      manifestPath: writeManifest(root, [target(), target({ name: 'other', repo: 'mastra-ai/other' })]),
+      log: () => {},
+      logError: line => errors.push(line),
+    });
+    assert.equal(code, 2);
+    assert.match(errors.join('\n'), /--into takes one site/);
+    assert.equal(fs.existsSync(into), false);
   });
 
   test('--into refuses a dest reached through a symlink in the checkout', async () => {

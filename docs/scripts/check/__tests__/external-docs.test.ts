@@ -244,6 +244,18 @@ describe('external-docs check', () => {
       ])
     })
 
+    it('routes index pages and frontmatter ids under the section routeBasePath', async () => {
+      const files = {
+        ...site('/reference#overview'),
+        [ref('index.mdx')]: page('# Reference\n\n## Overview\n\nText.'),
+        [ref('renamed.mdx')]: page('# Renamed', 'id: client'),
+        [ref('sidebars.js')]: sidebar(['api', 'index', 'client']),
+      }
+      expect(await run(files, sections())).toEqual([])
+      files['index.mdx'] = page('# Home\n\nSee [the client](/reference/client) and [old](/reference/renamed).')
+      expect(summary(await run(files, sections()))).toEqual(['mastra/external-internal-link src/site/index.mdx:7'])
+    })
+
     it('does not resolve links into a different site', async () => {
       expect(summary(await run(site('/reference/api'), sections('mastra-ai/other')))).toEqual([
         'mastra/external-internal-link src/site/index.mdx:7',

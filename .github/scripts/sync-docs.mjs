@@ -113,8 +113,13 @@ export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
       // Overlapping dirs in one repo would delete each other's files.
       if (overlaps(a?.dest, b?.dest)) errors.push(`${pair}: overlapping "dest" in ${a.repo}`);
       if (a?.branch !== b?.branch) errors.push(`${pair}: same repo ${a.repo} needs the same "branch"`);
-      if ((a?.routeBasePath ?? '/') === (b?.routeBasePath ?? '/')) {
+      const routeA = a?.routeBasePath ?? '/';
+      const routeB = b?.routeBasePath ?? '/';
+      if (routeA === routeB) {
         errors.push(`${pair}: same "routeBasePath" in ${a.repo}`);
+      } else if (routeA !== '/' && routeB !== '/' && overlaps(routeA, routeB)) {
+        // Nested section bases (e.g. /reference and /reference/api) can produce the same route from both sections.
+        errors.push(`${pair}: nested "routeBasePath" in ${a.repo}`);
       }
     }
   }
@@ -287,6 +292,12 @@ export async function main({
   }
 
   if (values.into) {
+    // A local dir is one checkout of one site; mirroring two sites into it would overwrite one with the other.
+    const repos = new Set(selected.map(target => target.repo));
+    if (repos.size > 1) {
+      logError(`--into takes one site, but "${values.target}" spans ${[...repos].join(', ')}. Pass a target name.`);
+      return 2;
+    }
     for (const target of selected) {
       const into = path.resolve(values.into);
       const result = mirror(path.join(rootDir, target.source), path.join(into, target.dest), { withinDir: into });
