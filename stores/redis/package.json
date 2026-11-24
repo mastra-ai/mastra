@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "redis": "5.12.3"
+    "redis": "5.12.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -39,7 +39,7 @@
     "execa": "^9.6.1",
     "fs-extra": "^11.4.1",
     "pino": "^10.4.0",
-    "redis": "^5.12.3"
+    "redis": "^5.12.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
