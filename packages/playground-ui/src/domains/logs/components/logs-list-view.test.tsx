@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LogRecord } from '../types';
 import { LogsListView } from './logs-list-view';
 
@@ -43,6 +43,51 @@ afterEach(() => {
   cleanup();
   scrollToIndex.mockClear();
   visibleCount = undefined;
+});
+
+const observers = new Set<TestIntersectionObserver>();
+
+class TestIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = '';
+  readonly scrollMargin = '';
+  readonly thresholds = [];
+  private readonly targets: Element[] = [];
+  constructor(private readonly callback: IntersectionObserverCallback) {}
+  observe(target: Element) {
+    this.targets.push(target);
+    observers.add(this);
+  }
+  unobserve() {}
+  disconnect() {
+    observers.delete(this);
+  }
+  takeRecords() {
+    return [];
+  }
+  intersect() {
+    const entries = this.targets.map(target => ({
+      target,
+      isIntersecting: true,
+      intersectionRatio: 1,
+      time: 0,
+      boundingClientRect: new DOMRect(),
+      intersectionRect: new DOMRect(),
+      rootBounds: null,
+    }));
+    this.callback(entries, this);
+  }
+}
+
+const scrollOlderEdgeIntoView = () => observers.forEach(observer => observer.intersect());
+
+beforeEach(() => {
+  vi.stubGlobal('IntersectionObserver', TestIntersectionObserver);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  observers.clear();
 });
 
 describe('LogsListView keyboard navigation', () => {
@@ -183,7 +228,7 @@ describe('LogsListView stream density', () => {
   });
 
   describe('oldest first, like a terminal', () => {
-    it('opens on the newest line before it loads older logs at the top', async () => {
+    it('opens on the newest line and loads older logs only once the top scrolls into view', async () => {
       const onFetchNextPage = vi.fn();
       const props = {
         density: 'stream',
@@ -198,12 +243,14 @@ describe('LogsListView stream density', () => {
       const { rerender } = render(<LogsListView {...props} />);
 
       await waitFor(() => expect(scrollToIndex).toHaveBeenCalledWith(1, { align: 'end' }));
+      scrollOlderEdgeIntoView();
       expect(onFetchNextPage).not.toHaveBeenCalled();
 
       visibleCount = undefined;
       rerender(<LogsListView {...props} logs={[...sandboxLines]} />);
+      scrollOlderEdgeIntoView();
 
-      await waitFor(() => expect(onFetchNextPage).toHaveBeenCalledOnce());
+      expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
 
     it('shows that older logs are loading above the lines', () => {
@@ -228,7 +275,7 @@ describe('LogsListView stream density', () => {
   });
 
   describe('newest first, like an audit log', () => {
-    it('loads older logs only once the bottom line is in view', async () => {
+    it('loads older logs once the bottom scrolls into view, but not while a page is loading', () => {
       const onFetchNextPage = vi.fn();
       const props = {
         density: 'stream',
@@ -238,15 +285,15 @@ describe('LogsListView stream density', () => {
         hasNextPage: true,
         onFetchNextPage,
       } as const;
-      visibleCount = 1;
-      const { rerender } = render(<LogsListView {...props} />);
+      const { rerender } = render(<LogsListView {...props} isFetchingNextPage />);
+      scrollOlderEdgeIntoView();
       expect(onFetchNextPage).not.toHaveBeenCalled();
       expect(scrollToIndex).not.toHaveBeenCalled();
 
-      visibleCount = undefined;
-      rerender(<LogsListView {...props} logs={[...sandboxLines]} />);
+      rerender(<LogsListView {...props} />);
+      scrollOlderEdgeIntoView();
 
-      await waitFor(() => expect(onFetchNextPage).toHaveBeenCalledOnce());
+      expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
 
     it('shows that older logs are loading below the lines', () => {

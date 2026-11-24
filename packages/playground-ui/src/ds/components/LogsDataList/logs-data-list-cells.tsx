@@ -122,7 +122,7 @@ export interface LogsDataListLineCellProps {
   timestamp: Date | string;
   level: LogLevel;
   message: string;
-  fields?: Record<string, unknown> | null;
+  fields?: Record<string, unknown>;
 }
 
 const COLLAPSED_LINE_COUNT = 3;
@@ -182,15 +182,13 @@ export function LogsDataListLineCell({ timestamp, level, message, fields }: Logs
   return (
     <>
       <span aria-hidden className={cn('absolute inset-y-1 left-1 w-0.5 rounded-full', logLevelDotClass[level])} />
-      <DataListCell className="content-start py-0.5 font-mono tabular-nums">
+      <DataListCell className="content-start font-mono tabular-nums">
         <time dateTime={toDate(timestamp)?.toISOString()}>
           {formatLogLineTimestamp(timestamp) ?? String(timestamp)}
         </time>
       </DataListCell>
-      <DataListCell className={cn('content-start py-0.5 font-mono uppercase', logLevelTextClass[level])}>
-        {level}
-      </DataListCell>
-      <DataListCell className="block py-0.5 font-mono wrap-anywhere whitespace-pre-wrap text-foreground @max-md:col-span-full @max-md:-mt-3">
+      <DataListCell className={cn('content-start font-mono uppercase', logLevelTextClass[level])}>{level}</DataListCell>
+      <DataListCell className="block font-mono wrap-anywhere whitespace-pre-wrap text-foreground @max-md:col-span-full">
         <LogMessage message={message} />
         {fieldEntries.length > 0 && (
           <span className="ml-3">

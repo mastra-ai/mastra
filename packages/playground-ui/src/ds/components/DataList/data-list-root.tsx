@@ -184,6 +184,7 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
   light: '[--row:var(--background)]',
   well: cn(
     "relative bg-row after:pointer-events-none after:absolute after:inset-0 after:z-30 after:rounded-[inherit] after:shadow-rim after:content-['']",
+    '[&_.data-list-top]:border-b [&_.data-list-top]:border-border',
     '[&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
   ),
 };
@@ -204,7 +205,7 @@ const dataListVariantBackground: Record<DataListVariant, string> = {
 
 const dataListDensityClasses: Record<DataListDensity, string | undefined> = {
   default: undefined,
-  compact: '[&_.data-list-row]:min-h-6',
+  compact: '[&_.data-list-row]:min-h-6 [&_.data-list-row]:gap-y-1 [&_.data-list-row]:py-0.5',
 };
 
 const dataListFitClasses: Record<DataListFit, string> = {
