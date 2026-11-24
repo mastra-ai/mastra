@@ -51,7 +51,6 @@ import {
   listSessionOpenRuns,
   listThreadOpenRuns,
   recordSessionRunStart,
-  takeOverInterruptedSessionRuns,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
 import { sessionHoldsWork } from '../session/session-unloader.js';
@@ -131,9 +130,6 @@ const RUN_REGISTRY_HEARTBEAT_MS = 10 * 60_000;
 // A run the registry still shows past this is a hang, not a slow run: failed
 // terminally so the lease and the in-flight slot come back.
 const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
-/** Sent to a session whose run died with its worker, so the phase continues on this one. */
-const RESUME_INTERRUPTED_RUN =
-  'Your previous run was interrupted because the worker running it stopped. Continue the work you were doing from where it left off. Check what was already done (files, commits, pushes) before repeating any step.';
 // Dispatches can legitimately run for minutes. Woken skill invocations hold
 // capacity until their agent run reaches a terminal state; binding preparation
 // also runs detached from the poll loop under this concurrency cap.
@@ -1694,9 +1690,8 @@ export class FactoryDecisionDispatcher {
                   });
           await this.#switchThread(session, binding, { userId: startedBy, orgId: record.orgId });
           this.#reviewSessions.set(record, { sessionId: binding.sessionId, threadId: binding.threadId });
-          const kickoffId =
+          const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
-          let deliveryId = kickoffId;
           const kickoffLanded = async () =>
             (await session.thread.listActiveMessages()).some(message => message.id === deliveryId);
           const kickoffStale = async () =>
@@ -1714,41 +1709,12 @@ export class FactoryDecisionDispatcher {
               `Factory binding ${binding.id} changed while waiting for its open run to end.`,
             );
           }
-          // A landed kickoff whose run died with its worker resumes here instead of being taken as
-          // done. Any delivery of this decision counts: a retry after a failed continuation resumes too.
-          const deliveryLanded = async () =>
-            (await session.thread.listActiveMessages()).some(
-              message =>
-                message.id === record.id ||
-                message.id.startsWith(`${record.id}:retry:`) ||
-                message.id.startsWith(`${record.id}:resume:`),
-            );
-          const interrupted = (await deliveryLanded())
-            ? await this.#interruptedRuns(session, binding, record.id, runStillActive)
-            : [];
-          if (interrupted.length > 0 && !(await kickoffStale())) {
-            if (await this.#runStopRequested(record.orgId, binding.id)) throw new FactoryRunStopped();
-            const resumeId = `${kickoffId}:resume:${record.attempts}`;
-            const tookOver = await takeOverInterruptedSessionRuns(session, {
-              audit: this.#audit,
-              kickoffIds: interrupted,
-              resumeKickoffId: resumeId,
-              ownerId: this.#ownerId,
-            });
-            if (!tookOver) {
-              throw new Error(
-                `Factory could not take over the interrupted run of binding ${binding.id}: recording it as aborted failed, or another worker took it over first.`,
-              );
-            }
-            deliveryId = resumeId;
-          }
           if (await kickoffLanded()) {
             if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
             return this.#replayLanded(record, decision, session, runStillActive);
           }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
-          const resuming = deliveryId !== kickoffId;
-          const coveredAt = resuming ? null : await this.#headReviewedSince(record, decision);
+          const coveredAt = await this.#headReviewedSince(record, decision);
           if (coveredAt) {
             // The verdict this pass was queued for exists; its status reports that verdict, not a cancelled run.
             await this.#reviewStatus(record, decision, {
@@ -1763,15 +1729,12 @@ export class FactoryDecisionDispatcher {
           const current = record.workItemId
             ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
             : null;
-          const kickoffContents = resuming
-            ? RESUME_INTERRUPTED_RUN
-            : withWorkItemDescription(resolved.contents, current?.description);
+          const kickoffContents = withWorkItemDescription(resolved.contents, current?.description);
           // A skill kickoff is system-generated, not something the human typed: send it
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces
           // record the skill name. Plain-prompt kickoffs stay user messages.
-          const kickoffSignal = resuming
-            ? { type: 'reactive' as const, tagName: 'system-reminder' }
-            : resolved.skillName !== undefined
+          const kickoffSignal =
+            resolved.skillName !== undefined
               ? {
                   type: 'reactive' as const,
                   tagName: 'skill',
@@ -1784,9 +1747,9 @@ export class FactoryDecisionDispatcher {
             return this.#replayLanded(record, decision, session, runStillActive);
           }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
-          if (!resuming) await this.#reviewQueuedOnce(record, decision);
+          await this.#reviewQueuedOnce(record, decision);
           if (decision.cancelInFlight && session.stream.isActive()) session.abort();
-          const precedingMessage = resuming ? undefined : decision.precedingMessage;
+          const precedingMessage = decision.precedingMessage;
           if (precedingMessage) {
             await awaitNotification(() =>
               session.sendNotificationSignal(
@@ -3286,29 +3249,6 @@ export class FactoryDecisionDispatcher {
       }
       await waitForSessionRunAudit(session);
     }
-  }
-
-  /**
-   * The runs of this decision's deliveries (a kickoff, its retries and resumes) that died with their worker: still
-   * open on the ledger, but heartbeating nowhere and not running here. A run that ended normally
-   * left the ledger when its end was observed, so an entry that outlived its owner never finished.
-   */
-  async #interruptedRuns(
-    session: BoundDispatcherSession,
-    binding: FactoryRunBindingRecord,
-    decisionId: string,
-    runStillActive: () => boolean,
-  ): Promise<string[]> {
-    if (runStillActive()) return [];
-    const open = await listThreadOpenRuns(session, binding.threadId);
-    return open
-      .filter(
-        entry =>
-          entry.bindingId === binding.id &&
-          (entry.kickoffId === decisionId || entry.kickoffId.startsWith(`${decisionId}:`)) &&
-          !isOpenRunLiveElsewhere(entry, this.#ownerId),
-      )
-      .map(entry => entry.kickoffId);
   }
 
   async #requireSession(binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<BoundDispatcherSession> {
