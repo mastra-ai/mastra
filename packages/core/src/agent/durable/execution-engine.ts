@@ -104,13 +104,29 @@ export class DurableExecutionEngine {
     const keepReplayEvent = createSupersededEventFilter(history);
     const attachedAtLogIndex = newestLogIndex(history);
     if (!offset) return { keepReplayEvent, attachedAtLogIndex };
-    const skipped = history.slice(0, offset);
-    if (skipped.length === offset) {
-      let floor: number | undefined;
-      for (const event of skipped) {
-        const generation = event.generation;
-        if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
-      }
+    // The floor is the highest generation among the events the client already
+    // consumed (every event below its offset). Trust the log for it only when
+    // the log provably still holds all of them: indices are opaque cursors
+    // (see MastraServerCache.listPushIndexed), and a run log's entries share
+    // one TTL, so the log is either complete from its first retained frame or
+    // was recreated with a higher seed. Contiguity below the offset — as many
+    // entries as the index range spans — proves completeness. Anything else
+    // (a reseeded log, holes from failed appends) falls back to the run's
+    // current generation from storage, which is a stricter floor, so it must
+    // never be used when the log can answer: it would drop committed events
+    // from earlier generations that were never superseded.
+    let first: number | undefined;
+    let below = 0;
+    let floor: number | undefined;
+    for (const event of history) {
+      const index = event.index;
+      if (typeof index !== 'number' || index >= offset) continue;
+      if (first === undefined || index < first) first = index;
+      below++;
+      const generation = event.generation;
+      if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
+    }
+    if (first !== undefined && below === offset - first) {
       return { minGeneration: floor, keepReplayEvent, attachedAtLogIndex };
     }
     return { minGeneration: await readRunGeneration(this.mastra, runId), keepReplayEvent, attachedAtLogIndex };
@@ -166,7 +182,18 @@ export class DurableExecutionEngine {
     if (typeof historyPubsub.getHistory !== 'function') return 'latest';
     try {
       const history = await historyPubsub.getHistory(AGENT_STREAM_TOPIC(runId));
-      return Array.isArray(history) && history.length > 0 ? history.length : 'latest';
+      if (!Array.isArray(history) || history.length === 0) return 'latest';
+      // Indices are opaque cursors, not list positions: a log recreated after
+      // expiry is epoch-seeded (see MastraServerCache.listPushIndexed), so the
+      // boundary is one past the newest numbered frame. Using the history
+      // length here would sit below every seeded index and replay the prior
+      // segment — including its terminal event — into the resumed reader.
+      let newest = -1;
+      for (const event of history) {
+        const index = (event as { index?: unknown })?.index;
+        if (typeof index === 'number' && index > newest) newest = index;
+      }
+      return newest >= 0 ? newest + 1 : 'latest';
     } catch {
       return 'latest';
     }

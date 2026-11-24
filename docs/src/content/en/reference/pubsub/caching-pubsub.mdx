@@ -75,6 +75,22 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
         description: 'Logger for errors. Falls back to `console.error` when omitted.',
         isOptional: true,
       },
+      {
+        name: 'runLogTtlMs',
+        type: 'number',
+        description:
+          'Minimum retention requested for `agent.stream.*` run logs with every append. Size it to the longest quiet gap of a run that is still executing plus a reconnect window; storage holds the messages, and an expired log resynchronizes observers instead of breaking them. A cache whose own TTL is longer keeps that instead.',
+        isOptional: true,
+        defaultValue: '3600000 (1 hour)',
+      },
+      {
+        name: 'threadStreamLogTtlMs',
+        type: 'number',
+        description:
+          'Minimum retention requested for `agent.thread-stream.*` logs with every append. A cache whose own TTL is longer keeps that instead.',
+        isOptional: true,
+        defaultValue: '3600000 (1 hour)',
+      },
     ],
   },
 ]}
@@ -92,7 +108,8 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
   {
     name: 'supportsOffsets',
     type: 'boolean',
-    description: 'Returns `true`. Cached events have sequential indexes that support numeric offset replay.',
+    description:
+      'Returns `true`. Cached events carry strictly increasing numeric indexes that support offset replay. Indexes are opaque cursors, not positions: a fresh log starts at a clock-derived value, so pass an index read from an event (plus one), never a computed count.',
   },
 ]}
 />
@@ -103,7 +120,7 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
 
 ### `publish(topic, event)`
 
-Caches the event with a sequential index, then publishes it to the inner pub/sub.
+Caches the event with the topic's next index, then publishes it to the inner pub/sub. Consecutive publishes get consecutive indexes; a topic whose log expired or was cleared restarts above every index it issued before, so a reconnecting subscriber can never mistake new events for already-seen ones.
 
 ```typescript
 await pubsub.publish('my-topic', {

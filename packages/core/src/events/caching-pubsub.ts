@@ -3,6 +3,7 @@ import type { IMastraLogger } from '../logger';
 import { isLeaseProvider, PubSub } from './pubsub';
 import type { LeaseProvider } from './pubsub';
 import { cachedLogTtlMs, toCachedLogFrame } from './topics';
+import type { CachedLogTtls } from './topics';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -62,6 +63,19 @@ export interface CachingPubSubOptions {
    * ignored for compatibility.
    */
   source?: PubSub;
+  /**
+   * Retention stamped on `agent.stream.<runId>` logs with every append.
+   * Defaults to {@link DEFAULT_RUN_LOG_TTL_MS}. Size it to the longest quiet
+   * gap of a run that is still executing plus a reconnect window — storage is
+   * the system of record, and an expired log resyncs observers instead of
+   * breaking them.
+   */
+  runLogTtlMs?: number;
+  /**
+   * Retention stamped on `agent.thread-stream.<key>` logs with every append.
+   * Defaults to {@link DEFAULT_THREAD_STREAM_LOG_TTL_MS}.
+   */
+  threadStreamLogTtlMs?: number;
 }
 
 const EMPTY_INDICES: ReadonlySet<number> = new Set();
@@ -131,6 +145,7 @@ export class CachingPubSub extends PubSub {
   private readonly shouldCache?: (topic: string) => boolean;
   private readonly extendExistingLogsOnly: boolean;
   private readonly onUnlogged?: (topic: string) => void;
+  private readonly logTtls: CachedLogTtls;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -154,6 +169,7 @@ export class CachingPubSub extends PubSub {
     this.shouldCache = options.shouldCache;
     this.extendExistingLogsOnly = options.extendExistingLogsOnly ?? false;
     this.onUnlogged = options.onUnlogged;
+    this.logTtls = { runLogTtlMs: options.runLogTtlMs, threadStreamLogTtlMs: options.threadStreamLogTtlMs };
   }
 
   /**
@@ -240,18 +256,24 @@ export class CachingPubSub extends PubSub {
    */
   private async readLogFrom(topic: string, from: number): Promise<Event[]> {
     const cacheKey = this.getCacheKey(topic);
-    let start = 0;
-    if (from > 0) {
-      // Length before counter: an append landing between the two reads can
-      // only overstate the holes, which starts the slice early, never late.
-      const length = await this.cache.listLength(cacheKey).catch(() => undefined);
-      const counter =
-        length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
-      if (typeof length === 'number' && typeof counter === 'number') {
-        start = Math.max(0, from - Math.max(0, counter - length));
+    let entries = from > 0 ? await this.readLogTailFrom(cacheKey, from) : undefined;
+    if (!entries) {
+      let start = 0;
+      if (from > 0) {
+        // Length before counter: an append landing between the two reads can
+        // only overstate the holes, which starts the slice early, never late.
+        // A counter seeded past the indices in the log (an expired log that
+        // was recreated) overstates them to the point of reading everything,
+        // which is still correct — the tail read above is the fast path there.
+        const length = await this.cache.listLength(cacheKey).catch(() => undefined);
+        const counter =
+          length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+        if (typeof length === 'number' && typeof counter === 'number') {
+          start = Math.max(0, from - Math.max(0, counter - length));
+        }
       }
+      entries = (await this.cache.listFromTo(cacheKey, start)) as Event[];
     }
-    const entries = (await this.cache.listFromTo(cacheKey, start)) as Event[];
     const numbered: Event[] = [];
     const unnumbered: Event[] = [];
     for (const event of entries) {
@@ -260,6 +282,34 @@ export class CachingPubSub extends PubSub {
     }
     numbered.sort((a, b) => a.index! - b.index!);
     return [...numbered, ...unnumbered];
+  }
+
+  /**
+   * Read only the slice of the log that can hold indices at or past `from`,
+   * sized from the last entry's index. List positions are contiguous, so a
+   * tail whose first entry is numbered at or below `from` provably contains
+   * every stored entry numbered `from` or later.
+   *
+   * Returns `undefined` when coverage cannot be proven — an unnumbered edge
+   * entry, a slice too wide to bound (indices are epoch-seeded, so a cursor
+   * from before a reseed is astronomically far from the tip), or a read
+   * failure — and the caller falls back to a wider read.
+   */
+  private async readLogTailFrom(cacheKey: string, from: number): Promise<Event[] | undefined> {
+    try {
+      const last = ((await this.cache.listFromTo(cacheKey, -1)) as Event[])[0];
+      if (!last) return []; // Empty log: nothing to replay.
+      if (typeof last.index !== 'number' || last.index < from) return undefined;
+      const width = last.index - from + 1;
+      if (!Number.isSafeInteger(width) || width > 100_000) return undefined;
+      const tail = (await this.cache.listFromTo(cacheKey, -width)) as Event[];
+      // A short result means the slice covered the whole log.
+      if (tail.length < width) return tail;
+      const first = tail[0];
+      return first && typeof first.index === 'number' && first.index <= from ? tail : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async publish(
@@ -293,7 +343,7 @@ export class CachingPubSub extends PubSub {
         this.getCacheKey(topic),
         this.getCounterKey(topic),
         toCachedLogFrame(topic, fullEvent),
-        cachedLogTtlMs(topic),
+        cachedLogTtlMs(topic, this.logTtls),
       );
     } catch (error) {
       this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
@@ -467,6 +517,14 @@ export class CachingPubSub extends PubSub {
         // is gone: it expired (or was cleared) and the run resumed, restarting
         // numbering at 0. Dropping it would swallow every frame of the new
         // segment, since all of their indices sit below the stale cursor.
+        // A clock-seeded cache usually renumbers *above* the cursor — a
+        // recreated counter is epoch-seeded past the indices it issued before
+        // (see MastraServerCache.listPushIndexed) — so its restarts normally
+        // land on the `seq > next` gap path instead. This path is what makes
+        // that a preference rather than a requirement: it also covers logs
+        // written by older cores, by caches that don't seed (Convex numbers
+        // densely), and the cases a clock seed can't rule out, such as a log
+        // recreated inside the seed's resolution or after a clock rollback.
         // Confirm by frame 0's id when one was captured on attach; otherwise by
         // the counter, which restarts with the log and so cannot sit below the
         // cursor in a continuous log.

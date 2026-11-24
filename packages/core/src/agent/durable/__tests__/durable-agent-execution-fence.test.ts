@@ -1179,8 +1179,13 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           const recovered = await agentB.recover(runId, { force: true });
           const recoveryDone = drain(recovered.fullStream);
           await recovering.entered;
-          // Offset 1 skips the initial iteration boundary, but must retain the committed text and tool exchange.
-          const observation = await agentB.observe(runId, { offset });
+          // Offset 1 skips the initial iteration boundary, but must retain the committed text and tool
+          // exchange. Indices are opaque epoch-seeded cursors, so derive it from the first event's real index.
+          const firstIndex = ((await (agentB.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0))[0]
+            ?.index ?? 0) as number;
+          const observation = await agentB.observe(runId, {
+            offset: offset === undefined ? undefined : firstIndex + offset,
+          });
           const replayDone = drain(observation.fullStream);
           recovering.release();
           try {
@@ -1232,7 +1237,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         // A prior takeover already started this iteration; its predecessor publishes a late start.
         // The next recovery must select the highest generation, not the last appended start.
-        const successorStart = (await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0)).length;
+        // Indices are opaque cursors (epoch-seeded logs), so the successor's
+        // start boundary is one past the newest index, not the history length.
+        const priorHistory = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const successorStart =
+          Math.max(...priorHistory.map(event => (typeof event.index === 'number' ? event.index : -1))) + 1;
         for (const generation of [originalGeneration + 1, originalGeneration]) {
           await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
             type: AgentStreamEventTypes.ITERATION_START,

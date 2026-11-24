@@ -139,7 +139,13 @@ describe('Agent run records', () => {
       .filter(w => w.key === agentRunRecordKey('records-agent', output.runId))
       .map(w => w.value.status);
     expect(statuses).toEqual(['running', 'suspended', 'running', 'finished']);
-    expect(cache.writes.every(w => w.ttlMs === AGENT_RUN_RECORD_TTL_MS)).toBe(true);
+    // Every record carries the long authorization TTL, including the finished
+    // one: it is a single small key, and a run parked on a tool approval must
+    // stay authorizable long after its replay log expired.
+    const recordWrites = cache.writes.filter(w => w.key === agentRunRecordKey('records-agent', output.runId));
+    for (const write of recordWrites) {
+      expect(write.ttlMs).toBe(AGENT_RUN_RECORD_TTL_MS);
+    }
   });
 
   it.each(['read', 'write'] as const)(

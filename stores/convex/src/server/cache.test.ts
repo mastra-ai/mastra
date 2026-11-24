@@ -764,12 +764,16 @@ describe('CachingPubSub replay over ConvexServerCache', () => {
       { index: 4, n: 4 },
       { index: 5, n: 5 },
     ]);
-    // The counter reads back as a number, so the replay slices the log at the
-    // offset instead of reading it from the start. (`[key, 0, 0]` is the
-    // single-entry read of frame 0's id for restart detection.)
+    // The replay reads only the tail that can hold indices at or past the
+    // offset, rather than the whole log: one read for the last entry to size
+    // the slice, then the slice itself. (`[key, 0, 0]` is the single-entry
+    // read of frame 0's id for restart detection.) Convex resolves negative
+    // offsets against its counter and queries by index, so a tail of two
+    // covers exactly indices 4 and 5.
     expect(listFromTo.mock.calls).toEqual([
       ['pubsub:workflow.events.v2.run-1', 0, 0],
-      ['pubsub:workflow.events.v2.run-1', 4],
+      ['pubsub:workflow.events.v2.run-1', -1],
+      ['pubsub:workflow.events.v2.run-1', -2],
     ]);
   });
 

@@ -23,6 +23,41 @@ it('publishes and consumes through Valkey GLIDE', async () => {
   }
 });
 
+it('bounds a run’s topics by the run-log retention, not the idle backstop (COR-1534)', async () => {
+  // A finished run whose process died before its delayed clearTopic used to
+  // sit in Valkey for the full backstop. Its topics are fan-out, their replay
+  // history is bounded in the server cache, and the record that authorizes
+  // reading them expires in a day — so they take the same short retention
+  // their cached log does, while work queues keep the backstop for grouped
+  // consumers that may be offline.
+  const keyPrefix = `valkey-retention-${randomUUID()}`;
+  const runId = randomUUID();
+  const runTopic = `agent.stream.${runId}`;
+  const controlTopic = `agent.control.${runId}`;
+  const workQueue = `work-queue-${randomUUID()}`;
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', keyPrefix });
+  const ONE_HOUR = 60 * 60 * 1000;
+  try {
+    for (const topic of [runTopic, controlTopic, workQueue]) {
+      await pubsub.publish(topic, { type: 'finish', runId, data: {} });
+    }
+    for (const topic of [runTopic, controlTopic]) {
+      const ttl = await pttlOf(`${keyPrefix}:${topic}`);
+      expect(ttl).toBeGreaterThan(0);
+      expect(ttl).toBeLessThanOrEqual(ONE_HOUR);
+    }
+    expect(await pttlOf(`${keyPrefix}:${workQueue}`)).toBeGreaterThan(ONE_HOUR);
+
+    // Subscription setup stamps the TTL because MKSTREAM may have just created
+    // the key; it must not promote a run topic to the backstop.
+    await pubsub.subscribe(runTopic, (_event, ack) => void ack?.());
+    expect(await pttlOf(`${keyPrefix}:${runTopic}`)).toBeLessThanOrEqual(ONE_HOUR);
+  } finally {
+    for (const topic of [runTopic, controlTopic, workQueue]) await pubsub.clearTopic(topic);
+    await pubsub.close();
+  }
+});
+
 it('trims only saved run entries while preserving other runs, pinned entries, and terminal events', async () => {
   const keyPrefix = `valkey-trim-${randomUUID()}`;
   const topic = `thread-${randomUUID()}`;

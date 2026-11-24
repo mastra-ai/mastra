@@ -161,20 +161,26 @@ describe('ConvexServerCache', () => {
   });
 
   it('falls back to increment + listPush when the deployed handler lacks listPushIndexed', async () => {
+    // The base-class fallback reseeds an absent counter (INCR answered 1)
+    // from the clock in epoch microseconds, so a log reborn after expiry
+    // cannot reissue an index a subscriber already consumed (COR-1534).
+    const seed = Date.now() * 1000;
     client.rawResponses = [
       new Error('Unsupported operation listPushIndexed'),
       { result: 1 },
+      { result: undefined }, // SET writing the reseeded counter
       { result: undefined },
-      { result: 2 },
+      { result: seed + 2 },
       { result: undefined },
     ];
 
-    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-1' })).resolves.toBe(0);
-    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-2' })).resolves.toBe(1);
+    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-1' })).resolves.toBe(seed);
+    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-2' })).resolves.toBe(seed + 1);
 
     expect(client.calls.map(call => call.op)).toEqual([
       'listPushIndexed',
       'increment',
+      'set',
       'listPush',
       'increment',
       'listPush',

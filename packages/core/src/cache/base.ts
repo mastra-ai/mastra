@@ -41,21 +41,44 @@ export abstract class MastraServerCache extends MastraBase {
 
   /**
    * Atomically allocate the next index from `counterKey` and append `value`
-   * (with `index` set to the 0-based allocated index) to the list at `listKey`.
+   * (with `index` set to the allocated index) to the list at `listKey`.
    * Returns the assigned index.
    *
-   * The list and its counter must expire together: a counter that outlives its
-   * list restarts at 0 while subscribers still expect the old numbering, and a
-   * counter that expires first would start reusing indices already in the list.
-   * Every append refreshes both keys to the same deadline.
+   * Indices are opaque cursors — not list positions, and not dense. The
+   * contract callers rely on is that within one log's life indices strictly
+   * increase, consecutive appends get consecutive indices, and a log recreated
+   * after its predecessor expired or was evicted does not reissue an index a
+   * subscriber may still hold (COR-1534). Readers resume from `index + 1`, not
+   * from a frame count.
+   *
+   * How an implementation keeps that last part is up to it. The built-in
+   * Redis, Valkey and in-memory caches seed a counter they create from the
+   * clock in epoch MICROseconds — microseconds because a hot log appends
+   * faster than the millisecond clock advances, and an index must not outrun
+   * the next seed. Epoch microseconds stay well inside
+   * Number.MAX_SAFE_INTEGER (2^53 ≈ year 2255). `ConvexServerCache` instead
+   * allocates `max(counter, list length)` inside one transaction. Neither is
+   * absolute: a clock seed is only as monotonic as the clock, so recreating a
+   * log within the seed's resolution, or after the clock moves backwards, can
+   * still repeat an index. Readers detect a restarted log and resynchronise
+   * rather than depend on that never happening.
+   *
+   * The list and its counter must expire together: a counter that expires
+   * before its list would reuse indices already in the list. Every append
+   * refreshes both keys to the same deadline.
    *
    * @param ttlMs - Minimum lifetime for both keys, in milliseconds. A cache
-   *   whose own TTL is longer, or that never expires, keeps that instead. When
-   *   omitted, the cache's default TTL applies.
+   *   whose own TTL is longer keeps that instead. An explicit `ttlMs` applies
+   *   even when the cache's default expiry is disabled: the caller is stating
+   *   a retention bound for this log, and a log that never expires is never
+   *   reclaimed. When omitted, the cache's default TTL applies.
    *
    * The default implementation composes `increment()` + `listPush()` (two
-   * round-trips) and is therefore NOT atomic, and ignores `ttlMs`. Overrides
-   * should perform both steps in one server-side operation.
+   * round-trips) and is therefore NOT atomic, and ignores `ttlMs`. It is a
+   * compatibility path, not a supported basis for resumable replay: concurrent
+   * appends can interleave, an append can fail after its index is allocated,
+   * and the seed can race. Overrides should perform allocation, the seed check
+   * and the append in one server-side operation.
    */
   async listPushIndexed(
     listKey: string,
@@ -63,7 +86,17 @@ export abstract class MastraServerCache extends MastraBase {
     value: Record<string, unknown>,
     _ttlMs?: number,
   ): Promise<number> {
-    const index = (await this.increment(counterKey)) - 1;
+    let index = (await this.increment(counterKey)) - 1;
+    if (index === 0) {
+      // The counter was absent. Reseed so a log recreated after expiry is
+      // unlikely to reissue indices a subscriber already consumed. Not atomic,
+      // like the rest of this fallback: a concurrent append between the
+      // increment and this set loses its allocation. `MastraServerCache`
+      // subclasses that care about replay seed inside one server-side
+      // operation instead (see the Redis and Valkey caches).
+      index = Date.now() * 1000;
+      await this.set(counterKey, index + 1);
+    }
     await this.listPush(listKey, { ...value, index });
     return index;
   }
