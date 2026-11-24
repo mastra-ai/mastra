@@ -890,6 +890,61 @@ describe('PlatformGitLabIntegration', () => {
       await expect(target()).resolves.toMatchObject({ sourceId: '7:ops/infra' });
     });
 
+    it('refuses reads and writes through a context built for an instance the pin has since moved off', async () => {
+      class Exposed extends PlatformGitLabIntegration {
+        context(connectionId: string) {
+          return this.contextById(connectionId);
+        }
+      }
+      let hostname = 'gitlab.example.com';
+      const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const storage = new SourceControlStorageInMemory('gitlab');
+      const first = discovering();
+      first.versionControl.initialize({ storage });
+      const installation = await first.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: {
+          externalId: 'a1b_selfhosted',
+          accountName: 'ops',
+          accountType: 'GitLab',
+          metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+        },
+      });
+      const [repository] = await first.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '7', slug: 'ops/infra', defaultBranch: 'main' }],
+      });
+
+      // Restarted while the connection points at another instance; a context is built for it.
+      hostname = 'gitlab.other.com';
+      const restarted = new Exposed({
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
+      });
+      restarted.versionControl.initialize({ storage });
+      const other = await restarted.context('a1b_selfhosted');
+      expect(other.host).toBe('gitlab.other.com');
+
+      // The stored link re-pins the connection to its own instance, then the connection returns there.
+      await expect(
+        restarted.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository!.id }),
+      ).rejects.toMatchObject({ status: 409 });
+      hostname = 'gitlab.example.com';
+
+      const writes = () =>
+        fetchMock.mock.calls.filter(
+          ([url, init]) => String(url).includes('a1b_selfhosted/proxy') && init?.method === 'POST',
+        ).length;
+      await expect(other.api.listProjects()).rejects.toMatchObject({ status: 409 });
+      await expect(other.api.createMergeRequestNote('7', 3, 'hello')).rejects.toMatchObject({ status: 409 });
+      expect(writes()).toBe(0);
+    });
+
     it('refuses a write through a context built before the connection moved to another instance', async () => {
       let hostname = 'gitlab.example.com';
       const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));

@@ -243,6 +243,17 @@ export class PlatformGitLabIntegration
   async #context(connection: PlatformConnection): Promise<PlatformGitLabContext> {
     const host = await this.#host(connection);
     const selfHosted = connection.integrationId === GITLAB_SELF_HOSTED_INTEGRATION_ID;
+    // The pin can move after this context is built (a stored link re-pins the
+    // connection), so check against the instance this context is for, not the pin.
+    const confirmInstance = async () => {
+      const fresh = await this.#freshHost(connection);
+      if (fresh !== host) {
+        throw new GitLabApiError(
+          `Self-hosted GitLab connection ${connection.id} now points at ${fresh}, not ${host}, the instance this request was made for.`,
+          409,
+        );
+      }
+    };
     return {
       id: connection.id,
       label: connection.accountLabel,
@@ -252,7 +263,7 @@ export class PlatformGitLabIntegration
         // The proxy reaches whichever instance the connection names now, so a
         // write first confirms that is still the instance this context is for,
         // and a read confirms it before its results are used under this host.
-        ...(selfHosted ? { confirmInstance: async () => void (await this.#freshHost(connection)) } : {}),
+        ...(selfHosted ? { confirmInstance } : {}),
       }),
       connection: gitlabConnection(connection.id),
       host,
@@ -260,8 +271,8 @@ export class PlatformGitLabIntegration
         // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
         // Never persist or log the returned credential.
         // Read the instance fresh on both sides of the credential fetch; either
-        // read refuses if the connection has left the instance it was first seen on.
-        if (selfHosted) await this.#freshHost(connection);
+        // read refuses if the connection has left this context's instance.
+        if (selfHosted) await confirmInstance();
         const credential = await this.binding.connect.getCredential(connection.id).catch((error: unknown) => {
           if (error instanceof MastraConnectError && error.code === 'unsupported_credential_type') return null;
           throw error;
@@ -275,7 +286,7 @@ export class PlatformGitLabIntegration
         if (typeof token !== 'string' || !token.trim()) {
           throw new GitLabApiError('GitLab connection did not provide a repository credential.', 502);
         }
-        if (selfHosted) await this.#freshHost(connection);
+        if (selfHosted) await confirmInstance();
         return token;
       },
     };
