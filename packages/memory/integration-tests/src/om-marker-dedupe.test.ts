@@ -105,14 +105,14 @@ describe('a stored message that gained an OM marker after it was saved', () => {
   // Control: without it, a change that stops writing markers would make the next test pass for the wrong reason.
   it('reaches storage, so a reload sees it', async () => {
     const { memory, threadId } = await saveThenMark();
-    const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+    const { messages } = await memory.recall({ threadId, resourceId: RESOURCE, perPage: false });
     expect(messages).toHaveLength(1);
     expect(markerParts(messages[0]!)).toHaveLength(1);
   });
 
   it('is still the same message when it is recalled into the live list on the next turn', async () => {
     const { memory, threadId, list } = await saveThenMark();
-    const { messages: recalled } = await memory.recall({ threadId, resourceId: RESOURCE });
+    const { messages: recalled } = await memory.recall({ threadId, resourceId: RESOURCE, perPage: false });
     list.add(recalled, 'memory');
 
     expect(list.get.all.db().map(message => message.id)).toEqual([`${threadId}-assistant`]);
@@ -124,7 +124,7 @@ describe('a stored message that gained an OM marker after it was saved', () => {
   it('stays deduplicated across repeated reloads', async () => {
     const { memory, threadId, list } = await saveThenMark();
     for (let reload = 0; reload < 2; reload++) {
-      const { messages: recalled } = await memory.recall({ threadId, resourceId: RESOURCE });
+      const { messages: recalled } = await memory.recall({ threadId, resourceId: RESOURCE, perPage: false });
       list.add(recalled, 'memory');
     }
     expect(list.get.all.db()).toHaveLength(1);
