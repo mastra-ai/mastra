@@ -273,7 +273,7 @@ program
   .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
   .option(
     '--region <region>',
-    `Region for new environments and Factory projects: ${DEPLOY_REGIONS.join(', ')} (default placement when omitted)`,
+    `Region for new environments and Factory projects: ${DEPLOY_REGIONS.join(', ')} (default: us)`,
   )
   .option(
     '--workers <mode>',
