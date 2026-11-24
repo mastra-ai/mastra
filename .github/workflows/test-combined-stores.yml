@@ -49,7 +49,7 @@ jobs:
           persist-credentials: false
       # Read before any step runs: keep the checkout above as the first step, and this step without if:.
       - name: Speed up checkout with the StarSling git mirror
-        uses: starslingdev/disks@v0
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
         with:
           git-mirror: true
       - id: set-stores
@@ -131,7 +131,7 @@ jobs:
 
       # Read before any step runs: keep the checkout above as the first step, and this step without if:.
       - name: Speed up checkout with the StarSling git mirror
-        uses: starslingdev/disks@v0
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
         with:
           git-mirror: true
 
@@ -185,7 +185,7 @@ jobs:
 
       # Read before any step runs: keep the checkout above as the first step, and this step without if:.
       - name: Speed up checkout with the StarSling git mirror
-        uses: starslingdev/disks@v0
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
         with:
           git-mirror: true
 
@@ -370,7 +370,7 @@ jobs:
 
       # Read before any step runs: keep the checkout above as the first step, and this step without if:.
       - name: Speed up checkout with the StarSling git mirror
-        uses: starslingdev/disks@v0
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
         with:
           git-mirror: true
 
