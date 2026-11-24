@@ -40,9 +40,12 @@ export function createMcpTokenVerifier(options: {
     let keys = keySets.get(issuer);
     if (!keys) {
       keys = (async () => {
-        const discover = (path: string) => fetch(`${issuer}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
-        let response = await discover('/.well-known/oauth-authorization-server');
-        if (response.status === 404) response = await discover('/.well-known/openid-configuration');
+        const discover = (url: string) => fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+        // RFC 8414 puts the well-known segment before the issuer's path; OpenID
+        // Connect discovery appends it.
+        const { origin, pathname } = new URL(issuer);
+        let response = await discover(`${origin}/.well-known/oauth-authorization-server${trimSlash(pathname)}`);
+        if (response.status === 404) response = await discover(`${issuer}/.well-known/openid-configuration`);
         if (!response.ok) throw new Error(`authorization server metadata answered ${response.status}`);
         const { jwks_uri } = (await response.json()) as { jwks_uri?: unknown };
         if (typeof jwks_uri !== 'string') throw new Error('authorization server metadata has no jwks_uri');

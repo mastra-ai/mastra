@@ -76,23 +76,30 @@ const USERS: Record<string, { orgId?: string; userId: string }> = {
  * An OAuth authorization server over real HTTP: RFC 8414 metadata and a JWKS,
  * signing RS256 access tokens the way AuthKit does with Resource Indicators on.
  * `outage` makes either endpoint answer 503, or never answer; `discovery`
- * picks which well-known document describes the server.
+ * picks which well-known document describes the server. `path` gives the
+ * issuer a path, as multi-tenant servers do: RFC 8414 metadata then lives at
+ * `/.well-known/oauth-authorization-server<path>`, OpenID Connect discovery
+ * at `<path>/.well-known/openid-configuration`.
  */
-async function startAuthorizationServer() {
+async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const jwk = { ...(await exportJWK(publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
   let issuer = '';
   const outage: Record<'metadata' | 'jwks', false | 'down' | 'hang'> = { metadata: false, jwks: false };
   const hanging: Array<() => void> = [];
-  const discovery = { document: '/.well-known/oauth-authorization-server' };
+  const discovery: { kind: 'oauth' | 'openid' } = { kind: 'oauth' };
   hangingResponses.push(() => hanging.splice(0).forEach(end => end()));
   const server = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === discovery.document) {
+    const document =
+      discovery.kind === 'oauth'
+        ? `/.well-known/oauth-authorization-server${path}`
+        : `${path}/.well-known/openid-configuration`;
+    if (req.url === document) {
       if (outage.metadata === 'hang') hanging.push(() => res.end());
       else if (outage.metadata) res.writeHead(503).end('{}');
       else res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/oauth2/jwks` }));
-    } else if (req.url === '/oauth2/jwks') {
+    } else if (req.url === `${path}/oauth2/jwks`) {
       if (outage.jwks === 'hang') hanging.push(() => res.end());
       else if (outage.jwks) res.writeHead(503).end('{}');
       else res.end(JSON.stringify({ keys: [jwk] }));
@@ -102,7 +109,7 @@ async function startAuthorizationServer() {
   });
   servers.push(server);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  issuer = `http://127.0.0.1:${(server.address() as AddressInfo).port}${path}`;
   return {
     issuer,
     outage,
@@ -132,9 +139,9 @@ function sign(key: CryptoKey, issuer: string, claims: JWTPayload, options: SignO
 const signedTokens = new Map<string, string>();
 const bearer = (token: string) => signedTokens.get(token) ?? token;
 
-async function setup(options: { resolveCaller?: McpCallerResolver; timeoutMs?: number } = {}) {
+async function setup(options: { resolveCaller?: McpCallerResolver; timeoutMs?: number; issuerPath?: string } = {}) {
   const seed = await createFactoryStorageForTests();
-  const authServer = await startAuthorizationServer();
+  const authServer = await startAuthorizationServer({ path: options.issuerPath });
   for (const [name, user] of Object.entries(USERS)) {
     signedTokens.set(name, await authServer.sign({ sub: user.userId, ...(user.orgId ? { org_id: user.orgId } : {}) }));
   }
@@ -450,9 +457,18 @@ describe('Factory MCP server', () => {
     expect(response.headers.get('WWW-Authenticate')).toContain('error="invalid_token"');
   });
 
+  it('finds the metadata of an authorization server whose issuer has a path', async () => {
+    const { url } = await setup({ issuerPath: '/tenant' });
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+
+    const openid = await setup({ issuerPath: '/tenant' });
+    openid.authServer.discovery.kind = 'openid';
+    expect((await claudeRequest(openid.url, 'server/discover', {}, 'token-alice')).status).toBe(200);
+  });
+
   it('accepts tokens from an authorization server that only publishes OpenID Connect discovery', async () => {
     const { url, authServer } = await setup();
-    authServer.discovery.document = '/.well-known/openid-configuration';
+    authServer.discovery.kind = 'openid';
 
     expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
   });
