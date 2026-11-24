@@ -523,17 +523,19 @@ describe('Datasets Handlers', () => {
         expect(events).toEqual([]);
       });
 
-      it('rejects invalid durable, itemTimeout and maxRetries before the handler', () => {
+      it('rejects invalid durable, maxConcurrency, itemTimeout and maxRetries before the handler', () => {
         const base = { targetType: 'agent', targetId: 'durable-agent' };
         const parse = (body: Record<string, unknown>) =>
           TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse({ ...base, ...body }).success;
 
         expect(parse({ durable: 'yes' })).toBe(false);
+        expect(parse({ maxConcurrency: 0 })).toBe(false);
+        expect(parse({ maxConcurrency: 2.5 })).toBe(false);
         expect(parse({ itemTimeout: 0 })).toBe(false);
         expect(parse({ itemTimeout: 1.5 })).toBe(false);
         expect(parse({ maxRetries: -1 })).toBe(false);
         expect(parse({ maxRetries: 0.5 })).toBe(false);
-        expect(parse({ durable: true, itemTimeout: 1000, maxRetries: 0 })).toBe(true);
+        expect(parse({ durable: true, maxConcurrency: 1, itemTimeout: 1000, maxRetries: 0 })).toBe(true);
       });
 
       it('still runs in-process without durable', async () => {

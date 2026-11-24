@@ -1,6 +1,7 @@
 import { MastraError } from '../../error/index.js';
 import { withoutLiveRequestKeys } from '../../request-context';
 import type { StartExperimentConfig } from './types';
+import { experimentWorkflowInputSchema } from './workflow';
 import type { ExperimentWorkflowInput } from './workflow';
 
 /** Error id thrown when `durable: true` is combined with an option a durable run can't carry. */
@@ -71,16 +72,21 @@ export function durableRunOptions<I, O, E>(
     throw notDurable('agentModel', 'pass a "provider/model" string, not a model object');
   }
 
-  return {
-    runOptions: {
-      maxConcurrency: config.maxConcurrency,
-      itemTimeout: config.itemTimeout,
-      maxRetries: config.maxRetries,
-      agentModel: config.agentModel,
-      unmockedToolPolicy: config.unmockedToolPolicy,
-      requestContext,
-      versions: config.versions,
-    },
-    scorerIds,
+  const runOptions: DurableRunOptions = {
+    maxConcurrency: config.maxConcurrency,
+    itemTimeout: config.itemTimeout,
+    maxRetries: config.maxRetries,
+    agentModel: config.agentModel,
+    unmockedToolPolicy: config.unmockedToolPolicy,
+    requestContext,
+    versions: config.versions,
   };
+  // The workflow validates its input only once the experiment exists, so check the options here first.
+  const parsed = experimentWorkflowInputSchema.omit({ datasetId: true, experimentId: true }).safeParse(runOptions);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0]!;
+    throw notDurable(String(issue.path[0]), issue.message);
+  }
+
+  return { runOptions, scorerIds };
 }

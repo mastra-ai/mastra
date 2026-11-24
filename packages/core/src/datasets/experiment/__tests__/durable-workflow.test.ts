@@ -360,6 +360,10 @@ describe('durable experiment workflow', () => {
       ['requestContext', { requestContext: { since: new Date() } }],
       ['requestContext', { requestContext: { missing: undefined } }],
       ['requestContext', { requestContext: { ratio: Number.NaN } }],
+      ['maxConcurrency', { maxConcurrency: 0 }],
+      ['maxConcurrency', { maxConcurrency: 2.5 }],
+      ['itemTimeout', { itemTimeout: 0 }],
+      ['maxRetries', { maxRetries: -1 }],
     ];
 
     it('carries a plain JSON requestContext to the target', async () => {

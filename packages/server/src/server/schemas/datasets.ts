@@ -452,7 +452,7 @@ export const triggerExperimentBodySchema = z
       .describe(
         'Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment.',
       ),
-    maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
+    maxConcurrency: z.number().int().positive().optional().describe('Maximum concurrent executions'),
     itemTimeout: z.number().int().positive().optional().describe('Per-item timeout in milliseconds'),
     maxRetries: z
       .number()

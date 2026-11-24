@@ -13,7 +13,7 @@ const { experimentId } = await dataset.startExperimentAsync({
 });
 ```
 
-Durable runs only accept options that can be stored, such as registered targets, scorer IDs, a `provider/modelId` `agentModel` and a plain JSON `requestContext`. Inline tasks, hooks, `onEvent`, `signal`, scorer objects and non-JSON `requestContext` values throw `EXPERIMENT_NOT_DURABLE` before anything is created. The caller's auth token, user, roles and permissions are removed from `requestContext` before the run is published or stored. Without `durable`, experiments run in process as before.
+Durable runs only accept options that can be stored, such as registered targets, scorer IDs, a `provider/modelId` `agentModel` and a plain JSON `requestContext`. Inline tasks, hooks, `onEvent`, `signal`, scorer objects, non-JSON `requestContext` values and invalid `maxConcurrency`, `itemTimeout` or `maxRetries` values throw `EXPERIMENT_NOT_DURABLE` before anything is created. The caller's auth token, user, roles and permissions are removed from `requestContext` before the run is published or stored. Without `durable`, experiments run in process as before.
 
 `runExperimentItem()` now also accepts `agentModel`, `itemTimeout`, `maxRetries`, `unmockedToolPolicy` and `versions`, and applies the item's tool mocks, so a caller-driven item behaves like an item in a native run.
 
