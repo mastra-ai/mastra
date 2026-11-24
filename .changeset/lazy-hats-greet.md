@@ -20,7 +20,7 @@ The `info` event sent on a model switch now names the cause first.
 
 **After:** `anthropic/claude-opus-5.5 is rate-limited, switched to openai/gpt-5.6-sol`
 
-The fallback exports moved out of `@mastra/code-sdk/auth/account-rotation-processor` and `@mastra/code-sdk/schema`. `isModelFallbackReason` was removed; `parseModelFallbackPart` validates the whole record:
+The fallback exports now live in `@mastra/code-sdk/model-fallback`. Importing them from `@mastra/code-sdk/auth/account-rotation-processor` or `@mastra/code-sdk/schema` still works but is deprecated. `isModelFallbackReason` is deprecated too; `parseModelFallbackPart` validates the whole record:
 
 ```diff
 - import {

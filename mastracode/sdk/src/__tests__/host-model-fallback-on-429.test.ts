@@ -126,7 +126,7 @@ async function startSession(initialFallbackModelIds?: readonly string[]) {
   const setFallbackModelIds = (next: readonly string[]) => {
     fallbackModelIds = next;
   };
-  return { send, savedHops, lastReply, errors, pendingFailures, setFallbackModelIds };
+  return { session, send, savedHops, lastReply, errors, pendingFailures, setFallbackModelIds };
 }
 
 describe('a Factory session whose model is rate-limited, with a host fallback configured', () => {
@@ -282,5 +282,20 @@ describe('a session whose host configures no fallbacks', () => {
 
     expect(errors).toEqual(['Rate limited']);
     expect(await savedHops()).toEqual([]);
+  });
+});
+
+describe('a Factory session that still holds a model pack pinned to another account', () => {
+  it('answers with the tenant key when the host configures no fallbacks', async () => {
+    mock.on({ model: /claude/ }, { content: 'Answered with the tenant key' });
+    const { session, send, lastReply, errors } = await startSession([]);
+    await session.state.set({
+      modelRoute: { entries: [{ id: 'pinned', label: 'Pinned', modelId: PRIMARY, accountId: 'stale-account' }] },
+    });
+
+    await send('Review the diff.');
+
+    expect(errors).toEqual([]);
+    expect(await lastReply()).toBe('Answered with the tenant key');
   });
 });
