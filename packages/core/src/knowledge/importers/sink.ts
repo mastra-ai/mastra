@@ -368,6 +368,17 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const nodeOf = async (sourceId: string | null | undefined) =>
     sourceId ? importers.getNode(binding.id, sourceId) : null;
 
+  // Someone deleted the node's page by hand. The source is still the source of truth, so the item is
+  // written again as if new. A page merged into another is not gone: its content lives on there.
+  const deletedByHand = async (node: KnowledgeImporterNodeRecord) => {
+    const page = await storage.getPage({ id: node.pageId, read: 'all' });
+    return !page || (!!page.deletedAt && !page.mergedInto);
+  };
+  const liveNodeOf = async (sourceId: string | null | undefined) => {
+    const node = await nodeOf(sourceId);
+    return node && !(await deletedByHand(node)) ? node : null;
+  };
+
   const ref = (keys: string[]) => `${target.scope}#${keys.join('/')}`;
 
   // A link's line, or null while its target has no live page.
@@ -495,12 +506,16 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     item: KnowledgeImportDeclaration & Partial<Pick<KnowledgeImportItem, 'body' | 'description' | 'links' | 'aliases'>>,
     hasBody: boolean,
   ) => {
-    const existing = await importers.getNode(binding.id, item.sourceId);
+    let existing = await importers.getNode(binding.id, item.sourceId);
+    if (existing && (await deletedByHand(existing))) {
+      await importers.deleteNode(binding.id, item.sourceId);
+      existing = null;
+    }
     // Where it goes: its parent's page, else its holding item's page, else the anchor. Placed
     // anywhere but under its parent, it waits for a settle slice to move it there.
-    const sourceParent = await nodeOf(item.parent);
+    const sourceParent = await liveNodeOf(item.parent);
     const misplaced = !!item.parent && !sourceParent;
-    const parentNode = sourceParent ?? (await nodeOf(item.fallbackParent));
+    const parentNode = sourceParent ?? (await liveNodeOf(item.fallbackParent));
     const destination = parentNode
       ? await owned(parentNode.pageId, parentNode.sourceId)
       : { page: anchor, keys: anchorPath };
@@ -641,6 +656,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         if (op.op === 'remove') {
           const node = await importers.getNode(binding.id, sourceId);
           if (!node) return;
+          if (await deletedByHand(node)) {
+            await importers.deleteNode(binding.id, sourceId);
+            result.applied = true;
+            return;
+          }
           const current = await owned(node.pageId, sourceId);
           // Stub or delete is decided on the locked subtree, which must hold no other binding's page.
           await assertSubtreeOwned(current.page.id);

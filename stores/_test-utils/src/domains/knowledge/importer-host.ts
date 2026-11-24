@@ -424,6 +424,32 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await page('notion/p2')).toMatchObject({ id: human!.id, body: 'back' });
     });
 
+    it('writes an item again after someone deleted its page by hand, and lets its removal through', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'c1', parent: 'p1' }), upsert({ sourceId: 'p2' })]);
+      const old = await page('notion/p1/c1');
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion/p1/c1' });
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion/p1' });
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion/p2' });
+
+      // The child arrives alone first: its parent's page is gone too, so it waits under the target.
+      const child = await run([upsert({ sourceId: 'c1', parent: 'p1', body: 'back' })]);
+      expect(child).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect((await page('notion/c1'))?.body).toBe('back');
+      expect((await page('notion/c1'))?.id).not.toBe(old!.id);
+
+      // The parent comes back and the child settles under it.
+      const parent = await run([upsert({ sourceId: 'p1' })]);
+      expect(parent).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect((await page('notion/p1/c1'))?.body).toBe('back');
+
+      // A hand-deleted page whose item the source removes: nothing to do, and nothing refused.
+      const removed = await run([{ op: 'remove', sourceId: 'p2' }]);
+      expect(removed).toMatchObject({ counts: { removed: 0, refused: 0 } });
+      const resent = await run([upsert({ sourceId: 'p2' })]);
+      expect(resent).toMatchObject({ counts: { created: 1, refused: 0 } });
+    });
+
     it("refuses an item whose path holds another binding's page, and never takes it over", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
