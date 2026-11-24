@@ -73,6 +73,27 @@ export const githubSignalsLegacyUpgradeScenario = {
     if (saved.signals?.githubPollIntervalMs !== 30_000) {
       throw new Error(`Expected githubPollIntervalMs=30000, received ${saved.signals?.githubPollIntervalMs}`);
     }
+
+    // A custom interval whose label matches a preset stays custom.
+    terminal.submit('/github');
+    await runtime.waitForScreenText(/Poll interval/i, terminal);
+    for (let i = 0; i < 5; i++) terminal.write('\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub polling interval \(current: 30s\)/i, terminal);
+    for (let i = 0; i < 4; i++) terminal.write('\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub polling interval in seconds/i, terminal);
+    terminal.write('\x15');
+    terminal.write('60.9');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub polling interval set to 1m\./i, terminal);
+
+    terminal.submit('/github');
+    await runtime.waitForScreenText(/Poll interval/i, terminal);
+    for (let i = 0; i < 5; i++) terminal.write('\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub polling interval \(current: 1m\)/i, terminal);
+    await runtime.waitForScreenText(/Enter seconds \(current\)/i, terminal);
     runtime.printScreen('github legacy upgrade debug status', terminal);
   },
 } satisfies McE2eScenario;
