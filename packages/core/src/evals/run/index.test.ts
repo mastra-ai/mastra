@@ -402,7 +402,9 @@ describe('runEvals', () => {
       expect(mockScorers[1].run).toHaveBeenCalled();
     });
 
-    it('should run scorers on individual step results', async () => {
+    // On storage v2 the first step's result is evicted by the end of the run, so its scorer only
+    // sees it if the result's lazy `steps` is loaded back from storage.
+    it.each([1, 2] as const)('should run scorers on individual step results (storage v%s)', async storageVersion => {
       const mockStep = createStep({
         id: 'test-step',
         inputSchema: z.object({ input: z.string() }),
@@ -411,15 +413,25 @@ describe('runEvals', () => {
           return { output: `Processed: ${inputData.input}` };
         },
       });
+      const passOn = (id: string) =>
+        createStep({
+          id,
+          inputSchema: z.object({ output: z.string() }),
+          outputSchema: z.object({ output: z.string() }),
+          execute: async ({ inputData }) => inputData,
+        });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
-        options: { validateInputs: false },
+        options: { validateInputs: false, storageVersion },
       })
         .then(mockStep)
+        .then(passOn('second-step'))
+        .then(passOn('third-step'))
         .commit();
+      const mastra = new Mastra({ workflows: { workflow }, logger: false, storage: new InMemoryStore() });
 
       // Mock the scorer to track what it receives
       const mockScorer = createMockScorer('step-scorer', 0.8);
@@ -432,7 +444,7 @@ describe('runEvals', () => {
             'test-step': [mockScorer],
           },
         },
-        target: workflow,
+        target: mastra.getWorkflow('workflow'),
       });
 
       // Verify the scorer was called with step-specific data
@@ -646,37 +658,18 @@ describe('runEvals', () => {
         .then(mockStep)
         .commit();
 
-      // Create mock scores storage
-      const saveScoreSpy = vi.fn().mockResolvedValue({ score: {} });
-      const mockScoresStore = {
-        saveScore: saveScoreSpy,
-      };
-
-      // Mock workflows store with methods needed for scorer workflow runs
-      const mockWorkflowsStore = {
-        getWorkflowRunById: vi.fn().mockResolvedValue(null),
-        deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
-        persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
-        listWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
-      };
-
-      const mockStorage = {
-        init: vi.fn().mockResolvedValue(undefined),
-        getStore: vi.fn().mockImplementation(async (domain: string) => {
-          if (domain === 'workflows') return mockWorkflowsStore;
-          if (domain === 'scores') return mockScoresStore;
-          return null;
-        }),
-        __setLogger: vi.fn(),
-      };
-
+      // Workflow runs claim run ownership through the workflows store, so a
+      // partial mock cannot satisfy them. Use a real in-memory store.
       const mastra = new Mastra({
         workflows: {
           testWorkflow: workflow,
         },
         logger: false,
-        storage: mockStorage as any,
+        storage: new InMemoryStore(),
       });
+
+      const scoresStore = (await mastra.getStorage()!.getStore('scores'))!;
+      const saveScoreSpy = vi.spyOn(scoresStore, 'saveScore');
 
       const scorer = createScorer({
         id: 'workflowScorer',

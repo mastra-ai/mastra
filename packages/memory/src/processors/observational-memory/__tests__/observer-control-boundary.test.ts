@@ -27,7 +27,16 @@ function textMessage(text: string, role: 'user' | 'assistant' = 'user', id?: str
   };
 }
 
-function createCapturingRunner() {
+const MULTI_THREAD_REPLY = `<observations>
+<thread id="thread-a">
+* 🔴 (17:00) User asked about invoices
+</thread>
+<thread id="thread-b">
+* 🔴 (17:00) User asked about deploys
+</thread>
+</observations>`;
+
+function createCapturingRunner(reply = '<observations>\n* 🔴 (17:00) User asked about billing\n</observations>') {
   const captured: { prompt?: any } = {};
   const runner = new ObserverRunner({
     observationConfig: {
@@ -46,7 +55,7 @@ function createCapturingRunner() {
       captured.prompt = prompt;
       return {
         getFullOutput: async () => ({
-          text: '<observations>\n* 🔴 (17:00) User asked about billing\n</observations>',
+          text: reply,
           usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
         }),
       };
@@ -123,7 +132,7 @@ describe('observer request keeps control input apart from observed history (#221
   });
 
   it('multi-thread: sends one user message with prior memory, then history, then the task', async () => {
-    const { runner, captured } = createCapturingRunner();
+    const { runner, captured } = createCapturingRunner(MULTI_THREAD_REPLY);
 
     await runner.callMultiThread(
       '* 🔴 (09:00) User prefers terse answers',
@@ -157,7 +166,7 @@ describe('observer request keeps control input apart from observed history (#221
   });
 
   it('multi-thread: does not put placeholder example observations in the user message', async () => {
-    const { runner, captured } = createCapturingRunner();
+    const { runner, captured } = createCapturingRunner(MULTI_THREAD_REPLY);
 
     await runner.callMultiThread(
       undefined,

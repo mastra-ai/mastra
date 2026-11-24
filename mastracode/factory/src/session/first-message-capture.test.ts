@@ -2,16 +2,13 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  observeSessionFirstMessage,
-  type FirstMessageCaptureDependencies,
-  type FirstMessageCaptureSession,
-} from './first-message-capture.js';
+import { observeSessionFirstMessage } from './first-message-capture.js';
+import type { FirstMessageCaptureDependencies, FirstMessageCaptureSession } from './first-message-capture.js';
 
 function createSession() {
   const listeners: Array<(event: AgentControllerEvent) => void> = [];
   const session: FirstMessageCaptureSession = {
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getId: () => 'resource-1' },
     subscribe: listener => {
       listeners.push(listener);
       return () => {

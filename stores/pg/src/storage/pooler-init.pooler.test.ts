@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PostgresStore } from './index';
@@ -91,57 +92,101 @@ describe('PostgresStore.init() under pgBouncer transaction pooling (issue #17679
     }
   });
 
-  it('completes init through pgBouncer without statement_timeout errors and acquires exactly one pooler backend', async () => {
-    const pool = new Pool({
-      connectionString,
-      // Match what a typical user would set when targeting a Supabase
-      // pooler: a generous Node-side pool that lets the bug surface as
-      // server-side queue contention rather than client-side connection
-      // starvation.
-      max: 20,
-    });
+  it.each(['empty schema', 'abandoned index'] as const)(
+    'initializes an %s through pgBouncer with exactly one pooler checkout',
+    async scenario => {
+      const direct = new Pool({ connectionString: 'postgresql://postgres:postgres@localhost:5437/postgres' });
+      if (scenario === 'abandoned index') {
+        const setup = new PostgresStore({ id: 'repair-setup', pool: direct, schemaName });
+        await setup.init();
+        await direct.query('UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass($1)', [
+          `"${schemaName}".idx_favorites_entity`,
+        ]);
+      }
+      const reader = await direct.connect();
+      if (scenario === 'abandoned index') {
+        await reader.query('BEGIN');
+        await reader.query(`SELECT * FROM "${schemaName}".mastra_favorites`);
+      }
+      const pool = new Pool({
+        connectionString,
+        // Match what a typical user would set when targeting a Supabase
+        // pooler: a generous Node-side pool that lets the bug surface as
+        // server-side queue contention rather than client-side connection
+        // starvation.
+        max: 20,
+      });
 
-    // Track concurrent pool.connect() checkouts — this is what the pooler
-    // bills as separate transactions, and what gets queued when
-    // DEFAULT_POOL_SIZE is exhausted.
-    let inFlight = 0;
-    let peakClientsCheckedOut = 0;
-    const originalConnect = pool.connect.bind(pool);
-    (pool as any).connect = async () => {
-      const client = await (originalConnect as any)();
-      inFlight++;
-      peakClientsCheckedOut = Math.max(peakClientsCheckedOut, inFlight);
-      const originalRelease = client.release.bind(client);
-      client.release = (...args: any[]) => {
-        inFlight--;
-        return originalRelease(...args);
+      // Track concurrent pool.connect() checkouts — this is what the pooler
+      // bills as separate transactions, and what gets queued when
+      // DEFAULT_POOL_SIZE is exhausted.
+      let inFlight = 0;
+      let peakClientsCheckedOut = 0;
+      const originalConnect = pool.connect.bind(pool);
+      (pool as any).connect = async () => {
+        const client = await (originalConnect as any)();
+        inFlight++;
+        peakClientsCheckedOut = Math.max(peakClientsCheckedOut, inFlight);
+        const originalRelease = client.release.bind(client);
+        client.release = (...args: any[]) => {
+          inFlight--;
+          return originalRelease(...args);
+        };
+        return client;
       };
-      return client;
-    };
 
-    const store = new PostgresStore({
-      id: `pg-17679-pooler-${Date.now()}`,
-      pool,
-      schemaName,
-    });
+      const store = new PostgresStore({
+        id: `pg-17679-pooler-${Date.now()}`,
+        pool,
+        schemaName,
+      });
 
-    try {
-      // The critical assertion: init() completes without throwing the
-      // user-reported "canceling statement due to statement timeout"
-      // error.
-      await expect(store.init()).resolves.toBeUndefined();
+      try {
+        // The critical assertion: init() completes without throwing the
+        // user-reported "canceling statement due to statement timeout"
+        // error.
+        const initializing = store.init();
+        void initializing.catch(() => {});
+        if (scenario === 'abandoned index') {
+          const deadline = performance.now() + 10000;
+          let waiting = false;
+          while (!waiting && performance.now() < deadline) {
+            const { rows } = await direct.query(
+              `SELECT 1 FROM pg_locks WHERE relation = to_regclass($1)
+              AND mode = 'AccessExclusiveLock' AND NOT granted`,
+              [`"${schemaName}".mastra_favorites`],
+            );
+            waiting = rows.length > 0;
+            if (!waiting) await delay(10);
+          }
+          expect(waiting).toBe(true);
+          // Keep the reader long enough to force the first 100ms repair lock to time out.
+          await delay(150);
+          await reader.query('COMMIT');
+        }
+        await expect(initializing).resolves.toBeUndefined();
+        if (scenario === 'abandoned index') {
+          const { rows } = await direct.query('SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)', [
+            `"${schemaName}".idx_favorites_entity`,
+          ]);
+          expect(rows).toEqual([{ indisvalid: true }]);
+        }
 
-      // The fix guarantees init holds exactly one backend connection
-      // for the entire DDL chain. Without the fix this number explodes
-      // (Node-side pool would queue ~200 checkout requests, and the
-      // pooler would queue the same on its 3-slot budget — the dominant
-      // cause of the reported failure).
-      expect(peakClientsCheckedOut).toBe(1);
-    } finally {
-      // Always release pool and store handles so a failed assertion
-      // doesn't leak connections into the next test.
-      await store.close().catch(() => {});
-      await pool.end();
-    }
-  });
+        // The fix guarantees init holds exactly one backend connection
+        // for the entire DDL chain. Without the fix this number explodes
+        // (Node-side pool would queue ~200 checkout requests, and the
+        // pooler would queue the same on its 3-slot budget — the dominant
+        // cause of the reported failure).
+        expect(peakClientsCheckedOut).toBe(1);
+      } finally {
+        // Always release pool and store handles so a failed assertion
+        // doesn't leak connections into the next test.
+        await reader.query('ROLLBACK');
+        reader.release();
+        await store.close().catch(() => {});
+        await pool.end();
+        await direct.end();
+      }
+    },
+  );
 });

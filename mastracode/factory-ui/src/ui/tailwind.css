@@ -1,16 +1,13 @@
 @import 'tailwindcss';
 @import '@mastra/playground-ui/components.css';
 @import '@mastra/playground-ui/sources.css';
+@import '@mastra/playground-ui/fonts.css';
 
-/* Mona Sans everywhere, same as Studio. Faces come from
- * @fontsource-variable/mona-sans, imported in main.tsx. */
-@layer base {
-  :root {
-    --font-display:
-      'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-      'Segoe UI Symbol', 'Noto Color Emoji';
-    --font-body: var(--font-display);
-  }
+/* The session panel's one animated value: registered to interpolate, not inherited so animating it never restyles the transcript. */
+@property --panel-reveal {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
 }
 
 /* The board card's corner. It is not a free number: a card is a rounded box with

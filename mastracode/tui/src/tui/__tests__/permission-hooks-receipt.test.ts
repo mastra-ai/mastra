@@ -17,7 +17,7 @@
  * notify.js is mocked only to keep the sibling notification tap inert; nothing
  * in this suite asserts on it.
  */
-import { mkdirSync, mkdtempSync, existsSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HookManager } from '@mastra/code-sdk/hooks/manager';
@@ -258,22 +258,25 @@ describe('PermissionRequest hooks fire at event receipt (#20861)', () => {
     expect(manager.runPermissionRequest).toHaveBeenCalledTimes(1);
   });
 
-  it('does not dispatch a permission hook for ask_user suspensions', async () => {
+  it('dispatches ask_question for ask_user suspensions while the queue is blocked', async () => {
     const manager = createRecordingManager();
     const { listener, releaseBlocker, handled } = createHarness(manager);
 
-    const blocked = listener({
+    void listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    const suspendPayload = { question: 'Continue?' };
+    void listener({
       type: 'tool_suspended',
       toolCallId: 'call-ask',
       toolName: 'ask_user',
-      suspendPayload: { question: 'Continue?' },
+      suspendPayload,
     });
 
-    expect(manager.runPermissionRequest).not.toHaveBeenCalled();
+    expect(handled).toEqual(['start:blocking_prompt']);
+    expect(manager.runPermissionRequest).toHaveBeenCalledTimes(1);
+    expect(manager.runPermissionRequest).toHaveBeenCalledWith('ask_question', 'call-ask', 'ask_user', suspendPayload);
     releaseBlocker.resolve();
-    await blocked;
-    expect(handled).toEqual(['start:tool_suspended', 'end:tool_suspended']);
-    expect(manager.runPermissionRequest).not.toHaveBeenCalled();
   });
 
   it('does not break event delivery when the hook dispatch rejects', async () => {
@@ -463,5 +466,77 @@ describe('runId edge with a real HookManager (#20861, Risk R1)', () => {
 
     releaseBlocker.resolve();
     await blocked;
+  });
+
+  it('reports an answer under the question run id after the suspended run ends in background mode', async () => {
+    // With background tools, the queue does not wait on the prompt: core's
+    // agent_end 'suspended' clears the run id while the question is still open.
+    const record = join(tmpProject, 'permission-result.jsonl');
+    mkdirSync(join(tmpProject, '.mastracode'), { recursive: true });
+    writeFileSync(
+      join(tmpProject, '.mastracode', 'hooks.json'),
+      JSON.stringify({
+        PermissionResult: [
+          {
+            type: 'command',
+            command: `node -e "process.stdin.pipe(require('node:fs').createWriteStream('${record}', { flags: 'a' }))"`,
+            timeout: 5000,
+          },
+        ],
+      }),
+    );
+    const manager = new HookManager(tmpProject, 'session-runid-test', '.mastracode', tmpHome);
+    expect(manager.getConfig().PermissionResult).toHaveLength(1);
+
+    const answer = createDeferred<void>();
+    let result: Promise<unknown> | undefined;
+    let listener: ((event: any) => Promise<void>) | undefined;
+    const state = {
+      pendingNewThread: false,
+      session: {
+        thread: { getId: vi.fn(() => 'thread-current') },
+        state: { get: vi.fn(() => ({ notifications: 'off' })) },
+        subscribe: vi.fn((handler: any) => {
+          listener = handler;
+          return vi.fn();
+        }),
+      },
+      options: { backgroundToolsEnabled: true },
+      hookManager: manager,
+    } as any;
+    // Mirrors MastraTUI: agent_end clears the run id; the ask_user handler
+    // reports its result once the user answers.
+    subscribeToAgentController(state, async event => {
+      if (event.type === 'agent_end') manager.clearRunId();
+      if (event.type === 'tool_suspended') {
+        await answer.promise;
+        result = manager.runPermissionResult('ask_question', event.toolCallId, event.toolName, 'answered');
+      }
+    });
+
+    void listener!({ type: 'agent_start' });
+    const runId = manager.getRunId();
+    expect(runId).toBeDefined();
+    void listener!({
+      type: 'tool_suspended',
+      toolCallId: 'call-ask',
+      toolName: 'ask_user',
+      suspendPayload: { question: 'Which?' },
+    });
+    await listener!({ type: 'agent_end', reason: 'suspended' });
+    expect(manager.getRunId()).toBeUndefined();
+
+    answer.resolve();
+    await vi.waitFor(() => expect(result).toBeDefined());
+    await result;
+
+    const reported = JSON.parse(readFileSync(record, 'utf8'));
+    expect(reported).toMatchObject({
+      hook_event_name: 'PermissionResult',
+      run_id: runId,
+      permission_kind: 'ask_question',
+      tool_call_id: 'call-ask',
+      decision: 'answered',
+    });
   });
 });

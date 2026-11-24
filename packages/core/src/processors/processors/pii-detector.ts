@@ -13,7 +13,8 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
-import { REPROCESS_PART_KEY } from '../stream-reprocess';
+import { FLUSH_HELD_PARTS_KEY, REPROCESS_PART_KEY } from '../stream-reprocess';
+import type { FlushHeldParts } from '../stream-reprocess';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 import { handleModelError } from './model-error-strategy';
@@ -237,8 +238,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
    * These run instead of LLM calls in processOutputStream to eliminate
    * per-chunk API costs and latency.
    */
+  private static readonly EMAIL_CONTINUATION = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/y;
+
   private static readonly PII_PATTERNS: Record<string, RegExp> = {
-    email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+    // The lookbehind keeps a long local-part run from being rescanned at every
+    // offset; EMAIL_CONTINUATION picks up an address that starts where one ended.
+    email: /(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
     phone: /(?:\+?\d{1,3}[-.\ ]?)?\(?\d{3}\)?[-.\ ]?\d{3}[-.\ ]?\d{4}/g,
     'credit-card': /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
     ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
@@ -548,10 +553,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
         if (result.redacted_content?.trim()) {
           console.info(`[PIIDetector] Redacted PII: ${alertMessage}`);
           return this.createRedactedMessage(message, result.redacted_content);
-        } else {
-          console.warn(`[PIIDetector] No redaction available, filtering: ${alertMessage}`);
-          return null; // Fallback to filtering if no redaction available
         }
+        console.warn(`[PIIDetector] No redaction available, filtering: ${alertMessage}`);
+        return null; // Fallback to filtering if no redaction available
 
       default:
         return null;
@@ -766,6 +770,19 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           start: match.index,
           end: match.index + match[0].length,
         });
+        if (type !== 'email') continue;
+        const continuation = PIIDetector.EMAIL_CONTINUATION;
+        continuation.lastIndex = pattern.lastIndex;
+        while ((match = continuation.exec(content)) !== null) {
+          detections.push({
+            type,
+            value: match[0],
+            confidence: 1.0,
+            start: match.index,
+            end: match.index + match[0].length,
+          });
+          pattern.lastIndex = continuation.lastIndex;
+        }
       }
     }
 
@@ -845,10 +862,9 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
               text: detectionResult.redacted_content,
             },
           };
-        } else {
-          console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
-          return null;
         }
+        console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
+        return null;
 
       default:
         return part;
@@ -1019,10 +1035,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
 
-    let emitEnd = Math.min(
-      combined.length - PIIDetector.REGEX_CARRYOVER_SIZE,
-      Math.max(combined.search(/\S*$/), combined.length - PIIDetector.MAX_WORD_HOLD),
-    );
+    // Walk back over the unfinished word, at most MAX_WORD_HOLD characters, instead of
+    // searching with /\S*$/, which is quadratic on long runs of non-whitespace.
+    const wordHoldStart = Math.max(0, combined.length - PIIDetector.MAX_WORD_HOLD);
+    let wordStart = combined.length;
+    while (wordStart > wordHoldStart && /\S/.test(combined[wordStart - 1]!)) wordStart--;
+    let emitEnd = Math.min(combined.length - PIIDetector.REGEX_CARRYOVER_SIZE, wordStart);
     const regions = this.buildRedactionRegions(detections);
     for (const region of regions) {
       if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;
@@ -1053,6 +1071,62 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
   }
 
   /**
+   * Releases what the stream still holds when it ends: deferred non-text parts,
+   * then the held text, checked and redacted the same way as when a non-text
+   * part flushes it. Errors are not swallowed, so held text is never released
+   * unchecked.
+   */
+  private async releaseHeldOutputStream(
+    state: Record<string, any>,
+    abort: (reason?: string) => never,
+    observabilityContext: ObservabilityContext | undefined,
+    requestContext: RequestContext | undefined,
+  ): Promise<ChunkType[]> {
+    const released: ChunkType[] = state._piiPendingNonText ?? [];
+    state._piiPendingNonText = undefined;
+
+    if (this.strategy !== 'warn' && this.hasRegexTypes) {
+      let held: string = state._piiRegexTail || '';
+      const heldPart = state._piiRegexTailPart as (ChunkType & { type: 'text-delta' }) | undefined;
+      state._piiRegexTail = undefined;
+      state._piiRegexTailPart = undefined;
+      if (held && heldPart) {
+        const regexResult = await this.detectPIILocal(held);
+        held = this.applyHeldStrategy(state, held, regexResult.detections ?? [], regexResult, heldPart, abort);
+        state._piiRegexTail = undefined;
+        state._piiRegexTailPart = undefined;
+        const text = this.strategy === 'redact' ? (regexResult.redacted_content ?? held) : held;
+        if (text && this.hasLLMOnlyTypes) {
+          if (!state._piiFirstPayloadId) {
+            state._piiFirstPayloadId = heldPart.payload.id;
+            state._piiFirstRunId = heldPart.runId;
+          }
+          state._piiBuffer = (state._piiBuffer || '') + text;
+        } else if (text) {
+          released.push({ ...heldPart, payload: { ...heldPart.payload, text } });
+        }
+      }
+    }
+
+    if (this.hasLLMOnlyTypes && state._piiBuffer) {
+      const flushed = await this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
+      if (flushed) released.push(flushed);
+    }
+    return released;
+  }
+
+  private discardHeldOutputStream(state: Record<string, any>): ChunkType[] {
+    const pending: ChunkType[] = state._piiPendingNonText ?? [];
+    state._piiPendingNonText = undefined;
+    state._piiBuffer = '';
+    state._piiFirstPayloadId = undefined;
+    state._piiFirstRunId = undefined;
+    state._piiRegexTail = undefined;
+    state._piiRegexTailPart = undefined;
+    return pending;
+  }
+
+  /**
    * Process streaming output chunks for PII detection and redaction.
    *
    * Two modes based on configured detection types:
@@ -1080,6 +1154,10 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
   ): Promise<ChunkType | null> {
     const { part, abort, state, writer, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
+    state[FLUSH_HELD_PARTS_KEY] = (options =>
+      options?.discard
+        ? this.discardHeldOutputStream(state)
+        : this.releaseHeldOutputStream(state, abort, observabilityContext, requestContext)) satisfies FlushHeldParts;
     try {
       if (this.strategy !== 'warn' && this.hasRegexTypes) {
         return this.processHeldOutputStream(part, state, abort, writer, observabilityContext, requestContext);

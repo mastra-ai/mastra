@@ -15,7 +15,8 @@ Common issues include:
 If you're having trouble, try running the PNPX command manually in your terminal to see if it works:
 
 ```bash
-pnpx @modelcontextprotocol/server-filesystem ./notes
+export NOTES_DIR="$(pwd)/notes"
+pnpx @modelcontextprotocol/server-filesystem "$NOTES_DIR"
 ```
 
-This can help identify whether the issue is with PNPX itself or with how it's being used in your Mastra configuration.
+This can help identify whether the issue is with PNPX itself or with how it's being used in your Mastra configuration. Make sure `NOTES_DIR` is set to the absolute path of the `notes` directory — a relative path resolves against the working directory Mastra starts the app from (`src/mastra/public` under `mastra dev`), not your project root.

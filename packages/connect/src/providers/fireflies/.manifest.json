@@ -3,7 +3,7 @@
   "localId": "fireflies",
   "templateSha": "9f836014ab8bd0043dfa5200ad15d298c7149dc6",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-10-15T17:21:25.718Z",
+  "generatedAt": "2026-11-05T14:52:14.663Z",
   "toolCount": 27,
   "skippedActions": [
     {
@@ -30,7 +30,7 @@
     "tools/get-askfred-thread.ts": "5006b736a71c623820d598b7ae3003d03da42b567717dc1674b6e2c6c002c4cf",
     "tools/get-bite.ts": "efc9e7808950139ea7810ccc19d91853b1c00c28d4034da60e686ca22f34a97b",
     "tools/get-channel.ts": "91a3bb3198211f191f84235533f7ad01eed2b9b6370b9345d692b766db46e82d",
-    "tools/get-transcript.ts": "3b047e9789be9f8654a24897065e6b91f61cdd2b466c5519c0c5bebdc2cb1a30",
+    "tools/get-transcript.ts": "0426b51d6c38bb4cfea074b935c6d5b886907dd83fa08e680b41b84a68048b8b",
     "tools/get-user.ts": "09986c654b7e63c61cf3818b7d9becc2644b46d124e9e869e10c3f54ccfb23dc",
     "tools/list-active-meetings.ts": "d09d4451c24364818a167dbf6aaf0ca1a0d47e765fb6d12244a531d7e917f0e6",
     "tools/list-askfred-threads.ts": "928893790ca68f6087c8a2a8fc3b88c7fb268e19e011738f27ca2965edcd6beb",

@@ -14,7 +14,6 @@ export default defineConfig([
     clean: true,
     dts: false,
     treeshake: true,
-    sourcemap: true,
     onSuccess: async () => {
       await generateTypes(process.cwd());
       await mkdir('dist', { recursive: true });

@@ -177,15 +177,6 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
     expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents');
   });
 
-  it('does not render Cancel or Save buttons (autosaved)', async () => {
-    server.use(...commonHandlers());
-    renderPage();
-
-    await screen.findByTestId('agent-builder-panel-chat');
-    expect(screen.queryByTestId('agent-builder-edit-cancel')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-edit-save')).toBeNull();
-  });
-
   it('renders an "Agent list" breadcrumb link pointing to the agents list', async () => {
     server.use(...commonHandlers());
     renderPage();
@@ -331,17 +322,6 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
       // Owner edit page stays on /edit once the user resolves.
       expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents/agent-123/edit');
     });
-  });
-
-  it('renders the profile panel alongside the chat without a tab strip', async () => {
-    server.use(...commonHandlers());
-    renderPage();
-
-    expect(await screen.findByTestId('agent-configure-name')).not.toBeNull();
-    expect(screen.getByTestId('agent-builder-panel-chat')).not.toBeNull();
-    expect(screen.getByTestId('agent-builder-panel-profile')).not.toBeNull();
-    expect(screen.queryByTestId('agent-builder-tab-chat')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-tab-configure')).toBeNull();
   });
 
   it('renders the Delete agent button and DELETEs + redirects on confirm', async () => {

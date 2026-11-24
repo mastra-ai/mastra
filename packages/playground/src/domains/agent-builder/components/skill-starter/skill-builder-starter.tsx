@@ -3,12 +3,16 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconGraduateCap } from '@mastra/playground-ui/icons/central/IconGraduateCap';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
-import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -19,25 +23,25 @@ import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibilit
 const EXAMPLES = [
   {
     title: 'Code reviewer',
-    icon: Wrench,
+    icon: IconMaintenance,
     prompt:
       'Build a skill that reviews TypeScript code for type-safety issues, missing tests, and inconsistent patterns. Leave concrete suggestions with examples.',
   },
   {
     title: 'Doc summarizer',
-    icon: FileText,
+    icon: IconFileText,
     prompt:
       'Build a skill that summarizes long technical documents into a one-page brief with the key points, action items, and open questions.',
   },
   {
     title: 'Onboarding tutor',
-    icon: GraduationCap,
+    icon: IconGraduateCap,
     prompt:
       'Build a skill that onboards new engineers to a codebase. Explain the architecture, point to the right docs, and answer questions in plain English with code examples.',
   },
   {
     title: 'Research notes',
-    icon: BookOpen,
+    icon: IconBook,
     prompt:
       'Build a skill that turns messy research notes into structured findings with sources, methodology, and a tl;dr at the top.',
   },
@@ -64,9 +68,7 @@ export const SkillBuilderStarter = () => {
   );
 
   const builderDefaultWorkspaceId = useMemo(() => {
-    const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+    const ws = builderSettings?.configuration?.agent?.workspace as { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -129,7 +131,7 @@ export const SkillBuilderStarter = () => {
               testId="skill-builder-starter-input"
               size="md"
               variant="unstyled"
-              placeholder="Describe the skill you want to build…"
+              placeholder="Describe the skill you want to build"
               value={message}
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -145,14 +147,13 @@ export const SkillBuilderStarter = () => {
                 tooltip="Start building"
                 disabled={trimmed.length === 0 || isCreating}
                 data-testid="skill-builder-starter-submit"
-                className="rounded-full"
               >
                 {isCreating ? (
                   <span data-testid="skill-builder-starter-submit-spinner">
                     <Spinner />
                   </span>
                 ) : (
-                  <ArrowUpIcon />
+                  <IconArrowUp />
                 )}
               </Button>
             </div>

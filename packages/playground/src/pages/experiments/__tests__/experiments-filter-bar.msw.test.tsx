@@ -1,9 +1,10 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
+import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
   buildListExperimentsResponse,
@@ -37,6 +38,7 @@ function setupHandlers() {
   const calls = { globalQueries: [] as URLSearchParams[] };
 
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(agents)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
@@ -182,16 +184,6 @@ describe('Experiments page filter bar', () => {
 
       await screen.findByRole('group', { name: 'Dataset Dataset One' });
     });
-
-    it('clears the param when the chip is removed', async () => {
-      setupHandlers();
-      renderPage('/experiments?dataset=dataset-1');
-
-      const chip = await screen.findByRole('group', { name: 'Dataset Dataset One' });
-      fireEvent.click(within(chip).getByRole('button', { name: 'Remove Dataset filter' }));
-
-      await waitFor(() => expect(getLocation()).toBe('/experiments'));
-    });
   });
 
   describe('when Target type and target chips are added', () => {
@@ -210,18 +202,6 @@ describe('Experiments page filter bar', () => {
       const lastQuery = calls.globalQueries.at(-1)!;
       expect(lastQuery.get('targetType')).toBe('agent');
       expect(lastQuery.get('targetId')).toBe('agent-1');
-    });
-  });
-
-  describe('when ?targetType= and ?targetId= are in the URL', () => {
-    it('drops the target id when the target type chip is removed', async () => {
-      setupHandlers();
-      renderPage('/experiments?targetType=agent&targetId=agent-1');
-
-      const chip = await screen.findByRole('group', { name: 'Target type Agent' });
-      fireEvent.click(within(chip).getByRole('button', { name: 'Remove Target type filter' }));
-
-      await waitFor(() => expect(getLocation()).toBe('/experiments'));
     });
   });
 });

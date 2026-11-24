@@ -41,7 +41,8 @@
   }
 
   &[data-appearance='default'] {
-    [data-variant='pill'] [data-slot='tab'] {
+    /* A folded tab ("+N" menu) stays out of the row. */
+    [data-variant='pill'] [data-slot='tab']:not([data-overflowed]) {
       position: relative;
       z-index: 10;
       padding: 0 12px;

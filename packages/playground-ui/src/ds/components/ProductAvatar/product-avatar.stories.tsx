@@ -6,7 +6,7 @@ import type { Product } from './product-identity';
 import { ProductAvatar } from './ProductAvatar';
 
 const products: Product[] = ['studio', 'server', 'observability', 'factory', 'workers', 'persistent-server'];
-const sizes: AvatarSize[] = ['xs', 'sm', 'md', 'lg', 'control'];
+const sizes: AvatarSize[] = ['xs', 'inline', 'sm', 'md', 'lg', 'control'];
 
 const meta = {
   title: 'Elements/Products/ProductAvatar',

@@ -23,3 +23,6 @@ export * from './state-reader';
 export * from './create';
 export * from './dynamic';
 export * from './predicate';
+
+/** @internal Framework outcome classification; custom spans may use their own values. */
+export { workflowTermination } from './execution-outcome';

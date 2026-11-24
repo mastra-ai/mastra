@@ -59,7 +59,7 @@ export function CodeBlock({
       // A scrolling `pre` still reports its longest line as an intrinsic width, which
       // grows every ancestor; containment keeps the block inside the width it is given.
       className={cn(
-        'group relative flex w-full flex-col overflow-hidden rounded-2xl border border-border bg-background [contain:inline-size]',
+        'group relative flex w-full flex-col overflow-hidden rounded-2xl bg-nested [contain:inline-size]',
         className,
       )}
     >
@@ -122,7 +122,6 @@ export function CodeBlock({
           content={code}
           copyMessage={copyMessage}
           tooltip={copyTooltip}
-          size="sm"
           className={cn(
             'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
             transitions.opacity,

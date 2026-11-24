@@ -10,19 +10,19 @@
  * @module
  */
 
-import { GeneratePortalLinkIntent } from '@workos-inc/node';
+import { GenerateLinkIntent } from '@workos-inc/node';
 import type { WorkOS } from '@workos-inc/node';
 
 import type { AdminPortalIntent, WorkOSAdminPortalOptions } from './types.js';
 
 /**
- * Maps our AdminPortalIntent type to WorkOS GeneratePortalLinkIntent enum.
+ * Maps our AdminPortalIntent type to WorkOS GenerateLinkIntent enum.
  */
-const INTENT_MAP: Record<AdminPortalIntent, GeneratePortalLinkIntent> = {
-  sso: GeneratePortalLinkIntent.SSO,
-  dsync: GeneratePortalLinkIntent.DSync,
-  audit_logs: GeneratePortalLinkIntent.AuditLogs,
-  log_streams: GeneratePortalLinkIntent.LogStreams,
+const INTENT_MAP: Record<AdminPortalIntent, GenerateLinkIntent> = {
+  sso: GenerateLinkIntent.SSO,
+  dsync: GenerateLinkIntent.DSync,
+  audit_logs: GenerateLinkIntent.AuditLogs,
+  log_streams: GenerateLinkIntent.LogStreams,
 };
 
 /**
@@ -92,7 +92,7 @@ export class WorkOSAdminPortal {
    * ```
    */
   async getPortalLink(organizationId: string, intent?: AdminPortalIntent): Promise<string> {
-    const result = await this.workos.portal.generateLink({
+    const result = await this.workos.adminPortal.generateLink({
       organization: organizationId,
       intent: INTENT_MAP[intent ?? 'sso'],
       returnUrl: this.returnUrl,

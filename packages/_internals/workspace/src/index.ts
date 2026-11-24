@@ -11,3 +11,30 @@ export {
   type GuardedSetupCommandOptions,
 } from './setup-marker';
 export { repoCloneCommand, type RepoCloneCommandOptions } from './repo-clone';
+export {
+  FILE_COMMAND_EXIT,
+  shellQuote,
+  siblingTempPath,
+  copyCommand,
+  moveNoClobberCommand,
+  appendFromCommand,
+  linkNoClobberCommand,
+  type CopyCommandOptions,
+} from './file-commands';
+export {
+  FilesApiFilesystem,
+  type FilesApi,
+  type FilesApiEntry,
+  type FilesApiErrorKind,
+  type FilesCommandResult,
+} from './files-api-filesystem';
+export {
+  ATTACH_TIMEOUT_MS,
+  CommandsApiProcessManager,
+  CommandsApiProcessHandle,
+  type CommandsApi,
+  type CommandsApiHandle,
+  type CommandsApiOperation,
+  type CommandsApiProcessManagerOptions,
+  type CommandsApiStreamOptions,
+} from './commands-api-process-manager';

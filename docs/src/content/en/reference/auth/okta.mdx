@@ -262,7 +262,7 @@ The `MastraRBACOkta` class maps Okta groups to Mastra permissions. It fetches us
 
 :::note
 
-RBAC requires a valid Enterprise Edition license. It works without a license in development so you can try it locally, but you’ll need a license for production. [Contact sales](https://mastra.ai/contact) for more information.
+RBAC requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license). [Contact sales](https://mastra.ai/contact) for more information.
 
 :::
 
@@ -294,6 +294,7 @@ To use Okta RBAC with a different auth provider, pass a `getUserId` function to 
 ```typescript title="src/mastra/index.ts"
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 import { MastraRBACOkta } from '@mastra/auth-okta'
+import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
   server: {

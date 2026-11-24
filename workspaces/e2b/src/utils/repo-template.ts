@@ -205,16 +205,23 @@ export interface RepoTemplateOptions {
    * credentials a setup command needs (registry tokens, private index
    * URLs) so the build reaches the same state a runtime setup would.
    *
-   * Hashed into the template name (keys and values), because env that
-   * changes what setup installs changes the image just as the setup command
-   * does. Rotating a value therefore forces a rebuild — put credentials
-   * that rotate often in {@link RepoTemplateOptions.getRepositoryAccess}
-   * instead, which is excluded from identity.
+   * Without {@link buildEnvRevision}, hashed into the template name (keys
+   * and values), because env that changes what setup installs changes the
+   * image just as the setup command does. Rotating a value therefore forces a
+   * rebuild — put credentials that rotate often in
+   * {@link RepoTemplateOptions.getRepositoryAccess} instead, which is
+   * excluded from identity. With a revision, the values stay out of the name.
    *
    * Values reach the template definition, so they must be short-lived or
    * non-secret.
    */
   buildEnv?: Record<string, string> | (() => Promise<Record<string, string>>);
+  /**
+   * Opaque id that changes whenever {@link buildEnv} changes. When set, the
+   * template name hashes the revision instead of the {@link buildEnv}
+   * values, so secrets never enter the name. Never derive it from the values.
+   */
+  buildEnvRevision?: string;
   /**
    * vCPUs allocated to sandboxes created from this template. Resources are
    * a property of the built template, not of an individual sandbox, so this
@@ -251,6 +258,8 @@ export interface RepoTemplateIdentity {
   sha?: string;
   setupCommand?: string | string[];
   buildEnv?: Record<string, string>;
+  /** See {@link RepoTemplateOptions.buildEnvRevision}. */
+  buildEnvRevision?: string;
   cpuCount?: number;
   memoryMB?: number;
   workingDirectory?: string;
@@ -313,8 +322,11 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
     cloneUrl,
     identity.setupCommand ?? null,
     // Sorted, since key order isn't identity. Values participate: env that
-    // changes what setup installs changes the image.
-    identity.buildEnv ? Object.entries(identity.buildEnv).sort(([a], [b]) => a.localeCompare(b)) : null,
+    // changes what setup installs changes the image. A revision stands in for
+    // the values instead (appended below), keeping secrets out of the name.
+    identity.buildEnv && identity.buildEnvRevision === undefined
+      ? Object.entries(identity.buildEnv).sort(([a], [b]) => a.localeCompare(b))
+      : null,
     // Normalized to the defaults, so "absent" and "explicitly default" are
     // the same template.
     identity.cpuCount ?? DEFAULT_CPU_COUNT,
@@ -322,6 +334,9 @@ function repoTemplateName(identity: Omit<RepoTemplateIdentity, 'sha'>): string {
     // Appended only when set, so templates predating the option keep their
     // existing names (and warm builds) instead of all rebuilding.
     ...(identity.workingDirectory !== undefined ? [identity.workingDirectory] : []),
+    // Same rule: appended only when set. The revision stands in for the
+    // build env values, which then never enter the name.
+    ...(identity.buildEnvRevision !== undefined ? ['buildEnvRevision', identity.buildEnvRevision] : []),
     // The list form appends its members (caller order) so it never collides
     // with the single form of its first repository.
     ...(identity.repos
@@ -459,6 +474,7 @@ export async function resolveSpecAtHead(
     // templates keep their hashes; omitted entirely when nothing would run.
     ...(normalizeSetupCommands(first.setupCommand).length > 0 ? { setupCommand: first.setupCommand } : {}),
     ...(buildEnv ? { buildEnv } : {}),
+    ...(options.buildEnvRevision !== undefined ? { buildEnvRevision: options.buildEnvRevision } : {}),
     ...(options.cpuCount !== undefined ? { cpuCount: options.cpuCount } : {}),
     ...(options.memoryMB !== undefined ? { memoryMB: options.memoryMB } : {}),
     ...(options.workingDirectory !== undefined

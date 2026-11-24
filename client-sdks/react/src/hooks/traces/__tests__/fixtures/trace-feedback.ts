@@ -1,4 +1,4 @@
-import type { RouteResponse } from '@mastra/client-js';
+import type { CreateFeedbackResponse, RouteResponse } from '@mastra/client-js';
 
 type ListFeedbackResponse = RouteResponse<'GET /observability/feedback'>;
 
@@ -56,3 +56,15 @@ export const reviewedFeedbackResponse: ListFeedbackResponse = listFeedbackRespon
 export const otherSpanFeedbackResponse: ListFeedbackResponse = listFeedbackResponse([
   feedbackRecord({ feedbackId: 'span-b-feedback', spanId: OTHER_SPAN_ID, value: 0 }),
 ]);
+
+export function createdFeedbackResponse(spanId?: string): CreateFeedbackResponse {
+  return {
+    success: true,
+    data: {
+      feedbackId: 'created-feedback',
+      traceId: TRACE_ID,
+      spanId: spanId ?? null,
+      timestamp: '2026-11-05T12:00:00.000Z',
+    },
+  };
+}

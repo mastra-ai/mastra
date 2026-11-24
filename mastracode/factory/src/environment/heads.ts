@@ -8,6 +8,7 @@
 
 import type { VersionControl } from '../capabilities/version-control.js';
 import { getBranchHead } from '../integrations/github/commits.js';
+import { groupedRepositoryAccess } from './repository-access.js';
 
 export type EnvironmentHeads = Record<string, string>;
 
@@ -74,12 +75,22 @@ export interface HeadRepository {
 
 /** Current head of every repository's pinned ref, keyed by slug. Throws when any lookup fails. */
 export async function resolveCurrentHeads(
-  github: { versionControl: Pick<VersionControl, 'getRepositoryAccess'> },
+  github: { versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'> },
   input: { orgId: string; repositories: HeadRepository[] },
 ): Promise<EnvironmentHeads> {
+  const repositoryAccess = groupedRepositoryAccess(
+    github.versionControl,
+    input.orgId,
+    input.repositories.map(repository => repository.id),
+  );
+  const grouped = {
+    versionControl: {
+      getRepositoryAccess: ({ repositoryId }: { repositoryId: string }) => repositoryAccess(repositoryId),
+    },
+  };
   const heads: EnvironmentHeads = {};
   for (const repository of input.repositories) {
-    heads[repository.slug] = await getBranchHead(github, {
+    heads[repository.slug] = await getBranchHead(grouped, {
       orgId: input.orgId,
       repository: { id: repository.id, slug: repository.slug },
       branch: repository.branch,

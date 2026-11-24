@@ -7,14 +7,15 @@ import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import { MemoryRunState } from '../../../memory/run-state';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
-import { resolveObservabilityContext } from '../../../observability';
+import { resolveObservabilityContext, SpanType } from '../../../observability';
+import { executeWithContext } from '../../../observability/utils';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import { getInitialSignalEchoes } from '../../helpers';
 import { assertThreadOwnedByResource } from '../../memory-thread-ownership';
 import { MessageList } from '../../message-list';
-import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
@@ -43,14 +44,6 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
     // Handle string, CoreSystemMessage, or SystemModelMessage
     messageList.addSystem(content, tag);
   }
-}
-
-function getInitialSignalEchoes(messageList: MessageList) {
-  const inputMessageIds = messageList.makeMessageSourceChecker().input;
-  return messageList.get.all
-    .db()
-    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
-    .map(mastraDBMessageToSignal);
 }
 
 interface PrepareMemoryStepOptions<OUTPUT = undefined> {
@@ -169,42 +162,60 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       }
 
       let threadObject: StorageThreadType | undefined = undefined;
-      await authorizeMemory(MastraFGAPermissions.MEMORY_READ, thread.id);
-      const existingThread = await memory.getThreadById({ threadId: thread.id });
+      let existingThread: StorageThreadType | null = null;
+      // Thread lookup and creation run before the input processors, so give them their own span.
+      const threadSpan = observabilityContext.tracingContext?.currentSpan?.createChildSpan({
+        type: SpanType.GENERIC,
+        name: 'agent:load-thread',
+      });
+      try {
+        // Run inside the span so storage and authorization spans nest under it.
+        await executeWithContext({
+          span: threadSpan,
+          fn: async () => {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_READ, thread.id);
+            existingThread = await memory.getThreadById({ threadId: thread.id });
 
-      if (existingThread) {
-        assertThreadOwnedByResource({
-          thread: existingThread,
-          resourceId,
-          agentName: capabilities.agentName,
-        });
+            if (existingThread) {
+              assertThreadOwnedByResource({
+                thread: existingThread,
+                resourceId,
+                agentName: capabilities.agentName,
+              });
 
-        if (
-          (!existingThread.metadata && thread.metadata) ||
-          (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
-        ) {
-          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
-          threadObject = await memory.saveThread({
-            thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
-            memoryConfig,
-          });
-        } else {
-          threadObject = existingThread;
-        }
-      } else {
-        // saveThread: true ensures the thread is persisted to the database immediately.
-        // This is required because output processors (like MessageHistory) may call
-        // saveMessages() before executeOnFinish(), and some storage backends (like PostgresStore)
-        // validate that the thread exists before saving messages.
-        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
-        threadObject = await memory.createThread({
-          threadId: thread?.id,
-          metadata: thread.metadata,
-          title: thread.title,
-          memoryConfig,
-          resourceId,
-          saveThread: true,
+              if (
+                (!existingThread.metadata && thread.metadata) ||
+                (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
+              ) {
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
+                threadObject = await memory.saveThread({
+                  thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
+                  memoryConfig,
+                });
+              } else {
+                threadObject = existingThread;
+              }
+            } else {
+              // saveThread: true ensures the thread is persisted to the database immediately.
+              // This is required because output processors (like MessageHistory) may call
+              // saveMessages() before executeOnFinish(), and some storage backends (like PostgresStore)
+              // validate that the thread exists before saving messages.
+              await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
+              threadObject = await memory.createThread({
+                threadId: thread?.id,
+                metadata: thread.metadata,
+                title: thread.title,
+                memoryConfig,
+                resourceId,
+                saveThread: true,
+              });
+            }
+          },
         });
+        threadSpan?.end({ output: { created: !existingThread } });
+      } catch (error) {
+        threadSpan?.error({ error: error instanceof Error ? error : new Error(String(error)), endSpan: true });
+        throw error;
       }
 
       const memoryRunState = new MemoryRunState({

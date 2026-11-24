@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import { factorySessionUrl } from '../../links.js';
 import { findEnvironmentRepository, resolveSessionRepositories } from '../../session/environment-repositories.js';
 import type { EnvironmentRepository } from '../../session/environment-repositories.js';
 import { runsPullRequestCreate } from '../../session/shell-commands.js';
@@ -71,6 +72,8 @@ interface SessionTarget {
   repositories: EnvironmentRepository[];
   orgId: string;
   userId: string;
+  factoryProjectId: string;
+  threadId: string;
 }
 
 /** One pull request of one environment repository, with the installation that reaches it. */
@@ -117,15 +120,18 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
     throw new Error('GitHub subscriptions require an authenticated repository session with an active thread.');
   }
   const sourceControl = github.sourceControlStorage;
-  const session = await sourceControl.sessions.getBySessionId(context.resourceId);
-  if (session && (session.orgId !== orgId || (session.factoryProjectId && session.factoryProjectId !== factoryProjectId))) {
+  const session = await sourceControl.sessions.getBySessionId(context.sessionId);
+  if (
+    session &&
+    (session.orgId !== orgId || (session.factoryProjectId && session.factoryProjectId !== factoryProjectId))
+  ) {
     throw new Error('The active session does not belong to this Factory.');
   }
   const repositories = await resolveSessionRepositories({
     sourceControl,
     session: session ?? { orgId, factoryProjectId, projectRepositoryId: null },
   });
-  return { context, session, repositories, orgId, userId };
+  return { context, session, repositories, orgId, userId, factoryProjectId, threadId: context.threadId };
 }
 
 /**
@@ -184,7 +190,6 @@ function subscriptionInput(target: SessionTarget, pullRequest: PullRequestTarget
     ownerId: target.context.session.ownerId,
     resourceId: pullRequest.connection.factoryProjectId,
     threadId: target.context.threadId!,
-    sessionScope: target.context.scope,
     source: 'explicit-tool' as const,
     subscribedByUserId: target.userId,
   };
@@ -243,6 +248,21 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   return resolved.number;
 }
 
+const SESSION_FOOTER_MARKER = '<!-- mastra-factory-session -->';
+
+const SESSION_FOOTER = new RegExp(`\n*${SESSION_FOOTER_MARKER}\\s*<sub>\\[Factory session\\]\\([^)\\s]*\\)</sub>\\s*$`);
+
+/**
+ * The triage handoff with the link to the session that wrote it as its last
+ * line. The host adds it, so every pending and final handoff carries it no
+ * matter what the agent wrote; a footer already in the body is replaced.
+ */
+export function withSessionFooter(body: string, sessionUrl: string | undefined): string {
+  const content = body.replace(SESSION_FOOTER, '').trimEnd();
+  if (!sessionUrl) return content;
+  return `${content}\n\n${SESSION_FOOTER_MARKER}\n<sub>[Factory session](${sessionUrl})</sub>\n`;
+}
+
 export async function upsertFactoryTriageComment(
   requestContext: RequestContext,
   input: { issueNumber: number; body: string },
@@ -263,7 +283,14 @@ export async function upsertFactoryTriageComment(
       installationId,
       repository: own.repository.slug,
       issueNumber: input.issueNumber,
-      body: input.body,
+      body: withSessionFooter(
+        input.body,
+        factorySessionUrl({
+          factoryProjectId: target.factoryProjectId,
+          sessionId: target.context.sessionId,
+          threadId: target.threadId,
+        }),
+      ),
     }),
   );
 }
@@ -284,7 +311,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
     getRegisteredGithubPatKind(requestContext),
   );
   if (pat) {
-    inject(pat);
+    inject(pat, true);
     return;
   }
   // The boot's own minter keeps the environment scope (and the agent's note
@@ -330,7 +357,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',
       description:
-        'Subscribe this thread to GitHub pull request activity. You usually do not need this tool: successful gh pr create commands subscribe automatically. Use it for an existing PR or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a canonical PR URL for any repository in this Factory; a bare PR number only when this session is filed under a single repository, so pass the URL when the Factory has more than one.',
+        'Subscribe this thread to GitHub pull request activity. PRs created with gh pr create are subscribed automatically. Call this when you start working on an existing PR you did not create in this thread (reviewing it, fixing merge conflicts, addressing review comments, fixing CI, pushing to its branch), or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a canonical PR URL for any repository in this Factory; a bare PR number only when this session is filed under a single repository, so pass the URL when the Factory has more than one.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
         const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool', github);

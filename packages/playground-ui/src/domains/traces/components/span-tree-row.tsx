@@ -12,7 +12,8 @@ export type SpanTreeRowProps = {
 
 /** One hierarchy row: expand toggle + name (+ meta line), then an optional trailing cell. Expects a grid parent with one column per cell. */
 export function SpanTreeRow({ ctx, meta, trailing }: SpanTreeRowProps) {
-  const { span, spanUI, depth, isRootSpan, isLastChild, isExpanded, isSelected, isFaded, onSpanClick, expansion } = ctx;
+  const { span, spanUI, isRootSpan, isLastChild, guides, isExpanded, isSelected, isFaded, onSpanClick, expansion } =
+    ctx;
 
   return (
     <>
@@ -20,11 +21,11 @@ export function SpanTreeRow({ ctx, meta, trailing }: SpanTreeRowProps) {
         span={span}
         spanUI={spanUI}
         isFaded={isFaded}
-        depth={depth}
         onSpanClick={onSpanClick}
         selectedSpanId={isSelected ? span.id : undefined}
         revealSpanId={ctx.isRevealed ? span.id : undefined}
         isLastChild={isLastChild}
+        guides={guides}
         hasChildren={expansion.hasChildren}
         numOfChildren={expansion.numOfChildren}
         isRootSpan={isRootSpan}

@@ -1,0 +1,945 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-om-final-text-openai-plain",
+    "testFile": "src/durable-agent-om-final-text.test.ts",
+    "testName": "T86 om-final-text — openai > plain engine",
+    "model": "gpt-5-mini",
+    "createdAt": "2026-10-22T15:17:23.350Z"
+  },
+  "recordings": [
+    {
+      "hash": "50dc8b6204f91fd1",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use the tools when they help, then answer the question."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792682232863
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e977b3ec15f55a-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 15:17:13 GMT",
+          "openai-processing-ms": "333",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999414",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "3ms",
+          "x-request-id": "req_611ddc27e72e4b02bc3359d3948b9098"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_043937975330613a006ada28f9311087d1be9151f55302f6a9\",\"object\":\"res",
+          "ponse\",\"created_at\":1792682233,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"prope",
+          "rties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_043937975330613a006ada28f9311087d1be9151f55302f6a9\",\"object\":\"response\",\"created_at\":1792682233,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",",
+          "\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_043937975330613a006ada28f9aae487d18cb08b0c01aa3564\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij5GNxMBs2bqQ7K32c1q9MeoyF-PN74K6MjXpmRldBusHVxNzClXfUJPEwHdJ5993LBbwa_xYzkgi4XIUpndLUcpMTi_7fnI2ChZbUaVRbSubFpc-6e9EmfHVKBpLn_1UCGBTZxYZQTG_Cbk-0W6XoFjCX-RW7Q67OYQTBlCqO0TeWqX0CEeJzp6iGOsQnmajDX7eSCwxMbtTZlp0xFYTPefp6dnwhiyMewNgDf-VxiYHcXcjrnazsHQBLw6wnXHaJQjeC9kHdyQo3myFtNbj-au7Z1sBADiPvm1Z_drQCyoy-DjXFg1BMRs-TZZVioR3OCnWbHfsYE0vNAs9cg5P6Y6f480M1dOAz5Hcf3Kp3puCriRHNHe-VChqMgcilfiAjYiOPig_zSVgtpl-Zm_BB6RQqeyj4-YmFoNYLldi55EjTgkf2wzz7fl3agdM7BCaC2L5lmhbofGs8AfEDG5nG1NypGflaKmVdKoWY-oDcWyaevVi5yM0MyxOVyR5uDONsf_GgjlS0R-dfeG0iBQMK5gayfdpVtxacpZTXcqw7MzpsNZVg5IiksCHiWGeKJ4NX-3pZFbBsJNqYlUXc0fhGZf8Lq0BnDbgjOjXQm4VQ091puvuOwQ_akRGQTzxJ-9KOsxe1HrjxyG9y9UxXnAXdRGQckG_zFIHFeHvOdWIDiH5YWm_IR1HDC3BH1zQsaTWJamx5DXwZVGFCtb5ei0AFe4auTU716CFxEgxPLotD1iEgbmdaGyTzpWFNvS-l7AnU_KmXTG0NQ5aJKDomlbGWMON0-rQC46lu3WJpea2ZfiOzlNBPqxmjPEPtnNM3-vvwreZEhY7199i34K0spIceX6uyzNmlWowEuvEgJVnp6IE_GEflHB4SvGEmN8Eqjo7gKA6qYafBTBqSCAhHuu_pzCrdJgUqGi1EUc02F-w_BMwPVxN4Pe_0KSyRB3jNslo9Bwra6yKvAL0pB9LO6cz5mOxFxfR6-94lQQORF9Lql-0_fbmsEoZC58j-gx6th53IhluFi7idxcT3qdtHT_R_VEpZLCJ9n_tDRoZjsNkFL-N6Rtm01GbP0A0YS2S1dSF_EmDJq2UNjSTgR2SHcbheSGSpqbJ39p8neARvoYCdgJZx2KAFnCzTHZBVLUCNwzfQtx",
+          "Psr3DdAd1zLYoIJfso7H_SSElAW76p0hzx-XnbPr8twUzh8HA25edBKitKx2gCV2tzGFktwmszIsWo3ydBDbw==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_043937975330613a006ada28f9aae487d18cb08b0c01aa3564\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij6TkyMI4Gusl-8vXfW8qiEA80olxt_Ywh8jj5Q4tANFf0XJzfhJhPTYut59D08mAaJc-xIM7-b_P7fpiVW3UHcCaCToreeJPY1j5x3xFceBzD0WftU-0TrfufbjHMvlVBMIXwXv-JrPshLDLg6Maac87kQ_7-oeZf5VnL_I_iahRGbSbCNbgVo6-nxxL1D3FhPEb2L6hCcaf9D2-BcTs6k10KvzFLGLq76PGbCvHPLtuEQ3aB2p91xgZ0XZdVlx-UvyH1WIbLZVHwbi8hP2nRg-f70X2ajXNlepScz839hY8oDmc_S5XDymg9AO8fR7vaJTdB5k3yv220Lv66QoJNN6tkP7y9T9A2FNZVnI5BTxMfPPJgdLIV9JJc5SOl9rXJZlOoKyaLi9LRo8m799BxNvj1EAfsOmztT8UOD01L8CSr6-Iyfwzfy6CbXXDQADxzJ7o1I20CoDLkZqIphjvyMIOjTmq_cS_6fnieKreNXFwtIBeXJo1PmKwRQ19oSYohQZpxLzd9sVlkLLePgOHXoXasvcQsXOd9wdxgeD_-C019RqUGxRtJfTVaN0alTsBpswFhUeOTw4UDCPTCts8ezM83JjeIpaJupxLSlyPvUgGEcQKwglt9FH9Kpo99Tex9jGMSMyohHHXjOQSg5l2XVUJctMZWJHtcqEMw273FaWXb0TypCWpu18Nh_-YGDLtPpecCoq5He_cV64sOIEla900iceuU4eJq0LJh_iAprrV9vFJ0FijkRWkdL5-ovl5EamLwamlK73JOE_1geJk386BhMScLNQH2YpdHyaPyyV-wd3bKhzRwS6Ac2LzBy4xqKJdpGVFGlLHBIxdtXaMt_aWdGBsPTyKIVZCGz9NoMxDfEAoFgU3mQIDMsE_75jLT6nQFE8xxmODPo1yRx_It9enFksngvraKkd8-Ol18mga7fyicP6mfhdyYdfUgUF9wPdfB3xjjqMcVlRQHADLG5w5JBKzs2f8wesMPriX_bcgFmf1XwOH-J7hAut26s_A6o7yAD3OthvMhQswnzOtBN6FJEuVVopoHEbdDhcq2LZzU0YdOE5kZTYsupdhxjFLmU7uyRstPff1mkvS_L5gKEn6m77qwRkuBU9yCBMg-eiBhkWCNH-f1mpueZO7K4HGNgJUg",
+          "O1irIdtz_d3LtCLjjfyQp9oIejznEQd4tays778cS013sFKJ3QgZ9QkMkszDaIWWKI_ubmIsdCnq4vFVDSrbEcQI6Q76aKA_e8fxhCHvuaULDBVg49n97h0wmKNXXSKswXxANaNSZJLD2ZhCe2ea5OKB_UaCCUkZEWB10NngX04QoOeFe9igBEjq1za3GmPuXSWKiyQkWGu89WFfzQ-oD2bDWDckFx69p9DkoKXfMt66ZvE0w0b2fY5GkcT11vAsZMPcYpkIB8v0n_mgPu0XlIe3PCEKq7_QI_NtrNstprmHc0o4EgICWTWFC9l_IlTF9yAMo9V1N1p4ET9LuQGJezRJVWI6C00ARl1v3aniBOfQfqaXzRZc4oJMPYLrkuP4Op8huWc6AfC8Toe4HydE4NcOHmqd28gqynU7icCv5qU1kZzvk6ad1iqzQpb0HDw4TebJLupjU4VM1pzjz1aUBxbCtvBidB4to-Ppt5Wran_x0evM6r3YZMJb-5uOn8-cAtPHKK-LpHtn3FduGabSb_c_az0CtSAHDBKT1-CZFUwMGQlhmAVca9FnwkRLtbBX1j99T4pDpC5LJ_mwA8IG6-S6rRij3CvkAXenshUCdN7wBJoOwZJmV05eypsyq6xhut6msW8Ug2PRBk3UFVy3--wbJgcF3RPJobsnGuFRVPZiJLuvniXUquGcDT_qefpN6FX0Kf1d8porVDWCZUnm94E0hm6ilmz6b-4ggp0iuXetAJJN0BxsmGrqiXvyAyDAVFYxp1ZUCxbUijHuz8UsXC0atbYazOFZVe3EQ1QJdc1TsT9F_FiipX1a5AtGc2UWmZnIP5OVWRTWKZP23sdeuDbl_cMJVerTDd3ai8Kpq_O7apZwLpYkTsLErFlDI1dnk77Mu4IqPGJ89pL9NYfxSfN-aHWcKTImVFVyUbm1epSQkCyxKqjF_tz8Nx5eGWF2yfJ9wday4HdAJZweQ-loANiBHj9Qs31MfzdzfK9PV1D8G8fS_vzu0NowMHWqp2xBMeux5N83NRpCnmWBpatEWm4FTB_2a9hgt1qcluEPIrOptb1m2XYrXEFV_TwQ0MRvnT0QftzWtI_A8B97DbbcCiERRaSRIyBvvL223PdalJIJwhXqvAsaeWnH5jrS1G8XglpWxrDXKh9mo5swXDimyKp5yki_gouDsqyLM3tBstXvFeO7QOjg5xBvpmd9TipprWEqJbpAyDvW4tj0Y32vBgTr9gnYwHR_kjwptTKgiJnUeeI7wr7Z8RX9IlejOW5fAWxkf9ldFi1cAJRQzAQAH2tCtGgFlzudRZsyfcqXBStLu79tIy4DHw9KytwHqRrWEf7AqMZAiOR1iVu6nS7InFY8F",
+          "UbkBOB_gwLxys5jKYDW7wrdOwIJb9LYSCHzz7fWmkjtIgYZzfw6WQxb-DDCZ0K_Hh6gW-7VspfpcSgw=\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_wCkkEEKIpeJwbFXqPQOIVPpw\",\"name\":\"lookupCity\"},\"output_index\":1,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"obfuscation\":\"zMS2TX6jhJ9gji\",\"output_index\":1,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"city\",\"item_id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"obfuscation\":\"oH0BkkG88QmR\",\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"obfuscation\":\"JF1TUZs0fmD3G\",\"output_index\":1,\"sequence_number\":7}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Lis\",\"item_id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"obfuscation\":\"3NjCPLgRnlpKE\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"bon\",\"item_id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"obfuscation\":\"FJZLnsQM1V9Pm\",\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"obfuscation\":\"tLmSGsjZa5ov1v\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"city\\\":\\\"Lisbon\\\"}\",\"item_id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"output_index\":1,\"sequence_number\":11}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Lisbon\\\"}\",\"call_id\":\"call_wCkkEEKIpeJwbFXqPQOIVPpw\",\"name\":\"lookupCity\"},\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_043937975330613a006ada28f9311087d1be9151f55302f6a9\",\"object\":\"response\",\"created_at\":1792682233,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792682234,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_043937975330613a006ada28f9aae487d18cb08b0c01aa3564\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij6a9ZYxBqKdlSv7ghFL0wLMDEQTdoILO5ZCkIX6hLyHfL35Hblww0rVo2Plu3NmbEKigKYC7kVsppOwtCiO6dfgU3qyQjM3f8qSnZtIkO74AH1G3As4bZDz0ON8g48gO_HlPqXwWQY8eJ4mG3EtzjVvEaM4AVTPEKt2_2DiJizDe5R1VKR20s5tn4pGTQVyyIjcd6q3TB0S870tmjPDwldojspR795QYUzTg_0xvExWY7bZ9igwY5GHz6FpShExXYUSAfi5e1phG9w5n0hiveL88lJ3-kdjtKViTT2tiW44GL8vdgq_AE-tWGB7Eud3S2abZYvEqB6_KZq-fvC2PmWl0CcfRFyJtGIdTvusBHeG0RrPdqcamoh-ZL7sEw8YWT06-ImtapL80lus9b73PHuSdaPpORd9O3l9yfnQbgqT2rWUJEA3GjQP_ZVs0w-Jg4hPL6DiHw2u5WN5bKq40pzQqiF73gIl3mDR3ulH1dphrsYgPcjfjGGMmnAiicw0eU_3y1FuSTBRjMhu-C8fj6UpNUIFKgPuPQDk6zIEeC0Q52jniF0hRoRbA4g-SGbA1PUPpJ6cXla3WcGn2CR7zihckUdwZ8RZSauLKgLt-4NyvMhRxPb1D8B6TPUpGYbEEwnwPI1E4t4zZIQ0H_RBjz4Det-Md0nT98DySYAMdHOR5obhmWWm2vzJH_4EfowCuJgKDQZbGtaaHFqIkyRCTw50_RHka3_tZn-Z1SkePkg-JfChZSynIsAJ_ulKqoByfuXGoyTJQlwg",
+          "6TME-Im2NZrzu7KMf0DAGIc_daVXyyWa1PvIu-C6fMXm4vpxPSUF76OfqBGEqpQg7vWAMd6oEyZvBc2hTZjIrByNabFl1PcU7h_UHv79sQHGhiouRXyw8yKetYLgK8oEmmKRoPjt2FnIbUEJaiRvmSnrbkqYvI5gcHIPDAOXMtwJogDHJKVqN2_FIdrP9zwV7e775gmX1E7PMAlrOACFB66Dbe0tXDeAHx1d63RVbRG4FMQNe7B-HvB6LElY9yO1FHMvvDuYi9F2ZfztAvG79v_75ywt8BvIiFYFhmG98SRLAnaV9BUobYHkdLYCvsPDrY7UcFYFvAXLDdQU5lWD9JXAE5epWBykS5VarEwShE1VVfHXdgPB5cRtYJM9JBOQMuQl3ETmlAd_ABaSnR2RbJqJCOTwPmUaUFMEijOxLrd1HWy0OV2qA3VzB9V6pQMS0bbuSNUjuy4Ij-6Asy2B97LQpB-pJv-gi72GVRGKYn7uJcFU7KE5_XspzhghJn0KXVdVlo1gLigxC51UQVRDV0-i_V6NdIk52-4uZsJ0aqf2ObKakxuRmg0etRYaRtbWigES-4JeY24tIBD9WCUnrtOaC3OESko5PIEULdN1SxrEzTyH-dkXICWonqChq8W-J0D9Hbdk_qS3piBG50eomq2UaGHh1ZgbMKy-DMqxnUM-BsrPRoR4-M9dwuM2w0DuHJ4wtJGnjAPL78d8fsCbaUmec7bPglGTMiA9vy-rtSFmUNlwocK3AJfiZb2TGjC1ZO_MsnbQFcjEKk29zDhz7_o8LStotwcNPbv3Y8fRf0yqH_P40CEgF5z7onRb1Sg1HarGgXlPDW2WOFiEQNdGO0LRPFfsS3_Cp26KMjg-aaZ9tcjwaL07AGnRF4j6dPALC63lxU6EygejBdDzQ9D8pf9VX_ap0_Ddk3unpom3XRGhIHZnhxSjXMLF2NUaE1JYSyqxXO_FJGn8WvIjFOxDsYumDVvA0msUKN-TMGOMvIf8e0eM1l8thKY-5urYPX2vWj0tZ29sz5xNZ-CvPlpl4Oj_iR2pKGYmZfK74PX4ols3AJCJRvbQwIyBFzp7lsrxVQ_c9jRehCHiv6GcNvpmj6_lN56YBmIhRa3JMyw6dcdRcrQcwGghXDUuwXLhyli1i2FLbcf4csVBaVXI4tPM13LZM-OKlkjscBY7Tp1scalx1q3YHlKiYfGXwUsZoXDK60xrw_emdd7UMlByjl2vNXHoDDfcLV9wsvZy3n2ig-7U0vC6XKxkmJOpRXi98kvWYFK_hQmXGdeAr5CW4avybCIy5GHUTCc54ltSY-tlK7uTbk4b34Iy8Qd__e9nOmgJDFkg_3SK71qIgzakUJwUiYNEw",
+          "4Lu3o7O4XaQaQx7xbLPrXCsAFrr7y7ERlRRW_0W30f6468NpskXO9tqEI5YKas3ZCikZ9TQG-isVgPgCc1C-2oxYqPYkCm0Rs-GQp1622j1om5e6DE4IATyfpUqnZmorTpQhSKmlZ3P5eFxYcrwQZXf_rence6yTA6UUs5lbj0ZujcEAXXCsqYPKPGHxDfYeRc4lnNx_bvZm4uWRfW0hMxLRKso8_r83_RAIojVLdaZFr2skK2uq_xjpDgZgzUkM-XrIcS-uX_D2XbFT1Ng87cWKILzYw8d6PyW8BmyfRFyK_pVSvzKe6DA90sOiTYObgI_PWTx7ajKvl-cW1Fy683r1qIwGWTFmRhMADnM6I4LoVmeDHUBy1Jte2UyM3DNUz2r9xToIE8jfrXiJEwJDSWyJ6pGHomT2Fwfo6whuyTC2bGy1jRFjCeQj8aGbptU2vr10xNaaM=\",\"summary\":[]},{\"id\":\"fc_043937975330613a006ada28fa654487d1bcfce606f4dafa7b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Lisbon\\\"}\",\"call_id\":\"call_wCkkEEKIpeJwbFXqPQOIVPpw\",\"name\":\"lookupCity\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",",
+          "\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":90,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":108,\"output_tokens_details\":{\"reasoning_tokens\":64},\"total_tokens\":198},\"user\":null,\"metadata\":{}},\"sequence_number\":13}\n\n"
+        ],
+        "chunkTimings": [
+          1,
+          0,
+          0,
+          0,
+          167,
+          0,
+          722,
+          0,
+          0,
+          4,
+          4,
+          3,
+          0,
+          23,
+          6,
+          68,
+          175,
+          0,
+          0,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "97e22b9d282cf231",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use the tools when they help, then answer the question."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_043937975330613a006ada28f9aae487d18cb08b0c01aa3564"
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_wCkkEEKIpeJwbFXqPQOIVPpw",
+              "name": "lookupCity",
+              "arguments": "{\"city\":\"Lisbon\"}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_wCkkEEKIpeJwbFXqPQOIVPpw",
+              "output": "{\"code\":\"C-LIS-91\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792682234764
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e977bf8d51f55a-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 15:17:15 GMT",
+          "openai-processing-ms": "269",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999289",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "4ms",
+          "x-request-id": "req_011bc9646d1049aa84d697a5a674253a"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_043937975330613a006ada28fae12c87d18dfc5b7a995a981d\",\"object\":\"res",
+          "ponse\",\"created_at\":1792682234,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"prope",
+          "rties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_043937975330613a006ada28fae12c87d18dfc5b7a995a981d\",\"object\":\"response\",\"created_at\":1792682234,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",",
+          "\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_043937975330613a006ada28fb4a2487d1a6ea4da522a401da\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij7wef3xTKHmo4-5alFR2izOqM1MBIr-xNguSLc8ZXsYLjTufsPOjzTJxVgx7HXcIMkbi7iIEVIqQ6CMA2diKVYfflOHGe6oTA3oTgSDEhMJioZBWfMumlvT9DRlCde5HQ-deD3C8pbVkvkqL7E075HXU85ctY5YXrwIGm983IwaIufoYhVKvqy1NgJQLe3FzG4zbubJDrlW8J_3fX_-JvgT4h__1UPICsJZUVv3kBe9IC9X_L8msuNXtmAaFmBsdHpVTFb_jDxoz5IjzvNLcJVAzt2BKgYdDJqj-M72NhgI9Z4fJjDW6nhQ2Z_QX4CrxGzYkSYqk9_EUOap0ICD5cd8lDOSlXM_tMGwcJjIJ_duyyPy-0w0t6iQcvG2Js4W5eDGAEDxsNpNxpRI9Ia_kujoGLa5ffK-OUxPbZfx_hV0RXLXvMHn8lKSHvMxVn-a3rviJ1A1pA1rQRBJ2ROJ3zcD7Hsifk7i8sdBH176mx0Uvoh9t-nhtnwB-S6VB-B8QGBcRuMrAW6CUnmR_9VYuczMUxyipCzc1upnYG_uSjX_JxDZKjzzrqUzAj-G8sBNynf47_uPBkTuxPDtYBxJaioMsTivj0E2EkLmSQqRszGOF_beWG5PAAqbGSAjgtAfNYddFpOTFJ2VdBCpj5lPhr4a_xPZmoyPLaFWdculiRjcdlJDn6ZMUOyntncQYIAJLvAAPZzGKQ-vQTLZwoBhWUp1p7eIfMmBP-lVwwhw00IBNJMKEmrvoT-vWESP9Z09sbA_KUSDTNxO1oBNTtLDatlDpNyrMXCCEapbTMa_1M6KlW_qGVsvSTbECFTF47d3Yijx3Amk2S8PY3lrvNbTzHEypOc2nBkssP2VA2oeTAlC0_X17kdGLvT7UcJuyqYhanEG0VnZE-2s92AVUo4HYEG1LzQa4D6Vvx26RAs9Fz3KXx8qLcfZMQvhJLFiamu9AqObjAAHPvfEF-_oOemQU8sffsE4r7QmwHypfgb2utkVWe-T_1qJUCh0QDE-Uw63ePe1UIsIyVyOjTYqr2XO6-mEBPnjGpJfgy0HxA3KXi-wfQ7Ojh4kM7f-QNECNq2wgf3WauY_lXhlh0AUvbAiOeGmGnNQ7Ru9-LsgUTZaYblejutk9QJSxt8z3wMQqcTQTdHq",
+          "Rr-PRkYst-UtppMihVch6RpdCjrbgUDg7nK_cY4EINq1peviPs1bGta4ebW0vvVkGPxJv2hLtAOm8Vo51S3lQ==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_043937975330613a006ada28fb4a2487d1a6ea4da522a401da\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij7BPDEdQT4qPhTiC92aPE1fEndFj3_Z9QjwaMdoTmDzgTwBBwv3pGleaTpO3J116u_mprJ0TdxtR7OWD1AD3vu-uFFcc4pzeTCNm13eZFLqQHYrC3A1I-yzRQQgd02kmBPJ7GyTjDVs9INg0h1ANGqTlW_iS7iKb-XPavbdxNHSbsCUtlusBztnpc4yNFdYS1sONSxytyrl2MuG32uJkKQ2OUrXFOmkV66Q4wXMKjr4vwe5Jf36ZAV9bVveqcKzEQGBayv-UMPnhkUqozpmFe3ZUV-1bRIdmnynidaeJY1M_NuVQ51yFXsOYlW56kB9FK1PZ0WV3Nv7yhy3OFTnYEOoXnisAvJWgeyPaO50fXFjhEZguxffHmeqb7MwwG_cVCfWGvi2vywfV2q1G89W4vhqeb4cZ7OdtJmf_xQqS6pvY2PGpmGczzK2OMh8uNpYqUbEE71aDuuOpeKtRNqBAu_lGMO-xoCiP_Fh0cIeEJfHYXiGZ1JjyChAhDkyxUrUHtuSFhbCgOWU42BzGsuIrH7sZP6mAJ7rSzcWa3GzeShAbknTZQp2UcUgvWPkGpUI3d2NHnrWqOZSNDPlkkhSfPPkPAQOxgosQUNsgC0danAGM3t15B02WX_MC2zjJf16yNMB9HUf_Uq8hqrIDpttnD2Xt_yj3eGvrqVYZ6dksJ2JciCDbGqO7N0VANUuGx5ikJsxwY9HXy3b02pZK20O6fgGOkeNgc1YVFv0Kh3Q_M7UTcbnNnWOzmkSmIzsq3-7JSgCqh9IQAWoAGh-b0NGLS4ETkrcdxCJWEmA9k7xs5IfH8LowjG_fsSR0q0LA1NqJUAomm80tCIfjlmjgdr17SMJyrXbx7nQJ0ynKWfNVOP-8y3Don-gQq48uuib6CwrGq7U1aGrivN1udvQvlxxaf_99N2wIsNrCrLZLGNVcqPYIPsZSQmlCsdK1EFUq2IS7nD5VibiqE195CA_eiei2HVvkrHUYgya1J7REtmlYGe09cVp6FiRffpb-eHT-d5pgC8gHgMZUqD5nAI31zra81-npGySJdz_t-lVkSmfBvX_HVSkHZMGF1qizYbYgTK5fWAdOFZZEB2Ez4eAPS-bw1ae7J8eaP6nxg-48TrmfC12D0jDn3nSQ9bHm4O13GtVYrdcX0",
+          "66-5y2I85xFWM0qCW8p_QUipavStdOp_PII-CIb2_LwZRSzQOQe7pE_MwKmQbHMrRqjpKszcRqpGYPDEAO9OCsAUcxxd1ih3tEEuwaTPms89ktObWq42s9pXtowUi5HnBGwVcLSZgl46VI3NyT1FslAx-4IpUMn1bXdkxXU3KVQ0Di5iaKQso-zPTNyHa-4cuYcnCN0HCrLwWal5WoHGuz7FB6ewO04HMWcKje2HGNAd0-OuuT6o6Oc9ZhWwtAgkzYifydjspz7ghNFpcdQlOxm9TymTOWq0oetRfIXAwniKjWRK7zwvUqyV9UfjWSv7gbxf1uqbAjRz-i8vfCaJ8e4V472sb-IRwRehaxakyznywJpLQxA_9CMVLFZsyJepj60EG-TFOfLB0TCLsg00bUk1WzzpijJgz2no2r-5sYrulBNQ9s_-TVax6RJ0RSGMDLAY0HtdsnpzWs2GK9EmaNC-RquGS_etZf0df_SlSWmuNoFJhDlTVGQJKsyx8SoIYuFRKNRsRaSS3eQlLxLFeIABcpj29fylBKjkOMGSP26mui7EcHBsSVTegkBVdphosjlZX19ccGzOMOOKq812VxNUDn0qDzA_3LgC6h7BTW1Ko_XdDCwTBP0zJe5GwQKjv66UQXSrsuKzkJMXZUdm04yD5LEhKEpNoxbXk424uXZQ1zA185l--MgAipaXj3pm1qS9W0NGlnK04ffz4Ew==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_SMNzJISuEYAKKLv0mFBq8NpU\",\"name\":\"getForecast\"},\"output_index\":1,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"6p8ipwqeT0oZzq\",\"output_index\":1,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"code\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"3oZ67ZFvczpm\",\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"1qhexEZyMd9V4\",\"output_index\":1,\"sequence_number\":7}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"C\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"J29tUEdJLoV9k1O\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-L\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"3Cy0Y1QYIE6IFo\",\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"IS\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"93KE1Ei3Y0imON\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"6BvuaN5hk7EfoVU\",\"output_index\":1,\"sequence_number\":11}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"91\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"R3SYm8KPAQIWNX\",\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"obfuscation\":\"oRxuXLnz5uKVQI\",\"output_index\":1,\"sequence_number\":13}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"code\\\":\\\"C-LIS-91\\\"}\",\"item_id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"output_index\":1,\"sequence_number\":14}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"code\\\":\\\"C-LIS-91\\\"}\",\"call_id\":\"call_SMNzJISuEYAKKLv0mFBq8NpU\",\"name\":\"getForecast\"},\"output_index\":1,\"sequence_number\":15}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_043937975330613a006ada28fae12c87d18dfc5b7a995a981d\",\"object\":\"response\",\"created_at\":1792682234,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792682235,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_043937975330613a006ada28fb4a2487d1a6ea4da522a401da\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij7bFQuHmjwzIe9KjuKecmhD9NsFmAj_4HwFl23dCBVU4MijB5E_ZCjgbMWDQn9bciWJ95ksH5oWdbkFY6O6QActQKyS3wWu-EstZIUhMQ8eQa2LQ6FXIXr7yZOWiv9muHb2fi-IWvo10nGEmBOJBsJcSLShVE1PZMQHNAjd0875hM9JyLBylSINrFIdrM2HUFRYeIrJpZ2fwucwVig1oSAB8wFxK0CtImwokSyClA38H7uW8S71fOqcuqI20kyEJgcxJpdNQGJOoI6noVNzgX3I_UZN0BsVHYPVgPN0h5BBcjvk8-IGJ7LT7fiGSCD49C4L7UCOMYPkJUE0ri2wCUi05zYAaFSuhZiZu-b_NbP_J52XjRQQFMX7ZUdKHXe7FOV50DbWaUlzC4dH97FYo18CogMYp8gwQx2ln1zif0aks2DEdtPUaZjUkFoTROIFzeinzK2V_SYLZvkeHfwDa3-0Srb3H86xLkUMYsx_3gf-JSeNIFZdrCGe-AK8NZ_5tOcI8FfemqL0fR5lfxrzKRMG4xVM2gSJtCd1_O-3cD-AdbZW5__xVczpAxuEdonoulhxml3qx9JrIFJwEPqTNyOViYgiVAyd_CtfJU6Kgcw9VwUQBQf4WuNZHeYxVVE5f7WLb2Fs5JmFSQsP-F6HvZbkywMx67Ce21y1vnf1W9uxtPV6rkYHwM1BlJwRZ4E89X_AS_hZ4FsAucc7gDMg6gksirMRo2O0kUnOkURzkm76krUT4tpu1t69JoYEPzHgdGpHyPHvZgFX",
+          "8jkNmM5ZdwsEixArEwSFeLrd7n34GMGKH5Elj1B8eL5wYwMQ5ckzI_SscvQwNTKlJEMBcLcee8PP__loZWVO2fMSx0AF9LN8oJY1-O-91yZ_T8qJKqUxBnAvJ__c__PjW_jRem99ehAB8dAzAta5EA_diRfafMddd9Y3RDtg4wuV89svjofJew7N80JOGj819AAwlUBkptDpcL2aL597yoYuFXsrgyA4zKtVUna1nXBZth4Cc_-gG0jdXNtqzf9tMvX_FyXDJpnSfH3ajZjcG3htm-h5S4_d-0jc_LNheiIS6rHOY7kiEWHHZasFCroIk7zDopE1d0tWAatfl_c_DwJfp4_8Jo3xvD_D2CJFWmNYXF_HiCfa7_Grz3fUscA9koWStPSGXCnLVZxCGU1RgGurI-25XuZplA_ST-nY_yg2Fg9iVz5GIXx2RZlNdYkB5GDbgnsrv_vWU8V8WgQekI4zS9canRKkDjdCRJSho4nL-MWjL1PlgBqCCVv7ESe3iEBTDsl0xVeP3GEDBIWOfqlR3uXyzXGqfxg2xnXxHLqPbpZLF_BaYOX_nEK8KX5yqrIwakeGYMIkExTwg-s_oxWIenxXAUfSKc2nSteF5cIUxyL0Jb9CDPjI228ApWL_Swu7zukm7HAx8YHwHgXikzXghy4QVTYlM8DV67IHhebdW_0WrAL6TVCjlNpDthMPG7aMn6hYCTpTYVGPjSQTpAF0WDFOQXrU-HISTXy2741rAyTCvZZtVwZs8kE0IMXWPzR_JUs49e_oMUzgHrBef73Q3P4o7sSdURNG2SAZ0v6Zdpmdh4GMlpGdmtTexN65cG5OUi3w623kthe0_hJgQ9uVv8odvLpoipKohR3_QBkjiZoDOvSE_ZwiTbdaI79Z2LRkpWqgiVnx9jQhAJvbOW4Jz8GqVLryaLGkOf-aizmfST2hmWa88zNlzTLiQVmIF2dCL5MoahCt2ddLJSEW-O-wovyTxWFpbmTiS8LXdkRHcAVkMEXKRtKjZCniFXet2OKX6AS6VTb0Fjq4_2dshDhfb5zw2nRxixR-eWb_2SfPIxLkIlhmn5qphdmA1-OmQ7FqEDiAxygFg==\",\"summary\":[]},{\"id\":\"fc_043937975330613a006ada28fba1ec87d19f4f7d7fd637d449\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"code\\\":\\\"C-LIS-91\\\"}\",\"call_id\":\"call_SMNzJISuEYAKKLv0mFBq8NpU\",\"name\":\"getForecast\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":215,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":57,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":272},\"user\":null,\"metadata\":{}},\"sequence_number\":16}\n\n"
+        ],
+        "chunkTimings": [
+          1,
+          0,
+          0,
+          0,
+          132,
+          0,
+          347,
+          0,
+          4,
+          3,
+          2,
+          2,
+          18,
+          9,
+          8,
+          4,
+          10,
+          73,
+          6,
+          172,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "520bf823bd4a1f88",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use the tools when they help, then answer the question."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_043937975330613a006ada28f9aae487d18cb08b0c01aa3564"
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_wCkkEEKIpeJwbFXqPQOIVPpw",
+              "name": "lookupCity",
+              "arguments": "{\"city\":\"Lisbon\"}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_wCkkEEKIpeJwbFXqPQOIVPpw",
+              "output": "{\"code\":\"C-LIS-91\"}"
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_043937975330613a006ada28fb4a2487d1a6ea4da522a401da"
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_SMNzJISuEYAKKLv0mFBq8NpU",
+              "name": "getForecast",
+              "arguments": "{\"code\":\"C-LIS-91\"}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_SMNzJISuEYAKKLv0mFBq8NpU",
+              "output": "{\"forecast\":\"sunny\",\"highC\":23}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792682236034
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e977c77a27f55a-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 15:17:16 GMT",
+          "openai-processing-ms": "286",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999213",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "4ms",
+          "x-request-id": "req_04eb14607f1f420d9ca767be11f50302"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_043937975330613a006ada28fc2ae087d1abf19195a737063d\",\"object\":\"response\",\"created_at\":1792682236,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_043937975330613a006ada28fc2ae087d1abf19195a737063d\",\"object\":\"response\",\"created_at\":1792682236,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"prope",
+          "rties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_043937975330613a006ada28fc93ec87d18abc7257d72cdbbe\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij8IgVCeXCQleYULg-_AmU0nhssitD9TG-e_Yl_a2jZa66c9YaiNN7olEERj7_T6cf-Iw8BdOJtkQZLkUSM0pk_Z1j-Vt8TAy-4qPRw3J5wohNqLNHLdntlYDXhjQv1lCuRmrhREIU-ky5DqRMx2uRt4nadBhaaF5htTLbZwFF7UTQ6spUQTVr4X2jgrn0uOO_UUUIRF6nRi33TfEFF2-2b5hpQqAUTUwKnQS5_C39UCyJDz1-GxA7IqUAhPY2bdil6nmWWR6mOcevW2AFrAr8hzlI3mTEuAoF57hhsASOEhfSX7yjFD3qASjpsHLu401fI1k8FhKmLLDHXmIDe7BKeT9zpXlG-W8QuBGcAAQk2s1WtZvIxcPjeg3RvH2ceiEOB8eO6tACrBf8uWBzC9K3xsS6Y2UAgzrkPpQ79MP4Q222pa1_PvWEnbjvh_zyiXYO76Yr5Cwk8eVYWFD0tDJPWEXEP1Uky5JC9Wvj7djQNyvc5lgz1HYmOtaIBTBPUb4FXhFWFn4VYElu_h07BaySQm0cSfdk135OhG8E2-BLvQNAft29gZ5LYr6TgdbcG5hOgwD7IdCnF5xX4RjF93SvHTo2jcsbWAMvzyIsBagLitavy1-mOEkfWytyRERVsE2Ta2hZJBpSARRVDGoDTbtWL7UhB-6hpyHAVCxF6rZSiHDuTNNkd2XXqdN0n5vJ1fbyedY4QYpIy8uyiM6pJDSRinKlOYH4t1q2xVq1cAKw0ik2-mzUHH-azY73NFdHE6dEE2eTCBxKzdGXeE2vsTXFkEr0fxj9-BLtPK9EGJhmTLqdj0YGCt_Nhe5OdsLl3KzG-Wr4JI_3S8syQ7MmgKYthXAXUZwqTEZ5VzBdFOOFmQPffCLZ9eY2J3B_YHsH_leFoOx8UufimTlYZn1IYvBUHFLrTjZsVANqMNTPyixUawRiZAj9j6b_VebSmOVNJAzQ6bk0ix3z13fWW5--uzApFZjOeFTS_OIesjvjEtTBckUvYftvzD2XtW7kdoZlj520dD1VG-B5kFuH9XkJYAcwPHjxnNIzupYcv_umhPGmA7vWfdIaO8KAGFUeirEmxCt7PjCV42eN5q9QW_BioCDsbQOh6lZ6Gm5bjkHGU52DEWC00PeVNJk7msJGEIiWU3Ws93w48lwmPGAcZvB-NWGJJ3vhLxe0QAC0MIoCgiJCfMlkSbrss8RsdCjoW9IGixawP-W1PvB5p2sRkgJNDjrKRUQ==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_043937975330613a006ada28fc93ec87d18abc7257d72cdbbe\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij9tMNgbqK4rRZyKdvbfABj7wbOmm4zvt52IT-pOlbcsoqjeyjRZlZ-hE4v_tKMSPv7rWZ8XYC39MY2w-FFSrv3bV7nbA1r2a2udhAsQp1FGdQEnroM0HrwmXCnSlzW_Q88uWDx3TN1RS2qU7vb2U4jf8F-8kRvtFeDU5I4i6bUrkaQkSH2tJvHOmm4vdFURU163xfBnwl0b4Om0FLF8ji7RIEmGvstn_xB_LPvV1725jn6Q-6c9EwgFG2BGmJYYQFcE1Y4GNL1if09T94aCbWL44Eu3Cg1AQgs2GYsGqjxNXKKgpJpc-2v81cOl24mG0NfreA3VQ7VcdC7pdQAVgIci9BvmuF5OGQOH_B41z_cHfjkDmiJhHA-LaB0_dtR439r7AF25ncqG_FWQjYedxfML88A9--7lUQFcaoPiut-CmUm0D3EPv-Hw9T1Ui4nrQ7Yr1w6RAtis2Axg70h4Pao9PEAFgYNsCJMIktxr1VMwtbImIZXQOITgZxYsO9pA5uGKzgmrc255SdtTEo_Rkvwwl2wxgRluKYNaZfKVzI2p2GJdFGc0rJVjH3kLlDHXFpEHtzdl5vwZZ6RTdXlV--T0g2p0gaNFk15m0OG2WQHYlaQMLUgGkMDTZnRlrA18onolv4USHf4GFo3rm34aJg_c_ld35nZZwMtnFzpuRgO99S-V89gDeexIQlxo8kf6wh3aUezN6XOb9VNmCM7E4gFKI_LHZW_y8_VfH9s0V_iRiTsTINDH4XMsWhaC2UGzBYcrLOWUslqxS4rOeIn6kytq1yiFcymEU2sE_J5Md3w2JLSswnvqkl3H-fC53kY27YovrJIZ61lLx9z37f0vfCpaKpM3chlqmn_eAWAdKsM-djnovzFqlVIXLL4I75nYzDfZlzD9y23cYumF-P4f9Mccvtn4FOxjlBbtmQO0-z7TgKpbUlO4-GXpnDL198bkQxk4UtbHdLuUk1RUvnIzBTTMKaGyHiDP_PSJl3mRdCU0c8Kz7fWVEJs250x6J2stLBoiADSksL91H5P3qNsqQ9fvd62uWKf7Mm8XxLBYM1YOidOjby-RjSWDPqyvXzojEnfX9fYeGz3qdhcZ8EPgPwdqwiScYPvwjAgKlyONsuxBD8De0C0v4h2sRF4FqN9Ad0AzU20sWqz95dym04DhJAKHiYfdqqWrszHCar2BqCq8KD-4EWhVSLV-0yAF6BybBMy6ZEkIY6fl8klmOZUrnamvCbo1qzOxO3wO-KDohDnBAQ5aKNxWIG1MIHxpYXnN9GU4hIIJsQXCGo1heutxDyYQmu5WEj-BIYBDDuaPou6H9IL_nBKnC2jdh7IHRjRKaGPrAnqMtiP9oNejwpxcTXZLl8enlhwPKavozG8jPNcjS5RkOT5CC2Iq1-6nysjX8SmUs04t4qS-qRTMD5k08cZC3_LNtMRfQIEU36Jos7EEY-ITiYqTHL2y1e-c9q-NhLoCHErDbXrjI5VBj4dTepWcE4CdG_90Sn1xqp7qDOoFhd44MKgW9qRiH78Y0B888yHs7Tv--JsmquV68wi3xssR-bvNP0UFKWko9X_M3Ue3wAu_VoQhUCOMjuv0lBbRM7A1Pc8icPVEQLv3I4XLceaw4P6w9wBQdJEvq5idxi1W1vEF-oY3kW1yJ8Pg-yZdjRpMqa4_urmrjGURGVNjJl5gJZGuAzRKrJH6Oji14pGNH5KD0U-VtUKg9pltfC5M-jPGjouarX2Cex0nFoKeXJ-YnV1UAJ5kqWKZckJWSw1K3QYdhXPRPrGkpRHzeNgKIxsarD4HgE8RYPTPdSrO64oac9crdHIhwZ_opx40qYLJkvbsQpbaWXiPa8IdbpFedb4kxKEH44X4IMt3DCbPtK-2anK1FlumftPhyZj1CQO9N62MeGQBQYuT6yE7dHJV_exZ3IDBEVE-bErMuOEbzGjEHy8EU_bqvpuxJ2J5mJodJ4YgOcnOV-MXmOuBv3g2bBSqT5TnliBEaH8HybwCoe6g5OvjtU0ta46pFCskrzjfoe7CVQFRd3umOKQJhpf3oqUmL1287bWhvAwrnYT6HWRSUuOuAJBrL7rNsT0ef6k7Lwu6-uK38BvdTJeBC-zhNCZXxB9BqXiRwUE_NVsqgTFDxqWButT6uEaOJOdmAievx8g-zqrLl3HX4QR0Gm8ZEak-UbKxhxCpH9V2TH-y39m2gC1JgBMkdMKU8Fo2o6SEQ52d20ly4DvmzmtNCeojGu8jNgj3qcxISjjltf8Zt0YxZzcoF3_cO2fbajFI5EobLrqsNV5wkg-6AtmWOiw-3ORCx8Z-Ro-IAxETWvPZQkNpPHDbT8-NEbfRfIAYw5UBWue4_0YplmvBAOdBb7kKJPZNOC6DxhrU9-1nDq8SySWHhZezd5Tt_K90PJX0c6H6PWAEVe7mpWXO1a3EGe8DJgaafB-_XrikQWxfTyxArY6rLI4mPc5ewq29h3OqEypcJ-tdDZPsZWwc2BgRhUESqDEwgUvErlVnJ8gIUKOSRrru0KAsg4YKa0hBU-8urCLKHefJa6pnu6mM5SU1YcsQmycRVryUbth5lU7vzgzBxQg8Ru0qglC3-btJS_9voqD0c9onjFxtQfdpGbxHtr7PPx0NCE8UBeNuB2rhMQexKL-lpxUSRw_qj6Gmf1oyv963VqF7YoYQPS89VoOTFPViA1LYq4J0cQnNTHu-r0IsbTmnt8-oRP4a7-bulW_eLirz7tvuKlJFhzFgkfzOYxg6OoawWBwPlVDAHqk0KSDvs7K6gLy_DGSmXlSDdxz4csx2EjRgeSbEUOrdL-V27xUCNfCsq8lGLHRhqA8vm1eFpSURHlzAXyEA_Vb8WrNaiUxGZ7lrcpkPALaEzC1HtILGXrXN1Gh0g9uSfCzLvsNU5yFcwmXq2KBthBabTH08ymaGOLTj001rTMi4OHaamRrBNLBjBlpHnT7ocSUFID9cU7u7bb7vE_9iiLieDYeTGFbHZ3tkGRyhSAnec6uQK4lg55XkQUaTqDdU95GNIzc9013E7MXqHgVpm5ktXLdMUgmO8WGVEWw69cNsjoMb-GJKBFYdvyuf6TbStuoY8AedXGLDHU4E_qL0resB0-wSlDeIOUGVGtwCAvfFitU-YO7GZVMFKVkWX4t4sa8HlccYFDG_TnP9KSvD_QfnG4QCkV_TgU=\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":4}\n\nevent: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":5}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Today\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"h5nag3rerUS\",\"output_index\":1,\"sequence_number\":6}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"RVjgnEQJEvf0R\",\"output_index\":1,\"sequence_number\":7}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Lisbon\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"3tqkDi7Ep\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" it's\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"Hhz520qxK9s\",\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sunny\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"z86JVgyz5m\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" with\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"8lcZr3YQJJG\",\"output_index\":1,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"ncimxlYKN0PjSn\",\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" high\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"yW4RWcXqLYp\",\"output_index\":1,\"sequence_number\":13}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"RFVVIQUhEjZpg\",\"output_index\":1,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"9Ah0tftukZcgP1N\",\"output_index\":1,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"23\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"L3qigOluR2OAmS\",\"output_index\":1,\"sequence_number\":16}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"°C\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"wsMQ0m1EnPioMx\",\"output_index\":1,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" (\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"Rmxt7XLjOPLHZf\",\"output_index\":1,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"about\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"qJkqBNycQrk\",\"output_index\":1,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"Rvq0OnLRtDxW0VX\",\"output_index\":1,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"73\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"CVdfjNfwC0mYRx\",\"output_index\":1,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"°F\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"y4xjzDICvbDC5l\",\"output_index\":1,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\").\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"6TOsYIXysD3Kwr\",\"output_index\":1,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Would\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"UCiWWAMp29\",\"output_index\":1,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"n37g7amlY6IL\",\"output_index\":1,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"EuJYsUiRAwn\",\"output_index\":1,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" an\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"tjS5xdUUI16OO\",\"output_index\":1,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" hourly\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"0boNWMKhz\",\"output_index\":1,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" forecast\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"Fpsoahg\",\"output_index\":1,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"yXLtdDqTWKgz8\",\"output_index\":1,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" precipitation\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"rF\",\"output_index\":1,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"/w\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"makjMJAMHeqIxH\",\"output_index\":1,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ind\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"CX7tL9erVsSlQ\",\"output_index\":1,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" details\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"cKAO9SkY\",\"output_index\":1,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"?\",\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"obfuscation\":\"WvvLdxvTTijdQjh\",\"output_index\":1,\"sequence_number\":35}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"logprobs\":[],\"output_index\":1,\"sequence_number\":36,\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F). Would you like an hourly forecast or precipitation/wind details?\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F). Would you like an hourly forecast or precipitation/wind details?\"},\"sequence_number\":37}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F). Would you like an hourly forecast or precipitation/wind details?\"}],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":38}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_043937975330613a006ada28fc2ae087d1abf19195a737063d\",\"object\":\"response\",\"created_at\":1792682236,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792682237,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_043937975330613a006ada28fc93ec87d18abc7257d72cdbbe\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij9IvHIZ8VjxrYX7wi6aM0Hn3i6rywZj-uB8lBQ7zVtodz9herL185SXr7afnEsKDTysc9ukdKE4iWPVGzmw5WIw6taCuwSLD0DGPOr23vmH8w3mnrmDIyvnnfSN0n3-KNlC1n1deDrqI3aVQ5KxkgGsyJgxAJggq3wpDyUwNVqXj_aqoKzT3UTbf9vCCqQSXm9obCwcQkNgtoveyOEBR7iAkNLRyocwmXvijbI9_sNmwAUg0IL_zrS7uJ6jMgN-5yxmLHRCpeYWPEqrhKPtUGg_EYMmDCdhSL26dvLcC7JrgthQXqlfNVVHokOcW0dqvKaaAv2MRjNnvTsSS342K8Ou1DiC4AHNnhnnOg0lKKw4-3H6MHgYQHOK3jGRK2B9EenpRmLYvW8n5UJ9TUkLLLTo1o8JT6v8RqNug2FmCakZp-qWWBIXrL7mTgDhqdVlgIR7ng2xvU37hzCGexuuu1MJPTtSdF3RMzdRQx8qsEzxkwtwYLZ2HScELLAaxu4i9FWr6kXGW-S5rJ3gzFq7lhUaJOCm2-hFsph-VZXfqG9LTisBP7gn-6d8KnHv0jBCtZzGBzY_NnS05P1_zVfemDA7kcvPFPGSiLBChcd5FaBbJNB5kqxJeBvUB94ii1lEk0VRx8JCFD5Ykh9lHHsiiFRHlH_e4dd8mEvyLGabhw-DRmhwjeuqCfCO0t5a3c9-BBx4f3imPZ5HtxyAJixiDHOfO_C0FJmMsm5jWXZaL3hVK7fvkywm7JQdIZWUAR7wnsKCRw2LONW6PNvTZbHjeAsCJ26eh4mhNkUiCiOsYajkAMEdRjQFfEbuIccyRJjOeOJ3ybo5DarBTPpzgiJCq-AMS0fGKBsKkZ1YtlxFvSCfHLjmR4ABObAm4-OlEwmnaRgbBYfvfpLHQ1bG6cawCeadfO_tEHrIYimPSfUI0pF2f2lLogV50nYkBnu4tjxWWCuWR2a-FpXCpHDOuvd7J8OFuyJJm9qAHQY8-piowTZJnNXHupkceaQ7jvul_9wgffxR3o4ex010kwzk6eFPpkUzzXbYA-lhvzsgF-aftz6XCmKHqWPNp5PCRnmf_n0mgS76czAi2DsmADsTu3BcVow_N3KLd7tey32GVapLoHdts00kDAI4RX4gaVQa9L5BEiq5nrBr0CVvHw1kGcibNn7BTAeyuCAdxC8uM_1eNPz6t29vAXbiyuwhCteLMw7JLwwGILAYehr-pxDULm38mvjZ62ZMm97wVP3uz-Mr8pJYd5HeaB0HY9jNHRSZgao8UJVusJEhWMzYKxmgaY8bP2FPejTff7qjOFE0v4UHOWlqUA0M1_T1r3flIzWeWnVyGPxAtRYUOW_DDlQYIPJ3E-xkfsbiLO7gchyEHDzXpHoqPC0hlDJhoMym8aau4KqlmEHIx2Qm7HWw6NL-QCTF9Ojq7EIXXqD5iRmHv4CM93PPddzY_WDT9aHF2CQuz9E4f1Rzgo8QA-BXsVbxM0eEcxZ9bdQKGzc4OE-667YS9eCO0-WJ-Kd_5sanq1p5EHoPnH09h53N_99QdvIpXZb39KLKX5fXpb3A7LZR6tIRho1IJr9SlagOpdRNVxlSnNIknC_zTmcSWzHZyRjrmQJtSssUdpTm0paOyZa7LcTpI5uaeE_Klc6Wc5mVXHIKBOR7AZzX2w177Yufmdoba7sBRS-MXYHjwn0HgKYUAYZ_xg9V4zJPk9HKL43ibfkCyjfeUXbBVM8A4b7mv3r9qZbtQZJeaGIRx_P5e5C9H4sn04IuvUvrItuIWEvYBHWu7vYfUNO5uuOumc544rpKuICDxEhnTIC8rZKXi-psnVkg0GOvldWkcxzN05UT_9Ca4SINLoyP90YxBXEVIQXJjAB2-lsRwNqO4KwffgsEyChSCr2EETRx6ANM0XBmOxlPwTLoUWLb-67aCH50cHin_6-gqSZTt9QCnclODBWBvHuM21ESqWho89p5dAuLtkA6ieDEH4WTF7XTXdp8jlrA5VgSJ1lpNtu0Zrj6FGXKHvBR5cht5KAyRoCKLz-JHelLtf5kCnufaAr_E6_lG_PUltnKqhmW9aP-H0C2YlqugrpJY3UyH48XuBihaTEg2OXddXvTLFX1_A1RsLnjKZ4d5j6JnV3ZqVc1X2XIGGGw3VAM0UGXfMcpuXFBgTpPd_nyZA6g39BgZ0PsMXAv6KS6N1nGBy36mAkYp937eigxnIOuCGRANoaCy-lDPGuvZGFkkdy8UG7tMeqDCHlr8wNeXsYf0erUwDqML6QAGjj-7COgxoqJni3xkAGdS73iklqXWtxC23vOTMjZPlRktcpdzutzYh5xXgf1T-ngLT0tEfo9jz-TN7e-O_l3CTnt5ximybBJScQO-9DoLgdkv3_I06mxLdf28qGu7e3zce3Eu8UfN2PiZGtxAgUrBu1sv556FxAvFYTE6LVJzrDHSbtE9QZtOQT9BEkITuDZxPTeWn5godegjBWhiv14GGQasCiWVTZLUSBQ1iqsFCGEjkga_2uqj-1_PfdKOC65MjFem-yTUuz77Z44U6ZBGoCr9JDLAL_eRTgphbUDrOYV1y3kmVNR-WUDXNWFlqBcI7_sspiXvQ1Utf44Y5Eiu7gDMwJVMudP5NCcq9g5LAouPKbsBYCkt-6EGzvjedpgpOMAvCqDYV9Ix43_3GtWptJMmfY9Bj8FMEY9ZStrX4eRTupSo1vUOYIPsym9NXB7iKNNwW8H9KEbDXL9K5Ixk7hIkNikq0IvkY89Pj0rrltlCr2Hjq34yJCYlRaaWrdq1yPyAwXOyocn1_Wo7Skbr1gA9lV9kFwMFO_27IYHpdwLugBc6bjTduSWxxYeZLKN8S-m3QbDFBNE0v0rEFEJGK81g4FYVFkOZekI92DIXLdPY0OtCMYmr-E6GSypLgQC5OMpGxJySSxrf1iXNS7y2Mt7h-FUN0Ko46r2EtdqTPxtbdmNuwhrHXroTlTPDz4GtmW3KdA-rg37mRKJ1qoC8SFfvgs1bLQUycwaifkTPxPn8_iyAmN3Mrn06prXbC77YiO7CJHaRSgrm539FIIdnREHQglPHy5FUFmH3GqSvQCXq_MF_kAhocflB1ObW6GT2XzR9EkjVid3npMrKmYmRLYnfEQ0opnSfEow0vzkf692hGq4EDIMcDa8NYRIWE67gO33j2IL2H0xxQ=\",\"summary\":[]},{\"id\":\"msg_043937975330613a006ada28fda45087d1a05807938aa23258\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F). Would you like an hourly forecast or precipitation/wind details?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_",
+          "retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":291,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":175,\"output_tokens_details\":{\"reasoning_tokens\":128},\"total_tokens\":466},\"user\":null,\"metadata\":{}},\"sequence_number\":39}\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          0,
+          151,
+          1070,
+          4,
+          5,
+          4,
+          48,
+          0,
+          2,
+          0,
+          0,
+          0,
+          12,
+          0,
+          6,
+          20,
+          6,
+          9,
+          4,
+          1,
+          20,
+          4,
+          7,
+          6,
+          8,
+          8,
+          6,
+          9,
+          7,
+          6,
+          10,
+          5,
+          85,
+          5,
+          3,
+          161,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "50dc8b6204f91fd1",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use the tools when they help, then answer the question."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792682238219
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e977d51b9ff55a-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 15:17:18 GMT",
+          "openai-processing-ms": "524",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999414",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "3ms",
+          "x-request-id": "req_b0433dc033364789a779b57fea0f53d5"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada28fe651487d1a3f7e39404d3bfca\",\"object\":\"response\",\"created_at\":1792682238,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada28fe651487d1a3f7e39404d3bfca\",\"object\":\"response\",\"created_at\":1792682238,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_0ab55b9414e89314006ada28fef07487d180839ec791769b93\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij-OjaDuZMyYEctdQcaBtr7rdMO-wN46aGW_kaWmF-ntY2eJhFqT78BSvS-DQPrAaePj2V8dRZ7ksQHSvKUt0YK_F5CtU46QdUM6MZAVVLjgUrzXVZ29JakGIUibrBDn_y3ys4lAlwhN8EFy8VtFxI4QcNLxEtWYGsfN7gmnDVmuFFBusYi4vwHCRnO1ty7F0SsXRUYQRjoh-hYxQxHbo4JpiIUU7252K9cUWi1Okh4D_x4sX8LC_lijwQEBRMXBcoB5-6sMIVyQeQqJNKr-DrCVeY4X9tQltjSe_3-E3OCtpMqNeyR_Lc8tmJ87zGGxX069Y96bAQStlGa5Q33hlzUZVd7q_sYBLRRI52VTfP03ShK2hzpSRGfwgG21086NT9tJD-Ll04ms66rM1XYg-pnOsiOtTbVI2_8-dbswM0H4IMKKTeGfuUi1o6dzMD8K2H5tzGG22StvxpytNjE8nf-UZQxogSB-qYRcpo4JgM0RHFttO15J9tHDJEPARPaDwaf3uhrUSZCD9Dmk4Qxr47148R0qTUs5fsiTqGgZeDH__8QecFTyWZCgb_2AdPZdqngusSdFGYRefG-uCBaFwlLkBljktDkTjZQGSLKljVu3RmNAekKzH8p1DwUd9V2Lt7VHLjZDrNhq2bded7Ol3lKkbrn09qDtIgjzrBjTjJ1_up_DQ_UoT07VwmGm31cC4H7UnmExJ-b-r3eKO7WpjU02-C_YNUbs8Ta-IMADLVYMzCJ7H_IEMjOg4QVR1-La_y7vrg1I3LHtcOygaxrIZ8SaAwOKl4xhfPDjlyTrBK7Z129pw3mZ-ZaJZSO_M10X0oWaIlENG_97jo3GeTuruOl_2D5Qyw3jA672QIuFSNNzqAJin6_Jg_IrPvlxmmTOv0Fh7sk-WlYS64C7vxlLX7npdQQGwqsiOKh1Lpx22ENDdH-RUJ6VX7mubwKjOMWxj6l--BzFfwR5v8aTT1zwJwR2vhBqv8wHkNWnu6rgjQJKL9yrYMdWhD7-1Q7zlaKZ3oRUvmkwDv4sqymIo0WD1ouZ6aaHHLZtIY4QQbLmTlTOC3KA-6SwT2lx8S_iuFkgpibuaiGFPx2y0KtRotwoOkpTade4KbaCDtDm7Q4GGGDPjkkGn_XKq0YIgHcXbY1QG86jNIiodu6zE2rlBPiRYIamFyEnoMX_L7m_tlbIk76ELPBaqXLdBuVKkyQlNaPE4XkzSljBuxNlw6RCVB0uIsD2A==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_0ab55b9414e89314006ada28fef07487d180839ec791769b93\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij_ZBxrW5HbQpXpH7DfLl3M-ixq1EhCNihOKQyDkoUanzRtuCQBR_SVcKpT7bVxoTIef373X18rD2mg_Uyf_V_yKd5OrJrqZ7kVYbkzat4KnY4x-QUJ_W9eeG0gzx0Itldf_zsg9ncyvCymqjyXcRTlrOnUfY6PBIR3Xg9MJOsTmC4EEcQQls-FmML5hrMPPNZnneSVKgDJ4iN-hGpgySdULt3b1tcB7EvA6dS3cUC_yZTgHGIKT-FWWgrJJqKYY0I_fjWosAvbqTujk_HFqq4sJxxl_b3UjFcTjYyPv5btHAEis9dBxvnKlyBqC8pwU-iDxlUS5jIrAgD2vZnA0nDfzEEljLkW-8UbLFOnhYIKTqaxH5gLPhS8F5gTH1_fD3uRUgOwlAMobUXmxox5w-WHp5N8NnPyttEX2o1wVv0Z--lTDZQspGgA5H3UsgchKqj6FNjtqTxx7-lTH4DeFG76uR1YwXg4mBuZcQecZWnUeseKr82RsUNTRQYYmhyi3dvqFfaj6W5-YjB3Me_Z2rl27UcQMm4Yj3GmeXUAhScsJgEp2EDllMmolrkF5OFUTfKA75gDeWUWGHYuQ7Pbla_JsvmmBP5rkdEQDLhpMWIP-H1rVtU_DkWH30Ez7v0-6QcxPl-q3ArSnT5VAmO_tLevguT2H5LTLWy8A2n9dFvKHVugwcj3CSaInTW8q09NcFDlscMVeYdoqUAzvYxYcpHLBETzktjZIN8bxvqamNnrDRJXx63Z6KRKqYnhXE8TxEOJd1r1SJkwzcvDzAtffmKS6A7dpzyomrIOmqX-AV76OABoW8wix-mC-w9aNTkSuIv_wt446Pg09F-6stJNokkZ3d6XKmE-XmiJaXo6lFsCQayE-0Q3itGWV81a8VvYEldisbgDtWXdTfQivFRTvDBzsmpiHarrf0Q2paGMiQO7jMXHKB-UGV5S5MrXLHq4gGz-v3VXD0OtiKOWQyPO4eDfS-sdVL5gFJkUX1f7mDRLo-KoKfiJpOajnhvQ07s1NdLtdD2tsSuZKtPGFfVyDi2VjqvKI21Q8eA2zDIUFvPKXhrSqxDVzSj-nK6YLwBfpuO_q_ducDy7TpEZzWa_6kGBpFFt8wiVQYLUpvmqPj8pbLvfkbjdaYvs9BDrAwiN5_p_FiziByn6KxCVrF9JvvrnOHiQpGIB4b81rS0vS0gRfmQK25PdfS-YaDkZuqUPZFxi4lxXYJQWYUejMir-r5-JBk6JHP-SDMWNUFTCKOd_1A_ky6RLtOx-ng0dcb6LTEIW8fR3hUUMNMCyimnppNYKuYHcXP1vY68l7mABkgnmCIvv3lCx4lhQBd6eSqETmv61rCtLHiO0xwYOPzajq4grzZz6r0f-BQWxGzDd26Hx63xDwRY32tNIZW_QRQwyeNI2pS5_idmzsWMeYa3oXOh784uDUM2OJq3xzWoVSvx5l912xYS1CGKL7fizZhz5pvJtbB-YD6DgMqJzOhETqYMMiNru41AdxYNoKVmIAa-e8oHjKd3rkkyACdse2DbTyyxQQpczi2EQk2dgU6luoKboCJ2hO65CLluKCIVlWtsYOqiHs-NcmLofX9T7pchcdE0MeYLbRCqkQu1_XyTdsnGIleQdy6wN-K2txLjYbGopdBYZAREJn9mbdQHcizKGgnsapeUr9m8BPvfc3wtRxU0n7JVJLv5acPcyqFVvCj7FmF1_E7Raj_fydpwD0-qO9Im65R1zpcf3gWDh5HrRW-K9A_Dl0YNCp5QdkZJYsa8j4SoL_bIG8ERjkXesC8hGm06O8uqgPy7N7tjCf17ddUI-VNBYZxBLlIB2Vf1tPYdc8oK06KxUFdOdK8gwR__tKRJmuMFwey4QcLBVi4my7LiP6fH2HnnI0vTBOwwvfH1VFr-v7rQmUpN49rJx3JdNnHyD3L1fQfW4R7AwgR0HrhDdtEOOeD__BI14OGpyT4un9rwS1cM8PxlwND3KrYZjrmecedzbnjUR2nvpgHVeQo6QkdelMa9Kbwxn4isclLi0p0IV6_v87Uh4xRNs3aPSihcjYB6OI5zviqy_29VrxU1GP9DoYiBuh_htHMWTe8QDn_RmddEHSu-I3CXWCI5m4NnAOWIOAd5D5SZmdi8Ky-XqYSLVhnUPq4eP8pjiQCtCUiddtHa1n052nqLCM3qYNFIZ8KhXjDhTGQBDNY4BQP6mpYur4W1TqzvHHb5-AUOfPxgPjrhVfOFpHxpQzvMlMhZsNECgeyyDdjfDU3t8p3BmWZou__dbKoGA40CXGazpYw8hO9LJcHCibAzyA0eawbjotmP_9QSekTeSBmFy14LTJ0muAWpeie3fL_4bC-KItJVmX4s6KqigEeckd0M0qR63bakEhmBGXtkIx5l45RIaDrIDkmOoW3xYxnVZziwp7OPxD5UAI3f4A95R-dFmhjT28O1eN9QlCo0trxj0GHZXVzb6aeXsAF9vpi5bw1jz_Fqrt3h6gDN421cl96iAPkwQaNeidGTLHbfip-0cIBtnHIMlvdlK2PRfJHQZRWdheuhOQpa6DodQn9r60tSZd3WHGEaSi5E5IZxhO6L6Uafcs7xiHmAYCvz8gt8Rsj1iuMs62u6_zA3wI9H8SfxvGHe6v5ZaDXZMKnBZOpLQzrNL_zkjoAcmcMf4VwuZCUuRE5UjmCzgCqGQ_qIF1gkx7xyEHld4cKgX_ba7Rwrs7Tv1sDSivSvVYbsQLuL8gepxJwXCxYXUu2Tz6VNAxdnLBP2NqLOCYo5w1uxxB1ILvfuLA9K2jugrQMecK81LAXaENY-WmKboediiGuxhCvC_WXCzgSsyRnq7oqoUgW44RGjd23aoRY9ngXYq_XjMaWp4rr0o0CEE1fD3IW8D-eXILoLLNNv2DkiQUM6NFzVVR7wdU5uezkHslXVptAFm9gnuO7r5a696MwkImwhdyvw4A1j9FclnI1HUaRA9jem-AZjnW4A_hZCE9krGBoplATKVXVco7vNJ41d5H1KDy4E0sadVm9MFOmg9GJLf6t615l4DZqTUbRgHHnivR-XcQnzPT1M8Cp9bRrZnOWoAXiZkfB9nYtDSGoflAEf8k0915KEoBB9PeZdGzyqrASFQnRjIDhW0YORtdFeH6Tpo2rV6qTLlg9NurXKxRWRHeyIVmbVyuh83zMN2XcBCnKuGy1XCEmKVhnUovKWFqQcC0eOwNEqf\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\nevent: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_DFC5I4ypurpHUmkjR1jPHcNY\",\"name\":\"lookupCity\"},\"output_index\":1,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"obfuscation\":\"fIJo0IAkxlXe3r\",\"output_index\":1,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"city\",\"item_id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"obfuscation\":\"hadlJ8Hhx87J\",\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"obfuscation\":\"b4XB7BPz79PMx\",\"output_index\":1,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Lis\",\"item_id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"obfuscation\":\"BQH0UiU06YDBL\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"bon\",\"item_id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"obfuscation\":\"IAo2sDH2qn1P6\",\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"obfuscation\":\"BNl5dmd6czIukK\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"city\\\":\\\"Lisbon\\\"}\",\"item_id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"output_index\":1,\"sequence_number\":11}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Lisbon\\\"}\",\"call_id\":\"call_DFC5I4ypurpHUmkjR1jPHcNY\",\"name\":\"lookupCity\"},\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.completed\n",
+          "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada28fe651487d1a3f7e39404d3bfca\",\"object\":\"response\",\"created_at\":1792682238,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792682239,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_0ab55b9414e89314006ada28fef07487d180839ec791769b93\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ij_zePFEDlKsSWcwG1q9r5sCBRGV8H1uWm-I3OJGv0aDHO63W88pyiesHot2Z2h63c8xgkKKrcyeaSoN--DKC4qJhxZud2z3294p3p7W9g1TqVwW9rUaIus-RWiQmBTW-crnNZ7o3rncdMMs1fS-TShDShAs7y7IoOS1wlQ7dFLc-NyP8i58g6tJoqloEuZJV2RN0W7cItNZ_1Y7ENUfwfPX1fwHDFLACTNyV1P-2bjj2DL33tDtNrMFYCN94enk-CN7UmfXNQN3lgcmfSnA8lECwit8J9gnKHGirfA2uqNY3NbgMW8cOauH0GUHI_o3Ivpm_KYRumBQICnSHYebG7OaVyk96fdvu9lUT1YPeRgVlGvrkrYb5QixxvGF5tZq3dh-s31aIqWDjEfSHWXgfmTmIG5J0z_mN7RLh2nEudWJGFcWn427c_HZRZfNnLeYihneK5e9QuWQmFfTL6b4MXDP1SGz9aBfL9RNSWvOtPQxRTTCa0i1wNjr3WbV9UVeSwQboJdi6EGF7SRov7V7hICziNcCypTtR4QwNr8MgB-033oRAI2g9Yuxg517kPsS4-WnGUbKOsE85olpImld6ps5O5pWCUC9uZYKFc5eRRFEKSSZw1gr6m_NFxePzdPWpIWYqh01EDZ8K-2mzKFwH0Q0_-T1DXTD0aIjpCOexcPyVssMNp-8Rmv0XTiqhsrZoZ3Opsn7_Frdz8eUQAn-pwomr0k5CPFq05eB-NvQQDBF0d1sTETTnFPQHABItEJLpsMY1QCGNDfBK1wHVUOzA8-TADM751FY4dvE5XDEX50cyPHnDGdSzE8-EXcDrhyR8c4ipleX9uaM8omq7c5ZjQXcS2ClaoaYjlwDuiM_jDgCiE3lTrT47A1itLHqVKmvAjguWHGmPzTZ05mymRYoXpskL8GagT7XP4W1gHh6QVcDXhtcxAhmMzOe6h7SlEs9DP7CkPJ5vGo3qCrYvdbM6y5YrjXm_TmyC7dbbSUkpw-1_fJizcnRnNMCrAJEdafexrDiqOD4FCdcNHZ5jo-LPgfkbLLPD8QSGG2JK5I0eKYrXLIDCjdNNPGaOXuoAHTmcMcvAkMMbyNC_ZWQeBHm8rn6HoOAS-HjDqoXvYWoXKlSiXb_1buhjcXAdGNo7XWU6ux6K8MuqUncnDJHI3b3WoTGXgdtCJ0eIJTSvY3Nq-Gs_yRMxrI31fLPzckzZwlSo1T6ZdB7RjeAFrCKe1pCmGI_lMkePExSuTGfB3pwCtd4N1DG6DCmFfxZTpT8encbWrkoQgsrJJ-YFFEsRjOQSE90fWb69o8AbKDOT-o0y0fnURRwnrE81h8t7J6IG366VBFd-qsv8iyHlz8KcSWpouLCKObpD5LWKN0yaP7JfkN8uGCVo13MJ28E4Hz8ADkO4SPTvoGoTd92AG1iRm6eFQmfHWeuhu_A3Kchsb6SRPDUBCVxjeZlekVKt6ylA4VHS7is5rfPn11I3Ui7nKjeh1wwkXaFaGY_r2zYtnFSM-aM7_Cqwzhp4ZaJkVTSDlNmmpJDIXgaDHr6F_RNqti7N7gI22nrKn2qVdZAEktrDjlsXK21FpokHq0QFHVGgM2j5KxNH0Uyqg4iDr8dC3RoVWF5nd7owixvFxmjFyFTi5O7Yue4UyjOwIVScUEiUEtGWMjCMuoOZuDaPBMOV7bb2zMW7VEg2dSdzu7AU4zHXXe2boQsh4rqrICHss7o7Rl8r8aqr60syLjUtfbv6F7hVTwDW6ToUBcyJcLOrIPDgaH3yTcGzcABEAnPvx6rcfatg3uCi7rg8ZO0BaPdEmhGa8fLFQMRbFq33YG2GGJl1wjH-7OpDigWRm1zgfsuJmb9BXSd2jXbzxTh4jLw0cGwqqrpCakUx5bNsoMYJzoEAEqjwA4bQ9Udj4Jsc89G-taPBrqSfmLus3ZGBHDyQ9JfFS79zzEvOhaVta0O89hHZVYBgE4I4-_Mk_kOJQRnnk2Fh3f7LPbUs7necpGj6pXZSd_bYkJrEs_slFqND0ijPBXTRF1bNAph__ny_kkNt_mmv0fSXrBbQNQEjn4opCO3hpNDOWFQtPIO1AvNUfXNyvIdbFZeQdDpBc1uHnsWmZXgb7QnSdMe4xkY6b96D72ilWhjrueyzx52oXyFSE2Qf40dqo14X6CDsC409LRHQytBZGta32v6lz8p2MWnPfOIF2_kcZCdMi4KgaATS58LskVcLrNNgZv6IOOd4IYS3fHS1lH297YwrMhW72J4DFz2xT6EjmNMx1d3LSnDy1wceoq9K6oCne3_GNy-LIXwZnQ-6-DTwh4qVBf0OSMhKFQykGeNE3QiIHBhrEL8kdTKi21jvlEHsGVw5pt7E_Kf2w0BgNj97G9nNjiUrN2jUuRkLLJHkvpy87GNBFyTCLzjAAVwbyZiPv8w4Gjsv8kqHQXPKbSWo9nBNOu5DOm4UUZel2pUUvflpLmOvHLZAVHEVe4Q9f38-MQN-iIm70sbjVb83WUmFFMCkB1vTW_WlW99rcW35kpSIqvb62kAReWM33lU0Yn8k4liH6ERe6NngvZRo2gGvqBHC29X20wULstNac3vMlXT4wbJLIATlL1BY4zDFQVt4cxLf6Anr9wbVynXDRgkcDo2qZAkwKQCpRS70MwI0wCG1DT9Ab_u7DsqdbDSyBM_K3kaTIx3-8pVSdrtUjwbsSi_sNwwlPoUVfmkGYhPZIBxoPFm00KP6PpTp1X5c9q8wf8q6wE6k8Bta22AEYH2CT9s89AXSURvJgHdGyeAyNUX_n0HL08ab4749icfJU25pPsq5S2B3B_x-6HSfr18znBQWQPV-c4KQHL4JYDPPFFOvKB2xe9MTpH7AuDD8mtlf475M3lQrpq_NqnB7DdcYUK9xWtAmAxta2tKoBZ85ErgZKLpnqcXZIdOf7PVyFCFbgdQhzFz77BHzkbnlMNL9oRtgTXwB_bGYgfs7411Tt2sDkjC87zoji9PmEJZhyjRAz24rGCUx1bPiN7erW7Vxgk5cKvNkUZqx__6uNKffg7I0JnW6iGA1y_6F2mCN4d81h0fvCr1LEv4wCTcwz1BLtjxmn9LRHVIzvly7kiHD4Y_hfnBOUQYyDQjV6cjZ8-d9eCgEZpARIc0YoB2eW21HloPkr8M9xloz6LDrnMd5mHOxfLrw2fYp-vs8ssxxQ7StgxW4V_g0S3oE5k5xAy\",\"summary\":[]},{\"id\":\"fc_0ab55b9414e89314006ada28ffd59887d1a6fb21b64f0252ae\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"city\\\":\\\"Lisbon\\\"}\",\"call_id\":\"call_DFC5I4ypurpHUmkjR1jPHcNY\",\"name\":\"lookupCity\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cach",
+          "e_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":90,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":150,\"output_tokens_details\":{\"reasoning_tokens\":128},\"total_tokens\":240},\"user\":null,\"metadata\":{}},\"sequence_number\":13}\n\n"
+        ],
+        "chunkTimings": [
+          20,
+          4,
+          52,
+          894,
+          7,
+          3,
+          3,
+          8,
+          9,
+          23,
+          73,
+          10,
+          153,
+          0,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "97e22b9d282cf231",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use the tools when they help, then answer the question."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_0ab55b9414e89314006ada28fef07487d180839ec791769b93"
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_DFC5I4ypurpHUmkjR1jPHcNY",
+              "name": "lookupCity",
+              "arguments": "{\"city\":\"Lisbon\"}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_DFC5I4ypurpHUmkjR1jPHcNY",
+              "output": "{\"code\":\"C-LIS-91\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792682240221
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e977e199aef55a-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 15:17:20 GMT",
+          "openai-processing-ms": "320",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999247",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "4ms",
+          "x-request-id": "req_5ac4bdb47eae4c1b84dbad1a3ea5fdaa"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada2900580887d1aef3522f6ff70828\",\"object\":\"response\",\"created_at\":1792682240,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada2900580887d1aef3522f6ff70828\",\"object\":\"response\",\"created_at\":1792682240,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_0ab55b9414e89314006ada2900d4bc87d1b0782c9d6ea589c9\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ikA_7bQG9WestKQP8D2hc1wR_QWGZgWPc5Ql7p7Pze2FmXGi0dMVxBfCC_66xcneOd4L6E3u3mtXh7pDNugg_V2MZnl0xtc4_Fz4LIP26luUTR8Z1GIpCdJES4C5vqXQOX7uYKkZ1q141amCuhJLgZi3FwOsPRkj5hG7mb-rPlW42PIbgdXLhU9rnsMvaJd2b4-EzbZslpRnveeANf0hkZxYF1M_6lFsoWyW5LEL4u-aHcJi906nJ7_WDWdlmDN8ceq1cbTNfAHZQYl9486Dt7ZvptqICw7WmaIt20mgzvXdf6A8MZJCouqcHOWEMePLYbFpnLqZ3yTXIupks2_mPcQCJNm7-m9rjsojzoBJ6UVFDULFZSrKOJXGS_Ctc6xXnX4U-xOqF-f8XKLHf-gKDsYTpEoVxXagAsVkJf15RfC8_TrCF-C8FV-qrKPr07U-I6purmpFdXobrCxJgmKpp0qpFZSO6Wlf6GopUi7crzpBIqsaljl17GXNSDEzvfN9Hx-xgrudKsy6cron-3dXQQ6LJSylpgyFTLIiN3CeqgpZytWomcPKBBlLMsOp_w1e0OJLPRmEXP9SLUWjKAVEY7D8Tc2sUyJ7vcSlax3t3L3Cfe_5dtOpoWxrYv3ahhxomkwSIFB4orSDBX9gFaFuZkyjJy3hSGIVKKtX6P6926STqSHweifdk2xjzc85IkqxBF3t0xS6GDeaMVWnWSzw4GQtTWenujL8UgVFNesnKFrf4QZxNJLABM2ubrnmBB4SiX2mMTAC4NBjdBCINRQcvPXl3qdtSmpm8nWbqfwr_OREAhhc5dTKGcmGchtlNkpMJ6Jh_nwDYKM8679bzJ3maEfeovSLFowLIH8hS6bILLadP_nbqroo3THMJaXa7LOdV5eflto78moeRLxmaQmkbbxZadfyV6mf_2RSmhsEFeh7RXnqhQ8Wcc-pKxdcumh-4rO1yh5W3OtL6PomY5SqTuFfATZUhhuT_uoDtkEMRZNAPf5PV6pRz4FXJfHyRhYt92Xz0EsrZmmLqInYwoBFxje7GBNfBA6fKlwTRy6Qerek-eHAtL2EFgop8tqAuXyLwSxi1TVdkIJr3DzzlOCgZ9OKTFpf7CEHD_iUB63yZI5d9LKSQOVd2Rfqvb3kdaAapUVxBZKoXc2tUS29WSR1rVliyThB3Dgw6W9CHPF1_7YwvL5wSKlfMHjPkg3HpBXuae1zwAaEfIrZgzw0BT_CiSZxw==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_0ab55b9414e89314006ada2900d4bc87d1b0782c9d6ea589c9\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ikBu9YalJp4nNoGkZYMXK8BnTmiyVlzw8lOMJmdjQZbBeMfwDS5heIWBnt9C8r5xFlLy7b9tDACiklcYvQGay6DsFRpLzZaPruUF4OGz3A2OxK5RN522dkIDHhVsvu4tTs12DSRQdLY1zww-XY8RmnJWUaOFJmYSMvkBakqiOkCzXkVrObApSosslhIXPc3QNMde8x94tXVWrtbyioPHC63JBkWGwdPIzNn9iEClH8DJbiVMzlN6nE4SxkEgTetXJ9q5e7R73G61G9r0pWxLCJPelpC7A3xaXUUOG51Gg1OOUD4I7es-t5QMST6CuRno4bjtyQ-VvGVlM3gfaR3Il9jLDT-kXOUQQkUy_7_VlCsrtcIKECIGICWlN72YIBoK_DBy915tMkaFvest_BBH7PPsYSQSzfqMi5USbWt0eipQr-y9Tci1DTKDXT9g4paQvIg1aJ1qSoXfueKMBTLttirDhzAeUOlhSA8tCrAqVN4bZ51Nl9OcBFBCXzwKdskaSA-K8OQSkU-8giH9xehlJcgiCh0yEIB0MT4HT_BoR-k-8FCGJAzke4hzAYzbNhoUZgrecpTNZo0X96-kcp0nnumEKdW9Ce1RJnJdt8dfz3py26RsLg_68fhLAO8PNIQRHWOQNFokLpkgKsXBsSwtAp3Lw2ccCexXy6FZ1hWFLVKhlXyEYo6kVtX8lGoYZm9QRQgt8h5KRbld7Sq435iMj8Havraz2TVqOJDsFEusAw8crvDBE3nC5Xr7Cz9szfy8iTTcjTuudIeJZl62qZfqSmG5DjiYNQE4RMNBFtyYWWaHf5CjfYdONU73NBNGfAORXltmkRmzPaZrbycW9qznDDvQja1I4RzyWp5r0BuFnTAGJG9ZFA-slxnNohu2zyYFj504Nds7z9zEX0iu9yvM4_be8jAdlCrKlMCKpaGmpRUqILdJDM8XFBNrW3QFgQk14uoRJY3HX5pijBd6Af8oMV3i1mGoYDsjglNTCTMhb0yHkfGQcMnV_Oz-5FNmThmWZvLL6Ir42H5zutr_GXxhMht87TM83tLl41EblExPTpOJtJxxx-aDBAFSG8O3r281oSxdwwEcRYf-ssrJ4u6810LwmaMHTKS_NZz-NeE5xtfgzE3HeWLK1eRRwwFbTvDcKYq7vLwyoCWx-9Q5k1HuQTeaJQ2lpSPPqG9pIomyjPxbi3Ju6NT6t6cCSTHGAPcGL7hSGRYSkRDELctb1AGlSTkU3STztf-ZEu2pgQFgkjelGt2Iz9sga1ti21kicx-ky_-9editK21q4-RNx2dCFd3XyuHZMy8I0PUHddTaXOh1L5OpdMO8afslZfa2J8R5FwiTQDVgLaawVUpe866FF-IFQU4yP_pU9JTBXYGaMXkxDmz6Fw_vkTa10VZWVgt1LdCpH85ee8hcOARie0Cuwa_C6jLnI8RodMNFNBW35-oaO3MIIIhjHvxEoght5sfPYviCf3qydIE4xxpxZ-ZkSbtGGj-9cuAgNfHOwCnOH25uTdo42V8PEmdxTAVKKSxaEa9bmzNi2ac75-pVUXwktxYt0sAvFaV4Fu3SAVdbI6y_IdwnZqPUhbBXrJKr45J_Hkoum_aop4Em8DBsWL0sxTfLa2pkMDafeDBsUmtQT7rHbnUnSRAjd8ktF1qdcVf39BVSAW1YgH5BGyMOylUF5NbGKi30VSeHbfVwcJ1tRKn2OiIQR5PUOF4cVNV-AjIQtJ0\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_doVV2nuRTXAUFTeoIHEj0YMt\",\"name\":\"getForecast\"},\"output_index\":1,\"sequence_number\":4}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"sHSurUC8CLqkRf\",\"output_index\":1,\"sequence_number\":5}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"code\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"BHzTRTPUBTHc\",\"output_index\":1,\"sequence_number\":6}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"UGqqSBrbwEWLG\",\"output_index\":1,\"sequence_number\":7}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"C\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"BEMNkPXmQ1AGkNw\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-L\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"yG4okZMx4z8yj5\",\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"IS\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"1oXH7VSQI0AXmy\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"PtChLkATsUGWazR\",\"output_index\":1,\"sequence_number\":11}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"91\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"Xu9qhSX3VJyNoE\",\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"obfuscation\":\"cE77Bc0BR3CLvc\",\"output_index\":1,\"sequence_number\":13}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"code\\\":\\\"C-LIS-91\\\"}\",\"item_id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"output_index\":1,\"sequence_number\":14}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"code\\\":\\\"C-LIS-91\\\"}\",\"call_id\":\"call_doVV2nuRTXAUFTeoIHEj0YMt\",\"name\":\"getForecast\"},\"output_index\":1,\"sequence_number\":15}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada2900580887d1aef3522f6ff70828\",\"object\":\"response\",\"created_at\":1792682240,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792682241,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_0ab55b9414e89314006ada2900d4bc87d1b0782c9d6ea589c9\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ikBnLxO2YAdBF8M11cn8PXRaPJ7Ooh1uD2LmiVSzXJZ8JEgO8ho-wjVJBOiNJIMj07uqKnK1WqAuXZi5n_W5wgQ1hMwZ6Qt5X264aBTMI5f6zaPYx3XzSk4oHBycjJJtnXmUS_hQwi6F9Yrvdrhg_GV3o6kuaDih5Ntcn7CKJwTuPQ3nRAniGT50cfXuV8odgrUrx8ugzgxRtmaGKPvBJdrwKMW-8MINGPbSYms-Lo8R7aOtlE0teBtHz0w5fdahSRUb3Bt_hvpknzlFtyBg0uBFHRORTM7FnlMEYOaK9S5x10cPN-9q9KW05cpelKGtVxIuG3Xu7edSE6MQOX4BHke4ezpZYnYFglkCAjonCppOJrJW6rNL42J_BoDNe61IcAvqqgT-RqO7QXSsRX-2W6z9fc_EY5y1dfUBGmVhR6kOE48Cl6ox-uypHKoW4ge6_qx-A4tl33ftFXTUmexRLcoBalFjDDN-8cewLDM56ScIhZlO2VjzYayqUgY6GLH7T91vc8zT6Q50Unfh8dpB9FBNKD6kGSQ1QTHUtur82CqhQ0gtaArZb8DES30s2y56uDOusDQ90M_HGPV3FDkjZiOu9sTyvk5Z0WrqH4z2hMaJZgrQvWW8RlHMQN10t7ilf-bTPeHlOyy0Z4v9Xd-trmtb7w4BQAataS5lcvndzsfBwtPDch5RkzEzHxncliRjwmZzLdT3zheQ5_0UxKpWSMVdInDMxGYEc8b2e5frYM1bK-XeuEahAQhcGNhllj1jRSQt-jFZVYsMQLjUktji18O-1mlm9gX_vL7JizcTl4y3-JOu7qtNQdEW-25VwqEx7ZVluVRgxQg90XO7YNS2r0N5Oxpz-Yd_LQhNX-EQln7s8NCJMhCfXzA7BTUdSMopfvuGgl9KBu7ltZ3uCt5_XHir3BhfR4KKDHwunEv1sqjau2uGN68vX5s4Kp83C5QFTez1qr5dQTXjOhxUbPMd2S_s4XjkK5jNiaVxbp8qDMFjPFnkk_twTZFk-vrk6p3Ay1F663PIPKRvHb2Vv3rpMq0uDMzn5t9Zj840_MsbkcS4nTXVTgppTwmPldqiA6v9duGpu7-FbNkGAT2pJyl0AByrNFr5xSNzk1jMfPfoVP8BkYbjJiHG_UY30B9GA7bn1rXP9JMJURdTB4ckRjgrF1ch15fmz-SX7DcLMEleE13MrCq4ynixnq-kyU_E3NnsFzJFOKpeJ2rLlmVlMDgN1MOgWdSqfldeo07-kVRC9838a1chHh3zde7wRpcqs09kNr_mOwwm9KjNlBUtFoeOCrnoDUpmJZaNjy_af_bi1XLtdnqIoiqC2KL-7Tv_3wjpWDW37drSLGUyYt8bvWomCAhLITREbG9wALvQkAhMKpX3b5VDmOkdOMcgvQbP252uRNLmnWnsmho-W4uyMV5nlv9hWIQJ5Z3JgcTjRv6rL8916oVfFDxf1I012MNkyTcSUYqU1Yap9of0fudLdY_lFedi-SyVxYscLngjahVYSXfroFvTq1XIy7vxLj5Z0okTmio4RxKJ5RL7kKN-jnJNAF6V5kFlOHH1PDSiiSnojTIyX24gV_x8nTCwNddCNdwTujVasZVzpAFp2Oh4fWfAWRY98rsUBwjwVN6SKeyqZd_rQ74So5T4uLygN4YktFPgGem8EB9gXVO3cVPMuG_hhAxKXAJJpT19aY1Ed4Vt-UaxIb6mZK19u7hO9JvTP6T4-7I\",\"summary\":[]},{\"id\":\"fc_0ab55b9414e89314006ada2901117887d18e59e04eab6302c3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"code\\\":\\\"C-LIS-91\\\"}\",\"call_id\":\"call_doVV2nuRTXAUFTeoIHEj0YMt\",\"name\":\"getForecast\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":257,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":45,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":302},\"user\":null,\"metadata\":{}},\"sequence_number\":16}\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          182,
+          6,
+          239,
+          2,
+          11,
+          0,
+          3,
+          7,
+          2,
+          65,
+          169
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "520bf823bd4a1f88",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use the tools when they help, then answer the question."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_0ab55b9414e89314006ada28fef07487d180839ec791769b93"
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_DFC5I4ypurpHUmkjR1jPHcNY",
+              "name": "lookupCity",
+              "arguments": "{\"city\":\"Lisbon\"}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_DFC5I4ypurpHUmkjR1jPHcNY",
+              "output": "{\"code\":\"C-LIS-91\"}"
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_0ab55b9414e89314006ada2900d4bc87d1b0782c9d6ea589c9"
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_doVV2nuRTXAUFTeoIHEj0YMt",
+              "name": "getForecast",
+              "arguments": "{\"code\":\"C-LIS-91\"}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_doVV2nuRTXAUFTeoIHEj0YMt",
+              "output": "{\"forecast\":\"sunny\",\"highC\":23}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792682241428
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e977e92d60f55a-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 15:17:21 GMT",
+          "openai-processing-ms": "355",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999183",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "4ms",
+          "x-request-id": "req_4129ef8517eb4baabca7d65e9fb887c4"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada29018a3487d18f503bdb1abda155\",\"object\":\"response\",\"created_at\":1792682241,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada29018a3487d18f503bdb1abda155\",\"object\":\"response\",\"created_at\":1792682241,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_0ab55b9414e89314006ada2902001c87d1981eacced03a773e\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ikCgqmHhT0DmEqcnQE3zbXy5_1NKCqK_g3PfJZnqGPgyhDhqvT_l4FJwrBtyxv4UHv4XkSNm-jXDmgl7Gvd2sAPUyW1rLAYObjJUZNcV4PXONUr1bnz2zgcYgzM8suIHTBjm7CX6nilxmfnFsZX4wEzEf_XRjMCWoneacq65mR6tko7woSD1MX-EsfGri48jYTSjbrAlmq9rYaGFH-im4WvtAGwnHor-aIeKL5lLlNcqwwEnewYOdP671FRh1VDyUUUSQpK13seHytI1sNWISS_uVm0IlBJopdAuNwk7Pmt4TT7jmb8M6Tzdb4DMjbDI1NCP9ACb_4EdAGrUYEVCjLA7ETUZkUuG4Hpwmn-9gpCHdc_UoV0NXv2AABuUcQP72Lfjo0gGPnzHHtncHjy6KRu36p7OuYwNtkKYzyLFH3ZMop2cUOPBY97EWG-R-lArWU5QmHwfcF05kFPyYHEZ48MPOloEn1QTeFBldkqTySLlu_k1MCgju4ibZxSic1KLRT3HSIgBb_c5L0HwoaLUn8FpdumYVI5GP1tP_SA963tI7Ht9ZWl0p9Ju7X5nkKauIN-FGp3qqxbJmcdQuORIRwXYRPruTPJm1tDqhJm208KNsWt-x9qlpwz7dDJ8EOBwjpfXKW_gJeaENkpitMdvlJ1vtAAekVbLZrLN2I9K69Gak0W23q8IELQYJRm5DQai7oL1f5Hn_TfChr-3G-_K7XKA3B0OZbZcszhRSl_d6GeMXh6QUxuRflNOv37le-alfjGaNv9GfbChl2_8iPUk7ilQS8O5m7mCyaO51_NKRcMQUAAayo5DRG36doMnMFK71K1DRtInQv5vGKFRCHYwX9IMrQ5UgqWWjOxj54O91zYh8iVQdVPcFnPTu1oD0ZGfobL-XhnQN8bgXDSXtUCXz55xfQuYrSIGRuc2f2V870kWomXq_sYC1-TNapbxJ50_nkCfRIAy28CAO_3Oopo_9prP0HFew7MB7qc2HV68feXlA5-mQo2khoeCn772qWcXQGOqMCXS_yHzqD7ovvpMKPh_OFtHMBrHtQfsCWVSYtAKyyMggqjEzRc6ilLT0LmkUlq3GSf1vIGWel7aGHYnFOvptJFvWTHZjDoHoYHvNUaP9txwOy3XFH2jzJLFV1cnQSTPKXokTIDcmm7sBcjCj0kHr9VUSkXa322BQLn-Z7ME3kqV4gxtH1brAf1dBA-GLjVKuFfuJBz9I0mN29k1kRrog==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_0ab55b9414e89314006ada2902001c87d1981eacced03a773e\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ikC4xgEBw4BzcN5_f1LfIqT-gZLt7JBswWrT1uAZ8Q_aqb5JS48pra1Z-SeIXPqJMyweYZzJWxQbVYEbR3Z6nS2xlmz1ViQXa5Z7x0iyx6TDofbtCK79DhwZFHRqlxNFPauJshMtG2mqcuTHV8g-FJ1q6d-06i54gVcFg1k99GLmTSyKUI_rlTyrBm00HWoSxe2lrCgP2ARmFpRomYimNgr2qo-28C94TVmeoyIMedUa_5Ub-4JFGZ4MdoabMWQDvzughlSdwVGPl2jxuWqksIn4C4966Cn99unbIBF5C5p8NKZnwloIwqFAS0tlYuaKUHVDmW72InwuSfOCSukikoJMFAiN__2izIgA9UfTdOCpYLO3zzR-Jg3lsnW0Y_unnpR_vGuj5a2XZ0NwbbXL1BBdvxedwB27cGLrFBC-FZwuHio5K5s_aWLrVREaq784jEMFDHME49HtAsILkvkiBlM4rXmfHN3FDJ904AT_V3dr3Ie4a72DfRHPztoaGE2zhKRKeIycVhFrAS1z3mPnfP0RYwUeWD2Fp5ZJvRkmbDDDEdZBKICS9ui3egbVCwQN6NskNTUoitpj37rfiU89Rgar5CXckaSMXnmIw4nEaetFtHaYr7YXGoRZq5BmREk2YR9cOvU7Fi3cseYXqTyC1QS01dlkaK_bMqTPz4LLtdRxFt45n99uE3Rw_njbZFsl3jb4nV0tVInEQH3AC_GtGKq0LFiqm50tBbpF-efZ1Pbl2QsUGoxjb8w46JKTQ5nf1OAoZc6yv-8HUQDPvzJ-z0My5A7syaR7qT_V-MNSWt8AodnRhh0cazFBlR2bo3Lx2AGcqBGAJMuhWHy1CtE9HaGHJiz9rZE1D8QPyKyLvnApYAcsEfbbHccD0uuPQpTOHnd6JlMSnTG5N2sVzng0KpMuLhqq6Nm8IcKDcCRYBnTFXT73pdJ2iYQJElm6LsuxDdObMGVIBGp0ji8QMAVvrVlgyx0YqW2znOt7UE4L6hDx-uqaIjNSalUy6UH2be7sCEcoP0vWNNMjpoMIqx0mIPtWqVB7Qi0ydSw6CmUT-3Quf7wV6G2-UsXNixLUcZ8OwjqvfPfrEjbR9qcc8X8-D-1XLdk_BJx-RHYfktUGzWVlkWcoMfmkPxB0i6pAZDaQW7IUEMDPhSOkcekIM-gvjrQ9OE6WOUTOIBOuftOPf06UEYugQLdzJ6zUVs79lZSk2aAeRQrF8558XQ53UWqIb-6B6xnzAnArU9wFFEm1nNKDk_LH85lBhw7vqUqEGCEFkoyt_cbffmstxSgi14IegA3F1Wgg8FXugIF-Uv7p_MOndfLn-HkEpYMfwuatKhTwRJmjiaqM5rtgnsjSlIgJPM54CC0SirWox5X4qpdUYnvanycT39Evs1ihZ4DPS7VYtW4_Bx3dRUDw8xkLv22vwq69AytkI_LC0rf8E1PqhFLREeZNar1IooKoi4GffkGMANXrbF6sV_ZCLLts_pEzwJ9XYFR3NfeRlTMZInXwpKER2IOvjWDF8Badtw_1bu0WLhYPtZDMNJzijvCn6bhQqKwAy1vQ3pceqaYkAj5KUWwzWw_4kaA8LfEOD8DAtgZdGZ0ijX5gMqkUSoOulqLUshak1uxRh-smZVlu5eRa4PEPtLIAYlZTcNKHsHdXGbckebI77J9vidvLbDUpesG59suE8BUmKaoyf9uCRTsh5vILTwPZtf8p3I_ihsyKZgLphbZe7j-uyZfKMLnvjXrbFQ001uzms9QfpLhCMBuz5tsDBXIaUsZvRJOpvqYm_WHNYFSrEKruc96TBkhKnU9GJk_SvtGg7tO9BVpfp2F-DsQaR7MOVWqLMjA4CZiTxbnBi6YFnmckYVnngIqeLcHSc9qoe-RYt7vlBsUMePW7LyfAfSVAgvWaHohn0-NYFyZF4HfSpsCBguD1XeFE6qmzd5Qj_TUFQN7-bGAMHxDHj3W4EOp_9MYdIml6wbFPVkFy_swRETiVIaLR3t7YW4GzHNn1d_47jZG9AWPhtcWoU9sz_WrAq6U7OHXo84vA_tOGraMJ2PoDW0zTYP0LKuHJk0igxGJz5Wcm8k5LH7bwPgtnCGK05Ez4eD2ActevC4Ho2pqxIl3gfhfjDVNAt_TQn1wgy4qtkkrVMrMagu5rjq2irLfP1iYpw7INAv9p-fbC25yWtlqYCxvxjqTW_onuJXfgMI1brBDNaWVTVMHFsZUNVGGRS8N2bLd0ZVvzaHpH9u8lVwREqOwcXiBD-Q5uo8JBUGvQCz67tMqu8xBL6Z5ayxZ_IDnA4vgQw0_FRYulT0kUnQdYObShc4bWUYOaxYxR-YHHe2ithYTaqrHwOLlgpCc-_keSEoeCdD5GAYaP9-g9A9tZkEq4HqY4esrFQgbeSpxaE9gbJXx8m4Om9GpGEt1io19hijOEXMo0os9VR7NWorCljSibyAyRYuqI36LWdhi1xSZZDv06O6-pF2ljMNS-w3Zo_nIggv3ydU2aHA-KCkzCYtXcwc7wflpCUOXZ3gs8AEk4FVqdw2knrPCz6eZciO5XhDdDsL6lCbsdZa2kz2GMxBMd5vESXfLbHmX5PpOtxmAeMkI1IGZrtOrzNwshwj-hwL1TwbVcj8FapZ00JR35EoVHfnGwjAHY5mIWJk9-GOexQz3E9Tnx_nBX_afpfRYYo5J9S2OzUgpaF0D3CpEO-VDC77MULeH-ieVDXdHUDJtt8c7xL3TlaFlc9s081ei-SexrcObH5LNtvJ6mOP_TSLjUg1oXaQEmyaSrb4LvUA5NIjQGVz6XMeDFDgT9il0iNmTAod3sICZE2SP0XxtMmSPS3k6MjbObGVqK84knXMghagEuNAZFMPqEfTsT9_J6wL6DubBj0JECTL1RznhO4lxqx9PJNy8KcQHcYtnQne_oZqqWUfBG4MgfRXsLJ4Y5PqN0hM0_6e0fhvG-r82UnAc7x4tagXnapeOoSGE0jEUbwPwMCH1yW67h15nUqZv8c_9iBSgDCpRh_ReRWy5ePufFiJ32Hi5gXL4KyN7RVL0lctwbYbqSyQP4KWRJX97-ty0v5Sg_rmBvjnaL0E10bfebsF90CZOGcR3vc9Cbp3zSyS0H_cmW1H38dXgQUpgbWE91rcdLnaHtiRSypM2l53H1sGAoup5xKEpzA==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":4}\n\n",
+          "event: response.content_par",
+          "t.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Today\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"lpsh6xHtqFv\",\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"9NX1vqPAF5KnV\",\"output_index\":1,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Lisbon\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"LD8RS8wlZ\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" it's\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"qiwJMzwsf5r\",\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sunny\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"X11L9LBah9\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" with\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"QOP1hhJpdDJ\",\"output_index\":1,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"AxZ9gOb3vlLrA8\",\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" high\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"t3qLUTSYjrD\",\"output_index\":1,\"sequence_number\":13}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"p7CJySTQyqdsB\",\"output_index\":1,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"vin4KZAzByyyQ3h\",\"output_index\":1,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"23\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"PKqwhK7r8VyRTC\",\"output_index\":1,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"°C\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"vMljrhl6BFWlWh\",\"output_index\":1,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" (\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"tYwQBIJDSeQh2P\",\"output_index\":1,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"about\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"soQqI1nwrLo\",\"output_index\":1,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"7sUMvpQkL4YpIws\",\"output_index\":1,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"73\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"SB93PL3QuA1MI0\",\"output_index\":1,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"°F\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"aAcVvNt8o6pqKQ\",\"output_index\":1,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\").\",\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"obfuscation\":\"95ONljB3Z8cwM1\",\"output_index\":1,\"sequence_number\":23}\n\nevent: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"logprobs\":[],\"output_index\":1,\"sequence_number\":24,\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F).\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F).\"},\"sequence_number\":25}\n\nevent: response.output_it",
+          "em.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F).\"}],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":26}\n\n",
+          "event: response.completed\n",
+          "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0ab55b9414e89314006ada29018a3487d18f503bdb1abda155\",\"object\":\"response\",\"created_at\":1792682241,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792682243,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_0ab55b9414e89314006ada2902001c87d1981eacced03a773e\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2ikDhgze9k_lqLT3eLk2iq-d8HzCWNlife0HAcbuSdjbJSgctksUTRxVRqBwSz15QDljpbPkEIQwASDu2XrFfyI28md7QAaFoGuE6FTJlleO2Om3CfHFhIKOBU7NaQ6FcvG79VwCCMuufSCxm_xzlyc8GZyA0wCtnTdLPhglyz2rSQFfACYSD1H2b-tVFlAi1GEvTlqBWs6bt_iYxqB03-M8DRShfcJ2Zg_vCLf7pOetTp_-OVb6caaxiaq2HUa8c5NE_MAOensOQn10-DBMYhPxExg1IvRi9dcon9iqb2XQu2OU5le65W_LTJk1JgCncl6qsDYG89XrsTpgZr5hQNZEUkW8LTbBxrJujzW1xm0i7GsWyWg33bEBe82P-SPcIOFysxuQe1Wp-puGloUbjCy0qMekzMZIiM1yOGyVId6YGf9QfsbWOfsHWY1CVmBe1ZVP9DO3K0IjNunNtHyDgbo9H_ydUQq9tkw5oz2B6ZFV-k_MiAiq2Oo2usxwoz7AOqzZCyr65O0BwO-9ldM_6M1f_d03Z1wPzKA8H60U976cBoeyrx8BCT8_g3zC_sFx4cafB3_ykJpd9668ELs0K0gvwXEAVuNJJkm396K5M2NRiycvrUO4Zb2_GrAHkdZ0uStOklBR48_mvGg7aOJvzO2X2jAB21y0wfZbPyc7_sPba2_ON0dHwwBL3riXRHJ2abORHnVUwH9FFjInAjqlkK-rF7yD1zJN35VZIsBrRZdjGjwUTWVa9JRXerCDqK6MVeYN-UuxM9--5ZXGFRtMWplf6UgPh4e1vZ6DPYEqpkHAyCQ9fdk-3yTAC5pi33xW2txKZh7BkVsBay_HA27dL-bKE5klA21zxTTo0zSVoqXQG_b_wYX5PWEuXHQjsyTVYivvco35TYZlFwdD73M1blU3wEW08i1yd7T4XcQqdxS-6Lq38yOMQsiSWkRSKnGRRVU3Btt2feNFbJnLDVaORm_XUg6GmkzLn37ZRox89BHz64tlBXJZVsNmabjNnGq3SPOcqXTqJibAR6XGBum9xOIZJ39GOyyZsPC6-aC6m67DFGwA8acLoPQ5LLfPqC5-4g4rXM-ZR9WiyDW4P8-7aQeajDCnC80Eg49EBBBd_zzv-VlvrOjMrIAQPb19zW3lkOLAlouvCmbnT_zKAbmmvii-mHWE-RykyedFVLnd-kD0DiheLV9V6SnBfmBPZKXhupDWJ5xcEkX9xqhmYjV83wuVxSRvg_DX1TuawJruU9ONTg8vlAkJGDNQHOb-xm4MsEAxpfepdCkqTQ6w2y-R2uXu_pqA1r2YaZAWIf6QYJHN9qW7Q0MuivwzLA8yC14zRKvXUe2CizE-suwLHliT4hJb5nLirEgcz_FV2vUmlfg5cjZx2A1Au4c3f2hQf2cxJm1-U4u9EFgt7ZpqrsDCXtv4ojVu_Y8yKLZAdhjpYduuN-5po_WHKnmcSjtrliSCjBjOXuuivojUpxAYW5z7bwGwqkBY-mhgq5fl-32xxOd6Yfd-wNPIDtWPckDf0QkHDxdtJ5q58jhi_UBD3sDuCoYFxXT9ZxMCKs9FNDWYWdEv1RRKtYG2tRaeD7GjANH2-QpGNCpGyZgY0YK75t7QtY-N-yWMYuG1AdYGb4F_F14uZdOACCZ3YKeDjqUwox3t8UpCN818HUO0Vs7OCudvh4P_DoPCn3HCLzN8ROxnvLIrt09UlrVp-rCJRozi6dGv_DS4Rpi8TOwsDPPFbxzl1vdJ0fDGHdRb4GROiJFD7i0TU5_sXtwvjMd65oSqEGYdfatKVtCsH4LwK0BVPKUCb4EDHJOjQm68WFLeg1DLjsEFR12Mr6hJGwDiaG8dPXm1JomxmDaREJQilleQgCo7oWgDDnKE0zRInHQGlbVZ8pwpFz8B17RK6rVWC_nXnS6hCfJVj36xs8UuftteMn4p7evC7mUsXtjhQSyKJLIOhIbUAZYvoWb_0ohJSyYtkuU5xQacpV9YfxohpoQLautAJwmUVAp9ApOUB5nKBeUiMhRFOIu8QWqpKzm3CxdwEXSJaasMJMV2DnYUlYDzRw3O8tD7O8aOOjKWKJ64i8bk3vXfNKR_AqZwqsrhKZYRpUAzB5EpY1xfn1Z1tjHzYUU2NOFlDhOejE7c3EPShj34l-Yk_h2Xy1kzIrDeFDVWrLMvnNU17oLFl1Mz2MFi6KsPRuKIwBUylNRlUbqIufE9mtbkT46ZHF_J6tuxf85qHZ4FOmIX1ETWgA28rtSCQ0VUipf0KlC2zz6NsMkC9RqaFfCCcePvbH_zs5suQa8cczCrgMwPRAIT4_0PovQkcId7GTP0gcavmXmspeOZ9Jp1sK2QhtJEU9UMckbZQLHBvgSMIy38FVM6VOJcGZMLd_VFjF3aKlz-UBzqdBUM2X5UlngFeIRduTdIaWUma_wZj8zMsmZUvIXgn5kLqBNeIyua_6doC1pxfk2E1pZ3PIHI6C7yxR5ppcFLl9tYod2a1hlGgntBXWVMlpnWNHPTngmV-YfNsNMalTqUQrm87tQC1pRsl02mcAmG5qBAc1R4scY4eSE6ynHLvVx5XfG2-7NsjoWvAGEbud2RzxeZoCyF1HeSrL05xJvYzkyuU_GV5y0rl1BlOy-6Z1dU1Z_zL9gcwQwWS_HDndtypomEH10_AIXwyVdSav1xNdcsZHJx2xWkMI9OMc4z7Hx1GFydXA-KyBsXpQiOzIPqaervamtTiZMxIF--aHIOPjEHh54N3-pQ2Ag_OxXBS6nE4DhEEkka4POMM8S_Ba0dJYD5Sr8OK-CINdSus-7ZYNWLCxfvaGviCRBne2xxjDUMSHuoGt5mtPwBgZopMf0RsUSnulMoIc8JtWAg6K_Vl2cpmbiwlhylaxOAWBqiEE-hww4L9jeeeWBO9EffiBlBIJZKxq0rZBqL6-a3nfxcP8PucxMLb4WsL2aATFX29UOIZcDpGZioPPcdvZDr6BoYlcXEnsAbmeDqH_3jt7bbyQX2w56AUhT6VE4DP6OJ0QNNWS5nr9VsaVbj-mexITUnyUluNtZpwMxeUDIdN3FBoJKzWE2LM8RJ1XecSiz3EvD78cdv8gsMg0q8vuwHHju6-tpsCH30Bhe6xyz6y3iQN7FRTSTDpobLUvmOZkjE1lIvWpthpYQcIZCdNw==\",\"summary\":[]},{\"id\":\"msg_0ab55b9414e89314006ada2902e60c87d19ca9905a04e85b74\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Today in Lisbon it's sunny with a high of 23°C (about 73°F).\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Look up the code for a city.\",\"name\":\"lookupCity\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true},{\"type\":\"function\",\"description\":\"Get the forecast for a city code.\",\"name\":\"getForecast\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":321,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":163,\"output_tokens_details\":{\"reasoning_tokens\":128},\"total_tokens\":484},\"user\":null,\"metadata\":{}},\"sequence_number\":27}\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          130,
+          924,
+          4,
+          8,
+          0,
+          7,
+          15,
+          14,
+          4,
+          2,
+          4,
+          7,
+          2,
+          7,
+          2,
+          11,
+          15,
+          24,
+          6,
+          8,
+          7,
+          5,
+          3,
+          2,
+          0,
+          173,
+          0
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

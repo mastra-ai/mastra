@@ -21,7 +21,7 @@ type AggregatedLanguageModelUsage = Omit<LanguageModelUsage, 'inputTokens' | 'ou
 const primaryUsageKeys = ['inputTokens', 'outputTokens', 'totalTokens'] as const;
 
 export class WorkflowRunOutput<
-  TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>,
+  TResult extends WorkflowResult<any, any, any, any, 1 | 2> = WorkflowResult<any, any, any, any>,
 > implements MastraBaseStream<WorkflowStreamEvent> {
   #status: WorkflowRunStatus = 'running';
   #tripwireData: StepTripwireData | undefined;

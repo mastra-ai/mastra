@@ -30,6 +30,8 @@ export enum EntityType {
   WORKFLOW_RUN = 'workflow_run',
   /** Memory */
   MEMORY = 'memory',
+  /** Classifier */
+  CLASSIFIER = 'classifier',
 }
 
 /**

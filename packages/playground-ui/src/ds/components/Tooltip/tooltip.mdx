@@ -1,0 +1,120 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as TooltipStories from './tooltip.stories';
+
+<Meta of={TooltipStories} />
+
+# Tooltip
+
+`Tooltip` names a control. `InfoTooltip` explains the thing next to it, in words or with a small drawing. Both open on hover and keyboard focus, and close on Escape or when the pointer or focus moves away. `InfoTooltip` also opens on a tap, because a finger has no hover, and closes when you tap the icon again or anywhere outside the popup.
+
+```tsx
+import { InfoTooltip, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+```
+
+## Which one
+
+Stop at the first question that answers yes.
+
+```text
+Does the popup hold a link, button, input, or anything else to focus?  -> Popover. A tooltip closes once focus leaves
+                                                                           its trigger, so nothing inside can be reached.
+Must people read it to fill in the form correctly?                     -> No popup. Use FieldDescription or the option
+                                                                           labels, which are always on screen.
+Does it name an icon-only control (Save, Delete)?                      -> Tooltip, with the words of the control's aria-label.
+Do one or two sentences explain the term?                              -> InfoTooltip.
+Does the point only land when two outcomes sit side by side?           -> InfoTooltip variant="illustrated".
+```
+
+## Illustrated tooltips
+
+<Canvas of={TooltipStories.InfoTooltipIllustrated} />
+
+```tsx
+const illustrativeTraffic = [
+  { runs: 100, failures: 5 },
+  { runs: 100, failures: 5 },
+  { runs: 100, failures: 85 },
+];
+const errorRates = illustrativeTraffic.map(member => member.failures / member.runs);
+const threshold = 0.5;
+const combinedRate =
+  illustrativeTraffic.reduce((sum, member) => sum + member.failures, 0) /
+  illustrativeTraffic.reduce((sum, member) => sum + member.runs, 0);
+
+const Members = () => (
+  <span className="flex gap-1">
+    {errorRates.map((rate, index) => (
+      <span
+        key={index}
+        className={cn('size-2.5 rounded-full', rate > threshold ? 'bg-destructive-indicator' : 'bg-success-indicator')}
+      />
+    ))}
+  </span>
+);
+
+const Level = ({ rate }: { rate: number }) => (
+  <span className="relative flex h-10 w-2.5">
+    <span className="flex w-full items-end overflow-hidden rounded-xs bg-border">
+      <span
+        className={cn('w-full', rate > threshold ? 'bg-destructive-indicator' : 'bg-muted-foreground')}
+        style={{ height: `${rate * 100}%` }}
+      />
+    </span>
+    <span className="absolute -inset-x-1 border-t-2 border-foreground" style={{ bottom: `${threshold * 100}%` }} />
+  </span>
+);
+
+<InfoTooltip aria-label="About alerting for each" variant="illustrated">
+  <InfoTooltip.Panel title="All traffic" caption="One failing server can be hidden by healthy ones.">
+    <Members />
+    <Level rate={combinedRate} />
+  </InfoTooltip.Panel>
+  <InfoTooltip.Panel title="Each server" caption="The failing server gets its own alert.">
+    <Members />
+    <span className="flex gap-1">
+      {errorRates.map((rate, index) => (
+        <Level key={index} rate={rate} />
+      ))}
+    </span>
+  </InfoTooltip.Panel>
+</InfoTooltip>;
+```
+
+`InfoTooltip` owns the popup, the panels, the plates, and the text. The drawing is yours: it belongs to the feature it explains, so keep `Members`, `Level`, and the data in that feature's folder and pass the marks in as each panel's children. Platform's "Alert for" field (`AlertForDiagram.tsx`) is the shipped example.
+
+`variant="illustrated"` makes the popup 320px wide, never wider than the screen, and sets the panels in equal columns. Each drawing sits on a framed plate, and the plates in one popup are always the same size, so the eye compares the drawings and not their boxes. Titles, plates, and captions share rows across panels, so a long caption in one panel never pushes the other drawing out of line.
+
+The popup opens below the label and starts at its left edge, with its tail on the icon, so it reads as attached to the label the way a menu hangs from its trigger. Text in the panels is left-aligned, because centered text wraps into a ragged block that is hard to read past two lines. The popup moves above the label when there is no room below. It reads the first element in the icon's row as the label, so put the icon right after its label in one row, as `FieldLabel`'s `info` prop does. Pass `side` or `align` to place it yourself.
+
+The drawing is hidden from screen readers. The icon's description is each panel's title and caption, read in order. Those words have to carry the whole explanation on their own.
+
+## Build a drawing
+
+Work in this order. Each step decides the next, and starting from the marks instead of the words is how a drawing ends up decorative.
+
+1. **Write the words first.** The `aria-label` names the question ("About alerting for each"). Each panel gets a title that matches an option beside the icon and one caption sentence that states its outcome. If the captions alone already make the point, stop and use a text `InfoTooltip`. If you can't write them, there is nothing to draw yet.
+2. **Split what changes from what stays.** List what the choice changes (how traffic is grouped) and what it doesn't (the three agents, their rates, the threshold). Everything on the second list is drawn identically in every panel. Only the first list may differ between them.
+3. **Pick one kind of mark for each kind of thing.** A member you count is a dot. A quantity against a limit is a bar with a line across it at the limit. Steps over time are marks along a row. Use the fewest kinds you can: the example has two, dots for agents and bars for error rates.
+4. **Write the illustrative data, then compute the drawing from it.** Name it as an example, size it so the point is visible at a glance (one member far over the line, the combined value under it), and derive every height from it the way the product computes it. Checklist item 4 has the rule.
+5. **Build each mark as a small component from roles and scale steps.** `Members` and `Level` above are the pattern: a fixed size from the scale, colors from roles, and a data-driven height through `style`.
+6. **Check it at real size against the checklist below.** Cover the drawing and read only the captions: they must still explain the choice.
+
+## Drawing checklist
+
+1. **One question, one takeaway.** The `aria-label` names the question and the captions answer it. A popup that answers two questions gets read for neither.
+2. **Title every panel with the option it shows.** One to three words, matching the words of the choice beside the icon ("All traffic", "Each agent"), so people map the picture to the option. The caption is one sentence that states the outcome.
+3. **Compare like with like.** Both panels draw the same members, the same inputs, the same scale, and the same threshold at the same height. Change only what the choice changes, or readers credit the difference to the wrong cause.
+4. **Draw the real mechanism, from numbers that say they are an example.** The data is illustrative, never live, so name it that way (`illustrativeTraffic`) and keep it beside the drawing. Compute what you show the way the product computes it. Mastra's error-rate alerts divide failed traces or spans by all traces or spans in the window, so a combined rate is total failures over total runs, and a busy member counts for more than a quiet one. The mean of the members' rates only matches that when every member has the same traffic. The example above gives each member 100 runs so the two agree; with unequal traffic, use the totals. No decorative charts, random data, or shapes that only look like data.
+5. **Position, shape, and text carry the meaning. Color repeats it.** The failing bar is red, and it also crosses the threshold line. Someone who can't tell red from green still reads it from the line.
+6. **Words inside the drawing are labels, and they are also said in text.** A value, unit, or threshold label belongs in the drawing when the picture is unreadable without it, such as `50%` beside the threshold line. Use `text-caption` or larger and a text role (`text-foreground`, `text-muted-foreground`), so it stays readable at popup size in both themes. The drawing is hidden from screen readers, so every label in it also appears in the panel's title or caption, or the captions explain the picture without it.
+7. **Marks come from roles.** Status marks are `{status}-indicator`, neutral marks `muted-foreground`, tracks `border`, lines `foreground`, and sizes are scale steps (`size-2.5`, `h-10`). No literal colors or opacity modifiers, because the drawing has to pass contrast on the popup surface in both themes. A height that comes from data may use `style`. The panel already draws the plate, so the drawing adds no box, border, or background of its own.
+8. **Stable geometry.** Fixed mark sizes, no motion inside the drawing, two panels, three at most. A fourth column at 320px squeezes captions to a word per line.
+9. **Check it at real size.** Open the real tooltip at desktop width and at 320px, in light and dark, and read the captions with the drawing covered. If the captions alone don't explain it, rewrite them.
+10. **It stays optional.** A tooltip explains; it never holds the only copy of something people need to finish the task.
+
+## Behavior
+
+- A mouse opens it on hover, and the pointer can move into the popup without closing it. The keyboard opens it on focus.
+- A tap opens `InfoTooltip`. Tapping the icon again, tapping elsewhere, or pressing Escape closes it. A plain `Tooltip` does not open on touch.
+- The popup stays mounted while closed, so screen readers always get the text as the icon's description.
+- Nothing inside either tooltip can take focus. Content with a link or a button goes in a `Popover`.

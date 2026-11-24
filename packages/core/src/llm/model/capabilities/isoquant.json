@@ -1,0 +1,19 @@
+{
+  "attachment": ["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"],
+  "temperature": ["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"],
+  "structuredOutput": ["deepseek-v4.1-flash-1017-fast", "glm-5.3-flash"],
+  "reasoning": {
+    "deepseek-v4.1-flash-1017-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

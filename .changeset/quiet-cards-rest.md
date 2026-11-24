@@ -1,5 +1,5 @@
 ---
-'mastra': patch
+'@mastra/playground-ui': patch
 ---
 
-Removed the "Suggested" badge from Factory board cards. A run waiting for approval is still surfaced by the highlighted "Start suggested run" button on the card.
+Fixed the missing shadow on the page card. It used the removed `--elevation-lip` variable.

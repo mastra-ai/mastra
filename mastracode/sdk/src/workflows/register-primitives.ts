@@ -85,7 +85,7 @@ export async function registerWorkflowBuilderPrimitives(
 
   // 3. Model-independent web tools. Provider-native web tools (Anthropic/OpenAI)
   //    are model-locked and would freeze workflows to one provider.
-  const configuredWebTools = createConfiguredWebTools();
+  const configuredWebTools = await createConfiguredWebTools();
   if (configuredWebTools) {
     mastra.addTool(configuredWebTools.web_search, 'web-search');
     mastra.addTool(configuredWebTools.web_extract, 'web-extract');

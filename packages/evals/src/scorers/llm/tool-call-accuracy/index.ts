@@ -29,6 +29,20 @@ const analyzeOutputSchema = compileSchema(
   }),
 );
 
+function matchToolEvaluations<T extends { toolCalled: string }>(actualTools: string[], evaluations: T[]): T[] {
+  const remainingCalls = new Map<string, number>();
+  for (const toolName of actualTools) {
+    remainingCalls.set(toolName, (remainingCalls.get(toolName) ?? 0) + 1);
+  }
+
+  return evaluations.filter(evaluation => {
+    const remaining = remainingCalls.get(evaluation.toolCalled) ?? 0;
+    if (remaining === 0) return false;
+    remainingCalls.set(evaluation.toolCalled, remaining - 1);
+    return true;
+  });
+}
+
 export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolCallAccuracyOptions) {
   const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
 
@@ -77,18 +91,18 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
     })
     .generateScore(({ results }) => {
       const evaluations = results.analyzeStepResult?.evaluations || [];
+      const missingTools = results.analyzeStepResult?.missingTools || [];
+      const actualTools = results.preprocessStepResult?.actualTools || [];
+      const totalToolCalls = actualTools.length;
 
-      // Handle edge case: no tools called
-      if (evaluations.length === 0) {
-        // Check if tools should have been called
-        const missingTools = results.analyzeStepResult?.missingTools || [];
+      if (totalToolCalls === 0) {
         return missingTools.length > 0 ? 0.0 : 1.0;
       }
 
-      const appropriateToolCalls = evaluations.filter(e => e.wasAppropriate).length;
-      const totalToolCalls = evaluations.length;
-
-      return roundToTwoDecimals(appropriateToolCalls / totalToolCalls);
+      const appropriateToolCalls = matchToolEvaluations(actualTools, evaluations).filter(
+        evaluation => evaluation.wasAppropriate,
+      ).length;
+      return roundToTwoDecimals(Math.min(1, appropriateToolCalls / (totalToolCalls + missingTools.length)));
     })
     .generateReason({
       description: 'Generate human-readable explanation of tool selection evaluation',
@@ -96,11 +110,13 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
         const userInput = getUserMessageFromRunInput(run.input) ?? '';
         const evaluations = results.analyzeStepResult?.evaluations || [];
         const missingTools = results.analyzeStepResult?.missingTools || [];
+        const actualTools = results.preprocessStepResult?.actualTools || [];
 
         return createReasonPrompt({
           userInput,
           score,
-          evaluations,
+          actualTools,
+          matchedEvaluations: matchToolEvaluations(actualTools, evaluations),
           missingTools,
         });
       },

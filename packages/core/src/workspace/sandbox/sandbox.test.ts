@@ -1,11 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SandboxError, SandboxUnsupportedFeatureError } from './errors';
-import {
-  assertModesUnsupported,
-  validateSandboxFileMode,
-  MAX_SANDBOX_FILE_MODE,
-  type SandboxFileInput,
-} from './sandbox';
+import { assertModesUnsupported, validateSandboxFileMode, MAX_SANDBOX_FILE_MODE } from './sandbox';
+import type { SandboxFileInput } from './sandbox';
 
 describe('validateSandboxFileMode', () => {
   it('accepts valid permission modes', () => {

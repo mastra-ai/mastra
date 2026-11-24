@@ -7,9 +7,9 @@
 
 import { ThreadManager, resolveLaunchViewport } from '@mastra/core/browser';
 import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
-import { BrowserManager } from 'agent-browser';
-import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page } from 'playwright-core';
+import { BrowserManager } from './browser-manager';
+import type { BrowserLaunchOptions } from './browser-manager';
 import type { BrowserConfig } from './types';
 
 /**
@@ -30,6 +30,10 @@ export interface AgentBrowserThreadManagerConfig extends ThreadManagerConfig {
   resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   /** Callback when a new browser manager is created for a thread */
   onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
+  /** Runs once a thread's browser is open, before saved tabs are restored (e.g. to add cookies) */
+  onBrowserOpened?: (threadId: string) => Promise<void>;
+  /** Runs before a thread's local browser launches (e.g. to release a stale profile lock) */
+  beforeLaunch?: (threadId: string) => Promise<void>;
 }
 
 /**
@@ -49,12 +53,16 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
   protected readonly browserConfig: BrowserConfig;
   private readonly resolveCdpUrl?: (cdpUrl: string | (() => string | Promise<string>)) => Promise<string>;
   protected readonly onBrowserCreated?: (manager: BrowserManager, threadId: string) => void;
+  protected readonly onBrowserOpened?: (threadId: string) => Promise<void>;
+  protected readonly beforeLaunch?: (threadId: string) => Promise<void>;
 
   constructor(config: AgentBrowserThreadManagerConfig) {
     super(config);
     this.browserConfig = config.browserConfig;
     this.resolveCdpUrl = config.resolveCdpUrl;
     this.onBrowserCreated = config.onBrowserCreated;
+    this.onBrowserOpened = config.onBrowserOpened;
+    this.beforeLaunch = config.beforeLaunch;
   }
 
   /**
@@ -97,6 +105,10 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
         launchOptions.cdpHeaders = this.browserConfig.cdpHeaders;
       }
 
+      if (!launchOptions.cdpUrl) {
+        await this.beforeLaunch?.(threadId);
+      }
+
       try {
         await manager.launch(launchOptions);
       } catch (error) {
@@ -113,6 +125,7 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       this.threadManagers.set(threadId, manager);
 
       try {
+        await this.onBrowserOpened?.(threadId);
         // Restore browser state if available (before notifying parent to avoid screencast race)
         if (savedState && savedState.tabs.length > 0) {
           this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);

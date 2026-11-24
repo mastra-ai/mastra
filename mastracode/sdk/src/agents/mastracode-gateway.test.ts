@@ -194,6 +194,188 @@ describe('MastraCodeGateway', () => {
     });
   });
 
+  describe('custom providers', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("keeps the gateway key away from a custom provider named like the gateway model's provider", async () => {
+      const requests: Array<{ url: string; auth: string | null }> = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: unknown, init?: RequestInit) => {
+          const headers = new Headers(init?.headers);
+          requests.push({ url: String(url), auth: headers.get('authorization') ?? headers.get('x-api-key') });
+          return new Response('{}', { status: 500 });
+        }),
+      );
+      const gateway = new MastraCodeGateway({
+        mastraGatewayBaseUrl: 'https://gateway.example.com',
+        mastraGatewayApiKey: 'org-gateway-key',
+        routeThroughMastraGateway: true,
+        customProviders: [
+          {
+            name: 'Anthropic',
+            url: 'https://custom.example.com/v1',
+            apiKey: 'custom-key',
+            models: ['claude-opus-5.5'],
+          },
+        ],
+        settingsPath: join(tmpdir(), 'nonexistent-settings.json'),
+      });
+
+      const model = gateway.resolveLanguageModel({
+        providerId: 'anthropic',
+        modelId: 'claude-opus-5.5',
+        apiKey:
+          gateway.resolveAuth({
+            gatewayId: 'mastracode',
+            providerId: 'anthropic',
+            modelId: 'claude-opus-5.5',
+            routerId: 'mastracode/anthropic/claude-opus-5.5',
+          })?.apiKey ?? '',
+      });
+      await Promise.resolve(
+        model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
+      ).catch(() => undefined);
+
+      expect(requests.length).toBeGreaterThan(0);
+      expect(requests.every(request => new URL(request.url).host !== 'custom.example.com')).toBe(true);
+    });
+  });
+
+  describe('Anthropic prompt caching through the Mastra gateway', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    async function captureGatewayRequest(
+      anthropicPromptCacheScope?: 'conversation' | 'system',
+      gatewayApiKey = 'msk-gateway-test',
+      followUp: any[] = [],
+    ) {
+      const requests: Array<{ headers: Headers; body: any }> = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: unknown, init?: RequestInit) => {
+          requests.push({ headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) });
+          return new Response('{}', { status: 500 });
+        }),
+      );
+      const gateway = new MastraCodeGateway({
+        mastraGatewayBaseUrl: 'https://gateway.example.com',
+        mastraGatewayApiKey: gatewayApiKey,
+        routeThroughMastraGateway: true,
+        customProviders: [],
+        settingsPath: join(tmpdir(), 'nonexistent-settings.json'),
+        anthropicPromptCacheScope,
+      });
+      const model = gateway.resolveLanguageModel({
+        providerId: 'anthropic',
+        modelId: 'claude-opus-5.5',
+        apiKey: gatewayApiKey,
+        headers: { 'x-thread-id': 'thread-1' },
+      });
+      await Promise.resolve(
+        model.doGenerate({
+          prompt: [
+            { role: 'system', content: 'Instructions' },
+            { role: 'system', content: 'Memory' },
+            { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+            ...followUp,
+          ],
+        }),
+      ).catch(() => undefined);
+
+      expect(requests).toHaveLength(1);
+      return requests[0]!;
+    }
+
+    it('marks the last system message and the latest message for the main agent', async () => {
+      const { headers, body } = await captureGatewayRequest();
+
+      expect(body.model).toBe('anthropic/claude-opus-5-5');
+      const marker = { type: 'ephemeral', ttl: '1h' };
+      expect(body.messages[0].content.at(-1).cache_control).toBeUndefined();
+      expect(body.messages[1].content.at(-1).cache_control).toEqual(marker);
+      expect(body.messages[2].content.at(-1).cache_control).toEqual(marker);
+      expect(headers.get('x-gateway-strict-capabilities')).toBe('false');
+      expect(headers.get('x-thread-id')).toBe('thread-1');
+      expect(headers.get('authorization')).toBe('Bearer msk-gateway-test');
+    });
+
+    it('recognizes the other organization key prefix', async () => {
+      const { headers, body } = await captureGatewayRequest('conversation', 'mskv2_test');
+
+      expect(body.messages[2].content.at(-1).cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+      expect(headers.get('x-gateway-strict-capabilities')).toBe('false');
+    });
+
+    it('marks a tool result when it is the latest message, as in an agent loop', async () => {
+      const { body } = await captureGatewayRequest('conversation', 'msk-gateway-test', [
+        {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'view', input: { path: 'a.txt' } }],
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'view',
+              output: { type: 'text', value: 'contents' },
+            },
+          ],
+        },
+      ]);
+
+      const marked = body.messages.filter((message: unknown) => JSON.stringify(message).includes('cache_control'));
+      expect(marked.map((message: { role: string }) => message.role)).toEqual(['system', 'tool']);
+      expect(body.messages.at(-1).role).toBe('tool');
+    });
+
+    it('marks only the last system message for background calls', async () => {
+      const { body } = await captureGatewayRequest('system');
+
+      expect(body.messages[1].content.at(-1).cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
+      expect(body.messages[2].content.at(-1).cache_control).toBeUndefined();
+    });
+
+    it('leaves the prompt alone for a project key, where the gateway manages memory', async () => {
+      const { headers, body } = await captureGatewayRequest('conversation', 'msk_project_test');
+
+      expect(JSON.stringify(body)).not.toContain('cache_control');
+      expect(headers.has('x-gateway-strict-capabilities')).toBe(false);
+    });
+  });
+
+  it('keeps the gateway key away from Moonshot when a gateway Kimi model runs', async () => {
+    const hosts: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: unknown) => {
+        hosts.push(new URL(String(url)).host);
+        return new Response('{}', { status: 500 });
+      }),
+    );
+    const gateway = new MastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway.example.com',
+      mastraGatewayApiKey: 'org-gateway-key',
+      routeThroughMastraGateway: true,
+      customProviders: [],
+      settingsPath: join(tmpdir(), 'nonexistent-settings.json'),
+    });
+
+    const model = gateway.resolveLanguageModel({
+      providerId: 'moonshotai',
+      modelId: 'kimi-k2.6',
+      apiKey: 'org-gateway-key',
+    });
+    await Promise.resolve(
+      model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] }),
+    ).catch(() => undefined);
+    vi.unstubAllGlobals();
+
+    expect(hosts).toEqual(['gateway.example.com']);
+  });
+
   describe('gateway API key accessors', () => {
     it('keeps the previous accessor as a compatibility alias', () => {
       writeAuthJson({

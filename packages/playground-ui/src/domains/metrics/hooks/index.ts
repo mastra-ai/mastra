@@ -1,6 +1,8 @@
 export { MetricsProvider, useMetrics, isValidPreset, DATE_PRESETS } from './use-metrics';
-export type { DatePreset, DateRange } from './use-metrics';
+export type { DatePreset, DateRange, MetricsScope } from './use-metrics';
 export { useMetricsFilters } from './use-metrics-filters';
+export { useMetricsScope } from './use-metrics-scope';
+export { useMetricsLayout, type MetricsLayout } from './use-metrics-layout';
 export { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useModelCostKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useTotalTokensKpiMetrics } from '@mastra/react/hooks/metrics';
@@ -38,6 +40,17 @@ export {
   type MetricsPropertyFilterFieldId,
 } from '../metrics-filters';
 export { useMetricsActivity, type ActivityBucket } from './use-metrics-activity';
-export { useMetricsLatency, type LatencyBucket, type LatencyEntity } from './use-metrics-latency';
+export {
+  useMetricsLatency,
+  type LatencyBucket,
+  type LatencyEntity,
+  type LatencyPercentile,
+} from './use-metrics-latency';
 export { useMetricsScores, type MetricsScores, type ScorerAverage, type ScoresBucket } from './use-metrics-scores';
 export { useTokenSpend, type SpendDimension, type SpendRow } from './use-token-spend';
+export {
+  useMetricsUsageTotals,
+  USAGE_METRICS,
+  type UsageTotalsMeasure,
+  type UsageTotalsOptions,
+} from './use-metrics-usage-totals';

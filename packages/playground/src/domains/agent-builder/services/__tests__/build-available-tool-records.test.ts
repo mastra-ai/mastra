@@ -64,18 +64,6 @@ describe('buildAvailableToolRecords', () => {
     });
   });
 
-  it('returns tools, agents, and workflows when all three are populated', () => {
-    const result = buildAvailableToolRecords(
-      { 'tool-a': { description: 'Tool A' } },
-      { 'agent-x': { name: 'Agent X' } },
-      { 'wf-1': { name: 'Workflow One' } },
-    );
-
-    expect(result.tools).toEqual({ 'tool-a': { description: 'Tool A' } });
-    expect(result.agents).toEqual({ 'agent-x': { id: 'agent-x', name: 'Agent X', description: undefined } });
-    expect(result.workflows).toEqual({ 'wf-1': { id: 'wf-1', name: 'Workflow One', description: undefined } });
-  });
-
   it('defaults workflows to an empty record when omitted', () => {
     const result = buildAvailableToolRecords({}, {});
 

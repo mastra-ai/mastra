@@ -1,4 +1,4 @@
-import type { IDeployer } from '@mastra/core/deployer';
+import type { IDeployer } from '@internal/deployer';
 
 import { Bundler } from '../bundler';
 import { DepsService } from '../services/deps.js';

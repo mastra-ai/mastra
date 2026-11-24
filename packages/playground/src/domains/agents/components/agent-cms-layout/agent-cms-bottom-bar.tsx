@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useAgentCmsNavigation } from '../agent-cms-sidebar/use-agent-cms-navigation';
 
@@ -29,7 +29,7 @@ export function AgentCmsBottomBar({ basePath, currentPath }: AgentCmsBottomBarPr
     <div className="flex items-center justify-between border-t border-border px-5 py-4">
       <div>
         {previous && (
-          <Button type="button" onClick={() => navigate(previous.href)} icon={<ArrowLeft />}>
+          <Button type="button" onClick={() => navigate(previous.href)} icon={<IconArrowLeft />}>
             {previous.name}
           </Button>
         )}
@@ -41,7 +41,7 @@ export function AgentCmsBottomBar({ basePath, currentPath }: AgentCmsBottomBarPr
             variant="default"
             disabled={isNextDisabled}
             onClick={() => navigate(next.href)}
-            icon={<ArrowRight />}
+            icon={<IconArrowRight />}
           >
             {next.name}
           </Button>
