@@ -1,3 +1,4 @@
+import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import { createKnowledgeUlid, KnowledgeNotFoundError } from './base';
 import type { KnowledgePage, KnowledgeReadScope } from './pages';
 import {
@@ -19,6 +20,7 @@ import type {
   KnowledgeTimelineEntryUpsertResult,
   KnowledgeTimelinePurgeResult,
   ListKnowledgeTimelineEntriesInput,
+  SearchKnowledgeTimelineEntriesInput,
   UpsertKnowledgeTimelineEntryInput,
 } from './timelines';
 
@@ -177,6 +179,41 @@ export class InMemoryKnowledgeTimelinesStorage extends KnowledgeTimelinesStorage
     const entries = matching.slice(0, input.limit).map(copy);
     const last = entries.at(-1);
     return { entries, nextCursor: matching.length > input.limit && last ? encodeKnowledgeTimelineCursor(last) : null };
+  }
+
+  async searchEntries(input: SearchKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntryRecord[]> {
+    checkKnowledgeTimelineReadLimit(input.limit);
+    const words = knowledgeSearchWords(input.query);
+    if (!words.length) return [];
+    const visible = new Set<string>();
+    for (const id of input.timelineIds ?? this.#s.timelines.keys()) {
+      if (!this.#s.timelines.has(id)) continue;
+      const found = this.lookup(id, input.read);
+      if (!found?.readable || found.page.deletedAt) continue;
+      if (input.scopeIds && !input.scopeIds.includes(found.page.scopeId)) continue;
+      visible.add(id);
+    }
+    const since = input.since?.getTime();
+    const until = input.until?.getTime();
+    return [...this.#s.entries.values()]
+      .filter(entry => {
+        if (!visible.has(entry.timelineId) || entry.deletedAt) return false;
+        const time = entry.occurredAt.getTime();
+        return (since === undefined || time >= since) && (until === undefined || time < until);
+      })
+      .map(entry => {
+        const body = entry.body.toLowerCase();
+        return { entry, matched: words.filter(word => body.includes(word)).length };
+      })
+      .filter(hit => hit.matched > 0)
+      .sort(
+        (a, b) =>
+          b.matched - a.matched ||
+          b.entry.occurredAt.getTime() - a.entry.occurredAt.getTime() ||
+          (a.entry.id < b.entry.id ? -1 : 1),
+      )
+      .slice(0, input.limit)
+      .map(hit => copy(hit.entry));
   }
 
   async purgeEntries(input: {

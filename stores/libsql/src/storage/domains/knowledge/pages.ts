@@ -344,7 +344,7 @@ function decodeCursor(cursor: string | undefined, length: number): string[] | un
   throw new KnowledgeInvalidCursorError(cursor);
 }
 
-function escapeLike(value: string): string {
+export function escapeLike(value: string): string {
   return value.replace(/[=%_]/g, match => `=${match}`);
 }
 
@@ -417,7 +417,7 @@ function readableScopes(read: KnowledgeReadScope): Fragment {
 }
 
 /** `alias.scopeId` is readable. */
-function pageReadable(alias: string, read: KnowledgeReadScope): Fragment {
+export function pageReadable(alias: string, read: KnowledgeReadScope): Fragment {
   const scopes = readableScopes(read);
   return { sql: `${alias}.scopeId IN (${scopes.sql})`, args: scopes.args };
 }

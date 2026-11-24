@@ -283,6 +283,53 @@ export function createKnowledgeTimelineTests(createStore: () => Promise<Knowledg
       ).toEqual({ entries: [], nextCursor: null });
     });
 
+    it('searches entry bodies by word, ranked by words matched then newest, within readable timelines', async () => {
+      const { store, scope, other, page, timelines, entry } = await setup();
+      await entry('old-both', 1, { body: 'Deploy failed: the Postgres migration timed out' });
+      await entry('new-one', 5, { body: 'postgres is back up' });
+      await entry('newer-one', 6, { body: 'Who owns the deploy runbook?' });
+      await entry('nothing', 7, { body: 'lunch?' });
+      await entry('gone', 8, { body: 'postgres deploy notes' });
+      await timelines.removeEntry({ timelineId: page.id, externalId: 'gone', writtenBy: importer });
+
+      const hidden = await store.createPage({ parentId: other.id, key: 'secret', name: '#secret', provenance: host });
+      await timelines.markTimeline({ pageId: hidden.id });
+      await timelines.upsertEntry({
+        timelineId: hidden.id,
+        externalId: 'h1',
+        occurredAt: at(9),
+        body: 'postgres deploy secrets',
+        writtenBy: importer,
+      });
+
+      const ids = (entries: { externalId: string }[]) => entries.map(e => e.externalId);
+      expect(ids(await timelines.searchEntries({ query: 'Postgres DEPLOY', read: acme, limit: 10 }))).toEqual([
+        'old-both',
+        'newer-one',
+        'new-one',
+      ]);
+      // A hidden timeline can't take a slot ahead of the limit.
+      expect(ids(await timelines.searchEntries({ query: 'postgres deploy', read: acme, limit: 1 }))).toEqual([
+        'old-both',
+      ]);
+      expect(ids(await timelines.searchEntries({ query: 'postgres deploy', read: 'all', limit: 1 }))).toEqual(['h1']);
+      expect(
+        ids(await timelines.searchEntries({ query: 'postgres', read: 'all', since: at(5), until: at(9), limit: 10 })),
+      ).toEqual(['new-one']);
+      expect(
+        ids(await timelines.searchEntries({ query: 'postgres', read: 'all', timelineIds: [hidden.id], limit: 10 })),
+      ).toEqual(['h1']);
+      expect(
+        ids(await timelines.searchEntries({ query: 'postgres', read: 'all', scopeIds: [scope.id], limit: 10 })),
+      ).toEqual(['new-one', 'old-both']);
+      expect(await timelines.searchEntries({ query: '   ', read: 'all', limit: 10 })).toEqual([]);
+      // A wildcard character is matched literally.
+      expect(await timelines.searchEntries({ query: '%', read: 'all', limit: 10 })).toEqual([]);
+
+      await store.deletePage({ id: hidden.id, expectedVersion: hidden.version, deletedBy: 'host' });
+      expect(ids(await timelines.searchEntries({ query: 'secrets', read: 'all', limit: 10 }))).toEqual([]);
+    });
+
     it('rolls entry writes back with the transaction they were in', async () => {
       const { store, page } = await setup();
       await expect(
@@ -306,6 +353,7 @@ export function createKnowledgeTimelineTests(createStore: () => Promise<Knowledg
       await expect(timelines.listEntries({ timelineId: page.id, read: 'all', limit: 101 })).rejects.toBeInstanceOf(
         RangeError,
       );
+      await expect(timelines.searchEntries({ query: 'x', read: 'all', limit: 101 })).rejects.toBeInstanceOf(RangeError);
       await expect(
         timelines.upsertEntry({
           timelineId: page.id,

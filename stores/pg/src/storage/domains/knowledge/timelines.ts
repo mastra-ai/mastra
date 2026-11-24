@@ -1,3 +1,4 @@
+import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import type {
   KnowledgeReadScope,
   KnowledgeTimelineEntriesPage,
@@ -7,11 +8,12 @@ import type {
   KnowledgeTimelinePurgeResult,
   KnowledgeTimelinesStorage,
   ListKnowledgeTimelineEntriesInput,
+  SearchKnowledgeTimelineEntriesInput,
   UpsertKnowledgeTimelineEntryInput,
 } from '@mastra/core/storage';
 
 import type { DbClient, TxClient } from '../../client';
-import { PG_KNOWLEDGE_PAGES_TABLES } from './pages';
+import { escapeLike, Params, PG_KNOWLEDGE_PAGES_TABLES, ReadFilter } from './pages';
 
 type Queryable = Pick<TxClient, 'none' | 'oneOrNone' | 'any' | 'query'>;
 
@@ -276,6 +278,33 @@ export class PgKnowledgeTimelines implements KnowledgeTimelinesStorage {
     const entries = rows.slice(0, input.limit).map(toEntry);
     const last = entries[entries.length - 1];
     return { entries, nextCursor: rows.length > input.limit && last ? encodeKnowledgeTimelineCursor(last) : null };
+  }
+
+  async searchEntries(input: SearchKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntryRecord[]> {
+    const { checkKnowledgeTimelineReadLimit } = await loadCore();
+    checkKnowledgeTimelineReadLimit(input.limit);
+    const words = knowledgeSearchWords(input.query);
+    if (!words.length) return [];
+    const params = new Params();
+    // Visibility is filtered in the query, before the limit, so unreadable hits never crowd out readable ones.
+    const filter = new ReadFilter(input.read, params, this.#t.pages);
+    const patterns = words.map(word => params.add(`%${escapeLike(word)}%`));
+    const where = [
+      `e."deletedAt" IS NULL`,
+      `p."deletedAt" IS NULL`,
+      filter.readable('s'),
+      `(${patterns.map(pattern => `e."body" ILIKE ${pattern}`).join(' OR ')})`,
+    ];
+    if (input.timelineIds) where.push(`e."timelineId" = ANY(${params.add(input.timelineIds)}::text[])`);
+    if (input.scopeIds) where.push(`p."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
+    if (input.since) where.push(`e."occurredAt" >= ${params.add(input.since.getTime())}`);
+    if (input.until) where.push(`e."occurredAt" < ${params.add(input.until.getTime())}`);
+    const matched = patterns.map(pattern => `(CASE WHEN e."body" ILIKE ${pattern} THEN 1 ELSE 0 END)`).join(' + ');
+    const rows = await this.#client.any(
+      `SELECT e.* FROM ${this.#t.entries} e JOIN ${this.#t.timelines} t ON t."pageId" = e."timelineId" JOIN ${this.#t.pages} p ON p."id" = e."timelineId" JOIN ${this.#t.pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, e."occurredAt" DESC, e."id" ASC LIMIT ${params.add(input.limit)}`,
+      params.values,
+    );
+    return rows.map(toEntry);
   }
 
   async purgeEntries(input: {

@@ -96,6 +96,23 @@ export interface KnowledgeTimelineEntriesPage {
   nextCursor: string | null;
 }
 
+export interface SearchKnowledgeTimelineEntriesInput {
+  /** Matched by word, as page search does (`knowledgeSearchWords`): an entry matches any word in its body. */
+  query: string;
+  /** Only entries of live timeline pages readable under this scope. */
+  read: KnowledgeReadScope;
+  /** Only these timelines. */
+  timelineIds?: string[];
+  /** Only timelines whose page is in one of these scopes. */
+  scopeIds?: string[];
+  /** `occurredAt >= since`. */
+  since?: Date;
+  /** `occurredAt < until`. */
+  until?: Date;
+  /** At most {@link MAX_KNOWLEDGE_TIMELINE_READ_LIMIT}. */
+  limit: number;
+}
+
 export type KnowledgeTimelinePurgeResult = { purgedIds: string[]; done: boolean };
 
 /** The page has child pages, so it can't become a timeline. Nothing was written. */
@@ -143,6 +160,12 @@ export abstract class KnowledgeTimelinesStorage {
     deletedAt?: Date;
   }): Promise<KnowledgeTimelineEntryRemoveResult>;
   abstract listEntries(input: ListKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntriesPage>;
+  /**
+   * Keyword search over entry bodies. Ranked by how many query words match, then newest
+   * `occurredAt`, then `id`. Deleted entries never match. The visibility filter applies before the
+   * limit, so a hidden timeline can't take a slot.
+   */
+  abstract searchEntries(input: SearchKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntryRecord[]>;
   /**
    * Deletes up to `limit` entries of a timeline whose page was deleted before `deletedBefore`, and
    * the timeline mark with the last batch (`done`). Refuses a live page, or one deleted since.

@@ -208,7 +208,7 @@ function qualifier(schemaName?: string) {
 }
 
 /** Collects bind parameters and hands back their `$n` placeholders. */
-class Params {
+export class Params {
   readonly values: unknown[] = [];
   add(value: unknown): string {
     this.values.push(value);
@@ -221,7 +221,7 @@ class Params {
  * check in it. A large frontier travels as a handful of array parameters (`= ANY($n::text[])`,
  * `unnest`), never as a long `IN (...)` list.
  */
-class ReadFilter {
+export class ReadFilter {
   readonly #all: boolean;
   readonly #pages: string;
   readonly #addresses?: string;
@@ -434,7 +434,7 @@ function toListedPin(row: Row): KnowledgeListedPin {
   return { ...toPin(row), pageName: String(row.pageName) };
 }
 
-function escapeLike(term: string): string {
+export function escapeLike(term: string): string {
   return term.replace(/[\\%_]/g, match => `\\${match}`);
 }
 

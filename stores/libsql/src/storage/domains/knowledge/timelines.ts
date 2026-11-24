@@ -1,3 +1,4 @@
+import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import type {
   KnowledgeReadScope,
   KnowledgeTimelineEntriesPage,
@@ -7,11 +8,12 @@ import type {
   KnowledgeTimelinePurgeResult,
   KnowledgeTimelinesStorage,
   ListKnowledgeTimelineEntriesInput,
+  SearchKnowledgeTimelineEntriesInput,
   UpsertKnowledgeTimelineEntryInput,
 } from '@mastra/core/storage';
 
 import type { SqliteInValue as InValue, SqliteResultSet as ResultSet } from '../../db/client';
-import { KNOWLEDGE_PAGE_TABLES } from './pages';
+import { escapeLike, KNOWLEDGE_PAGE_TABLES, pageReadable } from './pages';
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -278,6 +280,46 @@ export class LibSQLKnowledgeTimelines implements KnowledgeTimelinesStorage {
     const entries = rows.slice(0, input.limit).map(toEntry);
     const last = entries[entries.length - 1];
     return { entries, nextCursor: rows.length > input.limit && last ? encodeKnowledgeTimelineCursor(last) : null };
+  }
+
+  async searchEntries(input: SearchKnowledgeTimelineEntriesInput): Promise<KnowledgeTimelineEntryRecord[]> {
+    const { checkKnowledgeTimelineReadLimit } = await loadCore();
+    checkKnowledgeTimelineReadLimit(input.limit);
+    const words = knowledgeSearchWords(input.query);
+    if (!words.length) return [];
+    const likes = words.map(word => `%${escapeLike(word)}%`);
+    const has = `lower(e.body) LIKE ? ESCAPE '='`;
+    // Visibility is filtered in the query, before the limit, so unreadable hits never crowd out readable ones.
+    const readable = pageReadable('p', input.read);
+    const where = [
+      'e.deletedAt IS NULL',
+      'p.deletedAt IS NULL',
+      readable.sql,
+      `(${words.map(() => has).join(' OR ')})`,
+    ];
+    const args: InValue[] = [...readable.args, ...likes];
+    if (input.timelineIds) {
+      where.push('e.timelineId IN (SELECT value FROM json_each(?))');
+      args.push(JSON.stringify(input.timelineIds));
+    }
+    if (input.scopeIds) {
+      where.push('p.scopeId IN (SELECT value FROM json_each(?))');
+      args.push(JSON.stringify(input.scopeIds));
+    }
+    if (input.since) {
+      where.push('e.occurredAt >= ?');
+      args.push(input.since.getTime());
+    }
+    if (input.until) {
+      where.push('e.occurredAt < ?');
+      args.push(input.until.getTime());
+    }
+    const matched = words.map(() => `(CASE WHEN ${has} THEN 1 ELSE 0 END)`).join(' + ');
+    const { rows } = await this.#read.execute({
+      sql: `SELECT e.* FROM "${T.entries}" e JOIN "${T.timelines}" t ON t.pageId = e.timelineId JOIN "${PAGES}" p ON p.id = e.timelineId WHERE ${where.join(' AND ')} ORDER BY (${matched}) DESC, e.occurredAt DESC, e.id ASC LIMIT ?`,
+      args: [...args, ...likes, input.limit],
+    });
+    return rows.map(toEntry);
   }
 
   async purgeEntries(input: {
