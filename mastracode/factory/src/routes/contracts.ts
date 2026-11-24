@@ -1025,9 +1025,16 @@ export const boardPhasesQuerySchema = z.object({
   linearProject: pickedValuesSchema,
   /** A card matches when it carries every one of them. */
   label: pickedValuesSchema,
-  /** `with` keeps cards that have a pull request (their own or one attached), `without` the others. */
+  /**
+   * `with` keeps cards that have a pull request: their own, one attached, or one held by another card
+   * that names this card's issue as resolved (`closesWorkItemIds`). `without` keeps the others.
+   */
   pullRequest: pickedValuesSchema,
-  /** `trusted` keeps cards whose author has write access or is Factory, `untrusted` those from outside. */
+  /**
+   * `untrusted` keeps GitHub and GitLab cards whose author lacks write access, including those with no
+   * trust stamp, as intake reads `item.trusted`. `trusted` keeps the rest: those authors, Factory, and
+   * cards from sources no outsider can file (Linear, manual and similar).
+   */
   trust: pickedValuesSchema,
   /** Participant ids (`github:octocat`, `factory:<user id>`) related to the card in any way. */
   teammate: pickedValuesSchema,
