@@ -64,21 +64,22 @@ export interface ChannelConnectionDocs {
 }
 
 /** Providers present in src/providers but not part of the documented release. */
-export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
-  'anthropic',
-  'elevenlabs',
-  'gitlab',
-  'google-analytics',
-  'sendgrid',
-  'stripe',
-  'twitter-v2',
-]);
+export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set(['stripe', 'twitter-v2']);
 
 /** Shared Connect setup that every generated page links to as its prerequisite. */
 export const CONNECT_GUIDE_PATH = '/docs/mastra-platform/connect';
 
 /** Providers with a generated toolset in src/providers. Keys are provider IDs. */
 export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
+  anthropic: {
+    name: 'Anthropic',
+    logo: { slug: 'anthropic', mono: true },
+    canonicalPage: 'tools/anthropic.mdx',
+    ownership: 'generated-page',
+    category: 'Tools',
+    summary: 'send messages, count tokens, run message batches, read models, and manage files',
+    emit: true,
+  },
   clerk: {
     name: 'Clerk',
     logo: { slug: 'clerk', mono: true },
@@ -93,6 +94,15 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     canonicalPage: 'channels/discord.mdx',
     ownership: 'handwritten-with-partial',
     summary: 'send and manage messages, and manage channels, threads, roles, members, and webhooks',
+    emit: true,
+  },
+  elevenlabs: {
+    name: 'ElevenLabs',
+    logo: { slug: 'elevenlabs', mono: true },
+    canonicalPage: 'voice/elevenlabs.mdx',
+    ownership: 'handwritten-with-partial',
+    summary:
+      'convert text to speech, transcribe audio and video, clone voices, compose music, manage conversational AI agents, voices and voice settings, and pronunciation dictionaries, and read and delete history items, dubbing projects, conversations, and knowledge-base documents',
     emit: true,
   },
   fireflies: {
@@ -112,6 +122,26 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     ownership: 'handwritten-with-partial',
     summary:
       'search code and repositories, manage issues, pull requests, branches, files, and releases, and inspect and rerun workflow runs',
+    emit: true,
+  },
+  gitlab: {
+    name: 'GitLab',
+    logo: { slug: 'gitlab' },
+    canonicalPage: 'tools/gitlab.mdx',
+    ownership: 'generated-page',
+    category: 'Tools',
+    summary:
+      'manage projects, groups, issues, merge requests, branches, files, commits, and releases, and run, cancel, and retry pipelines and jobs',
+    emit: true,
+  },
+  'google-analytics': {
+    name: 'Google Analytics',
+    logo: { slug: 'googleanalytics' },
+    canonicalPage: 'other/google-analytics.mdx',
+    ownership: 'generated-page',
+    category: 'Other providers',
+    summary:
+      'run standard, pivot, realtime, and batch reports, read report metadata, and manage properties, data streams, and conversion events',
     emit: true,
   },
   'google-calendar': {
@@ -285,6 +315,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     category: 'Other providers',
     summary: 'send email and broadcasts, and manage contacts, segments, domains, templates, and webhooks',
     note: "Connect Resend with an API key that has **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.",
+    emit: true,
+  },
+  sendgrid: {
+    name: 'SendGrid',
+    logo: { src: 'https://app.nango.dev/images/template-logos/sendgrid.svg' },
+    canonicalPage: 'email-calendar/sendgrid.mdx',
+    ownership: 'generated-page',
+    category: 'Email / Calendar',
+    summary:
+      'send email, and manage marketing contacts, lists, segments, custom fields, dynamic templates, sender identities, and suppressions',
     emit: true,
   },
   'sharepoint-online': {
