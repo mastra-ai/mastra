@@ -149,7 +149,7 @@ describe('command analytics', () => {
     ['https://git.test/a?token=label@KEY', 'https://[redacted]'],
     ['https://user:KEY@git.test/a?b=KEY', 'https://[redacted]'],
     ['postgres://user:/?#KEY@db.test/a', 'postgres://[redacted]'],
-    ['https://registry.npmjs.org/@mastra/core', 'https://registry.npmjs.org/@mastra/core'],
+    ['https://user:KEY/@git.test/a', 'https://[redacted]'],
   ])('removes credentials and query strings from %s in reported errors', async (url, reported) => {
     const error = new Error(`Could not fetch ${url.replaceAll('KEY', API_KEY)} (404)`);
 

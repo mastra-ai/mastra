@@ -68,7 +68,7 @@ function pickCommandArgs(args: object): Record<string, unknown> {
  * credentials. Where those end is ambiguous: passwords can contain `/` or `?`, and queries `@`.
  */
 function stripUrlSecrets(message: string): string {
-  return message.replace(/:\/\/\S+/g, url => (/[^/]@/.test(url) ? '://[redacted]' : url.replace(/[?#].*/, '')));
+  return message.replace(/:\/\/\S+/g, url => (url.includes('@') ? '://[redacted]' : url.replace(/[?#].*/, '')));
 }
 
 interface CommandData {
