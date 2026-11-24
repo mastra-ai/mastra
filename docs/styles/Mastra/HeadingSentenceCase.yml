@@ -83,6 +83,7 @@ exceptions:
   - 'GET'
   - 'GitHub'
   - 'Google'
+  - 'Google Analytics'
   - 'Google Calendar'
   - 'Google Docs'
   - 'Google Gemini'

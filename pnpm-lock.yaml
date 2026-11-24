@@ -1921,6 +1921,9 @@ importers:
       baseline-browser-mapping:
         specifier: ^2.11.32
         version: 2.11.35
+      github-slugger:
+        specifier: ^1.5.0
+        version: 1.5.0
       jsdom:
         specifier: ^30.1.3
         version: 30.1.3(@noble/hashes@2.4.0)
@@ -4037,6 +4040,9 @@ importers:
 
   packages/_types-builder:
     dependencies:
+      '@babel/core':
+        specifier: ^8.0.9
+        version: 8.1.0
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.60.1(@types/node@22.19.15)

@@ -10,13 +10,19 @@
     "tofino-3"
   ],
   "reasoning": {
-    "ossington-5": [
+    "rosedale-1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "ossington-4-1": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "ossington-4-1": [
+    "ossington-5": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -26,12 +32,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "rosedale-1": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
       }
     ]
   }
