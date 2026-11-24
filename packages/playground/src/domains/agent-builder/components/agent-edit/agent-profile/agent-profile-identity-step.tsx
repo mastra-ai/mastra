@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import type { ReactNode } from 'react';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -25,11 +24,8 @@ export const AgentProfileIdentityStep = ({ avatar, details }: AgentProfileIdenti
   return (
     <AgentStepContainer
       cta={
-        <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue{' '}
-          <Icon>
-            <IconArrowRight />
-          </Icon>
+        <Button iconEnd={<IconArrowRight />} onClick={handleContinue} disabled={isStreaming}>
+          Continue
         </Button>
       }
     >

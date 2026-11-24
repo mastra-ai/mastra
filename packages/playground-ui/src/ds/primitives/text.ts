@@ -25,7 +25,7 @@ const roles: Record<TextRole, string> = {
 const tones = {
   ink: 'text-foreground',
   muted: 'text-muted-foreground',
-  faint: 'text-placeholder',
+  faint: 'text-subtle-foreground',
 };
 
 const fonts = {

@@ -429,7 +429,7 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
 
 ### Agent namespace examples
 
-Create a stored override for an existing code-defined agent:
+Create a stored override for an existing code-defined agent. Use the code agent's `id`. The `name`, `instructions`, and `model` fields are required, so pass them even when they match the code agent:
 
 ```typescript title="src/scripts/seed-agent.ts"
 import { mastra } from '../mastra'
@@ -438,7 +438,9 @@ const editor = mastra.getEditor()!
 
 await editor.agent.create({
   id: 'support-agent',
+  name: 'Support agent',
   instructions: 'You are a friendly support agent for Acme.',
+  model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
   tools: {
     search_kb: { description: 'Search the Acme knowledge base' },
   },

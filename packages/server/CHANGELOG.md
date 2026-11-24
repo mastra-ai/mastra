@@ -1,5 +1,20 @@
 # @mastra/server
 
+## 1.86.0-alpha.7
+
+### Patch Changes
+
+- Agents that set `durable.executionEngine` to `'default'` or `'evented'` now work with the same run routes as `createDurableAgent()` agents: ([#31008](https://github.com/mastra-ai/mastra/pull/31008))
+
+  - Tool approval and resume routes apply the same run ownership checks, so a request can no longer resume or approve a suspended run that belongs to another resource or thread.
+  - `POST /agents/:agentId/runs/:runId/abort` stops their runs instead of returning 404.
+  - `POST /agents/:agentId/recover` recovers their runs instead of returning 400.
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/mcp-apps-components@0.3.0-alpha.1
+  - @mastra/mcp@2.11.0-alpha.1
+
 ## 1.86.0-alpha.6
 
 ### Patch Changes

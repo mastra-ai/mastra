@@ -364,6 +364,26 @@ Both the literal and the stored value are lowercased and split into words. A wor
 
 The literal must contain at least one letter or digit; otherwise the request fails with `422 TRACE_QUERY_INVALID`. A missing field satisfies neither operator. Use `{ op: 'not', arg: { op: 'matches', ... } }` when records without the field should also match. Text operators are available on span `name`. Other string fields, numbers, timestamps, tags, and metadata reject them. Substring, wildcard, regular-expression, and fuzzy matching aren't supported, and there is no search across several fields.
 
+#### Search span content by token
+
+Hosts with token-indexed span content, such as Mastra Platform, also accept `hasAllTokens`. It matches a span when the field contains every token in the literal, in any order:
+
+```typescript
+const timeoutErrors = {
+  spans: {
+    some: {
+      op: 'hasAllTokens',
+      left: { path: 'error' },
+      right: { literal: 'connection timeout' },
+    },
+  },
+}
+```
+
+`left.path` is one of `input`, `output`, `error`, `inputPreview`, `outputPreview`, `errorPreview`, or `all`. With `all`, one of those fields must contain every token. Tokens found in different fields don't combine. The literal is trimmed and accepts 1 to 256 characters. Tokenization and case folding are defined by the host's store. A literal that produces no tokens matches nothing.
+
+`hasAllTokens` is available inside `spans.some` in trace queries and directly in span query predicates. It composes with `and` and `or`, but not beneath `not` or `spans.none`, and thread queries reject it. Self-hosted servers don't support token search and reject the operator with `422 TRACE_QUERY_INVALID`.
+
 ### Query limits
 
 The planner rejects a query before storage execution when it exceeds any of these limits:

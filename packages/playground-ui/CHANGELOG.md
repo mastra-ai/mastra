@@ -1,5 +1,62 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.11
+
+### Patch Changes
+
+- Disable zoom buttons at the Knowledge graph’s zoom limits, using the same controls as Workflow. ([#31227](https://github.com/mastra-ai/mastra/pull/31227))
+
+## 71.0.0-alpha.10
+
+### Minor Changes
+
+- Reworked the neutral colors in both themes. Supporting text is easier to read, and cards, menus and dialogs share one fill. Fields are the card color on the page and a light tint inside cards and dialogs. ([#31178](https://github.com/mastra-ai/mastra/pull/31178))
+
+  Added color roles, so a class says what it paints:
+
+  - `text-subtle-foreground` for counts, timestamps and hints. `text-placeholder` is now only for input placeholders and disabled labels.
+  - `bg-nested` for a box inside a card, `bg-row` for table rows, `border-separator` for lines between rows.
+  - `text-icon` and `text-muted-icon` for the icon beside a label.
+
+  ```tsx
+  // Before
+  <div className="rounded-lg border border-border bg-background">…</div>
+  <span className="text-placeholder">12 runs</span>
+
+  // After
+  <div className="rounded-lg bg-nested">…</div>
+  <span className="text-subtle-foreground">12 runs</span>
+  ```
+
+  Removed the `--elevation-lip`, `--inset-highlight` and `--field-rim-on-surface` variables.
+
+### Patch Changes
+
+- Pan in both directions with two-finger scrolling on the Knowledge graph in Studio and Factory. Pinch or use the zoom controls to change magnification. ([#31224](https://github.com/mastra-ai/mastra/pull/31224))
+
+- Fixed the missing right border on Studio's agent side panel (threads and editor). ([#31209](https://github.com/mastra-ai/mastra/pull/31209))
+
+- Let Factory’s Knowledge graph fill its canvas behind floating controls and pan from the edges with a trackpad. Use the Workflow canvas background in Knowledge and preserve the rounded app frame around the full-width graph. ([#31210](https://github.com/mastra-ai/mastra/pull/31210))
+
+- Headless Connect in Studio now uses the Nango host returned with the connect session, so connecting accounts works against a self-hosted Nango. Without a host it keeps using Nango Cloud. The host must use HTTPS (plain HTTP is allowed for localhost). ([#31187](https://github.com/mastra-ai/mastra/pull/31187))
+
+- Fixed provider logos on the Agents list being almost invisible in dark mode. ([#31178](https://github.com/mastra-ai/mastra/pull/31178))
+
+- Fixed the missing shadow on the page card. It used the removed `--elevation-lip` variable. ([#31236](https://github.com/mastra-ai/mastra/pull/31236))
+
+- Fixed key symbols in shortcut hints looking smaller than the letters beside them. ⌘, ↵, ⌫, arrows and the other key symbols now match the letters' height in `Kbd`, `CommandShortcut`, `DropdownMenu.Shortcut`, `ContextMenu.Shortcut` and `Sidebar.SearchTrigger`, the same on every operating system. The gaps between keys are balanced too, and `⌘K` and `⌘ K` look the same. Screen readers announce the keys by name ("Command K"). No changes needed where shortcuts are rendered. ([#31216](https://github.com/mastra-ai/mastra/pull/31216))
+
+- `useChatSend()` now returns the same function for as long as the chat is mounted. Components can keep it, or list it as a dependency: it no longer changes on every streamed chunk, and it always sends with the chat's current agent and settings. ([#31138](https://github.com/mastra-ai/mastra/pull/31138))
+
+- Show an animated Knowledge graph while Factory and Studio load. Show a still illustration when reduced motion is enabled. ([#31207](https://github.com/mastra-ai/mastra/pull/31207))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/memory@1.41.3-alpha.3
+  - @mastra/client-js@1.61.2-alpha.7
+  - @mastra/ai-sdk@1.12.1-alpha.0
+  - @mastra/react@1.16.0-alpha.7
+
 ## 71.0.0-alpha.9
 
 ### Minor Changes

@@ -28,24 +28,24 @@
         "type": "toggle"
       }
     ],
-    "nvidia/nemotron-3.5-lightning-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "effort",
         "values": ["none", "medium", "high"]
       }
     ],
-    "z-ai/glm-5.3-flash": [
+    "nvidia/nemotron-3.5-lightning-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "z-ai/glm-5.3": [
+    "z-ai/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

@@ -1,11 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../error';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import { reachesOtherProcesses } from '../../events/reach';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
+import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -21,11 +22,6 @@ import {
   markErrorForStreamRejection,
   RECOVER_SHUTDOWN_ERROR_ID,
 } from './constants';
-import type {
-  DurableAgentActiveRun,
-  DurableAgentListActiveRunsOptions,
-  DurableAgentListActiveRunsResult,
-} from './durable-agent';
 import type { UntrackedRunLiveness } from './execution-fence';
 import {
   DurableExecutionFenceError,
@@ -39,7 +35,14 @@ import {
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
-import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
+import type {
+  DurableAgentActiveRun,
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  AgentStreamEvent,
+  DurableAgenticWorkflowInput,
+  DurableToolCallInput,
+} from './types';
 import {
   createDurableAgenticWorkflow,
   defaultShouldPersistSnapshot,
@@ -1023,8 +1026,15 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
     guardrailLogger: IMastraLogger | undefined,
   ): { sharedExecution: boolean; usesRunPubSub: boolean } {
     const engine = this.resolveWorkflowEngine(workflowEngine, logger);
-    const sharedTransport =
-      engine === 'evented' && pubsub !== undefined && !(pubsub.__rawBus() instanceof EventEmitterPubSub);
+    const sharedTransport = engine === 'evented' && pubsub !== undefined && reachesOtherProcesses(pubsub);
+    if (sharedTransport && this.mastra) {
+      const mastra = this.mastra;
+      // The store resolves asynchronously and this path is sync. The warning never gates the run.
+      void Promise.resolve(mastra.getStorage()?.getStore('workflows'))
+        .catch(() => undefined)
+        .then(store => warnUnsupportedEventedSetup(mastra, store))
+        .catch(() => {});
+    }
     const sharedExecution = sharedTransport && fence?.generation !== undefined;
     if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
       this.#warnedUnfencedSharedExecution = true;

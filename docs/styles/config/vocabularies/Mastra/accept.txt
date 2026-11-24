@@ -46,6 +46,7 @@ GCS
 (?i)GET
 (?i)GitHub
 (?i)Google
+Google Analytics
 Google Calendar
 Google Docs
 Google Gemini

@@ -230,17 +230,7 @@ import {
   RECOVER_RUN_SUSPENDED_ERROR_ID,
   shouldRejectStream,
 } from './durable/constants';
-import type {
-  DurableAgentRecoveredRun,
-  DurableAgentListActiveRunsOptions,
-  DurableAgentListActiveRunsResult,
-  DurableAgentRecoverActiveRunsOptions,
-  DurableAgentRecoverActiveRunsResult,
-  DurableAgentRecoverOptions,
-  DurableAgent,
-  DurableAgentStreamOptions,
-  DurableAgentStreamResult,
-} from './durable/durable-agent';
+import type { DurableAgent } from './durable/durable-agent';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable/durable-stream-until-idle';
 import { DefaultAgentExecutionEngine, EventedAgentExecutionEngine } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
@@ -274,10 +264,7 @@ import {
 } from './durable/run-registry';
 import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
-import type {
-  DurableAgentStreamResult as DurableStreamAdapterResult,
-  DurableAgentStreamOptions as DurableStreamAdapterOptions,
-} from './durable/stream-adapter';
+import type { DurableStreamAdapterResult, DurableStreamAdapterOptions } from './durable/stream-adapter';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
@@ -290,6 +277,14 @@ import {
 } from './durable/stream-adapter';
 import { toLiveStructuredOutputSchema } from './durable/structured-output-null-transform';
 import type {
+  DurableAgentRecoveredRun,
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  DurableAgentRecoverActiveRunsOptions,
+  DurableAgentRecoverActiveRunsResult,
+  DurableAgentRecoverOptions,
+  DurableAgentStreamOptions,
+  DurableAgentStreamResult,
   AgentSuspendedEventData,
   AgentAbortEventData,
   AgentChunkEventData,
@@ -2271,8 +2266,7 @@ export class Agent<
 
   /**
    * Owner of a run this process tracks, or undefined. Native engine runs are tracked by
-   * the run registry until auto-cleanup clears their replay history. DurableAgent
-   * overrides this with the same registry lookup.
+   * the run registry until auto-cleanup clears their replay history.
    * @internal
    */
   __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
@@ -2285,7 +2279,7 @@ export class Agent<
    * Owner of an engine run whose replay history is still retained: the local owner,
    * else the shared record, including legacy records without stream status.
    * Undefined once the run's topic is cleared or when no engine is selected. Only used
-   * for replay access. Rejects when the shared cache cannot be read. DurableAgent overrides this.
+   * for replay access. Rejects when the shared cache cannot be read.
    * @internal
    */
   async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
@@ -10684,6 +10678,39 @@ export class Agent<
     }
   }
 
+  /**
+   * Runs the agent to completion and resolves with a {@link FullOutput}: final `text`, every
+   * step, all tool calls and results, usage, and `object` when `structuredOutput` is set.
+   * Use `stream()` instead to consume output as it is produced.
+   *
+   * - `messages`: a string, a message object (`{ role, content }`, AI SDK UI/model messages
+   *   included), or an array mixing both.
+   * - `options`: per-call {@link AgentExecutionOptionsBase} (`maxSteps`, `memory`,
+   *   `requestContext`, `modelSettings`, `toolChoice`, ...). They are merged over the
+   *   agent's `defaultOptions`.
+   * - Tool calls loop until the model stops calling tools or the step limit is hit
+   *   (`maxSteps`; 5 steps when neither `maxSteps` nor `stopWhen` is set).
+   * - Rejects with the run's error if the run fails.
+   * - Tool data is wrapped in `payload`: read `result.toolCalls[i].payload.args` and
+   *   `result.toolResults[i].payload.result`.
+   *
+   * This overload: `structuredOutput.schema` is a schema such as a Zod object, so
+   * `result.object` is typed from that schema.
+   *
+   * @example
+   * ```ts
+   * const result = await agent.generate('What is the weather in Paris?', { maxSteps: 3 });
+   * console.log(result.text);
+   * for (const call of result.toolCalls) console.log(call.payload.toolName, call.payload.args);
+   * for (const res of result.toolResults) console.log(res.payload.toolName, res.payload.result);
+   *
+   * const { object } = await agent.generate('List three colors', {
+   *   structuredOutput: { schema: z.object({ colors: z.array(z.string()) }) },
+   * });
+   * ```
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -10693,18 +10720,44 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
+  /**
+   * Runs the agent to completion with `structuredOutput`, typing `result.object` as `OUTPUT`.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
+  /**
+   * Runs the agent to completion with per-call options and no `structuredOutput`; resolves
+   * with a {@link FullOutput} (`text`, `steps`, `toolCalls`, `toolResults`, `usage`, ...).
+   * Tool data is under `payload`, e.g. `result.toolCalls[0].payload.args`.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
+  /**
+   * Runs the agent to completion using its `defaultOptions`; resolves with a {@link FullOutput}.
+   * `messages` is a string, a message object, or an array of either.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @example
+   * ```ts
+   * const { text } = await agent.generate('Hello!');
+   * ```
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
   async generate<OUTPUT = TOutput>(
     messages: MessageListInput,
@@ -16415,7 +16468,7 @@ export class Agent<
    *
    * @internal
    */
-  protected async subscribeToDurableRunStream(
+  async __subscribeToRunStream(
     runId: string,
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,

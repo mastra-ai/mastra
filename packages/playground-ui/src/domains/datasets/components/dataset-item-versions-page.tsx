@@ -192,16 +192,13 @@ export function DatasetItemVersionsPage({
       breadcrumbs={crumbs}
       headerActions={
         canDiff && (
-          <Button variant="ghost" size="sm" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
-            {isDiffView ? (
-              <>
-                <IconColumns3 /> Default view
-              </>
-            ) : (
-              <>
-                <IconChanges /> Diff view
-              </>
-            )}
+          <Button
+            icon={isDiffView ? <IconColumns3 /> : <IconChanges />}
+            variant="ghost"
+            size="sm"
+            onClick={() => setParam('view', isDiffView ? null : 'diff')}
+          >
+            {isDiffView ? 'Default view' : 'Diff view'}
           </Button>
         )
       }

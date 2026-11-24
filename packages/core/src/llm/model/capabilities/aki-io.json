@@ -25,7 +25,37 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "glm5.3-754b": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kolibri-1-tl5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gemma4-26b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "mistral4-119b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -35,36 +65,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "glm5.3-754b": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "kolibri-1-tl5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "mistral4-119b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

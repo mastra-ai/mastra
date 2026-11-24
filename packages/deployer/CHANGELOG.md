@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 1.86.0-alpha.7
+
+### Patch Changes
+
+- Package manager commands now run without a shell on macOS and Linux, so project paths with spaces or shell characters are passed through safely. On Windows, quoted paths keep a trailing backslash instead of letting it escape the closing quote. Also fixed slow parsing of dependency ranges and workspace globs with long runs of whitespace or slashes. ([#31095](https://github.com/mastra-ai/mastra/pull/31095))
+
+- Updated dependencies [[`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/server@1.86.0-alpha.7
+  - @mastra/core@1.86.0-alpha.7
+
 ## 1.86.0-alpha.6
 
 ### Patch Changes

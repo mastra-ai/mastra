@@ -122,8 +122,13 @@ export function CustomProviderForm({
         />
       </Field>
       <div className="flex items-center gap-2">
-        <Button variant="primary" size="sm" disabled={saveMutation.isPending} onClick={() => void save()}>
-          {saveMutation.isPending && <Spinner size="sm" aria-hidden className="size-3" />}
+        <Button
+          icon={saveMutation.isPending ? <Spinner size="sm" aria-hidden /> : undefined}
+          variant="primary"
+          size="sm"
+          disabled={saveMutation.isPending}
+          onClick={() => void save()}
+        >
           {provider ? 'Save' : 'Add'}
         </Button>
         {onCancel && (

@@ -143,7 +143,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
         disabled={disabled}
         className="absolute inset-0 cursor-pointer opacity-0"
       />
-      <div className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
+      <div className="flex size-9 items-center justify-center rounded-md bg-nested text-muted-foreground">
         <IconArrowOutOfBox className="size-icon-md" />
       </div>
       <div className="flex flex-col gap-1">
