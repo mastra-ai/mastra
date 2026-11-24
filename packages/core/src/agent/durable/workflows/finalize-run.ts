@@ -438,9 +438,15 @@ export async function runDurableFinishSideEffects({
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
-    await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
-    await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
+    const authorizeTitle = async () => {
+      await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
+      await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
+    };
+    // A denial fails a regular run's finalization, as its message save does. An OM run's turn is
+    // already persisted, so a denied title is skipped rather than failing the completed turn.
+    if (!durableState.observationalMemory) await authorizeTitle();
     const savedTitle = (async (): Promise<string | undefined> => {
+      if (durableState.observationalMemory) await authorizeTitle();
       if (generateThreadTitle) {
         return generateThreadTitle(titleArgs);
       } else if (mastra) {

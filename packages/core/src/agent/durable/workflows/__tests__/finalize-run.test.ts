@@ -195,6 +195,35 @@ describe('runDurableFinishSideEffects', () => {
     expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
+  // The OM processor already persisted the turn, so a principal that may read but not write the
+  // thread skips the title instead of failing a completed run.
+  it('skips the title without failing an observational-memory run when memory writes are denied', async () => {
+    authorizeDurableMemory.mockImplementation(async (_checks, input) => {
+      if (input.permission === 'memory:write') throw new Error('memory write denied');
+    });
+    const generateThreadTitle = vi.fn().mockResolvedValue('Title');
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    const result = await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: makeInitData({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        threadExists: true,
+        observationalMemory: true,
+      }),
+      messageListState: makeMessageListState(),
+    });
+    await result.titleGeneration;
+
+    expect(generateThreadTitle).not.toHaveBeenCalled();
+  });
+
   // #30478: the OM processor has already persisted the turn, so the run is titled like a regular Agent run.
   it('generates a title for an observational-memory run without flushing messages', async () => {
     const generateThreadTitle = vi.fn().mockResolvedValue(undefined);
@@ -208,7 +237,7 @@ describe('runDurableFinishSideEffects', () => {
       memory: { createThread: vi.fn() },
     } as unknown as RunRegistryEntry);
 
-    await runDurableFinishSideEffects({
+    const result = await runDurableFinishSideEffects({
       runId: 'run-1',
       initData: makeInitData({
         threadId: 'thread-1',
@@ -218,6 +247,8 @@ describe('runDurableFinishSideEffects', () => {
       }),
       messageListState: makeMessageListState(),
     });
+
+    await result.titleGeneration;
 
     expect(flushMessages).not.toHaveBeenCalled();
     expect(generateThreadTitle).toHaveBeenCalledTimes(1);
