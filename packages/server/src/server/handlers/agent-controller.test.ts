@@ -2704,6 +2704,52 @@ describe('agent-controller routes', () => {
       expect(all.threads.length).toBeGreaterThanOrEqual(3);
     });
 
+    it('drops threads hidden by the branch-aware memory when listing', async () => {
+      // A resource can hold threads the caller may not branch-read: pending
+      // branches and branches whose ancestors are inaccessible. The list route
+      // must filter them out through the same branch authorization used for
+      // single-thread reads, not just page the raw resource.
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-branch',
+      } as any);
+      const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-branch' });
+      await session.thread.create({ title: 'visible' });
+      const hidden = await session.thread.create({ title: 'pending-branch' });
+
+      const controller = mastra.getAgentController('code')!;
+      const visible = (await controller.queryThreads({ resourceId: 'user-branch' })).filter(
+        thread => thread.id !== hidden.id,
+      );
+      const fakeMemory = {
+        supportsThreadBranching: true,
+        __mastraInspectThreadBranchState: async (threadId: string) =>
+          threadId === hidden.id
+            ? { state: 'pending' as const, hasReadyDescendants: false }
+            : { state: 'ordinary' as const, hasReadyDescendants: false },
+        __mastraGetThreadBranchAuthorizationCandidates: async (threadId: string) => [{ id: threadId }],
+        // An unreachable history is how a hidden branch surfaces: the walkback
+        // does not end at the thread itself, so the read is refused.
+        getBranchHistory: async ({ threadId }: { threadId: string }) => ({
+          history:
+            threadId === hidden.id
+              ? []
+              : [{ thread: visible.find(thread => thread.id === threadId) ?? { id: threadId } }],
+        }),
+      };
+      (controller as any).resolveMemoryForRequestContext = async () => fakeMemory;
+
+      const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-branch',
+      } as any)) as { threads: { id: string }[] };
+      expect(res.threads.map(thread => thread.id)).toContain(visible[0]!.id);
+      expect(res.threads.map(thread => thread.id)).not.toContain(hidden.id);
+      delete (controller as any).resolveMemoryForRequestContext;
+    });
+
     it('keeps persisted session preferences out of a thread\u2019s tags', async () => {
       // Preferences that survive a restart (thinking level, notifications) share
       // the flat thread `metadata` bag with the scoping tags. They are string
