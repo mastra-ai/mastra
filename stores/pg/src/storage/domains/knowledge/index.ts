@@ -11,6 +11,7 @@ import { resolvePgConfig } from '../../db';
 import { PgKnowledgeImporters, pgKnowledgeImportersDDL } from './importers';
 import { PgKnowledgePages, pgKnowledgePagesDDL } from './pages';
 import { inspectPgKnowledgePagesSchema, initPgKnowledgePagesSchema, resetPgKnowledgePagesSchema } from './pages-schema';
+import { PgKnowledgeTimelines } from './timelines';
 
 const loadKnowledgePagesCore = createKnowledgePagesCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
@@ -156,6 +157,7 @@ export class KnowledgePG extends KnowledgeStorage {
   readonly #schemaName?: string;
   readonly #pages: PgKnowledgePages;
   readonly #importers?: PgKnowledgeImporters;
+  readonly #timelines?: PgKnowledgeTimelines;
 
   /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
   static getImportersExportDDL(schemaName?: string): string[] {
@@ -179,6 +181,17 @@ export class KnowledgePG extends KnowledgeStorage {
         };
       },
     });
+    if (coreFeatures.has('knowledge-timelines')) {
+      this.#timelines = new PgKnowledgeTimelines({
+        client,
+        schemaName,
+        readable: async (id, read) => {
+          // getPage returns a deleted page too; a timeline reads only through a live one.
+          const page = await this.#pages.getPage({ id, read });
+          return !!page && !page.deletedAt;
+        },
+      });
+    }
   }
 
   override getCapabilities() {
@@ -196,12 +209,18 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /** Same client and schema as the pages: on a transaction view, the view's transaction. */
+  override get timelines(): PgKnowledgeTimelines | undefined {
+    return this.#timelines;
+  }
+
+  /** Same client and schema as the pages: on a transaction view, the view's transaction. */
   override get importers(): PgKnowledgeImporters | undefined {
     return this.#importers;
   }
 
   async init(): Promise<void> {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
+    await this.#timelines?.init();
   }
 
   override async transaction<T>(
@@ -244,11 +263,17 @@ export class KnowledgePG extends KnowledgeStorage {
     await this.#client.tx(async tx => {
       const client = new TransactionDbClient(tx);
       if (this.#importers) await new PgKnowledgeImporters({ client, schemaName: this.#schemaName }).clearOnReset();
+      const timelines = this.#timelines
+        ? new PgKnowledgeTimelines({ client, schemaName: this.#schemaName, readable: async () => false })
+        : undefined;
+      await timelines?.dropOnReset();
       await resetPgKnowledgePagesSchema(client, this.#schemaName);
+      await timelines?.init();
     });
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#timelines?.clearAll();
     await this.#pages.clearAll();
   }
 
